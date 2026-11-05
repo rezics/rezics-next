@@ -17,12 +17,19 @@ import {
   type RecoveryStatus,
 } from '../src/library/archive-collection-recovery/contract';
 import type { RecoveryVisit } from '../src/library/archive-collection-recovery/visit';
+import {
+  commitRecoveryRead,
+  emptyRecoveryReadWindow,
+  recoveryReadTarget,
+  type RecoveryReadAdmission,
+} from '../src/library/archive-collection-recovery/window';
 
 const sourceId = '00000000-0000-4000-8000-000000000001';
 const collectionId = '00000000-0000-4000-8000-000000000002';
 const subjectId = '00000000-0000-4000-8000-000000000003';
 const occurrenceOne = '00000000-0000-4000-8000-000000000004';
 const occurrenceTwo = '00000000-0000-4000-8000-000000000005';
+const occurrenceThree = '00000000-0000-4000-8000-000000000009';
 const targetId = '00000000-0000-4000-8000-000000000006';
 const receivingCollectionId = '00000000-0000-4000-8000-000000000007';
 const deadline = new Date(Date.now() + 60 * 60 * 1_000).toISOString();
@@ -35,7 +42,7 @@ const target: EntityPickerSubject = {
   cover: null,
 };
 
-mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
+mock.module('../src/kernel/exposure', () => ({ useOperationAdmission: () => 'available' }));
 mock.module('../src/threads/content-subject-search', () => ({
   ContentSubjectSearchError: class ContentSubjectSearchError extends Error {},
   searchContentSubjects: async () => [target],
@@ -144,25 +151,33 @@ function occurrence(id: string, note: string, orderKey: string): RecoveryOccurre
 
 const firstOccurrence = occurrence(occurrenceOne, 'First archived note', '2');
 const secondOccurrence = occurrence(occurrenceTwo, 'Second archived note', '1');
+const thirdOccurrence = occurrence(occurrenceThree, 'Third archived note', '0');
 const occurrenceCollection: NonNullable<RecoveryOccurrencesPage['collection']> = {
   ...collection,
   presentationDisposition: 'retained',
 };
 
-function collectionsPage(sourceRecordCount = 64): RecoveryCollectionsPage {
-  return { ...status('preview', { sourceRecordCount }), next: null, collections: [collection] };
+function collectionsPage(
+  sourceRecordCount = 64,
+  collections: RecoveryCollection[] = [collection],
+  next: string | null = null,
+): RecoveryCollectionsPage {
+  return { ...status('preview', { sourceRecordCount }), next, collections };
 }
 
-function occurrencesPage(rows: RecoveryOccurrence[] = [firstOccurrence, secondOccurrence]): RecoveryOccurrencesPage {
+function occurrencesPage(
+  rows: RecoveryOccurrence[] = [firstOccurrence, secondOccurrence],
+  next: string | null = null,
+): RecoveryOccurrencesPage {
   return {
     ...status('preview', { selectedCollectionId: collectionId }),
-    next: null,
+    next,
     collection: occurrenceCollection,
     occurrences: rows,
   };
 }
 
-function reviewResult(): RecoveryReview {
+function reviewResult(selectedOccurrences = 2): RecoveryReview {
   const mapping = {
     sourceSubjectId: subjectId,
     targetSubjectId: targetId,
@@ -170,14 +185,14 @@ function reviewResult(): RecoveryReview {
     state: 'mapped' as const,
   };
   return {
-    ...status('reviewed', { selectedCollectionId: collectionId, selectedOccurrences: 2 }),
+    ...status('reviewed', { selectedCollectionId: collectionId, selectedOccurrences }),
     review: {
       reviewId: 'recovery-review-1',
       digest: 'a'.repeat(64),
       epoch: 1,
       completeOrder: true,
       completeMembership: true,
-      selectedOccurrences: 2,
+      selectedOccurrences,
       mappings: [mapping],
     },
     mappings: [mapping],
@@ -187,14 +202,17 @@ function reviewResult(): RecoveryReview {
   };
 }
 
-function outcomesPage(state: 'partial' | 'cancelled' = 'partial'): RecoveryOutcomesPage {
+function outcomesPage(
+  state: 'partial' | 'complete' | 'cancelled' = 'partial',
+  next: string | null = null,
+): RecoveryOutcomesPage {
   return {
     ...status(state, {
       selectedCollectionId: collectionId,
       selectedOccurrences: 2,
       collectionId: receivingCollectionId,
     }),
-    next: null,
+    next,
     collection: { id: receivingCollectionId, visibility: 'private' },
     outcomes: [
       {
@@ -215,15 +233,15 @@ function outcomesPage(state: 'partial' | 'cancelled' = 'partial'): RecoveryOutco
         outcome: 'applied',
       },
       {
-        sourceOccurrenceId: occurrenceTwo,
+        sourceOccurrenceId: occurrenceThree,
         sourceSubjectId: subjectId,
         targetSubjectId: targetId,
         nativeMemberId: null,
-        note: 'Second archived note',
+        note: 'Third archived note',
         notePresent: true,
         noteValid: true,
         sourceNoteState: 'value',
-        orderKey: '1',
+        orderKey: '0',
         orderPresent: true,
         addState: 'unresolved',
         noteState: 'unsupported',
@@ -258,6 +276,7 @@ function fakePort(
     upload: unknown[];
     collections: unknown[];
     occurrences: unknown[];
+    outcomes: unknown[];
     reviews: unknown[];
     applies: unknown[];
     cancels: unknown[];
@@ -265,6 +284,7 @@ function fakePort(
     upload: [],
     collections: [],
     occurrences: [],
+    outcomes: [],
     reviews: [],
     applies: [],
     cancels: [],
@@ -291,7 +311,7 @@ function fakePort(
     async review(command) {
       calls.reviews.push(structuredClone(command));
       if (options.staleReview && calls.reviews.length === 1) return { kind: 'conflict' };
-      return { kind: 'ok', value: reviewResult() };
+      return { kind: 'ok', value: reviewResult(command.body.selectedOccurrenceIds.length) };
     },
     async apply(command) {
       calls.applies.push(structuredClone(command));
@@ -306,7 +326,8 @@ function fakePort(
         }),
       };
     },
-    async outcomes() {
+    async outcomes(_id, query) {
+      calls.outcomes.push(structuredClone(query));
       return { kind: 'ok', value: outcomesPage(cancelled ? 'cancelled' : 'partial') };
     },
     async cancel(command) {
@@ -368,6 +389,14 @@ async function click(element: Element) {
   await act(async () => {
     if (element instanceof window.HTMLInputElement) element.click();
     else element.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+async function keyboardClick(element: HTMLButtonElement) {
+  await act(async () => {
+    element.focus();
+    element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 0 }));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
@@ -555,18 +584,87 @@ async function chooseCurrentTarget(host: HTMLElement) {
   await click(option!);
 }
 
-test('mounted visit preserves duplicate occurrences, refreshes a stale review, confirms a private result and retries the exact uncertain command', async () => {
+test('mounted recovery navigates independent native windows, revises selection, retries only the failed read, and applies the exact review', async () => {
   const fake = fakePort({ uncertainApply: true, staleReview: true });
+  fake.port.collections = async (_id, query) => {
+    fake.calls.collections.push(structuredClone(query));
+    const pages = new Map<string | null, RecoveryCollectionsPage>([
+      [null, collectionsPage(64, [], 'collections-2')],
+      ['collections-2', collectionsPage(64, [collection], 'collections-3')],
+      ['collections-3', collectionsPage(64, [])],
+    ]);
+    return { kind: 'ok', value: pages.get(query.cursor ?? null)! };
+  };
+  let failedOccurrenceRead = false;
+  fake.port.occurrences = async (_id, _collectionId, query) => {
+    fake.calls.occurrences.push(structuredClone(query));
+    if (query.cursor === 'occurrences-2' && !failedOccurrenceRead) {
+      failedOccurrenceRead = true;
+      return { kind: 'unavailable' };
+    }
+    const pages = new Map<string | null, RecoveryOccurrencesPage>([
+      [null, occurrencesPage([firstOccurrence], 'occurrences-2')],
+      ['occurrences-2', occurrencesPage([secondOccurrence], 'occurrences-3')],
+      ['occurrences-3', occurrencesPage([thirdOccurrence])],
+    ]);
+    return { kind: 'ok', value: pages.get(query.cursor ?? null)! };
+  };
+  let resultState: 'partial' | 'complete' = 'partial';
+  fake.port.outcomes = async (_id, query) => {
+    fake.calls.outcomes.push(structuredClone(query));
+    if (query.cursor === 'results-2' && resultState === 'partial') {
+      resultState = 'complete';
+      return { kind: 'ok', value: outcomesPage('complete') };
+    }
+    return {
+      kind: 'ok',
+      value: query.cursor
+        ? outcomesPage(resultState)
+        : outcomesPage(resultState, 'results-2'),
+    };
+  };
   const view = await mount(fake.port);
   try {
     await uploadSmallFile(view.host);
+    await keyboardClick(button(view.host, m.library_archive_recovery_next_page()));
+    expect(view.host.textContent).toContain('Private reading collection');
+    expect(window.document.activeElement?.id).toBe('recovery-collections-title');
+    await click(button(view.host, m.library_archive_recovery_next_page()));
+    expect(view.host.textContent).toContain(m.library_archive_recovery_no_collection_window());
+    await click(button(view.host, m.library_window_previous()));
+    expect(view.host.textContent).toContain('Private reading collection');
+    await click(button(view.host, m.library_archive_recovery_first_page()));
+    expect(view.host.textContent).toContain(m.library_archive_recovery_no_collection_window());
+    await click(button(view.host, m.library_archive_recovery_next_page()));
     await click(button(view.host, m.library_archive_recovery_choose_collection()));
-    const rows = [...view.host.querySelectorAll('input[type=checkbox][aria-label]')];
-    expect(rows).toHaveLength(2);
+    let rows = [...view.host.querySelectorAll('input[type=checkbox][aria-label]')];
+    expect(rows).toHaveLength(1);
     expect(view.host.textContent).toContain('First archived note');
+    await click(rows[0]!);
+    await click(button(view.host, m.library_archive_recovery_next_page()));
+    expect(view.host.textContent).toContain(m.library_archive_recovery_unavailable());
+    expect(fake.calls.reviews).toHaveLength(0);
+    expect(fake.calls.applies).toHaveLength(0);
+    await click(button(view.host, m.library_archive_recovery_retry_page()));
+    rows = [...view.host.querySelectorAll('input[type=checkbox][aria-label]')];
+    expect(rows).toHaveLength(1);
     expect(view.host.textContent).toContain('Second archived note');
     await click(rows[0]!);
-    await click(rows[1]!);
+    await click(button(view.host, m.library_archive_recovery_next_page()));
+    expect(view.host.textContent).toContain('Third archived note');
+    rows = [...view.host.querySelectorAll('input[type=checkbox][aria-label]')];
+    await click(rows[0]!);
+    await click(button(view.host, m.library_window_previous()));
+    rows = [...view.host.querySelectorAll('input[type=checkbox][aria-label]')];
+    expect(rows[0]?.checked).toBe(true);
+    await click(rows[0]!);
+    await click(button(view.host, m.library_archive_recovery_first_page()));
+    rows = [...view.host.querySelectorAll('input[type=checkbox][aria-label]')];
+    expect(rows[0]?.checked).toBe(true);
+    expect(view.host.textContent).toContain(m.library_archive_recovery_selection_count({ count: 2, maximum: 1000 }));
+    await click(button(view.host, m.library_archive_recovery_open_review()));
+    await click(button(view.host, m.library_archive_recovery_edit_selection()));
+    expect(view.host.textContent).toContain(m.library_archive_recovery_selection_count({ count: 2, maximum: 1000 }));
     await click(button(view.host, m.library_archive_recovery_open_review()));
     await chooseCurrentTarget(view.host);
     await click(button(view.host, m.library_archive_recovery_review_action()));
@@ -581,7 +679,7 @@ test('mounted visit preserves duplicate occurrences, refreshes a stale review, c
         mappings: { sourceSubjectId: string; targetSubjectId: string | null }[];
       };
     };
-    expect(reviewed.body.selectedOccurrenceIds).toEqual([occurrenceOne, occurrenceTwo]);
+    expect(reviewed.body.selectedOccurrenceIds).toEqual([occurrenceOne, occurrenceThree]);
     expect(reviewed.body.mappings).toEqual([{ sourceSubjectId: subjectId, targetSubjectId: targetId }]);
     expect(view.host.textContent).toContain(m.library_archive_recovery_new_private_destination());
     expect(view.host.textContent).toContain(m.library_archive_recovery_mapping_current({ id: targetId }));
@@ -597,10 +695,64 @@ test('mounted visit preserves duplicate occurrences, refreshes a stale review, c
     expect(view.host.textContent).toContain(m.library_archive_recovery_effect_applied());
     expect(view.host.textContent).toContain(m.library_archive_recovery_effect_unresolved());
     expect(view.host.querySelector('a[href*="/collections/"]')?.getAttribute('href')).toContain(receivingCollectionId);
+    await click(button(view.host, m.library_archive_recovery_next_results()));
+    expect(view.host.querySelector('[data-recovery-state="complete"]')).toBeTruthy();
+    await click(button(view.host, m.library_archive_recovery_read_outcomes()));
+    await click(button(view.host, m.library_archive_recovery_next_results()));
+    expect(view.host.textContent).toContain(m.library_archive_recovery_no_outcomes());
+    await click(button(view.host, m.library_window_previous()));
+    await click(button(view.host, m.library_archive_recovery_first_page()));
+    await click(button(view.host, m.library_archive_recovery_next_results()));
     expect(view.router.state.location.search).toEqual({});
     expect(view.router.state.location.hash).toBe('');
-    expect(fake.calls.collections).toHaveLength(1);
-    expect(fake.calls.occurrences).toHaveLength(2);
+    expect(fake.calls.collections.map((query) => (query as { cursor?: string }).cursor ?? null)).toEqual([
+      null,
+      'collections-2',
+      'collections-3',
+      'collections-2',
+      null,
+      'collections-2',
+    ]);
+    expect(fake.calls.occurrences.map((query) => (query as { cursor?: string }).cursor ?? null)).toEqual([
+      null,
+      'occurrences-2',
+      'occurrences-2',
+      'occurrences-3',
+      'occurrences-2',
+      null,
+    ]);
+    expect(fake.calls.outcomes.map((query) => (query as { cursor?: string }).cursor ?? null)).toEqual([
+      null,
+      'results-2',
+      null,
+      'results-2',
+      null,
+      null,
+      'results-2',
+    ]);
+  } finally {
+    await view.close();
+  }
+});
+
+test('equal replacement and A/B/A visits retire prior reader coordinates', async () => {
+  const fake = fakePort();
+  const view = await mount(fake.port, visit('viewer-a', 'epoch-a'));
+  try {
+    await uploadSmallFile(view.host);
+    expect(view.host.textContent).toContain(collection.title);
+    await view.replaceVisit(visit('viewer-a', 'epoch-a'));
+    expect(view.host.querySelector('input[type=file]')).toBeTruthy();
+    expect(view.host.textContent).not.toContain(collection.title);
+
+    await uploadSmallFile(view.host);
+    await click(button(view.host, m.library_archive_recovery_choose_collection()));
+    expect(view.host.textContent).toContain('First archived note');
+    await view.replaceVisit(visit('viewer-b', 'epoch-b'));
+    expect(view.host.querySelector('input[type=file]')).toBeTruthy();
+    await view.replaceVisit(visit('viewer-a', 'epoch-a'));
+    expect(view.host.querySelector('input[type=file]')).toBeTruthy();
+    expect(view.host.textContent).not.toContain('First archived note');
   } finally {
     await view.close();
   }
@@ -717,6 +869,38 @@ test('one native page and one bounded apply keep request counts constant as unre
     }
   }
   expect(measures.every((measure) => measure.join() === measures[0]!.join())).toBe(true);
+});
+
+test('a cursor window retains eight predecessors and abandons a forward branch after returning', () => {
+  const admission: RecoveryReadAdmission = {
+    uploadId: sourceId,
+    collectionId: null,
+    phase: 'selection',
+    statusState: null,
+    sourceStage: 'collections',
+  };
+  let window = emptyRecoveryReadWindow();
+  for (let index = 1; index <= 12; index++) {
+    const target = recoveryReadTarget(window, 'next', admission, `cursor-${index}`)!;
+    window = { ...window, staged: target };
+    window = commitRecoveryRead(window, target);
+  }
+  expect(window.current).toBe('cursor-12');
+  expect(window.previous).toHaveLength(8);
+  expect(window.previous[0]).toBe('cursor-4');
+
+  const previous = recoveryReadTarget(window, 'previous', admission)!;
+  expect(previous.cursor).toBe('cursor-11');
+  window = commitRecoveryRead({ ...window, staged: previous }, previous);
+  const branch = recoveryReadTarget(window, 'next', admission, 'new-branch-12')!;
+  window = commitRecoveryRead({ ...window, staged: branch }, branch);
+  expect(window.current).toBe('new-branch-12');
+  expect(window.previous.at(-1)).toBe('cursor-11');
+  expect(window.previous).not.toContain('cursor-12');
+  const first = recoveryReadTarget(window, 'first', admission)!;
+  expect(first.cursor).toBeNull();
+  window = commitRecoveryRead(window, first);
+  expect(window.previous).toEqual([]);
 });
 
 afterAll(async () => {

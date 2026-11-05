@@ -38,8 +38,11 @@ export class RecoveryCostLedger {
     if (kind === 'apply') this.current.applyRequests += 1;
   }
 
-  page(kind: 'collections' | 'occurrences' | 'outcomes', rows: number): void {
-    this.call(kind);
+  pageRequest(kind: 'collections' | 'occurrences' | 'outcomes', retry = false): void {
+    this.call(kind, retry);
+  }
+
+  pageResult(rows: number): void {
     this.current.pages += 1;
     this.current.rows += rows;
     this.current.maxPageRows = Math.max(this.current.maxPageRows, rows);

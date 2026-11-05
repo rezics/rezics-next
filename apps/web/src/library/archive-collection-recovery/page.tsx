@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { useOperation } from '../../kernel/exposure';
+import { useCallback, useEffect, useRef, useSyncExternalStore, type MouseEvent } from 'react';
+import { useOperationAdmission } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -16,6 +16,19 @@ import { ArchiveRecoveryConflict, ArchiveRecoveryResults } from './results';
 import { toggleOccurrence, togglePage } from './selection';
 import { ArchiveCollectionRecoveryUpload } from './upload';
 import { useRecoveryVisit, type RecoveryVisit } from './visit';
+import type { RecoveryReader } from './window';
+
+const visitIds = new WeakMap<RecoveryVisit, number>();
+let nextVisitId = 0;
+
+function visitKey(visit: RecoveryVisit): number {
+  let id = visitIds.get(visit);
+  if (id === undefined) {
+    id = ++nextVisitId;
+    visitIds.set(visit, id);
+  }
+  return id;
+}
 
 function noticeText(notice: RecoveryNotice): string | null {
   if (!notice) return null;
@@ -34,7 +47,7 @@ function terminal(stage: string): stage is 'expired' | 'denied' | 'unavailable' 
 export function PrivateArchiveCollectionRecoveryPage({ visit }: { visit?: RecoveryVisit | null }) {
   const observed = useRecoveryVisit();
   const current = visit === undefined ? observed : visit;
-  useOperation('collection.list');
+  const operation = useOperationAdmission('collection.list');
   if (!current) {
     return (
       <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
@@ -43,12 +56,19 @@ export function PrivateArchiveCollectionRecoveryPage({ visit }: { visit?: Recove
       </main>
     );
   }
-  return <RecoverySession key={`${current.subject}:${current.csrfToken}`} visit={current} />;
+  if (operation !== 'available') {
+    return (
+      <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
+        <PageHeading>{m.library_archive_recovery_title()}</PageHeading>
+        <p role="status">{m.library_archive_recovery_unavailable()}</p>
+      </main>
+    );
+  }
+  return <RecoverySession key={`${visitKey(current)}:${operation}`} visit={current} />;
 }
 
 function RecoverySession({ visit }: { visit: RecoveryVisit }) {
   const port = useArchiveCollectionRecoveryPort();
-  const liveRegion = useRef<HTMLParagraphElement>(null);
   const journeyRef = useRef<ArchiveCollectionRecoveryJourney | null>(null);
   if (!journeyRef.current) {
     journeyRef.current = createArchiveCollectionRecoveryJourney({ port, visit });
@@ -65,7 +85,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
   );
   const getSnapshot = useCallback(() => (snapshotCache.current ??= journey.snapshot()), [journey]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const [focusVersion, setFocusVersion] = useState(0);
+  const movementFocus = useRef<{ cancel: () => void } | null>(null);
   const text = noticeText(snapshot.notice);
   const locked = snapshot.notice?.kind === 'unknown';
   const terminalStage = terminal(snapshot.stage);
@@ -75,13 +95,52 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
     </a>
   );
 
-  useEffect(() => () => journey.retire(), [journey, visit]);
-  useEffect(() => {
-    liveRegion.current?.focus();
-  }, [snapshot.stage, snapshot.notice?.kind, focusVersion]);
-
+  useEffect(
+    () => () => {
+      movementFocus.current?.cancel();
+      journey.retire();
+    },
+    [journey, visit],
+  );
   function touch(action: Promise<void>) {
-    void action.then(() => setFocusVersion((value) => value + 1));
+    void action;
+  }
+
+  function moveReader(
+    event: MouseEvent<HTMLButtonElement>,
+    reader: RecoveryReader,
+    revision: number,
+    headingId: string,
+    action: Promise<void>,
+  ) {
+    if (event.detail !== 0 || document.activeElement !== event.currentTarget) {
+      touch(action);
+      return;
+    }
+    movementFocus.current?.cancel();
+    let cancelled = false;
+    const cancel = () => {
+      cancelled = true;
+      document.removeEventListener('focusin', onFocusIn, true);
+    };
+    const onFocusIn = () => cancel();
+    const request = { cancel };
+    movementFocus.current = request;
+    document.addEventListener('focusin', onFocusIn, true);
+    void action.then(() => {
+      document.removeEventListener('focusin', onFocusIn, true);
+      if (movementFocus.current === request) movementFocus.current = null;
+      const current = journey.snapshot();
+      const nextRevision =
+        reader === 'collections'
+          ? current.collectionsWindow.revision
+          : reader === 'occurrences'
+            ? current.occurrencesWindow.revision
+            : current.outcomesWindow.revision;
+      const nextStage = reader === 'collections' ? 'collections' : reader === 'occurrences' ? 'occurrences' : 'results';
+      if (cancelled || !visit.current() || current.stage !== nextStage || nextRevision <= revision) return;
+      document.getElementById(headingId)?.focus();
+    });
   }
 
   const heading = (
@@ -129,9 +188,19 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
       </nav>
 
       {text ? (
-        <p ref={liveRegion} tabIndex={-1} role="status" aria-live="polite" className="rounded-md border p-3">
+        <p tabIndex={-1} role="status" aria-live="polite" className="rounded-md border p-3">
           {text}
         </p>
+      ) : null}
+      {snapshot.readRetry ? (
+        <button
+          type="button"
+          className="min-h-11 rounded-md border px-4 font-medium"
+          disabled={snapshot.busy || locked}
+          onClick={() => touch(journey.retryRead())}
+        >
+          {m.library_archive_recovery_retry_page()}
+        </button>
       ) : null}
       {snapshot.notice?.kind === 'unknown' ? (
         <button
@@ -156,10 +225,12 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
       {snapshot.stage === 'collections' && snapshot.collectionsPage ? (
         <ArchiveCollectionChooser
           page={snapshot.collectionsPage}
-          busy={snapshot.busy || locked}
+          busy={snapshot.busy || locked || Boolean(snapshot.readRetry)}
+          canPrevious={snapshot.collectionsWindow.canPrevious}
           onChoose={(collection) => touch(journey.chooseCollection(collection))}
-          onFirst={() => touch(journey.loadCollections())}
-          onNext={(cursor) => touch(journey.loadCollections(cursor))}
+          onFirst={(event) => moveReader(event, 'collections', snapshot.collectionsWindow.revision, 'recovery-collections-title', journey.loadCollections())}
+          onPrevious={(event) => moveReader(event, 'collections', snapshot.collectionsWindow.revision, 'recovery-collections-title', journey.previousCollections())}
+          onNext={(cursor, event) => moveReader(event, 'collections', snapshot.collectionsWindow.revision, 'recovery-collections-title', journey.loadCollections(cursor))}
         />
       ) : null}
 
@@ -167,12 +238,14 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
         <ArchiveOccurrenceChooser
           page={snapshot.occurrencesPage}
           selected={snapshot.selected}
-          busy={snapshot.busy || locked}
+          busy={snapshot.busy || locked || Boolean(snapshot.readRetry)}
+          canPrevious={snapshot.occurrencesWindow.canPrevious}
           onToggle={(row) => journey.setSelection(toggleOccurrence(snapshot.selected, row))}
           onTogglePage={(rows) => journey.setSelection(togglePage(snapshot.selected, rows))}
           onReview={() => journey.prepareReview()}
-          onPage={(cursor) => touch(journey.loadOccurrences(cursor))}
-          onFirst={() => touch(journey.loadOccurrences())}
+          onPage={(cursor, event) => moveReader(event, 'occurrences', snapshot.occurrencesWindow.revision, 'recovery-occurrences-title', journey.loadOccurrences(cursor))}
+          onFirst={(event) => moveReader(event, 'occurrences', snapshot.occurrencesWindow.revision, 'recovery-occurrences-title', journey.loadOccurrences())}
+          onPrevious={(event) => moveReader(event, 'occurrences', snapshot.occurrencesWindow.revision, 'recovery-occurrences-title', journey.previousOccurrences())}
           onCollections={() => touch(journey.loadCollections())}
         />
       ) : null}
@@ -219,10 +292,12 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           <ArchiveRecoveryResults
             status={snapshot.status}
             page={snapshot.outcomesPage}
-            busy={snapshot.busy || locked}
+            busy={snapshot.busy || locked || Boolean(snapshot.readRetry)}
+            canPrevious={snapshot.outcomesWindow.canPrevious}
             onRead={() => touch(journey.loadOutcomes())}
-            onFirst={() => touch(journey.loadOutcomes())}
-            onNext={(cursor) => touch(journey.loadOutcomes(cursor))}
+            onFirst={(event) => moveReader(event, 'outcomes', snapshot.outcomesWindow.revision, 'recovery-results-title', journey.loadOutcomes())}
+            onPrevious={(event) => moveReader(event, 'outcomes', snapshot.outcomesWindow.revision, 'recovery-results-title', journey.previousOutcomes())}
+            onNext={(cursor, event) => moveReader(event, 'outcomes', snapshot.outcomesWindow.revision, 'recovery-results-title', journey.loadOutcomes(cursor))}
           />
           <button
             type="button"

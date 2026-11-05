@@ -1,5 +1,5 @@
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { CopyEditionPicker } from '../copy-edition-picker';
 import { m } from '../../paraglide/messages.js';
 import { actionClass } from '../private-export/controls';
@@ -125,15 +125,19 @@ function CollectionOption({
 export function ArchiveCollectionChooser({
   page,
   busy,
+  canPrevious,
   onChoose,
   onFirst,
+  onPrevious,
   onNext,
 }: {
   page: RecoveryCollectionsPage;
   busy: boolean;
+  canPrevious: boolean;
   onChoose: (collection: RecoveryCollection) => void;
-  onFirst: () => void;
-  onNext: (cursor: string) => void;
+  onFirst: (event: MouseEvent<HTMLButtonElement>) => void;
+  onPrevious: (event: MouseEvent<HTMLButtonElement>) => void;
+  onNext: (cursor: string, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <div className="grid gap-6">
@@ -141,17 +145,22 @@ export function ArchiveCollectionChooser({
       <section className="grid gap-4" aria-labelledby="recovery-collections-title">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="grid gap-1">
-            <h2 id="recovery-collections-title" className="text-lg font-semibold">
+            <h2 id="recovery-collections-title" tabIndex={-1} className="text-lg font-semibold">
               {m.library_archive_recovery_collections_title()}
             </h2>
             <p className="text-sm text-muted-foreground">{m.library_archive_recovery_collection_window()}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {canPrevious ? (
+              <button className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
+                {m.library_window_previous()}
+              </button>
+            ) : null}
             <button className={actionClass} type="button" disabled={busy} onClick={onFirst}>
               {m.library_archive_recovery_first_page()}
             </button>
             {page.next ? (
-              <button className={actionClass} type="button" disabled={busy} onClick={() => onNext(page.next!)}>
+              <button className={actionClass} type="button" disabled={busy} onClick={(event) => onNext(page.next!, event)}>
                 {m.library_archive_recovery_next_page()}
               </button>
             ) : null}
@@ -247,6 +256,8 @@ export function ArchiveOccurrenceChooser({
   onReview,
   onPage,
   onFirst,
+  canPrevious,
+  onPrevious,
   onCollections,
 }: {
   page: RecoveryOccurrencesPage;
@@ -255,15 +266,17 @@ export function ArchiveOccurrenceChooser({
   onToggle: (row: RecoveryOccurrence) => void;
   onTogglePage: (rows: readonly RecoveryOccurrence[]) => void;
   onReview: () => void;
-  onPage: (cursor: string) => void;
-  onFirst: () => void;
+  onPage: (cursor: string, event: MouseEvent<HTMLButtonElement>) => void;
+  onFirst: (event: MouseEvent<HTMLButtonElement>) => void;
+  canPrevious: boolean;
+  onPrevious: (event: MouseEvent<HTMLButtonElement>) => void;
   onCollections: () => void;
 }) {
   const rows = page.occurrences;
   return (
     <section className="grid gap-4" aria-labelledby="recovery-occurrences-title">
       <div className="grid gap-2">
-        <h2 id="recovery-occurrences-title" className="text-lg font-semibold">
+        <h2 id="recovery-occurrences-title" tabIndex={-1} className="text-lg font-semibold">
           {m.library_archive_recovery_occurrences_title()}
         </h2>
         {page.collection ? (
@@ -292,11 +305,16 @@ export function ArchiveOccurrenceChooser({
         <button className={actionClass} type="button" disabled={busy} onClick={onFirst}>
           {m.library_archive_recovery_first_page()}
         </button>
+        {canPrevious ? (
+          <button className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
+            {m.library_window_previous()}
+          </button>
+        ) : null}
         <button className={actionClass} type="button" disabled={busy || !selected.size} onClick={onReview}>
           {m.library_archive_recovery_open_review()}
         </button>
         {page.next ? (
-          <button className={actionClass} type="button" disabled={busy} onClick={() => onPage(page.next!)}>
+          <button className={actionClass} type="button" disabled={busy} onClick={(event) => onPage(page.next!, event)}>
             {m.library_archive_recovery_next_page()}
           </button>
         ) : null}

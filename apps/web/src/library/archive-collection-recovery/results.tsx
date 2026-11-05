@@ -1,5 +1,6 @@
 import { localizeHref } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
+import type { MouseEvent } from 'react';
 import { actionClass } from '../private-export/controls';
 import type { RecoveryOutcomesPage, RecoveryStatus } from './contract';
 
@@ -110,16 +111,20 @@ export function ArchiveRecoveryResults({
   status,
   page,
   busy,
+  canPrevious,
   onRead,
   onFirst,
+  onPrevious,
   onNext,
 }: {
   status: RecoveryStatus;
   page: RecoveryOutcomesPage | null;
   busy: boolean;
+  canPrevious: boolean;
   onRead: () => void;
-  onFirst: () => void;
-  onNext: (cursor: string) => void;
+  onFirst: (event: MouseEvent<HTMLButtonElement>) => void;
+  onPrevious: (event: MouseEvent<HTMLButtonElement>) => void;
+  onNext: (cursor: string, event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const collectionId = page?.collection?.id ?? status.collectionId;
   const state = status.state;
@@ -136,7 +141,7 @@ export function ArchiveRecoveryResults({
   return (
     <section className="grid gap-4" data-recovery-state={state} aria-labelledby="recovery-results-title">
       <div className="grid gap-3 rounded-xl border p-4 sm:p-6">
-        <h2 id="recovery-results-title" className="text-lg font-semibold">
+        <h2 id="recovery-results-title" tabIndex={-1} className="text-lg font-semibold">
           {heading}
         </h2>
         <p role="status">
@@ -177,8 +182,13 @@ export function ArchiveRecoveryResults({
             {m.library_archive_recovery_first_page()}
           </button>
         ) : null}
+        {canPrevious ? (
+          <button className={actionClass} type="button" disabled={busy} onClick={onPrevious}>
+            {m.library_window_previous()}
+          </button>
+        ) : null}
         {page?.next ? (
-          <button className={actionClass} type="button" disabled={busy} onClick={() => onNext(page.next!)}>
+          <button className={actionClass} type="button" disabled={busy} onClick={(event) => onNext(page.next!, event)}>
             {m.library_archive_recovery_next_results()}
           </button>
         ) : null}

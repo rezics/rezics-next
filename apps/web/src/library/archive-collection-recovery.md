@@ -35,6 +35,8 @@ but cannot be selected. Source privacy is never copied; destination privacy is a
 
 Decision: disable the file chooser while preparing one selected archive; keep a failed read selected for explicit retry or replacement.
 
+Decision: Keep separate bounded cursor windows for Collections, selected-Collection occurrences, and outcomes; commit coordinates only after the exact current read succeeds, and retry its staged cursor as a read.
+
 The upload, current page, selected operands and previews live only in mounted page memory. The upload uses a same-site
 no-store server function and the current viewer/CSRF session; neither archive bytes, continuation cursors nor source
 IDs enter the URL or persistent browser storage. Current session, CSRF credential epoch, route unmount or native
@@ -50,15 +52,24 @@ private Collection remain. Expiring evidence does not delete or unpublish that C
 
 The delivered bounds are `U = 34 MiB` raw upload, `P = 50` native preview/result rows, `R = 1,000` selected
 occurrences, 25 native steps per apply call, 24-hour evidence retention, and 4,096-character cursors. The canonical
-base64 body is at most 47,535,448 characters. A conservative current response bound is
-`B = 50 × (120,000 source-record bytes + 512 projected-response bytes) + 16,384 root/cursor bytes = 6,041,984 bytes`;
-the source row cap and fixed native envelope supply these terms.
+base64 upload body is at most 47,535,448 ASCII characters. A conservative current native response bound is
+`B = 50 × (120,000 source-record bytes + 512 projected-response bytes) + 16,384 root/cursor bytes = 6,041,984 bytes`.
+The visit retains at most one current page per reader, so three simultaneous page bodies are bounded by `3B =
+18,125,952 bytes`; it retains no old pages or response archives.
 
-Upload transfer is `O(U)`. One-page rendering and response state are `O(P + B)`; the explicit selection retains at most
-`R` delivered occurrence operands, and review adds `O(1)` beyond those operands. The visit does not walk pages to a
-total, hydrate each row, reconstruct rank keys, or load the archive into the browser. Subject suggestions run only
-after an explicit search term. Native apply independently caps each request at 25 commands and total selected work
-at `3R + 2` attempts.
+Each of the three cursor windows keeps at most eight predecessor cursors, one current cursor and one staged target.
+At 4,096 characters each, this is at most 40,960 cursor characters (81,920 UTF-16 bytes) per reader and 122,880
+characters (245,760 UTF-16 bytes) total, plus fixed object and array overhead. A staged target stores only its cursor
+and admission coordinates; it does not duplicate the predecessor stack.
+
+The explicit selection retains at most `R` delivered occurrence operands. At the producer's 120,000-byte source-row
+cap plus 512-byte projection allowance, that is at most 120,512,000 bytes for 1,000 selected row copies. Review sends
+only occurrence IDs and one source-to-target mapping per distinct selected Subject (at most 1,000 each), not those
+row copies; its canonical JSON body is at most 155,094 ASCII bytes for UUID operands. Apply retains one review ID and
+64-character digest (127 canonical JSON bytes) and each click admits at most 25 native steps; total selected work
+remains capped at `3R + 2` attempts. Upload transfer remains `O(U)`. The visit does not walk pages to a total, hydrate
+each row, reconstruct rank keys, or load the archive into browser storage. Subject suggestions run only after an
+explicit search term.
 
 Stories cover upload, local preparation, file-read failure, reviewed selection, stale conflict and partial result.
 Focused Web acceptance exercises the mounted journey and bounded/source-session behavior; native HTTP producer
