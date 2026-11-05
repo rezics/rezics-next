@@ -59,7 +59,16 @@ function operation(phase: 'completed' | 'applying' | 'preview' = 'completed') {
 }
 
 function outcome(state: LibraryBulkOutcome['state'], ordinal = '0'): LibraryBulkOutcome {
-  return { ordinal, subjectId, memberId: null, state, reason: null, resultingMemberId: null };
+  return {
+    ordinal,
+    subjectId,
+    memberId: null,
+    state,
+    reason: null,
+    deletion: null,
+    memberDeletion: null,
+    resultingMemberId: null,
+  };
 }
 
 test('renders the captured operation and results without issuing a command', () => {

@@ -51,6 +51,8 @@ const outcome = {
   memberId: null,
   state: 'applied',
   reason: null,
+  deletion: null,
+  memberDeletion: null,
   resultingMemberId: null,
 };
 function native(handler: (request: Request) => Response | Promise<Response>) {
