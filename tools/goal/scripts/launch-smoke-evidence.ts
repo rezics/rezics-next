@@ -20,10 +20,10 @@ import type { AgentAdapter, AgentLaunchOptions } from '../src/agents.ts';
 import { writeEvidenceAtomically } from '../test-support/lifecycle-fixture.ts';
 import type { ExecutedRegression, ScenarioEvidence } from '../test-support/lifecycle-scenarios.ts';
 
-const CHECK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type SmokePolicy = ControlPolicy['launchSmoke'];type SmokePolicy = ControlPolicy['launchSmoke'];
+export const CHECK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export type SmokePolicy = ControlPolicy['launchSmoke'];
 
-type SmokeReport = {
+export type SmokeReport = {
   version: 1;
   status: 'running' | 'passed' | 'failed' | 'unverified';
   startedAt: string;
@@ -36,7 +36,7 @@ type SmokeReport = {
   failure?: { step: string; detail: string; classification: 'failure' | 'infrastructure/unverified' };
 };
 
-type Reporter = (line: string) => void;
+export type Reporter = (line: string) => void;
 
 export type SmokeLaunchEvidence = {
   mode: 'start' | 'resume';
