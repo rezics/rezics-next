@@ -252,6 +252,7 @@ test('released group Continue, Previous, First and native open/back each read on
   expect(envelope).not.toContain('Current edition');
   expect(envelope).not.toContain('csrf');
   await click('next');
+  expect(reads).toHaveLength(7);
   await finish(page(null));
   expect(link('next')).toBeNull();
   expect(
