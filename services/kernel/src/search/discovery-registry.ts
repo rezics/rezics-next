@@ -137,6 +137,10 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
   };
   return Object.freeze({
     entries: Object.freeze([...byKind.values()]),
+    omittedKinds: Object.freeze((options.omittedKinds ?? []).map((kind) => Object.freeze({
+      ...kind,
+      labels: Object.freeze({ ...kind.labels }),
+    }))),
     get,
     ownerAdapters,
     getOwnerAdapter(kind: DiscoveryOwnerKind) {

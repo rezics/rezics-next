@@ -50,6 +50,24 @@ test('current native refusal removes account and verification links without inve
   expect(html).not.toContain('Verified');
 });
 
+test('partial native coverage keeps available results and visibly names the omitted kind', () => {
+  const page = {
+    ...discoveryExample,
+    kinds: {
+      ...discoveryExample.kinds,
+      omitted: [{ id: 'space', labels: { en: 'Spaces' }, state: 'unavailable' as const }],
+    },
+  };
+  const parsed = parseDiscoveryPage(page);
+  expect(parsed?.kinds.omitted).toEqual(page.kinds.omitted);
+  expect(parseDiscoveryPage({ ...page, kinds: { ...page.kinds, omitted: [{ ...page.kinds.omitted[0]!, id: 'account' }] } })).toBeUndefined();
+  const html = renderToStaticMarkup(
+    createElement(DiscoveryResults, { state: { status: 'ready', page: parsed! }, locale: 'en' }),
+  );
+  expect(html).toContain('The Spaces results are currently unavailable.');
+  expect(html).toContain('Mira Reading Room');
+});
+
 test('empty, unavailable, not-ready and loading are different; legacy or incomplete responses cannot become success', async () => {
   const states = [
     await readDiscovery(request, async () => ({ status: 200, data: { ...discoveryExample, hits: [] } })),

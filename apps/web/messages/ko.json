@@ -2563,6 +2563,8 @@
   "discovery_loading": "검색 결과 불러오는 중…",
   "discovery_not_in_library": "보관함에 없습니다.",
   "discovery_viewer_unavailable": "보관함 및 평점 정보를 사용할 수 없습니다. 이 검색을 새로고침해 다시 시도하세요.",
+  "discovery_kind_preparing": "{kind} 검색 결과를 준비 중입니다.",
+  "discovery_kind_unavailable": "{kind} 검색 결과를 현재 사용할 수 없습니다.",
   "discovery_not_ready": "검색을 준비하고 있습니다. 잠시 후 다시 시도해 주세요.",
   "discovery_unnamed_account": "이름 없는 계정",
   "discovery_verified_as": "{name}(으)로 인증됨",

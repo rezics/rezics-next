@@ -2563,6 +2563,8 @@
   "discovery_loading": "Cargando resultados…",
   "discovery_not_in_library": "No está en tu biblioteca.",
   "discovery_viewer_unavailable": "Los detalles de tu biblioteca y tus valoraciones no están disponibles. Vuelve a cargar esta búsqueda para intentarlo de nuevo.",
+  "discovery_kind_preparing": "Los resultados de {kind} todavía se están preparando.",
+  "discovery_kind_unavailable": "Los resultados de {kind} no están disponibles ahora.",
   "discovery_not_ready": "La búsqueda se está preparando. Inténtalo de nuevo en un momento.",
   "discovery_unnamed_account": "Cuenta sin nombre",
   "discovery_verified_as": "Identidad verificada: {name}",

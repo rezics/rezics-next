@@ -7,6 +7,7 @@ import {
   SECOND_SCOPE_PUBLIC_METADATA_KINDS,
   discoveryCapabilityMatches,
   discoveryCapabilityWitnesses,
+  classifyDiscoveryMetadataProducers,
   DiscoveryPopulationCutChangedError,
   advanceDiscovery,
   DISCOVERY_LIVE_GENERATIONS_SQL,
@@ -61,6 +62,40 @@ test('a registered kind from an owner without a generation producer remains expl
 
   expect(error).toBeInstanceOf(DiscoveryProducerCoverageError);
   expect(error).toMatchObject({ missingKinds: [], unsupportedKinds: ['collection', 'review', 'space'] });
+});
+
+test('metadata producer absence and readiness omit only that kind from generation requirements', async () => {
+  const producer = (kind: 'collection' | 'review' | 'space', readiness: unknown) =>
+    ({
+      kind,
+      owner: kind === 'collection' ? 'commerce' : 'content',
+      readiness: async () => readiness,
+    }) as unknown as DiscoveryMetadataProducer;
+  const available = producer('collection', 'ready');
+  const classification = await classifyDiscoveryMetadataProducers({
+    collection: available,
+    review: producer('review', 'preparing'),
+  });
+
+  expect(classification).toEqual({
+    availableKinds: ['collection'],
+    omittedKinds: [
+      { kind: 'review', state: 'preparing' },
+      { kind: 'space', state: 'unavailable' },
+    ],
+    witnesses: {},
+  });
+  expect(() =>
+    assertDiscoveryProducerCoverage(
+      [
+        { kind: 'account', owner: 'accounts' },
+        { kind: 'subject', owner: 'semantic' },
+        { kind: 'collection', owner: 'commerce' },
+      ],
+      classification.availableKinds,
+      ['account', 'subject', ...classification.availableKinds],
+    ),
+  ).not.toThrow();
 });
 
 test('default native owner readers register through the canonical slots without certifying population', async () => {

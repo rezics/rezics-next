@@ -296,7 +296,16 @@ const count = v.union([
   v.object({ kind: v.string(), unavailable: v.literal(true) }),
 ]);
 const kind = v.object({ id: v.string(), labels: textMap, icon: v.string(), count: v.exactOptional(count) });
-const kinds = v.object({ values: v.pipe(v.array(kind), v.maxLength(8)), next: v.nullable(v.string()) });
+const omittedKind = v.strictObject({
+  id: v.string(),
+  labels: textMap,
+  state: v.picklist(['preparing', 'unavailable']),
+});
+const kinds = v.object({
+  values: v.pipe(v.array(kind), v.maxLength(8)),
+  omitted: v.exactOptional(v.pipe(v.array(omittedKind), v.maxLength(3))),
+  next: v.nullable(v.string()),
+});
 const kindPage = v.object({ kinds, as_of: v.string() });
 const viewerQuestion = v.strictObject({
   id: resourceId,
@@ -601,8 +610,12 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
 }
 
 function validKinds(value: DiscoveryKinds): boolean {
+  const available = new Set(value.values.map((kind) => kind.id));
+  const omitted = value.omitted ?? [];
   return (
-    new Set(value.values.map((kind) => kind.id)).size === value.values.length &&
+    available.size === value.values.length &&
+    new Set(omitted.map((kind) => kind.id)).size === omitted.length &&
+    omitted.every((kind) => !available.has(kind.id)) &&
     value.values.every((kind) => !kind.count || kind.count.kind === kind.id)
   );
 }
@@ -732,6 +745,7 @@ export async function readDiscoveryKinds(
       status: 'ready',
       kinds: {
         values: parsed.output.kinds.values.map(({ count: _count, ...metadata }) => metadata),
+        ...(parsed.output.kinds.omitted ? { omitted: parsed.output.kinds.omitted } : {}),
         next: parsed.output.kinds.next,
       },
     };

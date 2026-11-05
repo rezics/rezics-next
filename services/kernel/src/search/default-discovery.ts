@@ -38,12 +38,19 @@ import { nativeSpaceDiscoveryAdapter } from './space-discovery.ts';
 import type { SpaceDiscoverySummary } from '../community/space-discovery.ts';
 import type {
   DiscoveryOwnerAdapterSlots,
+  DiscoveryOmittedKind,
   DiscoveryOwnerMetadataSummary,
   DiscoveryPage,
   DiscoveryReadContext,
   DiscoveryUnionHit,
 } from './discovery.ts';
-import type { DiscoveryMetadataKind, DiscoveryMetadataProducer } from './generations.ts';
+import {
+  classifyDiscoveryMetadataProducers,
+  type DiscoveryCapabilityWitnesses,
+  type DiscoveryMetadataKind,
+  type DiscoveryMetadataProducer,
+  type DiscoveryMetadataProducers,
+} from './generations.ts';
 import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from './discovery-documents.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
@@ -85,7 +92,54 @@ export type DefaultDiscoverySearch = Readonly<{
 }>;
 
 export type DefaultDiscoveryOwnerAdapters = DiscoveryOwnerAdapterSlots &
-  Readonly<{ metadataProducers: Readonly<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>> }>;
+  Readonly<{ metadataProducers: DiscoveryMetadataProducers }>;
+export type ResolvedDefaultDiscoveryOwnerAdapters = DefaultDiscoveryOwnerAdapters &
+  Readonly<{ omittedKinds: readonly DiscoveryOmittedKind[]; capabilityWitnesses: DiscoveryCapabilityWitnesses }>;
+
+const DISCOVERY_OWNER_METADATA = {
+  collection: {
+    id: 'collection',
+    labels: {
+      de: 'Sammlungen',
+      en: 'Collections',
+      es: 'Colecciones',
+      fr: 'Collections',
+      ja: 'コレクション',
+      ko: '컬렉션',
+      'zh-Hans': '收藏集',
+      'zh-Hant': '收藏集',
+    },
+    icon: 'library',
+  },
+  review: {
+    id: 'review',
+    labels: {
+      de: 'Rezensionen',
+      en: 'Reviews',
+      es: 'Reseñas',
+      fr: 'Avis',
+      ja: 'レビュー',
+      ko: '리뷰',
+      'zh-Hans': '评论',
+      'zh-Hant': '評論',
+    },
+    icon: 'message-square',
+  },
+  space: {
+    id: 'space',
+    labels: {
+      de: 'Spaces',
+      en: 'Spaces',
+      es: 'Espacios',
+      fr: 'Espaces',
+      ja: 'スペース',
+      ko: '스페이스',
+      'zh-Hans': '空间',
+      'zh-Hant': '空間',
+    },
+    icon: 'users',
+  },
+} as const;
 
 type SemanticDiscoveryHit = Extract<DiscoveryUnionHit, { summary: { kind: 'subject' } }>;
 type EnrichedDiscoveryPage = Readonly<{
@@ -476,54 +530,10 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
   keys?: KeyRing;
   reviewSource?: ReviewDiscoverySource;
 }): DefaultDiscoveryOwnerAdapters {
-  const metadata = {
-    collection: {
-      id: 'collection',
-      labels: {
-        de: 'Sammlungen',
-        en: 'Collections',
-        es: 'Colecciones',
-        fr: 'Collections',
-        ja: 'コレクション',
-        ko: '컬렉션',
-        'zh-Hans': '收藏集',
-        'zh-Hant': '收藏集',
-      },
-      icon: 'library',
-    },
-    review: {
-      id: 'review',
-      labels: {
-        de: 'Rezensionen',
-        en: 'Reviews',
-        es: 'Reseñas',
-        fr: 'Avis',
-        ja: 'レビュー',
-        ko: '리뷰',
-        'zh-Hans': '评论',
-        'zh-Hant': '評論',
-      },
-      icon: 'message-square',
-    },
-    space: {
-      id: 'space',
-      labels: {
-        de: 'Spaces',
-        en: 'Spaces',
-        es: 'Espacios',
-        fr: 'Espaces',
-        ja: 'スペース',
-        ko: '스페이스',
-        'zh-Hans': '空间',
-        'zh-Hant': '空間',
-      },
-      icon: 'users',
-    },
-  } as const;
   const clock = config.clock ? { clock: config.clock } : {};
   const collection = createNativeCollectionDiscoveryAdapter(
     { pool: config.pool, access: config.access, routeKey: config.routeKey, ...clock },
-    metadata.collection,
+    DISCOVERY_OWNER_METADATA.collection,
   );
   const reviewSource =
     config.reviewSource ??
@@ -542,7 +552,7 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
         adapter: {
           owner: 'content' as const,
           kind: 'review' as const,
-          metadata: metadata.review,
+          metadata: DISCOVERY_OWNER_METADATA.review,
           readCurrent: review.readCurrent,
         },
       }
@@ -552,7 +562,7 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
     adapter: {
       owner: 'content' as const,
       kind: 'space' as const,
-      metadata: metadata.space,
+      metadata: DISCOVERY_OWNER_METADATA.space,
       async readCurrent(
         ids: readonly string[],
         context: DiscoveryReadContext,
@@ -619,7 +629,7 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
       },
     },
   };
-  const metadataProducers: Readonly<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>> = Object.freeze({
+  const metadataProducers: DiscoveryMetadataProducers = Object.freeze({
     collection: createCollectionPopulationProducer(collection),
     review: createReviewPopulationProducer(reviewSource),
     space: createSpacePopulationProducer(space),
@@ -632,6 +642,73 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
   });
 }
 
+/** Resolve only current population capabilities; current owner readers stay independently bound per kind. */
+export async function resolveDefaultDiscoveryOwnerAdapters(config: {
+  pool: Pool;
+  routeKey: Uint8Array;
+  access: DefaultPublicFilterRuntimeConfig['access'];
+  clock?: DefaultPublicFilterRuntimeConfig['clock'];
+  keys?: KeyRing;
+  reviewSource?: ReviewDiscoverySource;
+}): Promise<ResolvedDefaultDiscoveryOwnerAdapters> {
+  const all = createDefaultDiscoveryOwnerAdapters(config);
+  const classification = await classifyDiscoveryMetadataProducers(all.metadataProducers);
+  const available = new Set(classification.availableKinds);
+  const omittedKinds = classification.omittedKinds.map(({ kind, state }) => ({
+    id: kind,
+    labels: DISCOVERY_OWNER_METADATA[kind].labels,
+    state,
+  }));
+  return Object.freeze({
+    collection: available.has('collection') ? all.collection : { readiness: 'unavailable' },
+    review: available.has('review') ? all.review : { readiness: 'unavailable' },
+    space: available.has('space') ? all.space : { readiness: 'unavailable' },
+    metadataProducers: Object.freeze(
+      Object.fromEntries(classification.availableKinds.map((kind) => [kind, all.metadataProducers[kind]!])) as Partial<
+        Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>
+      >,
+    ),
+    omittedKinds: Object.freeze(omittedKinds),
+    capabilityWitnesses: classification.witnesses,
+  });
+}
+
+function bindDefaultDiscoveryOwnerAdaptersToPublishedKinds(
+  adapters: ResolvedDefaultDiscoveryOwnerAdapters,
+  publishedKinds: readonly string[] | undefined,
+): ResolvedDefaultDiscoveryOwnerAdapters {
+  if (publishedKinds === undefined) return adapters;
+  const published = new Set(publishedKinds);
+  const available = new Set(
+    Object.keys(adapters.metadataProducers).filter((kind) => published.has(kind)),
+  ) as Set<DiscoveryMetadataKind>;
+  const omittedKinds = [
+    ...adapters.omittedKinds,
+    ...Object.keys(adapters.metadataProducers)
+      .filter((kind) => !published.has(kind))
+      .map((kind) => ({
+        id: kind,
+        labels: DISCOVERY_OWNER_METADATA[kind as DiscoveryMetadataKind].labels,
+        state: 'preparing' as const,
+      })),
+  ];
+  const witnesses = Object.fromEntries(
+    Object.entries(adapters.capabilityWitnesses).filter(([kind]) => published.has(kind)),
+  ) as DiscoveryCapabilityWitnesses;
+  return Object.freeze({
+    collection: available.has('collection') ? adapters.collection : { readiness: 'unavailable' },
+    review: available.has('review') ? adapters.review : { readiness: 'unavailable' },
+    space: available.has('space') ? adapters.space : { readiness: 'unavailable' },
+    metadataProducers: Object.freeze(
+      Object.fromEntries([...available].map((kind) => [kind, adapters.metadataProducers[kind]!])) as Partial<
+        Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>
+      >,
+    ),
+    omittedKinds: Object.freeze(omittedKinds),
+    capabilityWitnesses: Object.freeze(witnesses),
+  });
+}
+
 /** Default public catalogue/Account candidates, also consumed by the home feed with its current Actor.
  * Source owns whole-population readiness. Neither a local census nor returned summaries replace it.
  */
@@ -640,7 +717,6 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
   const runtime = createDefaultPublicFilterRuntime(config);
   const source = publicFilterSource(config);
   const subjects = createRatedSubjectSource(config.pool, config.routeKey).source;
-  const ownerAdapters = createDefaultDiscoveryOwnerAdapters(config);
   let work: ReturnType<typeof createWorkClient> | undefined;
   const pending = new Set<Promise<unknown>>();
   const retained = new Set<RetainedDiscoveryRead>();
@@ -662,10 +738,19 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
       let disclosureTarget: import('./account-discovery.ts').DiscoveryTarget | undefined;
       const current = await activeRelease(config.pool);
       if (!current) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+      const resolvedAdapters = await resolveDefaultDiscoveryOwnerAdapters(config);
+      const activeGeneration = (await discoveryGenerations(config.pool, config.prefix)).find(
+        ({ state }) => state === 'active',
+      );
+      const ownerAdapters = bindDefaultDiscoveryOwnerAdaptersToPublishedKinds(
+        resolvedAdapters,
+        activeGeneration?.kinds,
+      );
       const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, subjects, {
         release: current.release,
         languages,
         ownerAdapters,
+        omittedKinds: ownerAdapters.omittedKinds,
       });
       const bound = () => {
         if (!operations) throw new Error('Discovery capture or retained resume must precede consumer work');

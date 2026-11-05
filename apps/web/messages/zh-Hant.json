@@ -2563,6 +2563,8 @@
   "discovery_loading": "正在載入結果…",
   "discovery_not_in_library": "不在你的收藏庫中。",
   "discovery_viewer_unavailable": "你的收藏庫與評分詳情目前無法使用。請重新載入此搜尋再試一次。",
+  "discovery_kind_preparing": "正在準備{kind}的搜尋結果。",
+  "discovery_kind_unavailable": "目前無法使用{kind}的搜尋結果。",
   "discovery_not_ready": "搜尋正在準備中，請稍後再試。",
   "discovery_unnamed_account": "未命名帳號",
   "discovery_verified_as": "已認證為 {name}",
