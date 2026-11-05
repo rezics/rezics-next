@@ -3,6 +3,7 @@ import { createKernelClient } from '@rezics/client';
 import { BulkOperationUndo, undoOperand, bulkOperationUndoHref } from '../src/library/bulk-operation-undo';
 import { prepareNativeBulkUndo } from '../src/library/bulk-operation-undo-native';
 import type { OperationAddress } from '../src/library/bulk-operation-recovery-native';
+import { receiveUndoEvidence } from '../src/library/bulk-operation-undo-evidence';
 import type { BulkUndoRead } from '../src/library/bulk-operation-undo-evidence';
 import type { LibraryRestoreInput } from '../src/library/entries-read';
 
@@ -14,6 +15,8 @@ const ready = {
 };
 
 test('reopened Undo uses only disclosed personal removal evidence and its original deadline', () => {
+  expect(receiveUndoEvidence({ ...ready, page: { ...ready.page, next: 'x'.repeat(4097) } }).state).toBe('unavailable');
+  expect(receiveUndoEvidence({ ...ready, page: { ...ready.page, next: 'x'.repeat(4096) } }).state).toBe('ready');
   expect(bulkOperationUndoHref('zh-Hant', id)).toBe(`/zh-Hant/library/operations/${id}/undo`);
   expect(undoOperand(operation, outcome)?.subjectId).toBe('book-one');
   for (const row of [

@@ -31,6 +31,7 @@ export type BulkUndoRead =
 
 export function receiveUndoEvidence(result: BulkRead): BulkUndoRead {
   if (result.state !== 'ready') return result;
+  if (result.page.next !== null && result.page.next.length > 4096) return { state: 'unavailable' };
   return {
     ...result,
     page: {
