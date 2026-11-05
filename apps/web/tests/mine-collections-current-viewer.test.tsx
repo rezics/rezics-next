@@ -1,3 +1,4 @@
+import { mineCollectionsViewerPage as response } from './factories/collections';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
@@ -57,50 +58,6 @@ function deferred<T>() {
     reject = no;
   });
   return { promise, resolve, reject };
-}
-function response(
-  subject: string,
-  cursor: string | null = null,
-  layout: 'rows' | 'previews' = 'previews',
-): MineCollectionsViewerPage {
-  return {
-    sessionSubject: subject,
-    requested: { cursor, layout },
-    page: {
-      signedIn: true,
-      state: 'loaded',
-      next: `next-${subject}`,
-      collections: [
-        {
-          id: 'shared-private',
-          title: `Private ${subject}`,
-          curator: null,
-          visibility: 'private',
-          preview: {
-            state: 'loaded',
-            members: [{ id: `subject-${subject}`, type: 'Book', label: `Preview ${subject}`, cover: null }],
-          },
-        },
-      ],
-      navigationCollections: [
-        {
-          id: `state-${subject}`,
-          title: `Navigation ${subject}`,
-          curator: null,
-          membershipKind: 'dynamic',
-          builtinKind: 'state',
-        },
-      ],
-    },
-    pins: {
-      state: 'loaded',
-      revision: 7,
-      next: null,
-      canUpdate: true,
-      canRemove: true,
-      pins: [{ collectionId: `pin-${subject}`, target: { id: `pin-${subject}`, title: `Pinned ${subject}` } }],
-    },
-  };
 }
 
 test('The default My Collections route immediately retires private collections and pins on observed viewer or request replacement and accepts only actual matching prepared-viewer results', async () => {

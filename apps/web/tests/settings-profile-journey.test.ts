@@ -1,3 +1,4 @@
+import { editableProfile, profileAvatar, profileValues } from './factories/profile';
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
@@ -12,24 +13,17 @@ import { parseProfileWrite } from '../src/settings/profile-write-input';
 import { profileNeedsNavigationDecision } from '../src/settings/profile-navigation';
 
 function initial(): ProfileValues {
-  return {
-    accountId: '019a0000-0000-7000-8000-000000000001',
-    kind: 'actor',
-    displayName: 'Avery',
-    biography: 'Reading notes',
-    avatar: {
-      media: '019a0000-0000-7000-8000-000000000002',
-      width: 80,
-      height: 80,
-      placeholder: { thumbhash: 'hash', color: '#123456' },
-      variants: [{ format: 'webp', width: 80 }],
-      focalPoint: null,
-      credit: null,
-    },
-    links: [{ label: 'Home', url: 'https://example.test' }],
-    publicViews: { posts: true, reviews: true, collections: true, realms: false },
-  };
+  return profileValues(
+    editableProfile({
+      displayName: 'Avery',
+      bio: 'Reading notes',
+      avatar: profileAvatar(),
+      links: [{ label: 'Home', url: 'https://example.test' }],
+      publicViews: { posts: true, reviews: true, collections: true, realms: false },
+    }),
+  );
 }
+
 function api(options: { handleless?: boolean; unavailable?: boolean; compactHandle?: boolean } = {}) {
   let current = initial();
   const writes: { patch: object; key: string | null }[] = [];
