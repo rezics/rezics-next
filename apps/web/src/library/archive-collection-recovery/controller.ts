@@ -10,6 +10,7 @@ import {
   type RecoveryOccurrencesPage,
   type RecoveryOutcome,
   type RecoveryOutcomesPage,
+  type RecoveryPageQuery,
   type RecoveryPort,
   type RecoveryReview,
   type RecoveryStatus,
@@ -402,7 +403,10 @@ export function createArchiveCollectionRecoveryJourney(input: {
       | RecoveryFailure
       | RecoveryUnknown;
     try {
-      const query = { limit: RECOVERY_PAGE_ROWS, ...(target.cursor === null ? {} : { cursor: target.cursor }) };
+      const query: RecoveryPageQuery =
+        target.cursor === null
+          ? { limit: RECOVERY_PAGE_ROWS }
+          : { limit: RECOVERY_PAGE_ROWS, cursor: target.cursor };
       switch (kind) {
         case 'collections':
           result = await port.collections(uploadId, query);
