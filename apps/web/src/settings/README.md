@@ -112,6 +112,8 @@ Keep the existing thread watch toggle on the thread page. Settings does not add 
 
 **Decision:** A refused replay preserves the original removal as unresolved, drops denied page authority, and permits only a deliberate current read or exact replay; only a validated removal receipt settles it.
 
+**Decision:** A valid removal Retry-After is one absolute endpoint deadline scoped to the installed Settings owner. Keep the longest live deadline through reads, category changes and Watch view remounts; gate fresh removal and exact-original replay in the controller and controls, show definite refusal waits, and let expiry enable deliberate action without IO. Read waits remain independent.
+
 **Decision:** A watch-only departure names removal recovery; watches combined with any other Settings draft use the shared all-settings warning. Stay preserves the original intent and focus; Leave discards local recovery without promising native cancellation.
 
 **Decision:** Same-tab return keeps the current address, up to eight prior addresses and exact subscription ID, kind and revision in the Settings history entry. Return rereads that window; keyboard focus goes to its current disclosed stop control only after an exact native match and only if focus has not moved, while pointer return never changes focus. Missing, changed or withheld rows leave the current watches region available without scanning.

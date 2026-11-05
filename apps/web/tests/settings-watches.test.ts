@@ -331,6 +331,75 @@ test('uncertain removal needs current advice and both captured retry deadlines b
   }
 });
 
+test('definite removal refusal keeps its endpoint wait across current reads, kind changes and owner view remounts', async () => {
+  const startedAt = Date.parse('2026-11-05T10:00:00.000Z');
+  const realNow = Date.now;
+  let now = startedAt;
+  Date.now = () => now;
+  const commands: StopWatch[] = [];
+  const kinds: string[] = [];
+  const io: WatchManagementIO = {
+    read: async ({ kind }) => {
+      kinds.push(kind);
+      return kind === 'thread'
+        ? page([readable])
+        : { kind: 'page', page: { viewer, actions, watches: [], next: null } };
+    },
+    stop: async (command) => {
+      commands.push(command);
+      return commands.length === 1
+        ? { kind: 'rejected', problem: { status: 429, code: 'rate_limited', retryAfter: '5' } }
+        : { kind: 'removed' };
+    },
+  };
+  const { client, owner, controller } = setup(io);
+  try {
+    await controller.first();
+    await controller.stop(readable.subscriptionId);
+    expect(controller.snapshot()).toMatchObject({ write: 'rejected', command: null, writeRetryAt: startedAt + 5000 });
+
+    await controller.refresh();
+    expect(controller.snapshot()).toMatchObject({ read: 'ready', rows: [readable], writeRetryAt: startedAt + 5000 });
+    await controller.stop(readable.subscriptionId);
+    expect(commands).toHaveLength(1);
+    await controller.selectKind('board');
+    await controller.selectKind('thread');
+    expect(controller.snapshot().writeRetryAt).toBe(startedAt + 5000);
+
+    controller.retire();
+    const remounted = new WatchController(io, owner, owner);
+    remounted.mount();
+    await remounted.first();
+    expect(remounted.snapshot()).toMatchObject({ read: 'ready', writeRetryAt: startedAt + 5000 });
+    expect(remounted.canRemove()).toBe(false);
+    await remounted.stop(readable.subscriptionId);
+    expect(commands).toHaveLength(1);
+
+    const readsAtExpiry = kinds.length;
+    now += 5000;
+    expect(kinds).toHaveLength(readsAtExpiry);
+    expect(commands).toHaveLength(1);
+    expect(remounted.canRemove()).toBe(true);
+    await remounted.stop(readable.subscriptionId);
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toMatchObject({ watchId: readable.subscriptionId, kind: 'thread', expectedRevision: 3 });
+    expect(commands[1]?.idempotencyKey).not.toBe(commands[0]?.idempotencyKey);
+    expect(remounted.snapshot()).toMatchObject({ write: 'removed', command: null });
+
+    const noHeader = setup({
+      read: async () => page([readable]),
+      stop: async () => ({ kind: 'rejected', problem: { status: 429, code: 'rate_limited' } }),
+    });
+    await noHeader.controller.first();
+    await noHeader.controller.stop(readable.subscriptionId);
+    expect(noHeader.controller.snapshot().writeRetryAt).toBe(0);
+    noHeader.client.clear();
+  } finally {
+    Date.now = realNow;
+    client.clear();
+  }
+});
+
 test('viewer replacement or failed session refresh retires rows, pending commands and saved callbacks before late results', async () => {
   for (const transition of ['replacement', 'error'] as const) {
     const lateRead = deferred<WatchRead>();
