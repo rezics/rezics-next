@@ -198,8 +198,11 @@ test('The default Subject reader does not describe admitted incoming editions as
 
   const empty = structuredClone(ownEmpty);
   for (const [key, read] of Object.entries(plan.reads)) {
-    if (read.kind === 'links')
+    if (read.kind === 'links') {
       empty.reads[key] = { status: 200, body: { links: [], count: { value: 0, exact: true }, next: null } };
+    } else if (read.kind === 'relations') {
+      empty.reads[key] = { status: 200, body: { relations: [], count: { value: 0, exact: true }, next: null } };
+    }
   }
   const invitation = await renderLoaded(empty);
   expect(invitation).toContain('data-slot="invitation"');
