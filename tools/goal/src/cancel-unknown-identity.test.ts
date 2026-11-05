@@ -14,11 +14,11 @@ async function setupFailedAttempt(h: ReturnType<typeof harness>) {
   const task = h.tasks.dispatch(h.briefFile);
   const first = await h.tasks.retry(task.id);
   await first.exited;
-  await h.tasks.stop(task.id);
   const prior = { taskId: task.id, attempt: 1 };
   h.store.updateAttempt(prior, (attempt) => {
     attempt.checks = ['check-a'];
   });
+  await h.tasks.stop(task.id);
   h.settings.integrationBranch = 'invalid branch name';
   await expect(h.tasks.retry(task.id)).rejects.toThrow();
   const ref = { taskId: task.id, attempt: 2 };
