@@ -130,6 +130,8 @@ unavailable until the reader explicitly reloads the current Subject.
 
 Decision: Keep stream choices in native order, render one active page per family, and restart a deliberate stream change at its own node without carrying another node's cursor.
 
+Decision: A paged `SubjectList` uses its planned bounded row window on both Overview and selected views; continuation replaces that window at the supplied node and cursor.
+
 Destinations open in a new tab and carry the existing validated single-hop return address. Returning preserves the
 source window, locale, Realm Context, reader settings and focus. Explicit return links name the original native
 node and cursor. Moving focus cancels automatic restoration. Subject, source incarnation, release, Context, locale,
@@ -1464,6 +1466,8 @@ as catalogue subjects (an author imported from a source), as accounts, or both. 
 
 The overview answers "what is this, is it for me, and what do I do next" in the first viewport, then previews every
 other view. Sections a type does not support are left out; the rest keep this order and stable anchors.
+
+Decision: render the existing composition-owned header and primary actions once before specialist readers, then render every remaining composition node once in its supplied order.
 
 1. **Identity and next action.** Cover; title in the reader's language with the original title quietly beside it;
    type and date; principal creators, linked; the headline score with its population and count; the reader's own

@@ -47,6 +47,7 @@ type Reading = ProfileReading;
 function Value({ part, reading }: { part: PersonStatement | PersonStatement['qualifiers'][number]; reading: Reading }) {
   const { release, public: read, locale, link: Link = PlainLink } = reading;
   const unavailable = <span>{m.candidate_value_unavailable({}, options(locale))}</span>;
+  const documentUnavailable = <span>{m.people_biography_unreadable({}, options(locale))}</span>;
   const definition = release.properties[part.property.id];
   if (!definition || definition.datatype !== part.property.data_type) return unavailable;
   if (
@@ -54,7 +55,7 @@ function Value({ part, reading }: { part: PersonStatement | PersonStatement['qua
     part.value.type === 'value' &&
     (!('id' in part) || pageDocumentReferences(read.subject, [part.property.id], locale)[0]?.candidate !== part.id)
   )
-    return unavailable;
+    return documentUnavailable;
   if (part.value.type === 'value' && part.property.data_type === 'wikibase-item') {
     const id = part.value.content;
     if (typeof id !== 'string' || !Object.hasOwn(read.related, id)) return unavailable;
@@ -74,6 +75,7 @@ function Value({ part, reading }: { part: PersonStatement | PersonStatement['qua
       subject={read.subject.id}
       documents={reading.documents}
       locale={locale}
+      {...(part.property.data_type === 'document' ? { documentUnavailable } : {})}
       link={Link}
     />
   );

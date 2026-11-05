@@ -324,15 +324,21 @@ export function ScreenProfileReader({
   return (
     <article data-slot="screen-profile-reader" className="min-w-0 space-y-6">
       <header className="min-w-0 space-y-2">
-        <ContentItemHeading
-          id="screen-profile-reader-heading"
-          tabIndex={-1}
-          level={2}
-          className="text-xl font-semibold"
-        >
-          <span lang={visit.grain.lang ?? undefined}>{visit.grain.text}</span>
-        </ContentItemHeading>
-        <p className="text-muted-foreground">{m.screen_intro({}, o)}</p>
+        {visit.grain.text ? (
+          <ContentItemHeading
+            id="screen-profile-reader-heading"
+            tabIndex={-1}
+            level={2}
+            className="text-xl font-semibold"
+          >
+            <span lang={visit.grain.lang ?? undefined}>{visit.grain.text}</span>
+          </ContentItemHeading>
+        ) : null}
+        {visit.description ? (
+          <p className="text-muted-foreground" lang={visit.description.lang ?? undefined}>
+            {visit.description.text}
+          </p>
+        ) : null}
         {returnHref ? (
           <a className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} href={returnHref}>
             {m.screen_visit_return({}, o)}

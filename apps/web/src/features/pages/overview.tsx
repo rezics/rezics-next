@@ -1478,6 +1478,9 @@ function SummaryContent({
     ? undefined
     : pageText(read.subject.descriptions, value.locale, originalLanguage(read.subject));
   const { facts = null, tags = null } = value.about ?? {};
+  const documentFallbackHref =
+    viewHref(value, 'details') ??
+    subjectViewHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale, 'details');
   if (
     !selectedChoice &&
     !missing &&
@@ -1492,7 +1495,7 @@ function SummaryContent({
   )
     return null;
   const returnAddress = (focus: 'reading' | 'evidence' = 'reading') => {
-    if (!selectedChoice || !target) return undefined;
+    if (!selectedChoice || !target || !selectedDocument) return undefined;
     const href = subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href;
     const url = new URL(href, 'https://rezics.invalid');
     if (value.realm) url.searchParams.set('realm', value.realm);
@@ -1703,14 +1706,7 @@ function SummaryContent({
         {legacyUnavailable && (
           <SubjectReadingState
             locale={value.locale}
-            href={
-              viewHref(value, 'details') ??
-              subjectViewHref(
-                { id: read.subject.id, label: value.subjectLabel || value.unlabelled },
-                value.locale,
-                'details',
-              )
-            }
+            href={documentFallbackHref}
           />
         )}
         {selectedUnavailable && (
@@ -1721,7 +1717,7 @@ function SummaryContent({
         {(missing || failed) && (
           <SubjectReadingState
             locale={value.locale}
-            href={target ? `/v1/documents/${encodeURIComponent(target.documentId)}` : ''}
+            href={documentFallbackHref}
             onRetry={onRetry}
             retryLabel={m.subject_synopsis_retry({}, options)}
             message={

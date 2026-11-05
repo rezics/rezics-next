@@ -5,45 +5,89 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createKernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
-import { createFakeKernelFetch, createRecordedKernelFetch } from '../src/kernel/fake';
+import { createRecordedKernelFetch } from '../src/kernel/fake';
 import type { SubjectPageData } from '../src/features/pages/subject';
 import { SubjectViewError } from '../src/subject/view-error';
 import { m } from '../src/paraglide/messages.js';
-import fixtures from '../src/kernel/fixtures.json';
 import recordedPage from '../src/kernel/recorded/subject-page.json';
 import { continuationSubject } from '../src/kernel/fake/view-continuation';
 import { subjectTabs } from '../src/features/pages/views';
 import { subjectPageMessages, viewTabLabels } from '../src/features/pages/route-support';
 import { subjectHref } from '../src/subject/subject-href';
+import { screenProfileFixture } from '../src/kernel/fake/catalogue-screen-profile';
+import recordedSubject from '../src/kernel/recorded/subject.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+
+function subjectPageFetch<T extends object>(recording: T): typeof fetch {
+  const fallback = createRecordedKernelFetch({ 'subject-page': recording as never });
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.method === 'POST' && new URL(request.url).pathname === '/v1/pages:read') {
+      const { status: rawStatus, ...body } = recording as T & { status?: unknown };
+      const status = typeof rawStatus === 'number' ? rawStatus : 200;
+      return Response.json(body, { status });
+    }
+    return fallback(request);
+  }) as typeof fetch;
+}
+
 const [
   { loadSubjectPage, SubjectPage, subjectBody, pageContext },
   { loadViewPages, SubjectFrame, subjectFrame, SubjectViewPage },
   { SubjectHeaderActions },
   { SubjectLibrarySlot },
+  { ScreenProfileReader },
 ] = await Promise.all([
   import('../src/features/pages/subject'),
   import('../src/features/pages/subject-frame'),
   import('../src/features/pages/subject-reactions-view'),
   import('../src/library/subject-slot-view'),
+  import('../src/features/catalogue/screen-profile-reader'),
 ]);
+
+test('screen overview uses its released reader label and description instead of a schema identifier or editorial prompt', async () => {
+  const fixture = screenProfileFixture('ready', 'en', true, 'schema:TVSeries');
+  const loaded = await fixture.transport.load();
+  if (!loaded.ok || !loaded.public) throw new Error('Expected the admitted anime Subject');
+  const type = loaded.release.types['schema:TVSeries']!;
+  const label = type.labels.en!;
+  const description = type.descriptions!.en!;
+  const html = renderToStaticMarkup(
+    <ScreenProfileReader locale="en" release={loaded.release} public={loaded.public} />,
+  );
+  expect(html).toContain(`<span lang="en">${label[0]!.toLocaleUpperCase('en')}${label.slice(1)}</span>`);
+  expect(html).toContain(`lang="en">${description}</p>`);
+  expect(html).not.toContain('schema:TVSeries');
+  expect(html).not.toContain(m.screen_intro());
+});
 
 test('The default Subject reader does not describe admitted incoming editions as title-only and reports temporary dependency failure honestly with safe read recovery', async () => {
   // The recorded native default composition, with the same owner leaves as the ordinary route.
   const recorded = await loadSubjectPage(
     createKernelClient('https://kernel.invalid', {
-      fetch: createRecordedKernelFetch({ 'subject-page': recordedPage }),
+      fetch: subjectPageFetch(recordedPage),
     }),
     recordedPage.subject,
   );
   if (recorded.kind !== 'page') throw new Error('Expected the recorded subject page.');
+  const sourcePlan = planReads(
+    platformRegistry,
+    recorded.page.document as CompositionDocument,
+    pageContext(recorded.page),
+  );
+  const subjectKeys = Object.entries(sourcePlan.reads)
+    .filter(([, read]) => read.kind === 'subject' && read.id === recorded.page.subject)
+    .map(([key]) => key);
+  if (subjectKeys.length === 0) throw new Error('Expected the composition Subject read.');
+  for (const key of subjectKeys) recorded.page.reads[key] = { status: 200, body: structuredClone(recordedSubject) };
   const labels = viewTabLabels();
   const messages = subjectPageMessages();
-  const client = createKernelClient('https://kernel.invalid', { fetch: createFakeKernelFetch(fixtures as never) });
+  const client = createKernelClient('https://kernel.invalid', { fetch: createRecordedKernelFetch() });
   let content: ReactNode = (
     <SubjectPage
       page={recorded.page}
+      view="overview"
       locale="en"
       messages={messages}
       tabs={subjectTabs(recorded.page)}
@@ -78,7 +122,7 @@ test('The default Subject reader does not describe admitted incoming editions as
   );
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const exposure = await client.platform.exposure.get();
-  queryClient.setQueryData(['exposure', 'anonymous'], exposure.data?.admitted ?? []);
+  queryClient.setQueryData(['exposure', 'anonymous'], [...(exposure.data?.admitted ?? []), 'personal_library']);
   const router = createRouter({
     routeTree: createRootRoute({ component: () => content }),
     history: createMemoryHistory({ initialEntries: ['/en/subjects'] }),
@@ -90,6 +134,7 @@ test('The default Subject reader does not describe admitted incoming editions as
     </QueryClientProvider>,
   );
   expect(html.match(/data-slot="subject-header"/g)).toHaveLength(1);
+  expect(html.indexOf('data-slot="subject-header"')).toBeLessThan(html.indexOf('data-slot="literary-reader"'));
   expect(html).toMatch(/<h1[^>]*font-sans[^>]*>The Little Prince<\/h1>/);
   expect(html).toMatch(/data-slot="subject-primary-actions"[^>]*class="[^"]*col-span-full[^">]*grid-cols-1/);
   expect(html.indexOf('data-slot="subject-primary-actions"')).toBeGreaterThan(html.indexOf('<h1'));
@@ -119,6 +164,7 @@ test('The default Subject reader does not describe admitted incoming editions as
     content = (
       <SubjectPage
         page={page}
+        view="overview"
         locale="en"
         messages={messages}
         tabs={subjectTabs(page)}
@@ -136,7 +182,7 @@ test('The default Subject reader does not describe admitted incoming editions as
   const renderLoaded = async (recording: typeof ownEmpty) => {
     const loaded = await loadSubjectPage(
       createKernelClient('https://kernel.invalid', {
-        fetch: createRecordedKernelFetch({ 'subject-page': recording }),
+        fetch: subjectPageFetch(recording),
       }),
       recordedPage.subject,
     );
@@ -151,8 +197,11 @@ test('The default Subject reader does not describe admitted incoming editions as
 
   const empty = structuredClone(ownEmpty);
   for (const [key, read] of Object.entries(plan.reads)) {
-    if (read.kind === 'links')
+    if (read.kind === 'links') {
       empty.reads[key] = { status: 200, body: { links: [], count: { value: 0, exact: true }, next: null } };
+    } else if (read.kind === 'relations') {
+      empty.reads[key] = { status: 200, body: { relations: [], count: { value: 0, exact: true }, next: null } };
+    }
   }
   const invitation = await renderLoaded(empty);
   expect(invitation).toContain('data-slot="invitation"');
@@ -186,7 +235,7 @@ test('The default Subject reader does not describe admitted incoming editions as
   }
 
   // A dependency failure retries the same ordinary read, with no command or privileged fallback.
-  const recordedFetch = createRecordedKernelFetch({ 'subject-page': ownEmpty });
+  const recordedFetch = subjectPageFetch(ownEmpty);
   const requests: Request[] = [];
   const recoveryClient = createKernelClient('https://kernel.invalid', {
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -260,6 +309,8 @@ test('The default Subject reader does not describe admitted incoming editions as
   expect(bounded).toContain(`${subjectHref(continuationSubject, 'en').href}/editions`);
   const full = await loadViewPages(client, continuationSubject.id, 'editions');
   if (full.kind !== 'page') throw new Error('Expected the complete editions view.');
+  const fullPlan = planReads(platformRegistry, full.page.document as CompositionDocument, pageContext(full.page));
+  const fullKey = fullPlan.nodes.editions;
   const frame = subjectFrame(full.overview, 'en');
   if (!frame) throw new Error('Expected the subject identity from the existing overview read.');
   content = (
@@ -290,7 +341,8 @@ test('The default Subject reader does not describe admitted incoming editions as
   );
   expect(complete.match(/data-slot="subject-header"/g)).toHaveLength(1);
   expect(complete.match(/<h[12][^>]*>Editions<\/h[12]>/g)).toHaveLength(1);
-  expect(complete).toContain('First edition 24');
+  expect(complete).toContain('First edition 12');
+  expect(complete).not.toContain('First edition 13');
   expect(complete.match(/data-slot="continue-group"/g)).toHaveLength(1);
   expect(complete).toContain('cursor=continuation-next');
   expect(complete).not.toContain('data-slot="next-page"');

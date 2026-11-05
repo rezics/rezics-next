@@ -2,7 +2,6 @@ import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import type { SubjectPurchaseContext } from '../features/pages/subject-slots';
 import { m } from '../paraglide/messages.js';
 import { localizeHref, locales } from '../paraglide/runtime.js';
@@ -109,63 +108,69 @@ export function SubjectOffersView({
   const language = locales.find((candidate) => candidate === locale);
   if (!language) return null;
   const preparing = page.kind === 'preparing' || (page.kind === 'ready' && page.projectionState === 'preparing');
-  return (
-    <section
-      className="mt-6 flex min-w-0 flex-col gap-3"
-      aria-label={m.subject_purchase_heading({}, { locale: language })}
-    >
-      <h2 className="text-lg font-semibold">{m.subject_purchase_heading({}, { locale: language })}</h2>
-      <p className="max-w-prose text-sm text-muted-foreground">
-        {m.subject_purchase_discovery({}, { locale: language })}
+  const admitted = page.kind === 'ready' && page.projectionState === 'ready' && page.offers.length > 0;
+  const state =
+    page.kind === 'pending' || preparing ? (
+      <p role="status" className="text-sm text-muted-foreground">
+        {page.kind === 'pending'
+          ? m.subject_purchase_pending({}, { locale: language })
+          : m.subject_purchase_preparing({}, { locale: language })}
       </p>
-      {page.kind === 'pending' || preparing ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {page.kind === 'pending'
-            ? m.subject_purchase_pending({}, { locale: language })
-            : m.subject_purchase_preparing({}, { locale: language })}
-        </p>
+    ) : page.kind === 'denied' || page.kind === 'unavailable' || page.kind === 'cursor-error' ? (
+      <Alert role="alert">
+        <AlertDescription>
+          {page.kind === 'denied'
+            ? m.subject_purchase_denied({}, { locale: language })
+            : page.kind === 'cursor-error'
+              ? m.subject_purchase_cursor_error({}, { locale: language })
+              : m.subject_purchase_unavailable({}, { locale: language })}
+        </AlertDescription>
+      </Alert>
+    ) : null;
+  const controls = (
+    <div className="flex flex-wrap gap-2">
+      {page.kind === 'ready' && page.projectionState === 'ready' && page.next && onNext ? (
+        <Button type="button" variant="outline" className="min-h-11" onClick={() => onNext(page.next!)}>
+          {m.subject_purchase_next({}, { locale: language })}
+        </Button>
       ) : null}
-      {page.kind === 'denied' || page.kind === 'unavailable' || page.kind === 'cursor-error' ? (
-        <Alert role="alert">
-          <AlertDescription>
-            {page.kind === 'denied'
-              ? m.subject_purchase_denied({}, { locale: language })
-              : page.kind === 'cursor-error'
-                ? m.subject_purchase_cursor_error({}, { locale: language })
-                : m.subject_purchase_unavailable({}, { locale: language })}
-          </AlertDescription>
-        </Alert>
+      {onRestart ? (
+        <Button type="button" variant="outline" className="min-h-11" onClick={onRestart}>
+          {m.subject_purchase_restart({}, { locale: language })}
+        </Button>
       ) : null}
-      {page.kind === 'ready' && page.offers.length === 0 && !preparing ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>{m.subject_purchase_empty({}, { locale: language })}</EmptyTitle>
-            <EmptyDescription>{m.subject_purchase_discovery({}, { locale: language })}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+      {(page.kind === 'pending' || page.kind === 'unavailable' || page.kind === 'preparing' || preparing) && onRetry ? (
+        <Button type="button" variant="outline" className="min-h-11" onClick={onRetry}>
+          {m.subject_purchase_retry({}, { locale: language })}
+        </Button>
       ) : null}
-      {page.kind === 'ready' && page.offers.length > 0 ? (
-        <SubjectOfferChoice page={page} locale={language} version={pageVersion} current={current} origin={origin} />
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        {page.kind === 'ready' && page.next && onNext ? (
-          <Button type="button" variant="outline" className="min-h-11" onClick={() => onNext(page.next!)}>
-            {m.subject_purchase_next({}, { locale: language })}
-          </Button>
-        ) : null}
-        {onRestart ? (
-          <Button type="button" variant="outline" className="min-h-11" onClick={onRestart}>
-            {m.subject_purchase_restart({}, { locale: language })}
-          </Button>
-        ) : null}
-        {(page.kind === 'unavailable' || page.kind === 'preparing' || preparing) && onRetry ? (
-          <Button type="button" variant="outline" className="min-h-11" onClick={onRetry}>
-            {m.subject_purchase_retry({}, { locale: language })}
-          </Button>
-        ) : null}
-      </div>
-    </section>
+    </div>
   );
+  const hasNext = page.kind === 'ready' && page.projectionState === 'ready' && page.next !== null && !!onNext;
+  const hasRetry =
+    (page.kind === 'pending' || page.kind === 'unavailable' || page.kind === 'preparing' || preparing) && !!onRetry;
+  const noPresentation = !state && !hasNext && !hasRetry && !onRestart;
+  if (admitted)
+    return (
+      <section
+        className="mt-6 flex min-w-0 flex-col gap-3"
+        aria-labelledby="subject-purchase-heading"
+        data-slot="subject-public-offers"
+      >
+        <h2 id="subject-purchase-heading" className="text-lg font-semibold">
+          {m.subject_purchase_heading({}, { locale: language })}
+        </h2>
+        <p className="max-w-prose text-sm text-muted-foreground">
+          {m.subject_purchase_discovery({}, { locale: language })}
+        </p>
+        {page.kind === 'ready' ? (
+          <SubjectOfferChoice page={page} locale={language} version={pageVersion} current={current} origin={origin} />
+        ) : null}
+        {controls}
+      </section>
+    );
+  if (noPresentation) return null;
+  return <div className="mt-6 flex min-w-0 flex-col gap-3">{state}{controls}</div>;
 }
 
 function PreparedSubjectOffersRegion({

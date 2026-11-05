@@ -436,14 +436,19 @@ async function retainedRecoveryContract() {
   const document = window.document;
   const locale = 'fr';
   try {
-    document.body.innerHTML = renderToStaticMarkup(<SubjectOffersView page={{ kind: 'pending' }} locale={locale} />);
+    document.body.innerHTML = renderToStaticMarkup(
+      <SubjectOffersView page={{ kind: 'pending' }} locale={locale} onRetry={() => {}} />,
+    );
     expect(document.querySelector('[role="status"]')?.textContent).toBe(m.subject_purchase_pending({}, { locale }));
-    expect(document.querySelector('ul, a, button, [role="alert"]')).toBeNull();
+    expect(document.querySelector('h2')).toBeNull();
+    expect(document.querySelector('ul, a, [role="alert"]')).toBeNull();
+    expect(document.querySelector('button')?.textContent).toBe(m.subject_purchase_retry({}, { locale }));
 
     document.body.innerHTML = renderToStaticMarkup(
       <SubjectOffersView page={{ kind: 'preparing' }} locale={locale} onRetry={() => {}} />,
     );
     expect(document.querySelector('[role="status"]')?.textContent).toBe(m.subject_purchase_preparing({}, { locale }));
+    expect(document.querySelector('h2')).toBeNull();
     expect(document.querySelector('button')?.textContent).toBe(m.subject_purchase_retry({}, { locale }));
     expect(document.querySelector('ul, a, [role="alert"]')).toBeNull();
 
@@ -457,13 +462,13 @@ async function retainedRecoveryContract() {
       />,
     );
     expect(document.querySelector('[role="status"]')?.textContent).toBe(m.subject_purchase_preparing({}, { locale }));
-    expect(document.querySelectorAll('ul > li')).toHaveLength(1);
+    expect(document.querySelector('h2')).toBeNull();
+    expect(document.querySelectorAll('ul > li')).toHaveLength(0);
     expect(
       [...document.querySelectorAll('button')]
         .filter((button) => !button.closest('[data-subject-offer-choice]'))
         .map((button) => button.textContent),
     ).toEqual([
-      m.subject_purchase_next({}, { locale }),
       m.subject_purchase_restart({}, { locale }),
       m.subject_purchase_retry({}, { locale }),
     ]);
@@ -475,6 +480,7 @@ async function retainedRecoveryContract() {
       />,
     );
     expect(document.querySelector('[role="status"]')?.textContent).toBe(m.subject_purchase_preparing({}, { locale }));
+    expect(document.querySelector('h2')).toBeNull();
     expect(document.body.textContent).not.toContain(m.subject_purchase_empty({}, { locale }));
 
     document.body.innerHTML = renderToStaticMarkup(
@@ -485,7 +491,15 @@ async function retainedRecoveryContract() {
       />,
     );
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(m.subject_purchase_denied({}, { locale }));
+    expect(document.querySelector('h2')).toBeNull();
     expect(document.querySelector('ul, a, button, [role="status"]')).toBeNull();
+
+    document.body.innerHTML = renderToStaticMarkup(
+      <SubjectOffersView page={{ kind: 'unavailable' }} locale={locale} onRetry={() => {}} />,
+    );
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(m.subject_purchase_unavailable({}, { locale }));
+    expect(document.querySelector('h2')).toBeNull();
+    expect(document.querySelector('button')?.textContent).toBe(m.subject_purchase_retry({}, { locale }));
   } finally {
     await window.happyDOM.close();
   }
