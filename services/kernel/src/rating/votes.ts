@@ -6,7 +6,12 @@ import { authoritativeTimeValue, commandAttemptDeadline, type CommandEvent } fro
 import type { SessionComponent } from '../tokens/session.ts';
 import { withConnection } from '../database/pool.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import { createIdentityRatingCommitParticipant, readIdentityRatingReview } from '../semantic/index.ts';
+import {
+  createIdentityRatingCommitParticipant,
+  readIdentityRatingReview,
+  type IdentityRatingCommitParticipant,
+  type IdentityRatingCommitPreparation,
+} from '../semantic/index.ts';
 import {
   LibraryNotFoundError,
   createLibraryCommandRunner,
@@ -283,7 +288,7 @@ class VoteUnchanged extends Error {
 const PUT_VOTE_KIND = 'rating.vote.put';
 
 /** The producer owns the canonical command input for both execution and receipt linkage. */
-function normalizePutVoteInput(input: PutVoteInput): PutVoteInput {
+function normalizePutVoteInput(input: PutVoteInput, participant: IdentityRatingCommitParticipant) {
   if (!input || typeof input !== 'object' || typeof input.questionId !== 'string' || typeof input.targetId !== 'string')
     throw new VoteInvalidError('vote');
   if (input.units !== null && typeof input.units !== 'number') throw new VoteInvalidError('units');
@@ -298,12 +303,13 @@ function normalizePutVoteInput(input: PutVoteInput): PutVoteInput {
     requireVoteObservationProvider(input.questionId);
   }
   let guard: VoteReviewGuard | undefined;
+  let identityPreparation: IdentityRatingCommitPreparation | null = null;
   if (input.guard !== undefined) {
     try {
       guard = normalizeVoteReviewGuard(input.guard, input.targetId);
       const identity = guard.subject.identity;
       if (identity !== undefined) {
-        createIdentityRatingCommitParticipant().prepare(identity);
+        identityPreparation = participant.prepare(identity);
         if (
           identity.requestedOriginalId !== input.targetId ||
           identity.canonicalTerminalId !== guard.subject.canonicalId
@@ -315,11 +321,14 @@ function normalizePutVoteInput(input: PutVoteInput): PutVoteInput {
     }
   }
   return {
-    questionId: input.questionId,
-    targetId: input.targetId,
-    units: input.units,
-    ...(guard ? { guard } : {}),
-    ...(observation ? { observation } : {}),
+    input: {
+      questionId: input.questionId,
+      targetId: input.targetId,
+      units: input.units,
+      ...(guard ? { guard } : {}),
+      ...(observation ? { observation } : {}),
+    },
+    identityPreparation,
   };
 }
 
@@ -347,7 +356,7 @@ export function createVoteCommands(config: Dependencies) {
     admission?: VoteCommandAdmission,
   ): PreparedPutVote {
     voteAccount(actor);
-    const normalized = normalizePutVoteInput(input);
+    const { input: normalized } = normalizePutVoteInput(input, identityParticipant);
     return {
       input: normalized,
       receipt: Object.freeze({
@@ -388,8 +397,12 @@ export function createVoteCommands(config: Dependencies) {
     admission?: VoteCommandAdmission,
   ): Promise<PutVoteOutcome> {
     const owner = voteAccount(actor);
-    input = normalizePutVoteInput(input);
+    const normalized = normalizePutVoteInput(input, identityParticipant);
+    input = normalized.input;
     const { guard, observation } = input;
+    const questionPreparation = guard
+      ? questionAdmission.prepare({ questionId: input.questionId, question: guard.question })
+      : null;
     const initial = guard ? null : await prepareVoteTarget(config, actor, input, deadlineFor(5_000));
 
     try {
@@ -437,10 +450,8 @@ export function createVoteCommands(config: Dependencies) {
               epochs,
               error,
               admit,
-              questionAdmission: guard
-                ? questionAdmission.prepare({ questionId: input.questionId, question: guard.question })
-                : null,
-              identityAdmission: guard?.subject.identity ? identityParticipant.prepare(guard.subject.identity) : null,
+              questionAdmission: questionPreparation,
+              identityAdmission: normalized.identityPreparation,
             };
           },
         },
