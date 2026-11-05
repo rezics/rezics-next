@@ -50,6 +50,7 @@ source-row admission, then `putVoteOutcome` with those operands; an uncertain re
 `reconcilePutVote(actor, receipt)`. A Rating redirect of the Library-selected Subject stores no vote guard
 and requires an explicit new target review. Effect confirmation is separate from review, and retries preserve
 the original guard, operands and command key. Owner reads take `currentScore` from Rating after guarded effects.
+The frozen observation uses Content's meaning, or the question label when meaning is absent, captured at review.
 
 `createVoteCommands.readVoteReview` supplies the current question, canonical identity and required identity epochs,
 raw original/canonical slots and counted own-vote witness. The importer stores its complete version 1 guard with

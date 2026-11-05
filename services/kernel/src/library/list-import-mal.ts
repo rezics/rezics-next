@@ -808,7 +808,7 @@ export function createMalImport(deps: Dependencies) {
         id: review.question.id,
         revision: review.question.revision,
         grain: review.question.grain,
-        meaning: review.question.meaning ?? '',
+        meaning: review.question.meaning ?? review.question.label,
         scale: {
           min: review.question.scale.minimumUnits,
           max: review.question.scale.maximumUnits,

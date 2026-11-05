@@ -230,6 +230,7 @@ export type AniListStored = {
   labelWork?: Record<number, AniListLabelWork>;
   scoreCommand?: PreparedPutVote;
   scoreCommandActor?: AccountActor;
+  scoreObservation?: VoteObservation;
 };
 type Stored = AniListStored;
 type Header = { document: unknown; rawUpload: string; scoreFormat: string | null; count: number; cancelled: boolean };
@@ -255,7 +256,7 @@ function nativeVoteObservation(question: AniListNativeQuestion, canonicalId: str
       id: question.id,
       revision: question.revision,
       grain: question.grain,
-      meaning: question.meaning ?? '',
+      meaning: question.meaning ?? question.label,
       scale: {
         min: question.minimumUnits,
         max: question.maximumUnits,
@@ -766,7 +767,12 @@ export function createAniListImport(deps: Dependencies) {
       const inspected = matching.state === 'matched' ? await observe(actor, matching.candidates[0]!) : null;
       const { profile, profileBinding: _profileBinding, ...publicObservation } = inspected ?? {};
       const observation = inspected ? propose(publicObservation as AniListObservation, row.payload.source) : null;
-      const { scoreCommand: _scoreCommand, scoreCommandActor: _scoreCommandActor, ...publicPayload } = row.payload;
+      const {
+        scoreCommand: _scoreCommand,
+        scoreCommandActor: _scoreCommandActor,
+        scoreObservation: _scoreObservation,
+        ...publicPayload
+      } = row.payload;
       rows.push({
         ordinal: row.ordinal,
         ...publicPayload,
@@ -805,6 +811,7 @@ export function createAniListImport(deps: Dependencies) {
     if (selected && (!observation || selected !== observation.subjectId)) throw new LibraryConflictError();
     if (input.progress && (!selected || !profile || !profileBinding)) throw new LibraryConflictError();
     let score: AniListScoreReview | undefined;
+    let scoreObservation: VoteObservation | undefined;
     if (input.score) {
       if (!selected || !observation || !Object.hasOwn(stored.source.evidence, 'score'))
         throw new LibraryConflictError();
@@ -833,6 +840,8 @@ export function createAniListImport(deps: Dependencies) {
       const redirected = !!native && native.guard.subject.canonicalId !== selected;
       if (redirected) unavailable = 'identity_observation_unavailable';
       const usable = native && !redirected ? native : null;
+      if (usable)
+        scoreObservation = nativeVoteObservation(nativeQuestion(usable.question), usable.guard.subject.canonicalId);
       const scoreField = stored.source.fields.find((field) => field.field === 'score');
       score = {
         source: {
@@ -916,9 +925,16 @@ export function createAniListImport(deps: Dependencies) {
         outcome: _outcome,
         consumptionDateReview: _consumptionDateReview,
         consumptionDateIntent: _consumptionDateIntent,
+        scoreCommand: _scoreCommand,
+        scoreCommandActor: _scoreCommandActor,
+        scoreObservation: _scoreObservation,
         ...retained
       } = current;
-      return { ...retained, review: value };
+      return {
+        ...retained,
+        review: value,
+        ...(scoreObservation === undefined ? {} : { scoreObservation }),
+      };
     });
     // Receipt replay refers to the stored review, never freshly computed operands.
     const current = await load(actor, id, ordinal);
@@ -1374,7 +1390,9 @@ export function createAniListImport(deps: Dependencies) {
                 targetId: reviewed.score.native.target.subjectId,
                 units: reviewed.score.units,
                 guard,
-                observation: nativeVoteObservation(reviewed.score.native.question, guard.subject.canonicalId),
+                observation:
+                  stored.scoreObservation ??
+                  nativeVoteObservation(reviewed.score.native.question, guard.subject.canonicalId),
               },
               reviewed.score.native.commandKey,
               scoreAdmission(planActor, id, confirmation.ordinal, reviewed.id, reviewed.score.native.commandKey),

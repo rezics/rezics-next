@@ -1,8 +1,9 @@
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import type { SessionEnv } from '../../session/client';
-import { prepareSession, viewerCredential } from '../../session/request';
-import { mapSourceAdmissionPort } from '../rich-private-entry/admission';
+import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../../session/request';
+import { mapSourceAdmissionPort, type SourceAdmissionCustody } from '../rich-private-entry/admission';
+import { captureAnnotationCredential, originalAnnotationCredential } from '../rich-private-entry/credential';
 import { admitPrivateSourceObservation } from '../rich-private-entry/native';
 import { libraryFullQuery } from '../reads';
 import { readSubjectLabelAssignments } from '../subject-labels';
@@ -471,6 +472,50 @@ async function withSession(
   }
 }
 
+async function retainedAdmitCommand(
+  command: Extract<BangumiCommand, { kind: 'admit-source' }>,
+  session: { authorization: string },
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+): Promise<Extract<BangumiCommand, { kind: 'admit-source' }> | BangumiFailure> {
+  if (command.custody) return command;
+  const viewer = sessionSubject(request);
+  const csrfToken = requestCsrfToken(request);
+  if (!viewer || !csrfToken) return { kind: 'denied' };
+  const custody: SourceAdmissionCustody = {
+    viewer,
+    csrfToken,
+    credential: await captureAnnotationCredential(
+      request,
+      sessionEnv,
+      { viewer, csrfToken, authorization: session.authorization },
+      command.subjectId,
+    ),
+  };
+  return { ...command, custody };
+}
+
+async function admitAuthorization(
+  command: Extract<BangumiCommand, { kind: 'admit-source' }>,
+  session: { authorization: string },
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+): Promise<string | null> {
+  const custody = command.custody;
+  if (!custody) return session.authorization;
+  return originalAnnotationCredential(
+    request,
+    sessionEnv,
+    { ...session, viewer: custody.viewer, csrfToken: custody.csrfToken },
+    {
+      viewer: custody.viewer,
+      csrfToken: custody.csrfToken,
+      subjectId: command.subjectId,
+      credential: custody.credential,
+    },
+  );
+}
+
 function responseReason(result: NativeResult): string {
   const body = record(result.error) && 'value' in result.error ? result.error.value : result.error;
   if (record(body)) {
@@ -711,17 +756,24 @@ export function kernelBangumiPort(
     async admitSource(command) {
       const session = await withSession(request, sessionEnv, originConfigured);
       if ('kind' in session) return session;
+      const retained = await retainedAdmitCommand(command, session, request, sessionEnv);
+      if ('kind' in retained && retained.kind !== 'admit-source') return retained;
+      const working = retained;
+      const authorization = await admitAuthorization(working, session, request, sessionEnv);
+      if (!authorization) return { kind: 'denied' };
       try {
         const result = await admitPrivateSourceObservation(client, {
-          subjectId: command.subjectId,
-          body: command.body,
-          key: command.key,
-          authorization: session.authorization,
+          subjectId: working.subjectId,
+          body: working.body,
+          key: working.key,
+          authorization,
         });
-        return mapSourceAdmissionPort(result, command);
+        const mapped = mapSourceAdmissionPort(result, working);
+        if (mapped.kind !== 'unknown' || command.custody) return mapped;
+        return { kind: 'unknown', command: working };
       } catch (error) {
         if (isPlatformClosedError(error)) return { kind: 'unavailable' };
-        if (error instanceof TypeError) return unknown(command);
+        if (error instanceof TypeError) return unknown(working);
         throw error;
       }
     },

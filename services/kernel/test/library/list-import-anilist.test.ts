@@ -4,7 +4,6 @@ import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from '
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
-import { authenticateAccount } from '../support/admitted-access.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createAniListImport } from '../../src/library/list-import-anilist.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
@@ -87,13 +86,8 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     'progress_session:update',
   ]);
   await f.grantLibraryGate(importer.actor.accountId);
-  const steward = await authenticateAccount(
-    f.access,
-    { pool: f.pool, deadline: deadlineFor(30000) },
-    { ...f.steward.actor, scopes: ['access:grant', 'subject:batch_write'] },
-  );
   await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
-    { pool: f.pool, actor: steward, deadline: deadlineFor(30000) },
+    { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30000) },
     {
       resource: { route: 0, id: GLOBAL_CONTEXT },
       subject: { kind: 'account', id: importer.actor.accountId },
@@ -335,6 +329,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect(changedRow.review.score.native.commandKey).toBe(changedChoice.score.native.commandKey);
   expect(changedRow.scoreCommand).toBeUndefined();
   expect(changedRow.scoreCommandActor).toBeUndefined();
+  expect(changedRow.scoreObservation).toBeUndefined();
   expect(await apply([changedConfirmation], changedPath)).toMatchObject({ complete: true });
   const refreshedScore = await f.send(importer.bearer, 'POST', path2 + ':review', {
     ordinal: 1,

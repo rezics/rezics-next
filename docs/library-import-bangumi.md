@@ -71,7 +71,8 @@ caller through its typed route. Source expiry, cancellation and evidence removal
 upload does not undo native effects.
 
 Decision: receipt-only score recovery denies a current actor without `rating:vote` before any historical receipt is
-read, and reads back only the receipt's question and target.
+read, and reads back only the receipt's question and target. Kernel source-admission retries keep the first captured
+credential envelope, key and body.
 
 ## Web HTTP contract
 

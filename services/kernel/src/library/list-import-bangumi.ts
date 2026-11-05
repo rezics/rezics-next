@@ -1297,6 +1297,7 @@ export function createBangumiImport(deps: Dependencies) {
       !('receiptOnly' in plan)
     )
       throw new ProblemError('conflict');
+    if (!owner(actor).scopes.includes(VOTE_SCOPE)) throw new GrantDeniedError();
     const reconciled = await votes.reconcilePutVote(actor, plan.receipt);
     if (!reconciled) return null;
     return {
