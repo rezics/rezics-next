@@ -13,6 +13,7 @@ import type {
 export type ClassificationCommands = {
   read: Extract<OwnClassificationsRead, { state: 'ready' }>;
   retire?: () => void;
+  confirmMovement?: { current: (() => Promise<boolean>) | null };
   csrfToken: () => string | null;
   send: (intent: ClassificationIntent, signal: AbortSignal) => Promise<ClassificationCommandResult>;
   review: (intent: ClassificationIntent, signal: AbortSignal) => Promise<ClassificationReview>;

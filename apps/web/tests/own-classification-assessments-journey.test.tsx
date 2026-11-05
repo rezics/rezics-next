@@ -155,3 +155,33 @@ test('the response cap counts UTF-8 bytes and admits the exact boundary', () => 
   page.inventory.generation += '1';
   expect(() => indexOwnClassifications(page, frontier)).toThrow('Invalid classification frontier');
 });
+
+test('coordinates bound branching, failed targets, direct later entry and selected-pair paths without page bodies', async () => {
+  const { ClassificationWindows } = await import('../src/ratings/own-classifications/window-navigation');
+  const windows = new ClassificationWindows();
+  windows.admit({ ...frontier, cursor: 'direct' });
+  expect(windows.previous({ ...frontier, cursor: 'direct' })).toBeNull();
+  for (let index = 0; index < 12; index++) {
+    const target = { ...frontier, cursor: `raw ${index}` };
+    windows.stage(target, true);
+    windows.admit(target);
+  }
+  expect(windows.path).toHaveLength(9);
+  const accepted = [...windows.path];
+  windows.stage({ ...frontier, cursor: 'failed' }, true);
+  expect(windows.path).toEqual(accepted);
+  expect(windows.staged?.cursor).toBe('failed');
+  windows.admit({ ...frontier, cursor: 'failed' });
+  const previous = windows.previous({ ...frontier, cursor: 'failed' })!;
+  windows.stage({ ...frontier, ...previous }, false);
+  windows.admit({ ...frontier, ...previous });
+  expect(windows.path.at(-1)).toBe(previous.cursor);
+  windows.stage({ ...frontier, cursor: 'branch' }, false);
+  windows.admit({ ...frontier, cursor: 'branch' });
+  expect(windows.path).not.toContain('failed');
+  windows.admit({ cursor: 'branch', selected: { subjectId, associationId: classificationRow().associationId } });
+  expect(windows.path).toEqual(['branch']);
+  windows.retire();
+  expect(windows.path).toEqual([]);
+  expect(windows.staged).toBeNull();
+});

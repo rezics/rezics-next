@@ -187,3 +187,51 @@ test('inspection retires on source replacement and old selection callbacks canno
     await act(async () => root.unmount());
   }
 });
+
+test('three native windows, terminal Previous, exact failed Retry and First retain supplied selection', async () => {
+  const { ClassificationWindows } = await import('../src/ratings/own-classifications/window-navigation');
+  const { ClassificationsReader } = await import('../src/ratings/own-classifications/reader');
+  const windows = new ClassificationWindows();
+  const selected = { subjectId, associationId };
+  let address: ClassificationFrontier = { cursor: null, selected };
+  const calls: ClassificationFrontier[] = [];
+  let fail = false;
+  const host = window.document.createElement('div') as HTMLElement;
+  const root = createRoot(host);
+  const render = () => root.render(<ClassificationsReader
+    key={JSON.stringify(address)}
+    initial={{ state: 'preparing', page: null, subject: accountId, locale: 'en', frontier: address }}
+    frontier={address} locale="en" subject={accountId} state={null} isCurrent={() => true} windows={windows}
+    read={async (target) => {
+      calls.push(target);
+      return fail
+        ? { state: 'unavailable', page: null, subject: accountId, locale: 'en', frontier: target }
+        : { state: 'ready', source: 'content.classification-ballot-own-page.v1', page: classificationsPage(target.cursor === 'two' ? [] : undefined, target.cursor === null ? 'one' : target.cursor === 'one' ? 'two' : null), subject: accountId, locale: 'en', frontier: target };
+    }}
+    onNext={(target) => { windows.stage(target, false); address = target; render(); }}
+  />);
+  const click = async (label: string) => {
+    const button = [...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === label);
+    expect(button).toBeDefined();
+    await act(async () => button!.click());
+  };
+  try {
+    await act(async () => render());
+    await click(m.own_classifications_next());
+    fail = true;
+    await click(m.own_classifications_next());
+    expect(windows.path).toEqual([null, 'one']);
+    expect(windows.staged).toEqual({ cursor: 'two', selected });
+    fail = false;
+    await click(m.own_classifications_retry());
+    expect(calls.map((call) => call.cursor)).toEqual([null, 'one', 'two', 'two']);
+    expect(windows.path).toEqual([null, 'one', 'two']);
+    await click(m.library_collections_previous());
+    expect(calls.at(-1)).toEqual({ cursor: 'one', selected });
+    await click(m.library_collections_first_page());
+    expect(calls.at(-1)).toEqual({ cursor: null, selected });
+    expect(calls).toHaveLength(6);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
