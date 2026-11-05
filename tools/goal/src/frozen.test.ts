@@ -8,6 +8,7 @@ import { git, WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import { reading } from './test-support.ts';
 import { launch } from './launch.ts';
+import { devMayRepairFrozenAcceptance } from './merge-train.ts';
 
 const block = '```ts path=tests/acceptance.test.ts\n// keep this comment\ntest("frozen", () => {});\n```';
 function briefWith(blocks: string[], paths = ['tests/**']): string {
@@ -55,9 +56,10 @@ describe('frozen acceptance files', () => {
     }
   });
 
-  test('integration refuses a branch that changed a frozen file and reports it to the manager', async () => {
+  test('a dev landing integrates a frozen-file repair and reports the changed path once', async () => {
     const h = integrationHarness();
     try {
+      h.ensureDev();
       writeFileSync(h.briefFile, briefWith([block], ['result.txt', 'tests/acceptance.test.ts']));
       // Dispatch a task whose worker can pass its normal acceptance command.
       const real = h.tasks.dispatch(h.briefFile);
@@ -79,31 +81,31 @@ describe('frozen acceptance files', () => {
       writeFileSync(join(real.worktree, 'tests/acceptance.test.ts'), 'worker changed the acceptance test\n');
       git(real.worktree, ['add', '--', 'tests/acceptance.test.ts']);
       git(real.worktree, ['commit', '-m', 'change frozen acceptance']);
-      const advancedTarget = h.advanceDev('tests/acceptance.test.ts', 'integration changed frozen acceptance\n');
       await h.train();
-      expect(advancedTarget).not.toBe(h.head('main'));
-      expect(h.head()).toBe(advancedTarget);
-      expect(
-        h.inbox.some((event) => event.kind === 'spec-conflict' && event.summary.includes('tests/acceptance.test.ts')),
-      ).toBe(true);
-      expect(h.store.task(real.id).currentAttempt).toBe(1);
-      expect(h.store.task(real.id).state).toBe('stopped');
-      expect(h.store.attempt({ taskId: real.id, attempt: 1 }).escalation).toBe('spec-conflict');
-      const outcome = h.store.events(real.id, 1).find((event) => event.kind === 'gate-outcome');
-      const durableOutcome = JSON.parse(outcome!.body);
-      expect(durableOutcome.refusal).toEqual({
-        kind: 'frozen-acceptance-change',
-        paths: ['tests/acceptance.test.ts'],
-      });
-      expect(durableOutcome.rebaseConflict).toBeUndefined();
-      expect(durableOutcome.conflictedFiles).toBeUndefined();
-      const refusalEvents = h.store.events(real.id).filter((event) => event.kind === 'manager-event');
-      expect(refusalEvents).toHaveLength(1);
-      expect(JSON.parse(refusalEvents[0]!.body).summary).toContain('tests/acceptance.test.ts');
+      expect(h.store.task(real.id).state).toBe('integrated');
+      expect(git(h.root, ['show', 'dev:tests/acceptance.test.ts'])).toBe('worker changed the acceptance test');
+      expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+        'Frozen acceptance file changed: tests/acceptance.test.ts',
+      );
+      const infoEvents = h.inbox.filter(
+        (event) =>
+          event.taskId === real.id && event.kind === 'info' && event.summary.includes('tests/acceptance.test.ts'),
+      );
+      expect(infoEvents).toHaveLength(1);
+      expect(infoEvents[0]!.managerId).toBe(real.brief.manager ?? real.brief.goal);
+      expect(infoEvents[0]!.summary).toBe('Frozen acceptance file changed: tests/acceptance.test.ts');
       expect(h.queue.next()).toBeUndefined();
     } finally {
       h.dispose();
     }
+  });
+
+  test('only ordinary dev landings may repair frozen acceptance files', () => {
+    expect(devMayRepairFrozenAcceptance('integration', 'implementation')).toBe(true);
+    expect(devMayRepairFrozenAcceptance('main', 'implementation')).toBe(false);
+    expect(devMayRepairFrozenAcceptance('integration', 'implementation', true)).toBe(false);
+    expect(devMayRepairFrozenAcceptance('stabilize', 'implementation')).toBe(false);
+    expect(devMayRepairFrozenAcceptance('integration', 'verification')).toBe(false);
   });
 
   test('a retry with a reshaped brief commits its replacement frozen blocks before launch', async () => {

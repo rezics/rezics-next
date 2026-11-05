@@ -27,6 +27,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { runIntegration } from './integration-cli.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { WorkerStore } from './store.ts';
+import { assertBriefDispatchable, MAX_BRIEF_BYTES } from './briefs.ts';
 import { brief as fixtureBrief, harness, markdown, temporaryDirectory } from './test-support.ts';
 
 const NOW = Date.UTC(2026, 10, 2, 12, 0);
@@ -119,7 +120,7 @@ function brief(state: string, goal: string, name: string, ageMs: number, text = 
   const directory = join(state, 'backlog', goal);
   mkdirSync(directory, { recursive: true });
   const file = join(directory, name);
-  writeFileSync(file, `${text}\n`);
+  writeFileSync(file, `${text.startsWith('---') ? text : `${markdown}\n\n${text}`}\n`);
   const at = (NOW - ageMs) / 1000;
   utimesSync(file, at, at);
   return file;
@@ -221,12 +222,42 @@ test('a refused brief moves to failed with its reason, and the owner gets one ev
   expect(sweep.refused.map((entry) => entry.brief)).toEqual(['bad-one.md', 'bad-two.md']);
   const failed = join(f.state, 'backlog', 'web', 'failed');
   expect(readdirSync(failed).sort()).toEqual(['bad-one.md', 'bad-one.reason', 'bad-two.md', 'bad-two.reason']);
-  expect(readFileSync(join(failed, 'bad-one.reason'), 'utf8')).toContain('brief refused: REFUSE one');
+  expect(readFileSync(join(failed, 'bad-one.reason'), 'utf8')).toContain('REFUSE one');
   const events = f.inbox.pending('web');
   expect(events).toHaveLength(1);
   expect(events[0]!.event.kind).toBe('instruction');
   expect(events[0]!.event.summary).toContain('Backlog dispatch refused 2 brief(s): bad-one.md');
   expect(events[0]!.event.summary).toContain(failed);
+});
+
+test('dispatch reports prompt and brief lints while retaining the task in dispatched', async () => {
+  const f = fixture();
+  const dispatch = f.runtime.dispatch;
+  f.runtime.dispatch = async (file) => {
+    const result = await dispatch(file);
+    const taskId = typeof result === 'string' ? result : result.taskId;
+    return {
+      taskId,
+      lintWarnings: assertBriefDispatchable(readFileSync(file, 'utf8'), '/main/checkout'),
+    };
+  };
+  const content = [
+    markdown,
+    'See `.temp/goal/notes.md` and `/main/checkout`.',
+    '',
+    'A saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.',
+    'x'.repeat(MAX_BRIEF_BYTES + 1),
+  ].join('\n');
+  brief(f.state, 'web', 'linted.md', 60_000, content);
+
+  const sweep = await sweepBacklog(f.runtime);
+
+  expect(sweep.dispatched).toHaveLength(1);
+  expect(sweep.dispatched[0]?.lintWarnings).toHaveLength(4);
+  expect(sweep.dispatched[0]?.lintWarnings?.join('\n')).toContain('diagnostic budget');
+  expect(sweep.refused).toEqual([]);
+  expect(existsSync(join(f.state, 'backlog', 'web', 'failed'))).toBe(false);
+  expect(readdirSync(join(f.state, 'backlog', 'web', 'dispatched'))).toContain('task-1-linted.md');
 });
 
 test('refused revisions with the same filename keep separate briefs and reasons', async () => {
@@ -271,12 +302,13 @@ test('an uncommitted interrupted claim returns to the ready backlog and dispatch
   const claims = join(f.state, 'backlog', 'web', '.dispatching');
   mkdirSync(claims, { recursive: true });
   const file = join(claims, 'interrupted.md');
-  writeFileSync(file, 'Interrupted brief\n');
+  const text = `${markdown}\n\nInterrupted brief\n`;
+  writeFileSync(file, text);
   utimesSync(file, (NOW - 60_000) / 1000, (NOW - 60_000) / 1000);
 
   const sweep = await sweepBacklog(f.runtime);
 
-  expect(f.dispatched.map((entry) => entry.text)).toEqual(['Interrupted brief\n']);
+  expect(f.dispatched.map((entry) => entry.text)).toEqual([text]);
   expect(sweep.dispatched).toEqual([{ goal: 'web', taskId: 'task-1', brief: 'interrupted.md' }]);
   expect(sweep.refused).toEqual([]);
   expect(readdirSync(join(f.state, 'backlog', 'web', 'dispatched'))).toEqual(['task-1-interrupted.md']);
@@ -285,7 +317,7 @@ test('an uncommitted interrupted claim returns to the ready backlog and dispatch
 
 test('an interrupted claim whose dispatch already committed archives onto the existing task once', async () => {
   const f = fixture();
-  const text = 'Committed brief\n';
+  const text = `${markdown}\n\nCommitted brief\n`;
   const id = 'existing-task';
   task(f.db, id, 'ready', { goal: 'web', manager: 'web', markdown: text }, 1);
   task(f.db, 'older', 'integrated', { goal: 'web', manager: 'web', markdown: text }, 2);
@@ -311,7 +343,7 @@ test('an interrupted claim whose dispatch already committed archives onto the ex
 
 test('an interrupted claim that matches several unarchived tasks is refused with those ids', async () => {
   const f = fixture();
-  const text = 'Shared brief\n';
+  const text = `${markdown}\n\nShared brief\n`;
   task(f.db, 'task-a', 'ready', { goal: 'web', manager: 'web', markdown: text }, 1);
   task(f.db, 'task-b', 'ready', { goal: 'web', manager: 'web', markdown: text }, 2);
   const claims = join(f.state, 'backlog', 'web', '.dispatching');

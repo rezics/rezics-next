@@ -19,12 +19,14 @@ function temporary<T>(run: (path: string) => T): T {
   }
 }
 
-test('brief limits admit exact UTF-8 bytes and paths while bounding wildcard work', () => {
+test('brief byte budgets warn while path validation still bounds wildcard work', () => {
   const markdown =
     '---\ngoal: fixture\nkind: implementation\npaths: [a]\nriskAreas: []\ncriticalPath: false\nwaiting: []\n---\né';
   const policy = readControlPolicy({ brief: { bytes: Buffer.byteLength(markdown), pathCharacters: 1 } });
   expect(parseBrief(markdown, { version: 1, areas: {} }, policy.brief).paths).toEqual(['a']);
-  expect(() => parseBrief(markdown + 'é', { version: 1, areas: {} }, policy.brief)).toThrow('brief is');
+  expect(parseBrief(markdown + 'é', { version: 1, areas: {} }, policy.brief).lintWarnings).toEqual([
+    `brief is ${Buffer.byteLength(markdown + 'é')} bytes; diagnostic budget is ${Buffer.byteLength(markdown)} bytes`,
+  ]);
   expect(() => validatePath('ab', policy.brief)).toThrow('under 1 characters');
   expect(() => readDerivedFiles([{ path: 'ab', stage: 'integration', command: ['bun'] }], policy.brief)).toThrow(
     'under 1',

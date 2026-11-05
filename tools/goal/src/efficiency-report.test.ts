@@ -51,6 +51,7 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
         JSON.stringify({ taskId: 'queued', attempt: 1, declaredPaths: ['services/sample/src/index.ts'] }),
       );
     const at = (minute: number) => new Date(Date.parse(bucket) + minute * 60_000).toISOString();
+    task(h.db, 'guarded', 'integrated', 'fixture');
     recordFlow(h.db, {
       taskId: 'landed',
       attempt: 2,
@@ -63,6 +64,16 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
     recordFlow(h.db, { taskId: 'landed', attempt: 2, stage: 'worker', action: 'started', at: at(3) });
     recordFlow(h.db, { taskId: 'landed', attempt: 2, stage: 'worker', action: 'finished', at: at(12) });
     recordFlow(h.db, { taskId: 'queued', attempt: 1, stage: 'landing', action: 'enqueued', at: at(15) });
+    h.db.query('INSERT INTO worker_records(task_id,attempt,body) VALUES (?,?,?)').run(
+      'guarded',
+      1,
+      JSON.stringify({
+        taskId: 'guarded',
+        attempt: 1,
+        endedAt: at(20),
+        guardIds: ['new-failure', 'environment', 'new-failure'],
+      }),
+    );
     h.db
       .query('INSERT INTO worker_promotions(id,body) VALUES (1,?)')
       .run(JSON.stringify({ id: 'promotion', phase: 'stabilize-blocked' }));
@@ -72,6 +83,7 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
     expect(report).toContain('Landing identities: landed#2 at 2026-10-31T01:10:00.000Z (dev).');
     expect(report).toContain('Last useful landing: landed#2 at 2026-10-31T01:10:00.000Z.');
     expect(report).toContain('Worker starts / finishes in bucket: 2 starts (including resumes) / 1 finished attempts.');
+    expect(report).toContain('Guard endings in bucket: new-failure 1; environment 1.');
     expect(report).toContain('Current landing queue age: 1 queued attempts; oldest 2700000 ms.');
     expect(report).toContain('queued#1');
     expect(report).toContain('Orphaned landings: 1 (orphan).');

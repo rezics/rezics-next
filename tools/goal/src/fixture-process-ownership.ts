@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import type { ProcessOwnershipAdapter } from './process.ts';
 
 const OWNER_FILE = '.test-fixture-owner';
 const DISPOSING_FILE = '.test-fixture-disposing';
@@ -186,3 +187,20 @@ export function hasUnsettledFixtureWaits(stateDirectory: string, token: string):
   const key = ownerKey(stateDirectory, token);
   return Boolean(activeWaits.get(key)?.size || waitFailures.get(key)?.length);
 }
+
+/** Test-support policy, injected into otherwise ordinary process, launch, and job code. */
+export const fixtureProcessOwnershipAdapter: ProcessOwnershipAdapter = {
+  assertWorkerLaunchAllowed(logPath) {
+    fixtureOwnerForLaunch(logPath);
+  },
+  workerStarted(logPath, identity) {
+    recordFixtureOwnedProcess(logPath, 'worker', identity);
+  },
+  waiterStarted(logPath) {
+    if (!fixtureOwnerForLog(logPath)) return undefined;
+    return (identity) => recordFixtureOwnedProcess(logPath, 'waiter', identity);
+  },
+  trackWait(logPath, wait) {
+    trackFixtureWait(logPath, wait);
+  },
+};

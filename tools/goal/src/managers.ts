@@ -13,6 +13,8 @@ import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
 import { renderManagerOpening } from './prompts.ts';
+import { recordFlow } from './flow.ts';
+import type { PromptBudgetManifest } from './types.ts';
 import type { ProcessIdentity } from './process.ts';
 import type { ManagerWindows } from './windows.ts';
 
@@ -78,6 +80,7 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   turnStartedAt?: number;
   goalState: GoalState | null;
   usage: unknown;
+  promptManifest?: PromptBudgetManifest;
   continuationAsked?: boolean;
   continuationRenewed?: boolean;
   continuationTokensUsed?: number;
@@ -489,7 +492,7 @@ export class ManagerSessions {
     } | null;
     return (row?.last_written_at ?? -1) >= since;
   }
-  private opening(spec: ManagerSpec, continuationFile?: string): string {
+  private opening(spec: ManagerSpec, continuationFile?: string) {
     return renderManagerOpening({
       spec,
       continuationFile,
@@ -498,8 +501,7 @@ export class ManagerSessions {
       backlogPath: this.backlogPath(spec),
       command: this.services.command.join(' '),
       policy: this.policy,
-      warn: (message) => this.services.onError?.(new Error(message)),
-    }).prompt;
+    });
   }
   private claudeArgv(spec: ManagerSpec, session: string[], prompt: string): string[] {
     const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
@@ -547,11 +549,22 @@ export class ManagerSessions {
   }
   // The opening goes to a file, not argv: the CLI process would otherwise match a `pgrep -f` for any command the
   // opening names, and a manager that stopped its inbox watcher by pattern once killed its own session that way.
-  private openingPointer(spec: ManagerSpec): string {
+  private openingPointer(spec: ManagerSpec, prompt: string): string {
     const path = join(this.inbox.stateDirectory, 'managers', `${spec.id}.opening.md`);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, this.opening(spec));
+    writeFileSync(path, prompt);
     return `Read ${path} completely and follow it.`;
+  }
+  private recordPromptLaunch(state: ManagedManagerState): void {
+    if (!state.promptManifest) return;
+    recordFlow(this.db, {
+      taskId: `manager:${state.id}`,
+      attempt: state.history?.length ?? 0,
+      stage: 'manager',
+      action: 'started',
+      at: new Date(this.now()).toISOString(),
+      detail: JSON.stringify({ prompt: { overBudget: state.promptManifest.overBudget } }),
+    });
   }
   // A Claude manager hears its inbox through its own background watcher, so a session that exited never sees new
   // events; the next event resumes it in its window.
@@ -664,12 +677,14 @@ export class ManagerSessions {
         const continuationFile = history?.length ? this.continuationPath(spec) : undefined;
         const opening =
           continuationFile && existsSync(continuationFile) ? this.opening(spec, continuationFile) : this.opening(spec);
+        state.promptManifest = opening.manifest;
         const turn = await client.request('turn/start', {
           threadId: state.threadId,
           ...codexTurnSettings(spec),
-          input: textInput(opening),
+          input: textInput(opening.prompt),
         });
         this.turnStarted(state, turn.turn.id);
+        this.recordPromptLaunch(state);
         if (state.pendingRenewal) {
           state.pendingRenewal.ready = true;
           this.save(state);
@@ -678,12 +693,15 @@ export class ManagerSessions {
         }
       } else {
         state.threadId = randomUUID();
+        const opening = this.opening(spec);
+        state.promptManifest = opening.manifest;
         this.services.windows.register(
           spec.id,
-          this.claudeArgv(spec, ['--session-id', state.threadId], this.openingPointer(spec)),
+          this.claudeArgv(spec, ['--session-id', state.threadId], this.openingPointer(spec, opening.prompt)),
           spec.cwd,
         );
         state.status = 'running';
+        this.recordPromptLaunch(state);
       }
       this.save(state);
       this.armDeadline(state);

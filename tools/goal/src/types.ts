@@ -1,5 +1,6 @@
 import type { ProcessIdentity } from './process.ts';
 import type { AttemptRef, FirstFailure, ManagerEventKind } from './contracts.ts';
+import type { GuardId } from './guards.ts';
 
 export type Cli = 'codex' | 'grok' | 'cursor' | 'claude';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -26,7 +27,13 @@ export type IntegrationTarget = 'main' | 'integration' | 'stabilize';
 export type TaskClass = Exclude<TaskKind, 'verification'> | 'critical-path';
 export type AcceptancePlacement = 'local' | 'default';
 export type AcceptanceRequirement = 'browser' | 'native' | 'root';
-export type PromptManifest = {
+export type PromptLayer = 'role' | 'conditions' | 'brief' | 'opening' | 'total';
+export type PromptBudgetManifest = {
+  layers: Partial<Record<PromptLayer, number>>;
+  budgets: Partial<Record<PromptLayer, number>>;
+  overBudget: PromptLayer[];
+};
+export type PromptManifest = PromptBudgetManifest & {
   agents: string;
   role: string;
   conditions: Record<string, string>;
@@ -165,6 +172,8 @@ export type Settings = {
   };
 };
 export type Brief = {
+  /** Dispatch hygiene measurements; warnings never prevent task creation. */
+  lintWarnings?: string[];
   proof?: ProofMetadata;
   continuation?: BriefContinuation;
   goal: string;
@@ -481,6 +490,8 @@ export type AttemptRecord = AttemptRef & {
   outsidePaths?: string[];
   /** A dev product diff beyond its estimate's tolerance, recorded instead of a scope stop; absent within it. */
   estimateOverrun?: { lines: number; files: number; estimate: { lines: number; files: number } };
+  /** Guard refusals and attempt endings that priced this record; absent on historical records. */
+  guardIds?: GuardId[];
   hostMs: number | null;
   classifierVersion: string;
   stepClasses: Record<StepClass, number>;

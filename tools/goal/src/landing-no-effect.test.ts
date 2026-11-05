@@ -12,7 +12,7 @@ function setWorkerContent(task: { worktree: string }, content: string): void {
   writeFileSync(path, JSON.stringify({ ...plan, content }));
 }
 
-test('a Markdown union with no effect on dev returns the task to its worker and names the file', async () => {
+test('a Markdown union already present on dev integrates without another worker attempt', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -24,13 +24,13 @@ test('a Markdown union with no effect on dev returns the task to its worker and 
     await h.train();
 
     const outcome = h.outcomes[0]!;
-    expect(outcome.passed).toBe(false);
+    expect(outcome.passed).toBe(true);
     expect(outcome.stage).toBe('merge');
-    expect(outcome.firstFailure?.assertion).toContain('Change had no effect on dev');
-    expect(outcome.conflictedFiles).toContain('README.md');
-    expect(outcome.mergedCommit).toBeUndefined();
-    expect(h.store.task(task.id).currentAttempt).toBeGreaterThan(1);
-    expect(h.store.task(task.id).state).not.toBe('integrated');
+    expect(outcome.refusal).toBeUndefined();
+    expect(outcome.firstFailure).toBeUndefined();
+    expect(outcome.mergedCommit).toBe(dev);
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+    expect(h.store.task(task.id).state).toBe('integrated');
     expect(h.head('dev')).toBe(dev);
   } finally {
     h.dispose();
@@ -89,22 +89,23 @@ test('a JSON message deletion that conflicts with a dev edit is left unresolved 
   }
 });
 
-test('an empty landing tree is not attributed to an existing dev commit', async () => {
+test('an empty landing tree already represented on dev integrates as present', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
     const task = h.dispatch('result.txt');
     await h.start(task);
-    h.advanceDev('result.txt', 'result.txt');
+    const dev = h.advanceDev('result.txt', 'result.txt');
 
     await h.train();
 
     const outcome = h.outcomes[0]!;
-    expect(outcome.passed).toBe(false);
+    expect(outcome.passed).toBe(true);
     expect(outcome.stage).toBe('merge');
-    expect(outcome.mergedCommit).toBeUndefined();
-    expect(h.store.task(task.id).currentAttempt).toBeGreaterThan(1);
-    expect(h.store.task(task.id).state).not.toBe('integrated');
+    expect(outcome.refusal).toBeUndefined();
+    expect(outcome.mergedCommit).toBe(dev);
+    expect(h.store.task(task.id).currentAttempt).toBe(1);
+    expect(h.store.task(task.id).state).toBe('integrated');
   } finally {
     h.dispose();
   }

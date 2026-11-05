@@ -65,7 +65,7 @@ export type BacklogRuntime = {
   stateDirectory: string;
   inbox: ManagerInbox;
   /** The `goal dispatch` path: create the task and request its first attempt. Returns the new task ID. */
-  dispatch(briefFile: string): Promise<string>;
+  dispatch(briefFile: string): Promise<string | { taskId: string; lintWarnings?: string[] }>;
   /** Queue a continuation through the existing task retry path. */
   continueTask(goal: string, continuation: BriefContinuation, briefFile: string): Promise<void>;
   /** The `goal cancel` path. */
@@ -80,7 +80,7 @@ export type BacklogRuntime = {
 export type BacklogSweep = {
   /** Another run held the backlog lease, so this one did nothing. */
   skipped?: true;
-  dispatched: { goal: string; taskId: string; brief: string }[];
+  dispatched: { goal: string; taskId: string; brief: string; lintWarnings?: string[] }[];
   continued: { goal: string; taskId: string; attempt: number; brief: string }[];
   refused: { goal: string; brief: string; reason: string }[];
   expired: { goal: string; taskId: string }[];
@@ -93,6 +93,29 @@ export function backlogDirectory(stateDirectory: string, goal?: string): string 
 
 function tableExists(db: Database, name: string): boolean {
   return Boolean(db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
+}
+
+function taskLintWarnings(db: Database, taskId: string): string[] {
+  if (!tableExists(db, 'worker_tasks')) return [];
+  const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string } | null;
+  if (!row) return [];
+  try {
+    const brief = (JSON.parse(row.body) as { brief?: { lintWarnings?: unknown } }).brief;
+    return Array.isArray(brief?.lintWarnings)
+      ? brief.lintWarnings.filter((warning): warning is string => typeof warning === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function dispatchResult(result: string | { taskId: string; lintWarnings?: string[] }): {
+  taskId: string;
+  lintWarnings: string[];
+} {
+  return typeof result === 'string'
+    ? { taskId: result, lintWarnings: [] }
+    : { taskId: result.taskId, lintWarnings: result.lintWarnings ?? [] };
 }
 
 function directories(path: string): string[] {
@@ -386,7 +409,12 @@ function recoverClaims(
         );
       if (matches.length === 1) {
         archiveCommittedClaim(runtime, goal, file, matches[0]!);
-        dispatched.push({ taskId: matches[0]!, brief: basename(file) });
+        const lintWarnings = taskLintWarnings(runtime.db, matches[0]!);
+        dispatched.push({
+          taskId: matches[0]!,
+          brief: basename(file),
+          ...(lintWarnings.length ? { lintWarnings } : {}),
+        });
         continue;
       }
       returnClaimToReady(goalDirectory, file);
@@ -545,7 +573,11 @@ async function dispatchResearchClaim(
   markdown: string,
   writtenMs: number,
   maxNewTasks: number,
-): Promise<{ dispatched: { taskId: string; brief: string }[]; started: number; complete: boolean }> {
+): Promise<{
+  dispatched: { taskId: string; brief: string; lintWarnings?: string[] }[];
+  started: number;
+  complete: boolean;
+}> {
   const input = readResearchFanout(markdown);
   if (!input) return { dispatched: [], started: 0, complete: false };
   const groupId = input.groupId ?? randomUUID();
@@ -558,7 +590,7 @@ async function dispatchResearchClaim(
   ensureResearchGroup(runtime, groupId, input.goal || goal, input.manager, sourceName, input.researchers, reports);
   const goalDirectory = backlogDirectory(runtime.stateDirectory, goal);
   const children = dirname(claimed);
-  const dispatched: { taskId: string; brief: string }[] = [];
+  const dispatched: { taskId: string; brief: string; lintWarnings?: string[] }[] = [];
   let started = 0;
 
   for (const model of input.researchers) {
@@ -567,7 +599,8 @@ async function dispatchResearchClaim(
     if (existing.length) {
       for (const task of existing) {
         archiveResearchMember(goalDirectory, sourceName, task.id, model, temporary);
-        dispatched.push({ taskId: task.id, brief: sourceName });
+        const lintWarnings = taskLintWarnings(runtime.db, task.id);
+        dispatched.push({ taskId: task.id, brief: sourceName, ...(lintWarnings.length ? { lintWarnings } : {}) });
       }
       continue;
     }
@@ -576,17 +609,22 @@ async function dispatchResearchClaim(
 
     writeFileSync(temporary, researcherBrief(markdown, input, model, groupId, reports[model]!));
     try {
-      const taskId = await runtime.dispatch(temporary);
+      const dispatchedTask = dispatchResult(await runtime.dispatch(temporary));
+      const taskId = dispatchedTask.taskId;
       started += 1;
       archiveResearchMember(goalDirectory, sourceName, taskId, model, temporary);
-      dispatched.push({ taskId, brief: sourceName });
+      const lintWarnings = dispatchedTask.lintWarnings.length
+        ? dispatchedTask.lintWarnings
+        : taskLintWarnings(runtime.db, taskId);
+      dispatched.push({ taskId, brief: sourceName, ...(lintWarnings.length ? { lintWarnings } : {}) });
     } catch (error) {
       const created = researchTasks(runtime, groupId).filter((task) => task.model === model);
       if (created.length) {
         for (const task of created) {
           started += 1;
           archiveResearchMember(goalDirectory, sourceName, task.id, model, temporary);
-          dispatched.push({ taskId: task.id, brief: sourceName });
+          const lintWarnings = taskLintWarnings(runtime.db, task.id);
+          dispatched.push({ taskId: task.id, brief: sourceName, ...(lintWarnings.length ? { lintWarnings } : {}) });
         }
       } else {
         failResearcher(runtime, groupId, model, errorText(error));
@@ -765,6 +803,7 @@ async function dispatchReady(
       throw error;
     }
     let taskId: string;
+    let lintWarnings: string[] = [];
     let continuation: BriefContinuation | undefined;
     let groupedResearch = false;
     try {
@@ -825,7 +864,11 @@ async function dispatchReady(
           for (const entry of group.dispatched) dispatched.push({ goal: pick.goal, ...entry });
           continue;
         }
-        taskId = await runtime.dispatch(claimed);
+        const dispatchedTask = dispatchResult(await runtime.dispatch(claimed));
+        taskId = dispatchedTask.taskId;
+        lintWarnings = dispatchedTask.lintWarnings.length
+          ? dispatchedTask.lintWarnings
+          : taskLintWarnings(runtime.db, taskId);
       }
     } catch (error) {
       if (groupedResearch) throw error;
@@ -850,7 +893,13 @@ async function dispatchReady(
     available -= 1;
     if (continuation)
       continued.push({ goal: pick.goal, taskId, attempt: continuation.expectedAttempt, brief: basename(pick.file) });
-    else dispatched.push({ goal: pick.goal, taskId, brief: basename(pick.file) });
+    else
+      dispatched.push({
+        goal: pick.goal,
+        taskId,
+        brief: basename(pick.file),
+        ...(lintWarnings.length ? { lintWarnings } : {}),
+      });
   }
   for (const [goal, entries] of refusedByGoal) notifyRefusals(runtime, goal, entries);
   return { dispatched, continued, refused };

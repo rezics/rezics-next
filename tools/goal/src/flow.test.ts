@@ -101,6 +101,32 @@ test('goal report --flow gives per stage and per Goal totals and percentiles, ef
   expect(result.attemptsPerIntegrated).toBe(1);
 });
 
+test('flow reports count over-budget worker and manager launches once per layer', () => {
+  const result = flowReport(
+    [
+      {
+        taskId: 't1',
+        attempt: 1,
+        stage: 'worker',
+        action: 'started',
+        at: date(1),
+        detail: JSON.stringify({ prompt: { overBudget: ['role', 'total', 'role'] } }),
+      },
+      {
+        taskId: 'manager:fixture',
+        attempt: 1,
+        stage: 'manager',
+        action: 'started',
+        at: date(2),
+        detail: JSON.stringify({ prompt: { overBudget: ['opening'] } }),
+      },
+      { taskId: 'legacy', attempt: 1, stage: 'worker', action: 'started', at: date(3) },
+    ],
+    [task('t1')],
+  );
+  expect(result.overBudgetLaunchesByLayer).toEqual({ role: 1, total: 1, opening: 1 });
+});
+
 test('incomplete lifecycle phases remain unknown instead of receiving inferred timestamps', () => {
   const events: any[] = [
     { taskId: 't1', attempt: 0, stage: 'dispatch', action: 'dispatched', at: date(0) },
