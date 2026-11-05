@@ -14,6 +14,7 @@ import { conceptPublicOriginHref, type ConceptPublicOrigin } from './source-conc
 import { termsPublicCorrectionHref, type TermsPublicOrigin } from './terms-public-visit';
 import { graphPublicOriginHref, type GraphPublicOrigin } from '../pages/graph-browser/public-visit';
 import { musicContextAddressHref, validatedMusicContextReturn } from './music-context-profile/navigation';
+import { createRelationPublicOrigin, relationPublicCorrectionHref } from './relation-public-visit';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -470,11 +471,14 @@ export function subjectContributionEntries(
   address: Subject & { context?: string | undefined; realm?: string | undefined },
 ): CatalogueEntry[] {
   const base = subject(address);
+  const relationOrigin = createRelationPublicOrigin(address);
   return [
     {
       group: 'edit',
       label: m.relation_title({}, options(address.locale)),
-      href: `${base}/relation-edit${address.realm ? `?${new URLSearchParams({ realm: address.realm })}` : ''}`,
+      href: relationOrigin
+        ? relationPublicCorrectionHref(`${base}/relation-edit`, relationOrigin)
+        : `${base}/relation-edit${address.realm ? `?${new URLSearchParams({ realm: address.realm })}` : ''}`,
     },
     ...(address.context
       ? [
