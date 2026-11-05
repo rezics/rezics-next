@@ -484,43 +484,6 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).toContain('B replacement row');
     expect(host.textContent).not.toContain(m.library_follow_removed());
     await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent === m.following_reading_inspect())!
-        .click();
-      await tick();
-    });
-    expect(host.querySelector('[data-slot="list-row"]')).not.toBeNull();
-    await remove();
-    const captured = writes.at(-1)!;
-    const originalInput = structuredClone(captured.input);
-    await refetch('current/cursor+');
-    const denied = {
-      ...loaded('B', 'current/cursor+', 'Unused'),
-      page: { signedIn: true, forbidden: true as const, follows: [], next: null },
-    };
-    await settle(reads.at(-1)!, denied);
-    expect(host.textContent).toContain(m.library_my_ratings_denied());
-    expect(host.textContent).not.toContain('B replacement row');
-    expect(host.querySelector('[data-slot="list-row"], [data-slot="follow-control"], [data-slot="empty"]')).toBeNull();
-    expect(host.querySelector('a[href*="B-canonical"]')).toBeNull();
-    expect(host.querySelector('a[href*="bounded-more"]')).toBeNull();
-    expect(router.state.location.search).toEqual({ cursor: 'current/cursor+' });
-    expect(captured.input).toEqual(originalInput);
-    const beforeDeniedRefresh = writes.length;
-    await settle(captured, { ok: false, reason: 'unavailable' });
-    expect(writes).toHaveLength(beforeDeniedRefresh);
-    expect(host.textContent).toContain(m.library_my_ratings_denied());
-    await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent === m.following_reading_refresh())!
-        .click();
-      await tick();
-    });
-    await settle(reads.at(-1)!, loaded('B', 'current/cursor+', 'B replacement row', 'bounded-more'));
-    expect(host.textContent).not.toContain(m.library_my_ratings_denied());
-    expect(host.textContent).toContain('B replacement row');
-
-    await act(async () => {
       const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
       if (snapshot.state !== 'signed-in') throw new Error('No current viewer');
       client.setQueryData(exposure.viewerExposureQuery(snapshot.observation).queryKey, { subject: 'B', admitted: [] });
@@ -782,6 +745,32 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     await settle(reads[0]!, initial);
     expect(host.textContent).toContain('Last visible row');
     expect(restart()).toBeDefined(); // Populated later pages also have a way back.
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === m.following_reading_inspect())!
+        .click();
+      await tick();
+    });
+    await refetch('A', 'terminal/page+');
+    await settle(reads.at(-1)!, initialDenied);
+    expect(host.textContent).toContain(m.library_my_ratings_denied());
+    expect(host.textContent).not.toContain('Last visible row');
+    expect(
+      host.querySelector(
+        '[data-slot="list-row"], [data-slot="follow-control"], [data-slot="empty"], a[href*="A-canonical"]',
+      ),
+    ).toBeNull();
+    expect(restart()).toBeUndefined();
+    expect(router.state.location.search).toEqual({ cursor: 'terminal/page+' });
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === m.following_reading_refresh())!
+        .click();
+      await tick();
+    });
+    await settle(reads.at(-1)!, initial);
+    expect(host.textContent).not.toContain(m.library_my_ratings_denied());
+    expect(host.textContent).toContain('Last visible row');
     const beforeRemoval = reads.length;
     await remove();
     await settle(writes[0]!, { ok: true, following: false });
