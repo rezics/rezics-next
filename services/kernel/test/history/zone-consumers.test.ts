@@ -109,10 +109,9 @@ test('actual Zone command custody reaches the registered owners and waits for th
     }));
     artifacts.push({ owner: owner!, artifact: { partition, locator, accounts } });
   }
-  expect(artifacts.map(({ owner }) => owner.name).sort()).toEqual([
-    ...ZONE_HISTORY_EVENT_TYPES,
-    ...ZONE_HISTORY_RECEIPT_KINDS,
-  ].sort());
+  expect(artifacts.map(({ owner }) => owner.name).sort()).toEqual(
+    [...ZONE_HISTORY_EVENT_TYPES, ...ZONE_HISTORY_RECEIPT_KINDS].sort(),
+  );
 
   const readiness = await runCommand(f.db.pool, { partition, deadline: Date.now() + 30_000 }, async (tx) => {
     const observations = [];

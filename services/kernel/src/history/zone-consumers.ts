@@ -22,7 +22,11 @@ for (const type of ZONE_HISTORY_EVENT_TYPES) {
 /** The current rebuilt producer cut: five receipt codecs and five closed ID/revision events.
  * No Zone durable-work producer is registered until its actual native owner exists. */
 export const ZONE_HISTORY_FAMILY_SOURCES: readonly HistoryFamilySource[] = Object.freeze([
-  ...ZONE_HISTORY_RECEIPT_KINDS.map((producer) => ({ artifactType: 'command-receipt/v1' as const, producer, version: 1 })),
+  ...ZONE_HISTORY_RECEIPT_KINDS.map((producer) => ({
+    artifactType: 'command-receipt/v1' as const,
+    producer,
+    version: 1,
+  })),
   ...ZONE_HISTORY_EVENT_TYPES.map((producer) => ({ artifactType: 'outbox-event/v1' as const, producer, version: 1 })),
 ]);
 

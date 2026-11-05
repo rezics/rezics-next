@@ -217,8 +217,7 @@ export async function observeZoneHistoryConsumerClosure(
     )
   ).rows[0];
   if (home?.write_state !== 'active') return pending('zone-history-native-home-unavailable');
-  if (binding && home.epoch !== binding.originalEpoch)
-    return pending('zone-history-home-epoch-changed');
+  if (binding && home.epoch !== binding.originalEpoch) return pending('zone-history-home-epoch-changed');
   if (!(await lockHistoryBarrier(tx, barrier))) return pending('zone-history-terminal-barrier-unavailable');
 
   const sourceKey = JSON.stringify(['zone', zoneId]);
@@ -267,8 +266,7 @@ export async function observeZoneHistoryConsumerClosure(
       [artifact.partition, eventLocator.position.toString(), eventLocator.eventSeq],
     )
   ).rows[0];
-  if (!event || !ZONE_EVENT_TYPE_SET.has(event.type))
-    return pending('zone-history-event-inventory-unavailable');
+  if (!event || !ZONE_EVENT_TYPE_SET.has(event.type)) return pending('zone-history-event-inventory-unavailable');
   const classification = classifyEvent(event.type);
   if (classification.kind !== 'non-personal') throw new TypeError('Zone base event classification changed');
   if (
