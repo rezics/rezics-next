@@ -148,6 +148,32 @@ function linksOf(
       };
       links.set(linkKey(keyed), keyed);
     }
+    if (link.property === 'wdt:P725' && relation?.slotKey === 'wdt:P453' && link.value === 'value' && link.target) {
+      const character = qualifiers.find(
+        (qualifier) =>
+          qualifier.property === 'wdt:P453' &&
+          qualifier.value.type === 'value' &&
+          typeof qualifier.value.content === 'string' &&
+          routeOf(qualifier.value.content) !== null,
+      )?.value.content;
+      if (typeof character === 'string') {
+        const keyed = {
+          ...link,
+          target: character,
+          project_outbound: false,
+          relation: relationStatement,
+          slot_id,
+          external: null,
+          value: 'value' as const,
+          outbound_order: relationStatement ? (order ?? null) : null,
+          outbound_order_key: relationStatement ? outbound_order_key : '',
+          source_type: holder.source_type,
+          order_key,
+          filter_value: character,
+        };
+        links.set(linkKey(keyed), keyed);
+      }
+    }
   }
   return links;
 }

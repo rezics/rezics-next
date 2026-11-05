@@ -1049,6 +1049,7 @@ export async function listSubjectLinks(
     property: string | null;
     limit: number;
     filter?: string;
+    qualifier?: { property: string; value: string };
     type?: string;
     language?: string;
     languages?: readonly string[];
@@ -1080,6 +1081,7 @@ export async function listSubjectLinks(
       ...(context === GLOBAL_CONTEXT ? {} : { context }),
       property: options.property,
       filter: options.filter ?? null,
+      qualifier: options.qualifier ?? null,
       type: options.type ?? null,
       language: languages.join(',') || null,
       release: options.releasePin ?? (options.release ? releaseDigest(options.release) : null),
@@ -1137,21 +1139,24 @@ export async function listSubjectLinks(
               after_statement: afterStatement,
               page_limit: (options.type ? 4 * options.limit : options.limit) + 1,
             });
-      const privatePage = await privateLinks(client, {
-        subject: options.subject,
-        inbound: true,
-        property: options.property,
-        crossProperty: options.property === null,
-        after: cursor?.after,
-        limit: (options.type ? 4 * options.limit : options.limit) + 1,
-      });
-      const privateRows = privatePage.entries.map((row) => ({
-        subject: row.subject_id,
-        property: row.property,
-        statement: row.candidate_id,
-        type: row.source_type,
-        order_key: row.order_key,
-      }));
+      const privateRows = options.qualifier
+        ? []
+        : (
+            await privateLinks(client, {
+              subject: options.subject,
+              inbound: true,
+              property: options.property,
+              crossProperty: options.property === null,
+              after: cursor?.after,
+              limit: (options.type ? 4 * options.limit : options.limit) + 1,
+            })
+          ).entries.map((row) => ({
+            subject: row.subject_id,
+            property: row.property,
+            statement: row.candidate_id,
+            type: row.source_type,
+            order_key: row.order_key,
+          }));
       rows = [...rows, ...privateRows]
         .sort((a, b) => {
           const left = options.property === null ? a.property : 'order_key' in a ? String(a.order_key) : '';
@@ -1187,12 +1192,15 @@ export async function listSubjectLinks(
             subject: link.subject,
             property: link.property,
             candidate: link.statement,
-            target: options.subject,
+            target: options.qualifier ? null : options.subject,
             value: 'value' as const,
+            ...(options.qualifier ? { anyResolvedTarget: true } : {}),
             context,
             defaults,
-            ...(options.filter === undefined ? {} : { filter: options.filter }),
-            ...(relationFilter === undefined
+            ...(options.filter === undefined ? {} : { filter: options.qualifier?.value ?? options.filter }),
+            ...(options.qualifier
+              ? { filterProperties: [options.qualifier.property] }
+              : relationFilter === undefined
               ? {}
               : { filterProperties: Array.isArray(relationFilter) ? relationFilter : [relationFilter] }),
             requireRelation: true,
@@ -1275,9 +1283,16 @@ export async function listSubjectLinks(
     if (!current) return [];
     if (
       current.value.type !== 'value' ||
-      current.value.content !== options.subject ||
-      (options.filter &&
-        !current.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
+      (options.qualifier ? typeof current.value.content !== 'string' : current.value.content !== options.subject) ||
+      (options.qualifier
+        ? !current.qualifiers.some(
+            (snak) =>
+              snak.property.id === options.qualifier!.property &&
+              snak.value.type === 'value' &&
+              snak.value.content === options.qualifier!.value,
+          )
+        : options.filter &&
+          !current.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
     )
       return [];
     const summary = summaries.get(link.subject) ?? null;
@@ -1288,8 +1303,15 @@ export async function listSubjectLinks(
     const assertion = options.authorizeSummary ? disclosedRelationStatement(current, summaries) : current;
     if (
       !assertion ||
-      (options.filter &&
-        !assertion.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
+      (options.qualifier
+        ? !assertion.qualifiers.some(
+            (snak) =>
+              snak.property.id === options.qualifier!.property &&
+              snak.value.type === 'value' &&
+              snak.value.content === options.qualifier!.value,
+          )
+        : options.filter &&
+          !assertion.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
     )
       return [];
     const related = Object.fromEntries(
@@ -1311,7 +1333,7 @@ export async function listSubjectLinks(
       credit && (!rawKey || (key?.value.type === 'value' && typeof key.value.content === 'string'))
         ? {
             property: link.property,
-            target: options.subject,
+            target: options.qualifier ? current.value.content as string : options.subject,
             ...(key?.value.type === 'value' && typeof key.value.content === 'string' ? { key: key.value.content } : {}),
           }
         : undefined;
