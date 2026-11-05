@@ -239,6 +239,7 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
         return { passed: true, output: '', timedOut: false };
       }),
     });
+    console.log('verifier planning debug', JSON.stringify({ executed, findings: ctx.store.devVerifierFindings() }));
     expect(
       executed.filter(({ command }) => command.join(' ').endsWith(verifierCommand.join(' '))),
     ).toHaveLength(1);
