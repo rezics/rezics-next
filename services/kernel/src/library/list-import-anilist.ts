@@ -1116,7 +1116,7 @@ export function createAniListImport(deps: Dependencies) {
       const header = await load<Header>(actor, id, -1);
       if (header.cancelled) break;
       const stored = await load(actor, id, confirmation.ordinal);
-      let reviewed = stored.review;
+      const reviewed = stored.review;
       if (
         !reviewed ||
         reviewed.id !== confirmation.reviewId ||
@@ -1256,10 +1256,6 @@ export function createAniListImport(deps: Dependencies) {
             },
           );
           if (admission.value.reviewId === null) break;
-          reviewed = {
-            ...reviewed,
-            score: { ...reviewed.score, native: { ...reviewed.score.native, consented: true } },
-          };
           try {
             await votes.putVoteOutcome(actor, {
               questionId: reviewed.score!.native.question.id,
