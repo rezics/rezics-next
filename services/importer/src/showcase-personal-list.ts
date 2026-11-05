@@ -3,14 +3,14 @@ import type { KernelClient } from '@rezics/client';
 import type { ShowcaseJournal } from './showcase-publication.ts';
 
 type VndbSurface = KernelClient['libraryImports']['vndb'];
-type Preview = NonNullable<Awaited<ReturnType<VndbSurface['$preview']['post']>>['data']>;
+type PreviewResponse = Awaited<ReturnType<VndbSurface['$preview']['post']>>;
 
 export type ShowcasePersonalListUpload =
   | { state: 'uploaded'; uploadId: string; rows: number }
   | { state: 'refused'; code: string }
   | { state: 'unknown-delivery'; code: string };
 
-function preview(value: unknown): Pick<Preview, 'uploadId' | 'rows'> | null {
+function preview(value: unknown): { uploadId: string; rows: number } | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const result = value as Record<string, unknown>;
   return (
@@ -36,7 +36,7 @@ export async function seedShowcasePersonalList(input: {
   const route = input.client.libraryImports.vndb;
   if (typeof route !== 'function') throw new TypeError('Kernel client does not expose VNDB imports');
 
-  let response: Awaited<ReturnType<VndbSurface['$preview']['post']>>;
+  let response: PreviewResponse;
   try {
     response = await route.$preview.post(
       { xml: sealed.xml },
