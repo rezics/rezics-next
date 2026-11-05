@@ -230,8 +230,7 @@ function scoreReviewFitsPreview(row: VndbRow, body: Extract<VndbReviewInput, { a
     currentVote.state === 'unavailable'
   )
     return false;
-  if (body.selection.kind === 'clear')
-    return currentVote.state === 'set' && body.consent === 'clear-native-vote';
+  if (body.selection.kind === 'clear') return currentVote.state === 'set' && body.consent === 'clear-native-vote';
   const source = row.fields.score;
   return (
     body.consent === 'adopt-native-vote' &&
@@ -308,9 +307,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     const selected = [...rows.values()].sort((a, b) => a.ordinal - b.ordinal);
     const unattemptedEffects = selected.length
       ? unappliedEffects(selected, outcomes)
-      : retiredUnattempted.filter(
-          (effect) => !outcomes.has(effectKey(effect.ordinal, effect.reviewId, effect.kind)),
-        );
+      : retiredUnattempted.filter((effect) => !outcomes.has(effectKey(effect.ordinal, effect.reviewId, effect.kind)));
     const pendingEffects = currentApply
       ? effectsFromCommands([currentApply], selected).filter(
           (effect) => !outcomes.has(effectKey(effect.ordinal, effect.reviewId, effect.kind)),
@@ -585,8 +582,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     // A replacement review withdraws the prior confirmation even if admission is refused.
     stage = 'review';
     confirmed = [];
-    const pendingRow: VndbRow =
-      body.action === 'score' ? { ...row, scoreDecision: null } : { ...row, decision: null };
+    const pendingRow: VndbRow = body.action === 'score' ? { ...row, scoreDecision: null } : { ...row, decision: null };
     if (body.action === 'score') scoreNotices.delete(row.ordinal);
     rows.set(row.ordinal, pendingRow);
     if (page) page = { ...page, rows: page.rows.map((item) => (item.ordinal === row.ordinal ? pendingRow : item)) };
@@ -604,7 +600,10 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
             reviewId: response.value.reviewId,
             targetId: response.value.targetId,
           });
-          const updated = { ...pendingRow, nativeScore: { ...row.nativeScore, currentVote: response.value.currentVote } };
+          const updated = {
+            ...pendingRow,
+            nativeScore: { ...row.nativeScore, currentVote: response.value.currentVote },
+          };
           rows.set(row.ordinal, updated);
           if (page) page = { ...page, rows: page.rows.map((item) => (item.ordinal === row.ordinal ? updated : item)) };
           return snapshot();
@@ -761,9 +760,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
       const next = pendingPreview;
       const receipts = [...outcomes.values()];
       const references = [...effectReferences.entries()];
-      const unsettled = rows.size
-        ? unappliedEffects([...rows.values()], outcomes)
-        : retiredUnattempted;
+      const unsettled = rows.size ? unappliedEffects([...rows.values()], outcomes) : retiredUnattempted;
       clearForReplacement();
       if (xml === null) {
         receipts.forEach((receipt) => outcomes.set(outcomeKey(receipt), receipt));
@@ -818,9 +815,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     if (response?.kind === 'deleted' && live()) {
       const receipts = [...outcomes.values()];
       const references = [...effectReferences.entries()];
-      const unsettled = rows.size
-        ? unappliedEffects([...rows.values()], outcomes)
-        : retiredUnattempted;
+      const unsettled = rows.size ? unappliedEffects([...rows.values()], outcomes) : retiredUnattempted;
       clearForReplacement();
       receipts.forEach((receipt) => outcomes.set(outcomeKey(receipt), receipt));
       references.forEach(([key, effect]) => effectReferences.set(key, effect));

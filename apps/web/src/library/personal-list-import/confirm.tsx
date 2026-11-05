@@ -27,7 +27,8 @@ export function VndbConfirmPage({
       <ul className="space-y-3">
         {snap.selection.map((row) => {
           const value = row.scoreDecision;
-          const score = value && 'action' in value && (value.action === 'vote' || value.action === 'clear') ? value : null;
+          const score =
+            value && 'action' in value && (value.action === 'vote' || value.action === 'clear') ? value : null;
           return (
             <li key={row.ordinal} className="min-w-0 rounded-md border p-3" data-vndb-confirm={row.ordinal}>
               <p className="break-words font-medium">{row.title}</p>

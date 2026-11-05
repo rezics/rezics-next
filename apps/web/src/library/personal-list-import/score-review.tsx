@@ -102,8 +102,7 @@ export function VndbScoreReview({
 
   function review() {
     if (!canReview || !question || !targetId) return;
-    const selection =
-      choice === 'vote' ? { kind: 'vote' as const, units: Number(units) } : { kind: 'clear' as const };
+    const selection = choice === 'vote' ? { kind: 'vote' as const, units: Number(units) } : { kind: 'clear' as const };
     onReview({
       ordinal: row.ordinal,
       action: 'score',
@@ -130,7 +129,9 @@ export function VndbScoreReview({
       {question ? (
         <div className="space-y-1 text-sm">
           <p className="break-words font-medium">{m.library_vndb_score_question({ label: question.label })}</p>
-          <p className="break-words">{m.library_vndb_score_meaning({ meaning: question.meaning ?? m.library_vndb_score_meaning_unknown() })}</p>
+          <p className="break-words">
+            {m.library_vndb_score_meaning({ meaning: question.meaning ?? m.library_vndb_score_meaning_unknown() })}
+          </p>
           <p className="break-words text-muted-foreground">
             {m.library_vndb_score_question_basis({
               id: question.id,
@@ -176,7 +177,9 @@ export function VndbScoreReview({
       {scoreNotice ? (
         <div role="status" className="space-y-1">
           <p>{noticeText(scoreNotice)}</p>
-          {scoreNotice.reviewId ? <p className="break-words text-sm">{m.library_vndb_score_receipt({ id: scoreNotice.reviewId })}</p> : null}
+          {scoreNotice.reviewId ? (
+            <p className="break-words text-sm">{m.library_vndb_score_receipt({ id: scoreNotice.reviewId })}</p>
+          ) : null}
         </div>
       ) : null}
       {targetMatchesPreview && supportedMeaning && native.currentVote.state !== 'unavailable' ? (

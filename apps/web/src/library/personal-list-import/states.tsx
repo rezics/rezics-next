@@ -73,7 +73,10 @@ export function VndbRemoved({ outcomes, effects }: { outcomes: VndbOutcome[]; ef
                 <p>{m.library_vndb_effect_review_id({ id })}</p>
                 <p>{outcomeLabel(outcome.status, kind)}</p>
                 {effect?.targetId ? (
-                  <a href={subjectHref({ id: effect.targetId, label: '' }, getLocale()).href} className="underline underline-offset-2">
+                  <a
+                    href={subjectHref({ id: effect.targetId, label: '' }, getLocale()).href}
+                    className="underline underline-offset-2"
+                  >
                     {m.library_vndb_effect_target({ id: effect.targetId })}
                   </a>
                 ) : null}

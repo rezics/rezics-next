@@ -1470,11 +1470,25 @@ export function createVndbImport(config: Config) {
       score.guard.ordinal !== choice.ordinal ||
       score.guard.reviewId !== choice.scoreReviewId
     )
-      return { outcome: { ordinal: choice.ordinal, scoreReviewId: choice.scoreReviewId, status: 'stale' }, stopped: null };
-    if (score.status === 'applied' || score.status === 'skipped' || score.status === 'stale' || score.status === 'failed')
-      return { outcome: { ordinal: choice.ordinal, scoreReviewId: choice.scoreReviewId, status: score.status }, stopped: null };
+      return {
+        outcome: { ordinal: choice.ordinal, scoreReviewId: choice.scoreReviewId, status: 'stale' },
+        stopped: null,
+      };
+    if (
+      score.status === 'applied' ||
+      score.status === 'skipped' ||
+      score.status === 'stale' ||
+      score.status === 'failed'
+    )
+      return {
+        outcome: { ordinal: choice.ordinal, scoreReviewId: choice.scoreReviewId, status: score.status },
+        stopped: null,
+      };
     // In particular, do not call the unguarded vote writer when review admission is unavailable.
-    return { outcome: { ordinal: choice.ordinal, scoreReviewId: choice.scoreReviewId, status: 'unavailable' }, stopped: null };
+    return {
+      outcome: { ordinal: choice.ordinal, scoreReviewId: choice.scoreReviewId, status: 'unavailable' },
+      stopped: null,
+    };
   }
 
   async function apply(

@@ -26,10 +26,7 @@ export function VndbReviewPage({
   onHideSource: () => void;
 }) {
   const current = snap.page?.rows ?? [];
-  const reviewed = snap.rows.reduce(
-    (count, row) => count + Number(!!row.decision) + Number(!!row.scoreDecision),
-    0,
-  );
+  const reviewed = snap.rows.reduce((count, row) => count + Number(!!row.decision) + Number(!!row.scoreDecision), 0);
   return (
     <section className="min-w-0 space-y-6" data-vndb-stage="review" tabIndex={-1}>
       <p role="status">
@@ -74,9 +71,9 @@ export function VndbReviewPage({
             {m.library_vndb_previous_page()}
           </VndbAction>
         ) : null}
-      <VndbAction type="button" variant="outline" disabled={busy} onClick={onRefresh}>
-        {m.library_vndb_refresh_page()}
-      </VndbAction>
+        <VndbAction type="button" variant="outline" disabled={busy} onClick={onRefresh}>
+          {m.library_vndb_refresh_page()}
+        </VndbAction>
         {snap.page?.next !== null && snap.page ? (
           <VndbAction type="button" variant="outline" disabled={busy} onClick={onNext}>
             {m.library_vndb_next_page()}

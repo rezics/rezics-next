@@ -285,24 +285,32 @@ test('XML → exact target/state review → explicit selected apply → a separa
   const request = new Request('https://example.invalid/library/import-return', {
     headers: { authorization: 'Bearer current-reader', 'x-reader': 'reader-1', 'x-csrf-token': 'csrf-1' },
   });
-  const fresh = await loadImportLibrary(client, request, {}, {
-    expectedReader: 'reader-1',
-    expectedCredential: 'csrf-1',
-  });
+  const fresh = await loadImportLibrary(
+    client,
+    request,
+    {},
+    {
+      expectedReader: 'reader-1',
+      expectedCredential: 'csrf-1',
+    },
+  );
   expect(fresh.state).toBe('current');
   if (fresh.state !== 'current') throw new Error('Admitted Library read should be current');
-  const denied = await loadImportLibrary(client, request, {}, {
-    expectedReader: 'another-reader',
-    expectedCredential: 'csrf-1',
-  });
+  const denied = await loadImportLibrary(
+    client,
+    request,
+    {},
+    {
+      expectedReader: 'another-reader',
+      expectedCredential: 'csrf-1',
+    },
+  );
   expect(denied).toEqual({ state: 'denied' });
   const libraryRequests = requests.filter((row) => row.path.endsWith('/libraryEntries'));
   expect(libraryRequests).toHaveLength(1);
   const pageRequest = libraryRequests[0]!;
   expect(new URL(pageRequest.url).searchParams.get('limit')).toBe('8');
-  const html = await render(
-    <ImportLibraryView result={fresh} busy={false} onRead={nothing} />,
-  );
+  const html = await render(<ImportLibraryView result={fresh} busy={false} onRead={nothing} />);
   expect(html).toContain('現在のライブラリの題名');
   expect(html).toContain('/library');
   expect(html).not.toContain('Private source note');

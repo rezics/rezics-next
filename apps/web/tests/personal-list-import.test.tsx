@@ -155,9 +155,9 @@ test('reviews source score beside the current native vote and requires explicit 
 
   const retained = { ...scored, kind: 'retained' as const };
   expect(renderToStaticMarkup(<VndbEvidence row={retained} />)).toContain('07.0');
-  expect(renderToStaticMarkup(<VndbScoreReview row={retained} targetId={subject} busy={false} onReview={() => {}} />)).toContain(
-    'not a VN enjoyment vote',
-  );
+  expect(
+    renderToStaticMarkup(<VndbScoreReview row={retained} targetId={subject} busy={false} onReview={() => {}} />),
+  ).toContain('not a VN enjoyment vote');
 
   const zero = scoredRow();
   zero.fields.score = { kind: 'invalid', raw: '0' };
@@ -247,16 +247,13 @@ test('keeps score and state reviews independent and retries exact score outcomes
     [{ ordinal: 0, scoreReviewId: reviewIds[1] }],
   ]);
   expect(partial.outcomes).toEqual([{ ordinal: 0, reviewId: reviewIds[0], status: 'applied' }]);
-  expect(partial.unattemptedEffects.map((effect) => [effect.kind, effect.reviewId])).toEqual([
-    ['score', reviewIds[1]],
-  ]);
+  expect(partial.unattemptedEffects.map((effect) => [effect.kind, effect.reviewId])).toEqual([['score', reviewIds[1]]]);
   expect(partial.pendingEffects.map((effect) => effect.reviewId)).toEqual([reviewIds[1]]);
   const settled = await journey.retryUnknown();
   expect(applyCommands[2]).toBe(applyCommands[1]);
-  expect(settled.outcomes.map((outcome) => ('scoreReviewId' in outcome ? outcome.scoreReviewId : outcome.reviewId))).toEqual([
-    reviewIds[0],
-    reviewIds[1],
-  ]);
+  expect(
+    settled.outcomes.map((outcome) => ('scoreReviewId' in outcome ? outcome.scoreReviewId : outcome.reviewId)),
+  ).toEqual([reviewIds[0], reviewIds[1]]);
   expect(settled.outcomes.map((outcome) => outcome.status)).toEqual(['applied', 'unavailable']);
   expect(settled.applied).toBe(1);
   expect(settled.settledEffects.map((effect) => effect.targetId)).toEqual([subject, subject]);
