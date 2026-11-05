@@ -70,7 +70,8 @@ The mounted request contract is unchanged; Web consumes the existing selected-re
 caller through its typed route. Source expiry, cancellation and evidence removal retain their existing bounds; a removed
 upload does not undo native effects.
 
-Decision: receipt-only score recovery denies a current actor without `rating:vote` before any historical receipt is read, and reads back only the receipt's question and target.
+Decision: receipt-only score recovery denies a current actor without `rating:vote` before any historical receipt is
+read, and reads back only the receipt's question and target.
 
 ## Web HTTP contract
 
