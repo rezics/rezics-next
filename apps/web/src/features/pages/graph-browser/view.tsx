@@ -522,7 +522,7 @@ export function GraphBrowserPage({
           failure: undefined,
           record: undefined,
           awaitingRoute: false,
-          localOnly: false,
+          localOnly: pending.localOnly,
         });
       } catch {
         if (controller.signal.aborted || sequenceRef.current !== requestId || sourceRef.current !== record.source)
