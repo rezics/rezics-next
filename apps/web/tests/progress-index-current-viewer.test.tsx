@@ -291,8 +291,7 @@ const { CurrentViewerProgressIndexPage } = await import('../src/library/progress
 const { readProgressIndex, readCurrentViewerProgressIndex } = await import('../src/library/progress-server');
 const { prepareSession } = await import('../src/session/request');
 const { sessionQuery } = await import('../src/session/query');
-const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
-const { viewerExposureLifetime } = await import('../src/session/observation');
+const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
