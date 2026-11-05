@@ -210,14 +210,15 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function paint(data = props.data) {
   props = { ...props, data };
   await act(async () => {
-    root.render(
-      <StrictMode>
-        <QueryClientProvider client={client}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
-      </StrictMode>,
-    );
-    renderProps?.(props);
+    if (renderProps) renderProps(props);
+    else
+      root.render(
+        <StrictMode>
+          <QueryClientProvider client={client}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </StrictMode>,
+      );
     await tick();
   });
 }
