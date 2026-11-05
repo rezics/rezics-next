@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { profileDigest, PROFILE_FORMAT, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
-import type { KernelClient } from '@rezics/client';
-import { loadPresentationPreview } from '../src/features/pages/presentation-preview';
+import { SESSION_HEADER, type KernelClient } from '@rezics/client';
+import { loadPresentationPreview, presentationPreviewClient } from '../src/features/pages/presentation-preview';
 
 const document: CompositionDocument = {
   root: { props: {} },
@@ -43,4 +43,43 @@ test.each([
 test('accepts a coherent profile at native head zero and reports a valid changed digest', async () => {
   expect(await inspect({ digest, head: 0 })).toMatchObject({ ok: true, head: 0 });
   expect(await inspect({ digest: `sha256:${'f'.repeat(64)}`, head: 0 })).toEqual({ ok: false, reason: 'changed' });
+});
+
+test.each(['aggregate', 'controls'] as const)('cancels anonymous %s reads and reopens fresh', async (phase) => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const requests: Request[] = [];
+  const client = presentationPreviewClient('https://kernel.invalid', (async (input, init) => {
+    const request = new Request(input, init);
+    requests.push(request);
+    if (requests.length === (phase === 'aggregate' ? 1 : 3)) entered.resolve();
+    if (phase === 'aggregate' || !request.url.endsWith('/pages:read')) {
+      await release.promise;
+      // The aggregate deliberately ignores abort; no later controls may start in that case.
+      if (phase === 'controls') request.signal.throwIfAborted();
+    }
+    const body = request.url.endsWith('/pages:read')
+      ? page
+      : request.url.endsWith('/active')
+        ? { digest, head: 17 }
+        : { digest, profile };
+    return Response.json(body);
+  }) as typeof fetch);
+  const lifetime = new AbortController();
+  const pending = loadPresentationPreview(client, input, lifetime.signal);
+  await entered.promise;
+  lifetime.abort();
+  expect(requests.every((request) => request.signal.aborted)).toBe(true);
+  release.resolve();
+  expect(await pending).toEqual({ ok: false, reason: 'unavailable' });
+  expect(requests).toHaveLength(phase === 'aggregate' ? 1 : 3);
+  for (const request of requests) {
+    expect(request.headers.has('authorization')).toBe(false);
+    expect(request.headers.has('cookie')).toBe(false);
+    expect(request.headers.has(SESSION_HEADER)).toBe(false);
+    expect([request.credentials, request.redirect, request.cache]).toEqual(['omit', 'manual', 'no-store']);
+  }
+  const fresh = new AbortController();
+  expect(await loadPresentationPreview(client, input, fresh.signal)).toMatchObject({ ok: true, head: 17 });
+  expect(requests.at(-1)!.signal.aborted).toBe(false);
 });
