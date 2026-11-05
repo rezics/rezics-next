@@ -1241,7 +1241,7 @@
   "library_nav_sidebar_label": "Navigation de la bibliothèque",
   "library_pin_actions": "Actions de la collection épinglée",
   "library_pin_conflict": "Les collections épinglées ont changé ailleurs. Consultez la liste actuelle avant de réessayer.",
-  "library_pin_denied": "Vous n’avez pas accès à vos collections épinglées.",
+  "library_pin_denied": "Votre accès actuel ne permet pas de consulter vos collections épinglées.",
   "library_pin_limit": "Vous avez atteint la limite de 100 collections épinglées.",
   "library_pin_more": "Toutes les collections",
   "library_pin_move_down": "Descendre",

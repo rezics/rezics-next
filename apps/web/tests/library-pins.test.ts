@@ -151,108 +151,43 @@ test('a missing list operation makes no pins request, while a failed read is not
   expect(await readLibraryPins(exposed as never, 'Bearer viewer', 8)).toEqual({ state: 'unavailable' });
 });
 
-test('Pins reads keep permission, exact platform closure, preparation and transport distinct at both HTTP boundaries', async () => {
+test('Pins reads keep permission, closure, preparation and transport distinct', async () => {
   const document = { paths: { '/v1/libraryPins': { get: { operationId: 'library_pin.list' } } } };
-  const scenarios: {
-    name: string;
-    stage: 'openapi' | 'list';
-    response?: unknown;
-    thrown?: Error;
-    expected?: unknown;
-    calls: string[];
-    rejects?: string;
-  }[] = [
-    {
-      name: 'OpenAPI forbidden',
-      stage: 'openapi',
-      response: { error: { status: 403 } },
-      expected: { state: 'denied' },
-      calls: ['openapi'],
-    },
-    {
-      name: 'OpenAPI platform closure',
-      stage: 'openapi',
-      response: { error: { status: 403, value: { code: 'platform_closed' } } },
-      expected: { state: 'closed', platformClosed: true },
-      calls: ['openapi'],
-    },
-    {
-      name: 'list forbidden',
-      stage: 'list',
-      response: { error: { status: 403 } },
-      expected: { state: 'denied' },
-      calls: ['openapi', 'pins'],
-    },
-    {
-      name: 'list platform closure',
-      stage: 'list',
-      response: { error: { status: 403, value: { code: 'platform_closed' } } },
-      expected: { state: 'closed', platformClosed: true },
-      calls: ['openapi', 'pins'],
-    },
-    {
-      name: 'wrapped platform closure',
-      stage: 'list',
-      thrown: new PlatformClosedError(403, { code: 'platform_closed' }),
-      expected: { state: 'closed', platformClosed: true },
-      calls: ['openapi', 'pins'],
-    },
-    {
-      name: 'list preparation',
-      stage: 'list',
-      response: { status: 202 },
-      expected: { state: 'preparing' },
-      calls: ['openapi', 'pins'],
-    },
-    {
-      name: 'OpenAPI transport failure',
-      stage: 'openapi',
-      thrown: new TypeError('fetch failed'),
-      expected: { state: 'unavailable' },
-      calls: ['openapi'],
-    },
-    {
-      name: 'list transport failure',
-      stage: 'list',
-      thrown: new TypeError('fetch failed'),
-      expected: { state: 'unavailable' },
-      calls: ['openapi', 'pins'],
-    },
-    {
-      name: 'unexpected client error',
-      stage: 'list',
-      thrown: new Error('unexpected client error'),
-      calls: ['openapi', 'pins'],
-      rejects: 'unexpected client error',
-    },
-  ];
-
-  for (const scenario of scenarios) {
+  const scenarios = [
+    ['openapi', { error: { status: 403 } }, { state: 'denied' }],
+    ['openapi', { error: { status: 403, value: { code: 'platform_closed' } } }, { state: 'closed', platformClosed: true }],
+    ['list', { error: { status: 403 } }, { state: 'denied' }],
+    ['list', { error: { status: 403, value: { code: 'platform_closed' } } }, { state: 'closed', platformClosed: true }],
+    ['list', new PlatformClosedError(403, { code: 'platform_closed' }), { state: 'closed', platformClosed: true }],
+    ['list', { status: 202 }, { state: 'preparing' }],
+    ['openapi', new TypeError('fetch failed'), { state: 'unavailable' }],
+    ['list', new TypeError('fetch failed'), { state: 'unavailable' }],
+    ['list', new Error('unexpected client error'), 'throws'],
+  ] as const;
+  for (const [stage, response, expected] of scenarios) {
     const calls: string[] = [];
     const client = {
       'openapi.json': {
         get: async () => {
           calls.push('openapi');
-          if (scenario.stage === 'openapi') {
-            if (scenario.thrown) throw scenario.thrown;
-            return scenario.response;
-          }
-          return { data: document };
+          if (stage !== 'openapi') return { data: document };
+          if (response instanceof Error) throw response;
+          return response;
         },
       },
       libraryPins: {
         get: async () => {
           calls.push('pins');
-          if (scenario.stage !== 'list') throw new Error('Pins read after OpenAPI refusal');
-          if (scenario.thrown) throw scenario.thrown;
-          return scenario.response;
+          if (stage !== 'list') throw new Error('Pins read after OpenAPI refusal');
+          if (response instanceof Error) throw response;
+          return response;
         },
       },
     };
     const read = readLibraryPins(client as never, 'Bearer viewer', 8);
-    if (scenario.rejects) await expect(read).rejects.toThrow(scenario.rejects);
-    else expect(await read).toEqual(scenario.expected);
-    expect(calls, scenario.name).toEqual(scenario.calls);
+    if (expected === 'throws') await expect(read).rejects.toThrow('unexpected client error');
+    else expect(await read).toEqual(expected);
+    expect(calls).toEqual(stage === 'openapi' ? ['openapi'] : ['openapi', 'pins']);
   }
 });
 
