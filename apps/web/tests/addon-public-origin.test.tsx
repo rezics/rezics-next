@@ -18,7 +18,7 @@ import { candidateContext } from '../src/subject/candidates';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const base = `/en/subjects/${addonProfileId}/northern-lights/addon`;
+const base = `/en/subjects/${addonProfileId}/harbor-northern-lights/addon`;
 const origin = (): AddonPublicOrigin => ({
   subject: addonProfileId,
   type: 'wd:Q209163',
@@ -117,7 +117,7 @@ test('the installed Addon entry, canonical route and supported session keep orig
   const observed = origin();
   const loader = Route.options.loader;
   if (typeof loader !== 'function') throw new Error('Expected installed canonical loader');
-  const load = (href: string, slug = 'northern-lights', id = addonProfileId) =>
+  const load = (href: string, slug = 'harbor-northern-lights', id = addonProfileId) =>
     loader({
       params: { id, slug },
       location: { searchStr: new URL(href, window.location.origin).search, hash: '' },
@@ -141,11 +141,13 @@ test('the installed Addon entry, canonical route and supported session keep orig
     return page;
   };
   try {
-    await render(<AddonProfileEntry id={addonProfileId} label="Northern lights" locale="en" origin={observed} />);
+    await render(
+      <AddonProfileEntry id={addonProfileId} label="Harbor: Northern lights" locale="en" origin={observed} />,
+    );
     const href = host.querySelector('a')!.getAttribute('href')!;
     expect(
       collectEditorialEntries(
-        <AddonProfileEntry id={addonProfileId} label="Northern lights" locale="en" origin={observed} />,
+        <AddonProfileEntry id={addonProfileId} label="Harbor: Northern lights" locale="en" origin={observed} />,
       ).entries[0]!.href,
     ).toBe(href);
     expect(await load(href)).toMatchObject({ id: addonProfileId, visit: { kind: 'origin', origin: observed } });
