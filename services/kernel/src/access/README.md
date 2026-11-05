@@ -37,6 +37,9 @@ the same core for ordinary and explicit advice. Own-account action metadata bind
 excludes that floor and resource-role grants. A core decision reached through registered Global authority still
 marks the same governance provenance used by command auditing.
 
+The typed native projection maps SQL `live` to the core's `deadlineLive` operand without structural casts.
+Scalar and batched consumers use that same projection; the native statement and its output remain unchanged.
+
 The exact type operand is deliberately not guessed for point `Resource` checks. Resource-role registrations bind
 `access:grant` to `community.realm`, `semantic.context` and `semantic.zone`; that point action keeps the existing
 bounded SQL evaluator. A `ReadDecisions` batch supplies `resourceType`, so the same action uses the core only for a
@@ -217,7 +220,9 @@ completed projection bytes are measured directly. Witness work is zero: Access d
   seek, and denial work for the three closed reasons (`resource`, `suspension`, `realm_ban`). The native temporal
   keys' `WITHOUT OVERLAPS` constraints and last-range `LIMIT 1` seeks bound each candidate/reason. The declaration
   also charges the finite generated key/target/probe/decision work. The final assignment recheck is separately
-  included. No target grant, current denial or final scope decision is reused from preparation.
+  included. Its byte reservation includes all ordinary/explicit local/Global primitive grant and denial fields,
+  assignment validity and `live`, checked against the adapter's closed projection type. Kind audience declarations
+  compose this same reservation. No target grant, current denial or final scope decision is reused from preparation.
 
 Native cost/growth evidence remains separate from these declarations. Publishing a bound proves no native
 execution, cold-load or shared-suite pass; missing foreign operands remain explicitly unmeasured.

@@ -1,6 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { AccessUnavailableError, requireAccessDeadline } from './unavailable.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { NativePermissionProjection } from './policy-core.ts';
 
 /** Neutral native dimensions, structurally compatible with the Source ledger. */
 export type AccessWork = Readonly<{
@@ -429,7 +430,46 @@ export function accessNativeDeclaration(
             explicit: false,
             publicAllowed: false,
             at: timestamp,
-            live: false,
+            ...({
+              live: false,
+              assignmentValid: false,
+              localDenied: false,
+              actorActionGrant: false,
+              actorResourceRoleGrant: false,
+              actorOwnAccountGrant: false,
+              actorAuthenticatedBenefitGrant: false,
+              principalActionGrant: false,
+              principalResourceRoleGrant: false,
+              principalOwnAccountGrant: false,
+              principalAuthenticatedBenefitGrant: false,
+              globalDenied: false,
+              globalActorActionGrant: false,
+              globalActorResourceRoleGrant: false,
+              globalActorOwnAccountGrant: false,
+              globalActorAuthenticatedBenefitGrant: false,
+              globalPrincipalActionGrant: false,
+              globalPrincipalResourceRoleGrant: false,
+              globalPrincipalOwnAccountGrant: false,
+              globalPrincipalAuthenticatedBenefitGrant: false,
+              explicitLocalDenied: false,
+              explicitActorActionGrant: false,
+              explicitActorResourceRoleGrant: false,
+              explicitActorOwnAccountGrant: false,
+              explicitActorAuthenticatedBenefitGrant: false,
+              explicitPrincipalActionGrant: false,
+              explicitPrincipalResourceRoleGrant: false,
+              explicitPrincipalOwnAccountGrant: false,
+              explicitPrincipalAuthenticatedBenefitGrant: false,
+              explicitGlobalDenied: false,
+              explicitGlobalActorActionGrant: false,
+              explicitGlobalActorResourceRoleGrant: false,
+              explicitGlobalActorOwnAccountGrant: false,
+              explicitGlobalActorAuthenticatedBenefitGrant: false,
+              explicitGlobalPrincipalActionGrant: false,
+              explicitGlobalPrincipalResourceRoleGrant: false,
+              explicitGlobalPrincipalOwnAccountGrant: false,
+              explicitGlobalPrincipalAuthenticatedBenefitGrant: false,
+            } satisfies NativePermissionProjection),
           },
           shape.targets ?? 1,
         );
