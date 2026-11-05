@@ -211,6 +211,18 @@ test('the mounted default Following composition retires viewer, cursor and row l
   );
   const window = new Window({ url: `${origin}/en/library/following`, width: 1280, height: 900 });
   window.document.documentElement.lang = 'en';
+  window.matchMedia = (query) => ({
+    media: query,
+    matches: query === '(pointer: coarse)',
+    onchange: null,
+    addListener() {},
+    removeListener() {},
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {
+      return false;
+    },
+  }) as MediaQueryList;
   const globals = {
     window,
     document: window.document,
@@ -317,16 +329,6 @@ test('the mounted default Following composition retires viewer, cursor and row l
     await act(async () => {
       trigger.click();
       await tick();
-    });
-    console.log('Following menu activation', {
-      trigger: trigger.outerHTML,
-      buttons: [...window.document.querySelectorAll<HTMLButtonElement>('button')].map((button) => ({
-        text: button.textContent,
-        disabled: button.disabled,
-      })),
-      dialogs: [...window.document.querySelectorAll('[role="dialog"], [role="menu"]')].map((element) =>
-        element.outerHTML.slice(0, 500),
-      ),
     });
     const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
       (item) => item.textContent === m.library_follow_unfollow(),
@@ -545,6 +547,18 @@ test('Following recovery stays page-local through terminal pages, last-row remov
   );
   const window = new Window({ url: `${origin}/en/library/following`, width: 1280, height: 900 });
   window.document.documentElement.lang = 'en';
+  window.matchMedia = (query) => ({
+    media: query,
+    matches: query === '(pointer: coarse)',
+    onchange: null,
+    addListener() {},
+    removeListener() {},
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {
+      return false;
+    },
+  }) as MediaQueryList;
   const globals = {
     window,
     document: window.document,
