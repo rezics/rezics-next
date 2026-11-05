@@ -131,7 +131,13 @@ function population(axis: Axis, base: number): Population {
                 relation: false,
               })),
               'semantic.redirect': [
-                { route: owner, subject_id: subject, target: selected.subject, recorded_transaction_id: transaction },
+                {
+                  route: owner,
+                  subject_id: subject,
+                  sequence: 1,
+                  target: selected.subject,
+                  recorded_transaction_id: transaction,
+                },
               ],
               'content.imported_field': [
                 {
