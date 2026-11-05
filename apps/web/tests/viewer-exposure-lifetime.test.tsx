@@ -39,7 +39,9 @@ mock.module('cloudflare:workers', () => ({
 }));
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { Exposure, operationIsAdmitted, prepareExposure, useOperation } = await import('../src/kernel/exposure');
+const { Exposure, operationIsAdmitted, prepareExposure, useOperation, viewerExposureLifetime } = await import(
+  '../src/kernel/exposure'
+);
 const { sessionQuery } = await import('../src/session/query');
 
 const admitted = [
@@ -273,6 +275,17 @@ test('viewer exposure retires each mounted reader observation without leaking or
 
     immediateNative = false;
     await act(async () => render(root!, 2));
+    console.log(
+      'viewer admission trace',
+      credentialReads,
+      viewerExposureLifetime(client).getSnapshot(),
+      client.getQueryCache().findAll({ queryKey: ['exposure'] }).map((query) => ({
+        key: query.queryKey,
+        status: query.state.status,
+        fetchStatus: query.state.fetchStatus,
+        data: query.state.data,
+      })),
+    );
     await until(() => nativeReads.length === 1);
     expect(credentialReads).toBe(1);
     expect(nativeReads.map(({ authorization }) => authorization)).toEqual(['Bearer native-A']);
