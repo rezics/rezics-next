@@ -657,7 +657,8 @@ test('The default home route renders a bounded mixed discovery Following and Con
     await settle();
     await click(m.home_kinds_load());
     await choose(nativeKind);
-    await selectSpace();
+    expect(query().get('spaceId')).toBe(homeStorySpace.spaceId);
+    expect(host.textContent).toContain(homeStorySpace.title);
     await click(m.home_questions_load());
     await chooseQuestion(firstQuestion.id);
     expect(lastFeed().headers.get('authorization')).toBe('Bearer private-token');
