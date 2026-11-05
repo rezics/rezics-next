@@ -78,6 +78,28 @@ test('native completion revalidates FULL reads and retains occurrence notes, dup
   ).toBe(true);
 });
 
+test('malformed and noncanonical captured addresses return unavailable before native reads', async () => {
+  const source = native();
+  const capture = captureCollectionExport(await source.page())!;
+  source.calls.length = 0;
+
+  const requests = [
+    '{',
+    JSON.stringify(['page', 'list', null, false]),
+    `${JSON.stringify(['page', 'list', null, false, []])} `,
+  ];
+  for (const requestAddress of requests) {
+    const validated = validateCollectionExportCapture({
+      ...capture,
+      provenance: { ...capture.provenance, request: requestAddress },
+    });
+    expect(await loadCollectionExport(source.client, request, {}, validated, context)).toEqual({
+      state: 'unavailable',
+    });
+  }
+  expect(source.calls).toHaveLength(0);
+});
+
 test('terminal native denial, changed population and revision never deliver a file; larger reads refuse', async () => {
   const source = native();
   const capture = captureCollectionExport(await source.page())!;
