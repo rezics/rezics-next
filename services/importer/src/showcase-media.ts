@@ -542,7 +542,7 @@ export async function acquireBangumiCoverSources(
   for (const { row, kind } of tasks) {
     const endpoint = endpointFor(row.key);
     const archiveDigest = sourceDigest(row.payload);
-    const sharedCareerSource = creator
+    const sharedCareerSource = kind === 'creator'
       ? plan.personCareerSources?.find((source) => source.externalId === row.key)
       : undefined;
     const sharedImage = sharedCareerSource ? sharedPersonImage(sharedCareerSource, row, endpoint) : undefined;
