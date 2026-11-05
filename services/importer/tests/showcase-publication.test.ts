@@ -697,11 +697,13 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
     expect(mismatchedManifest.omissions.some((omission) => omission.code === 'graph-endpoint-mismatch')).toBe(true);
 
     const refusedCandidate = synopses.find((candidate) => candidate.source?.external_id === '101')!;
-    const refusedCandidateState = candidates.get(refusedCandidate.id)!;
-    refusedCandidateState.head = 2;
+    const refusedAssertion = resumed.manifest.records
+      .find((record) => record.provider === 'bangumi' && record.sourceKey === '101')
+      ?.assertions.find((assertion) => assertion.candidateId === refusedCandidate.id);
+    if (!refusedAssertion) throw new Error('Missing selected synopsis for permanent refusal recovery');
+    const refusedAction = `accept:${showcaseDigest({ identity: refusedCandidate.id, digest: refusedAssertion.candidateDigest })}`;
+    journal.refuseAction(refusedAction, 'review-http-403');
     const refusedCallsBefore = acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id).length;
-    refuseAcceptance = true;
-    acceptanceRefusalStatus = 403;
     const permanentlyRefused = await publishShowcase({
       plan,
       result: initialResult,
@@ -716,12 +718,9 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       sourceKey: '101',
       code: 'review-http-403',
     });
-    expect(acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id)).toHaveLength(
-      refusedCallsBefore + 1,
-    );
+    expect(acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id)).toHaveLength(refusedCallsBefore);
     journal.close();
     journal = new ShowcaseJournal(journalPath);
-    refuseAcceptance = false;
     const refusalReopened = await publishShowcase({
       plan,
       result: initialResult,
@@ -736,9 +735,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       sourceKey: '101',
       code: 'review-http-403',
     });
-    expect(acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id)).toHaveLength(
-      refusedCallsBefore + 1,
-    );
+    expect(acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id)).toHaveLength(refusedCallsBefore);
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
