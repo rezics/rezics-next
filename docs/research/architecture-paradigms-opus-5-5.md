@@ -113,13 +113,217 @@ evaluation turns into a temporal-dead-zone `ReferenceError` when the order shift
 
 ## Literature
 
+Citations give title, authors, year and link; the full list is under "Sources". Quotations are verbatim from the
+source read; paraphrases are marked as such. Clones used: Effect (TypeScript) `cb679e3`, MIT; Packwerk `31e5342`, MIT;
+Cordis `6663348`, MIT; Bun `c643ea8`, MIT. All are recorded in `.reference/INDEX.md` under `architecture-paradigms` or
+`search-worker-outcome-harness`.
+
 ### Spatiotemporal composability
+
+*A Programming Paradigm for Spatiotemporal Composability*, Yifan Shi, Wei Zhang and Tianyi Cui (Peking University;
+DeepSeek-AI), arXiv:2608.25512 v1, 26 August 2026, 92 pages, arXiv non-exclusive distribution licence
+(<https://arxiv.org/abs/2608.25512>). Read in full from the PDF; the HTML rendering does not exist. The implementation
+is Cordis (<https://github.com/cordiverse/cordis>, MIT, read at `6663348`); the paper presents Cordis v4.
+
+The paper names two dimensions of composition beyond ordinary function composition (section 1.1):
+
+- **Temporal composability**: "upon removal of a component, the modifications the component made to the shared
+  environment must be completely and safely reversed."
+- **Spatial composability**: "components must be able to declare, discover, and resolve their dependencies on one
+  another in a structured and verifiable manner."
+
+In the static setting the paper reduces the first to lexical scoping (RAII, bracket patterns) and the second to
+module import resolution. Its mechanisms:
+
+1. **Revertible effects** (section 3.1). An effect is modelled as `Γ → Γ × (Γ → Γ)`: it returns the changed context
+   *and* its inverse, and inverses compose in reverse order. In Cordis every context mutation goes through one
+   primitive, `ctx.effect(callback)`, whose callback returns its disposer (section 5.1.1;
+   `packages/core/src/fiber.ts:292`). Event listeners, timers (`packages/timer/src/index.ts`), service provision and
+   child components all reduce to it, so unloading a component reverts everything it registered.
+2. **Reactive coeffects** (section 3.2). A component declares the keys it requires (`inject`) and the keys it
+   provides. Each context change is classified against that specification, and the component is activated only while
+   its requirements are satisfied.
+3. **The context paradigm** (section 3.3). Effects and coeffects are unified in one context type, and "every
+   interaction between a component and its environment passes through this single entity". Operations on a key act
+   only on that key's binding, which yields an observational equivalence under which the effects of distinct
+   components interleave without disturbing one another (sections 3.3.2, 3.4).
+4. **Cycles** (section 6.5). A dependency cycle leaves the components permanently inactive, and "this condition is
+   predictable from the dependency declarations alone, so a runtime can report it when components are loaded." The
+   paper's remedy is decomposition: a server and an access controller that call each other become *server-core*,
+   *access-control-core*, *request-mediation* and *policy-management*; "neither core depends on the other; only the
+   integration components depend on both." The cost is more components, up to quadratic in mutually interacting
+   components, which it proposes to mitigate with bundling, convention-based wiring and scaffolding.
+5. **Limits it states.** Linking is nominal by key name, so interface drift and key collisions are possible across
+   independently built components (section 6.6). The Koishi case study (section 5.3: a chatbot framework with "over
+   4000 community-contributed plugins") is "an existence-and-adoption result rather than a quantitative one";
+   overhead and productivity against a baseline are future work. Effects that leave the system boundary (bytes
+   written, messages sent) cannot be reverted, only withheld or compensated (section 6.1).
+
+For REZICS the relevant part is not hot reload. It is that a component's whole effect on its environment and its whole
+dependence on it are *declared values* that a runtime, or a static check, can inspect. The paper's section 6.5
+example is our own failure: the `IDEMPOTENCY_HEADER` boot failure was a cycle between HTTP problem mapping and Access.
 
 ### Effect systems in theory and practice
 
+- **Effect systems.** *Polymorphic Effect Systems*, John M. Lucassen and David K. Gifford, POPL 1988
+  (<https://doi.org/10.1145/73560.73564>): types annotated with the effects a computation may have, originally to find
+  what can run in parallel. That motivation is ours: knowing what code touches tells you what can be changed and
+  checked independently.
+- **Algebraic effects and handlers.** *Algebraic Operations and Generic Effects*, Gordon Plotkin and John Power, 2003
+  (<https://doi.org/10.1023/A:1023064908962>), and *Handlers of Algebraic Effects*, Gordon Plotkin and Matija Pretnar,
+  ESOP 2009 (<https://doi.org/10.1007/978-3-642-00590-9_7>). An effect is an interface of operations; a handler gives
+  it meaning; the same code runs under a production handler or a test handler. This is ports and adapters stated as
+  semantics (paraphrase).
+- **Koka.** *Koka: Programming with Row Polymorphic Effect Types*, Daan Leijen, MSFP 2014
+  (<https://doi.org/10.4204/EPTCS.153.8>), and *Type Directed Compilation of Row-Typed Algebraic Effects*, Daan Leijen,
+  POPL 2017 (<https://doi.org/10.1145/3009837.3009872>). Every function's type carries an inferred row of effects;
+  a function with an empty row is pure. The key practical property is inference: the programmer does not write the
+  rows, the compiler reports them.
+- **Effekt and capability passing.** *Effects as Capabilities: Effect Handlers and Lightweight Effect Polymorphism*,
+  Jonathan Immanuel Brachthäuser, Philipp Schuster and Klaus Ostermann, OOPSLA 2020
+  (<https://doi.org/10.1145/3428194>). Effect types are read as the capabilities a computation needs from its
+  context; handlers are passed explicitly (capability-passing style) and functions are second class to keep
+  capabilities from escaping. The authors trade some purity reasoning for much simpler effect polymorphism and
+  encapsulation (paraphrase of the abstract). *Capturing Types*, Aleksander Boruch-Gruszecki, Martin Odersky, Edward
+  Lee, Ondřej Lhoták and Jonathan Brachthäuser, ACM TOPLAS 2023 (<https://doi.org/10.1145/3618003>), brings the
+  same idea to Scala as capture checking. Object capabilities in general: *Robust Composition*, Mark S. Miller, PhD
+  thesis, Johns Hopkins University, 2006 (<http://www.erights.org/talks/thesis/>): authority flows only through
+  references you were given.
+- **Coeffects.** *Coeffects: A Calculus of Context-Dependent Computation*, Tomas Petricek, Dominic Orchard and Alan
+  Mycroft, ICFP 2014 (<https://doi.org/10.1145/2628136.2628160>): the dual of effects, tracking what a computation
+  *requires* from its context. The spatiotemporal paper builds its spatial dimension on this.
+- **Effect handlers in a production language.** *Retrofitting Effect Handlers onto OCaml*, KC Sivaramakrishnan,
+  Stephen Dolan, Leo White, Tom Kelly, Sadiq Jaffer and Anil Madhavapeddy, PLDI 2021
+  (<https://doi.org/10.1145/3453483.3454039>). OCaml 5 ships untyped handlers; effects are not in function types.
+  This shows the industrial compromise: the runtime mechanism shipped, the static effect tracking did not.
+- **Effect (TypeScript).** Effect-TS/effect `cb679e3`, package `effect` 4.1.2, MIT. `Effect<A, E, R>` is "a value that
+  lazily describes a workflow or job. The workflow requires some context `R`, and may fail with an error of type `E`"
+  (`packages/effect/src/Effect.ts:97-99`). "A `Layer<ROut, E, RIn>` describes how to acquire one or more services,
+  which services are required to build them, and which errors can occur during acquisition"
+  (`packages/effect/src/Layer.ts:4-6`). Test services such as `testing/TestClock.ts` replace time. `R` is a
+  compile-time coeffect: a program that still requires a service does not type-check as runnable. Production evidence
+  is from Effect's own podcast, *Cause & Effect* (<https://effect.website/podcast/>): Zendesk ("one of their main
+  products, serving millions of users every day", episode 1, 2024-11-26; the guest credits dependency injection,
+  layers and an incentive to write unit tests), Markprompt, MasterClass, Vercel, Spiko, OpenRouter, Warp and OpenCode
+  (episode 8, 2026-06-19, migrating "a large TypeScript codebase to Effect"). These are testimonials from the
+  vendor's channel. No controlled study or published defect or throughput numbers were found.
+
+**What practice shows.** Typed effect tracking (Koka rows, Effekt capabilities, Effect's `R`) works when the compiler
+infers or checks it on every edit. Where the language cannot, systems keep the *runtime* half (handlers, layers,
+disposers) and enforce the static half with conventions and tools (OCaml 5, Cordis, plain dependency injection). For
+TypeScript the choice is between (a) adopting a library whose types carry requirements, which rewrites every effectful
+signature, and (b) passing capability records explicitly and checking imports, which keeps signatures but gives up
+inference of what a function may do.
+
 ### Classic architecture literature
 
+- **Parnas, decomposition criteria.** *On the Criteria To Be Used in Decomposing Systems into Modules*, David L. Parnas,
+  CACM 1972 (<https://doi.org/10.1145/361598.361623>): "We propose instead that one begins with a list of difficult
+  design decisions or design decisions which are likely to change. Each module is then designed to hide such a
+  decision from the others." Decomposing by processing steps, as a flowchart, couples every module to shared
+  representations. *Designing Software for Ease of Extension and Contraction*, David L. Parnas, IEEE TSE 1979
+  (<https://doi.org/10.1109/TSE.1979.234169>), adds the *uses* relation: when it is loop-free, every level is a usable
+  and testable subset of the system; when it loops, "nothing works until everything works" (paraphrase).
+- **Dijkstra, THE.** *The Structure of the "THE"-Multiprogramming System*, Edsger W. Dijkstra, CACM 1968
+  (<https://doi.org/10.1145/363095.363143>). Six layers, each using only those below. The paper credits the hierarchy
+  for making exhaustive testing of each level feasible before the next was added (paraphrase).
+- **Conway.** *How Do Committees Invent?*, Melvin E. Conway, Datamation 1968
+  (<https://www.melconway.com/Home/Committees_Paper.html>): "organizations which design systems ... are constrained
+  to produce designs which are copies of the communication structures of these organizations." Empirical test:
+  *Exploring the Duality between Product and Organizational Architectures: A Test of the "Mirroring" Hypothesis*,
+  Alan MacCormack, Carliss Baldwin and John Rusnak, Research Policy 2012
+  (<https://doi.org/10.1016/j.respol.2012.04.011>): loosely coupled organisations (open source) produced
+  significantly more modular products than tightly coupled ones (paraphrase). *Identification of Coordination
+  Requirements*, Marcelo Cataldo, Patrick Wagstrom, James Herbsleb and Kathleen Carley, CSCW 2006
+  (<https://doi.org/10.1145/1180875.1180929>): changes are completed faster when coordination matches the
+  dependencies among the work (paraphrase).
+- **Baldwin and Clark, design rules.** *Design Rules, Volume 1: The Power of Modularity*, Carliss Baldwin and Kim
+  Clark, MIT Press 2000 (<https://mitpress.mit.edu/9780262024662/>). Parallel independent work becomes possible when
+  a small set of *visible design rules* (architecture, interfaces, tests) is fixed first and everything else is hidden
+  in modules (paraphrase).
+- **Lakos, levelization.** *Large-Scale C++ Software Design*, John Lakos, Addison-Wesley 1996 (ISBN 0-201-63362-0).
+  Physical design: components get a *level* (1 + the highest level they depend on); a system is levelizable only if
+  its component dependency graph is acyclic; cyclic physical dependencies defeat understanding, testing and reuse
+  because no part can be tested without the rest. He measures coupling with cumulative component dependency (CCD), the
+  sum over components of the number of components each needs to be tested (paraphrase). Our median closure of 610
+  files is that measure per file.
+- **Martin, package principles.** *Design Principles and Design Patterns*, Robert C. Martin, 2000
+  (<https://web.archive.org/web/20150906155800/http://www.objectmentor.com/resources/articles/Principles_and_Patterns.pdf>),
+  and *Agile Software Development: Principles, Patterns, and Practices*, Prentice Hall 2002. Acyclic dependencies
+  principle: "Allow no cycles in the package dependency graph." Stable dependencies principle: "Depend in the
+  direction of stability." Stable abstractions principle: a package should be as abstract as it is stable. Cycles are
+  broken by dependency inversion: the depended-on side declares an interface the other implements.
+- **Cockburn, ports and adapters.** *Hexagonal Architecture*, Alistair Cockburn, 2005
+  (<https://alistair.cockburn.us/hexagonal-architecture/>): "Allow an application to equally be driven by users,
+  programs, automated test or batch scripts, and to be developed and tested in isolation from its eventual run-time
+  devices and databases."
+- **Functional core, imperative shell.** Gary Bernhardt, *Boundaries*, SCNA 2012
+  (<https://www.destroyallsoftware.com/talks/boundaries>), and the screencast *Functional Core, Imperative Shell*,
+  2012 (<https://www.destroyallsoftware.com/screencasts/catalog/functional-core-imperative-shell>): simple values as
+  the boundaries between components; decisions in a pure core tested without mocks; a thin shell with few
+  conditionals performs the I/O (paraphrase).
+- **Out of the Tar Pit.** Ben Moseley and Peter Marks, 2006 (<https://curtclifton.net/papers/MoseleyMarks06a.pdf>).
+  Complexity is the main difficulty in large systems; its main sources are state and control. They separate essential
+  state (what users supply), essential logic (pure derivation) and accidental state and control (performance hints),
+  and recommend keeping accidental parts out of the logic altogether (paraphrase). A module-level cache or registry is
+  accidental state with global reach.
+
 ### Architecture for many parallel writers
+
+Large organisations and recent agent studies. Evidence about model behaviour is limited to work under four months old
+(after 2026-07-06).
+
+- **Google.** *Why Google Stores Billions of Lines of Code in a Single Repository*, Rachel Potvin and Josh Levenberg,
+  CACM 2016 (<https://doi.org/10.1145/2854146>): one trunk with tens of thousands of engineers works because of build
+  tooling that knows every dependency and tests affected targets (paraphrase). *Software Engineering at Google*, Titus
+  Winters, Tom Manshreck and Hyrum Wright, O'Reilly 2020, chapter 18 (<https://abseil.io/resources/swe-book>):
+  fine-grained modules, the "1:1:1" rule (one directory, one package, one build target) and visibility restrictions
+  keep the build graph explicit (paraphrase). Bazel enforces it: a target may only be depended on by packages its
+  `visibility` lists (<https://bazel.build/concepts/visibility>).
+- **Uber.** *Keeping Master Green at Scale*, Sundaram Ananthanarayanan et al., EuroSys 2019
+  (<https://doi.org/10.1145/3302424.3303970>): with hundreds of changes a day, a submit queue that builds and tests
+  candidate changes speculatively, using the build graph to find independent changes, keeps trunk green; conflict
+  analysis relies on target-level dependencies (paraphrase).
+- **Shopify.** *Enforcing Modularity in Rails Apps with Packwerk*, Maple Ong, 2020-09-23
+  (<https://shopify.engineering/enforcing-modularity-rails-apps-packwerk>), and *A Packwerk Retrospective*, Gannon
+  McGibbon and Chris Salzberg, 2024-02-07 (<https://shopify.engineering/a-packwerk-retrospective>). Packwerk kept a
+  "deprecated references list" as a ratchet, like our baseline. The retrospective's findings: dependency checks
+  provided "value in holding the line against new dependencies at the base layer"; privacy checks turned Packwerk into
+  "an API design tool" and were removed in v3.0. A package brought to zero violations still would not boot in
+  isolation, because constants loaded outside the tracked mechanism are "untracked and invisible to the tool", so "a
+  package that is well-defined according to Packwerk (has no violations left to resolve) may actually crash with name
+  errors when its code is executed." Their conclusion: "running code, more than any metric, will always be the best
+  indicator of real progress."
+- **Semantic interference between parallel agents.** *Passes Alone, Fails Together: Benchmarking Semantic Coordination
+  in Parallel LLM-Agent Development*, Haocheng Xia, Eugene Wu and Yongjoo Park, arXiv:2609.25396, 2026-09-21
+  (<https://arxiv.org/abs/2609.25396>). On constructed interface changes to 12 Django helpers, 105 of 108 blind
+  GPT-5.5 runs (97%) produced patches that each passed alone but failed when merged, despite clean textual merges.
+  A roughly 130-token description of the completed interface change recovered 82% (in the synthetic tier it cut
+  interference from 2.50 to 0.04 per run). On 417 mined Django PR pairs, interference was rare (1 of 834 runs), which
+  the authors attribute to history that review had already reconciled. "This happens when one agent changes an
+  interface or rule that another agent still relies on." The authors warn that the constructed rates do not estimate
+  real frequency.
+- **Pre-write admission.** *Claim Plane: Reliability Gains and the Limits of Selective Concurrency for Parallel Coding
+  Agents*, Maxim Nikolaev, arXiv:2608.00947, 2026-08-02 (<https://arxiv.org/abs/2608.00947>; abstract only, the full
+  text could not be extracted). On 30 CooperBench feature pairs, static admission over declared change scopes raised
+  pair pass from 23.3% to 50.0% and integration success from 65.6% to 96.7%, but it "recovered reliability largely by
+  collapsing toward serial execution" (96.7% of executions serialised). Dynamic admission failed closed on undeclared
+  scope in 46 of 90 executions.
+- **Queue governance.** *BulkPR-Bench: Benchmarking Queue-Level Governance of Interacting Pull Requests*, Zetong Xiong
+  et al. (23 authors, Baidu), arXiv:2608.02685, 2026-08-03 (<https://arxiv.org/abs/2608.02685>). Six current models
+  selecting safe merge subsets from 581 candidate PRs in 18 repositories completed only 8 of 324 queues exactly; unsafe
+  merges occurred in 226 runs; agents respected 98–100% of the relations they recovered, so the gap is *recovering*
+  relations, and supplying the relation graph raised scores to 77.5–99.1%.
+- **Context only.** *AI Agent Pull Requests on GitHub: Frequency, Structure, and Merge Conflict Rates*, George Xu,
+  Arjun Subramanian and Nithilan Karthik, arXiv:2607.04697, 2026-07-06 (<https://arxiv.org/abs/2607.04697>). Its data
+  covers December 2024 to July 2025, so it fails the four-month rule for model behaviour; cited only for the
+  observation that textual conflicts are a lower bound because build and semantic conflicts are not tracked.
+
+**What the recent evidence says.** Agents mostly fail together, not alone, and they fail on relations they cannot
+see: changed interfaces (Xia et al.), interacting PRs (BulkPR-Bench), undeclared scope (Claim Plane). Making the
+relation explicit and machine-readable recovers most of the loss. Serialising on declared file scopes also works but
+gives up the parallelism we need. Explicit, small, checked interfaces between modules are the form of "relation
+graph" that does not serialise work.
 
 ## What each idea predicts for our failure
 
