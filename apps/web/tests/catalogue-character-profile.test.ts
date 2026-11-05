@@ -220,6 +220,9 @@ test('character correction and uncertain creation retain native facts, keys and 
     type: 'value',
     content: { amount: '+171', unit: 'http://www.wikidata.org/entity/Q174728' },
   };
+  staged.statement.references = [
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://source.test/height' } }] },
+  ];
   const sealed = sealFacts(characterProfileId, read.release, [staged]);
   let candidate: string | undefined;
   await sendFacts(sealed, fixture.props.facts(characterProfileId).propose, (_property, result) => {
