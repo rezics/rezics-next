@@ -7,7 +7,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { ZonePageResponseSchema } from '../../src/zones/contract.ts';
 import { ZonePageReadProgressSchema } from '../../src/zones/page-continuation.ts';
 import { createReleasedLibraryPopulation } from '../library/support/released-library-population.ts';
-import { discoveryKey } from '../support/released-discovery.ts';
+import { discoveryKey, type DiscoveryPersona } from '../support/released-discovery.ts';
 import { createBody, page, resourceFixture } from '../zones/resource-fixture.ts';
 
 // A saved Zone site over real Search and curated Collections. Readers are anonymous, a signed-in member without
@@ -28,6 +28,13 @@ function complete(answer: Answer) {
 
 test('a saved Zone site serves TypeList, union and Subject pages to anonymous, member and delegated readers', async () => {
   const population = await createReleasedLibraryPopulation({ version: 1, search: 'native' });
+  const call = (
+    who: DiscoveryPersona,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    target: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ): Promise<Answer> => population.request(who, method, target, body, headers);
   try {
     const fixture = population.base;
     const curated = (await population.sources()).sources;
@@ -55,7 +62,7 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
       ['zone:create', 'collection:create', 'collection:read', 'collection:update', 'gate:collections'],
       GLOBAL_CONTEXT,
     );
-    const created = await population.request(
+    const created = await call(
       'editor',
       'POST',
       '/v1/zones',
@@ -65,7 +72,7 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const zone = created.body.zone as { id: string; revision: string };
     const save = async (saved: typeof configuration, mounts: string[], base: string) => {
-      const answer = await population.request(
+      const answer = await call(
         'editor',
         'PUT',
         `${path(zone.id)}/configuration`,
@@ -76,7 +83,7 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
       return answer.body.zone.revision as string;
     };
     const publish = async (visibility: 'public' | 'private', base: string) => {
-      const answer = await population.request(
+      const answer = await call(
         'editor',
         'POST',
         `${path(zone.id)}:publish`,
@@ -88,15 +95,19 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
     };
     let revision = await publish('public', zone.revision);
 
-    const read = (who: Reader, target: Target, options: { cursor?: string; languages?: string[] } = {}) =>
-      population.request(
+    const read = (
+      who: Reader,
+      target: Target,
+      options: { cursor?: string | undefined; languages?: string[] | undefined } = {},
+    ) =>
+      call(
         who,
         'POST',
         `${path(zone.id)}:readPage${options.cursor === undefined ? '' : `?${new URLSearchParams({ cursor: options.cursor })}`}`,
         { target, languages: options.languages ?? ['en'] },
       );
     // Retained preparation is followed by its own continuation, never repeated or reshaped into a partial page.
-    const resolve = async (who: Reader, target: Target, languages?: string[]) => {
+    const resolve = async (who: Reader, target: Target, languages?: string[] | undefined): Promise<Answer> => {
       let answer = await read(who, target, { languages });
       const seen = new Set<string>();
       while (answer.status === 202) {
@@ -119,7 +130,7 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
       return ids;
     };
     const native = async (sort: Listed) => {
-      const answer = await population.request('anonymous', 'POST', '/v1/subjects:search', {
+      const answer = await call('anonymous', 'POST', '/v1/subjects:search', {
         filter: { type: { in: ['schema:Book'] } },
         sort,
         limit: 24,
@@ -161,7 +172,7 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
       expect(subjectPage.views).toContain('overview');
       for (const note of NOTES) expect(JSON.stringify(subjectPage)).not.toContain(note);
     }
-    const union = await population.request('anonymous', 'GET', `${path(zone.id)}/subjects?limit=100`);
+    const union = await call('anonymous', 'GET', `${path(zone.id)}/subjects?limit=100`);
     expect(union.status, JSON.stringify(union.body)).toBe(200);
     const unionIds = (union.body.subjects as { id: string }[]).map(({ id }) => id);
     expect(new Set(unionIds).size).toBe(unionIds.length);
@@ -170,7 +181,7 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
     expect((await resolve('anonymous', { subject: randomUUID() })).status).toBe(404);
 
     // Phase 2: the owner's private Collection is the only source here. Other readers gain it through an explicit grant.
-    const own = await population.request(
+    const own = await call(
       'editor',
       'POST',
       '/v1/collections',
@@ -180,7 +191,7 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
     expect(own.status, JSON.stringify(own.body)).toBe(201);
     const ownId = own.body.collection.id as string;
     const addMember = (subjectId: string, note: string) =>
-      population.request('editor', 'POST', `/v1/collections/${ownId}/members`, { subjectId, note }, discoveryKey());
+      call('editor', 'POST', `/v1/collections/${ownId}/members`, { subjectId, note }, discoveryKey());
     expect((await addMember(book, 'PRIVATE-JOURNEY-NOTE')).status).toBe(201);
     revision = await save({ ...configuration, scope: [] }, [ownId], revision);
     expect(await listed('anonymous', '', 'name')).toEqual([]);
@@ -195,7 +206,7 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
       actions: ['collection:read'],
       valid: '(,)',
     };
-    expect((await population.request('editor', 'POST', '/v1/grants', grant, discoveryKey())).status).toBe(201);
+    expect((await call('editor', 'POST', '/v1/grants', grant, discoveryKey())).status).toBe(201);
     expect(await listed('outsider', '', 'name')).toEqual([book]);
     expect(complete(await resolve('outsider', { subject: book, view: 'overview' })).subject).toBe(book);
     expect(await listed('anonymous', '', 'name')).toEqual([]);
@@ -204,7 +215,7 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
     const afterChange = await listed('outsider', '', 'name');
     expect(afterChange).toHaveLength(2);
     expect(afterChange).toEqual(expect.arrayContaining([book, shortBook]));
-    expect((await population.request('editor', 'POST', '/v1/grants:revoke', grant, discoveryKey())).status).toBe(200);
+    expect((await call('editor', 'POST', '/v1/grants:revoke', grant, discoveryKey())).status).toBe(200);
     expect(await listed('outsider', '', 'name')).toEqual([]);
     expect((await resolve('outsider', { subject: book })).status).toBe(404);
 
@@ -213,7 +224,7 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
     const edited = { ...configuration, labels: { ...configuration.labels, en: 'Journey site, edited' } };
     const retry = discoveryKey();
     const firstBody = { configuration: edited, mounts };
-    const first = await population.request('editor', 'PUT', `${path(zone.id)}/configuration`, firstBody, {
+    const first = await call('editor', 'PUT', `${path(zone.id)}/configuration`, firstBody, {
       ...retry,
       'if-match': `"${revision}"`,
     });
@@ -221,13 +232,13 @@ test('a saved Zone site serves TypeList, union and Subject pages to anonymous, m
     const original = revision;
     revision = first.body.zone.revision as string;
     revision = await save({ ...edited, labels: { ...edited.labels, en: 'Journey site, revised' } }, mounts, revision);
-    const replay = await population.request('editor', 'PUT', `${path(zone.id)}/configuration`, firstBody, {
+    const replay = await call('editor', 'PUT', `${path(zone.id)}/configuration`, firstBody, {
       ...retry,
       'if-match': `"${original}"`,
     });
     expect(replay.status, JSON.stringify(replay.body)).toBe(200);
     expect(replay.body).toEqual(first.body);
-    const conflict = await population.request(
+    const conflict = await call(
       'editor',
       'PUT',
       `${path(zone.id)}/configuration`,
