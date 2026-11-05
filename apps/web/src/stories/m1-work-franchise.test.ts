@@ -1,6 +1,10 @@
-import { expect, test } from 'bun:test';
-import { directedWorkRelations, showcaseWorkKind, workFranchiseGroups } from '../features/pages/showcase-work/model';
+import { expect, mock, test } from 'bun:test';
 import type { ProfileRelationWindow } from '../features/pages/views';
+
+// The projection needs no Workers bindings; match the existing Bun component-control environment.
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { directedWorkRelations, showcaseWorkKind, workFranchiseGroups } =
+  await import('../features/pages/showcase-work/model');
 
 // Authored native-response controls. These UUIDs do not identify seeded catalogue objects.
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
