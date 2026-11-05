@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { QueryKey } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -24,13 +24,15 @@ export function ThreadActivity({
 }) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const inFlight = useRef(false);
   const locale = getLocale();
   const options = { locale };
   const activityCurrent = useThreadActivityCurrent(publication ?? activity, queryKey);
   const visible = current && activityCurrent && !pending && !failed ? activity : undefined;
 
   async function retry() {
-    if (pending || !current || !isCurrent()) return;
+    if (inFlight.current || !current || !isCurrent()) return;
+    inFlight.current = true;
     setPending(true);
     setFailed(false);
     try {
@@ -38,6 +40,7 @@ export function ThreadActivity({
     } catch {
       if (isCurrent()) setFailed(true);
     } finally {
+      inFlight.current = false;
       if (isCurrent()) setPending(false);
     }
   }
