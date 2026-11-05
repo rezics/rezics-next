@@ -1,6 +1,6 @@
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from '../library/collection-source.ts';
-import { CANONICAL_SOURCE_RECEIVING_COST as COLLECTION_SOURCE_WORK_COST } from '../library/canonical-source-bounds.ts';
+import { CANONICAL_SOURCE_RECEIVING_COST } from '../library/canonical-source-bounds.ts';
 import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from '../library/canonical-source-limits.ts';
 import {
   MEMBERS_PREPARATION_BRANCH_COST,
@@ -80,11 +80,11 @@ const sourceStatesPerInvocation = Math.max(
  */
 const metadataPrefix = asBound(MEMBERS_PREPARATION_BRANCH_COST.sourceMetadata);
 const searchBody = asBound(MEMBERS_PREPARATION_STEP_CEILING);
-const collectionState = repeatBound(COLLECTION_SOURCE_WORK_COST.state, sourceStatesPerInvocation);
+const collectionState = repeatBound(CANONICAL_SOURCE_RECEIVING_COST.state, sourceStatesPerInvocation);
 const collectionPrefix = repeatBound(
   sumBounds(
-    COLLECTION_SOURCE_WORK_COST.seek,
-    COLLECTION_SOURCE_WORK_COST.group(MEMBERS_PREPARATION_SOURCE_PATHS.id.sourceGroupRowsPerQueryMaximum),
+    CANONICAL_SOURCE_RECEIVING_COST.seek,
+    CANONICAL_SOURCE_RECEIVING_COST.group(MEMBERS_PREPARATION_SOURCE_PATHS.id.sourceGroupRowsPerQueryMaximum),
   ),
   MEMBERS_PREPARATION_SOURCE_PATHS.id.candidatePrefixMaximum,
 );
