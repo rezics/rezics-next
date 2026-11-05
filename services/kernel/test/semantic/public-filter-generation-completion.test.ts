@@ -38,8 +38,8 @@ test('generation restart keeps the original Source proof through lost observatio
   });
   const transport: typeof search = {
     request: search.request.bind(search),
-    async bulk(lines, options) {
-      const result = await search.bulk(lines, options);
+    async bulk<T = unknown>(lines: readonly unknown[], options?: Parameters<typeof search.bulk>[1]) {
+      const result = await search.bulk<T>(lines, options);
       if (observationLost && !dispatchLost) {
         dispatchLost = true;
         throw new SearchUnavailableError('Lost original native dispatch reply');
