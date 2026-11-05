@@ -671,4 +671,9 @@ export type {
   OriginalLifecycleResult,
   OriginalLifecycleResultPort,
 } from './native-lifecycle-results.ts';
-export { securityResponseLimits, securityScopeLimit, securityJsonStringBytes, securityResponseByteBudgets } from './security-response-bounds.ts';
+export {
+  securityResponseLimits,
+  securityScopeLimit,
+  securityJsonStringBytes,
+  securityResponseByteBudgets,
+} from './security-response-bounds.ts';

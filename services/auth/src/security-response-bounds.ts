@@ -9,7 +9,8 @@ export function securityDisplay(value: unknown, limit: number): string | null {
   return typeof value === 'string' && value.length <= limit ? value : null;
 }
 export function securityDate(value: unknown): string {
-  const date = value instanceof Date ? value : new Date(value as string);
+  if (!(value instanceof Date) && typeof value !== 'string') throw new Error('Invalid Security date');
+  const date = value instanceof Date ? value : new Date(value);
   return date.toISOString();
 }
 export function securityPasskey(row: Record<string, unknown>) {
@@ -22,6 +23,11 @@ export function securityPasskey(row: Record<string, unknown>) {
 }
 /** Scope authority from stored records is refused, never clipped to fit a budget. */
 export function securityScopes(value: unknown, limit: number): value is string[] {
-  return Array.isArray(value) && value.length <= limit && value.every(scope =>
-    typeof scope === 'string' && scope.length <= limits.scope && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope));
+  return (
+    Array.isArray(value) &&
+    value.length <= limit &&
+    value.every(
+      (scope) => typeof scope === 'string' && scope.length <= limits.scope && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope),
+    )
+  );
 }

@@ -54,7 +54,11 @@ export async function composeSecurityPage(database: Pool, viewer: Viewer): Promi
       ? 'allowed'
       : 'step-up-required';
   const page: SecurityPageEnvelope = {
-    viewer: { account_id: securityId(viewer.account_id), session_id: securityId(viewer.session_id), client_id: securityId(viewer.client_id) },
+    viewer: {
+      account_id: securityId(viewer.account_id),
+      session_id: securityId(viewer.session_id),
+      client_id: securityId(viewer.client_id),
+    },
     sessions: { kind: 'unavailable' },
     passkeys: { kind: 'unavailable' },
     actions: {
@@ -122,9 +126,6 @@ export async function composeSecurityPage(database: Pool, viewer: Viewer): Promi
     for (const row of rows) {
       if (!record(row) || !text(row.id) || seen.has(row.id) || (row.name !== null && typeof row.name !== 'string'))
         throw new Error('Invalid passkey');
-      const created = securityDate(row.created_at),
-        used = row.last_used_at === null ? null : securityDate(row.last_used_at);
-      if (!created || (row.last_used_at !== null && !used)) throw new Error('Invalid passkey date');
       seen.add(row.id);
       valid.push({
         ...securityPasskey(row),
