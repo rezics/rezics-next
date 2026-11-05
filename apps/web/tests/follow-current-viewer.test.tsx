@@ -283,7 +283,7 @@ test('Rerenders, refreshed following, callbacks, supplied keys and nonempty CSRF
   await target({ ...refreshed, onRemoved: () => currentRemoved++ });
   await click(m.library_follow_unfollow());
   expect(writes[1]!.input).toBe(first.input);
-  expect(writes[1]!.csrfToken).toBe('csrf-two');
+  expect(writes[1]!.csrfToken).toBe('csrf-one');
   await settle(writes[1]!, { ok: false, reason: 'unavailable' });
   await target({ ...refreshed, following: true }, viewer('viewer-one', 'csrf-three'));
   expect(writes).toHaveLength(2);
@@ -293,6 +293,41 @@ test('Rerenders, refreshed following, callbacks, supplied keys and nonempty CSRF
   await settle(writes[2]!, { ok: true, following: false });
   expect(oldRemoved).toBe(0);
   expect(currentRemoved).toBe(1);
+});
+
+test('A missing initial CSRF token preserves the seeded request through an explicit rejected-command review', async () => {
+  let reviews = 0;
+  await target(
+    { onReview: async () => (reviews++, { state: 'ready', following: true }) },
+    { ...viewer(), csrfToken: null },
+  );
+  await click(m.library_follow_unfollow());
+  expect(writes).toHaveLength(0);
+
+  await target(
+    {
+      idempotencyKey: secondKey,
+      onReview: async () => (reviews++, { state: 'ready', following: true }),
+    },
+    viewer('viewer-one', 'csrf-ready'),
+  );
+  await click(m.library_follow_unfollow());
+  expect(writes).toHaveLength(1);
+  const rejected = writes[0]!;
+  expect(rejected.input).toEqual({ targetId: firstTarget, following: false, idempotencyKey: firstKey });
+  expect(rejected.csrfToken).toBe('csrf-ready');
+  await settle(rejected, { ok: false, reason: 'conflict' });
+
+  await click(m.library_follow_conflict_recovery_review());
+  expect(reviews).toBe(1);
+  expect(host.textContent).toContain(m.library_follow_conflict_recovery_ready());
+  await click(m.library_follow_unfollow());
+  expect(writes).toHaveLength(2);
+  expect(writes[1]!.input.targetId).toBe(firstTarget);
+  expect(writes[1]!.input.following).toBe(false);
+  expect(writes[1]!.input.idempotencyKey).not.toBe(firstKey);
+  await settle(writes[1]!, { ok: true, following: false });
+  expect(host.textContent).toContain(m.library_follow_removed());
 });
 
 test('The standalone presenter fences target changes, preserves independent remove admission and keeps conflict explicit', async () => {

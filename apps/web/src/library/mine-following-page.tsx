@@ -28,6 +28,7 @@ import { useFollowingSelection } from './following-reading/current-selection';
 import { FollowingInspection, type FollowingSpaceReader } from './following-reading/inspection';
 import { useFollowingReturn } from './following-reading/return';
 import { SubjectCover } from './subject-row';
+import { createFollowIntent, type FollowIntentOwner } from './mine-following-intent';
 
 type ReviewFollow = (targetId: string) => Promise<FollowState | null>;
 
@@ -235,6 +236,20 @@ export function MineFollowingPageView({
   onRefresh?: (() => void) | undefined;
   readSpace?: FollowingSpaceReader | undefined;
 }) {
+  const intentOwners = useRef<{
+    lifetime: HistoryOrigin['lifetime'] | undefined;
+    byTarget: Map<string, FollowIntentOwner>;
+  } | null>(null);
+  if (!intentOwners.current || intentOwners.current.lifetime !== origin?.lifetime)
+    intentOwners.current = { lifetime: origin?.lifetime, byTarget: new Map() };
+  const intentOwnerFor = (targetId: string) => {
+    let owner = intentOwners.current!.byTarget.get(targetId);
+    if (!owner) {
+      owner = createFollowIntent();
+      intentOwners.current!.byTarget.set(targetId, owner);
+    }
+    return owner;
+  };
   const requestedAddress = personalDirectoryAddress(cursor ?? undefined, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
   const addressRejected = invalidAddress || page.addressInvalid || page.kindUnavailable || !requestedAddress.valid;
   const requestedCursor = requestedAddress.cursor;
@@ -286,6 +301,7 @@ export function MineFollowingPageView({
       onReview={onReview}
       onRefresh={onRefresh}
       readSpace={readSpace}
+      intentOwnerFor={intentOwnerFor}
     />
   );
 }
@@ -301,6 +317,7 @@ function MineFollowingPageState({
   onReview,
   onRefresh,
   readSpace,
+  intentOwnerFor,
 }: {
   page: MineFollowingPage;
   cursor: string | null;
@@ -312,6 +329,7 @@ function MineFollowingPageState({
   onReview?: ReviewFollow | undefined;
   onRefresh?: (() => void) | undefined;
   readSpace?: FollowingSpaceReader | undefined;
+  intentOwnerFor: (targetId: string) => FollowIntentOwner;
 }) {
   const canUnfollow = useOperation('follow.delete');
   const canReadCollection = useOperation('collection.get');
@@ -458,6 +476,7 @@ function MineFollowingPageState({
                     <span hidden={!canUnfollow}>
                       <FollowTargetControl
                         origin={origin}
+                        intentOwner={intentOwnerFor(follow.targetId)}
                         targetId={follow.targetId}
                         following
                         disabled={!!status}

@@ -221,10 +221,12 @@ test('both actual Following exports receive denial with the prepared owner and o
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => {
     resolve = yes;
+    reject = no;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 const loaded = (
   subject: string,
@@ -351,6 +353,15 @@ test('the mounted default Following composition retires viewer, cursor and row l
       call.resolve(result);
       await tick();
     });
+  const refresh = () =>
+    act(async () => {
+      const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (candidate) => candidate.textContent === m.following_reading_refresh(),
+      );
+      expect(button).toBeDefined();
+      button!.click();
+      await tick();
+    });
   const key = (cursor: string | null) => mineFollowingQuery('B', cursor, getLocale()).queryKey;
   const refetch = (cursor: string | null) =>
     act(async () => {
@@ -409,12 +420,45 @@ test('the mounted default Following composition retires viewer, cursor and row l
     await settle(reads[0]!, loaded('A', null, 'A private title'));
     await remove();
     const aRemoval = writes[0]!;
+    expect(aRemoval.input).toEqual({
+      targetId: initial.page.follows[0]!.targetId,
+      following: false,
+      idempotencyKey: initial.page.follows[0]!.idempotencyKey,
+    });
+    await act(async () => {
+      aRemoval.reject(new Error('Following removal reply was lost'));
+      await tick();
+    });
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, viewer('A', 'csrf-rotated'));
+      await tick();
+    });
+    await refresh();
+    const deniedA = loaded('A', null, 'A private title');
+    deniedA.page = { signedIn: true, forbidden: true, follows: [], next: null };
+    await settle(reads[1]!, deniedA);
+    expect(host.textContent).toContain(m.library_my_ratings_denied());
+    expect(host.textContent).not.toContain('A private title');
+    expect(host.querySelector('[data-slot="list-row"], [data-slot="follow-control"]')).toBeNull();
+    expect([...host.querySelectorAll<HTMLButtonElement>('button')].some((button) =>
+      button.textContent === m.following_reading_inspect(),
+    )).toBe(false);
+    expect(host.querySelector('a[href*="A-canonical"]')).toBeNull();
+    expect(writes).toHaveLength(1); // The denied list did not settle or replace the unanswered command.
+    await refresh();
+    await settle(reads[2]!, loaded('A', null, 'A private title restored'));
+    expect(host.textContent).toContain('A private title restored');
+    expect(host.textContent).not.toContain(m.library_my_ratings_denied());
+    await remove();
+    const aRetry = writes[1]!;
+    expect(aRetry.input).toBe(aRemoval.input);
+    expect(aRetry.csrf).toBe('csrf-one');
     await act(async () => {
       void client.refetchQueries({ queryKey: ['mine-following', 'A'] });
       await tick();
     });
-    expect(reads).toHaveLength(2);
-    const aRead = reads[1]!;
+    expect(reads).toHaveLength(4);
+    const aRead = reads[3]!;
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('B'));
       await tick();
@@ -423,9 +467,9 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).not.toContain('A private title');
     expect(host.textContent).not.toContain(m.library_follow_reason_library());
     expect(host.querySelector('a[href*="A-canonical"]')).toBeNull();
-    expect(reads).toHaveLength(3); // B progresses while both A operations remain pending.
+    expect(reads).toHaveLength(5); // B progresses while its old A read and retry remain pending.
     const b = loaded('B', null, 'B current title');
-    await settle(reads[2]!, b);
+    await settle(reads[4]!, b);
     expect(host.textContent).toContain('B current title');
     await remove();
     const rejected = writes.at(-1)!;
@@ -457,7 +501,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(retry.input).toEqual(uncertain.input);
     expect(retry.csrf).toBe('csrf-one');
     await settle(aRead, loaded('A', null, 'Late A disclosure'));
-    await settle(aRemoval, { ok: true, following: false });
+    await settle(aRetry, { ok: true, following: false });
     expect(host.textContent).toContain('B current title');
     expect(host.textContent).not.toContain('Late A disclosure');
     expect(host.textContent).not.toContain(m.library_follow_removed());
