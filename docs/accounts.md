@@ -412,10 +412,12 @@ roles; creating a Realm does not create an owner membership. The
 [Realms/Spaces report](research/accounts-design-realms-spaces.md) supports retaining the current public self-join
 and direct manager-add model. There is no implicit invitation, recipient approval or request-to-join feature.
 
-Ban and membership publication retain current authorization. Protected bans override independent grants,
-own-list candidates and pending inverse cleanup; public reads retain anonymous disclosure. Unban restores
-neither membership nor follow. Tests hold ordinary-member cleanup for read and admission denials, apart from
-independent-grant and public controls. The transition producer owns settled hold retirement
+Ban and membership publication retain current authorization. At commit, a protected ban hides ordinary member
+reads and denies self-join and manager-add before native membership removal settles. Protected bans override
+independent grants, own-list candidates and pending inverse cleanup; public reads retain anonymous disclosure.
+Bounded durable cleanup removes membership and its follow. Unban restores neither membership nor follow;
+explicit readmission can recreate both afterward. Decision: retain the existing protected-ban writer and test
+ordinary-member pending cleanup separately from independent-grant and public controls. The transition producer owns settled hold retirement
 and account deletion entry, proving the committed/cancelled generation. Inverse release, synthetic settlement
 or leave to bypass a settled hold cannot replace that transition.
 
