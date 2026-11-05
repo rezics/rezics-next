@@ -133,9 +133,7 @@ test('lost acknowledgement requires a successful current inventory and review be
   await flush(() =>
     review.resolve({
       kind: 'ready',
-      passkeys: [
-        { id: 'unrelated-native-id', name: 'Security key', created_at: '2026-11-01T00:00:00Z', last_used_at: null },
-      ],
+      passkeys: [{ id: 'unrelated-native-id', name: '', created_at: '2026-11-01T00:00:00Z', last_used_at: null }],
       truncated: false,
     }),
   );
@@ -145,6 +143,7 @@ test('lost acknowledgement requires a successful current inventory and review be
   expect(ceremonies).toBe(1);
   await flush(() => click(m.auth_security_passkey_registration_continue()));
   expect(locked()).toBe(false);
+  expect(host.textContent).toContain(m.auth_security_passkey_history_unknown());
   response = Promise.withResolvers();
   await flush(submit);
   expect(ceremonies).toBe(2);

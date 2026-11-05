@@ -91,25 +91,7 @@ export function parseSecuritySessions(body: unknown): SecuritySession[] | null {
   return rows;
 }
 
-export function parseSecurityPasskeys(body: unknown): SecurityPasskey[] | null {
-  if (!record(body) || !Array.isArray(body.passkeys) || body.passkeys.length > 32) return null;
-  const rows: SecurityPasskey[] = [];
-  const seen = new Set<string>();
-  for (const row of body.passkeys) {
-    if (
-      !record(row) ||
-      !text(row.id) ||
-      seen.has(row.id) ||
-      !text(row.name) ||
-      !date(row.created_at) ||
-      (row.last_used_at !== null && !date(row.last_used_at))
-    )
-      return null;
-    seen.add(row.id);
-    rows.push({ id: row.id, name: row.name, created_at: row.created_at, last_used_at: row.last_used_at });
-  }
-  return rows;
-}
+export { parseSecurityPasskeys } from './security-inventory';
 
 export function targetPresence(rows: { id: string }[], id: string, limit: number) {
   // Native lists are capped, not paginated. A full window cannot prove absence.

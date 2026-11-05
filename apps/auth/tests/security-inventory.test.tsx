@@ -226,7 +226,7 @@ test('selected inventory BFF bounds streamed native pages and retires stalled re
 test('fixed Security readers apply the public byte caps before parsing and retire stalled streams', async () => {
   const script = `
     import { expect, mock } from 'bun:test';
-    let signal, mode = 'maximum', target = '', started, expire, cancelled = 0;
+    let signal, mode = 'maximum', target = '', started, expire, cancelled = 0, timers = 0;
     const calls = [];
     mock.module('@tanstack/react-start', () => ({ createServerFn: () => {
       let validate = value => value;
@@ -239,29 +239,36 @@ test('fixed Security readers apply the public byte caps before parsing and retir
       setResponseHeader() {},
     }));
     mock.module('./apps/auth/src/turnstile.ts', () => ({ readTurnstileConfig: async () => ({ siteKey: '', scriptUrl: '' }) }));
+    mock.module('cloudflare:workers', () => ({ env: { AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:4' } }));
     globalThis.__AUTH_ORIGIN__ = '';
-    const { securityFixedResponseByteBudgets: budgets } = await import('@rezics/auth-contract');
+    const { securityResponseByteBudgets, securityFixedResponseByteBudgets: fixed } = await import('@rezics/auth-contract');
+    const budgets = { ...fixed, session: securityResponseByteBudgets(4).session };
+    let sessionReads = 0, failSession = 0;
     const id = '\\u0000'.repeat(1024), date = '2026-11-05T00:00:00.000Z';
     const page = { viewer: { account_id: id, session_id: 'session', client_id: id },
       actions: { change_password: 'step-up-required', register_passkey: 'step-up-required' },
       sessions: { kind: 'unavailable' }, passkeys: { kind: 'unavailable' } };
-    const passkeys = { passkeys: [{ id, name: '\\u0000'.repeat(128), created_at: date, last_used_at: date }] };
+    const passkeys = { passkeys: [{ id, name: '', created_at: date, last_used_at: date }] };
     const registration = { kind: 'already-signed-in', viewer: { account_id: id }, requirements: {
       handle: { minLength: 3, maxLength: 64 }, email: { maxLength: 254 },
       password: { minLength: 10, maxLength: Number.MAX_SAFE_INTEGER },
       verification: { provider: 'turnstile', required: true } }, verification: { configured: false },
       actions: { register: false, continue: true } };
-    const key = path => path === '/security-page' ? 'securityPage' : path === '/passkeys' ? 'passkeys' : 'registrationPage';
+    const key = path => path === '/session' ? 'session' : path === '/security-page' ? 'securityPage' : path === '/passkeys' ? 'passkeys' : 'registrationPage';
     function response(path) {
-      if (path === '/session') return Response.json({ account_id: id });
-      const cap = budgets[key(path)], value = path === '/security-page' ? page : path === '/passkeys' ? passkeys : registration;
+      if (path === '/session') sessionReads++;
+      const session = { account_id: mode === 'different' && sessionReads === 2 ? 'replacement' : id,
+        client_id: id, scope: Array(4).fill('a'.repeat(128)), authn_epoch: Number.MAX_SAFE_INTEGER,
+        auth_time: Number.MAX_SAFE_INTEGER, amr: ['pwd'] };
+      const cap = budgets[key(path)], value = path === '/session' ? session : path === '/security-page' ? page : path === '/passkeys' ? passkeys : registration;
       let body = JSON.stringify(value); body += ' '.repeat(cap - new TextEncoder().encode(body).byteLength);
       let bytes = new TextEncoder().encode(body);
-      if (mode === 'overflow' && path === target) bytes = new Uint8Array(cap + 1);
-      const stream = new ReadableStream({ start(c) { if (mode === 'stalled' && path === target) { started.resolve(); return; } c.enqueue(bytes); c.close(); }, cancel() { cancelled++; } });
+      if (mode === 'overflow' && path === target && (!failSession || sessionReads === failSession)) bytes = new Uint8Array(cap + 1);
+      const stream = new ReadableStream({ start(c) { if (mode === 'stalled' && path === target && (!failSession || sessionReads === failSession)) { started.resolve(); return; } if (mode === 'unreadable' && path === '/session' && sessionReads === failSession) { c.error(new Error('broken body')); return; } c.enqueue(bytes); c.close(); }, cancel() { cancelled++; } });
       const result = new Response(stream); result.json = () => { throw new Error('expected bounded reader'); }; return result;
     }
     globalThis.fetch = async (input, init) => { const path = new URL(String(input)).pathname; calls.push(path);
+      if (init.headers.Cookie !== 'fixture=session' || init.cache !== 'no-store' || init.redirect !== 'manual') throw new Error('private transport changed');
       if (init.signal !== signal) throw new Error('BFF signal not forwarded'); return response(path); };
     const { loadSecurityPage, loadPasskeyInventory } = await import('./apps/auth/src/security-inventory.ts');
     const { readRegistrationPage } = await import('./apps/auth/src/registration-page.ts');
@@ -272,6 +279,14 @@ test('fixed Security readers apply the public byte caps before parsing and retir
     expect(await loadPasswordChangeLimits()).toEqual({ minLength: 10, maxLength: Number.MAX_SAFE_INTEGER });
     expect((await reviewPasskeyRegistration(id)).kind).toBe('ready');
     expect(calls).toEqual(['/security-page', '/passkeys', '/registration-page', '/registration-page', '/session', '/passkeys', '/session']);
+    for (const failure of ['overflow', 'unreadable', 'different']) {
+      for (const stage of failure === 'different' ? [2] : [1, 2]) {
+        mode = failure; target = '/session'; failSession = stage; sessionReads = 0; calls.length = 0;
+        expect(await reviewPasskeyRegistration(id)).toEqual({ kind: failure === 'different' ? 'denied' : 'unavailable' });
+        expect(calls).toEqual(stage === 1 ? ['/session'] : ['/session', '/passkeys', '/session']);
+      }
+    }
+    failSession = 0;
     const parse = JSON.parse; let parses = 0; JSON.parse = (...args) => { parses++; return parse(...args); };
     for (const [path, read] of [['/security-page', loadSecurityPage], ['/passkeys', loadPasskeyInventory],
       ['/registration-page', readRegistrationPage], ['/registration-page', loadPasswordChangeLimits]]) {
@@ -282,7 +297,25 @@ test('fixed Security readers apply the public byte caps before parsing and retir
     }
     JSON.parse = parse;
     const timer = globalThis.setTimeout; let held;
-    globalThis.setTimeout = (fn, ms, ...args) => ms === 5000 ? (expire = fn, held = timer(() => {}, 60000)) : timer(fn, ms, ...args);
+    globalThis.setTimeout = (fn, ms, ...args) => ms === 5000 ? (timers++, expire = fn, held = timer(() => {}, 60000).unref()) : timer(fn, ms, ...args);
+    for (const stage of [1, 2]) {
+      for (const retire of [false, true]) {
+        mode = 'stalled'; target = '/session'; failSession = stage; sessionReads = 0; calls.length = 0; timers = 0;
+        started = Promise.withResolvers(); const life = new AbortController();
+        const pending = reviewPasskeyRegistration(id, life.signal); await started.promise; expect(timers).toBe(1);
+        if (retire) life.abort(); else expire();
+        expect(await pending).toEqual({ kind: 'unavailable' });
+        expect(calls).toEqual(stage === 1 ? ['/session'] : ['/session', '/passkeys', '/session']);
+      }
+    }
+    const nativeFetch = globalThis.fetch;
+    globalThis.fetch = async () => { started.resolve(); return new Promise(() => {}); };
+    started = Promise.withResolvers(); const ignored = reviewPasskeyRegistration(id); await started.promise; expire();
+    expect(await ignored).toEqual({ kind: 'unavailable' }); globalThis.fetch = nativeFetch;
+    mode = 'overflow'; target = '/passkeys'; failSession = 0; calls.length = 0;
+    expect(await reviewPasskeyRegistration(id)).toEqual({ kind: 'unavailable' });
+    expect(calls).toEqual(['/session', '/passkeys']);
+    failSession = 0;
     mode = 'stalled'; target = '/security-page'; started = Promise.withResolvers();
     const retired = new AbortController(), before = calls.length, priorCancel = cancelled, pending = loadSecurityPage(retired.signal);
     await started.promise; retired.abort(); expect(await pending).toEqual({ kind: 'unavailable' });

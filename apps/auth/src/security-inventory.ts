@@ -34,6 +34,40 @@ export type InventoryPage<V extends InventoryView> =
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
+function passkeyDate(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= securityResponseLimits.date &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+// Reject the whole native list: dropping malformed or duplicate rows could fabricate absence.
+export function parseSecurityPasskeys(body: unknown): PublicPasskey[] | null {
+  if (!record(body) || !Array.isArray(body.passkeys) || body.passkeys.length > securityResponseLimits.passkeys)
+    return null;
+  const rows: PublicPasskey[] = [];
+  const seen = new Set<string>();
+  for (const row of body.passkeys) {
+    if (
+      !record(row) ||
+      typeof row.id !== 'string' ||
+      !row.id ||
+      row.id.length > securityResponseLimits.id ||
+      seen.has(row.id) ||
+      typeof row.name !== 'string' ||
+      row.name.length > securityResponseLimits.passkeyName ||
+      !passkeyDate(row.created_at) ||
+      (row.last_used_at !== null && !passkeyDate(row.last_used_at))
+    )
+      return null;
+    seen.add(row.id);
+    rows.push({ id: row.id, name: row.name, created_at: row.created_at, last_used_at: row.last_used_at });
+  }
+  return rows;
+}
+
 function strings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
 }
@@ -283,19 +317,8 @@ const readPasskeys = createServerFn({ method: 'POST' }).handler(
         securityFixedResponseByteBudgets.passkeys,
       );
       if (response.status !== 200) return { ok: false };
-      if (!record(body) || !Array.isArray(body.passkeys)) return { ok: false };
-      const passkeys = [];
-      for (const row of body.passkeys) {
-        if (
-          !record(row) ||
-          typeof row.id !== 'string' ||
-          typeof row.name !== 'string' ||
-          typeof row.created_at !== 'string' ||
-          (row.last_used_at !== null && typeof row.last_used_at !== 'string')
-        )
-          return { ok: false };
-        passkeys.push({ id: row.id, name: row.name, created_at: row.created_at, last_used_at: row.last_used_at });
-      }
+      const passkeys = parseSecurityPasskeys(body);
+      if (!passkeys) return { ok: false };
       return { ok: true, body: { passkeys } };
     } catch {
       return { ok: false };

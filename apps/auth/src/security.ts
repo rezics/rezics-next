@@ -4,13 +4,14 @@ import {
   securityFixedResponseByteBudgets,
   type CredentialEffectErrorResponse,
 } from '@rezics/auth-contract';
+import { readNativeAccountSessionAuthority } from './account-session';
+import { securityResponseLimits } from '@rezics/auth-contract';
 import { privateAuthRead } from './private-auth-read';
 import { AUTH_POST_TIMEOUT_MS, authPost, failureMessage } from './api';
 import { readJsonBounded } from './private-auth-json';
 import { m } from './paraglide/messages.js';
 import {
   issuerSecurityJsonRequest,
-  issuerSecurityRequest,
   loadSecurityPage,
   type SecurityPageEnvelope,
   type SecurityAdvice,
@@ -208,20 +209,17 @@ export async function loadPasswordChangeLimits(signal?: AbortSignal): Promise<Pa
 
 const registrationReview = createServerFn({ method: 'POST' })
   .validator((accountId: string) => {
-    if (typeof accountId !== 'string' || !accountId) throw new Error('Invalid account');
+    if (typeof accountId !== 'string' || !accountId || accountId.length > securityResponseLimits.id)
+      throw new Error('Invalid account');
     return accountId;
   })
   .handler(async ({ data }): Promise<PasskeyRegistrationReview> => {
     // All reads carry one fixed BFF request cookie; never adopt another account's list.
     async function authority(): Promise<'current' | 'signed-out' | 'denied' | 'unavailable'> {
-      const response = await issuerSecurityRequest('/session');
-      if (response.status === 401) return 'signed-out';
-      if (response.status === 403) return 'denied';
-      if (response.status !== 200) return 'unavailable';
-      const body: unknown = await response.json();
-      if (!body || typeof body !== 'object' || !('account_id' in body) || typeof body.account_id !== 'string')
-        return 'unavailable';
-      return body.account_id === data ? 'current' : 'denied';
+      const session = await readNativeAccountSessionAuthority();
+      if (session.kind === 'signed-out' || session.kind === 'denied') return session.kind;
+      if (session.kind !== 'ready') return 'unavailable';
+      return session.accountId === data ? 'current' : 'denied';
     }
     try {
       const before = await authority();

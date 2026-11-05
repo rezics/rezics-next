@@ -569,6 +569,19 @@ matching name, visible row, empty list or truncated list never settles the earli
 only the inventory shown and does not claim whether that write committed. A blank name receives a browser-and-system
 suggestion, which may not identify the saved passkey.
 
+Decision: enrollment review shares the configured account-session receiver (retaining native 403 denial)
+and the ordinary inventory's native row parser. Session-before, passkeys and session-after retain the originating
+cookie and one `privateAuthRead` five-second lifetime through headers, streamed bodies and delivery. Session bytes
+use `securityResponseByteBudgets(C).session` from `AUTH_SECURITY_SCOPE_CONFIGURATION`, never current scopes;
+missing or unusable configuration makes review unavailable. Passkeys retain the fixed native byte budget and
+32-row limit; identifiers, names, dates and duplicate IDs are admitted at HTTP receiving, then declared fields
+alone are projected. Native empty names are legal and use the existing localized display fallback. Failed or changed
+final authority publishes no earlier rows. Unavailable review preserves uncertainty and explicit Retry; admitted
+same-owner review and deliberate finish preserve original unknown history and never acknowledge the old ceremony.
+This keeps exactly `GET /session`, `GET /passkeys`, `GET /session` for successful review, the existing deliberate
+finish refresh cost, and zero enrollment, removal, approval or sign-in calls from review, Retry or focus.
+Native-browser qualifications remain open.
+
 When the direct passkey review has no explicit completeness flag, a full 32-row result is shown as potentially
 truncated because the read is bounded at the native contract limit.
 
