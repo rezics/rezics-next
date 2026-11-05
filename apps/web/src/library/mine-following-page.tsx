@@ -192,9 +192,11 @@ export function CurrentViewerMineFollowingPage({
     matches(read.data, origin.subject, address.cursor, locale, kind)
       ? read.data.page
       : retiredPage;
+  const rowOriginCurrent = useRef<() => boolean>(() => false);
+  rowOriginCurrent.current = () => current() && readCurrent();
   const rowOrigin: HistoryOrigin = {
     lifetime: origin.boundary.lifetime,
-    isCurrent: () => current() && readCurrent(),
+    isCurrent: () => rowOriginCurrent.current(),
   };
   const retryState = origin.client.getQueryState(options.queryKey);
   const status =
