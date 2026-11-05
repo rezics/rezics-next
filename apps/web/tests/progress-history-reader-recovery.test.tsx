@@ -286,10 +286,12 @@ test('Long text and added/removed occurrences have bounded previews with complet
     expect(unitRows[2]!.querySelector('summary')).toBeNull();
     const replacement = {
       ...initial,
+      changesCursor: 'another-changes-page',
       unitsCursor: 'another-page',
       session: { ...initial.session, units: [literal, 'new'] },
     };
     await h.show(replacement);
+    expect(h.region('changes').querySelector('details')!.open).toBe(false);
     expect(h.region('units').querySelector('details')!.open).toBe(false);
     expect(JSON.stringify(initial)).toBe(before);
     expect(unexpectedRequest).not.toHaveBeenCalled();
