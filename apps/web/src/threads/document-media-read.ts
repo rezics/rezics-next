@@ -20,6 +20,7 @@ export async function readThreadDocumentMedia(
   client: KernelClient,
   posts: readonly ThreadPost[],
   authorization?: string | null,
+  signal?: AbortSignal,
 ): Promise<ThreadDocumentMedia> {
   const ids = new Set<string>();
   const documents: DocumentBinding[] = [];
@@ -47,7 +48,7 @@ export async function readThreadDocumentMedia(
         mediaIds: [...referenced],
       });
   }
-  const result = await loadDocumentMedia(client, [...ids], authorization);
+  const result = await loadDocumentMedia(client, [...ids], authorization, signal);
   if (result.kind === 'unavailable') return result;
   return {
     kind: 'ready',

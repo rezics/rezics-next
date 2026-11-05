@@ -64,6 +64,7 @@ export async function loadDocumentMedia(
   client: KernelClient,
   ids: readonly string[],
   authorization?: string | null,
+  signal?: AbortSignal,
 ): Promise<DocumentMediaRead> {
   if (ids.length > DOCUMENT_MEDIA_LIMIT || new Set(ids).size !== ids.length || ids.some((value) => !v.is(id, value)))
     return { kind: 'unavailable' };
@@ -78,7 +79,7 @@ export async function loadDocumentMedia(
       { ids: [...ids] },
       {
         ...(authorization ? { headers: { authorization } } : {}),
-        fetch: { cache: 'no-store', redirect: 'manual' },
+        fetch: { cache: 'no-store', redirect: 'manual', ...(signal ? { signal } : {}) },
       },
     ]);
     if (member(result, 'status') !== 200 || member(result, 'error')) return { kind: 'unavailable' };

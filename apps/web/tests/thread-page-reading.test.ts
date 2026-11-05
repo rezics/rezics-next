@@ -65,11 +65,18 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
   let failed = false;
   let missingLocation = false;
   let abortRead: AbortController | undefined;
+  let abortMedia: AbortController | undefined;
+  let mediaSignal: AbortSignal | null | undefined;
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const url = new URL(new Request(input, init).url);
       paths.push(`${url.pathname}${url.search}`);
       expect(new Request(input, init).headers.has('authorization')).toBe(false);
+      if (url.pathname === '/v1/media/presentations') {
+        mediaSignal = init?.signal;
+        abortMedia?.abort(new Error('Image reading visit ended'));
+        return new Response(null, { status: 503 });
+      }
       if (url.pathname.endsWith('/location'))
         return missingLocation
           ? new Response(null, { status: 404 })
@@ -200,4 +207,44 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
   expect(paths.slice(beforeAbort)).toEqual([`/v1/threads/${threadId}/reading-page`]);
   await expect(read()).rejects.toThrow('Reading visit ended');
   expect(paths).toHaveLength(beforeAbort + 1);
+
+  abortRead = undefined;
+  missingLocation = false;
+  response.replies.items = [reply];
+  const mediaId = '99999999-9999-4999-8999-999999999999';
+  response.thread.firstPost = {
+    ...opening,
+    mediaIds: [mediaId],
+    body: {
+      ...opening.body,
+      doc: {
+        ...opening.body.doc,
+        content: [...opening.body.doc.content!, { type: 'image', attrs: { src: mediaId, alt: 'Optional image' } }],
+      },
+    },
+  };
+  const selectedRead = (signal?: AbortSignal) =>
+    loadThreadPage(
+      client,
+      new Request('https://web.test/', { signal }),
+      {},
+      { id: threadId, post: replyId },
+      { sitekey: '', scriptUrl: '' },
+      'anonymous',
+    );
+  const optionalFailure = await selectedRead();
+  expect(optionalFailure.posts.posts[0]?.body).toEqual(response.thread.firstPost.body);
+  expect(optionalFailure.documentMedia).toEqual({ kind: 'unavailable' });
+  expect(optionalFailure.posts.next).toBe('sparse-next');
+  expect(optionalFailure.linkedPostUnavailable).toBe(false);
+  expect(optionalFailure.posts.posts[1]?.body).toEqual(reply.body);
+  abortMedia = new AbortController();
+  await expect(selectedRead(abortMedia.signal)).rejects.toThrow('Image reading visit ended');
+  expect(mediaSignal?.aborted).toBe(true);
+  expect(paths.slice(-4)).toEqual([
+    `/v1/threads/${threadId}/posts/${replyId}/location`,
+    `/v1/threads/${threadId}/reading-page?cursor=selected-reply-cursor`,
+    `/v1/boards/${boardId}`,
+    '/v1/media/presentations',
+  ]);
 });
