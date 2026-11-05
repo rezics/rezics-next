@@ -331,7 +331,7 @@ test('ordinary maintenance resumes its stored publication and advances native po
       return f.operations.prepare(f.registered.consumer, context());
     },
     publication: f.operations,
-  } as DefaultPublicFilterRuntime;
+  } as unknown as DefaultPublicFilterRuntime;
   const start = () =>
     createPublicPreparation({
       pool,
