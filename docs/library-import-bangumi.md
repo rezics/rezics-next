@@ -61,13 +61,16 @@ actor and key unsettled; review cannot replace them. Every new score attempt cle
 an exact retry. Preserve makes no vote attempt. Native zero remains a selected unit.
 
 After the seven-day source deadline, a started score with no acknowledgment retains only its bounded native receipt
-for the existing 24-hour recovery window. Receipt reconciliation is read-only: no receipt admits no new effect, and a
-historical receipt is followed by a fresh current Rating readback. Source evidence and reviewed operands are not
-restored. Current readback uses the existing owner Entry and native Rating readers, never the command receipt or
-retained source.
+for the existing 24-hour recovery window. Receipt reconciliation is read-only and checks current vote authority before
+lookup: no receipt admits no new effect, and a historical receipt is followed by a fresh current Rating readback.
+Source evidence and reviewed operands are not restored. Current readback uses the existing owner Entry and native
+Rating readers, addressed only by the receipt's question and target; receipt outcome values and retained source are
+never readback.
 The mounted request contract is unchanged; Web consumes the existing selected-review, confirmation and current-readback
 caller through its typed route. Source expiry, cancellation and evidence removal retain their existing bounds; a removed
 upload does not undo native effects.
+
+Decision: receipt-only score recovery denies a current actor without `rating:vote` before any historical receipt is read, and reads back only the receipt's question and target.
 
 ## Web HTTP contract
 
