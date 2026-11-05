@@ -51,7 +51,8 @@ A refused replay also retains the original command. Cancellation stops unstarted
 partial results; it cannot release a started command before matching native acknowledgement.
 
 Only acknowledged matching Entry/label/assignment effects supply canonical destinations. One selected result page
-is shown; native result navigation never imports unrelated journal/session fields. Explicit readback uses the actual
+is shown, retaining acknowledged rows for the current selection when a later native page omits them; native result
+navigation never imports unrelated journal/session fields. Explicit readback uses the actual
 current Entry read or the existing addressed FULL label-assignment read (one row, including current label metadata),
 not historical archive values. Removal and seven-day expiry of private evidence do not undo admitted Library changes.
 Expiry clears private upload/replay state and retains accepted results until replacement or session retirement.

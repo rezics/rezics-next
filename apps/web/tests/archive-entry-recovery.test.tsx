@@ -27,7 +27,7 @@ test('Every locale mounts native file admission and explains the supported branc
       const escaped = (text: string) => renderToStaticMarkup(<span>{text}</span>).slice(6, -7);
       for (const text of [m.library_archive_entry_upload_help(), m.library_archive_entry_scope(), m.library_archive_deliberate()]) expect(html).toContain(escaped(text));
       expect(html).toMatch(/<input[^>]*type="file"/);
-      expect(html).not.toMatch(/<input[^>]*type="file"[^>]*disabled/);
+      expect(html).not.toMatch(/<input[^>]*type="file"[^>]*\sdisabled=""/);
       expect(html).toContain('aria-describedby="archive-file-help"');
       expect(html).toContain('aria-current="step"');
       expect(html).toContain(`href="/${locale}/library"`);
