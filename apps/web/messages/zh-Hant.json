@@ -11238,5 +11238,10 @@
   "library_mal_retry_source_evidence": "重試來源證據接納",
   "library_mal_score_zero_source": "{value}（0 表示未評分）",
   "library_mal_score_source_details": "數值：{value}；MAL 評分範圍：{scale}",
-  "library_mal_score_source_scale": "MAL 範圍 {min} 至 {max}，間距 {step}"
+  "library_mal_score_source_scale": "MAL 範圍 {min} 至 {max}，間距 {step}",
+  "moderation_manual_heading": "開啟已知的審核佇列",
+  "moderation_manual_hint": "輸入看板 ID，或開啟目錄檢舉。每個佇列都會獨立檢查你目前的存取權限。",
+  "moderation_manual_board": "看板 ID",
+  "moderation_manual_open": "開啟看板佇列",
+  "moderation_manual_catalogue": "開啟目錄檢舉"
 }

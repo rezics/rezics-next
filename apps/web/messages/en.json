@@ -11406,5 +11406,10 @@
   "library_mal_retry_source_evidence": "Retry source evidence admission",
   "library_mal_score_zero_source": "{value} (zero means unrated)",
   "library_mal_score_source_details": "Value: {value}; MAL scale: {scale}",
-  "library_mal_score_source_scale": "MAL scale from {min} to {max}, step {step}"
+  "library_mal_score_source_scale": "MAL scale from {min} to {max}, step {step}",
+  "moderation_manual_heading": "Open a known moderation queue",
+  "moderation_manual_hint": "Enter a board ID or open catalogue reports. Each queue checks your current access independently of discovery.",
+  "moderation_manual_board": "Board ID",
+  "moderation_manual_open": "Open board queue",
+  "moderation_manual_catalogue": "Open catalogue reports"
 }

@@ -70,7 +70,8 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
       : undefined;
   const historyDecision = history ? token(search.historyDecision, 128) : undefined;
   const historyReturn = !history && board && search.historyReturn === true ? true : undefined;
-  const selected = queue === 'appeals' && board && !history ? token(search.case, 128) : undefined;
+  // History temporarily replaces the reader, while this ID remains its captured return selection.
+  const selected = queue === 'appeals' && board ? token(search.case, 128) : undefined;
   return {
     queue,
     status: queue === 'resolved' ? 'resolved' : queue === 'reports' ? 'pending' : selection.status,

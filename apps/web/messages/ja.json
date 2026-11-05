@@ -11233,5 +11233,10 @@
   "library_mal_retry_source_evidence": "ソース証拠の登録を再試行",
   "library_mal_score_zero_source": "{value}（0 は未評価を意味）",
   "library_mal_score_source_details": "値: {value}。MAL の尺度: {scale}",
-  "library_mal_score_source_scale": "MAL の尺度: {min}〜{max}、刻み幅 {step}"
+  "library_mal_score_source_scale": "MAL の尺度: {min}〜{max}、刻み幅 {step}",
+  "moderation_manual_heading": "既知のモデレーションキューを開く",
+  "moderation_manual_hint": "掲示板 ID を入力するか、カタログの通報を開いてください。各キューで現在のアクセス権を個別に確認します。",
+  "moderation_manual_board": "掲示板 ID",
+  "moderation_manual_open": "掲示板のキューを開く",
+  "moderation_manual_catalogue": "カタログの通報を開く"
 }

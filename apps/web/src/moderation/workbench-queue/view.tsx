@@ -20,6 +20,7 @@ import {
   type WorkbenchSearch,
 } from './scope';
 import { ModerationDirectory } from './directory-view';
+import { ManualModerationScope } from './manual-scope';
 import { workbenchQueueScope, type WorkbenchCase, type WorkbenchRead } from './read';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import { reportReviewDepartureMessages, reportReviewNavigationContext } from '../reports-bulk-controls';
@@ -265,13 +266,16 @@ export function WorkbenchView({
         <p className="text-sm text-muted-foreground">{m.moderation_directory_return_hint()}</p>
       ) : null}
       {page.state === 'ready' && (scope.kind === 'none' || scope.kind === 'realm') ? (
-        <ModerationDirectory
-          page={page.directory}
-          search={search}
-          onSearch={onSearch}
-          {...(onRetry ? { onRetry } : {})}
-          {...(isCurrent ? { isCurrent } : {})}
-        />
+        <>
+          <ManualModerationScope search={search} onSearch={onSearch} {...(isCurrent ? { isCurrent } : {})} />
+          <ModerationDirectory
+            page={page.directory}
+            search={search}
+            onSearch={onSearch}
+            {...(onRetry ? { onRetry } : {})}
+            {...(isCurrent ? { isCurrent } : {})}
+          />
+        </>
       ) : null}
       {(page.state === 'ready' || search.history) && queueScope ? (
         <section className="space-y-4" aria-label={m.moderation_workbench_heading()}>
