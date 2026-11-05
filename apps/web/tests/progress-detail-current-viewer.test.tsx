@@ -957,8 +957,7 @@ test('a native section restart clears only its predecessors; replacement retires
 test('Stay cancels history movement and cannot lend coordinates or focus to a later unrelated navigation', async () => {
   const h = await mount(detail(), false, viewer(), true);
   try {
-    await h.click(m.library_progress_update());
-    await h.fill(m.library_progress_amount(), '9');
+    await h.fill(m.library_logs_publish_note(), 'draft');
     const before = h.reads.length;
     await act(async () => {
       within(h.body.getByRole('region', { name: m.library_progress_changes(), exact: true }))
@@ -968,11 +967,8 @@ test('Stay cancels history movement and cannot lend coordinates or focus to a la
     expect(h.body.getByRole('alertdialog')).toBeTruthy();
     await h.click(m.library_progress_draft_navigation_stay());
     expect(h.reads).toHaveLength(before);
-    expect(h.body.getByLabelText(m.library_progress_amount()).getAttribute('value')).toBe('9');
-    await act(async () => {
-      h.body.getByRole('dialog').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    });
-    await h.click(m.library_progress_draft_navigation_discard());
+    expect((h.body.getByLabelText(m.library_logs_publish_note()) as HTMLTextAreaElement).value).toBe('draft');
+    await h.fill(m.library_logs_publish_note(), '');
     await act(async () => h.router.navigate({
       to: '/library/progress/$id',
       params: { id: address.id },
