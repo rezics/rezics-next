@@ -17,6 +17,10 @@ capabilities and disclosure rules on every page and device.
 Decision: Independent progress visits and the configured Library visit on a manga Subject expose explicit refresh,
 adopt newer saved values in untouched units, and retain local amount or clear choices by measure unit.
 
+Decision: Native Library labels keep operation-id admission. Kernel exposure names those mounted shell journeys
+when the personal Library gate is visible, matching commerce sales and public create journeys, so the saved-view
+labels link, catalogue and shelf read the same admitted set as the APIs.
+
 - The Collection editor supports bounded destination and occurrence-anchor browsing, exact duplicate-preserving
   transfer review, the existing atomic native transfer and bounded source/destination recovery. Its limits and
   consumer authorities are recorded in the [placement journey](../../apps/web/src/library/collection-placement-journey.md).

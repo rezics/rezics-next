@@ -6,6 +6,21 @@ import type { MountedRoute } from '../../http/request.ts';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 import { visibleOperations } from './visibility.ts';
 
+/** Mounted operations the site reads by id rather than by gate group. */
+export const SHELL_JOURNEY_OPERATIONS = [
+  'commerce_sale.list',
+  'subject.create',
+  'realm.create',
+  'provider_review.list',
+  'library_label.list',
+  'library_label.create',
+  'library_label.rename',
+  'library_label.delete',
+  'library_label.assign',
+  'library_label.unassign',
+  'library_label.assignment_list',
+] as const;
+
 /** Capture the complete mounted catalogue on the first request, as the served OpenAPI route does. */
 export function admittedGroupsRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -41,7 +56,7 @@ export function admittedGroupsRoutes(
         visible.flatMap((operation) => (operation.exposure.startsWith('gate:') ? [operation.exposure.slice(5)] : [])),
       );
       // Fixed shell journeys require their mounted operation, independently of gate-group admission.
-      for (const id of ['commerce_sale.list', 'subject.create', 'realm.create', 'provider_review.list']) {
+      for (const id of SHELL_JOURNEY_OPERATIONS) {
         if (visible.some((operation) => operation.operationId === id)) admitted.add(id);
       }
       set.headers['cache-control'] = 'no-store';

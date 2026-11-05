@@ -242,9 +242,10 @@ test('the Library owner reads and edits the saved view through native pages and 
   await page.getByRole('heading', { name: m.library_heading() }).waitFor();
   await page.getByText(fixture.title).waitFor();
   const counts = page.getByRole('navigation', { name: m.library_summary_heading() });
-  await counts.getByRole('link', { name: `${m.library_state_all()} 1 / 1` }).waitFor();
+  await counts.getByRole('link', { name: new RegExp(`${m.library_state_all()}\\s*1 / 1`) }).waitFor();
   await page.getByRole('link', { name: m.library_nav_labels() }).waitFor();
-  await page.locator('[data-received-entry-reading-trigger]').click();
+  await page.locator('[data-received-entry-reading-trigger]').first().waitFor();
+  await page.locator('[data-received-entry-reading-trigger]').first().click();
   await page.locator('[data-received-entry-reading]').waitFor();
   expect(await page.locator('[data-entry-reading-progress]').innerText()).toContain('12');
   await page.locator('[data-received-entry-reading-close]').click();

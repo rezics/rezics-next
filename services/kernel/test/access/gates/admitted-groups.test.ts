@@ -23,6 +23,17 @@ const groups = {
   past: 'admitted_past',
 };
 const publicJourneys = ['provider_review.list', 'realm.create', 'subject.create'];
+const shellJourneys = [
+  'commerce_sale.list',
+  ...publicJourneys,
+  'library_label.list',
+  'library_label.create',
+  'library_label.rename',
+  'library_label.delete',
+  'library_label.assign',
+  'library_label.unassign',
+  'library_label.assignment_list',
+];
 const opened = [groups.a, groups.z, ...publicJourneys].sort();
 const issuer = 'https://admitted.auth.test';
 const audience = 'https://admitted.api.test';
@@ -104,7 +115,7 @@ async function read(token?: string): Promise<string[]> {
     operation.exposure.startsWith('gate:') ? [operation.exposure.slice(5)] : [],
   );
   const journeys = visible.flatMap(({ operationId }) =>
-    ['commerce_sale.list', ...publicJourneys].includes(operationId) ? [operationId] : [],
+    shellJourneys.includes(operationId) ? [operationId] : [],
   );
   expect(body.admitted).toEqual([...new Set([...visibleGroups, ...journeys])].sort());
   for (const group of mountedGroups().filter((group) => !body.admitted.includes(group))) {
