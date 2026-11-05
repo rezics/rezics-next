@@ -133,8 +133,10 @@ export function PaymentReferenceDraftNavigation({
       event.returnValue = '';
     };
     const documentLink = (event: MouseEvent) => {
-      const target = event.target;
-      const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null;
+      const node = event.target;
+      if (!(node instanceof Node)) return;
+      const from = node instanceof Element ? node : node.parentElement;
+      const anchor = from?.closest<HTMLAnchorElement>('a[href]') ?? null;
       if (!anchor || (!protectedNow() && !departure)) return;
       const destination = sameOriginDocumentDestination(anchor, event, window.location.href);
       if (!destination) return;
@@ -158,9 +160,11 @@ export function PaymentReferenceDraftNavigation({
     };
     window.addEventListener('beforeunload', beforeUnload);
     window.addEventListener('click', documentLink, true);
+    document.addEventListener('click', documentLink, true);
     return () => {
       window.removeEventListener('beforeunload', beforeUnload);
       window.removeEventListener('click', documentLink, true);
+      document.removeEventListener('click', documentLink, true);
     };
   }, [active, departure]);
 
