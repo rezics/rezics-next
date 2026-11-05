@@ -13,6 +13,7 @@ import { m } from '../../paraglide/messages.js';
 export const Route = createFileRoute('/library/labels')({
   server: { handlers: { POST: labelsFormPost } },
   validateSearch: (search: Record<string, unknown>) => ({
+    ...search,
     ...(Object.hasOwn(search, 'cursor') ? { cursor: search.cursor } : {}),
     ...(Object.hasOwn(search, 'q') ? { q: search.q } : {}),
   }),

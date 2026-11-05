@@ -1,4 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEventHandler,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -14,7 +23,7 @@ import { undoToast as UndoToast } from '@rezics/ui/undo-toast';
 import { toast } from '@rezics/ui/shadcn/toast';
 import { manageLabel } from './labels-actions';
 import { readLabelsPage } from './labels-read-route';
-import type { LabelInput, LabelsPage, LabelFeedback } from './labels-read';
+import type { LabelInput, LabelsPage, LabelFeedback, LabelResult } from './labels-read';
 import { shelfHref } from './shelf-params';
 import type { LibraryLabelSummary } from './subject-labels.ts';
 import type { ManagementGuard } from './management-current-origin';
@@ -22,6 +31,8 @@ import type { GatedOperation } from '../kernel/exposure';
 import { hasUnsentLabelName, useLabelDraftNavigation } from './label-draft-navigation';
 import { LabelNameReader } from './label-name-reader';
 import { libraryLabelNameIssue, type LibraryLabelNameIssue } from './subject-label-name';
+import { LABELS_CURSOR_MAX_LENGTH } from './labels-address';
+import type { LabelsWindowDirection } from './labels-window-navigation';
 
 /** A catalogue label opens its complete personal shelf. */
 export function LabelShelfLink({ label, locale }: { label: LibraryLabelSummary; locale: string }) {
@@ -113,17 +124,29 @@ type Attempt = {
 
 export function LabelsPageView({
   page: initial,
+  sendLabel = manageLabel,
   isCurrent = alwaysCurrent,
   refresh,
   originating,
   cursor,
+  canPrevious = false,
+  windowBusy = false,
+  onWindowMove,
+  retryCurrent,
+  headingRef,
   locale = getLocale(),
 }: {
   page: LabelsPage;
+  sendLabel?: typeof manageLabel;
   isCurrent?: () => boolean;
   refresh?: () => Promise<LabelsPage | null>;
   originating?: ManagementGuard | undefined;
   cursor?: string;
+  canPrevious?: boolean;
+  windowBusy?: boolean;
+  onWindowMove?: (direction: LabelsWindowDirection, restoreHeadingFocus: boolean) => void;
+  retryCurrent?: () => void;
+  headingRef?: Ref<HTMLHeadingElement>;
   locale?: string;
 }) {
   const [page, setPage] = useState(initial);
@@ -141,11 +164,18 @@ export function LabelsPageView({
   } | null>(null);
   const createField = useRef<HTMLInputElement>(null);
   const renameField = useRef<HTMLInputElement>(null);
-  const locked = useRef<{ current: () => boolean } | null>(null);
+  const locked = useRef<{ current: () => boolean; sending: boolean } | null>(null);
   const mounted = useRef(false);
   const attempts = useRef(new Map<string, Attempt>());
-  const ownedToast = useRef<{ id: string; owner: string } | null>(null);
+  const ownedToast = useRef<{
+    id: string;
+    owner: string;
+    onClick: MouseEventHandler<HTMLButtonElement>;
+  } | null>(null);
   const pageRef = useRef<HTMLElement>(null);
+  const keyboardIntent = useRef<LabelsWindowDirection | null>(null);
+  const onWindowMoveRef = useRef(onWindowMove);
+  onWindowMoveRef.current = onWindowMove;
   const actionTriggers = useRef(new Map<string, HTMLButtonElement>());
   const latestPage = useRef(page);
   const path = `/${locale}/library/labels`;
@@ -156,7 +186,7 @@ export function LabelsPageView({
     if (!owned) return;
     // UndoToast uses a shared replaceable ID. A functional update scrubs only our installed entry.
     toast.update(owned.id, (previous) =>
-      previous.data?.labelsOwner === owned.owner
+      previous.data?.labelsOwner === owned.owner && previous.actionProps?.onClick === owned.onClick
         ? {
             title: '',
             description: '',
@@ -193,7 +223,7 @@ export function LabelsPageView({
     setAction((selected) => selected ?? failedAction(next));
   }
   latestPage.current = page;
-  if (locked.current && !locked.current.current()) {
+  if (locked.current && !locked.current.current() && !locked.current.sending) {
     locked.current = null;
     setBusy(false);
   }
@@ -234,6 +264,46 @@ export function LabelsPageView({
       (renameDirty && admitted({ operation: 'rename', idempotencyKey: action!.label.renameKey })),
     focus: () => (renameDirty ? renameField.current : createField.current),
   });
+  const unresolvedCommand = [...attempts.current.values()].some((attempt) => attempt.unresolved);
+  function movementControl(direction: LabelsWindowDirection, label: string, href: string | (() => string)) {
+    if (!onWindowMove)
+      return (
+        <a
+          href={typeof href === 'string' ? href : href()}
+          className={buttonVariants({ variant: 'outline', className: actionClass })}
+          onClick={(event) => {
+            if (!alive()) event.preventDefault();
+          }}
+        >
+          {label}
+        </a>
+      );
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        className={actionClass}
+        disabled={busy || windowBusy || unresolvedCommand || !alive()}
+        onKeyDown={(event) => {
+          if (!event.repeat && (event.key === 'Enter' || event.key === ' ')) keyboardIntent.current = direction;
+        }}
+        onBlur={() => {
+          if (keyboardIntent.current === direction) keyboardIntent.current = null;
+        }}
+        onClick={(event) => {
+          const restoreHeadingFocus =
+            keyboardIntent.current === direction && document.activeElement === event.currentTarget;
+          keyboardIntent.current = null;
+          void navigation.leave(() => {
+            if (!alive() || busy || windowBusy || unresolvedCommand) return;
+            return onWindowMoveRef.current?.(direction, restoreHeadingFocus);
+          });
+        }}
+      >
+        {label}
+      </Button>
+    );
+  }
   function chooseAction(next: LabelAction | null) {
     void navigation.confirm(renameDirty).then((discard) => {
       if (
@@ -288,16 +358,21 @@ export function LabelsPageView({
           renderedKey: supplied.idempotencyKey,
           unresolved: true,
           headers: new Headers(headers),
-          send: manageLabel,
+          send: sendLabel,
         };
     attempts.current.set(slot, attempt);
-    const lock = { current: () => admitted(input) };
+    const lock = { current: () => admitted(input), sending: true };
     locked.current = lock;
     setBusy(true);
     const page = latestPage.current;
     try {
       if (!admitted(input)) return;
-      const result = await attempt.send({ data: attempt.input, headers: attempt.headers });
+      let result: LabelResult;
+      try {
+        result = await attempt.send({ data: attempt.input, headers: attempt.headers });
+      } finally {
+        lock.sending = false;
+      }
       if (!admitted(input)) return;
       attempt.unresolved = !result.ok && result.reason === 'unavailable';
       if (result.ok && input.operation === 'create') setCreateName((value) => (value === input.name ? '' : value));
@@ -394,8 +469,15 @@ export function LabelsPageView({
           },
           { undo: m.library_label_undo() },
         );
-        ownedToast.current = { id, owner };
-        toast.update(id, { data: { labelsOwner: owner } });
+        toast.update(id, (previous) => {
+          const undo = previous.actionProps!.onClick!;
+          const onClick: MouseEventHandler<HTMLButtonElement> = (event) => undo(event);
+          ownedToast.current = { id, owner, onClick };
+          return {
+            data: { labelsOwner: owner },
+            actionProps: { ...previous.actionProps, onClick },
+          };
+        });
       }
     } catch {
       if (!admitted(input)) return;
@@ -413,7 +495,8 @@ export function LabelsPageView({
         },
       }));
     } finally {
-      if (alive() && (!originating || originating.isCurrent(operationOf(input))) && locked.current === lock) {
+      lock.sending = false;
+      if (mounted.current && locked.current === lock) {
         locked.current = null;
         setBusy(false);
       }
@@ -588,7 +671,13 @@ export function LabelsPageView({
   if (page.state && page.state !== 'loaded')
     return (
       <article className="max-w-3xl space-y-6">
-        <PageHeading>{m.library_labels_heading()}</PageHeading>
+        <PageHeading
+          ref={headingRef}
+          tabIndex={-1}
+          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {m.library_labels_heading()}
+        </PageHeading>
         <p role={page.state === 'unavailable' ? 'alert' : 'status'}>
           {cursorRecovery
             ? staleCursor
@@ -604,21 +693,46 @@ export function LabelsPageView({
         </p>
         {feedback && !feedback.ok && feedback.operation ? error('label-error') : null}
         {undoForm}
-        <a
-          onClick={(event) => {
-            if (!alive()) event.preventDefault();
-          }}
-          href={cursorRecovery ? firstPagePath : mutationPath}
-          className={buttonVariants({ variant: 'outline', className: actionClass })}
-        >
-          {cursorRecovery ? m.library_collections_first_page() : m.subject_view_retry()}
-        </a>
+        <nav aria-label={m.library_labels_heading()} className="flex flex-wrap gap-2">
+          {retryCurrent ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={actionClass}
+              disabled={!alive() || windowBusy}
+              onClick={() => {
+                if (alive() && !windowBusy) retryCurrent();
+              }}
+            >
+              {m.subject_view_retry()}
+            </Button>
+          ) : (
+            <a
+              onClick={(event) => {
+                if (!alive()) event.preventDefault();
+              }}
+              href={mutationPath}
+              className={buttonVariants({ variant: 'outline', className: actionClass })}
+            >
+              {m.subject_view_retry()}
+            </a>
+          )}
+          {cursorRecovery && cursor !== undefined
+            ? movementControl('first', m.library_collections_first_page(), () => firstPagePath)
+            : null}
+        </nav>
       </article>
     );
   if (!page.signedIn)
     return (
       <article className="space-y-6">
-        <PageHeading>{m.library_labels_heading()}</PageHeading>
+        <PageHeading
+          ref={headingRef}
+          tabIndex={-1}
+          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {m.library_labels_heading()}
+        </PageHeading>
         <a
           href={`/auth/sign-in?return_to=${encodeURIComponent(path)}`}
           className={buttonVariants({ className: actionClass })}
@@ -630,7 +744,13 @@ export function LabelsPageView({
   if (!page.operations.includes('library_label.list'))
     return (
       <article className="space-y-6">
-        <PageHeading>{m.library_labels_heading()}</PageHeading>
+        <PageHeading
+          ref={headingRef}
+          tabIndex={-1}
+          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {m.library_labels_heading()}
+        </PageHeading>
         <p>{m.library_labels_unavailable()}</p>
       </article>
     );
@@ -638,7 +758,13 @@ export function LabelsPageView({
     <article ref={pageRef} tabIndex={-1} className="min-w-0 max-w-3xl space-y-8 text-foreground" aria-busy={busy}>
       {navigation.boundary}
       <header className="space-y-2">
-        <PageHeading>{m.library_labels_heading()}</PageHeading>
+        <PageHeading
+          ref={headingRef}
+          tabIndex={-1}
+          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {m.library_labels_heading()}
+        </PageHeading>
         <p className="text-muted-foreground">{m.library_labels_private()}</p>
         <p className="text-sm text-muted-foreground">{m.library_consolidation_labels_hint()}</p>
       </header>
@@ -869,30 +995,34 @@ export function LabelsPageView({
           </DialogContent>
         </Dialog>
       ) : null}
-      {cursor !== undefined || page.next || cursorRecovery ? (
-        <nav className="flex flex-wrap gap-2">
-          {cursor !== undefined || cursorRecovery ? (
-            <a
-              onClick={(event) => {
-                if (!alive()) event.preventDefault();
+      {cursor !== undefined || page.next || canPrevious || cursorRecovery ? (
+        <nav aria-label={m.library_labels_heading()} className="flex flex-wrap gap-2">
+          {staleCursor && retryCurrent ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={actionClass}
+              disabled={!alive() || windowBusy}
+              onClick={() => {
+                if (alive() && !windowBusy) retryCurrent();
               }}
-              href={firstPagePath}
-              className={buttonVariants({ variant: 'outline', className: actionClass })}
             >
-              {m.library_collections_first_page()}
-            </a>
+              {m.subject_view_retry()}
+            </Button>
           ) : null}
-          {page.next && !cursorRecovery ? (
-            <a
-              className={buttonVariants({ variant: 'outline', className: actionClass })}
-              onClick={(event) => {
-                if (!alive()) event.preventDefault();
-              }}
-              href={`${path}?${new URLSearchParams({ ...(page.query !== undefined ? { q: page.query } : {}), cursor: page.next })}`}
-            >
-              {m.library_label_more()}
-            </a>
-          ) : null}
+          {!staleCursor && canPrevious
+            ? movementControl('previous', m.library_labels_previous(), () => firstPagePath)
+            : null}
+          {cursor !== undefined || cursorRecovery
+            ? movementControl('first', m.library_collections_first_page(), () => firstPagePath)
+            : null}
+          {!staleCursor && page.next && page.next.length <= LABELS_CURSOR_MAX_LENGTH
+            ? movementControl(
+                'next',
+                m.library_label_more(),
+                () => `${path}?${new URLSearchParams({ ...(page.query !== undefined ? { q: page.query } : {}), cursor: page.next! })}`,
+              )
+            : null}
         </nav>
       ) : null}
     </article>

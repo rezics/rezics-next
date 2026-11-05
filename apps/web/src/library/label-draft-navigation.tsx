@@ -50,6 +50,18 @@ export function useLabelDraftNavigation(options: {
       pending.current = resolve;
     });
   }
+  async function leave(action: () => void | Promise<void>): Promise<boolean> {
+    const protectedDraft = live.current.dirty;
+    if (!(await confirmRef.current(protectedDraft))) return false;
+    if (protectedDraft && !live.current.isCurrent()) return false;
+    leavingDocument.current = true;
+    try {
+      await action();
+      return true;
+    } finally {
+      leavingDocument.current = false;
+    }
+  }
   const confirmRef = useRef(confirm);
   confirmRef.current = confirm;
   useLayoutEffect(() => {
@@ -135,6 +147,7 @@ export function useLabelDraftNavigation(options: {
 
   return {
     confirm,
+    leave,
     boundary: (
       <>
         {router ? <RouterDraftBoundary protectedNow={protectedNow} confirm={() => confirmRef.current()} /> : null}

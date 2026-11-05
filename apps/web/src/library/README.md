@@ -265,6 +265,21 @@ by the production Collection read. Successful empty grants stay current. Decisio
 controls remain unavailable; undocumented object fields and visible Entry/vote facts never grant navigation or
 dispatch. Preserve occurrence row keys and original Subjects while the producer delivers its typed closure.
 
+## Label catalogue cursor windows
+
+Decision: Labels retains at most eight admitted predecessor cursors plus the current coordinate in the existing
+QueryClient visit, stages one exact target only after the sole draft Leave decision, and commits movement only after
+the matching current private read is admitted.
+
+The visit is scoped to the exact raw prefix, locale, source and current private reader admission. It stores cursor
+strings only; one native catalogue page of at most 100 rows remains visible, and each cursor is admitted within the
+existing 4,096 JavaScript code-unit bound. A failed movement keeps its staged cursor for exact Retry without
+truncating accepted history. First removes only the cursor while retaining the raw prefix, other search bytes and
+hash. A direct later address has no inferred predecessor. Route state identifies the in-memory visit across
+deliberate cursor remounts; reloads and unrelated reader retirement do not restore private coordinates. Sparse and
+empty pages keep their supplied continuation and accepted predecessors. Native Label naming, shelf reading,
+commands, recovery and lifecycle remain with the existing Commerce contract.
+
 ## My Collections cursor windows
 
 Decision: My Collections keeps at most eight admitted predecessor cursor coordinates plus the current coordinate in

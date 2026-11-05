@@ -2440,6 +2440,7 @@
   "library_label_draft_navigation_stay": "Quedarme",
   "library_label_draft_navigation_discard": "Descartar",
   "library_label_more": "Página siguiente",
+  "library_labels_previous": "Página anterior",
   "library_label_deleted": "Se eliminó {name}",
   "library_label_stale": "La etiqueta cambió. Se muestra la versión actual.",
   "library_label_invalid": "No se puede usar ese nombre de etiqueta.",

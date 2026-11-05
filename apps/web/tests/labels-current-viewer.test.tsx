@@ -1,14 +1,14 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode, type ComponentProps } from 'react';
+import { act, StrictMode, useState, type ComponentProps } from 'react';
 import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import type { LabelsCurrentRead } from '../src/library/labels-read-route';
 import type { LabelInput, LabelResult } from '../src/library/labels-read';
 import type { MenuProps } from '@rezics/ui/menu';
 
-// UNRUN: one focused mounted/deferred management journey for integration. Controlled BFF
-// responses exercise the actual route and handlers, not native authority or browser/visual proof.
+// One focused mounted/deferred management journey. Controlled BFF responses exercise the actual
+// route and handlers, not native authority or browser/visual proof.
 const operations = [
   'personal_library',
   'library_label.list',
@@ -115,6 +115,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -124,6 +125,10 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const reads = await import('../src/library/labels-read-route');
     const kernel = await import('../src/kernel/client');
     const { Route } = await import('../src/routes/library/labels');
+    const { LABELS_WINDOW_QUERY_KEY, labelsWindowOwner } = await import('../src/library/labels-window-navigation');
+    const { libraryWorkspaceAdmission } = await import('../src/library/library-workspace-admission');
+    const { browserObservation } = await import('../src/session/observation');
+    const { sessionQueryKey } = await import('../src/session/browser-state');
     const nativeCalls: Request[] = [];
     let failure: { status: number; code: string } | undefined;
     let admitted = [...operations];
@@ -142,15 +147,17 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       const load = Route.options.loader as unknown as (input: {
         deps: { cursor?: string; query?: string };
       }) => Promise<{ kind: 'loaded'; result: LabelsCurrentRead }>;
-      const loaded = await load({ deps: { cursor: 'exact+/cursor==', query: ' Private%_ ' } });
-      expect(loaded).toMatchObject({
+      const routeData = await load({ deps: { cursor: 'exact+/cursor==', query: ' Private%_ ' } });
+      expect(routeData).toMatchObject({
         kind: 'loaded',
+        address: { valid: true, cursor: 'exact+/cursor==', query: ' Private%_ ' },
         result: {
           sessionSubject: 'A',
           requested: { cursor: 'exact+/cursor==', query: ' Private%_ ', locale: 'en' },
           page: { csrfToken: 'prepared-A', state: 'loaded', labels: [{ name: 'Private A' }] },
         },
       });
+      const loaded = routeData.result;
       expect(preparations).toBe(1);
       const list = nativeCalls.find((call) => new URL(call.url).pathname === '/v1/libraryLabels')!;
       expect(new URL(list.url).searchParams.get('limit')).toBe('100');
@@ -219,8 +226,9 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const { createRoot, hydrateRoot } = await import('react-dom/client');
     const { renderToString } = await import('react-dom/server');
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-    const { browserObservation } = await import('../src/session/observation');
     const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+    const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } =
+      await import('@tanstack/react-router');
     const menu = await import('@rezics/ui/menu');
     const dialogs = await import('@rezics/ui/shadcn/dialog');
     const inputs = await import('@rezics/ui/shadcn/input');
@@ -269,15 +277,29 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     });
     let search: Search = { q: 'Private', cursor: 'exact+/page==' };
     let initial = response('A', search);
-    const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => ({
-      kind: 'loaded',
-      address: { valid: true, cursor: search.cursor ?? null, query: search.q ?? null },
-      result: initial,
-    }));
+    const loader = spyOn(Route, 'useLoaderData').mockImplementation(
+      () =>
+        ({
+          kind: 'loaded',
+          address: { valid: true, cursor: search.cursor ?? null, query: search.q ?? null },
+          result: initial,
+        }) as never,
+    );
     const address = spyOn(Route, 'useSearch').mockImplementation(() => search);
     const Page = Route.options.component!;
+    let rerenderRoute = () => {};
+    function RouteView() {
+      const [, setRevision] = useState(0);
+      rerenderRoute = () => setRevision((revision) => revision + 1);
+      return <Page />;
+    }
+    const router = createRouter({
+      routeTree: createRootRoute({ component: RouteView }),
+      history: createMemoryHistory({ initialEntries: ['/en/library/labels'] }),
+    });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const stopBrowserObservation = browserObservation(queryClient).subscribeCache(() => {});
+    const observation = browserObservation(queryClient);
+    const stopObservation = observation.subscribeCache(() => {});
     const host = document.createElement('div');
     document.body.append(host);
     let root: ReturnType<typeof createRoot> | undefined;
@@ -286,7 +308,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       <StrictMode>
         <QueryClientProvider client={queryClient}>
           <notifications.Toaster>
-            <Page />
+            <RouterProvider router={router} />
           </notifications.Toaster>
         </QueryClientProvider>
       </StrictMode>
@@ -299,15 +321,15 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     ) => {
       menus.length = 0;
       await act(async () => {
-        const currentSession = queryClient.getQueryData<typeof viewer>(['session']);
+        const currentSession = queryClient.getQueryData<typeof viewer>(sessionQueryKey);
         if (
           !reuseSession ||
           currentSession?.state !== viewer.state ||
           currentSession?.subject !== viewer.subject ||
           currentSession?.csrfToken !== viewer.csrfToken
         )
-          queryClient.setQueryData(['session'], viewer);
-        const current = browserObservation(queryClient).getSnapshot();
+          queryClient.setQueryData(sessionQueryKey, viewer);
+        const current = observation.getSnapshot();
         if (current.state === 'signed-in')
           queryClient.setQueryData(viewerExposureQuery(current.observation).queryKey, {
             subject: current.observation.subject,
@@ -319,7 +341,10 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
           expect(html).toContain('name="csrf_token" value="prepared-A"');
           host.innerHTML = html;
           root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
-        } else root.render(tree());
+        } else {
+          rerenderRoute();
+          root.render(tree());
+        }
       });
     };
     const settleRead = async (index: number, value: LabelsCurrentRead) => {
@@ -373,8 +398,29 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       });
     };
     try {
+      await router.load();
       await show(session('A'));
       expect(pendingReads).toHaveLength(0); // Genuine loader provenance hydrates without an added read.
+      const labelsAdmission = libraryWorkspaceAdmission(queryClient, [
+        'library_label.list',
+        'library_label.create',
+        'library_label.rename',
+        'library_label.delete',
+      ]);
+      const admittedA = labelsAdmission.read();
+      const retainedA = {
+        visitId: 'A-before-replacement',
+        owner: labelsWindowOwner(queryClient, {
+          locale: 'en',
+          query: search.q ?? null,
+          source: reads.readLabelsCurrent,
+          viewer: admittedA.viewer,
+          listEpoch: admittedA.dispatch[0]!,
+        }),
+        path: [null, 'A-cursor-one', 'A-cursor-two'],
+        staged: null,
+      };
+      queryClient.setQueryData(LABELS_WINDOW_QUERY_KEY, retainedA);
       await act(async () => select('rename')());
       const oldSelect = select('delete');
       const oldFocus = dialogProps.at(-1)!.finalFocus as () => unknown;
@@ -394,6 +440,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
         csrf: 'session-A',
       });
       await show(session('B'));
+      expect(queryClient.getQueryData(LABELS_WINDOW_QUERY_KEY)).toBeUndefined();
       retired('A');
       expect(document.querySelector('[role="dialog"]')).toBeNull();
       expect(host.querySelector('input[name="q"]')).toBeNull();
@@ -421,9 +468,15 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await submit('rename');
       expect(writes[2]!.data).toEqual(uncertain);
       expect(writes[2]!.csrf).toBe('session-B');
-      await show(session('B', 'session-B-rotated'), operations, true);
-      busy(); // The current view retains the outstanding attempt.
+      initial = response('B', search, 23);
+      await show(session('B', 'another-nonempty-csrf'));
+      busy(); // Ordinary same-viewer loader/CSRF refresh preserves the outstanding attempt.
       await settleWrite(2, { ok: false, reason: 'conflict' });
+      expect(pendingReads).toHaveLength(1); // The retired response cannot launch a fresh read.
+      await submit('rename'); // Retry only after the replacement origin has admitted the same owner again.
+      expect(writes[3]!.data).toEqual(uncertain);
+      expect(writes[3]!.csrf).toBe('session-B');
+      await settleWrite(3, { ok: false, reason: 'conflict' });
       expect(pendingReads[1]!.data).toEqual({ cursor: search.cursor, query: search.q });
       await settleRead(1, response('B', search, 24));
       expect(
@@ -444,10 +497,10 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await act(async () => select('rename')());
       await changeName('Changed B draft');
       await submit('rename');
-      expect(writes[3]!.data.name).toBe('Changed B draft');
-      expect(writes[3]!.data.idempotencyKey).not.toBe(uncertain.idempotencyKey);
-      expect(writes[3]!.data.revision).toBe(24);
-      await settleWrite(3, { ok: true });
+      expect(writes[4]!.data.name).toBe('Changed B draft');
+      expect(writes[4]!.data.idempotencyKey).not.toBe(uncertain.idempotencyKey);
+      expect(writes[4]!.data.revision).toBe(24);
+      await settleWrite(4, { ok: true });
       await settleRead(2, response('B', search, 25));
       expect(document.querySelector('[role="dialog"]')).toBeNull();
 
@@ -458,14 +511,14 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       const deleteKey = (document.querySelector('[role="dialog"] input[name="idempotencyKey"]') as HTMLInputElement)
         .value;
       await submit('delete');
-      expect(writes[4]!.data).toEqual({
+      expect(writes[5]!.data).toEqual({
         operation: 'delete',
         id: 'label-B',
         revision: 25,
         name: 'Private B',
         idempotencyKey: deleteKey,
       });
-      await settleWrite(4, { ok: true, revision: 73 }); // Keep A/B refresh IO pending while C starts using its route.
+      await settleWrite(5, { ok: true, revision: 73 }); // Keep A/B refresh IO pending while C starts using its route.
       await show(session('C'));
       retired('B');
       await settleRead(4, response('C', search));
@@ -481,10 +534,10 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await settleRead(5, response('D', search));
       await act(async () => select('rename')());
       await submit('rename');
-      await settleWrite(5, new Error('Retired C failure'));
+      await settleWrite(6, new Error('Retired C failure'));
       busy();
       expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-      await settleWrite(6, { ok: false, reason: 'conflict' });
+      await settleWrite(7, { ok: false, reason: 'conflict' });
       await settleRead(6, response('D', search));
       await act(async () => {
         const cancel = [...document.querySelectorAll('[role="dialog"] button')].find(
@@ -494,9 +547,9 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       });
       await act(async () => select('delete')());
       await submit('delete');
-      const deleteInput = writes[7]!.data;
+      const deleteInput = writes[8]!.data;
       expect(deleteInput).toMatchObject({ operation: 'delete', id: 'label-D', revision: 7, name: 'Private D' });
-      await settleWrite(7, { ok: true, revision: 91 });
+      await settleWrite(8, { ok: true, revision: 91 });
       const deleted = response('D', search);
       deleted.page.labels = [];
       await settleRead(7, deleted);
@@ -505,13 +558,13 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       const restoreForm = host.querySelector('input[name="operation"][value="restore"]')!.closest('form')!;
       const undoKey = (restoreForm.querySelector('input[name="idempotencyKey"]') as HTMLInputElement).value;
       await act(async () => undo.actionProps!.onClick!({} as never));
-      expect(writes[8]!.data).toEqual({ operation: 'restore', id: 'label-D', revision: 91, idempotencyKey: undoKey });
-      await settleWrite(8, { ok: true, revision: 92 });
+      expect(writes[9]!.data).toEqual({ operation: 'restore', id: 'label-D', revision: 91, idempotencyKey: undoKey });
+      await settleWrite(9, { ok: true, revision: 92 });
       await settleRead(8, response('D', search, 92));
       expect(host.querySelector('input[name="operation"][value="restore"]')).toBeNull();
       await act(async () => select('delete')());
       await submit('delete');
-      await settleWrite(9, { ok: true, revision: 93 });
+      await settleWrite(10, { ok: true, revision: 93 });
       await settleRead(9, deleted);
       const retiredUndo = toastEntries.at(-1)!;
       await act(async () => {
@@ -557,7 +610,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(host.textContent).toContain('Private F');
       await act(async () => select('rename')());
       await submit('rename');
-      await settleWrite(10, { ok: true });
+      await settleWrite(11, { ok: true });
       await settleRead(17, response('F', { ...search, cursor: 'wrong refresh cursor' }));
       retired('F');
       await show(
@@ -567,13 +620,18 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       retired('F');
       await show(session('F'), ['personal_library', 'library_label.list'], true);
       retired('F');
-      await refetch();
+      const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.subject_view_retry());
+      expect(retry).toBeDefined();
+      await act(async () => (retry as HTMLButtonElement).click());
       await settleRead(18, response('F', search));
       expect(host.textContent).toContain('Private F');
       expect(host.querySelector('input[name="operation"]')).toBeNull();
       expect(host.querySelector('input[name="q"]')!.getAttribute('value')).toBe(search.q!);
 
       search = { q: '  Private %_ + & ?  ', cursor: 'exact+/native-rejected==' };
+      const rawSearch =
+        'q=%20%20Private%20%25_%20%2B%20%26%20%3F%20%20&cursor=exact%2B%2Fnative-rejected%3D%3D';
+      window.history.replaceState(null, '', `/en/library/labels?${rawSearch}`);
       const rejectedRead = pendingReads.length;
       await show(session('F'));
       expect(pendingReads).toHaveLength(rejectedRead + 1);
@@ -591,10 +649,15 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(host.textContent).toContain(m.library_labels_invalid_cursor());
       expect(host.textContent).not.toContain('Private F');
       expect(host.querySelector('input[name="operation"][value="create"]')).toBeNull();
-      const recovery = [...host.querySelectorAll('a')].find(
-        (link) => link.textContent === m.library_collections_first_page(),
+      const recovery = [...host.querySelectorAll('button')].find(
+        (button) => button.textContent === m.library_collections_first_page(),
       );
-      expect(recovery?.getAttribute('href')).toBe(`/en/library/labels?${new URLSearchParams({ q: search.q! })}`);
+      expect(recovery).toBeDefined();
+      await act(async () => (recovery as HTMLButtonElement).click());
+      expect(router.history.location.href).toBe('/en/library/labels?q=%20%20Private%20%25_%20%2B%20%26%20%3F%20%20');
+      expect(queryClient.getQueryData(LABELS_WINDOW_QUERY_KEY)).toMatchObject({
+        staged: { direction: 'first', target: null },
+      });
       const undoForm = [...host.querySelectorAll('form')].find((form) =>
         form.querySelector('input[name="operation"][value="restore"]'),
       )!;
@@ -663,10 +726,14 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(unrelatedUndo.title).toBe('Another journey Undo');
       await act(async () => unrelatedUndo.actionProps!.onClick!({} as never));
       expect(unrelatedUndos).toBe(1);
+      await act(async () => queryClient.setQueryData(sessionQueryKey, session('B')));
+      expect(queryClient.getQueryData(LABELS_WINDOW_QUERY_KEY)).toBeUndefined();
+      await act(async () => queryClient.setQueryData(sessionQueryKey, session('A')));
+      expect(queryClient.getQueryData(LABELS_WINDOW_QUERY_KEY)).toBeUndefined();
       expect(hydrationErrors).toEqual([]);
     } finally {
       if (root) await act(async () => root!.unmount());
-      stopBrowserObservation();
+      stopObservation();
       queryClient.clear();
       host.remove();
       for (const restore of [menuRead, inputRead, dialogRead, toastRead, transport, write, loader, address])

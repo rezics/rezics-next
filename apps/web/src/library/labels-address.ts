@@ -51,3 +51,24 @@ export function parseLabelsAddress(value: unknown): LabelsAddressResult {
   const cursor = typeof input.cursor === 'string' && input.cursor !== '' ? input.cursor : null;
   return { valid: true, cursor, query };
 }
+
+/** Change only the raw cursor pair; preserve all other search bytes and the hash. */
+export function labelsCursorHref(
+  pathname: string,
+  search: string,
+  hash: string,
+  cursor: string | null,
+): string {
+  const rawSearch = search.replace(/^\?/, '');
+  const pairs = rawSearch === '' ? [] : rawSearch.split('&');
+  const isCursor = (pair: string) => new URLSearchParams(pair).keys().next().value === 'cursor';
+  let replaced = false;
+  const next = pairs.flatMap((pair) => {
+    if (!isCursor(pair)) return [pair];
+    if (cursor === null || replaced) return [];
+    replaced = true;
+    return [`cursor=${encodeURIComponent(cursor)}`];
+  });
+  if (cursor !== null && !replaced) next.push(`cursor=${encodeURIComponent(cursor)}`);
+  return `${pathname}${next.length ? `?${next.join('&')}` : ''}${hash}`;
+}
