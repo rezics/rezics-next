@@ -27,7 +27,7 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 
-test('selected dump candidates publish only by exact intent and resume a refused step from the durable journal', async () => {
+test('selected dump candidates publish exact intent, resume retryable steps, and retain permanent refusals', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-publication-'));
   const subjects = new Map<
     string,
@@ -71,6 +71,7 @@ test('selected dump candidates publish only by exact intent and resume a refused
   const publicReads = new Map<string, any>();
   const acceptanceCalls: { candidateId: string; body: unknown; idempotencyKey: string }[] = [];
   let refuseAcceptance = true;
+  let acceptanceRefusalStatus = 503;
   let tagSpoiler = 0;
   const unavailableReviewSubjects = new Set<string>();
   const metadata = sourceRecordMetadataFixture();
@@ -272,7 +273,7 @@ test('selected dump candidates publish only by exact intent and resume a refused
         acceptanceCalls.push({ candidateId, body, idempotencyKey });
         if (refuseAcceptance) {
           const error = new Error('refused') as Error & { status: number };
-          error.status = 403;
+          error.status = acceptanceRefusalStatus;
           throw error;
         }
         accepted.add(candidateId);
@@ -429,6 +430,9 @@ test('selected dump candidates publish only by exact intent and resume a refused
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     refuseAcceptance = false;
+    const tagAcceptanceCallsBeforeReplay = acceptanceCalls.filter(
+      (call) => call.candidateId === membershipCandidateId,
+    ).length;
     const replayed = await publishShowcase({
       plan,
       result,
@@ -460,7 +464,7 @@ test('selected dump candidates publish only by exact intent and resume a refused
       });
     }
     const tagAcceptanceCalls = acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId);
-    expect(tagAcceptanceCalls).toHaveLength(1);
+    expect(tagAcceptanceCalls.length - tagAcceptanceCallsBeforeReplay).toBe(1);
 
     const reopenedSynopsis = synopses.find((candidate) => candidate.source?.external_id === '101')!;
     const reopenedSubject = [...subjects.values()].find(
@@ -690,6 +694,50 @@ test('selected dump candidates publish only by exact intent and resume a refused
     const mismatchedManifest = buildWith(mismatchedEndpointAck);
     expect(hasRelation(mismatchedManifest)).toBe(false);
     expect(mismatchedManifest.omissions.some((omission) => omission.code === 'graph-endpoint-mismatch')).toBe(true);
+
+    const refusedCandidate = synopses.find((candidate) => candidate.source?.external_id === '101')!;
+    const refusedCandidateState = candidates.get(refusedCandidate.id)!;
+    refusedCandidateState.head = 2;
+    const refusedCallsBefore = acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id).length;
+    refuseAcceptance = true;
+    acceptanceRefusalStatus = 403;
+    const permanentlyRefused = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(permanentlyRefused.omissions).toContainEqual({
+      provider: 'bangumi',
+      sourceKey: '101',
+      code: 'review-http-403',
+    });
+    expect(acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id)).toHaveLength(
+      refusedCallsBefore + 1,
+    );
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+    refuseAcceptance = false;
+    const refusalReopened = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(refusalReopened.omissions).toContainEqual({
+      provider: 'bangumi',
+      sourceKey: '101',
+      code: 'review-http-403',
+    });
+    expect(acceptanceCalls.filter((call) => call.candidateId === refusedCandidate.id)).toHaveLength(
+      refusedCallsBefore + 1,
+    );
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
