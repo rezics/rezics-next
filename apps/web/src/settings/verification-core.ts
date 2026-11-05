@@ -195,16 +195,12 @@ export async function readVerification(
       caller,
     );
     if (result.error) throw new VerificationReadError(nativeFailure(result));
-    if (!result.data)
-      throw new VerificationReadError({
-        status: result.status || 0,
-        message: m.settings_verification_request_failed(),
-      });
     const data: unknown = result.data;
     if (!validStatus(data, accountId))
       throw new VerificationReadError({
         status: result.status || 0,
-        message: m.settings_verification_load_failed(),
+        message:
+          data == null ? m.settings_verification_request_failed() : m.settings_verification_load_failed(),
       });
     return data;
   } catch (error) {
