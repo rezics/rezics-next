@@ -476,7 +476,7 @@ export async function claimReviewGrowthFixture() {
       expect(value.code).toBe(code);
     }
     async function measureListingPaths(expected: readonly RealmClaimReviewPage['claimRequests'][number][]) {
-      const expectedPage = (claimRequests: unknown, next: unknown) => ({
+      const expectedPage = <Requests, Next>(claimRequests: Requests, next: Next) => ({
         claimRequests,
         next,
         selectedRequest: null,

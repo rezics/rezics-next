@@ -42,7 +42,7 @@ test('registered owner erasure supplies the original episode and native HTTP req
     // A new HTTP idempotency key still refers to the same native pending request.
     expect(await fixture.submit()).toEqual(claim);
     const first = await fixture.list();
-    const reviewPageResult = (claimRequests: unknown, next: unknown) => ({
+    const reviewPageResult = <Requests, Next>(claimRequests: Requests, next: Next) => ({
       claimRequests,
       next,
       selectedRequest: null,

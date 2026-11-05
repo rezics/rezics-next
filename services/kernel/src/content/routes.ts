@@ -1387,11 +1387,23 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               ...page,
               pinnedThreads: page.pinnedThreads.map((card) => ({
                 ...card,
-                media: { ...card.media, images: [...card.media.images] },
+                media: {
+                  ...card.media,
+                  images: card.media.images.map((image) => ({
+                    ...image,
+                    variants: image.variants.map((variant) => ({ ...variant })),
+                  })),
+                },
               })),
               threads: page.threads.map((card) => ({
                 ...card,
-                media: { ...card.media, images: [...card.media.images] },
+                media: {
+                  ...card.media,
+                  images: card.media.images.map((image) => ({
+                    ...image,
+                    variants: image.variants.map((variant) => ({ ...variant })),
+                  })),
+                },
               })),
             };
             const { anchors: _anchors, ...body } = response;

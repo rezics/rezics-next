@@ -54,7 +54,7 @@ export async function settingsPageGrowthFixture() {
       }
       const source = await f.base.call('GET', `/v1/posts/${parentId}`, { bearer: f.base.author.bearer });
       expect(source.response.status, source.text).toBe(200);
-      if (!source.value.post) throw new Error('Expected the native post read to return its selected post');
+      if (!source.value || !source.value.post) throw new Error('Expected the native post read to return its selected post');
       const authored = await f.call('POST', `/v1/posts/${parentId}/revisions`, {
         body: { body: rulesBody() },
         headers: { 'if-match': JSON.stringify(source.value.post.revisionId) },
