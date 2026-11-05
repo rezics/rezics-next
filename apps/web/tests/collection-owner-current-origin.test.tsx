@@ -261,9 +261,7 @@ async function mounted() {
   };
 }
 function handler(node: Element, name: string): (event?: unknown) => void {
-  const key = Object.keys(node).find((value) => value.startsWith('__reactProps$'))!;
-  if (!((node as unknown as Record<string, Record<string, unknown>>)[key]?.[name]))
-    console.log('missing React handler', { tag: node.tagName, name, html: node.outerHTML.slice(0, 180), keys: Object.keys(node) });
+  const key = Object.getOwnPropertyNames(node).find((value) => value.startsWith('__reactProps$'))!;
   return (node as unknown as Record<string, Record<string, (event?: unknown) => void>>)[key]![name]!;
 }
 const settle = <T,>(call: ReturnType<typeof deferred<T>>, result: T) =>
