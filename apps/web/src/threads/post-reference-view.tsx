@@ -99,7 +99,7 @@ export function PostReferenceView({
     if (!position.isCurrent()) return;
     setReturning(position.canReturn);
     setUnavailable(result === 'unavailable');
-    transferFocus.current = false;
+    // Keep modal cleanup from stealing focus after the exact source occurrence receives it.
   }
 
   function choose(entry: PostReferenceEntry) {
@@ -158,7 +158,7 @@ export function PostReferenceView({
     setUnavailable(result === 'unavailable');
   }
 
-  const finalFocus = () => (launcher.current?.isConnected ? launcher.current : position.fallbackFocus());
+  const finalFocus = () => (position.isCurrent() && !transferFocus.current ? (launcher.current ?? false) : false);
   const list = (
     <div id={id} className="max-h-[min(70vh,32rem)] min-w-0 space-y-3 overflow-y-auto" lang={locale}>
       {selected ? (
