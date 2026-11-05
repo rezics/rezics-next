@@ -441,6 +441,19 @@ function CurrentSalesRead({
           settled();
           return;
         }
+        if (windows.transferredLoadId && windows.transferredLoadId !== result.loadId) {
+          windows.coordinates = new CreatorSalesWindows(windows.activeCursor);
+          windows.focus = undefined;
+          windows.completed = undefined;
+          windows.targetLocationKey = undefined;
+          windows.transferredLoadId = undefined;
+          windows.admitting = false;
+          windows.navigationPending = false;
+          windows.navigationFailed = false;
+          windows.retrying = false;
+          settled();
+          return;
+        }
         windows.completed = { attempt, ...result };
         windows.admitting = true;
         settled();

@@ -270,13 +270,7 @@ test('three windows return through exact Previous and failed Restart retry witho
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
-  const router = createRouter({
-    routeTree: createRootRoute(),
-    history: createMemoryHistory({ initialEntries: ['/en/creator/sales'] }),
-  });
-  let cursor: string | undefined;
-  let locationKey = 'initial-location';
-  let loadId = 'initial-load';
+  let routeLoad = 0;
   const native = (target?: string): CreatorSalesCurrentRead => {
     const value = page(A, target ?? null);
     value.page = {
@@ -287,12 +281,11 @@ test('three windows return through exact Previous and failed Restart retry witho
     };
     return value;
   };
-  let initial = native();
   let fail = false;
   let held: Promise<void> | undefined;
   let release: (() => void) | undefined;
   const requested: (string | undefined)[] = [];
-  const firstMovementRead = deferred<void>();
+  const admissions: ReturnType<typeof deferred<Awaited<ReturnType<typeof navigateCreatorSales>>>>[] = [];
   const read = spyOn(reads, 'readCreatorSalesCurrent').mockImplementation(async ({ data }) => {
     requested.push(data.cursor);
     if (held) await held;
@@ -300,35 +293,56 @@ test('three windows return through exact Previous and failed Restart retry witho
     if (fail) value.page = { kind: 'unavailable' };
     return value;
   });
-  const show = () =>
-    root.render(
-      <QueryClientProvider client={client}>
-        <RouterContextProvider router={router}>
-          <CreatorSalesCurrent
-            initial={initial}
-            loadId={loadId}
-            locationKey={locationKey}
-            cursor={cursor}
-            locale="en"
-            navigate={async (href, started) => {
-              cursor = new URL(href, 'https://site.test').searchParams.get('cursor') ?? undefined;
-              locationKey = `movement-${requested.length + 1}`;
-              started(locationKey);
-              initial = await reads.readCreatorSalesCurrent({ data: cursor ? { cursor } : {} });
-              loadId = `loaded-${requested.length}`;
-              show();
-              firstMovementRead.resolve(undefined);
-              return { locationKey, loadId };
-            }}
-          />
-        </RouterContextProvider>
-      </QueryClientProvider>,
-    );
+  const rootRoute = createRootRoute({ component: Outlet });
+  let salesRouteId = '';
+  const salesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/en/creator/sales',
+    validateSearch: (search) => ({ cursor: typeof search.cursor === 'string' ? search.cursor : undefined }),
+    loaderDeps: ({ search }) => search,
+    staleTime: 0,
+    gcTime: 0,
+    loader: async ({ deps }) => ({
+      loadId: `sales-load-${++routeLoad}`,
+      initial: await reads.readCreatorSalesCurrent({ data: deps.cursor ? { cursor: deps.cursor } : {} }),
+    }),
+    component: function SalesRoute() {
+      const routeRouter = useRouter();
+      const data = routeRouter.state.matches.at(-1)!.loaderData as {
+        initial: CreatorSalesCurrentRead;
+        loadId: string;
+      };
+      const cursor = (routeRouter.state.location.search as { cursor?: string }).cursor;
+      return (
+        <CreatorSalesCurrent
+          initial={data.initial}
+          loadId={data.loadId}
+          locationKey={routeRouter.state.location.key}
+          cursor={cursor}
+          locale="en"
+          navigate={(href, started) => {
+            const admission = deferred<Awaited<ReturnType<typeof navigateCreatorSales>>>();
+            admissions.push(admission);
+            return navigateCreatorSales(routeRouter, salesRouteId, href, started).then((result) => {
+              admission.resolve(result);
+              return result;
+            });
+          }}
+        />
+      );
+    },
+  });
+  salesRouteId = salesRoute.id;
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([salesRoute]),
+    history: createMemoryHistory({ initialEntries: ['/en/creator/sales'] }),
+  });
   const tick = () =>
     act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-  const click = async (label: string, keyboard = false) => {
+  const click = async (label: string, keyboard = false, waitForNavigation = false) => {
+    const previousAdmissions = admissions.length;
     const element = [...host.querySelectorAll<HTMLElement>('a,button')].find((item) => item.textContent === label)!;
     expect(element).toBeDefined();
     if (keyboard) element.focus();
@@ -337,22 +351,30 @@ test('three windows return through exact Previous and failed Restart retry witho
         new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: keyboard ? 0 : 1 }),
       ),
     );
+    if (waitForNavigation && admissions.length > previousAdmissions) {
+      expect(await admissions.at(-1)!.promise).toBeDefined();
+    }
     await tick();
   };
   const stay = (event: Event) => event.preventDefault();
   host.addEventListener('click', stay);
   try {
-    await act(async () => show());
+    await act(async () => {
+      await router.load();
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+    });
     await tick();
     const next = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => link.textContent === 'Older sales')!;
     expect(next.getAttribute('href')).toBe('/en/creator/sales?cursor=second%2B%2F%3D');
     await act(async () =>
       next.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ctrlKey: true })),
     );
-    expect(requested).toHaveLength(0);
-    await click('Older sales', true);
-    await firstMovementRead.promise;
-    await tick();
+    expect(requested).toEqual([undefined]);
+    await click('Older sales', true, true);
     expect(host.textContent).toContain('Previous sales');
     expect(document.activeElement?.id).toBe('creator-sales-heading');
     await click('Inspect sale');
@@ -366,27 +388,28 @@ test('three windows return through exact Previous and failed Restart retry witho
       window.dispatchEvent(new window.Event('pageshow'));
     });
     expect(host.querySelector('#creator-sale-inspection')).not.toBeNull();
-    await click('Older sales');
+    await click('Older sales', false, true);
     expect(host.querySelector('#creator-sale-inspection')).toBeNull();
     expect(host.textContent).toContain('No sales on this page');
     expect(host.textContent).toContain('Previous sales');
     fail = true;
-    await click('Previous sales');
+    await click('Previous sales', false, true);
     expect(host.textContent).toContain('Retry this window');
     fail = false;
     await click('Retry this window');
-    expect(cursor).toBe('second+/=');
+    expect(router.state.location.search).toEqual({ cursor: 'second+/=' });
     expect(host.querySelector('#creator-sale-inspection')).toBeNull();
-    await click('Previous sales');
-    expect(cursor).toBeUndefined();
+    await click('Previous sales', false, true);
+    expect(router.state.location.search).toEqual({});
     expect(host.textContent).not.toContain('Previous sales');
-    await click('Older sales');
+    await click('Older sales', false, true);
     fail = true;
-    await click('Back to latest sales');
+    await click('Back to latest sales', false, true);
     fail = false;
     await click('Retry this window');
     expect(host.textContent).not.toContain('Previous sales');
     expect(requested).toEqual([
+      undefined,
       'second+/=',
       'third+/=',
       'second+/=',
@@ -530,11 +553,14 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-  const click = async (label: string) => {
+  const click = async (label: string, keyboard = false) => {
     const element = [...host.querySelectorAll<HTMLElement>('a,button')].find((item) => item.textContent === label)!;
     expect(element).toBeDefined();
+    if (keyboard) element.focus();
     await act(async () =>
-      element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
+      element.dispatchEvent(
+        new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: keyboard ? 0 : 1 }),
+      ),
     );
     await tick();
   };
@@ -558,7 +584,14 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     await act(async () => {
       await router.invalidate({ filter: (match) => match.routeId === salesRouteId });
     });
+    await tick();
+    const replaced = router.state.matches.find((match) => match.routeId === salesRouteId)!.loaderData as {
+      initial: CreatorSalesCurrentRead;
+      loadId: string;
+    };
+    expect(replaced.loadId).not.toBe(delayedAdmission?.loadId);
     expect(requested.filter((cursor) => cursor === 'second+/=')).toHaveLength(2);
+    expect(host.textContent).toContain('Inspect sale');
     await act(async () => {
       delayedNavigation.resolve();
     });
