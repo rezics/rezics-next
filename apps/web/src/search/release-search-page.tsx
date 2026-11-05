@@ -94,7 +94,7 @@ export function ReleaseSearchPage({
         aria-busy={state.status === 'loading' || visit.busy || undefined}
         data-release-group-results
       >
-        {!parsed?.invalid.length && !page && (
+        {(!parsed?.invalid.length || parsed.invalid.every((field) => field === 'cursor')) && !page && (
           <div
             role={
               ['unavailable', 'restart', 'invalid', 'unsupported', 'denied'].includes(state.status) ? 'alert' : 'status'
