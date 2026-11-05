@@ -505,33 +505,6 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await resolveWrite(uncertainWrite, { ok: false, status: 503, message: '', failure: { status: 503 } });
     expect(writableEditor.snapshot().attempt).toBe(originalAttempt);
     expect(writableEditor.snapshot().phase).toBe('uncertain');
-    const matchingRead = readRequests.length;
-    let matchingReload!: Promise<void>;
-    await act(async () => {
-      matchingReload = writableEditor.reload();
-      await Promise.resolve();
-    });
-    await until(() => readRequests.length === matchingRead + 1, 'the matching current-profile read');
-    const matchingCurrent = originalAttempt.after;
-    await resolveRead(matchingRead, successRead(matchingCurrent));
-    await matchingReload;
-    expect([
-      writableEditor.snapshot().attempt,
-      writableEditor.snapshot().acknowledged,
-      writableEditor.snapshot().phase,
-      writableEditor.snapshot().known?.displayName,
-      writableEditor.snapshot().draft?.displayName,
-      writableEditor.snapshot().draft?.links,
-      host.textContent?.includes(m.settings_profile_save_unknown()),
-    ]).toEqual([
-      originalAttempt,
-      false,
-      'uncertain',
-      originalAttempt.after.displayName,
-      originalAttempt.after.displayName,
-      matchingCurrent.links,
-      true,
-    ]);
     const refusalRead = readRequests.length;
     const refusalReload = writableEditor.reload();
     await until(() => readRequests.length === refusalRead + 1, 'a current read refusal');
@@ -560,10 +533,9 @@ test('the connected Profile and Public activity journey shares safe reads and pe
 
     // The production avatar component owns and cancels its own upload promise on credential replacement.
     const fileInput = host.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(fileInput?.disabled).toBe(false);
     const gif = new window.File(['gif bytes'], 'selected-avatar.gif', { type: 'image/gif' });
     if (!fileInput) throw new Error('The connected profile avatar chooser was not rendered.');
-    await until(() => !fileInput.disabled, 'current avatar-upload advice after profile recovery');
-    expect(fileInput.disabled).toBe(false);
     Object.defineProperty(fileInput, 'files', { configurable: true, value: [gif] });
     await act(async () => fileInput!.dispatchEvent(new window.Event('change', { bubbles: true })));
     await until(
@@ -844,5 +816,57 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       else Reflect.deleteProperty(globalThis, key);
     }
     mock.restore();
+  }
+});
+
+test('matching Profile and public-activity reads remain visibly unconfirmed in their controls', async () => {
+  const [{ ProfileFeedback }, { ProfileEditor }, { renderToStaticMarkup }, { m }] = await Promise.all([
+    import('../src/settings/profile'),
+    import('../src/settings/profile-write'),
+    import('react-dom/server'),
+    import('../src/paraglide/messages.js'),
+  ]);
+  for (const scope of ['profile', 'views'] as const) {
+    const before = profile();
+    let current = before;
+    let reads = 0;
+    const attempts: ProfileAttempt[] = [];
+    const editor = new ProfileEditor(
+      {
+        read: async () => {
+          reads++;
+          return current;
+        },
+        save: async (attempt) => {
+          attempts.push(attempt);
+          current = attempt.after;
+          throw new Error('Response lost');
+        },
+      },
+      before,
+    );
+    editor.edit(
+      scope === 'profile'
+        ? { displayName: 'Submitted name' }
+        : { publicViews: { ...before.publicViews, reviews: false } },
+    );
+    await editor.submit(scope);
+    const original = editor.snapshot().attempt!;
+    await editor.reload();
+    const state = editor.snapshot();
+    const markup = renderToStaticMarkup(createElement(ProfileFeedback, { editor, scope }));
+    expect([reads, attempts.length, state.attempt, state.phase, state.acknowledged]).toEqual([
+      1,
+      1,
+      original,
+      'uncertain',
+      false,
+    ]);
+    expect(markup).toContain(
+      scope === 'profile' ? m.settings_profile_save_unknown() : m.settings_public_activity_unknown(),
+    );
+    expect(markup).toContain(
+      scope === 'profile' ? m.settings_profile_retry_save() : m.settings_public_activity_retry(),
+    );
   }
 });
