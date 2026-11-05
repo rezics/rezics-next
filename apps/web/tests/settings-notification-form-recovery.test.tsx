@@ -803,12 +803,15 @@ test('native failure bodies retain per-kind choices or Restore, replay unknown c
       ? { ok: false, reason: input.notifications === null ? 'conflict' : 'unavailable' }
       : { ok: true, version: 12, notifications: current, page: settingsPage(current, 12) };
   });
-  const read = spyOn(preferences, 'loadSettingsPage').mockResolvedValue({
-    signedIn: true,
-    securityHref: null,
-    preferences: { spoilerLevel: 1, suitability: 'blur', version: 11 },
-    notifications: current,
-    page: settingsPage(current, 11),
+  const read = spyOn(preferences, 'loadSettingsPage').mockImplementation(async () => {
+    const version = writes.length > 1 ? 12 : 11;
+    return {
+      signedIn: true,
+      securityHref: null,
+      preferences: { spoilerLevel: 1, suitability: 'blur', version },
+      notifications: current,
+      page: settingsPage(current, version),
+    };
   });
   const client = spyOn(kernel, 'kernelClient').mockReturnValue({} as ReturnType<typeof kernel.kernelClient>);
   const post = (fields: URLSearchParams) =>
@@ -838,13 +841,14 @@ test('native failure bodies retain per-kind choices or Restore, replay unknown c
           }),
         ),
       );
+      form = await fields(await post(form));
       if (action === 'restore') {
-        form = await fields(await post(form));
         expect(writes).toHaveLength(1);
         expect(form.get('expectedVersion')).toBe('11');
         expect(form.get('idempotencyKey')).not.toBe(writes[0]!.idempotencyKey);
       }
       refused = false;
+      form.set('notificationStep', 'send');
       expect((await post(form)).status).toBe(303);
       expect(writes[1]!.notifications).toEqual(action === 'save' ? { reply: false } : null);
       if (action === 'save') expect(writes[1]).toEqual(writes[0]);
