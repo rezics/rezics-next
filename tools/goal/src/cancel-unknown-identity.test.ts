@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { continuationOverlap } from './continuation.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -221,13 +221,13 @@ test('never-launched recovery stays open while a live descendant is in the workt
 
 test('never-launched recovery stays open when current PID evidence is unreadable', async () => {
   const h = harness('#!/usr/bin/env bun\n');
+  const hidden = join(h.settings.stateDirectory, 'hidden-pid');
   try {
     const { task, ref } = await setupFailedAttempt(h);
-    const blocked = join(h.settings.stateDirectory, 'blocked-pid-parent');
-    writeFileSync(blocked, 'not a directory');
-    h.store.updateAttempt(ref, (attempt) => {
-      attempt.logPath = join(blocked, '2.jsonl');
-    });
+    mkdirSync(hidden);
+    writeFileSync(join(hidden, 'pid'), '1');
+    chmodSync(hidden, 0);
+    symlinkSync(join(hidden, 'pid'), `${h.store.attempt(ref).logPath}.pid`);
     await expect(h.tasks.cancel(task.id)).rejects.toThrow('unknown process identity');
     await recover(h);
     expect(h.store.attempt(ref).terminationIntent).toMatchObject({
@@ -237,6 +237,11 @@ test('never-launched recovery stays open when current PID evidence is unreadable
     expect(h.store.task(task.id).state).toBe('stopped');
     expect(() => h.tasks.queueRetry(task.id)).toThrow(StaleAttemptError);
   } finally {
+    try {
+      chmodSync(hidden, 0o755);
+    } catch {
+      // The fixture directory may already have been removed.
+    }
     await h.disposeAsync();
   }
 });
