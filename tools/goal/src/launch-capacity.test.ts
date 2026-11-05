@@ -110,7 +110,9 @@ test('a cancelled wait and an opt-out leave no owned tickets', async () => {
         return [];
       },
     };
-    await expect(awaitHostCapacity(failing, directory.path, false, 'cancel')).rejects.toThrow('capacity counter failed');
+    await expect(awaitHostCapacity(failing, directory.path, false, 'cancel')).rejects.toThrow(
+      'capacity counter failed',
+    );
     expect(tickets()).toEqual([]);
 
     mkdirSync(queue, { recursive: true });

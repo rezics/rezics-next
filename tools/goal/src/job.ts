@@ -75,13 +75,7 @@ import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt, Task } from './types.ts';
 import type { PageDataRepair } from './page-data.ts';
 import type { RunningWorker } from './launch.ts';
-import {
-  applyRenderedPrompt,
-  checkWaitMs,
-  launch,
-  renderWorkerPrompt,
-  workerActivityBaseline,
-} from './launch.ts';
+import { applyRenderedPrompt, checkWaitMs, launch, renderWorkerPrompt, workerActivityBaseline } from './launch.ts';
 import { awaitHostCapacity, capacityWaiters, startsFirst } from './launch-capacity.ts';
 import { agentAdapter, agentCommands } from './agents.ts';
 import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetime.ts';

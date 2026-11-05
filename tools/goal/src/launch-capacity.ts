@@ -1,14 +1,5 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  watch,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { processIdentity, sameProcess } from './process.ts';
