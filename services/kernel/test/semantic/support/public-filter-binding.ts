@@ -17,7 +17,12 @@ export async function publicationJob(f: Fixture, source: PublicFilterSource, con
     binding: createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access),
     clock: f.config.clock,
     meaning: f.meaning,
-    writerGuard: unavailableSearchWriterPublication,
+    writerGuard: {
+      ...unavailableSearchWriterPublication,
+      async write() {
+        throw new Error('Source completion must not dispatch generation writes');
+      },
+    },
   });
   try {
     const prepared = await publication.prepare(consumer, readContext());
