@@ -1,5 +1,7 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { m } from '../src/paraglide/messages.js';
@@ -43,7 +45,36 @@ const env = {
   },
 };
 mock.module('cloudflare:workers', () => ({ env }));
-mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
+// Server functions execute on the Worker even when a mounted browser component calls them.
+const serverCall = new AsyncLocalStorage<boolean>();
+mock.module('@tanstack/react-start', async () => {
+  const story = await import('../.storybook/react-start');
+  type Implementation = (...args: never[]) => unknown;
+  return {
+    ...story,
+    createServerFn() {
+      const chain = story.createServerFn();
+      const handle = chain.handler;
+      return Object.assign(chain, {
+        handler<T extends Implementation>(handler: T): T {
+          return handle(((...args: never[]) => serverCall.run(true, () => handler(...args))) as T);
+        },
+      });
+    },
+    createIsomorphicFn() {
+      return {
+        server(server: Implementation) {
+          return {
+            client(client: Implementation) {
+              return (...args: never[]) =>
+                (serverCall.getStore() || typeof window === 'undefined' ? server : client)(...args);
+            },
+          };
+        },
+      };
+    },
+  };
+});
 mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => request,
   setResponseHeader: (name: string, value: string) => {
