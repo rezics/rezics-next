@@ -1,7 +1,7 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createContext, useContext, type ReactNode } from 'react';
-import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import { candidateContext } from '../src/subject/candidates';
@@ -171,7 +171,7 @@ test('mounted menu and production relation route gate unsupported origins before
     createRequire(require.resolve('storybook/test')).resolve('@testing-library/user-event')
   );
   const { m } = await import('../src/paraglide/messages.js');
-  const { deLocalizeUrl, getLocale, localizeUrl, setLocale } = await import('../src/paraglide/runtime.js');
+  const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
   const user = userEvent.setup({ document: window.document });
@@ -189,15 +189,15 @@ test('mounted menu and production relation route gate unsupported origins before
   const root = createRoot(host);
   const Content = createContext<ReactNode>(null);
   const rootRoute = createRootRoute({ component: () => <>{useContext(Content)}<Outlet /></> });
+  const localeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$locale', component: Outlet });
   Route.update({
     id: '/subjects/$id_/$slug_/relation-edit',
     path: '/subjects/$id/$slug/relation-edit',
-    getParentRoute: () => rootRoute,
+    getParentRoute: () => localeRoute,
   } as never);
   const router = createRouter({
-    routeTree: rootRoute.addChildren([Route]),
+    routeTree: rootRoute.addChildren([localeRoute.addChildren([Route])]),
     history: createMemoryHistory({ initialEntries: ['/'] }),
-    rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
   const menu = <EditorialEntry id={subjectId} label={label} locale="en" context={candidateContext}>{null}</EditorialEntry>;
   const renderMenu = async () =>
@@ -211,14 +211,7 @@ test('mounted menu and production relation route gate unsupported origins before
       ),
     );
   const navigate = async (href: string) => {
-    const url = new URL(href, 'https://site.test');
-    await act(async () =>
-      router.navigate({
-        to: '/subjects/$id/$slug/relation-edit',
-        params: { id: subjectId, slug: url.pathname.split('/')[4]! },
-        search: Object.fromEntries(url.searchParams.entries()),
-      } as never),
-    );
+    await act(async () => router.navigate({ href }));
   };
   const openEditor = async () => {
     await act(async () => user.click(within(host).getByRole('button', { name: m.relation_open() })));
