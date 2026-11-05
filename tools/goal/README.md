@@ -2571,15 +2571,16 @@ Processes hand over on the new `main:tools/goal`. If
 `tools/goal/package.json` or its lockfile changed, cp-sync reinstalls in the main checkout. Each sync appends the
 previous and new main, stabilize and dev heads to `.temp/goal/cp-sync-history.log`.
 
-A release takes the checks, publication, the restart and three minutes. There is no observation window before
-publication: cp-sync reads one instant of live-worker width and landing requests, then publishes. After the restart,
-which checks each resident unit started after publication, it observes four readings a minute apart for three minutes
-(`policy.cpSync.residentSamples` and `residentSampleMs`). It rolls back only on a real regression: live workers fell by
-more than half, or landings that were running before publication merged none in that window. A quiet window in which no
-landing was running never rolls back. Trains and attempt supervisors started from the previous `tools/goal` notice the
-published revision: a stale train lets its running command finish, stops at the next command boundary, releases its
-lanes and exits, and its successor runs the published code. The resident host finishes its active requests on SIGTERM
-before systemd starts the new one, and workers keep their scopes. No process is killed by hand.
+A release runs the checks, publishes, restarts the resident units and then observes for three minutes. There is no
+observation window before publication: cp-sync reads one instant of live-worker width and of undelivered landing
+requests on tasks in the landing state, then publishes. After the restart it verifies that each resident unit started
+after publication, then takes four readings a minute apart (`policy.cpSync.residentSamples` and
+`policy.cpSync.residentSampleMs`). It rolls back only on a real regression: live workers fell by more than half, or no
+landing merged in that window while landings already in flight before publication were requested. A quiet window with
+no landing in flight never rolls back. A stale train started from the previous `tools/goal` lets its running command
+finish, stops at the next command boundary, releases its lanes and exits; its successor runs the published code. The
+resident host, which runs attempt supervision, is restarted by systemd: it finishes its active requests on SIGTERM, and
+workers keep their scopes. No process is killed by hand.
 
 cp-sync refuses when the main checkout has uncommitted or untracked files under the synced paths, when `main`
 moved, when stabilize changed control-plane paths that dev lacks, or while another run holds `.temp/goal/cp-sync.lock`.
@@ -2789,8 +2790,8 @@ budget; both bounds are configurable under `policy.maintenance` and applied when
 
 Decision: cp-sync takes one instant reading before publication and a three-minute post-publication window of four
 readings. Only failed host or verifier readiness, a unit whose process did not start after publication, live workers
-falling by more than half, or no landing merged in the window while landings already running before publication were
-requested restores the previous tree in a forward commit. Lower counts within half and quiet windows are normal.
+falling by more than half, or no landing merged in the window while landings already in flight before publication
+restores the previous tree in a forward commit. Lower counts within half and quiet windows are normal.
 Decision: after publication a stale train lets its running control-plane command finish and hands off at the next command
 boundary instead of cancelling it, so the release does not restart a running check; the successor runs the published code.
 After publishing, a missing environment file or resident code unit triggers `goal service install` from the newly published

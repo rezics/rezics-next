@@ -552,7 +552,7 @@ export async function restartResident(
 }
 
 /**
- * A release rolls back only on a real signal: live workers fell by more than half, or landings that were running before
+ * A release rolls back only on a real signal: live workers fell by more than half, or landings already in flight before
  * publication merged none in the window. Lower counts within half, and quiet windows, are normal.
  */
 export function residentRegression(before: ResidentHealth, after: ResidentHealth): boolean {
