@@ -149,32 +149,6 @@ navigation replacement retire the visit.
 
 Decision: a missing configured native origin remains unavailable, including development; never present fixture data as a delivered inventory.
 
-### Cost: own-history consumer read
-
-- Touches: one session preparation and one mounted own-history GET; one response validation and source hash.
-- Bound: one page with at most twenty ordinary rows and one exact selected row; no target or identity hydration,
-  page search, total calculation or row accumulation. The wire validator does not establish a native materialization
-  or serialization byte bound.
-- Growth check: focused consumer cases pin exact endpoint/operands, sparse and preparing results, selection,
-  private projection and safe advice. Native independent-population growth remains controller/producer work.
-
-The localized route prepares each replacing private visit from closed cursor/report operands. Next, selection and
-restart commit browser history; refresh and retry prepare the same address again. The retired visit cannot publish
-alongside a route loader. Selected status and its validated local return use these same operands, with one keyboard
-focus ticket that retires on movement, navigation or browser incarnation replacement. No private pages are cached in
-this handoff. Native execution remains controller-owned.
-
-`reporter-status-model.ts` narrows the installed root response's own-submission branch for Board, Thread, Post,
-Subject, Space and Realm. It preserves the submitted reference and disposition independently of target availability;
-only history's admitted native advice can navigate to a target.
-
-Decision: an own-history visit retains one replacement page and exact selection; failed continuation retries its original operands, expiry restarts explicitly, and locale or native source replacement retires the visit.
-
-Decision: My reports opens at `/moderation/reports`; its status return uses a fixed local destination carrying the exact cursor and selected report ID.
-
-`reporter-history/journey.ts` owns prepared browser admission and page replacement through the shared private-reader lifetime; the localized Reports route mounts it through `view.tsx`.
-
-Decision: served history next/select/restart commit closed route operands; retry/refresh reload the same address. The loader alone publishes each new private visit, and sparse frontiers retain continuation without claiming completed emptiness. Invalid status return operands recover to My reports.
 
 Decision: My reports retains up to eight admitted predecessor coordinates, current and one staged target per eligible
 Router/QueryClient visit. Coordinates contain only opaque cursor and report selection operands; there is no cursor
@@ -185,3 +159,30 @@ The fixed exact status return preserves coordinates, never the old reader. Brows
 independent navigation replacement clears them. Existing localized Previous and First page vocabulary is reused.
 Cost remains one replacing page (twenty ordinary rows plus one selected row), no page cache, replay or extra read;
 coordinate retention adds at most ten operand records, whose native opaque cursors have no declared byte bound.
+
+### Cost: own-history consumer read
+
+- Touches: one session preparation and one mounted own-history GET; one response validation and source hash.
+- Bound: one page with at most twenty ordinary rows and one exact selected row; no target or identity hydration,
+  page search, total calculation or row accumulation. The wire validator does not establish a native materialization
+  or serialization byte bound.
+- Growth check: focused consumer cases pin exact endpoint/operands, sparse and preparing results, selection,
+  private projection and safe advice. Native independent-population growth remains controller/producer work.
+
+The localized route prepares each replacing private visit from closed cursor/report operands. Continue, Previous, First, selection and
+restart commit browser history; refresh and retry prepare the same address again. The retired visit cannot publish
+alongside a route loader. Selected status and its validated local return use these same operands, with one keyboard
+focus ticket that retires on movement, navigation or browser incarnation replacement. No private pages are cached in
+this handoff. Native execution remains controller-owned.
+
+`reporter-status-model.ts` narrows the installed root response's own-submission branch for Board, Thread, Post,
+Subject, Space and Realm. It preserves the submitted reference and disposition independently of target availability;
+only history's admitted native advice can navigate to a target.
+
+Decision: an own-history visit retains one replacement page and exact selection; failed movement retries its original operands, expiry restarts explicitly, and locale or native source replacement retires the visit.
+
+Decision: My reports opens at `/moderation/reports`; its status return uses a fixed local destination carrying the exact cursor and selected report ID.
+
+`reporter-history/journey.ts` owns prepared browser admission and page replacement through the shared private-reader lifetime; the localized Reports route mounts it through `view.tsx`.
+
+Decision: served history next/previous/first/select/restart commit closed route operands; retry/refresh reload the same address. The loader alone publishes each new private visit, and sparse frontiers retain continuation without claiming completed emptiness. Invalid status return operands recover to My reports.

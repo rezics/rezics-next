@@ -192,3 +192,28 @@ test('three admitted windows reread exact predecessors, preserve a failed target
   expect(s.calls.at(-1)).toEqual({ reportId: '33333333-3333-8333-8333-345633333333' });
   s.stop();
 });
+
+test('only ready admissions consume predecessors, capped at eight exact windows', async () => {
+  const s = await setup();
+  if (s.loaded.result.state !== 'loaded') throw new Error('fixture');
+  const loaded = s.loaded.result;
+  for (let index = 0; index < 10; index++) {
+    s.respond({ ...s.loaded, result: { ...loaded, page: { ...loaded.page, nextCursor: `window-${index}` } } });
+    await s.journey.next();
+    expect(s.journey.snapshot().state).toBe('loaded');
+  }
+  s.respond({ ...s.loaded, result: { ...loaded, page: { ...loaded.page, state: 'preparing', nextCursor: null } } });
+  await s.journey.previous();
+  expect(s.journey.snapshot().state).toBe('loaded');
+  expect(s.journey.hasPrevious()).toBe(true);
+  s.respond(s.loaded);
+  await s.journey.refresh();
+  expect(s.journey.snapshot().state).toBe('loaded');
+  for (let index = 0; index < 7; index++) {
+    await s.journey.previous();
+    expect(s.journey.snapshot().state).toBe('loaded');
+  }
+  expect(s.journey.hasPrevious()).toBe(false);
+  expect(s.calls.at(-1)).toEqual({ cursor: 'window-0', reportId: id });
+  s.stop();
+});

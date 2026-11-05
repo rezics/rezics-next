@@ -53,22 +53,30 @@ function createRouteCoordinates(cache: QueryClient) {
   let locale: string | undefined;
   let source: string | undefined;
   let router: object | undefined;
+  let cancelFocus = () => {};
   let status: string | undefined;
   let returning = false;
   const clear = () => {
+    cancelFocus();
     coordinates.clear();
     source = undefined;
     status = undefined;
     returning = false;
   };
   // Reuse the installed browser observation; no independent session observer.
-  browser.subscribeCache(() => {
+  browser.subscribeCache((event) => {
     const next = browser.getSnapshot();
-    if (next !== observation) clear();
+    const admission = event.query.queryKey[0] === 'exposure' && event.query.queryKey[1] === 'viewer';
+    const replaced = event.type === 'removed' ||
+      (event.type === 'updated' && ['success', 'error', 'setState'].includes(event.action.type));
+    if (next !== observation || (admission && replaced)) clear();
     observation = next;
   });
+  observation = browser.getSnapshot();
   return {
     ...coordinates,
+    cancelFocus: (cancel: () => void) => { cancelFocus = cancel; },
+    isRouter: (candidate: object) => router === candidate,
     clear,
     eligible(nextLocale: string, nextSource?: string) {
       if (locale !== nextLocale || (source !== undefined && nextSource !== undefined && source !== nextSource)) clear();

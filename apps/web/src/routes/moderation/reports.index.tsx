@@ -54,8 +54,10 @@ function ReporterHistoryRoute() {
   const focus = reporterHistoryFocusFor(router);
   const { queryClient } = Route.useRouteContext();
   const coordinates = routeHistoryCoordinates(queryClient);
+  coordinates.cancelFocus(focus.cancel);
   if (coordinates.bind(router)) {
     router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+      if (!coordinates.isRouter(router)) return;
       coordinates.navigating(toLocation.pathname, toLocation.pathname.replace(/\/$/, '') === '/moderation/reports'
         ? reporterHistoryQuery(toLocation.search) : null);
     });
@@ -102,7 +104,7 @@ function ReporterHistoryRoute() {
         };
       },
     }),
-    [router, initial.navigationKey, initial.generation, focus],
+    [router, initial.navigationKey, initial.generation, focus, coordinates],
   );
   return (
     <ReporterHistoryCurrent
