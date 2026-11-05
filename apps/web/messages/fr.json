@@ -5305,6 +5305,8 @@
   "library_my_logs_retry": "Réessayer",
   "library_my_logs_restarted": "La page a changé. Vos journaux publiés les plus récents sont affichés.",
   "library_my_logs_newest": "Journaux publiés les plus récents",
+  "library_my_logs_next": "Suivant",
+  "library_my_logs_previous": "Précédent",
   "library_my_logs_no_visible": "Aucun journal publié visible sur cette page.",
   "library_my_logs_read": "Lire le journal de {title}, publié le {date}",
   "library_my_logs_full_note": "Note complète",

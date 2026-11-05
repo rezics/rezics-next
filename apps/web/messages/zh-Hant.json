@@ -5308,6 +5308,8 @@
   "library_my_logs_retry": "重試",
   "library_my_logs_restarted": "頁面已變更，現顯示最新發布的閱讀日誌。",
   "library_my_logs_newest": "最新發布的閱讀日誌",
+  "library_my_logs_next": "下一頁",
+  "library_my_logs_previous": "上一頁",
   "library_my_logs_no_visible": "此頁沒有可顯示的已發布閱讀日誌。",
   "library_my_logs_read": "閱讀《{title}》的日誌，發布於 {date}",
   "library_my_logs_full_note": "完整筆記",

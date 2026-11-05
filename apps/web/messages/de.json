@@ -5305,6 +5305,8 @@
   "library_my_logs_retry": "Erneut versuchen",
   "library_my_logs_restarted": "Die Seite hat sich geändert. Deine neuesten veröffentlichten Leseeinträge werden angezeigt.",
   "library_my_logs_newest": "Neueste veröffentlichte Leseeinträge",
+  "library_my_logs_next": "Weiter",
+  "library_my_logs_previous": "Zurück",
   "library_my_logs_no_visible": "Keine sichtbaren veröffentlichten Leseeinträge auf dieser Seite.",
   "library_my_logs_read": "Leseeintrag zu {title} lesen, veröffentlicht am {date}",
   "library_my_logs_full_note": "Vollständige Notiz",

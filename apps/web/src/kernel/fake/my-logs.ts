@@ -92,6 +92,16 @@ export const routes: FakeRoute[] = [
         },
       ];
       if (scenario === 'unknown') for (const item of logs) item.subject = null;
+      if (scenario === 'ready') {
+        const cursor = query.get('cursor');
+        const page = cursor === 'story-middle-page' ? 1 : cursor === 'story-oldest-page' ? 2 : 0;
+        return {
+          status: 200,
+          publishedLogs: [logs[page]!],
+          next: page === 0 ? 'story-middle-page' : page === 1 ? 'story-oldest-page' : null,
+          headers,
+        };
+      }
       const older = query.get('cursor') === 'story-older-page';
       return {
         status: 200,
@@ -105,7 +115,8 @@ export const routes: FakeRoute[] = [
     method: 'GET',
     path: /^\/v1\/publishedLogs\/([^/]+)$/,
     story: ({ match }) => {
-      if ((!scenario?.startsWith('public-') && scenario !== 'long') || match?.[1] !== firstLog().id) return undefined;
+      if ((!scenario?.startsWith('public-') && scenario !== 'long' && scenario !== 'ready') || match?.[1] !== firstLog().id)
+        return undefined;
       detailReads += 1;
       detailId = match[1];
       const headers = { 'cache-control': 'private, no-store' };

@@ -272,6 +272,20 @@ history adds no list, preview, navigation or pins request. Layout changes preser
 preview budget. The current `/library/collections` response does not yet publish native saved-query capability
 evidence; Web consumes an optional explicit `savedQueryCapability` value and never infers support from rows.
 
+## My Logs cursor windows
+
+Decision: My Logs keeps up to eight admitted predecessor coordinates, the current coordinate and one staged target
+in the named `/library/logs` QueryClient visit. Every cursor passes `myLogsSearch` and stays within 4096 JavaScript
+code units. Only the matching current private read admits movement; a failed Previous or Newest retries its exact
+staged cursor without changing accepted coordinates. A fresh direct later-page visit has no Previous. Newest reads
+without a cursor. The visit stores no log rows and is retained across ordinary leaf remounts, then retired on reader,
+viewer observation, credential, operation admission, locale or route disposal.
+
+The page keeps only the current FULL native page of at most 100 rows. It adds no prefetch, refill, history read,
+duplicate Subject/session data or mutation command. Native stale-cursor recovery retains its single bounded first-page
+read; only its admitted restarted result resets accepted coordinates to the first position and keeps the restart
+notice. Unavailable, denied, preparing, signed-out and invalid-address states do not admit a window.
+
 # Progress return navigation
 
 Decision: keep private Progress return context in router history state, re-read the native index before restoring row focus, and offer first-page/current-work recovery when the original address no longer admits the selected session; an explicit new session keeps its filters and removes only the Progress cursor.
