@@ -2,11 +2,7 @@
  * Callers supply a finite positive byte allowance and their existing whole-call
  * signal. This utility neither starts nor renews a deadline.
  */
-export async function readJsonBounded(
-  response: Response,
-  maxBytes: number,
-  signal: AbortSignal,
-): Promise<unknown> {
+export async function readJsonBounded(response: Response, maxBytes: number, signal: AbortSignal): Promise<unknown> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error('Private JSON response unavailable');
 
