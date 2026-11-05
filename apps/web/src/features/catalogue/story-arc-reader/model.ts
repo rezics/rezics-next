@@ -54,7 +54,9 @@ export function arcStreams(release: Definitions, type: string, locale: string, a
     .flatMap(([property, field]): ArcStream[] => {
       const relation = field.relation;
       if (!relation || field.datatype !== 'wikibase-item') return [];
-      const forward = definition.properties.includes(property);
+      // CreativeWork's inherited arc slot is a work's membership list; an arc is only ever a member.
+      const forward =
+        definition.properties.includes(property) && !(type === storyArcType && property === storyArcProperty);
       if (arc) {
         if (
           property !== 'schema:character' ||
