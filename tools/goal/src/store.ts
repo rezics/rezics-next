@@ -587,7 +587,8 @@ export class WorkerStore implements AttemptFence {
     taskId?: string,
     attempt?: number,
   ): number {
-    const states = includeWaiting ? "attempt_state IN ('running', 'waiting')" : "attempt_state='running'";
+    const liveStates = "attempt_state IN ('running', 'waiting')";
+    const states = includeWaiting ? liveStates : `${liveStates} AND attempt_state='running'`;
     const lane = urgent === undefined ? '' : ` AND urgent=${urgent ? 1 : 0}`;
     let excludeCurrent = '';
     let bindings: (string | number)[] = [];
@@ -596,7 +597,9 @@ export class WorkerStore implements AttemptFence {
       bindings = [taskId, attempt];
     }
     const row = this.db
-      .query(`SELECT count(*) AS count FROM worker_current_attempts WHERE ${states}${lane}${excludeCurrent}`)
+      .query(
+        `SELECT count(*) AS count FROM worker_current_attempts INDEXED BY worker_current_attempts_state WHERE ${states}${lane}${excludeCurrent}`,
+      )
       .get(...bindings) as { count: number };
     return row.count;
   }

@@ -181,14 +181,26 @@ test('Admission with critical waiters cannot leave admissible capacity idle or i
     writeFileSync(join(directory, 'capacity.json'), JSON.stringify({ maxWorkers: 2, minAvailableMiB: 0 }));
     const insertTask = db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
     const insertAttempt = db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)');
+    const seedCurrent = (sequence: number, id: string, state: string) => {
+      insertTask.run(
+        id,
+        sequence,
+        1,
+        JSON.stringify({ id, currentAttempt: 1, state: state === 'running' ? 'running' : 'ready' }),
+      );
+      insertAttempt.run(id, 1, JSON.stringify({ taskId: id, attempt: 1, state }));
+    };
+    const setState = (id: string, state: 'running' | 'exited') =>
+      store.updateAttempt({ taskId: id, attempt: 1 }, (attempt) => {
+        attempt.state = state;
+      });
     for (const [sequence, id, state] of [
       [1, 'busy-one', 'running'],
       [2, 'busy-two', 'running'],
       [3, 'critical', 'pending'],
       [4, 'normal', 'pending'],
     ] as const) {
-      insertTask.run(id, sequence, 1, '{}');
-      insertAttempt.run(id, 1, JSON.stringify({ state }));
+      seedCurrent(sequence, id, state);
     }
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
     const waitFor = async (condition: () => boolean) => {
@@ -204,11 +216,7 @@ test('Admission with critical waiters cannot leave admissible capacity idle or i
     const normal = awaitHostCapacity(store, directory, false, 'normal', 1, { pollIntervalMs: 5 });
     await waitFor(() => readdirSync(queue).filter((name) => !name.endsWith('.admitted')).length === 2);
 
-    db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-      JSON.stringify({ state: 'exited' }),
-      'busy-one',
-      1,
-    );
+    setState('busy-one', 'exited');
     releaseCritical = await critical;
     await waitFor(() => readdirSync(queue).some((name) => name.includes('-critical.admitted')));
     expect(store.runningAttemptsCount() + readdirSync(queue).filter((name) => name.endsWith('.admitted')).length).toBe(
@@ -217,42 +225,22 @@ test('Admission with critical waiters cannot leave admissible capacity idle or i
     expect(readdirSync(queue).some((name) => name.includes('-normal.admitted'))).toBe(false);
 
     // The reservation remains attached to this critical incarnation through preparation and launch.
-    db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-      JSON.stringify({ state: 'running' }),
-      'critical',
-      1,
-    );
+    setState('critical', 'running');
     await waitFor(() => !readdirSync(queue).some((name) => name.includes('-critical.admitted')));
     expect(store.runningAttemptsCount()).toBe(2);
 
     // Once that incarnation exits, the older normal waiter takes the newly admissible place.
-    db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-      JSON.stringify({ state: 'exited' }),
-      'critical',
-      1,
-    );
+    setState('critical', 'exited');
     releaseNormal = await normal;
     expect(readdirSync(queue).some((name) => name.includes('-normal.admitted'))).toBe(true);
     expect(store.runningAttemptsCount() + readdirSync(queue).filter((name) => name.endsWith('.admitted')).length).toBe(
       2,
     );
 
-    db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-      JSON.stringify({ state: 'running' }),
-      'normal',
-      1,
-    );
+    setState('normal', 'running');
     await waitFor(() => !readdirSync(queue).some((name) => name.includes('-normal.admitted')));
-    db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-      JSON.stringify({ state: 'exited' }),
-      'normal',
-      1,
-    );
-    db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-      JSON.stringify({ state: 'exited' }),
-      'busy-two',
-      1,
-    );
+    setState('normal', 'exited');
+    setState('busy-two', 'exited');
 
     // A normal waiter older than the fixed critical head start must overtake a later critical arrival.
     const agedDirectory = join(directory, 'aged');
@@ -263,8 +251,7 @@ test('Admission with critical waiters cannot leave admissible capacity idle or i
       [6, 'aged-normal', 'pending'],
       [7, 'aged-critical', 'pending'],
     ] as const) {
-      insertTask.run(id, sequence, 1, '{}');
-      insertAttempt.run(id, 1, JSON.stringify({ state }));
+      seedCurrent(sequence, id, state);
     }
     const agedNormal = awaitHostCapacity(store, agedDirectory, false, 'aged-normal', 1, {
       pollIntervalMs: 5,
@@ -274,25 +261,13 @@ test('Admission with critical waiters cannot leave admissible capacity idle or i
     await waitFor(() => readdirSync(agedQueue).filter((name) => !name.endsWith('.admitted')).length === 1);
     const agedCritical = awaitHostCapacity(store, agedDirectory, true, 'aged-critical', 1, { pollIntervalMs: 5 });
     await waitFor(() => readdirSync(agedQueue).filter((name) => !name.endsWith('.admitted')).length === 2);
-    db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-      JSON.stringify({ state: 'exited' }),
-      'aged-busy',
-      1,
-    );
+    setState('aged-busy', 'exited');
     releaseAgedNormal = await agedNormal;
     await waitFor(() => readdirSync(agedQueue).some((name) => name.includes('-aged-normal.admitted')));
     expect(readdirSync(agedQueue).some((name) => name.includes('-aged-critical.admitted'))).toBe(false);
-    db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-      JSON.stringify({ state: 'running' }),
-      'aged-normal',
-      1,
-    );
+    setState('aged-normal', 'running');
     await waitFor(() => !readdirSync(agedQueue).some((name) => name.includes('-aged-normal.admitted')));
-    db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-      JSON.stringify({ state: 'exited' }),
-      'aged-normal',
-      1,
-    );
+    setState('aged-normal', 'exited');
     releaseAgedCritical = await agedCritical;
     await waitFor(() => readdirSync(agedQueue).some((name) => name.includes('-aged-critical.admitted')));
   } finally {
