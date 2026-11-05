@@ -539,9 +539,9 @@ export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefi
   const selected = !new URL(location.publicHref, 'https://rezics.local').searchParams.has('managedAccount');
   const owner = useManagedSessionReader(session.subject, session.subject, session.csrfToken);
   const [visited, setVisited] = useState<ManagedSessionReader | null>(() => (selected ? owner : null));
-  if (selected && visited !== owner) setVisited(owner);
   if (!owner.isCurrent()) return null;
   if (session.state !== 'signed-in' || !session.subject) return null;
+  if (selected && visited !== owner) setVisited(owner);
   // A direct detail URL does not fetch the directory to guess admission. Once visited, keep its bounded reader.
   if (visited !== owner) return null;
   return (
