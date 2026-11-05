@@ -86,7 +86,7 @@ test('review markup keeps long names readable, identifies its region, and lays o
       review,
       subjectName,
       alreadyAssigned: false,
-      applyAction: createElement('button', null, 'Apply'),
+      applyAction: createElement('button', { 'data-subject-label-review-apply': true }, 'Apply'),
       onEdit: () => {},
       onDiscard: () => {},
     }),
