@@ -1,5 +1,9 @@
 import { candidateContext } from '../subject/candidates';
-import { mangaPublicCorrectionHref, mangaGlobalVisitHref, mangaObservedOrigin } from '../features/catalogue/manga-public-visit';
+import {
+  mangaPublicCorrectionHref,
+  mangaGlobalVisitHref,
+  mangaObservedOrigin,
+} from '../features/catalogue/manga-public-visit';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { pickText } from '@rezics/composition';
@@ -74,10 +78,21 @@ function CorrectionFamily({
   const read = fixture.reads.get(mangaVolumeId)!;
   const href = subjectHref({ id: mangaVolumeId, label: pickText(read.subject.labels, locale).text }, locale).href;
   const publicHref = origin === 'realm' ? `${href}?realm=00000000-0000-4000-8000-00000000d199` : href;
-  const path = origin === 'legacy' ? `${href}/manga` : origin === 'fresh' ? mangaGlobalVisitHref(mangaVolumeId, locale, href) :
-    mangaPublicCorrectionHref(`${href}/manga`, mangaObservedOrigin({ subject: mangaVolumeId, type: 'schema:PublicationVolume',
-      context: origin === 'selected' ? '00000000-0000-4000-8000-00000000d198' : candidateContext,
-      ...(origin === 'realm' ? { realm: '00000000-0000-4000-8000-00000000d199' } : {}), returnHref: publicHref }));
+  const path =
+    origin === 'legacy'
+      ? `${href}/manga`
+      : origin === 'fresh'
+        ? mangaGlobalVisitHref(mangaVolumeId, locale, href)
+        : mangaPublicCorrectionHref(
+            `${href}/manga`,
+            mangaObservedOrigin({
+              subject: mangaVolumeId,
+              type: 'schema:PublicationVolume',
+              context: origin === 'selected' ? '00000000-0000-4000-8000-00000000d198' : candidateContext,
+              ...(origin === 'realm' ? { realm: '00000000-0000-4000-8000-00000000d199' } : {}),
+              returnHref: publicHref,
+            }),
+          );
   return (
     <div dir={rtl ? 'rtl' : undefined}>
       <PageStory visitor={signedOut ? 'Signed Out' : 'Signed In'} path={path} />
@@ -343,13 +358,16 @@ export const DeliberateReload: Story = {
 };
 
 export const ObservedGlobal: Story = { args: { origin: 'global' } };
-export const SelectedContext: Story = { args: { origin: 'selected' }, play: async ({ canvasElement }) => {
-  const canvas = within(canvasElement);
-  await expect(await canvas.findByRole('alert')).toHaveTextContent(m.manga_origin_unsupported({}, options()));
-  const choice = canvas.getByRole('link', { name: m.manga_origin_global({}, options()) });
-  choice.focus();
-  await expect(choice).toHaveFocus();
-  await expect(canvas.queryByRole('textbox')).toBeNull();
-} };
+export const SelectedContext: Story = {
+  args: { origin: 'selected' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.manga_origin_unsupported({}, options()));
+    const choice = canvas.getByRole('link', { name: m.manga_origin_global({}, options()) });
+    choice.focus();
+    await expect(choice).toHaveFocus();
+    await expect(canvas.queryByRole('textbox')).toBeNull();
+  },
+};
 export const RetainedRealm: Story = { args: { origin: 'realm' } };
 export const FreshGlobal: Story = { args: { origin: 'fresh' } };

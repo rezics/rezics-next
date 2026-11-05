@@ -164,7 +164,12 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
   );
 }
 
-export type MangaProfileSessionProps = { id?: string; locale: string; visit?: MangaPublicVisit | undefined; address?: string | undefined };
+export type MangaProfileSessionProps = {
+  id?: string;
+  locale: string;
+  visit?: MangaPublicVisit | undefined;
+  address?: string | undefined;
+};
 function MangaProfileSessionGuard(props: MangaProfileSessionProps) {
   if (props.id && (props.visit?.kind === 'invalid' || mangaUnsupportedVisit(props.visit)))
     return <MangaPublicVisitNotice id={props.id} locale={props.locale} visit={props.visit} />;
