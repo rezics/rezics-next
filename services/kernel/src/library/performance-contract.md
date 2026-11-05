@@ -1,3 +1,40 @@
+# Private physical-copy loans
+
+Decision: retain the existing loan journey and owner, consume immutable local SQL plans through the existing
+command work association, and preserve one absolute preparation deadline; extend the mounted journey suite.
+
+`loan-operation-bounds.ts` owns the literal copy/loan lock, copy locator, unique open-loan probe, generation
+read/advance and loan insert/update declarations. Each plan freezes its positional scalar binds before dispatch
+and uses public nine-axis arithmetic. `loan-commands.ts` executes those same operands on its original client.
+An existing command association consumes each declaration before SQL and retains its dispatched charge on
+failure. Ordinary calls keep their native runner and connection ownership. No plan supplies authorization,
+receipt evidence, an additional allowance or an independent transaction.
+
+Point projections use UUID text and int32 generation widths. Input bytes include the original escaped private
+name and original dates, revision, command time and transaction ID. The open-copy partial unique index proves
+at most one row independently of LIMIT; its point and LIMIT node are both counted. Local write bounds include
+heap and index work: fresh loans reach primary/open-copy/due/owner indexes, extension retains those indexes,
+and return replaces open-copy/due with history. Generation upsert includes its conflicting old tuple and new
+tuple. These tables have no foreign keys, deferred constraints or mutation triggers. Misses, negative probes
+and failed CAS retain their declarations. These SQL leaves construct no identity witness or Search request;
+their ninth axis is explicitly zero when translated into the existing eight-axis command accounting port.
+
+These local leaves are **not complete enclosing operation plans**. Account/action/group admission, original
+and current source/profile evidence, both Person mapping reads and summary/disclosure, copy/loan projections,
+command receipt/replay, partition/floor/epoch, shelf effects, History/outbox and worker controls, transaction
+controls/retries/cleanup and mounted response serialization still need composition at their existing owners.
+Person coalescing does not reduce raw loan/copy projection work. In particular, the current open-page
+`COALESCE(due_on, …)` continuation filter cannot derive examined rows from LIMIT, and joined copy vocabulary
+columns do not have schema width limits. A finite result page alone does not settle either derivation.
+
+The retained limits are open 100/history 50/presentation 100, generation 2147483647 and a generation-bound
+15-minute cursor. Listing captures the original cursor before its first await, reads generation before decoding,
+and rejects changed generations. Due dates remain ascending/nulls last for open loans and return dates descending
+for history, with loan ID breaking ties. Command preparation, including retries, shares the original native
+deadline. Current authorization still precedes receipt replay; a replayed return receipt differs from a fresh
+return against an already returned loan. Copy-before-loan locking, private-name fidelity, exact revision CAS,
+open uniqueness, disposal conflicts and retained history remain with the existing command owner.
+
 # Native Entry operation bounds
 
 Decision: derive native Entry work as immutable SQL leaves composed by the existing command owner; retain

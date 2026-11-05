@@ -1,13 +1,18 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { authoritativeTimeValue, type CommandAttempt, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  commandAttemptDeadline,
+  type CommandAttempt,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { classifyUnavailability, AccessUnavailableError } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import { type AccountActor, type Access, type Actor } from '../request/access.ts';
-import { deadlineFor } from '../request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -39,9 +44,20 @@ import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import type { LibraryProfileSource } from './profile-source.ts';
 
-const MAX_OPEN_PAGE = 100;
-const MAX_HISTORY_PAGE = 50;
-const MAX_PRESENTATION_ROWS = MAX_OPEN_PAGE;
+import {
+  executeLoanNative,
+  loanAdvanceGenerationPlan,
+  loanCopyLocatorPlan,
+  loanCopyLockPlan,
+  loanGenerationPlan,
+  loanInsertPlan,
+  loanLockPlan,
+  loanOpenProbePlan,
+  loanUpdatePlan,
+  MAX_HISTORY_LOAN_PAGE,
+  MAX_LOAN_PRESENTATION_ROWS,
+  MAX_OPEN_LOAN_PAGE,
+} from './loan-operation-bounds.ts';
 const UNDATED_SORT_DAY = '9999-12-31';
 const LOAN_EVENT = 'com.rezics.library.copy-loan.changed.v1';
 const SOFT_SEMANTIC_FAILURES = new Set([
@@ -167,11 +183,7 @@ async function readCopy(client: Pick<PoolClient, 'query'>, route: number, accoun
 }
 
 async function lockCopy(tx: CommandTransaction, route: number, accountId: string, copyId: string) {
-  await tx.query('SELECT copy_id FROM library.copy WHERE route=$1 AND account_id=$2 AND copy_id=$3 FOR UPDATE', [
-    route,
-    accountId,
-    copyId,
-  ]);
+  await executeLoanNative(tx, loanCopyLockPlan({ route, accountId, id: copyId }));
   return readCopy(tx, route, accountId, copyId);
 }
 
@@ -256,13 +268,7 @@ function cursorAfter(tokens: KeyRing, binding: CursorBinding, token: string, gen
 }
 
 async function bumpGeneration(tx: CommandTransaction, route: number, accountId: string): Promise<number> {
-  const result = await tx.query<{ generation: number }>(
-    `INSERT INTO library.copy_loan_generation(route,account_id,generation) VALUES($1,$2,2)
-     ON CONFLICT (route,account_id) DO UPDATE SET generation=library.copy_loan_generation.generation+1
-       WHERE library.copy_loan_generation.generation < 2147483647
-     RETURNING generation`,
-    [route, accountId],
-  );
+  const result = await executeLoanNative(tx, loanAdvanceGenerationPlan({ route, accountId }));
   if (!result.rows[0]) throw new LoanConflictError('revision_exhausted');
   return Number(result.rows[0].generation);
 }
@@ -288,19 +294,12 @@ async function readLoan(tx: Pick<PoolClient, 'query'>, route: number, accountId:
 }
 
 async function lockLoan(tx: CommandTransaction, route: number, accountId: string, loanId: string): Promise<Loan> {
-  const initial = await tx.query<{ copyId: string }>(
-    'SELECT copy_id::text AS "copyId" FROM library.copy_loan WHERE route=$1 AND account_id=$2 AND loan_id=$3',
-    [route, accountId, loanId],
-  );
+  const initial = await executeLoanNative(tx, loanCopyLocatorPlan({ route, accountId, id: loanId }));
   const copyId = initial.rows[0]?.copyId;
   if (!copyId) throw new LoanNotFoundError();
   // Use the same lock order as copy disposal and loan creation: exact copy, then loan.
   await lockCopy(tx, route, accountId, copyId);
-  await tx.query('SELECT loan_id FROM library.copy_loan WHERE route=$1 AND account_id=$2 AND loan_id=$3 FOR UPDATE', [
-    route,
-    accountId,
-    loanId,
-  ]);
+  await executeLoanNative(tx, loanLockPlan({ route, accountId, id: loanId }));
   const row = await readLoan(tx, route, accountId, loanId);
   if (!row) throw new LoanNotFoundError();
   if (
@@ -320,22 +319,7 @@ async function updateLoan(
   next: Loan,
   command: { transactionId: string; time: string },
 ): Promise<void> {
-  const result = await tx.query(
-    `UPDATE library.copy_loan
-        SET due_on=$4, returned_on=$5, revision=$6, updated_at=$7, transaction_id=$8
-      WHERE route=$1 AND account_id=$2 AND loan_id=$3 AND revision=$9 AND returned_on IS NULL`,
-    [
-      routeOf(current.accountId),
-      current.accountId,
-      current.id,
-      next.dueOn,
-      next.returnedOn,
-      next.revision,
-      command.time,
-      command.transactionId,
-      current.revision,
-    ],
-  );
+  const result = await executeLoanNative(tx, loanUpdatePlan(current, next, command));
   if (result.rowCount !== 1) throw new LoanConflictError('stale_revision');
 }
 
@@ -383,7 +367,7 @@ export async function loanPeopleDisplay(
   languages: readonly string[] = [],
 ): Promise<Map<string, string | null>> {
   const selected = [...new Set(personIds)];
-  if (selected.length > MAX_PRESENTATION_ROWS)
+  if (selected.length > MAX_LOAN_PRESENTATION_ROWS)
     throw new RangeError('Loan person presentation exceeds the bounded page');
   if (!selected.length) return new Map();
   const concealed = () => new Map(selected.map((id) => [id, null]));
@@ -432,82 +416,65 @@ export function createLoanCommands(config: Dependencies) {
     const owner = requireActor(actor, 'copy:create');
     const parsed = parseLoanCreate(input);
     const route = sameAccountRoute(owner.accountId, parsed.copyId);
-    return runner.ownAccountPrepared<PreparedCreate, Loan>(
-      owner,
-      {
-        action: 'copy:create',
-        kind: 'library.copy-loan.create',
-        requestKey,
-        input: parsed,
-        async prepare(attempt: CommandAttempt) {
-          await admitEntryAttempt(config, owner, 'copy:create', attempt, deadlineFor(WORK_STEP_DEADLINE_MS));
-          const copy = await currentCopyForPreparation(pool, owner, route, parsed.copyId);
-          if (!copy) return { copy: null, source: null, personAdmitted: false, error: null };
-          try {
-            const source = await readLibraryProfileSource(
-              { pool, access, actor: owner, at: attempt.time, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
-              copy.subjectId,
-            );
-            let personAdmitted = true;
-            if (parsed.counterparty.kind === 'person')
-              personAdmitted = await personReferenceAdmitted(
-                config,
-                owner,
-                parsed.counterparty.personId,
-                deadlineFor(WORK_STEP_DEADLINE_MS),
+    return withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () =>
+      runner.ownAccountPrepared<PreparedCreate, Loan>(
+        owner,
+        {
+          action: 'copy:create',
+          kind: 'library.copy-loan.create',
+          requestKey,
+          input: parsed,
+          async prepare(attempt: CommandAttempt) {
+            const deadline = commandAttemptDeadline(attempt);
+            await admitEntryAttempt(config, owner, 'copy:create', attempt, deadline);
+            const copy = await currentCopyForPreparation(pool, owner, route, parsed.copyId);
+            if (!copy) return { copy: null, source: null, personAdmitted: false, error: null };
+            try {
+              const source = await readLibraryProfileSource(
+                { pool, access, actor: owner, at: attempt.time, deadline },
+                copy.subjectId,
               );
-            return { copy, source, personAdmitted, error: null };
-          } catch (error) {
-            return { copy, source: null, personAdmitted: false, error };
-          }
+              let personAdmitted = true;
+              if (parsed.counterparty.kind === 'person')
+                personAdmitted = await personReferenceAdmitted(config, owner, parsed.counterparty.personId, deadline);
+              return { copy, source, personAdmitted, error: null };
+            } catch (error) {
+              return { copy, source: null, personAdmitted: false, error };
+            }
+          },
         },
-      },
-      async (tx, command, prepared) => {
-        if (prepared.error) throw prepared.error;
-        if (!prepared.copy || !prepared.source) throw new LibraryNotFoundError();
-        const copy = await lockCopy(tx, route, owner.accountId, parsed.copyId);
-        assertLoanCopyOperand(owner.accountId, parsed, copy);
-        if (!copy || copy.subjectId !== prepared.copy.subjectId || copy.deletionId !== null || copy.status !== 'owned')
-          throw new LoanConflictError('copy_unavailable');
-        if (
-          prepared.source.subjectId !== copy.subjectId ||
-          prepared.source.kind !== 'supported' ||
-          copy.kind === null ||
-          !hasCopyStatus(prepared.source.profile, copy.kind, 'owned')
-        )
-          throw new ProblemError('unsupported_library_profile');
-        if (parsed.counterparty.kind === 'person' && !prepared.personAdmitted) throw new LoanNotFoundError();
-        const existing = await tx.query(
-          `SELECT loan_id FROM library.copy_loan WHERE route=$1 AND account_id=$2 AND copy_id=$3
-            AND returned_on IS NULL LIMIT 1`,
-          [route, owner.accountId, parsed.copyId],
-        );
-        if (existing.rows.length) throw new LoanConflictError('copy_unavailable');
-        const loan = createLoanRecord({ id: newId(route), accountId: owner.accountId }, parsed);
-        const time = authoritativeTimeValue(command.time);
-        await tx.query(
-          `INSERT INTO library.copy_loan
-             (route,loan_id,account_id,copy_id,direction,counterparty_kind,counterparty_name,counterparty_person_id,
-              started_on,due_on,returned_on,revision,created_at,updated_at,transaction_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULL,1,$11,$11,$12)`,
-          [
-            route,
-            loan.id,
-            owner.accountId,
-            loan.copyId,
-            loan.direction,
-            loan.counterparty.kind,
-            loan.counterparty.kind === 'name' ? loan.counterparty.name : null,
-            loan.counterparty.kind === 'person' ? loan.counterparty.personId : null,
-            loan.startedOn,
-            loan.dueOn,
-            time,
-            command.transactionId,
-          ],
-        );
-        await bumpGeneration(tx, route, owner.accountId);
-        return { value: loan, events: [event(owner.accountId, loan.id)] };
-      },
+        async (tx, command, prepared) => {
+          if (prepared.error) throw prepared.error;
+          if (!prepared.copy || !prepared.source) throw new LibraryNotFoundError();
+          const copy = await lockCopy(tx, route, owner.accountId, parsed.copyId);
+          assertLoanCopyOperand(owner.accountId, parsed, copy);
+          if (
+            !copy ||
+            copy.subjectId !== prepared.copy.subjectId ||
+            copy.deletionId !== null ||
+            copy.status !== 'owned'
+          )
+            throw new LoanConflictError('copy_unavailable');
+          if (
+            prepared.source.subjectId !== copy.subjectId ||
+            prepared.source.kind !== 'supported' ||
+            copy.kind === null ||
+            !hasCopyStatus(prepared.source.profile, copy.kind, 'owned')
+          )
+            throw new ProblemError('unsupported_library_profile');
+          if (parsed.counterparty.kind === 'person' && !prepared.personAdmitted) throw new LoanNotFoundError();
+          const existing = await executeLoanNative(
+            tx,
+            loanOpenProbePlan({ route, accountId: owner.accountId, id: parsed.copyId }),
+          );
+          if (existing.rows.length) throw new LoanConflictError('copy_unavailable');
+          const loan = createLoanRecord({ id: newId(route), accountId: owner.accountId }, parsed);
+          const time = authoritativeTimeValue(command.time);
+          await executeLoanNative(tx, loanInsertPlan(loan, { time, transactionId: command.transactionId }));
+          await bumpGeneration(tx, route, owner.accountId);
+          return { value: loan, events: [event(owner.accountId, loan.id)] };
+        },
+      ),
     );
   }
 
@@ -515,26 +482,28 @@ export function createLoanCommands(config: Dependencies) {
     const owner = requireActor(actor, 'copy:update');
     const parsed = parseLoanExtend(input);
     const route = sameAccountRoute(owner.accountId, loanId);
-    return runner.ownAccountPrepared(
-      owner,
-      {
-        action: 'copy:update',
-        kind: 'library.copy-loan.extend',
-        requestKey,
-        input: { loanId, ...parsed },
-        prepare: (attempt) =>
-          admitEntryAttempt(config, owner, 'copy:update', attempt, deadlineFor(WORK_STEP_DEADLINE_MS)),
-      },
-      async (tx, command) => {
-        const current = await lockLoan(tx, route, owner.accountId, loanId);
-        const next = extendLoanRecord(current, parsed);
-        await updateLoan(tx, current, next, {
-          transactionId: command.transactionId,
-          time: authoritativeTimeValue(command.time),
-        });
-        await bumpGeneration(tx, route, owner.accountId);
-        return { value: next, events: [event(owner.accountId, loanId)] };
-      },
+    return withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () =>
+      runner.ownAccountPrepared(
+        owner,
+        {
+          action: 'copy:update',
+          kind: 'library.copy-loan.extend',
+          requestKey,
+          input: { loanId, ...parsed },
+          prepare: (attempt) =>
+            admitEntryAttempt(config, owner, 'copy:update', attempt, commandAttemptDeadline(attempt)),
+        },
+        async (tx, command) => {
+          const current = await lockLoan(tx, route, owner.accountId, loanId);
+          const next = extendLoanRecord(current, parsed);
+          await updateLoan(tx, current, next, {
+            transactionId: command.transactionId,
+            time: authoritativeTimeValue(command.time),
+          });
+          await bumpGeneration(tx, route, owner.accountId);
+          return { value: next, events: [event(owner.accountId, loanId)] };
+        },
+      ),
     );
   }
 
@@ -543,26 +512,28 @@ export function createLoanCommands(config: Dependencies) {
     const parsed = parseLoanReturn(input);
     const route = sameAccountRoute(owner.accountId, loanId);
     const boundary = loanDueBoundary(clock());
-    return runner.ownAccountPrepared(
-      owner,
-      {
-        action: 'copy:update',
-        kind: 'library.copy-loan.return',
-        requestKey,
-        input: { loanId, ...parsed },
-        prepare: (attempt) =>
-          admitEntryAttempt(config, owner, 'copy:update', attempt, deadlineFor(WORK_STEP_DEADLINE_MS)),
-      },
-      async (tx, command) => {
-        const current = await lockLoan(tx, route, owner.accountId, loanId);
-        const next = returnLoanRecord(current, parsed, boundary);
-        await updateLoan(tx, current, next, {
-          transactionId: command.transactionId,
-          time: authoritativeTimeValue(command.time),
-        });
-        await bumpGeneration(tx, route, owner.accountId);
-        return { value: next, events: [event(owner.accountId, loanId)] };
-      },
+    return withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () =>
+      runner.ownAccountPrepared(
+        owner,
+        {
+          action: 'copy:update',
+          kind: 'library.copy-loan.return',
+          requestKey,
+          input: { loanId, ...parsed },
+          prepare: (attempt) =>
+            admitEntryAttempt(config, owner, 'copy:update', attempt, commandAttemptDeadline(attempt)),
+        },
+        async (tx, command) => {
+          const current = await lockLoan(tx, route, owner.accountId, loanId);
+          const next = returnLoanRecord(current, parsed, boundary);
+          await updateLoan(tx, current, next, {
+            transactionId: command.transactionId,
+            time: authoritativeTimeValue(command.time),
+          });
+          await bumpGeneration(tx, route, owner.accountId);
+          return { value: next, events: [event(owner.accountId, loanId)] };
+        },
+      ),
     );
   }
 
@@ -573,17 +544,15 @@ export function createLoanCommands(config: Dependencies) {
     const owner = requireActor(actor, 'copy:list');
     const route = routeOf(owner.accountId)!;
     const filter = input.filter;
-    const maxPage = filter === 'open' ? MAX_OPEN_PAGE : MAX_HISTORY_PAGE;
+    const maxPage = filter === 'open' ? MAX_OPEN_LOAN_PAGE : MAX_HISTORY_LOAN_PAGE;
     const size = Math.max(1, Math.min(maxPage, input.limit));
     const binding = cursorBinding(owner.accountId, filter);
     const boundary = loanDueBoundary(clock());
+    const cursor = input.cursor;
     return readOnly(pool, owner, async (client) => {
-      const generationRow = await client.query<{ generation: number }>(
-        'SELECT generation FROM library.copy_loan_generation WHERE route=$1 AND account_id=$2',
-        [route, owner.accountId],
-      );
+      const generationRow = await executeLoanNative(client, loanGenerationPlan({ route, accountId: owner.accountId }));
       const generation = Number(generationRow.rows[0]?.generation ?? 1);
-      const after = input.cursor ? cursorAfter(tokens, binding, input.cursor, generation, filter) : null;
+      const after = cursor ? cursorAfter(tokens, binding, cursor, generation, filter) : null;
       const sql =
         filter === 'open'
           ? `SELECT l.loan_id::text AS "loanId", l.account_id::text AS "accountId", l.copy_id::text AS "copyId",
