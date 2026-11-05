@@ -222,7 +222,8 @@ test('the mounted Subject, canonical route, correction session and existing read
     // Menu submenus render through a body portal, so query the same mounted surface as the addon flow.
     const publicDom = within(window.document.body);
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="subject-contribute"] button')!;
-    await act(async () => user.click(trigger));
+    trigger.focus();
+    await act(async () => user.keyboard('{Enter}'));
     await waitForMenu(() =>
       expect(
         publicDom.queryByRole('dialog', { name: m.contribute_title() }) ?? publicDom.queryByRole('menu'),
