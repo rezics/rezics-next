@@ -85,7 +85,7 @@ test('the policy interval, defect transition, section output and per-run report 
     expect(readControlPolicy().pageData.intervalMs).toBe(7_200_000);
     expect(readControlPolicy({ containers: { keep: ['rezics-pagecheck-'] } }).containers.keep).toContain('rezics-pagecheck-');
     expect(pageDataClassCounts([section('DATA'), section('API')])).toMatchObject({ DATA: 1, API: 1, WEB: 0 });
-    expect(newlyDefectiveSections([section('EMPTY'), section('API')], [section('API')])).toEqual([
+    expect(newlyDefectiveSections([section('EMPTY')], [section('API')])).toEqual([
       { section: section('API'), previousClass: 'EMPTY' },
     ]);
     expect(
@@ -143,7 +143,7 @@ test('a dedicated stack boot failure reaches the supermanager with its first err
     });
     expect(result).toBe('failed');
     expect(notices).toEqual([
-      { managerId: 'supermanager', summary: expect.stringContaining('docker: daemon unavailable') },
+      { managerId: 'supermanager', kind: 'environment', summary: expect.stringContaining('docker: daemon unavailable') },
     ]);
     expect(flowReport(readFlow(h.db), []).pageDataRuns[0]?.failure).toEqual({
       phase: 'boot',
@@ -195,7 +195,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
   try {
     const task = h.tasks.dispatch(h.briefFile);
     await job.start(task.id);
-    const ref = { taskId: task.id, attempt: task.currentAttempt };
+    const ref = { taskId: task.id, attempt: h.store.task(task.id).currentAttempt };
     h.store.updateTask(ref, (current) => {
       current.state = 'integrated';
     });
