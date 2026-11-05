@@ -8,7 +8,7 @@ import * as start from '../.storybook/react-start';
 import { CollectionVisit, collectionWindowHref } from '../src/accounts/public-profile/collection-windows/visit';
 
 const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
-const window = new Window({ url: 'https://site.test/@haruka/collections' });
+const window = new Window({ url: 'https://site.test/@mira/collections' });
 const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
   Element: window.Element, Node: window.Node, Document: window.Document, DocumentFragment: window.DocumentFragment,
   MutationObserver: window.MutationObserver, ResizeObserver: window.ResizeObserver,
@@ -57,7 +57,7 @@ test('served named Collections route replaces sparse/empty windows, survives cur
   const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()();
   const route = Route.update({ getParentRoute: () => rootRoute, path: '/@{$handle}/$view', id: undefined } as never);
   const router = createRouter({ routeTree: rootRoute.addChildren([route]), context: { queryClient: client },
-    history: createMemoryHistory({ initialEntries: ['/@haruka/collections?keep=a%2fb&keep=2#anchor'] }) });
+    history: createMemoryHistory({ initialEntries: ['/@mira/collections?keep=a%2fb&keep=2#anchor'] }) });
   const host = window.document.createElement('div'); window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const settle = async () => { await new Promise((resolve) => setTimeout(resolve, 30)); };
