@@ -13,13 +13,31 @@ export type CorrectionState = {
 
 /** One visit owns one bounded review and at most one unresolved original command. */
 export class SelectedCorrection {
-  private state: CorrectionState = { page: null, command: null, busy: false, uncertain: false, rejected: null, current: {} };
+  private state: CorrectionState = {
+    page: null,
+    command: null,
+    busy: false,
+    uncertain: false,
+    rejected: null,
+    current: {},
+  };
   private listeners = new Set<() => void>();
   private active = true;
-  constructor(private port: CorrectionPort, private isCurrent: () => boolean, private refreshEntries: () => Promise<void>) {}
+  constructor(
+    private port: CorrectionPort,
+    private isCurrent: () => boolean,
+    private refreshEntries: () => Promise<void>,
+  ) {}
   snapshot = () => this.state;
-  subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
-  private current() { return this.active && this.isCurrent(); }
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+  private current() {
+    return this.active && this.isCurrent();
+  }
   private update(patch: Partial<CorrectionState>) {
     if (!this.current()) return;
     this.state = { ...this.state, ...patch };
@@ -37,7 +55,12 @@ export class SelectedCorrection {
   async confirm(position: number) {
     const page = this.state.page;
     if (!this.current() || this.state.command || this.state.busy || !page || page.state !== 'open') return;
-    await this.dispatch({ kind: 'confirm', reviewId: page.reviewId, body: { epoch: page.epoch, position }, key: crypto.randomUUID() });
+    await this.dispatch({
+      kind: 'confirm',
+      reviewId: page.reviewId,
+      body: { epoch: page.epoch, position },
+      key: crypto.randomUUID(),
+    });
   }
   /** Reopening current facts never acknowledges an uncertain confirmation. */
   async reopen(pageNumber = this.state.page?.page ?? 0) {
@@ -51,7 +74,9 @@ export class SelectedCorrection {
         this.update({ page: result.value });
         await this.readCurrent(result.value);
       } else if (result.kind === 'rejected') this.update({ rejected: result.status });
-    } finally { this.update({ busy: false }); }
+    } finally {
+      this.update({ busy: false });
+    }
   }
   async retry() {
     if (!this.current() || this.state.busy || !this.state.command || this.state.command.kind === 'create') return;
@@ -63,14 +88,20 @@ export class SelectedCorrection {
     if (this.state.command) await this.retry();
     const page = this.state.page;
     if (!this.current() || this.state.command || !page) return;
-    await this.dispatch({ kind: 'cancel', reviewId: page.reviewId, body: { epoch: page.epoch }, key: crypto.randomUUID() });
+    await this.dispatch({
+      kind: 'cancel',
+      reviewId: page.reviewId,
+      body: { epoch: page.epoch },
+      key: crypto.randomUUID(),
+    });
   }
   private async readCurrent(page: EntryAnnotationCorrectionPage) {
     const values: Record<string, PrivateEntryRead> = {};
     // Only this native four-item page is read. A stale/recreated identity cannot disclose current replacement facts.
     for (const item of page.items) {
       if (!this.current()) return;
-      values[item.selected.subjectId] = item.current === null ? { kind: 'unavailable' } : await this.port.personal(item.selected.subjectId);
+      values[item.selected.subjectId] =
+        item.current === null ? { kind: 'unavailable' } : await this.port.personal(item.selected.subjectId);
     }
     this.update({ current: values });
   }
@@ -79,8 +110,14 @@ export class SelectedCorrection {
     try {
       const result = await this.port.send(command);
       if (!this.current()) return;
-      if (result.kind === 'uncertain') { this.update({ uncertain: true }); return; }
-      if (result.kind === 'rejected') { this.update({ command: null, rejected: result.status }); return; }
+      if (result.kind === 'uncertain') {
+        this.update({ uncertain: true });
+        return;
+      }
+      if (result.kind === 'rejected') {
+        this.update({ command: null, rejected: result.status });
+        return;
+      }
       this.update({ command: null });
       if ('items' in result.value) {
         this.update({ page: result.value });
@@ -94,6 +131,8 @@ export class SelectedCorrection {
           await this.readCurrent(reopened.value);
         } else this.update({ page: { ...page, state: result.value.state } });
       }
-    } finally { this.update({ busy: false }); }
+    } finally {
+      this.update({ busy: false });
+    }
   }
 }

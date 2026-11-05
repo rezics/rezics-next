@@ -1,15 +1,27 @@
-import type { KernelClient, EntryAnnotationCorrectionSelection, EntryAnnotationCorrectionPage, EntryAnnotationCorrectionCancelResult } from '@rezics/client';
+import type {
+  KernelClient,
+  EntryAnnotationCorrectionSelection,
+  EntryAnnotationCorrectionPage,
+  EntryAnnotationCorrectionCancelResult,
+} from '@rezics/client';
 import { readPrivateEntry, type PrivateEntryRead } from '../rich-private-entry/native';
 
 export type CorrectionCommand =
   | { kind: 'create'; items: EntryAnnotationCorrectionSelection[]; key: string }
   | { kind: 'confirm'; reviewId: string; body: { epoch: string; position: number }; key: string }
   | { kind: 'cancel'; reviewId: string; body: { epoch: string }; key: string };
-export type NativeResult<T> = { kind: 'ready'; value: T } | { kind: 'uncertain' } | { kind: 'rejected'; status: number };
+export type NativeResult<T> =
+  | { kind: 'ready'; value: T }
+  | { kind: 'uncertain' }
+  | { kind: 'rejected'; status: number };
 export type CommandResult = NativeResult<EntryAnnotationCorrectionPage | EntryAnnotationCorrectionCancelResult>;
 
 /** Keys remain logical until this single HTTP boundary. The native review owns item request IDs. */
-export async function sendCorrection(client: KernelClient, authorization: string, command: CorrectionCommand): Promise<CommandResult> {
+export async function sendCorrection(
+  client: KernelClient,
+  authorization: string,
+  command: CorrectionCommand,
+): Promise<CommandResult> {
   const options = { headers: { authorization, 'idempotency-key': JSON.stringify(command.key) } };
   try {
     if (command.kind === 'create') {
@@ -32,8 +44,15 @@ export async function sendCorrection(client: KernelClient, authorization: string
 function failure(status: number): { kind: 'uncertain' } | { kind: 'rejected'; status: number } {
   return status >= 500 ? { kind: 'uncertain' } : { kind: 'rejected', status };
 }
-export async function readCorrection(client: KernelClient, authorization: string, reviewId: string, page: number): Promise<NativeResult<EntryAnnotationCorrectionPage>> {
-  const result = await client.libraryEntryAnnotationCorrections({ reviewId }).get({ query: { page }, headers: { authorization } });
+export async function readCorrection(
+  client: KernelClient,
+  authorization: string,
+  reviewId: string,
+  page: number,
+): Promise<NativeResult<EntryAnnotationCorrectionPage>> {
+  const result = await client
+    .libraryEntryAnnotationCorrections({ reviewId })
+    .get({ query: { page }, headers: { authorization } });
   return result.error ? failure(result.status) : { kind: 'ready', value: result.data.review };
 }
 export type CorrectionPort = {
