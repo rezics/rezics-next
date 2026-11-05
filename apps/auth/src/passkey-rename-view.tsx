@@ -24,7 +24,7 @@ export function PasskeyRenameView({
   passkey: SecurityPasskey;
   disabled: boolean;
   begin(): PasskeyRenameLease | null;
-  observe(id: string, name: string): void;
+  observe(id: string, name: string | null): void;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(passkey.name);
@@ -70,20 +70,22 @@ export function PasskeyRenameView({
     setState('reading');
     const current = await reviewPasskeyRegistration(accountId, owned.signal);
     if (!owned.isCurrent()) return;
-    const row = current.kind === 'ready' ? current.passkeys.find((row) => row.id === passkey.id) : undefined;
-    if (!row) {
+    if (current.kind !== 'ready') {
       setState('unknown');
       setNotice(m.auth_security_passkey_rename_review_failed());
       return;
     }
-    observe(row.id, row.name);
-    setName(row.name);
+    const row = current.passkeys.find((row) => row.id === passkey.id);
     // A current label is an observation, not the lost command's acknowledgement.
     owned.finish();
     lease.current = null;
     setState('draft');
     setEditing(false);
-    setNotice(m.auth_security_passkey_rename_observed({ name: row.name }));
+    if (row) setName(row.name);
+    setNotice(
+      row ? m.auth_security_passkey_rename_observed({ name: row.name }) : m.auth_security_passkey_rename_history(),
+    );
+    observe(passkey.id, row?.name ?? null);
   }
   return (
     <div className="flex max-w-full flex-col items-start gap-2">

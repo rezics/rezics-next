@@ -1384,7 +1384,11 @@ function SecurityPageView({
                                     disabled={operationBlocked}
                                     begin={beginPasskeyRename}
                                     observe={(id, name) =>
-                                      setPasskeys((rows) => rows.map((row) => (row.id === id ? { ...row, name } : row)))
+                                      setPasskeys((rows) =>
+                                        name === null
+                                          ? rows.filter((row) => row.id !== id)
+                                          : rows.map((row) => (row.id === id ? { ...row, name } : row)),
+                                      )
                                     }
                                   />
                                   <Button
