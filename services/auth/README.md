@@ -2941,7 +2941,7 @@ partial review. Historical rows that exceed the current producer ceiling remain
 stored and produce unavailable advice until their source is corrected.
 
 `@rezics/auth-contract` exports these field ceilings and the fixed
-`AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES`. Its UTF-8 budget is the maximum
+`AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES` ceiling of 25,649 UTF-8 bytes. Its budget is the maximum
 over all four readiness/action variants of `UTF8(JSON skeleton) + 6 × variable
 UTF-16 units`. The closed skeleton includes all JSON keys, quotes, syntax, fixed
 handle rules, the 36-unit viewer identity, the optional 36-unit selected UUID,
