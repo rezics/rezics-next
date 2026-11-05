@@ -46,6 +46,7 @@ type MockComposerProps = {
   boardId?: string;
   replyTargetId?: string | null;
   submissionContext?: unknown;
+  replyContext?: ReactNode;
   onSubmit: (command: MockReplyCommand) => Promise<MockWriteResult>;
   onSuccess: (value: unknown) => void;
   onIntentLockChange: (locked: boolean) => void;
@@ -95,6 +96,7 @@ mock.module('../src/threads/composer', () => ({
         { type: 'button', 'data-slot': 'lock-mock-reply', onClick: () => props.onIntentLockChange(true) },
         'Retain uncertain reply',
       ),
+      props.replyContext,
     );
   },
   SignInPrompt: () => null,
