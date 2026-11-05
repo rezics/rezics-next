@@ -1334,9 +1334,25 @@ Theme and locale also use globals; these fixtures make no native or visual appro
 
 ## Relation contributions
 
+Decision: the public relation entry carries one closed `origin` observation with the admitted Subject, actual
+Context, optional admitted Realm, locale and one immediate public Subject return. It is visit intent only. The route
+checks its complete address against 2,048 characters and UTF-8 bytes, using the installed Subject return validator;
+malformed, conflicting, foreign, wrong-locale, wrong-Subject, recursive and oversized input is refused without
+truncation. The generic observation stays separate from `realm`, `via`, `creditHandoff` and `relatedWorkHandoff`;
+mixing it with a specialized handoff is invalid. The menu retains its existing no-Realm eligibility and sign-in
+handling.
+
+An observed non-Global Context or Realm stops before Subject, page, label, editor or session reads and offers its
+compatible public return plus a separately named general public Subject visit when the route cannot represent that
+Context. A fresh Global choice drops the observation and keeps only the validated public return before using the
+existing current Global read and advice. Direct Global and existing via-only visits retain their contract. Return and
+browser history reacquire the current public reading; this entry carries no assertion locator, so only the current
+Subject heading can regain focus. The local guard adds zero native requests; chosen Global sessions and public
+returns use their existing bounded reads.
+
 The canonical Global overview links to `/{locale}/subjects/{id}/{slug}/relation-edit`. The route keeps the
-subject's canonical identity and shared frame; Realm readings do not expose a Global writer. A Realm query on the
-editor shows the unsupported Context state. There is no browser Context override.
+subject's canonical identity and shared frame; Realm readings do not expose a Global writer. There is no browser
+Context override.
 
 After session preparation, contributors choose an effective released relation property and a real target through
 the existing subject picker, or edit one of the public reader's existing relations. Classification properties stay

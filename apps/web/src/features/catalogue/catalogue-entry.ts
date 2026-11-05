@@ -10,6 +10,7 @@ import { catalogueFileCorrectionHref } from './catalogue-file-reader/navigation'
 import { isReleaseType } from './release-fidelity/model';
 import { releaseEntryHref, RELEASE_ENTRY_BYTES } from './release-fidelity/navigation';
 import { factsPublicCorrectionHref, type FactsPublicOrigin } from './facts-public-visit';
+import { createRelationPublicOrigin, relationPublicCorrectionHref } from './relation-public-visit';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -410,11 +411,14 @@ export function subjectContributionEntries(
   address: Subject & { context?: string | undefined; realm?: string | undefined },
 ): CatalogueEntry[] {
   const base = subject(address);
+  const relationOrigin = createRelationPublicOrigin(address);
   return [
     {
       group: 'edit',
       label: m.relation_title({}, options(address.locale)),
-      href: `${base}/relation-edit${address.realm ? `?${new URLSearchParams({ realm: address.realm })}` : ''}`,
+      href: relationOrigin
+        ? relationPublicCorrectionHref(`${base}/relation-edit`, relationOrigin)
+        : `${base}/relation-edit${address.realm ? `?${new URLSearchParams({ realm: address.realm })}` : ''}`,
     },
     ...(address.context
       ? [
