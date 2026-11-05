@@ -407,7 +407,8 @@ export function ViewerInboxPage({
     returnReceipt?.historyKey === historyKey && returnReceipt.owner.isCurrent() ? returnReceipt : null;
   useEffect(() => subscribeInboxReturn(router, setReturnReceipt), [router]);
   useEffect(() => {
-    if (returnReceipt && !admittedReturn) retireInboxReturn(router, returnReceipt.id);
+    if (returnReceipt && returnReceipt.phase !== 'departed' && !admittedReturn)
+      retireInboxReturn(router, returnReceipt.id);
   }, [admittedReturn, returnReceipt, router]);
   const episodeOwnerCurrent = useCallback(
     () => viewer.isCurrent() && inboxViewerCsrfToken(queryClient, viewer) === csrfToken,
