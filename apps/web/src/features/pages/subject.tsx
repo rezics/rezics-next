@@ -497,6 +497,19 @@ function placesSlot(content: readonly unknown[], name: string): boolean {
   );
 }
 
+/** Keep the existing composition-owned identity and its actions, but render it before specialist readers. */
+function splitHeaderDocument(document: PageDocument): { header?: PageDocument; remaining: PageDocument } {
+  const index = document.content.findIndex((node) => node.type === 'Slot' && node.props.name === 'header');
+  if (index < 0) return { remaining: document };
+  return {
+    header: { ...document, content: [document.content[index]!] },
+    remaining: {
+      ...document,
+      content: [...document.content.slice(0, index), ...document.content.slice(index + 1)],
+    },
+  };
+}
+
 /** Invite first facts only when the admitted subject and its planned relation reads confirm emptiness. */
 function hasOnlyTitle(page: SubjectPageData): boolean {
   const read = subjectBody(page);
@@ -803,6 +816,7 @@ export function SubjectPage({
       </Empty>
     ) : null;
   const header = placesSlot(page.document.content, 'header');
+  const composition = overview && !framed ? splitHeaderDocument(page.document) : { remaining: page.document };
   const afterHeader = overview ? (
     <>
       {bar}
@@ -874,6 +888,14 @@ export function SubjectPage({
           {...(!page.account && renderedActions ? { headerActions: renderedActions } : {})}
         >
           <div className="flex w-full flex-col gap-8">
+            {composition.header ? (
+              <CompositionRender
+                document={composition.header}
+                definitions={pageDefinitions}
+                components={pageComponents(framed)}
+                root={PageRoot}
+              />
+            ) : null}
             {literarySubject && (overview || view === 'contents' || view === 'editions') ? (
               <LiteraryReaderEntry
                 work={literarySubject}
@@ -1115,7 +1137,7 @@ export function SubjectPage({
               <SubjectCommunityContext.Provider value={page.community}>
                 <SubjectCommunityVerificationContext.Provider value={verification}>
                   <CompositionRender
-                    document={page.document}
+                    document={composition.remaining}
                     definitions={pageDefinitions}
                     components={pageComponents(framed)}
                     root={PageRoot}

@@ -1394,6 +1394,8 @@ as catalogue subjects (an author imported from a source), as accounts, or both. 
 The overview answers "what is this, is it for me, and what do I do next" in the first viewport, then previews every
 other view. Sections a type does not support are left out; the rest keep this order and stable anchors.
 
+Decision: render the existing composition-owned header and primary actions once before specialist readers, then render every remaining composition node once in its supplied order.
+
 1. **Identity and next action.** Cover; title in the reader's language with the original title quietly beside it;
    type and date; principal creators, linked; the headline score with its population and count; the reader's own
    status, progress and rating with one primary action (Continue, Start, Add). On phones the cover is a thumbnail

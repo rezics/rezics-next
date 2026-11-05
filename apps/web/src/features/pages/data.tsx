@@ -251,6 +251,7 @@ export function CandidateValue({
   locale,
   subject,
   documents,
+  documentUnavailable,
   link = PlainLink,
 }: {
   snak: Snak & { id?: string };
@@ -259,6 +260,8 @@ export function CandidateValue({
   subject?: string;
   /** Authorized responses from this comparison's current read, never draft envelopes or a shared cache. */
   documents?: unknown;
+  /** Profile readers can name an unavailable authored field without treating it like an ordinary scalar. */
+  documentUnavailable?: ReactNode;
   link?: PageLink;
 }) {
   const messages = {
@@ -292,7 +295,7 @@ export function CandidateValue({
           }}
         />
       );
-    return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
+    return documentUnavailable ?? <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
   }
   if (snak.property.data_type === 'media')
     return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;

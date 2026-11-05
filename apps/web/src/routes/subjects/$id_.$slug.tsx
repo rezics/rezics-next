@@ -6,7 +6,7 @@ import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
 import { validatePageNode, validatePageRealm } from '../../features/pages/view-cursor';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
-import { useQuery, useSuspenseQuery, useSuspenseQueries, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { isView } from '@rezics/composition';
 import { SubjectPage, pageRelationProperties, subjectPageTitle, subjectPageType } from '../../features/pages/subject';
@@ -22,7 +22,7 @@ import {
   RatingsRecoveryContext,
   RatingPopulationsContext,
 } from '../../features/pages/subject-ratings-view';
-import { RATING_SOURCES, type RatingSources, type RatingSource } from '../../features/pages/subject-ratings';
+import { type RatingSources, type RatingSource } from '../../features/pages/subject-ratings';
 import { SubjectRatingPopulations } from '../../features/pages/subject-rating-populations-view';
 import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
 import { useSubjectReactionReader } from '../../features/pages/subject-reaction-reader';
@@ -310,24 +310,6 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
           location.hash,
         ),
       );
-    const type = subjectPageType(page.page);
-    const [frame, relations, reactions, ratings] = await Promise.all([
-      type
-        ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale()))
-        : Promise.resolve({ label: undefined, ratio: undefined, schemaOrgType: undefined }),
-      context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(page.page), getLocale())),
-      context.queryClient.ensureQueryData(subjectReactionsQuery(params.id, getLocale())),
-      Promise.all(
-        RATING_SOURCES.map((source) =>
-          context.queryClient.ensureQueryData(subjectRatingQuery(params.id, getLocale(), source)),
-        ),
-      ).then(([question, figure, global, statistics]): RatingSources => ({
-        question: question!.question,
-        figure: figure!.figure,
-        global: global!.global,
-        statistics: statistics!.statistics,
-      })),
-    ]);
     return {
       ...data,
       shareCard: page.shareCard,
@@ -335,10 +317,6 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
       paths: address?.paths ?? data.paths,
       reader,
       page: page.page,
-      frame,
-      relations,
-      reactions,
-      ratings,
       tabs: subjectTabs(page.page),
     };
   },
@@ -349,11 +327,6 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
           ...(loaderData.paths ? { paths: loaderData.paths } : {}),
           shareCard: loaderData.shareCard,
           realm: loaderData.realm,
-          ...(loaderData.frame.label ? { typeLabel: loaderData.frame.label } : {}),
-          ...(loaderData.frame.schemaOrgType ? { schemaOrgType: loaderData.frame.schemaOrgType } : {}),
-          ...(loaderData.ratings.figure.kind === 'ready'
-            ? { ratings: { figure: loaderData.ratings.figure.value } }
-            : {}),
         })
       : { meta: [{ title: m.not_found_heading() }] },
   component: SubjectRoute,
@@ -401,22 +374,28 @@ export function SubjectOverview({
       ? { labelId: undoLabelId, assignmentId: undoAssignmentId, revision: undoRevision }
       : undefined;
   const type = subjectPageType(page);
-  const { data: frame } = useSuspenseQuery(type ? subjectFrameQuery(type, locale) : subjectFrameQuery('', locale));
-  const { data: relations } = useSuspenseQuery(subjectRelationsQuery(pageRelationProperties(page), locale));
-  const { data: publicReactions } = useSuspenseQuery(subjectReactionsQuery(id, locale));
-  const [questionQuery, figureQuery, globalQuery, statisticsQuery] = useSuspenseQueries({
-    queries: [
-      subjectRatingQuery(id, locale, 'question'),
-      subjectRatingQuery(id, locale, 'figure'),
-      subjectRatingQuery(id, locale, 'global'),
-      subjectRatingQuery(id, locale, 'statistics'),
-    ],
+  const frameQuery = useQuery({
+    ...subjectFrameQuery(type ?? '', locale),
+    enabled: type !== undefined,
   });
+  const frame = frameQuery.data ?? {};
+  const relationsQuery = useQuery(subjectRelationsQuery(pageRelationProperties(page), locale));
+  const relations = relationsQuery.data ?? {};
+  const reactionsQuery = useQuery(subjectReactionsQuery(id, locale));
+  const publicReactions = reactionsQuery.data;
+  const [questionQuery, figureQuery, globalQuery, statisticsQuery] = [
+    useQuery(subjectRatingQuery(id, locale, 'question')),
+    useQuery(subjectRatingQuery(id, locale, 'figure')),
+    useQuery(subjectRatingQuery(id, locale, 'global')),
+    useQuery(subjectRatingQuery(id, locale, 'statistics')),
+  ];
+  const outcome = (query: typeof questionQuery, source: RatingSource) =>
+    query.data?.[source] ?? (query.isError ? { kind: 'failed' as const } : { kind: 'idle' as const });
   const publicRatings: RatingSources = {
-    question: questionQuery.data.question,
-    figure: figureQuery.data.figure,
-    global: globalQuery.data.global,
-    statistics: statisticsQuery.data.statistics,
+    question: outcome(questionQuery, 'question'),
+    figure: outcome(figureQuery, 'figure'),
+    global: outcome(globalQuery, 'global'),
+    statistics: outcome(statisticsQuery, 'statistics'),
   };
   const retryRatingSource = (source: RatingSource) => {
     const request = {

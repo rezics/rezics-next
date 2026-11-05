@@ -15,6 +15,7 @@ import { continuationSubject } from '../src/kernel/fake/view-continuation';
 import { subjectTabs } from '../src/features/pages/views';
 import { subjectPageMessages, viewTabLabels } from '../src/features/pages/route-support';
 import { subjectHref } from '../src/subject/subject-href';
+import { screenProfileFixture } from '../src/kernel/fake/catalogue-screen-profile';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const [
@@ -22,12 +23,30 @@ const [
   { loadViewPages, SubjectFrame, subjectFrame, SubjectViewPage },
   { SubjectHeaderActions },
   { SubjectLibrarySlot },
+  { ScreenProfileReader },
 ] = await Promise.all([
   import('../src/features/pages/subject'),
   import('../src/features/pages/subject-frame'),
   import('../src/features/pages/subject-reactions-view'),
   import('../src/library/subject-slot-view'),
+  import('../src/features/catalogue/screen-profile-reader'),
 ]);
+
+test('screen overview uses its released reader label and description instead of a schema identifier or editorial prompt', async () => {
+  const fixture = screenProfileFixture('ready', 'en', true, 'schema:TVSeries');
+  const loaded = await fixture.transport.load();
+  if (!loaded.ok || !loaded.public) throw new Error('Expected the admitted anime Subject');
+  const type = loaded.release.types['schema:TVSeries']!;
+  const label = type.labels.en!;
+  const description = type.descriptions!.en!;
+  const html = renderToStaticMarkup(
+    <ScreenProfileReader locale="en" release={loaded.release} public={loaded.public} />,
+  );
+  expect(html).toContain(`<span>${label[0]!.toLocaleUpperCase('en')}${label.slice(1)}</span>`);
+  expect(html).toContain(description);
+  expect(html).not.toContain('schema:TVSeries');
+  expect(html).not.toContain(m.screen_intro());
+});
 
 test('The default Subject reader does not describe admitted incoming editions as title-only and reports temporary dependency failure honestly with safe read recovery', async () => {
   // The recorded native default composition, with the same owner leaves as the ordinary route.
@@ -90,6 +109,7 @@ test('The default Subject reader does not describe admitted incoming editions as
     </QueryClientProvider>,
   );
   expect(html.match(/data-slot="subject-header"/g)).toHaveLength(1);
+  expect(html.indexOf('data-slot="subject-header"')).toBeLessThan(html.indexOf('data-slot="literary-reader"'));
   expect(html).toMatch(/<h1[^>]*font-sans[^>]*>The Little Prince<\/h1>/);
   expect(html).toMatch(/data-slot="subject-primary-actions"[^>]*class="[^"]*col-span-full[^">]*grid-cols-1/);
   expect(html.indexOf('data-slot="subject-primary-actions"')).toBeGreaterThan(html.indexOf('<h1'));

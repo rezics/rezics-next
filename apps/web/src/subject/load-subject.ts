@@ -35,27 +35,16 @@ function pathsFor(subject: Subject): PagePaths {
   ) as PagePaths;
 }
 
-async function isAgentType(type: string): Promise<boolean> {
-  if (agentRoots.has(type)) return true;
-  try {
-    const { readRelease } = await import('./definitions');
-    const release = await readRelease();
-    const visited = new Set<string>();
-    const visit = (current: string): boolean => {
-      if (agentRoots.has(current)) return true;
-      if (visited.has(current)) return false;
-      visited.add(current);
-      return (release.types[current]?.bases ?? []).some(visit);
-    };
-    return visit(type);
-  } catch {
-    return false;
-  }
+function isAgentType(read: SubjectRead): boolean {
+  return (
+    agentRoots.has(read.subject.type) ||
+    (read.summary?.types.some((type) => agentRoots.has(type)) ?? false)
+  );
 }
 
 export async function verifiedHandle(client: KernelClient, read: SubjectRead): Promise<string | undefined> {
   const subject = read.subject;
-  if (!read.account && !(await isAgentType(subject.type))) return undefined;
+  if (!read.account && !isAgentType(read)) return undefined;
   try {
     const result = await client.accounts.get({ query: { agent: subject.id } });
     const accounts = result.data?.accounts;
