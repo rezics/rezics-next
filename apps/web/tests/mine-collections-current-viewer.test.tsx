@@ -223,6 +223,7 @@ test('The default My Collections route immediately retires private collections a
   const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
   const Page = Route.options.component!;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const stopObservation = viewerExposureLifetime(client).subscribe(() => {});
   const router = createRouter({
     routeTree: createRootRoute(),
     history: createMemoryHistory({ initialEntries: ['/library/collections?layout=previews'] }),
@@ -375,6 +376,7 @@ test('The default My Collections route immediately retires private collections a
     expect(hydrationErrors).toEqual([]);
   } finally {
     if (root) await act(async () => root!.unmount());
+    stopObservation();
     client.clear();
     host.remove();
     for (const restore of [menuRead, transport, write, loader, invalidate]) restore.mockRestore();
