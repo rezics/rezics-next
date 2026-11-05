@@ -158,6 +158,8 @@ function currentVoteGuard(vote: Vote | null): NativeVoteGuard {
   return { state: 'set', units: vote.units, revision: vote.revision };
 }
 
+function reviewView(review: StoredReview): BangumiReview;
+function reviewView(review: StoredReview | null): BangumiReview | null;
 function reviewView(review: StoredReview | null): BangumiReview | null {
   if (!review) return null;
   const { scoreGuard: _scoreGuard, ...visible } = review;

@@ -153,7 +153,7 @@ const holdProjectionBytes = Buffer.byteLength(JSON.stringify({ transactionId: ma
 const retainedProjectionBytes = Buffer.byteLength(JSON.stringify({ transactionId: maxUuid }));
 const terminalProjectionBytes = Buffer.byteLength(JSON.stringify({ version: maxInt, outcome: maxEscapedText(32) }));
 
-const rawQueries = Object.freeze({
+const rawQueries: Readonly<Record<Exclude<NativeSourceDriver, 'done'>, Query>> = Object.freeze({
   member: rawMember,
   entry: rawEntry,
   entry_deleted: rawEntryDeleted,
@@ -167,7 +167,39 @@ const rawQueries = Object.freeze({
 });
 
 /** The canonical SQL objects used by the native adapter and the executable plan. */
-export const nativeSourceCustodyQueries = Object.freeze({
+export const nativeSourceCustodyQueries: Readonly<{
+  partition: Query;
+  source: Query;
+  account: Query;
+  output: Query;
+  ensure: Query;
+  fences: Query;
+  read: Query;
+  start: Query;
+  advance: Query;
+  identityCapture: Query;
+  proof: Query;
+  finish: Query;
+  hold: Query;
+  held: Query;
+  retained: Query;
+  release: Query;
+  terminalScope: Query;
+  raw: typeof rawQueries;
+  rawExplicitOutput: Query;
+  retirement: Readonly<{
+    partition: Query;
+    source: Query;
+    receipt: Query;
+    active: Query;
+    holds: Query;
+    children: Query;
+    proof: Query;
+    capture: Query;
+    identityRetention: Query;
+    nextCapture: Query;
+  }>;
+}> = Object.freeze({
   partition: nativeIdentityPartitionQuery,
   source: sourceQuery,
   account: accountQuery,
