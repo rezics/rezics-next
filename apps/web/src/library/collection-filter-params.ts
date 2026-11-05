@@ -16,7 +16,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export function readCollectionFilterParams(
   params: URLSearchParams,
   release: FilterRelease,
-  type: string,
+  type?: string,
 ): CollectionFilterParams {
   const selected: Record<string, string[]> = {};
   const selectedLabels: Record<string, string> = {};
@@ -27,7 +27,7 @@ export function readCollectionFilterParams(
     ignored.push(key);
     issues.push({ key, reason });
   };
-  const facets = facetProperties(release, [type]);
+  const facets = facetProperties(release, type === undefined ? Object.keys(release.types) : [type]);
   const labels = new Map(
     [...params].filter(([key]) => key.startsWith('l.')).map(([key, value]) => [key.slice(2), value]),
   );
@@ -172,7 +172,7 @@ export function collectionFilterAddress(
         .filter((key) => key === 'type' || /^[fr]\./.test(key))
         .sort()
         .map((key) => {
-          if (key === 'type') return [key, value.getAll(key).length ? value.getAll(key) : ['schema:Book']];
+          if (key === 'type') return [key, value.getAll(key)];
           if (key.startsWith('r.'))
             return [
               key,

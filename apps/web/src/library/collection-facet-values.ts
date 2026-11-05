@@ -8,7 +8,7 @@ import { facetRequest, type FacetState, type RequestedFacet } from '../search/re
 
 export type CollectionFacetRequest = {
   resource: { kind: 'collection'; id: string };
-  type: string;
+  type?: string;
   release: string;
   filter?: FilterDocument;
   languages: string[];
@@ -34,7 +34,7 @@ const input = v.strictObject({
     kind: v.literal('collection'),
     id: v.pipe(v.string(), v.minLength(1), v.maxLength(128)),
   }),
-  type: v.pipe(v.string(), v.minLength(1), v.maxLength(128)),
+  type: v.exactOptional(v.pipe(v.string(), v.minLength(1), v.maxLength(128))),
   release: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
   filter: v.exactOptional(v.unknown()),
   languages: v.pipe(v.array(v.pipe(v.string(), v.maxLength(35))), v.minLength(1), v.maxLength(8)),
@@ -63,7 +63,8 @@ export const readCollectionFacetValues = createServerFn({ method: 'POST' })
     const release = await readRelease().catch(() => undefined);
     if (!release) return { status: 'unavailable', code: 'collection_facet_release_unavailable' };
     if (data.release !== release.digest) return { status: 'restart', code: 'collection_facet_release_changed' };
-    if (!release.types[data.type]) return { status: 'refused', code: 'collection_facet_type_refused' };
+    if (data.type !== undefined && !release.types[data.type])
+      return { status: 'refused', code: 'collection_facet_type_refused' };
 
     let filter: FilterDocument | undefined;
     try {

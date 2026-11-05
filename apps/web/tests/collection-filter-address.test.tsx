@@ -113,7 +113,7 @@ test('correction is explicit, inspectable and preserves context; only a changed 
   expect(clear.searchParams.get('layout')).toBe('grid');
   const unchanged = new URLSearchParams({ cursor: 'opaque', [`r.${count}`]: '1e3,' });
   const normalized = new URL(
-    collectionFilterAddress('en', 'c', {}, { [count]: { from: 1000 } }, {}, type, unchanged),
+    collectionFilterAddress('en', 'c', {}, { [count]: { from: 1000 } }, {}, undefined, unchanged),
     corrected,
   );
   expect(normalized.searchParams.get('cursor')).toBe('opaque');

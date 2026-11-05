@@ -12,7 +12,7 @@ export function CollectionFilterAddressState({
   search,
 }: {
   id: string;
-  type: string;
+  type: string | undefined;
   params: CollectionFilterParams;
   search: string;
 }) {
