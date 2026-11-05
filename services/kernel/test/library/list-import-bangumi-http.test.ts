@@ -1,7 +1,7 @@
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import { batchCommand } from '../../src/semantic/bulk.ts';
 import { globalContextAnchor } from '../../src/semantic/context.ts';
@@ -656,6 +656,23 @@ test('score review retains source scale and native vote while requiring separate
       status: 'applied',
       vote: { units: 13 },
     });
+    // A changed re-import is a fresh review: the new Bangumi score sits beside the current native vote.
+    const changedUpload = (
+      await ok(await score.send('owner', 'POST', `${root}:preview`, upload([{ ...rows[0], rate: 9 }])))
+    ).uploadId;
+    const changedReview = (
+      await ok(
+        await score.send('owner', 'POST', `/${changedUpload}:review`, {
+          ordinal: 0,
+          target: setTarget,
+          score: { action: 'preserve' },
+        }),
+      )
+    ).review;
+    expect(changedReview.score).toMatchObject({
+      source: { state: 'score', value: 9 },
+      native: { currentVote: { state: 'set', units: 0 }, admission: { status: 'reviewed' } },
+    });
   } finally {
     await score.close();
   }
@@ -962,6 +979,16 @@ test('source scrub retains only a started vote receipt and reconciles it with cu
       routeKey: testRouteKey(),
       votes: native,
     });
+    // Recovery repeats current vote authority before it looks up or discloses the historical receipt.
+    await expect(
+      recovery.apply(
+        { ...score.owner.actor, scopes: score.owner.actor.scopes.filter((scope) => scope !== 'rating:vote') },
+        uploadId,
+        selected,
+        new AbortController().signal,
+        Date.now() + 120000,
+      ),
+    ).rejects.toBeInstanceOf(GrantDeniedError);
     const before = await native.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, target);
     const result = await recovery.apply(
       score.owner.actor,
