@@ -58,47 +58,10 @@ type Slot = {
   eligibilityGeneration: string;
 };
 type Contribution = { subjectId: string; associationId: string; bindingHash: Uint8Array; revision: string };
-type PageItem = {
-  state: 'available' | 'withheld';
-  subjectId: string;
-  associationId: string;
-  subject: { id: string; type: string; label: string | null; href: string } | null;
-  target: { id: string; type: string; label: string | null; href: string } | null;
-  association: null | {
-    subjectId: string;
-    associationId: string;
-    slotId: string;
-    property: string;
-    targetId: string;
-    contextId: typeof GLOBAL_CONTEXT;
-    origin: 'global';
-    release: string;
-    revision: number;
-    bindingHash: string;
-    statementDigest: string;
-    qualifiersDigest: string;
-  };
-  own: { assessment: Assessment; falsePositive: boolean; revision: string; pending: 'current' | 'pending' | 'unknown' };
-  aggregate: ReturnType<typeof classificationAggregateView> | null;
-  actions: {
-    state: 'editable' | 'read-only' | 'withdraw-only' | 'withheld';
-    readback: string | null;
-    set: string | null;
-    clear: string | null;
-  };
-};
-export type ClassificationBallotOwnPage = {
-  viewer: { accountId: string };
-  inventory: {
-    kind: 'current-retained';
-    complete: false;
-    generation: string | null;
-    cleanup: 'not-started' | 'pending' | 'settled';
-  };
-  items: PageItem[];
-  traversal: 'more' | 'complete';
-  next: string | null;
-};
+export type ClassificationBallotOwnPage = import('typebox').Static<
+  typeof import('./classification-ballot-own-page-schemas.ts').ClassificationBallotOwnPageSchema
+>;
+type PageItem = ClassificationBallotOwnPage['items'][number];
 
 function ownerOf(actor: Actor): AccountActor {
   if (

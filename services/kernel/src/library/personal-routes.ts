@@ -1966,7 +1966,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         query: t.Object(
           {
             ...pageQuery,
-            targetType: t.Optional(t.Enum({ subject: 'subject', collection: 'collection', space: 'space' })),
+            targetType: t.Optional(t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')])),
           },
           closed,
         ),
@@ -1988,7 +1988,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
               parameters: { accountId: owner.accountId, targetType: query.targetType ?? 'all', state: 'following' },
             };
             let after: FollowPageCursor | null = null;
-            let cursorEpoch: string | null = null;
+            let cursorEpoch: number | null = null;
             if (query.cursor !== undefined) {
               const cursor = decodeCursor(dependencies.tokens, binding, query.cursor);
               if (
