@@ -4282,11 +4282,10 @@ The opaque outer cursor binds the account, client, delegator, sorted scopes, aut
 head, Subject and Semantic source component, filter, order, page bound and destination policy version. Its inner
 Realm keyset cursor retains the Realm source epoch and raw Board frontier. Both cursors expire after fifteen minutes;
 an expired inner Realm generation is returned as a closed expired page for explicit restart. No Board advice is cached across pages.
-Decision: Migrate `apps/web/src/threads/review-board-choices.ts` only after the shared complete-input publisher
-installs this route and its complete native dependencies through `@rezics/client`. Retain the current receiver until
-then; an absent installed callable does not authorize a replacement declaration or endpoint. The migration must call
-the public method directly, derive page and preparation types from its result, and retain runtime validation of the
-untrusted response, native bindings and all page states independently of installed typing.
+Decision: Preserve the local receiver until the controller publishes the admitted review-destinations route and its
+complete native dependencies in the actual `@rezics/client` output; then call that public method and derive page and
+preparation types from its result while retaining runtime validation of the untrusted response, native bindings and
+all page states. Missing installed typing does not authorize a replacement declaration or endpoint.
 
 ### Cost: Review destination page and exact inspection
 
