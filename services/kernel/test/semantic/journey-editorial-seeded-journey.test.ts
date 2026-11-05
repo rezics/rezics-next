@@ -1,22 +1,62 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
-import type { HttpResponse, Persona } from '../../../../specs/semantic-driver.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { createSemanticDriver, type SemanticOutcomeDriver } from './outcome-driver.ts';
+import { setupContent } from '../../src/content/setup.ts';
+import { createPool } from '../../src/database/pool.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { setupPresentation } from '../../src/presentation/setup.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { createRealAccess } from './real-access.ts';
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const pool = createPool(databaseUrl);
+const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const accounts = {
+  editor: newId(0x5101),
+  acceptor: newId(0x5102),
+  outsider: newId(0x5103),
+  delegated: newId(0x5104),
+  suspended: newId(0x5105),
+};
+type Actor = keyof typeof accounts | null;
+const actions = [
+  'subject:create',
+  'subject:read',
+  'statement:propose',
+  'context:create',
+  'context:accept',
+  'context:adopt',
+  'subject:merge',
+  'moderation:hide',
+];
+const real = await createRealAccess(admin, accounts, actions);
+const kernel = createKernel({
+  pool,
+  access: real.access,
+  tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(41)]]) },
+  receiptKeys: testReceiptKeys(),
+  routeKey: new Uint8Array(32).fill(42),
+  writeRate: real.writeRate,
+});
 
 const language = 'schema:inLanguage';
 const abstract = 'schema:abstract';
 const citation = (id: string) => ({
   parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: id } }],
 });
-const key = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
+const key = () => `"${randomUUID()}"`;
 const snak = (id: string, content: unknown) => ({ property: { id }, value: { type: 'value' as const, content } });
 const cited = (property: string, content: unknown, source: string) => ({
   ...snak(property, content),
   references: [citation(source)],
 });
 
+type HttpResponse = { status: number; headers: Headers; body: Record<string, any> };
 type Statement = { id: string; rank: string; value: { type: string; content?: unknown } };
 type Candidate = {
   id: string;
@@ -36,10 +76,32 @@ type SubjectBody = {
   };
 };
 
-let driver: SemanticOutcomeDriver;
-const write = (persona: Persona, path: string, body: unknown, headers = key()) =>
-  driver.request(persona, 'POST', path, body, headers);
-const get = (persona: Persona, path: string) => driver.request(persona, 'GET', path);
+async function call(
+  persona: Actor,
+  method: string,
+  path: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<HttpResponse> {
+  const response = await kernel.handle(
+    new Request(`http://kernel.test${path}`, {
+      method,
+      headers: {
+        ...(persona ? { authorization: `Bearer ${real.bearer(persona)}` } : {}),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        'idempotency-key': headers['Idempotency-Key'] ?? key(),
+        ...headers,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+  );
+  return { status: response.status, headers: response.headers, body: (await response.json()) as Record<string, any> };
+}
+
+const write = (persona: Actor, path: string, body: unknown, headers: Record<string, string> = {}) =>
+  call(persona, 'POST', path, body, headers);
+const get = (persona: Actor, path: string, headers: Record<string, string> = {}) =>
+  call(persona, 'GET', path, undefined, headers);
 
 function problem(response: HttpResponse, status: number, code: string) {
   expect(response.status, JSON.stringify(response.body)).toBe(status);
@@ -65,7 +127,8 @@ function languages(subject: SubjectBody['subject']) {
   }));
 }
 
-async function propose(id: string, content: string, source: string, headers = key(), persona: Persona = 'editor') {
+async function propose(id: string, content: string, source: string, idempotency = key(), persona: Actor = 'editor') {
+  const headers = { 'Idempotency-Key': idempotency };
   const response = await write(
     persona,
     `/v1/subjects/${id}/candidates`,
@@ -84,7 +147,7 @@ async function propose(id: string, content: string, source: string, headers = ke
   };
 }
 
-async function listCandidates(id: string, persona: Persona, limit = 20, cursor?: string) {
+async function listCandidates(id: string, persona: Actor, limit = 20, cursor?: string) {
   const query = new URLSearchParams({
     property: language,
     context: GLOBAL_CONTEXT,
@@ -100,13 +163,56 @@ async function listCandidates(id: string, persona: Persona, limit = 20, cursor?:
   };
 }
 
+async function inspectRevisions(subjectId: string) {
+  const route = routeOf(subjectId);
+  if (route === null) return [];
+  const rows = await pool.query<{ revision: string; partition: string; transaction_id: string }>(
+    `SELECT revision, route >> 4 AS partition,
+            recorded_transaction_id::text AS transaction_id
+       FROM semantic.revision
+      WHERE route=$1 AND subject_id=$2
+      ORDER BY revision`,
+    [route, subjectId],
+  );
+  return rows.rows.map((row) => ({
+    revision: Number(row.revision),
+    partition: Number(row.partition),
+    transactionId: row.transaction_id,
+  }));
+}
+
 beforeAll(async () => {
-  driver = await createSemanticDriver(undefined, { isolatedAuth: true });
-  await driver.grant('editor', ['moderation:hide'], driver.globalContext);
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
+  await setupPresentation(pool);
+  await setupContent(pool);
+  for (const account of Object.values(accounts))
+    await admin.query("UPDATE access.account SET rate_tier='trusted' WHERE route=$1 AND account_id=$2", [
+      routeOf(account),
+      account,
+    ]);
+  const global = { route: 0, id: GLOBAL_CONTEXT };
+  for (const action of [
+    'subject:create',
+    'subject:read',
+    'statement:propose',
+    'context:create',
+    'moderation:hide',
+  ] as const)
+    await real.grant(global, 'editor', action);
+  for (const action of ['subject:read', 'context:accept', 'context:adopt', 'subject:merge'] as const)
+    await real.grant(global, 'acceptor', action);
+  await real.grant(global, 'delegated', 'statement:propose');
+  for (const action of ['subject:create', 'statement:propose', 'context:create'] as const)
+    await real.grant(global, 'suspended', action);
+  await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
+    routeOf(accounts.suspended),
+    accounts.suspended,
+  ]);
 }, 180_000);
 
 afterAll(async () => {
-  await driver?.close();
+  await pool.end();
+  await admin.end();
 }, 180_000);
 
 test('cited competing proposals complete through acceptance, adoption and independent public readback', async () => {
@@ -121,7 +227,7 @@ test('cited competing proposals complete through acceptance, adoption and indepe
   expect(created.context).toBe(GLOBAL_CONTEXT);
   const createdEnglish = languages(created);
   expect(createdEnglish).toEqual([{ id: createdEnglish[0]!.id, rank: 'normal', content: 'en' }]);
-  const afterCreate = await driver.inspect.revisions(created.id);
+  const afterCreate = await inspectRevisions(created.id);
   expect(afterCreate).toHaveLength(1);
   expect(new Set(afterCreate.map((row) => row.partition)).size).toBe(1);
 
@@ -131,7 +237,7 @@ test('cited competing proposals complete through acceptance, adoption and indepe
     'editor',
     `/v1/subjects/${created.id}/candidates`,
     { statement: cited(language, 'ja', 'https://catalogue.example.test/editorial/ja') },
-    replayKey,
+    { 'Idempotency-Key': replayKey },
   );
   expect(replayed.status).toBe(201);
   expect(replayed.body).toMatchObject({ candidate: japanese.id, revision: japanese.revision });
@@ -143,7 +249,7 @@ test('cited competing proposals complete through acceptance, adoption and indepe
   });
   problem(invalid, 400, 'invalid_request');
 
-  const pendingPublic = readSubject(await get('anonymous', `/v1/subjects/${created.id}`));
+  const pendingPublic = readSubject(await get(null, `/v1/subjects/${created.id}`));
   expect(languages(pendingPublic)).toEqual(createdEnglish);
   expect(pendingPublic.revision).toBe(created.revision);
 
@@ -185,7 +291,7 @@ test('cited competing proposals complete through acceptance, adoption and indepe
   expect(decided[japanese.id]?.decision).toBe('accepted');
   expect(decided[korean.id]?.decision).toBe('rejected');
   expect(decided[chinese.id]?.decision).toBeNull();
-  expect(languages(readSubject(await get('anonymous', `/v1/subjects/${created.id}`)))).toEqual(createdEnglish);
+  expect(languages(readSubject(await get(null, `/v1/subjects/${created.id}`)))).toEqual(createdEnglish);
 
   const adopted = await write('acceptor', `/v1/subjects/${created.id}:adopt`, {
     context: GLOBAL_CONTEXT,
@@ -196,7 +302,7 @@ test('cited competing proposals complete through acceptance, adoption and indepe
   });
   expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
 
-  const publicAfter = readSubject(await get('anonymous', `/v1/subjects/${created.id}`));
+  const publicAfter = readSubject(await get(null, `/v1/subjects/${created.id}`));
   expect(languages(publicAfter)).toEqual([{ id: japanese.id, rank: 'preferred', content: 'ja' }]);
   expect(JSON.stringify(publicAfter)).not.toContain(korean.id);
   expect(JSON.stringify(publicAfter)).not.toContain('ko');
@@ -213,7 +319,9 @@ test('cited competing proposals complete through acceptance, adoption and indepe
   const room = await write('editor', '/v1/contexts', { labels: { en: 'Editorial room', 'zh-Hans': '编辑室' } });
   expect(room.status, JSON.stringify(room.body)).toBe(201);
   const contextId = (room.body as { context: { id: string } }).context.id;
-  await driver.grant('acceptor', ['context:accept', 'context:adopt'], contextId);
+  const contextResource = { route: routeOf(contextId)!, id: contextId };
+  await real.grant(contextResource, 'acceptor', 'context:accept');
+  await real.grant(contextResource, 'acceptor', 'context:adopt');
   const suppressed = await write('acceptor', `/v1/subjects/${created.id}:adopt`, {
     context: contextId,
     property: language,
@@ -222,15 +330,15 @@ test('cited competing proposals complete through acceptance, adoption and indepe
     expected_head: null,
   });
   expect(suppressed.status, JSON.stringify(suppressed.body)).toBe(200);
-  expect(languages(readSubject(await get('anonymous', `/v1/subjects/${created.id}`)))).toEqual([
+  expect(languages(readSubject(await get(null, `/v1/subjects/${created.id}`)))).toEqual([
     { id: japanese.id, rank: 'preferred', content: 'ja' },
   ]);
-  expect(languages(readSubject(await get('anonymous', `/v1/subjects/${created.id}?context=${contextId}`)))).toEqual([]);
+  expect(languages(readSubject(await get(null, `/v1/subjects/${created.id}?context=${contextId}`)))).toEqual([]);
   const labelled = await get('editor', `/v1/contexts/${contextId}`);
   expect(labelled.status, JSON.stringify(labelled.body)).toBe(200);
   const labels = (labelled.body as { context: { labels: Record<string, string> } }).context.labels;
   expect(labels.en).toBe('Editorial room');
-  const fallback = await driver.request('editor', 'GET', `/v1/contexts/${contextId}`, undefined, {
+  const fallback = await get('editor', `/v1/contexts/${contextId}`, {
     'accept-language': 'zh-Hant, zh-Hans;q=0.8, en;q=0.1',
   });
   expect(fallback.status).toBe(200);
@@ -302,9 +410,9 @@ test('cited competing proposals complete through acceptance, adoption and indepe
       })
     ).status,
   ).toBe(200);
-  const publicAuthored = readSubject(await get('anonymous', `/v1/subjects/${authored.id}?includeDocuments=true`));
+  const publicAuthored = readSubject(await get(null, `/v1/subjects/${authored.id}?includeDocuments=true`));
   expect(publicAuthored.statements[abstract]?.map((row) => row.id)).toEqual([abstractCandidate]);
-  const publicDocument = await get('anonymous', `/v1/documents/${documentLocator!.document}`);
+  const publicDocument = await get(null, `/v1/documents/${documentLocator!.document}`);
   expect(publicDocument.status, JSON.stringify(publicDocument.body)).toBe(200);
   const document = (publicDocument.body as { document: Record<string, unknown> }).document;
   expect(document).toMatchObject({
@@ -316,13 +424,13 @@ test('cited competing proposals complete through acceptance, adoption and indepe
     availability: 'available',
   });
 
-  const revisions = await get('anonymous', `/v1/subjects/${created.id}/revisions?limit=20`);
+  const revisions = await get(null, `/v1/subjects/${created.id}/revisions?limit=20`);
   expect(revisions.status).toBe(200);
   const kinds = (revisions.body as { revisions: { revision: number; kind: string }[] }).revisions.map(
     (row) => row.kind,
   );
   expect(kinds).toEqual(expect.arrayContaining(['record', 'candidate', 'decision', 'adoption']));
-  const inspected = await driver.inspect.revisions(created.id);
+  const inspected = await inspectRevisions(created.id);
   expect(inspected.length).toBeGreaterThanOrEqual(kinds.length);
   expect(new Set(inspected.map((row) => row.partition)).size).toBe(1);
   expect(new Set(inspected.map((row) => row.transactionId)).size).toBe(inspected.length);
@@ -330,7 +438,7 @@ test('cited competing proposals complete through acceptance, adoption and indepe
     (row) => row.kind === 'adoption',
   );
   expect(adoptionRevision).toBeDefined();
-  const detail = await get('anonymous', `/v1/subjects/${created.id}/revisions/${adoptionRevision!.revision}`);
+  const detail = await get(null, `/v1/subjects/${created.id}/revisions/${adoptionRevision!.revision}`);
   expect(detail.status).toBe(200);
   expect((detail.body as { change: { kind: string; mode?: string } }).change).toMatchObject({
     kind: 'adoption',
@@ -346,31 +454,15 @@ test('anonymous, outsider, delegated editor and suspended bearers keep editorial
     }),
   );
   const statement = { statement: cited(language, 'fr', 'https://catalogue.example.test/editorial/fr') };
-  problem(await write('anonymous', `/v1/subjects/${created.id}/candidates`, statement), 401, 'authentication_required');
+  problem(await write(null, `/v1/subjects/${created.id}/candidates`, statement), 401, 'authentication_required');
   const suspended = await write('suspended', `/v1/subjects/${created.id}/candidates`, statement);
   problem(suspended, 401, 'invalid_credentials');
   expect(suspended.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
 
-  const outsider = await driver.fixtures.person('outsider');
-  const outsiderWrite = await driver.fixtures.send(
-    outsider,
-    'POST',
-    `/v1/subjects/${created.id}/candidates`,
-    statement,
-    key(),
-  );
-  problem(outsiderWrite, 403, 'forbidden');
+  problem(await write('outsider', `/v1/subjects/${created.id}/candidates`, statement), 403, 'forbidden');
 
-  const delegated = await driver.fixtures.person('delegated-editor');
-  await driver.fixtures.grantAccount(delegated, ['statement:propose']);
-  const delegatedWrite = await driver.fixtures.send(
-    delegated,
-    'POST',
-    `/v1/subjects/${created.id}/candidates`,
-    statement,
-    key(),
-  );
+  const delegatedWrite = await write('delegated', `/v1/subjects/${created.id}/candidates`, statement);
   expect(delegatedWrite.status, JSON.stringify(delegatedWrite.body)).toBe(201);
   expect(typeof delegatedWrite.body.candidate).toBe('string');
-  expect(languages(readSubject(await get('anonymous', `/v1/subjects/${created.id}`)))).toEqual([]);
+  expect(languages(readSubject(await get(null, `/v1/subjects/${created.id}`)))).toEqual([]);
 }, 180_000);
