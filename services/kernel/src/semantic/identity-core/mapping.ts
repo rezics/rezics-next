@@ -33,7 +33,7 @@ export type IdentityPendingEvidence = Readonly<{
   partition_no: number;
   terminal: string;
   pending_job: string | null;
-  pending_epoch: Integer;
+  pending_epoch: Integer | null;
 }>;
 export type IdentityControlEvidence = Readonly<{
   partition_no: number;
