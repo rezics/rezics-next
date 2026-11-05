@@ -109,6 +109,14 @@ test('The actual named-label Library renders private FULL assignments and remove
     },
   }));
   mock.module('cloudflare:workers', () => ({ env: sessionEnv }));
+  mock.module('../src/settings/shelf-preferences-current', () => ({
+    readCurrentShelfPreferences: async () => ({
+      generation: id(900),
+      accountId: A,
+      csrfToken: null,
+      shelf: null,
+    }),
+  }));
   const reads: Request[] = [];
   const held: {
     subject: string;
