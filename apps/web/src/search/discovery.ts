@@ -634,7 +634,7 @@ function validKinds(value: DiscoveryKinds): boolean {
  */
 export function parseLegacySearchPage(value: unknown): LegacySearchPage | undefined {
   let directory: DiscoveryKinds | undefined;
-  if (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'kinds')) {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value) && 'kinds' in value) {
     const parsedKinds = v.safeParse(kinds, value.kinds);
     if (!parsedKinds.success || !validKinds(parsedKinds.output)) return;
     directory = parsedKinds.output;

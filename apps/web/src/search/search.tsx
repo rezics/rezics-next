@@ -61,7 +61,6 @@ import { createRangeDraftState, updateRangeDraft, type RangeDraft } from './refi
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import {
   readDiscoveryKinds,
-  type DiscoveryKinds,
   type DiscoveryKindsState,
   type LegacySearchPage,
   type DiscoveryState,
@@ -1840,7 +1839,7 @@ export function RealmCatalogueSearch({
       key={searchSessionLifetime(locale, { ...queryState, cursor: undefined }, reader ?? undefined)}
       queryState={queryState}
       locale={locale}
-      reader={reader ?? undefined}
+      {...(reader ? { reader } : {})}
       pathname={pathname}
       searchHref={currentHref}
       hrefForState={hrefForState}
