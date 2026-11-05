@@ -396,6 +396,8 @@ test('The actual named-label Library renders private FULL assignments and remove
     await act(async () => client.invalidateQueries({ queryKey: rejectedQuery.queryKey, exact: true }));
     await settle();
     visible(A, null);
+    const recoveredSerial = serial;
+    expect(recoveredSerial).toBe(beforeHydration + 1); // Clearing the cursor refusal deliberately rereads its exact page.
     // Read admission is independent of missing CSRF and of unassign admission.
     const reading = () => host.querySelector('[data-received-assignment-reader]');
     const openReading = async () => {
@@ -419,7 +421,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     undoForm.dispatchEvent(blockedSubmit);
     expect(blockedSubmit.defaultPrevented).toBe(true);
     noCsrf = false;
-    expect(serial).toBe(beforeHydration); // Matching SSR does not repeat the FULL page read.
+    expect(serial).toBe(recoveredSerial); // Changing the CSRF observation does not repeat the FULL page read.
     const originalForms = fields();
     const display = new URLSearchParams(parameters);
     display.set('layout', 'list');
@@ -428,7 +430,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     await act(async () => {
       await navigate(display);
     });
-    expect(serial).toBe(beforeHydration);
+    expect(serial).toBe(recoveredSerial);
     expect(fields()).toEqual(originalForms);
     expect(reading()).not.toBeNull(); // Display changes preserve the exact page observation.
     observe('signed-in', A, 'z'.repeat(22));
