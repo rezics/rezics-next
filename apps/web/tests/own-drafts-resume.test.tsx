@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { fromPlainText } from '@rezics/document';
 import { m } from '../src/paraglide/messages.js';
-import { localizeHref } from '../src/paraglide/runtime.js';
+import { getLocale, localizeHref } from '../src/paraglide/runtime.js';
 import { subjectHref } from '../src/subject/subject-href';
 import { threadHref } from '../src/threads/thread-href';
 import {
@@ -266,7 +266,7 @@ test('browser writing stays separate until the person names it as the editor sou
     expect(fixture.host.textContent).toContain('Independent browser body');
     expect([listReads, selectedReads, localReads, writes.length]).toEqual([1, 1, 1, 0]);
     await fixture.click(m.own_drafts_use_browser({}, { locale }));
-    expect(fixture.host.textContent).toContain(m.own_drafts_browser_source({}, { locale }));
+    expect(fixture.host.textContent).toContain(m.own_drafts_browser_source({}, { locale: getLocale() }));
     expect(fixture.host.textContent).toContain('Independent browser body');
     expect(fixture.host.textContent).not.toContain('Server-saved body');
     expect(writes).toHaveLength(0);
