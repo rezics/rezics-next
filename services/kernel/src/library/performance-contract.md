@@ -533,28 +533,36 @@ optional exact source recheck, and at most one reclaim and one set. Negative par
 ineffective reservation remain in those bounds. The subject page retains its 32-key raw frontier before sorting,
 cursor filtering and slicing.
 
-Create, rename with its no-change read branch, label delete/restore, catalogue pages, assignment set, exact unassign,
-exact retained restore, and BASIC/FULL assignment SQL pages are consumed by the existing stores and callers. A
-composed local operation reserves once on the current `CommandWorkAssociation`; its nested SQL leaves execute on the
-same client without duplicate reservation. A direct leaf still uses its exact SQL declaration. The explicit bridge
-to the existing eight-axis Source port checks `engineRequests === 0`; these SQL leaves make no Search request and do
-not mint permission, a native grant, replay authority or execution evidence.
+Create, rename with its no-change read branch, label delete/restore, assignment set, exact unassign and exact retained
+restore now attach their SQL and command receipt/event components through the existing command execution binding,
+before `runCommand` dispatches. Their SQL leaves continue on the command's existing client and do not reserve twice.
+The command plans remain `complete: false` while access preparation, import source-currentness and retry/rollback
+costs are not closed by their owners. The explicit nine-to-eight-axis bridge checks `engineRequests === 0`; these SQL
+leaves make no Search request and grant no permission, native authority, receipt replay or execution evidence.
 
-FULL by-label storage reads charge the bounded assignment page, current parent, entry tiles and active-session query
-for at most 100 subject IDs. Their projection bounds follow the stored vocabulary ID ceiling, profile unit ID limit,
-numeric input grammar, locator limit, UUID/revision widths and PostgreSQL timestamp text. The active-session seek is
-the existing partial index on `(route, account_id, subject_id, last_changed_at DESC, session_id)`. FULL subject
-summaries remain Semantic-owned and the current `fullView` fanout is outside this local plan.
+Catalogue reads reserve before opening the read snapshot. The immutable page includes the full row projection,
+partition/current-account snapshot, cursor input and serialized response; a prefix continuation also reserves the
+exact name point read at the 100-scalar ceiling. Cursor decoding, stale-partition comparison and cursor encoding stay
+in the catalogue caller. This is the only enclosing plan currently marked `complete: true`.
+
+Assignment pages preserve distinct BASIC/FULL declarations and the unchanged raw frontier of at most 100 rows.
+FULL by-label storage work includes the assignment page, current parent, entry tiles and active-session query. Tile
+and session projections follow the stored vocabulary ID ceiling, profile unit ID limit, numeric input grammar,
+locator limit, UUID/revision widths and PostgreSQL timestamp text. The active-session seek is the existing partial
+index on `(route, account_id, subject_id, last_changed_at DESC, session_id)`. The Semantic `readSubject` fanout stays
+at its owner and is not yet composed into the FULL HTTP envelope.
 
 The existing native prefix journey now takes a full 100-row prefix page and its five-row continuation. The FULL HTTP
 journey takes a 100-assignment raw page with one withheld Subject summary and verifies that continuation starts after
 the raw frontier without refill; existing assignment, lifecycle and catalogue journeys retain their replay, CAS,
 capacity and later-edit assertions.
 
-These declarations are not yet complete enclosing operations: each plan reports `complete: false`. The existing
-command root still owns access/action/group preparation, account floor/fence, source identity and parent currentness,
-receipt/replay, History/events/outbox, transaction controls, retries, rollback and serialized response bytes. The
-catalogue root also owns partition/cursor decoding and continuation-name rereads. AniList, MAL and custom import
-preparation/fence branches remain with their import callers. Semantic FULL disclosure and its repeated source/profile
-probes remain with the Semantic owner. Add those reached terms at those existing boundaries before calling the
-operation family complete; keep the current request deadline, attempts, receipt semantics and capacity unchanged.
+The remaining composition cannot be made a finite pre-dispatch reservation without changing current owner behavior.
+The command owner retries contention until the original deadline with no attempt-count cap (`semantic/README.md`,
+Command and receipt); `command.ts` computes a growing jitter ceiling but no maximum attempt count. The FULL Semantic
+reader also fetches every current merge member through `source-records-members.sql`, then repeats source, profile,
+disclosure and redirect probes; that indexed query has no row limit. Neither actual retry count nor member count is
+known before the first dispatch. Do not mark those operation branches complete, derive terms from returned rows, add
+a second admission or introduce a new rejection. AniList, MAL and custom import preparation/source fences also need
+their existing owners to supply the missing static terms. Keep request deadline, attempts, receipt, origin and raw
+page-frontier behavior unchanged.
