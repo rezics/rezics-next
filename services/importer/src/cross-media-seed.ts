@@ -2079,7 +2079,7 @@ export type CrossMediaSeedResult = {
   characterDiagnostics: SourceVocabularyGap[];
   episodeDiagnostics: ShowcaseEpisodeDiagnostic[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
-  vndbWorkRelations: VndbWorkRelationOutcome[];
+  vndbWorkRelations: readonly VndbWorkRelationOutcome[];
   releaseSupersessions?: GraphEdgeEvidence[];
   bangumiGenrePublication?: BangumiGenrePublication;
   bangumiGameGenrePublication?: BangumiGameGenrePublication;

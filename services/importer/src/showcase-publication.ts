@@ -1691,7 +1691,14 @@ export async function publishShowcase(input: {
     nativeType: string;
     readerRoute: string;
     kind: string;
-    assertions: { candidateId: string; property: string; digest: string }[];
+    assertions: {
+      candidateId: string;
+      property: string;
+      digest: string;
+      citations?: readonly string[];
+      qualifiers?: NonNullable<BatchStatement['qualifiers']>;
+      target?: { sourceKey: string; subjectId: string; nativeType: string };
+    }[];
   }[] = [];
   const finalMediaOutcomes = [...mediaOutcomes];
   const readHandoffs = new Map<
