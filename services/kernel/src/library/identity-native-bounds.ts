@@ -132,9 +132,7 @@ function one(
   );
 }
 function count(value: unknown, max: number): number | undefined {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= max
-    ? value
-    : undefined;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= max ? value : undefined;
 }
 function ranged(
   sql: string,
@@ -188,9 +186,7 @@ function declaredPoint(
   declaration: Readonly<{ work: Bound; resultBytes: number }>,
 ): Bound | undefined {
   const statement = base(sql, values);
-  return statement
-    ? sumBounds(statement, declaration.work, bound({ bytes: declaration.resultBytes }))
-    : undefined;
+  return statement ? sumBounds(statement, declaration.work, bound({ bytes: declaration.resultBytes })) : undefined;
 }
 function projected(
   _sql: string,
@@ -267,7 +263,9 @@ const currentCaptureProjectionBytes = Buffer.byteLength(
 const basisProjectionBytes = new Map<Query, number>([
   [
     nativeIdentityPartitionQuery,
-    Buffer.byteLength(JSON.stringify({ epoch: 2147483647, position: boundDecimal, writeState: 'active', movedTo: null })),
+    Buffer.byteLength(
+      JSON.stringify({ epoch: 2147483647, position: boundDecimal, writeState: 'active', movedTo: null }),
+    ),
   ],
   [accountQuery, Buffer.byteLength(JSON.stringify({ state: 'suspended', fenced: false, epoch: boundDecimal }))],
   [
@@ -299,7 +297,15 @@ const basisProjectionBytes = new Map<Query, number>([
       }),
     ),
   ],
-  [fencesQuery, Buffer.byteLength(JSON.stringify([{ kind: 'collection', generation: boundDecimal }, { kind: 'account', generation: boundDecimal }]))],
+  [
+    fencesQuery,
+    Buffer.byteLength(
+      JSON.stringify([
+        { kind: 'collection', generation: boundDecimal },
+        { kind: 'account', generation: boundDecimal },
+      ]),
+    ),
+  ],
   [identityCapture, currentCaptureProjectionBytes],
   [proofQuery, Buffer.byteLength(JSON.stringify({ transactionId: boundId, position: boundDecimal }))],
 ]);
@@ -361,57 +367,57 @@ const sqlDeclarations = Object.freeze(
   ) as SQLDeclarations,
 );
 
-const selectedParts: Readonly<
-  Record<keyof typeof LIBRARY_IDENTITY_SELECTED_STATEMENTS, StatementPart>
-> = Object.freeze({
-  plan: projected(
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.plan.sql,
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.plan.values,
-    1,
-    1,
-    0,
-    LIBRARY_IDENTITY_PLAN_RESULT_BYTES,
-    1,
-  ),
-  current: projected(
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.current.sql,
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.current.values,
-    7,
-    7,
-    1,
-    64,
-    1,
-  ),
-  job: projected(
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.job.sql,
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.job.values,
-    16,
-    13,
-    16,
-    2048,
-    4,
-  ),
-  seal: projected(
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.seal.sql,
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.seal.values,
-    5,
-    5,
-    2,
-    256,
-    1,
-  ),
-  // The selected page's declaration is one item; its native EOF term is composed separately.
-  page: projected(
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.page.sql,
-    LIBRARY_IDENTITY_SELECTED_STATEMENTS.page.values,
-    1,
-    0,
-    0,
-    512,
-    0,
-    1,
-  ),
-});
+const selectedParts: Readonly<Record<keyof typeof LIBRARY_IDENTITY_SELECTED_STATEMENTS, StatementPart>> = Object.freeze(
+  {
+    plan: projected(
+      LIBRARY_IDENTITY_SELECTED_STATEMENTS.plan.sql,
+      LIBRARY_IDENTITY_SELECTED_STATEMENTS.plan.values,
+      1,
+      1,
+      0,
+      LIBRARY_IDENTITY_PLAN_RESULT_BYTES,
+      1,
+    ),
+    current: projected(
+      LIBRARY_IDENTITY_SELECTED_STATEMENTS.current.sql,
+      LIBRARY_IDENTITY_SELECTED_STATEMENTS.current.values,
+      7,
+      7,
+      1,
+      64,
+      1,
+    ),
+    job: projected(
+      LIBRARY_IDENTITY_SELECTED_STATEMENTS.job.sql,
+      LIBRARY_IDENTITY_SELECTED_STATEMENTS.job.values,
+      16,
+      13,
+      16,
+      2048,
+      4,
+    ),
+    seal: projected(
+      LIBRARY_IDENTITY_SELECTED_STATEMENTS.seal.sql,
+      LIBRARY_IDENTITY_SELECTED_STATEMENTS.seal.values,
+      5,
+      5,
+      2,
+      256,
+      1,
+    ),
+    // The selected page's declaration is one item; its native EOF term is composed separately.
+    page: projected(
+      LIBRARY_IDENTITY_SELECTED_STATEMENTS.page.sql,
+      LIBRARY_IDENTITY_SELECTED_STATEMENTS.page.values,
+      1,
+      0,
+      0,
+      512,
+      0,
+      1,
+    ),
+  },
+);
 type SelectedDeclarations = Readonly<
   Record<
     keyof typeof LIBRARY_IDENTITY_SELECTED_STATEMENTS,
@@ -455,15 +461,12 @@ export function nativeIdentitySourceBasisBound(sql: string, values: readonly unk
   const query = basisQueries.find((item) => equal(item.sql, sql));
   if (!query || values.length !== query.params.length) return undefined;
   const serialized = bindText(values);
-  if (serialized === undefined || Buffer.byteLength(serialized) > basisBindBounds.get(normalize(sql))!) return undefined;
+  if (serialized === undefined || Buffer.byteLength(serialized) > basisBindBounds.get(normalize(sql))!)
+    return undefined;
   const queryBound = base(sql, values);
   if (!queryBound) return undefined;
   const nativeWork = basisWork.get(query)!;
-  return sumBounds(
-    queryBound,
-    nativeWork,
-    bound({ bytes: basisProjectionBytes.get(query)! }),
-  );
+  return sumBounds(queryBound, nativeWork, bound({ bytes: basisProjectionBytes.get(query)! }));
 }
 export function nativeIdentitySourceBasisFootprint(
   sql: string,
@@ -587,7 +590,10 @@ export function libraryIdentityNativeOperationBound(
 export function libraryIdentitySelectedOperationBound(sql: string, values: readonly unknown[]): Bound | undefined {
   if (!libraryIdentitySelectedBindBound(sql, values)) return undefined;
   const selected = Object.values(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.selected).some(
-    (item) => equal(item.sql, sql) || (item === LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.selected.plan && equal(libraryIdentityBoundedPlanSQL, sql)),
+    (item) =>
+      equal(item.sql, sql) ||
+      (item === LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.selected.plan &&
+        equal(libraryIdentityBoundedPlanSQL, sql)),
   );
   if (!selected) return undefined;
   return libraryIdentityNativeOperationBound(sql, values);

@@ -94,17 +94,19 @@ export function declareLibraryIdentityStatement(
 }
 
 /** Pool checkout itself has no SQL, result projection, candidate or witness. */
-export const LIBRARY_IDENTITY_CHECKOUT_WORK = declared(declareBound({
-  candidateKeys: 0,
-  nativeRows: 0,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 1,
-  witnessKeys: 0,
-  statements: 0,
-  bytes: 0,
-  engineRequests: 0,
-}));
+export const LIBRARY_IDENTITY_CHECKOUT_WORK = declared(
+  declareBound({
+    candidateKeys: 0,
+    nativeRows: 0,
+    identityMetadataRows: 0,
+    emptySeeks: 0,
+    nativePoints: 1,
+    witnessKeys: 0,
+    statements: 0,
+    bytes: 0,
+    engineRequests: 0,
+  }),
+);
 
 /** Inclusive component algebra. A caller cannot splice an arbitrary vector into it.
  * Repeats (including rejected SQL and failed COMMIT followed by ROLLBACK) are separate
