@@ -142,11 +142,10 @@ row/ancestry/place disclosure and Accounts publication checks. Withdrawal or cha
 cohort without a replacement frontier. Shared own-reaction, aggregate freshness, action and thread-watch slots
 retain their native current/unavailable/anonymous/sign-in/denied meanings. Readback does not acknowledge a command.
 
-Content's single serial declaration publisher admits complete source inputs independently of future consumers.
-Acceptance requires compiler/construction, official generation, an installed callable and composition-root evidence;
-compatibility reflection, handwritten DTOs/casts/mirrors and source fixtures do not qualify.
-`AuthorContributionActionsWire` remains unavailable until the publisher installs its real method/DTO; it consumes
-this route without importing private producer types.
+Content's one official serial publisher publishes complete admitted inputs independently of future consumers.
+Publication requires compiler/construction, official generation, installed callable and composition-root evidence.
+Compatibility reflection, handwritten DTOs/casts/mirrors and source fixtures do not qualify.
+`AuthorContributionActionsWire` stays unavailable until publication and imports no private producer types.
 
 ### Cost: selected author private overlay
 
