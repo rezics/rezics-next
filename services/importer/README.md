@@ -1265,37 +1265,21 @@ explicit omission.
 
 ### VNDB character traits and selected work appearances
 
-The default family seed acquires the verified `traits`, `traits_parents`,
-`chars_traits`, and `chars_vns` COPY tables. It keeps character identity in the
-VNDB source namespace, selects only characters attached to the chosen VNDB
-family works, and imports supported traits as `schema:keywords` and appearances
-as `schema:character` with the exact role Concept and source spoiler level.
-Association citations retain their table keys. False-positive, unsupported,
-missing-qualifier, and release-scoped rows remain review gaps. For
-`task seed:dev`, reviewed trait Concepts i23 and i30 are checked against current
-public reads and composed with selected works in the same reconciliation run.
-Its optional vocabulary profile supplies appearance-role bindings; other
-character traits remain withheld unless they have reviewed Concepts. The
-ordinary broad publisher emits the bounded needed trait dictionary, parent
-closure and admitted appearance-role terms through the current importer and
-common journal, rereads current native type/`schema:url`/`skos:inScheme`/
-`skos:broader`, and only then admits exact character and per-work associations.
-Optional
-`--vndb-character-vocabulary` / `REZICS_DEV_VNDB_CHARACTER_VOCABULARY` remains
-an explicit UUID override; adopted usable bindings are those the current public
-read actually discloses. Publication consumes the finite vocabulary records and
-exact source URIs from this adapter; it does not invent another vocabulary
-publisher. Trait labels use the exact `traits.name` (ja when kana is present,
-zh-Hant when Han is present without kana, otherwise en) and never a minted
-translation. Mapping revisions stay `character-trait@1` and `appearance-role@1`
-on those associations; vocabulary create/propose identity uses
-`vndb-character-vocabulary@1`.
+The family seed acquires `traits`, `traits_parents`, `chars_traits` and
+`chars_vns`. VNDB Character identity stays source-specific. Only actual selected
+work appearances supply membership; trait and cast citations retain exact table
+keys. `schema:keywords` retains the source trait Concept, lie=false and spoiler;
+`schema:character` retains the exact role Concept and spoiler. False-positive,
+unsupported, missing-qualifier and release-scoped rows remain gaps.
 
-Decision: vocabulary profile UUIDs are lookup hints only; the broad publication
-worker emits them after acknowledgement, and the importer rereads each
-selected Scheme and Concept from current public state before use.
-
-Decision: bounded `traits_parents` edges publish as `skos:broader` on the child Concept; a later URI, type, inScheme or taxonomy-parent contradiction withholds only that term and leaves independently admitted character names and blood-type facts intact.
+The broad publisher emits the bounded trait dictionary, parent closure and
+selected appearance roles through the existing importer and common journal.
+Current type, `schema:url`, `skos:inScheme` and required adopted `skos:broader`
+evidence precede association use. Parent closure retains its caps; a contradiction
+withholds only the affected term, leaving independent names and blood types.
+Trait labels keep `traits.name`: ja for kana, zh-Hant for Han without kana,
+otherwise en. Association revisions remain `character-trait@1` and
+`appearance-role@1`; vocabulary uses `vndb-character-vocabulary@1`.
 
 ### Bangumi person biographies
 
@@ -1324,6 +1308,26 @@ with null object prototypes retain the same provenance; prototype identity is ne
 Decision: `task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
 
 [Seed denial diagnostics](seed-diagnostics.md).
+
+### Refresh selected VNDB Character vocabulary
+
+Decision: reviewed selection admits only source-supported i23/i30 traits and
+selected appearance roles; unavailable Concepts withhold their associations.
+
+The ordinary seed reads current reviewed traits and roles before initial import
+and every vocabulary reseed. Characters may occupy either planned record group.
+The common journal publishes selected role schemes and Concepts, then current
+reads supply the returned trait/role profile and association bindings. Optional
+`--vndb-character-vocabulary` / `REZICS_DEV_VNDB_CHARACTER_VOCABULARY` UUIDs are
+lookup hints, never adoption authority. Unreviewed traits remain withheld.
+
+- Touches: selected Character rows, one reviewed trait Scheme and only needed
+  i23/i30 Concepts, plus selected current role bindings.
+- Bound: existing selected closure and publication caps; each refresh reads at
+  most one trait Scheme and two Concepts. No catalogue scan or new journal.
+- Growth check: `tests/showcase-vndb-traits.test.ts` covers source selection and
+  isolated withdrawal; `test/imports/showcase-character-vocabulary.test.ts`
+  retains independent current Character/work reads and reopen acceptance.
 
 ### Selected VNDB Release context across vocabulary phases
 

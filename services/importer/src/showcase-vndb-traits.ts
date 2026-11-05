@@ -15,17 +15,9 @@ export async function prepareShowcaseVndbTraits(
   port: CrossMediaPort,
   subjects: Readonly<Record<string, string>>,
 ) {
-  const schemeId = subjects['vndb-character-traits-scheme'];
-  if (!schemeId) throw new Error('Reviewed VNDB character-trait scheme is missing');
-  const concepts = reviewedCodes.map((code) => {
-    const id = subjects[`vndb-character-traits-${code}`];
-    if (!id) throw new Error(`Reviewed VNDB character trait ${code} is missing`);
-    return { code, id };
-  });
-  const bindings = await readVndbCharacterVocabularyBindings(port, { traits: { schemeId, concepts } });
-  if (bindings.concepts.length !== concepts.length) throw new Error('Reviewed VNDB character traits are not current');
-
-  const characters = new Set(plan.entities.vndb.filter((row) => characterId.test(row.key)).map((row) => row.key));
+  const characters = new Set(
+    [...plan.records.vndb, ...plan.entities.vndb].filter((row) => characterId.test(row.key)).map((row) => row.key),
+  );
   const codes = new Set<string>(reviewedCodes);
   const traits: Record<string, unknown>[] = [];
   const seen = new Set<string>();
@@ -37,6 +29,15 @@ export async function prepareShowcaseVndbTraits(
     seen.add(key);
     traits.push(row);
   }
+  const needed = new Set(traits.map((row) => row.tid));
+  const schemeId = subjects['vndb-character-traits-scheme'];
+  const concepts = reviewedCodes.flatMap((code) => {
+    const id = subjects[`vndb-character-traits-${code}`];
+    return needed.has(code) && id ? [{ code, id }] : [];
+  });
+  const bindings = await readVndbCharacterVocabularyBindings(port, {
+    ...(schemeId && needed.size ? { traits: { schemeId, concepts } } : {}),
+  });
   const vocabularyPlan = { ...sourcePlan, traits, appearances: [] };
   return {
     bindings,
