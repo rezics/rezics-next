@@ -745,15 +745,24 @@ export async function loadSettingsPage(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
+  options: { signal?: AbortSignal } = {},
 ): Promise<SettingsPage> {
+  const signal = options.signal;
   let accountId: string | null = null;
   try {
+    signal?.throwIfAborted();
     await prepareSession(request, sessionEnv);
+    signal?.throwIfAborted();
     const authorization = viewerCredential(request);
     const preparedAccountId = sessionSubject(request);
     if (!authorization || !preparedAccountId) return { signedIn: false };
     accountId = preparedAccountId;
-    const result = await client.accounts({ accountId }).preferences.get({ headers: { authorization } });
+    signal?.throwIfAborted();
+    const result = await client.accounts({ accountId }).preferences.get({
+      headers: { authorization },
+      ...(signal ? { fetch: { signal } } : {}),
+    });
+    signal?.throwIfAborted();
     const preferences = !result.error ? present(result.data) : undefined;
     if (!preferences) {
       const failure = failureDetails(result.error ?? result.data, statusOf(result), result.headers);
@@ -775,6 +784,7 @@ export async function loadSettingsPage(
       securityHref: securityHref(sessionEnv),
     };
   } catch (error) {
+    signal?.throwIfAborted();
     if (isSessionUnavailableError(error)) throw error;
     const failure = failureDetails(error);
     return {

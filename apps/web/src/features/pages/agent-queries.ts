@@ -2,9 +2,9 @@ import { queryOptions } from '@tanstack/react-query';
 import type { AccountView } from '../../accounts/public-profile/page-read';
 import { personalRead, publicRead } from '../../kernel/query';
 import { defaultReader } from '../../subject/reader';
-import type { AgentReaderResult } from './agent-actions';
+import { readAgentReader, type AgentReaderResult } from './agent-reader-read';
 import type { ReaderFailure } from './agent-reader';
-import { readAgentPage, readAgentReader } from './agent-actions';
+import { readAgentPage } from './agent-actions';
 
 export type AgentReaderQueryKey = readonly [
   'agent-reader',
@@ -54,7 +54,7 @@ export const agentReaderQuery = (handle: string, locale: string, scope: AgentRea
     ...personalRead,
     queryKey: scope.queryKey,
     enabled: typeof window !== 'undefined' && personalRead.enabled && scope.enabled && scope.current(),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const expectedReader = scope.reader;
       const unavailable = {
         kind: 'default' as const,
@@ -62,10 +62,10 @@ export const agentReaderQuery = (handle: string, locale: string, scope: AgentRea
         accountId: null,
         reader: defaultReader,
       };
-      if (!expectedReader || !scope.current()) return unavailable;
+      if (!expectedReader || !scope.current() || signal.aborted) return unavailable;
       try {
-        const result = await readAgentReader({ data: { handle, locale, expectedReader } });
-        if (!scope.current()) return unavailable;
+        const result = await readAgentReader({ data: { handle, locale, expectedReader }, signal });
+        if (signal.aborted || !scope.current()) return unavailable;
         if (result.kind !== 'ready' || result.accountId !== expectedReader) {
           scope.retire(result.kind === 'default' ? result.reason : 'rejected');
           return result.kind === 'default'
@@ -80,7 +80,7 @@ export const agentReaderQuery = (handle: string, locale: string, scope: AgentRea
         scope.accept(result);
         return result;
       } catch (error) {
-        if (!scope.current()) return unavailable;
+        if (signal.aborted || !scope.current()) return unavailable;
         throw error;
       }
     },

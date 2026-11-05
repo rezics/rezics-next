@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { addressLease, readLease } from '../../reader/lease';
 import { browserObservation } from '../../session/observation';
 import { defaultReader, type Reader } from '../../subject/reader';
-import type { AgentReaderResult } from './agent-actions';
+import type { AgentReaderResult } from './agent-reader-read';
 import type { AgentReaderQueryKey, AgentReaderQueryScope } from './agent-queries';
 
 export type AgentReaderPath = { kind: 'overview' } | { kind: 'view'; view: string };

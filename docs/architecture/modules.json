@@ -568,6 +568,7 @@
         "apps/web/src/search/search-window/index.ts",
         "apps/web/src/search/release-window.ts",
         "apps/web/src/search/language-preferences.tsx",
+        "apps/web/src/features/pages/agent-reader-read/index.ts",
         "apps/web/src/features/pages/showcase-work/index.ts"
       ],
       "allowedDependencies": [
@@ -611,7 +612,7 @@
       "kind": "UI/transport library",
       "owner": "performance",
       "paths": ["apps/web/src/settings/**", "apps/web/src/inbox/**"],
-      "publicEntries": [],
+      "publicEntries": ["apps/web/src/settings/preferences.ts"],
       "allowedDependencies": ["client", "ui", "web-accounts", "web-app", "web-content", "web-library", "web-search"],
       "capabilities": ["account-settings"]
     },
