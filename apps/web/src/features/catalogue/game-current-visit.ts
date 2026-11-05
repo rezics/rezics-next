@@ -25,7 +25,9 @@ function sourceAddress(value: string, id: string, locale: string, realm?: string
   if (!accepted) return;
   const url = new URL(accepted, 'https://rezics.invalid');
   const path = url.pathname.split('/');
-  if (path[2] !== 'subjects' || path[3] !== id || url.hash) return;
+  // The shared validator supplies #connections for an address without a fragment.
+  // It validates the route; the local descriptor retains only its source address.
+  if (path[2] !== 'subjects' || path[3] !== id || new URL(value, 'https://rezics.invalid').hash) return;
   const keys = [...url.searchParams.keys()];
   if (keys.some((key) => key !== 'realm') || (url.searchParams.get('realm') ?? undefined) !== realm) return;
   return `${url.pathname}${url.search}`;
