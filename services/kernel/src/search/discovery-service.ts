@@ -305,17 +305,15 @@ function executeDiscoverySearch(
     const kindDirectory = discoveryKindDirectory(registry);
     const registryDigest = createHash('sha256')
       .update(
-        canonicalize(
-          {
-            directory: kindDirectory.map(({ kind, metadata }) => ({
-              kind,
-              domains: registry.domains?.(kind) ??
-                registry.entries.find((entry) => entry.kind === kind)?.domains ?? ['text', 'kind'],
-              metadata,
-            })),
-            omitted: registry.omittedKinds ?? [],
-          },
-        )!,
+        canonicalize({
+          directory: kindDirectory.map(({ kind, metadata }) => ({
+            kind,
+            domains: registry.domains?.(kind) ??
+              registry.entries.find((entry) => entry.kind === kind)?.domains ?? ['text', 'kind'],
+            metadata,
+          })),
+          omitted: registry.omittedKinds ?? [],
+        })!,
       )
       .digest('hex');
     const binding = {

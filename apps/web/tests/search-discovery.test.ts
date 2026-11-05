@@ -60,7 +60,9 @@ test('partial native coverage keeps available results and visibly names the omit
   };
   const parsed = parseDiscoveryPage(page);
   expect(parsed?.kinds.omitted).toEqual(page.kinds.omitted);
-  expect(parseDiscoveryPage({ ...page, kinds: { ...page.kinds, omitted: [{ ...page.kinds.omitted[0]!, id: 'account' }] } })).toBeUndefined();
+  expect(
+    parseDiscoveryPage({ ...page, kinds: { ...page.kinds, omitted: [{ ...page.kinds.omitted[0]!, id: 'account' }] } }),
+  ).toBeUndefined();
   const html = renderToStaticMarkup(
     createElement(DiscoveryResults, { state: { status: 'ready', page: parsed! }, locale: 'en' }),
   );

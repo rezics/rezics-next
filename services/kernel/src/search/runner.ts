@@ -358,9 +358,7 @@ export function startDiscoveryIndexing(options: {
       options.pool,
       options.routeKey,
       options.source,
-      ownerAdapters
-        ? { ownerAdapters, omittedKinds: ownerAdapters.omittedKinds }
-        : undefined,
+      ownerAdapters ? { ownerAdapters, omittedKinds: ownerAdapters.omittedKinds } : undefined,
     );
     const metadataProducers = ownerAdapters?.metadataProducers;
     let readiness: Error | undefined;
