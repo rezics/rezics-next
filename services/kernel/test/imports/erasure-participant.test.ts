@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { readErasureStatus } from '../../src/access/erasure.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { importsWorkModule } from '../../src/imports/erasure.ts';
+import { importsWorkModule } from '../../src/composition/imports-erasure.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';

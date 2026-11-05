@@ -2,7 +2,7 @@ import { mock } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import * as effects from '../../src/events/effects.ts';
 import type { Envelope } from '../../src/events/log.ts';
-import { importsWorkModule } from '../../src/imports/erasure.ts';
+import { importsWorkModule } from '../../src/composition/imports-erasure.ts';
 
 // Intercept only the relay factory boundary to retain its actual registered enqueue
 // and the one envelope read by production. Registration, dispatch and execution stay native.

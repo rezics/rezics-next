@@ -13,7 +13,7 @@ import { semanticWorkModule } from '../semantic/work-module.ts';
 import { createSearchWorkModule } from '../search/work.ts';
 import { ratingWorkModule } from '../rating/work-module.ts';
 import { workflowRetentionWorkModule } from '../work/retention.ts';
-import { importsWorkModule } from '../imports/erasure.ts';
+import { importsWorkModule } from './imports-erasure.ts';
 import { createKernel } from '../http/kernel.ts';
 
 /** Accounts registration installs the Realm adapter before any Realm workflow runs.

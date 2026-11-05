@@ -460,8 +460,7 @@
         "services/kernel/src/partition/**",
         "services/kernel/src/request/**",
         "services/kernel/src/database/**",
-        "services/kernel/src/imports/**",
-        "services/kernel/src/route/**",
+                "services/kernel/src/route/**",
         "services/kernel/src/clock.ts",
         "services/kernel/src/config-error.ts",
         "services/kernel/db/migrations/**",
@@ -474,7 +473,6 @@
         "services/kernel/src/route/route.ts",
         "services/kernel/src/tokens/seal.ts",
         "services/kernel/src/history/work.ts",
-        "services/kernel/src/imports/erasure.ts",
         "services/kernel/src/work/retention.ts",
         "services/kernel/src/work/registry.ts",
         "services/kernel/src/command/execution-contract.ts",
@@ -534,8 +532,7 @@
         "services/kernel/src/partition/**",
         "services/kernel/src/request/**",
         "services/kernel/src/database/**",
-        "services/kernel/src/imports/**",
-        "services/kernel/src/route/**",
+                "services/kernel/src/route/**",
         "services/kernel/src/clock.ts"
       ]
     },
