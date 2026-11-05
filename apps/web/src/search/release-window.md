@@ -11,3 +11,5 @@ Web's public reader/address and response origins fence dispatch and acceptance, 
 replacement. Query, locale and checkpoint replacement retire pending focus. The route observes the loader's read
 without a second mount fetch; reader replacement and browser restoration explicitly refresh. Child windows keep
 [their independent receiving law](README.md#release-child-windows); returning never restores an expansion.
+Each activation owns its settlement by identity; a late completion for an earlier visit to the same cursor cannot
+retire the current action, whose accepted render settles focus.
