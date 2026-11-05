@@ -151,8 +151,8 @@ test('a resolution replays cleanly onto an unrelated new dev head without anothe
     expect(mocked.calls()).toBe(1);
     expect(outcome).toMatchObject({ passed: true, conflictResolution: { method: 'resolver', attempts: 1 } });
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
-    expect(git(h.root, `show dev:${file}`)).toBe(resolved.trimEnd());
-    expect(git(h.root, `show dev:${devOnly}`)).toBe('export const devOnly = true;');
+    expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
+    expect(git(h.root, 'show', `dev:${devOnly}`)).toBe('export const devOnly = true;');
   } finally {
     h.dispose();
   }
@@ -189,8 +189,8 @@ test('a resolution that conflicts with a moved dev head runs the resolver again 
     await h.job.drain();
 
     const outcome = h.outcomes.find((item) => item.taskId === task.id)!;
-    expect(mocked.calls()).toBe(2);
     expect(outcome).toMatchObject({ passed: true, conflictResolution: { method: 'resolver', attempts: 2 } });
+    expect(mocked.calls()).toBe(2);
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
     expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
   } finally {
@@ -227,7 +227,7 @@ test('a 300 KB resolver prompt is delivered over stdin and the resolution lands'
     expect(mocked.calls()).toBe(1);
     expect(outcome).toMatchObject({ passed: true, conflictResolution: { method: 'resolver', attempts: 1 } });
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
-    expect(git(h.root, `show dev:${file}`)).toBe(resolved.trimEnd());
+    expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
   } finally {
     h.dispose();
   }
