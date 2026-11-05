@@ -48,12 +48,12 @@ Decision: The production selected-advice receiver stays unavailable until retain
 response validators remain ready for the existing private no-store native advice route. The mounted manager now
 prepares and displays controls only from its exact selected response, and retains the original command intent
 through explicit retry and refresh while source, cohort and browser-session retirement close old controls. The Board
-page still lacks the observed `pinRevision`, so production selection remains unavailable until the publication
-adds it. Tests establish bounded selection, response validation and mounted consumer behavior, not native
-management/growth. The publication owner continues the retained lineage through
-`416-retained-content-publication.md`; this consumer does not generate or install declarations and makes no
-declaration-head claim.
+page's native source supplies its observed `pinRevision` on initial and continued pages and rejects changed
+generations at final admission. Production selection remains unavailable until complete-input publication installs
+both that field and the official advice callable. Tests establish bounded selection, response validation and
+mounted consumer behavior, not installed production advice or native management/growth. The publication owner
+owns declaration generation and installation.
 
-Decision: Advice uses each displayed available opening post's native `revisionId` as `sourceRevisionId`; pin actions stay unavailable until the Board page supplies its observed `pinRevision`.
+Decision: Advice uses each displayed available opening post's native `revisionId` as `sourceRevisionId` and the admitted Board page's observed `pinRevision`; production actions stay unavailable until both page metadata and advice callable are installed in the public client.
 
 Decision: Pin/unpin confirmation is an expandable in-row group tied to its toggle; cancel restores toggle focus, while completion focuses the current status or the Board's announced recovery target.
