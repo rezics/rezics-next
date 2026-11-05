@@ -3,7 +3,7 @@ import { useCallback, useLayoutEffect, useRef, type MouseEvent } from 'react';
 /** One mounted consent transition owns its keyboard orientation until the reader moves. */
 export function useConsentFocus() {
   const pending = useRef<{
-    source: HTMLElement;
+    source: HTMLButtonElement;
     current: () => boolean;
     ready: () => boolean;
     target: () => HTMLElement | null | undefined;
@@ -28,7 +28,7 @@ export function useConsentFocus() {
   return {
     cancel,
     begin(
-      event: Pick<MouseEvent<HTMLElement>, 'currentTarget' | 'detail'> | undefined,
+      event: Pick<MouseEvent<HTMLButtonElement>, 'currentTarget' | 'detail'> | undefined,
       current: () => boolean,
       target: () => HTMLElement | null | undefined,
       ready = () => true,
@@ -43,7 +43,7 @@ export function useConsentFocus() {
       };
       const left = () => {
         // Removal or disabling during this transition may itself drop focus.
-        if (source.isConnected && !source.matches(':disabled')) cancel();
+        if (source.isConnected && !source.disabled) cancel();
       };
       const tabbed = (event: KeyboardEvent) => {
         if (event.key === 'Tab') cancel();
