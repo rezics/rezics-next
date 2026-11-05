@@ -2699,6 +2699,8 @@ Summary Retry owns an AbortSignal. Reader/session, Subject, Context/Realm, relea
 
 ### Exact selected-synopsis Sources contract
 
+Decision: the optional `selectedSynopsis` query on the existing Subject operation compares the original locator through Content admission and a final Semantic selected-slot pass. Its closed result is `matched` with one redacted fact, Context and release, or `changed`, `missing`, `unsupported`, or `unavailable`. Sources carries the original validated synopsis return intent through its loader and current-session refresh; deliberate general Sources visits remain independent. Native growth repairs and mounted acceptance must pass before this is claimed as delivered capability.
+
 The comparison binds one original tuple: Subject and holder, schema:abstract, statement, resolved Global Context, Subject release, Content document ID/digest, exact supplied language and observed page release/Realm constraints. Fresh native rank/adoption and Subject currentness must admit that tuple. Never substitute a sibling/preferred assertion, replacement document, merged holder or language. The request is intent, not authority.
 
 The producer compares the tuple, Content independently admits the exact document under current rights/source fences, and Semantic revalidates the selected slot before serialization. Return one redacted fact plus admitted Context/release. Keep document operands, body, identity locators, native revisions and fence evidence server-side, out of DTOs, DOM, accessible names, telemetry and errors. Qualifiers/references come only from the matched statement; admitted empty citations stay empty. Attach no page sourceRecords or sibling citations. Citation does not grant body rights.
