@@ -275,13 +275,24 @@ export function LibraryNavigationNotice({
   const collectionsUnavailable =
     showCollectionsNotice &&
     (collectionsState === 'unavailable' || collectionsState === 'denied' || collectionsState === 'error');
-  return pins.state === 'unavailable' || collectionsUnavailable ? (
+  const platformClosed = pins.state === 'closed' && pins.platformClosed === true;
+  const pinNotice =
+    pins.state === 'unavailable'
+      ? m.library_pin_read_failed()
+      : pins.state === 'denied'
+        ? m.library_pin_denied()
+        : platformClosed
+          ? m.library_subject_closed()
+          : undefined;
+  const collectionsNotice = collectionsUnavailable
+    ? collectionsState === 'denied'
+      ? m.library_collections_denied()
+      : m.library_collections_unavailable()
+    : undefined;
+  const notice = pinNotice ?? collectionsNotice;
+  return notice ? (
     <p role="status" className="text-sm text-muted-foreground">
-      {pins.state === 'unavailable'
-        ? m.library_pin_read_failed()
-        : collectionsState === 'denied'
-          ? m.library_collections_denied()
-          : m.library_collections_unavailable()}
+      {notice}
     </p>
   ) : pins.state === 'preparing' || (showCollectionsNotice && collectionsState === 'preparing') ? (
     <p role="status" className="text-sm text-muted-foreground">

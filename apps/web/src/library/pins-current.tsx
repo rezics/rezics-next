@@ -191,6 +191,7 @@ export function useCurrentLibraryNavigation(locale: string, limit: 8 | 100 = 8, 
       origin.pinsCurrent() &&
       !!origin.subject &&
       !!origin.pins.data &&
+      origin.pins.data.pins.state === 'loaded' &&
       origin.client.getQueryState(origin.pins.queryKey ?? options.queryKey)?.status === 'success' &&
       origin.client.getQueryData(origin.pins.queryKey ?? options.queryKey) === origin.pins.data &&
       matchesPinsOrigin(origin.pins.data.pins.origin, origin.subject, limit),

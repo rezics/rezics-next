@@ -150,6 +150,111 @@ test('a missing list operation makes no pins request, while a failed read is not
   expect(await readLibraryPins(exposed as never, 'Bearer viewer', 8)).toEqual({ state: 'unavailable' });
 });
 
+test('Pins reads keep permission, exact platform closure, preparation and transport distinct at both HTTP boundaries', async () => {
+  const document = { paths: { '/v1/libraryPins': { get: { operationId: 'library_pin.list' } } } };
+  const scenarios: {
+    name: string;
+    stage: 'openapi' | 'list';
+    response?: unknown;
+    thrown?: Error;
+    expected?: unknown;
+    calls: string[];
+    rejects?: string;
+  }[] = [
+    {
+      name: 'OpenAPI forbidden',
+      stage: 'openapi',
+      response: { error: { status: 403 } },
+      expected: { state: 'denied' },
+      calls: ['openapi'],
+    },
+    {
+      name: 'OpenAPI platform closure',
+      stage: 'openapi',
+      response: { error: { status: 403, value: { code: 'platform_closed' } } },
+      expected: { state: 'closed', platformClosed: true },
+      calls: ['openapi'],
+    },
+    {
+      name: 'list forbidden',
+      stage: 'list',
+      response: { error: { status: 403 } },
+      expected: { state: 'denied' },
+      calls: ['openapi', 'pins'],
+    },
+    {
+      name: 'list platform closure',
+      stage: 'list',
+      response: { error: { status: 403, value: { code: 'platform_closed' } } },
+      expected: { state: 'closed', platformClosed: true },
+      calls: ['openapi', 'pins'],
+    },
+    {
+      name: 'wrapped platform closure',
+      stage: 'list',
+      thrown: new PlatformClosedError(403, { code: 'platform_closed' }),
+      expected: { state: 'closed', platformClosed: true },
+      calls: ['openapi', 'pins'],
+    },
+    {
+      name: 'list preparation',
+      stage: 'list',
+      response: { status: 202 },
+      expected: { state: 'preparing' },
+      calls: ['openapi', 'pins'],
+    },
+    {
+      name: 'OpenAPI transport failure',
+      stage: 'openapi',
+      thrown: new TypeError('fetch failed'),
+      expected: { state: 'unavailable' },
+      calls: ['openapi'],
+    },
+    {
+      name: 'list transport failure',
+      stage: 'list',
+      thrown: new TypeError('fetch failed'),
+      expected: { state: 'unavailable' },
+      calls: ['openapi', 'pins'],
+    },
+    {
+      name: 'unexpected client error',
+      stage: 'list',
+      thrown: new Error('unexpected client error'),
+      calls: ['openapi', 'pins'],
+      rejects: 'unexpected client error',
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const calls: string[] = [];
+    const client = {
+      'openapi.json': {
+        get: async () => {
+          calls.push('openapi');
+          if (scenario.stage === 'openapi') {
+            if (scenario.thrown) throw scenario.thrown;
+            return scenario.response;
+          }
+          return { data: document };
+        },
+      },
+      libraryPins: {
+        get: async () => {
+          calls.push('pins');
+          if (scenario.stage !== 'list') throw new Error('Pins read after OpenAPI refusal');
+          if (scenario.thrown) throw scenario.thrown;
+          return scenario.response;
+        },
+      },
+    };
+    const read = readLibraryPins(client as never, 'Bearer viewer', 8);
+    if (scenario.rejects) await expect(read).rejects.toThrow(scenario.rejects);
+    else expect(await read).toEqual(scenario.expected);
+    expect(calls, scenario.name).toEqual(scenario.calls);
+  }
+});
+
 test('pins use their returned current targets; an unavailable target has no title or destination', () => {
   const html = renderToStaticMarkup(
     createElement(LibraryNavigation, {

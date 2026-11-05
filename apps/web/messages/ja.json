@@ -1215,6 +1215,7 @@
   "library_nav_sidebar_label": "ライブラリのナビゲーション",
   "library_pin_actions": "コレクションの固定操作",
   "library_pin_conflict": "固定したコレクションが別の場所で変更されました。もう一度試す前に現在の一覧を確認してください。",
+  "library_pin_denied": "固定したコレクションへのアクセス権がありません。",
   "library_pin_limit": "固定できるコレクションは最大 100 件です。",
   "library_pin_more": "すべてのコレクション",
   "library_pin_move_down": "下へ移動",

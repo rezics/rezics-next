@@ -1215,6 +1215,7 @@
   "library_nav_sidebar_label": "라이브러리 탐색",
   "library_pin_actions": "컬렉션 고정 작업",
   "library_pin_conflict": "고정한 컬렉션이 다른 곳에서 변경되었습니다. 다시 시도하기 전에 현재 목록을 확인하세요.",
+  "library_pin_denied": "고정한 컬렉션에 접근할 권한이 없습니다.",
   "library_pin_limit": "컬렉션 고정 한도인 100개에 도달했습니다.",
   "library_pin_more": "모든 컬렉션",
   "library_pin_move_down": "아래로 이동",

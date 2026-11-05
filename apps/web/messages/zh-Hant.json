@@ -1215,6 +1215,7 @@
   "library_nav_sidebar_label": "庫導覽",
   "library_pin_actions": "收藏集固定選項",
   "library_pin_conflict": "固定的收藏集已在別處變更。請先查看目前清單再重試。",
+  "library_pin_denied": "你沒有權限存取釘選的收藏集。",
   "library_pin_limit": "已達到固定 100 個收藏集的上限。",
   "library_pin_more": "所有收藏集",
   "library_pin_move_down": "下移",
