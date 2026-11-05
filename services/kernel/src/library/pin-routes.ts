@@ -51,14 +51,12 @@ function queryFields(request: Request, allowed: string[]) {
 function pinTarget(value: CollectionResourceView | null): Static<typeof collectionResourceSchema> | null {
   if (!value) return null;
   const target = collectionReadView(value);
-  if ('allowedVisibilityActions' in target) {
-    const { allowedVisibilityActions, ...fields } = target;
-    return {
-      ...fields,
-      ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }),
-    };
-  }
-  return target;
+  if ('builtinKind' in target) return { ...target };
+  const { allowedVisibilityActions, ...fields } = target;
+  return {
+    ...fields,
+    ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }),
+  };
 }
 
 /** Lazy Access is resolved only after kernel composition and native route admission. */
