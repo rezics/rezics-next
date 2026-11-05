@@ -44,11 +44,13 @@ export function VndbConfirmPage({
                       className="break-words rounded-sm bg-muted/40 p-2 text-sm"
                     >
                       <p className="font-medium">
-                        {effect.kind === 'entry-state' && row.decision?.action === 'progress' ? m.library_vndb_progress_title() : effect.kind === 'score'
-                          ? m.library_vndb_score_effect()
-                          : row.decision
-                            ? selectionLabel(row.decision.status, row.decision.state, row.decision.replace)
-                            : m.library_vndb_action_state()}
+                        {effect.kind === 'entry-state' && row.decision?.action === 'progress'
+                          ? m.library_vndb_progress_title()
+                          : effect.kind === 'score'
+                            ? m.library_vndb_score_effect()
+                            : row.decision
+                              ? selectionLabel(row.decision.status, row.decision.state, row.decision.replace)
+                              : m.library_vndb_action_state()}
                       </p>
                       {effect.kind === 'score' && score?.reviewId === effect.reviewId ? (
                         <p>
@@ -57,7 +59,16 @@ export function VndbConfirmPage({
                             : m.library_vndb_score_selected_clear()}
                         </p>
                       ) : null}
-                      {effect.kind === 'entry-state' && row.decision?.progress ? <ul>{row.decision.progress.measures.map((measure) => <li key={measure.field}>{measure.field}: {measure.sourceAmount ?? '—'} {measure.unit} · {measure.action} · {measure.status}</li>)}</ul> : null}
+                      {effect.kind === 'entry-state' && row.decision?.progress ? (
+                        <ul>
+                          {row.decision.progress.measures.map((measure) => (
+                            <li key={measure.field}>
+                              {measure.field}: {measure.sourceAmount ?? '—'} {measure.unit} · {measure.action} ·{' '}
+                              {measure.status}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                       <p>{m.library_vndb_score_receipt({ id: effect.reviewId })}</p>
                       {effect.targetId ? <p>{m.library_vndb_target_id({ id: effect.targetId })}</p> : null}
                       {effect.kind === 'entry-state' && row.decision?.baseline ? (

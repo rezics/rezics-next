@@ -78,7 +78,8 @@ export function kernelVndbPort(
       if (result.status >= 400) return failure(result.status, result.error);
       return result.data === null ? unknown(command) : resultOf(result.data);
     } catch (error) {
-      if (error instanceof TypeError || error instanceof DOMException || error instanceof SyntaxError) return unknown(command);
+      if (error instanceof TypeError || error instanceof DOMException || error instanceof SyntaxError)
+        return unknown(command);
       throw error;
     }
   }

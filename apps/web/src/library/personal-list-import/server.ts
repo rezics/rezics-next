@@ -73,7 +73,12 @@ export const applyVndbImport = createServerFn({ method: 'POST' })
   .validator((input: unknown): Extract<VndbCommand, { kind: 'apply' }> & { sender: string } => {
     if (!input || typeof input !== 'object' || !('uploadId' in input) || !('body' in input))
       throw new Error('Invalid VNDB import');
-    return { kind: 'apply', uploadId: requireId(input.uploadId), body: vndbApplyBody(input.body), sender: requireSender(input) };
+    return {
+      kind: 'apply',
+      uploadId: requireId(input.uploadId),
+      body: vndbApplyBody(input.body),
+      sender: requireSender(input),
+    };
   })
   .handler(async ({ data }) => port(data.sender).apply(data));
 

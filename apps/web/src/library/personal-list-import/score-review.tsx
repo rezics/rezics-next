@@ -161,7 +161,11 @@ export function VndbScoreReview({
       ) : sourceSupported ? (
         <p className="break-words text-sm">{m.library_vndb_score_choose_native_units()}</p>
       ) : null}
-      <p className="break-words text-sm text-muted-foreground">{native.admission.status === 'conditional' ? m.library_vndb_score_apply_ready() : m.library_vndb_score_current_unavailable()}</p>
+      <p className="break-words text-sm text-muted-foreground">
+        {native.admission.status === 'conditional'
+          ? m.library_vndb_score_apply_ready()
+          : m.library_vndb_score_current_unavailable()}
+      </p>
       {scoreDecision ? (
         <div className="space-y-1 rounded-sm bg-muted/40 p-2 text-sm" data-vndb-score-decision={scoreDecision.reviewId}>
           <p role="status">{m.library_vndb_score_reviewed({ status: scoreDecision.status })}</p>
@@ -230,7 +234,14 @@ export function VndbScoreReview({
                 }}
               >
                 <option value="">{m.library_vndb_score_select_units()}</option>
-                {Array.from({ length: Math.floor((question.scale.max - question.scale.min) / question.scale.step) + 1 }, (_, index) => question.scale.min + index * question.scale.step).map((value) => <option key={value} value={value}>{value}</option>)}
+                {Array.from(
+                  { length: Math.floor((question.scale.max - question.scale.min) / question.scale.step) + 1 },
+                  (_, index) => question.scale.min + index * question.scale.step,
+                ).map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
               </select>
             </Field>
           ) : null}
@@ -250,7 +261,11 @@ export function VndbScoreReview({
             <VndbCheck
               id={`${id}-consent`}
               checked={consent}
-              label={choice === 'vote' ? m.library_vndb_score_consent_apply_vote() : m.library_vndb_score_consent_apply_clear()}
+              label={
+                choice === 'vote'
+                  ? m.library_vndb_score_consent_apply_vote()
+                  : m.library_vndb_score_consent_apply_clear()
+              }
               onToggle={setConsent}
             />
           ) : null}
