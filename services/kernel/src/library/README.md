@@ -3259,7 +3259,7 @@ bounded page and lookahead without repeating FULL fact attachment.
 
 ### Native identity scope planning and current seals
 
-See the [Library performance contract](performance-contract.md#native-identity-scope-planning-and-current-seals) for its closed declaration, native custody and growth obligation.
+The canonical identity Source admits at most 100 raw keys per page. Its aggregate input is independently capped at 256; native row and identity-metadata bounds remain separate. The aggregate limit does not raise the per-page Source cap. The [Library performance contract](performance-contract.md#native-identity-scope-planning-and-current-seals) owns participant custody and cost.
 
 ### Members preparation funding
 
@@ -3301,57 +3301,9 @@ child cleanup. Existing Type/catalogue publication, Members preparation and ordi
 
 ### Native foreign listing copies
 
-The default `library/work.ts` Collection/member handlers call `listing.ts:syncSubjectListing`. Its finite positive
-foreign-copy entrypoint is `listing-source-observer.ts:admitListingSource` followed by `recoverSubjectListing`;
-Commerce's sibling entrypoint is `creator-sales-work.ts:prepareCreatorSaleDelivery` / `recoverCreatorSale`.
-The exported `applySubjectListing` compatibility entrypoint re-reads actual native truth and enters that same
-factory; it cannot replay an observation as permission. Native projection triggers seek the unique open gate for
-the current PostgreSQL transaction and compare the exact immutable payload, so old prepared writers cannot bypass
-the migration barrier. Local personal copy create/update/restore remains in its own
-account home with `ownAccountPrepared`, current local fence and original copy/profile/session semantics.
+The finite positive Source producer records raw drivers, retained references, mapping claims, generation/frontier updates and its writer/capture fence in the native transaction that seals the copy. The Source consumer follows exact effect-key and disposition pages until an explicit short page proves exhaustion, then checks the same current seal. Missing, changed or unsealed evidence stays unavailable; failed reads preserve the prior committed result.
 
-The Collection adapter reads current native multiplicity/public history, curator, actual Collection revision and
-transaction/write basis, and original native outbox role basis in one owning operational transaction. Collection
-IDs are never cast to account IDs. It stages the separate [Access live-copy transition](../access/README.md#native-live-business-copies)
-and local-role holds, then releases the Collection home before visiting any other role or Subject home. Exact
-original commit position/epoch orders the immutable positive effect; fresh same-home business generation/truth is
-rechecked after all admissions and released again. The Subject transaction acquires the exact native receiver gate
-and commits the original listing CAS/count/event body, every personal-role inverse and terminal result atomically.
-Equal/stale deliveries cannot repeat public count deltas. Ordering-only work stays operational; real public change
-retains `subject.listed`. Negative work creates no transition, gate payload, missing pair or missing version.
-An existing nonterminal version advances only its monotone same-source zero cut; a never-public zero with no
-retained receiver identity performs bounded negative seeks without an inserted identity. Genuine terminal curator cleanup deletes only already retained identities up to its native
-source cut, with the original public count/event envelope; it never creates a new zero marker after T. Original
-source-fence and equal-stamp conflict semantics remain intact.
-The gate supplies terminal exclusion, not Source visibility/currentness permission.
-
-Accounts' default recovery finds maintained native pending transitions, including a dead enqueuer and a crash after
-receiving commit. Apply and first cancel arbitrate the same key; only the authentic committed result releases holds.
-A cancelled effect cannot become positive on replay, including after account T. The migration's separate fixed-home
-old-pair/version frontier reenrolls one actual existing identity per step through two raw1 primary-key seeks through this same adapter, with unknown old evidence
-remaining incomplete. New writers enroll independently of the frontier. Restore activation, byte/role ceilings and
-exact statement/guard bounds are owned by Access's native contract; unsupported lineage remains fenced, while a
-fresh migration-admitted default path performs real positive copies. Source/native/physical/privacy/main acceptance
-has not been established by source presence or typing.
-
-### Identity retirement dependency retained
-
-Library now exposes the native six-driver planner and current sealed-effect pages. Planning stays pending until the
-raw drivers, retained OLD references, mapping claims, generation/frontier updates and final locked writer/capture/job
-fence all complete in the native transaction that records `library-private-follow-counts` and the seal. The Source
-consumer follows the exact effect-key/disposition cursor until an explicit short page proves exhaustion, then
-rechecks the same current seal. Missing, changed or unsealed evidence remains pending or unavailable; it cannot
-produce an empty completion. Failed reads preserve the previously committed Source result and receipt.
-
-The positive retirement chain still requires the installed original SDK/Work same-configured-pool writer locks
-through Source commit, original durable Source custody/terminal transfer and current source/writer/restore fences,
-actual receiving commit/copy guards, current Account reversal settlement and every repeated same-home native
-verification, exhaustive Library pages/current same-home seal, then History recording and independent final
-maintenance/root/all-copy closure. Those owners retain their own exact pending branches; this Library planner does
-not discharge historical SDK recording, terminal transfer, external restore proof or final root closure. The
-focused identity tests exercise this implementation's native contract; controller integration still must run the
-deferred native receiving journey, five unchanged Search receiving checks, full Kernel check, gates and retries.
-No integration or publication pass is claimed here, and the acceptance remains failing until those owners report it.
+Positive retirement requires current Source and writer fences, durable Source custody and terminal transfer, committed receiving guards, current Account reversal settlement, exhaustive same-home verification and the current Library seal before History records completion. Final maintenance, root and all-copy closure retain their own authorities. No participant infers another owner's ACK or completion.
 
 ### Cost: foreign listing copy and negative cleanup
 

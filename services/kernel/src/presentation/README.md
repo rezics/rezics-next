@@ -29,53 +29,13 @@ Build checks in `test/presentation/platform-profile.test.ts`:
 - every list in a shipped document is admitted by the bundled release
 - setup activates the platform profile once
 
-## Release evidence and scope
+## Release scope and evidence
 
-The shared [composition format](../../../../packages/composition/README.md) is a closed, inert document with a
-generated schema, resolver, appearance tokens and named slots. The platform profile and released definitions cover
-the eight launch configurations. This proves configuration and shared renderer mapping, not a separately executed
-browser or native matrix for every type; the generic page needs no per-vertical implementation. Global profiles are
-immutable, and publish and activate use their explicit grants. The original Zone starters remain inert documents;
-they do not implement the later common Zone page runtime.
+The closed composition format, platform profile and released definitions cover the eight launch configurations through the shared renderer; the generic page needs no vertical-specific implementation. This proves neither native execution nor browser acceptance for every type. Original Zone starters remain inert documents and do not provide the common Zone page runtime.
 
-Profile commands retain their invocation's digest/head, detached deeply frozen plain-data body and original
-callback or live authorization capability before asynchronous work. Validation, hashing and storage use the same
-owned body without evaluating accessors or serialization hooks; caller objects remain mutable. Authority is checked
-fresh on each attempt and before receipt replay; the executor retains receipt-byte and basis ownership. Trusted
-bootstrap captures its potential body before the initial pointer read and defers an invalid-body error until needed,
-so an already-active setup still returns after one pointer read without writing. This adds bounded in-memory work
-only, with no additional SQL, cache entries, authority decisions or command frames. Commerce catalogue, the Semantic Global Context anchor, subject module identity, and Access
-identity-bridge maps initialize without reading unfinished module bindings so these native files can load; Global
-Context identity and bridge behavior stay the same. The connected invocation cases
-in `test/presentation/profile-invocation-custody.test.ts` exercise native bootstrap and publish/activate custody. Compiler evidence alone does not establish those outcomes.
+Profile commands retain their invocation digest, detached plain-data body and original callback or authorization capability. Validation, hashing and storage use the same captured body. Authority is checked fresh on every attempt and before receipt replay. Bootstrap returns after one active-pointer read without writing when a profile is already active.
 
-The six frozen [page outcomes](../../../../specs/pages-outcomes.test.ts) have a real persona/API receipt, and the
-[Workers host cases](../../../../apps/web/tests/pages-workers.host.test.ts) have actual workerd HTTP rendering and
-aggregate-derived JSON-LD receipts in development history. The [completion audit](../../../../docs/research/search-pages-completion-audit.md#execution-evidence-actually-inspected)
-records their revisions and counts: six native cases passed in that receipt and two Workers cases passed in an
-earlier receipt, followed by a later Workers run that failed one of two cases. Those receipts are real artifacts,
-not absent tests, but they do not establish a final-revision or root-gate pass. The Workers oracle now checks About
-prose before facts and tags, and About before Parts and Relations, while preserving real HTTP SSR before JavaScript,
-public-body and JSON-LD assertions, authorization checks, both Workers cases and the non-agent routing-GET ceiling
-of one. The latest recorded workerd execution predates that correction and failed one of two cases; the corrected
-two-case execution is unverified. Release evidence must give the current revision and case counts. A historical 2/2
-cannot replace that receipt. Formatting, imports, converter checks, ordinary Bun `renderToString` and root typecheck
-alone do not replace the native cases.
-
-The canonical page read has one descriptor aggregate, separate from bounded routing, definitions and control reads;
-it does not promise one total site HTTP request. Request probes are reused within the aggregate. A non-agent routing
-subject GET is at most one. Verified-agent
-address routing retains the [agent contract](../../../../docs/subject-pages.md#agents) and
-[address outcomes](../../test/presentation/agent-page-address.test.ts), including the bounded redirect and its
-lookup/hop. Automated accounts retain the [SoftwareApplication template and identity](../../../../packages/composition/README.md#subject-views).
-Render and JSON-LD use the same current public source bodies. A fixture canary that was never sent is not
-native Kernel or Auth privacy proof.
-
-The shared composition limits of 16 descriptors and 128 total distinct output slots apply at publication and at
-the actual aggregate executor. They do not bound backend postings, native Access or dependency work, bytes or SQL. A controlled issuer exercising real
-Access is distinct from the six-case driver using the real Auth and Access services. Simple-page permissive Access
-growth and profile lookup growth do not measure full native route authorization or every descriptor combination.
-The Cost qualifications below remain scoped to their named operations.
+The page reader has one bounded descriptor aggregate, separate from routing, definition and control reads; it does not promise one total site HTTP request. A non-agent routing Subject GET is at most one. The shared limits of 16 descriptors and 128 distinct output slots apply at publication and execution, not backend postings, native Access, dependency work, bytes or SQL. See [Semantic acceptance](../../../../docs/goals/semantic.capabilities.md) for revision-bound outcome evidence; examples and typing do not certify native or browser acceptance.
 
 ## Aggregate execution admission
 
@@ -244,6 +204,12 @@ A subject page continuation resolves its current template and Context before pla
 node's native links/relations/subject-threads read and retains ordinary subject/control reads. Other links, relations,
 Search and subject-thread descriptors return 204 with an empty body; they are unrequested, not empty lists. Clients retain independent group state or
 offer a fresh-start link when opening a continued document directly. Full-document planning bounds still apply.
+
+### Work franchise overview
+
+The [showcase-work entry](../../../../apps/web/src/features/pages/showcase-work/index.ts) exports WorkFranchiseReading, selectWorkFranchiseRegion, loadSubjectPage and subjectBody. The selector accepts a page and a node/property/direction with an optional cursor, then returns the exact page, selected window and continuation; a mismatch or continuation from another node returns undefined. Failed or withheld selection remains selected. onContinue receives only that node's continuation, and the grouped renderer performs no acquisition.
+
+The preview contains at most twelve assertions total and three per stream, subject to tighter selected-view caps. Web owns rendering, navigation grammar and outer return; Semantic owns grouping, evidence and node continuation. Subject pages owns the visit. This uses the existing renderer and native page contract without another callable.
 
 ### Document bodies in aggregate pages
 

@@ -6,35 +6,15 @@ This module owns subject facts and their item projections, partition paging, and
 
 `languageRanges` and `chooseLabel` are pure shared Definitions functions exported by the package root, including its
 browser condition. The native `services/kernel/src/semantic/language.ts` entry is a compatibility re-export for
-Content, Library and Search. The policy and stored-tag behavior remain unchanged; native consumers retain their
-existing import path.
+Content, Library and Search. The policy and stored-tag behavior remain unchanged. There is no general pickText or model change; native consumers retain their existing import path.
 
 ## Canonical identity boundary
 
-Decision: canonical identity stays local to Semantic; `identity-core/index.ts` is the pure public entry,
-while `identity-adapters/read.ts` is the lightweight native mapping entry and `identity-adapters/index.ts`
-is the native store entry of the existing `kernel-semantic` adapter module. The existing
-`identity-adapters/identity-epoch-binding.ts` implementation is the exact public binding entry; callers retain the
-same named binding functions, proof objects and WeakMaps.
-Read-only callers use `read.ts`, which re-exports only `readIdentityMappings` and never loads the store or binding graph.
-The current static edges are `retention -> binding -> retention`, `binding -> index -> binding`,
-`binding -> identity -> retention`, and `reversal -> binding`. Deferred edges are `identity -> binding` for undo and
-lookup and `binding -> identity` for reversal verification. Declaring the existing file adds no node or value edge,
-preserves those static/deferred loads, and leaves `read.ts` and `index.ts` cold-load behavior unchanged. Remove only the
-four replaced Access-to-binding rule 2 exceptions; retain the existing rule 3 cycle records.
-The adapter remains in that module because its admission, closure and participant mechanisms already share native authority.
+The pure kernel-identity-core leaf inside native Semantic owns mapping DTOs, bounded evidence classification and immutable merge, unmerge and repoint transforms. identity-core/index.ts is its public entry and has no SQL, runtime, command or Access effects. It indexes acquired evidence once and performs O(N) work for at most 100 originals.
 
-The core owns mapping DTOs, bounded evidence classification, exact observation values and immutable merge/unmerge/repoint
-transforms. Evidence, requested source homes and the installed support job arrive explicitly. It imports no SQL, runtime,
-command/access authority, environment, clock, randomness or crypto. Its four states and existing reasons are unchanged;
-pending never implies self. Classification indexes the capped acquired evidence once, then uses bounded per-original
-lookups: O(N) time and space for at most 100 originals, without acquisition or query changes.
+Effectful adapters remain in kernel-semantic. The lightweight identity read entry maps native results without loading the store or binding effects; the main store index remains effectful, and callers use the narrow public binding entry. Adapters keep SQL, authorization, independent observations, custody proofs, hashing, pre-arm, admission, publication and jobs. Deferred loading, error identity and function identity remain unchanged. The [identity epoch contract](identity-epoch-contract.md) owns the detailed native schedule and cost.
 
-Adapters own independent repeatable-read collection, route/home selection, ambient support jobs, SQL, authorization,
-prearm, native receipt hashing, opaque binding proofs, admission and publication. Control home zero remains compatibility
-topology. Compatibility entries retain callers of the former contract/read/store/binding paths. Library keeps originals
-and source fences, Search keeps membership/currentness, Rating keeps visibility witnesses and hashing, and Content keeps
-lifecycle writes. Native mapping/store/publication/admission and three-scale growth acceptance remain with their owners.
+No wildcard custody export, new package, module or protocol, second Library resolver, permission cache or baseline exception is introduced.
 
 ## Bounded current relation visits
 
@@ -53,7 +33,7 @@ acceptance; the controller runs that acceptance after integration.
 
 Decision: VNDB source tag weights use only the exact Kana `/vn` `tags.rating` aggregate, metric `vndbTagsRating`, unit `1` and range `(0,3]`; `tags_vn.vote` remains an association admission filter and is never converted into this statistic.
 
-`produceVndbSourceTagWeightCandidate` in `source-tag-weight.ts` accepts the exact `https://api.vndb.org/kana/vn` endpoint, request body and response bytes for one Kana `/vn` lookup. It requires `filters: ["id", "=", <record id>]`, `fields: "id,tags{id,rating,spoiler,lie}"` and `results: 1`; then it validates the returned VN id and requested provider tag id, requires `lie: false`, preserves the rating's decimal token without floating-point rounding, and carries spoiler `0`, `1` or `2` onto the same ordinary `schema:genre` or `schema:keywords` candidate. It rejects the dump's individual votes, guessed values, a request that omitted `tags.rating`, and unsupported fields. The numeric qualifier is source evidence; it never supplies a REZICS vote, confidence, rank, acceptance or adoption.
+`produceVndbSourceTagWeightCandidate` in `source-tag-weight.ts` accepts the exact `https://api.vndb.org/kana/vn` endpoint, request body and response bytes for one Kana `/vn` lookup. It requires `filters: ["id", "=", <record id>]`, `fields: "id,tags{id,rating,spoiler,lie}"` and `results: 1`; then it validates the returned VN id and requested provider tag id, requires `lie: false`, preserves the rating's decimal token without floating-point rounding, and carries spoiler `0`, `1` or `2` onto the same ordinary `schema:genre` or `schema:keywords` candidate. It rejects the dump's individual votes, guessed values, a request that omitted `tags.rating`, and unsupported fields. The numeric qualifier is source evidence; it never supplies a REZICS vote, confidence, rank, acceptance, adoption or publication.
 
 The candidate carries the caller's exact native Context, Concept and classification property. Its references include the VNDB record citation, exact source tag id, SHA-256 of the complete unversioned response and the official [Kana `/vn` API field contract](https://api.vndb.org/kana#post-vn). The proposal endpoint remains Global; the returned `contextId` is the exact Context Imports must use for native acceptance and adoption, and grants no authority. A later source revision is a new candidate for the same exact source association and must pass those existing native authorities. There is no import-time aggregation or page-time vote scan. The public subject page reads the already selected and disclosed statement plus the page's bounded Concept summary; its private viewer-action component remains an independent read in the same `POST /v1/pages:read` request.
 
@@ -577,7 +557,9 @@ The projection stores a base row with the nil UUID and a row per distinct value 
 
 Rows and `inbound_link_count` counters change in one partition-fenced transaction, including replay, removal and merge moves. Property and qualifier counts are exact. A type-filtered count samples the first 1,000 rows in the selected property/filter range; it is exact when that range has at most 1,000 rows and otherwise is an "at least" count. This bounded count sample is separate from the page scan. The page scan examines at most `4 × limit + 1` rows under a type filter and can return an empty or short page with a continuation. A continuation advances past examined rows, never past an unexamined match. Freshness waits, authorization and deadline failures follow the existing subject-link read.
 
-The one released Character voice lookup is `GET /v1/subjects/:id/links?property=wdt:P725&filter=:character&qualifier=wdt:P453`. It is admitted only when the active release declares `wdt:P725` a credit relation with `wdt:P453` as its slot key and qualifier, and `wdt:P453` targets `wd:Q95074`. Ordinary `filter` and inverse semantics are unchanged. The qualified reader accepts at most 20 rows, seeks the current Global/Context projection by its indexed order key, and examines at most 20 keys before returning `partial: true` plus a continuation after the last examined key. Context suppression consumes that scan budget; a stale projection cannot establish an empty result. Current holder assertions are batch-checked against the supplied qualifier and their main value remains the performer target.
+The released Character voice lookup is GET /v1/subjects/:id/links with property wdt:P725, Character filter and wdt:P453 qualifier. Admission requires the active release to declare wdt:P725 as a credit relation with wdt:P453 as both slot key and qualifier targeting Character. The performer remains the main value. The reader accepts at most 20 output rows and examines at most 20 ordered keys, including suppressed and otherwise ineligible candidates; a partial continuation begins after the last examined key. Ordinary inverse behavior is unchanged, and same-Character degree/history growth stays within the existing index bounds.
+
+Character visits may compose two windows of at most 20 assertions and 256 related-reference summaries, subject to tighter installed limits. Direct native Subject reads opt into includeDocuments=true; aggregate pages keep their dependent document plan. Content owns the shared public document schema, types, mapper and HTTP disclosure and erasure. A preview body must match its exact document, Subject, candidate, digest and language, be available and validated, or remain unreadable. Semantic adds no second document hydration or mapper.
 
 `GET /v1/subjects/:id/relations?property=P` reads the holder's forward projection. It accepts the same `filter`, `type`, `limit` (1–100, default 25) and opaque `cursor` parameters. The page is ordered by the property's declared key, includes each selected slot's Context view and the target's shared subject summary, and returns an exact or at-least count. Its type-filtered scan examines at most `4 × limit + 1` rows; the separate type-count sample is capped at 1,000 rows. Unresolved values follow resolved targets and sort by their declared key, then external IRI and statement id. Targets without a visible summary are omitted without changing counts; external values carry a null summary. Freshness, authorization and deadline handling match `/links`.
 
@@ -732,196 +714,13 @@ slots; the old SAME256, final replay, alias-window and home-certificate prescrip
 
 ## Identity
 
-`stepIdentityEpochMapping(pool, job)` in `identity-epoch-mapping.ts` is the native mapping step. It retains
-immutable input generations, bounded link/member phases and released per-home effect receipt custody. It
-accepts no caller page, frontier, affected-ID vector or completion callback. Terminal repoint retains the smallest
-remaining live original from the admitted generation, then maps the remainder directly to that saved root;
-singleton detachment has no remainder. The public intent is unchanged. Mapping completion remains a
-receipt locator: it cannot publish without the two fixed participant receipts. Accounts source intents,
-full positive undo/publication, generation minimization/erasure and inclusive native cost evidence remain
-pending at the boundaries documented in the [identity contract](identity-epoch-contract.md#mapping-execution-boundary).
+Subject IDs permanently name catalogue records and are never reused. Creation requires Global subject:create and installs revision 1 with its self mapping at the source home. Merge requires subject:merge and asserts duplicate identity only; editions, translations and formats remain separate subjects linked by relations.
 
-Subject IDs permanently name catalogue records and are never reused. Creation requires Global `subject:create`
-(and import batch authority where applicable), writes revision 1 and is independent of Search. Compact fact storage
-is an optimization, not a separate compact-revision creation target. Merging requires `subject:merge` and asserts
-duplicate identity only. Distinct editions, translations and formats remain separate subjects linked by relations.
-Native revision-1 creation installs the self mapping in its source transaction. Full asynchronous merge-command
-completion still requires the mapping and fixed participant producers below.
+Native account-context reading brackets anonymous hydration with two repeatable-read observations. Pending, unavailable or differing positive epochs refuse the result. Terminal values grouped by one query do not establish that separate native calls share a snapshot. Native SQL and Access authority remain unchanged.
 
-### Durable publication and caller contract
+Mapping and publication retain opaque proofs, exact hash and custody rules, pre-arm, independently observed native state, and resumable jobs. Participant classification remains O(N) for N≤100. Cross-home enrollment, movement and abort remain deferred wherever atomic_guard_unavailable applies; no partial protocol is promised. Detailed execution, SQL and publication custody remain in the [identity epoch contract](identity-epoch-contract.md).
 
-Merge, unmerge, repoint, `verifyAccountAgent` and `unverifyAccountAgent` use the same native durable mechanism.
-Jobs with disjoint changed group sets run concurrently; claims, production partition-local capacity P=1 and reclaim pressure
-are partition-local. PREPARING is affected pending/overlap-busy. No global sole pending job, whole-job lock,
-active marker or universal page gate is allowed. Coherent immutable non-ABA double collection checks at most
-4,096 originals per resulting group before ALL new admission effects. Missing/moved/incomplete evidence is
-unavailable. Later drift after durable preparation retains recovery, never effect-free overflow/not_applied.
-
-Ordinary `POST /v1/subjects:merge` keeps its native body, Global authorization and quoted Idempotency-Key.
-Only actual admission returns `202 {operation: {id}}` with `Location: /v1/subjectIdentityOperations/{id}`.
-Current-authority replay finds that same operation. The existing GET poll pending/completed DTOs and concealed
-unknown/denied behavior remain; a redirect/revision alone cannot complete it. Native held pre-suspension tokens
-return `401 invalid_credentials` with Bearer `invalid_token`; Auth suspended sign-in returns its actual 403.
-Kernel suspended-account 403 is defensive, not a reachable valid-suspended-bearer fixture.
-
-Verification/reversal retain their successful subject/component DTO and same receipt. The SAME Accounts workflow
-uses bounded admission/delivery steps, bounded indexed native publication probes and durable sleep OUTSIDE a step,
-before approval/page/finish/pending-clear. No worker is held through an outage. Busy/capacity/handoff retries the
-same intent, never denies review. Access now records immutable account-home decision/reversal intents in the
-original native transaction/receipt and verifies them before releasing the home for admission. The original
-wrappers use the typed native coordinator adapter and require actual mapping and both participant publication.
-The coordinator module is absent in this checkout, so its absence retains retryable work without a successful DTO.
-Historical missing custody and consumer-aware source minimization remain pending owner obligations; exact keys,
-delivered guards and integration debt are in the owning contract.
-No queue, public pending DTO, permission change or second operation protocol is introduced.
-
-### Lists, point reads and personal references
-
-Canonical lists use maintained canonical-ID indexes and unique prepared rows. Observation, publication and cursor
-currentness are scoped to the ACTUAL source and its COMPLETE expanded query dependencies, including excluded,
-NOT and order-only originals. A finite unchanged owner source must make useful-page progress while disjoint jobs
-run continuously. A genuinely all-group catalogue can have broad dependencies without stalling that owner source.
-Partition summaries carry committed scoped reader revisions, never max allocated epoch or global job history.
-
-`createIdentityScopedObservations(pool)` publishes the native `register`, `arm`, `finish`, `revalidate`,
-`repair` and `retire` declarations in `identity-scope-types.ts`. Registration retains complete Source capture
-frontiers and inverse enrollment; pre-arm receiving commits the exact attempt obligation and reader revision
-together. The existing maintenance queue revisits one pending scope per selected home, with retained circular
-cursors so an unavailable scope does not prevent another scope's repair. Public structural capture is owned
-by `identity-scoped-public-source.ts`; the opaque handle only locates its committed native records.
-
-Library completion pages the original `library/identity-scope-effects.ts` native expected selections, one
-bounded page per step. Caller `records`/`receiving` arrays are optional lookup hints. Each selected committed
-receiving binding, applied effect and exact control custody must resolve before the Source retains its frontier.
-The completion head binds registration, capture, source generation, immutable attempt and the complete native
-seal/version/frontier. Changed or unsealed input cannot inherit an earlier prefix. Exhaustion closes the active
-attempt only after `verifyLibraryScopeEffectsSeal` succeeds on the live Source command and current native
-owner/capture/attempt guards hold. That transaction increments the committed revision; it leaves Source repair
-to establish the next clean observation. Enumeration and native hold guards share the caller's original
-`WorkAllowance` through `NativeCollectionWork.compose`; native receipts are charged without resetting dimensions.
-Maintenance uses the retained caller or registration step ceiling for a fresh bounded reservation per step.
-A fresh registration after retirement gets a new registration ID and increments the existing revision; it
-cannot inherit the earlier attempt's completion prefix. Upgrade rows with unknown preexisting send outcomes
-stay unavailable unless their exact committed directory locator is retained; absence is never rollback.
-
-Retirement first makes the summary unsafe, finishes real outstanding attempts, then retires one directory ticket
-at a time under its original bridge. A durable source-local sending intent precedes every directory enrollment.
-Directory release retains a native receipt and tombstone, so a lost reply or delayed enrollment cannot resurrect
-a removed ticket. Closed bridges retain tickets until their preparation custody reopens them. After the final
-local unresolved seek, actual native `releaseHold` and the retired summary commit together. Immutable old cursor
-bases fail the retiring summary; retiring a registration creates no authority to purge its native business Source
-or another owner's capture/history. Attempt and retirement tombstones remain against delayed messages.
-
-Library public-output identity is separate from account-owned identity: its Source address binds Collection,
-incarnation, output generation and immutable activation transaction/decimal position/source generation. Current
-source generation is independently checked. No account ID is inferred from a Collection. The old Library native
-factory is untouched; its current rejection of an unsupported public-output locator remains unavailable until
-its owner delivers the discriminated runtime.
-
-Foreign runtime readiness remains explicit. The exact original-module Library expected-effect declarations
-are provisional unavailable adapters until the native producer arrives. The additive
-`identity-receiving-effects.ts:readIdentityReceivingSelection(pool, selection, {deadline})` is loaded read-only
-when delivered; no hint can substitute for its committed record. The admission ticket reader and FAA binding
-also remain provisional in this base. Public catalogue completion retains its own capture/attempt-bound expected
-state and never consumes a Library seal. Its remaining foreign ABI is a public-catalogue native expected
-projection/effect page, current Source-local final seal verifier, and exact committed projection/receiving lookup
-bound to `(NativePublicSource, captureId, registration, scopeId, job, attempt)`. No such export exists in
-`public-filter-source-binding.ts`; its public read/repair declarations do not certify identity-effect exhaustion.
-Until that producer is available the public active obligation is retained and cannot advance the reader revision
-as completed. These boundaries are native readiness limits, not a claim that this implementation passed native proof.
-The focused `identity-scoped-observation-outcomes.test.ts` scenarios remain integration acceptance, unexecuted
-at this implementation stage.
-
-The [owning contract](identity-epoch-contract.md#scoped-reader-publication-and-complete-query-dependencies)
-derives native registration, arm/finish custody, reordered lower-job publication/cancel handling and start/final/
-current cursor checks from existing source keys/observations. Actual complete native Collection/owner/Search
-bindings remain missing. Returned-hit samples, broad owner-fact mutation alarms and unavailable source stubs are
-not completeness proof. No new cursor vector/crypto, source ABI or hidden source-wide global marker is assumed.
-
-No request-time alias walk, 4,096-home sweep or separate per-page readMapping prerequisite is allowed. Pages use
-existing shared batched owner/epoch reads plus two probes and existing candidate source points, with no extra
-snapshot/client/control statements or per-ID loop, inside filtered-list budgets. Current original AND terminal
-eligibility and full excluded/order/FOREIGN physical-query admission remain independent of identity metadata.
-
-Unaffected and fresh self point reads remain useful; source basis routes ONE relevant current control home per
-original. Missing/moved/retired state is unavailable, never self/zero or a guessed terminal route. Same-backend
-standalone mapping uses one RR/eight statements; cross-backend released observations use source<=10/control<=6,
-16 total or 11 pending. Original/terminal privacy is separately charged. Existing one-anchor readSubjectReference,
-item metadata and type reads retain their native anchor/client/time contracts; no permission cache is created.
-
-Stored personal original IDs, notes, dates, order and multiplicity remain. Canonical views choose the highest live
-native owner_write_seq with conflict visible, union labels and keep copies/sessions distinct. Undo is a new owner
-write. Library's [native sequence prerequisite](../library/owner-write-sequence.md) already delivers the authorized
-allocator, private owner counter and nullable live/archive sequence columns. The missing boundary is production
-set/clear/Undo integration and bounded legacy cutover/readiness, not the primitive's existence. Null legacy values
-cannot select a canonical winner; timestamps/UUIDs do not substitute. Allocation adds its actual two body
-statements to the owner command, replay does not allocate, and failed allocation rolls back with the fact. Collection
-browsing shows one canonical card while editing preserves every stored occurrence. New writes address current
-terminals and corrections preserve unrelated later edits.
-
-### Native cutover and retained evidence
-
-The [owning native contract](identity-epoch-contract.md#native-cutover-adoption) requires locked native absence
-custody for a fresh installation or all 4096 legacy homes, including empty/unselected homes and actual owner epochs.
-Both paths retain every birth/writer/queued continuation, native source export,
-receiving custody BEFORE exact-head ACK, and home barrier plus deferred SAME-TX final guard. Ordinary/import
-births initialize self at the SUBJECT source home; account-agent births use account home. Real scheduler/bootstrap
-or actual locked absence installation must close coverage; readEpoch side effects, seeded rows or preset readiness are insufficient. Actual guard races
-cover verify AND reversal in flight; an owner move proves retryable availability, not the final guard.
-
-Immutable input refs plus a constant transform form the affected index before effect gates run. Current generations
-are flat. At EVERY durable/crash/replay/abandon state, each partition q retains at most Gq+4P full generations and
-Aq+4P·4096 memberships, including bootstrap/unsealed/export/partial-delete/abandoned/move copies. Native ref locks,
-minimized undo/reversal/move/cursor custody and locked empty-range reclaim proof are required. Unreclaimed local
-copies block new local admission; other partitions progress. R/L/H obligations remain history-proportional storage,
-not hidden full groups. General physical owner transfer is a named missing bounded native custody/storage proof.
-
-Ordered capacity begins at the FIRST ordered resource INCLUDING actual job home. Compact receipt-to-job binding
-is indexed actor/account-home history with retention/erasure accounting. Every claim generation, native confirmation,
-accepted pointer, planned-home close proof, receiving handoff and source hold/validation copy is included in the
-[owning inventory](identity-epoch-contract.md#native-home-binding-inventory-and-recovery-cost). No extra P slot,
-full membership vector or resource allowance is added. Sole-owner Ad1 ledger minimization/shared-copy custody is
-named pending coverage. Native attempt locks close
-EVERY planned home against delayed/uncertain acquire; job-home CAS selects admitted versus cancelling. P=1 progress
-follows strictly ordered waits, not leases or try/unwind timing. See the contract for costs and required schedules.
-
-### Library canonical publication participant
-
-The SAME version-1 `library-private-follow-counts` identity participant covers ALL six member/entry/label/session/
-copy/output canonical drivers, directory/candidates/support, first apply, follows/totals, OLD withdrawal/NEW add,
-fences and exact prior custody. A follow-only ACK cannot publish; no third participant or Library A5 transfer.
-Directory proof is ONE `(owner,canonical)` candidate plus structural `(original,scope)` existence/extrema with
-indexed inverse discovery. A million same-original/profile/lifecycle sessions cannot create a million directory
-rows. No per-fact witness/copy or required legacy canonical_source_fact write is adopted as directory proof.
-
-Support per `(canonical target,follower)` changes totals at 0-to-1/1-to-0; derived data stays in target home and
-stored follows in source home. Legitimate first apply versus gate installation is serialized in the same native
-transaction; stale delivery rereads current source, account eligibility and mapping. Complete prior effect custody,
-crash/replay and terminal no-resurrection remain required. [Private follow counts](../../../../docs/private-follow-counts.md)
-owns that store. Missing native adapters/locators cannot supply a noData ACK.
-
-Core OP is the actual `command/operational.ts:runOperationalTransaction` and `enqueueIntent`, with native fencing
-and atomic DBOS intent. It has no Core receipt/event/outbox/write-basis/position/intent table/relay. Access owns its
-separate account-home verify/reversal intent TABLE; shared-history owns operational DBOS history; Library A5 owns
-derived Library data. Semantic inventories its physical identity stores and receiving cleanup locators; exhausting
-Semantic refs does not certify Library purge. Fixed A5 participants are distinct from identity publication ones.
-Participant-own erasure ACK is acyclic; overall completion separately waits frontier/no-open-late/allACK.
-
-### Specification closure and remaining native acceptance
-
-This document and the [sole native owner](identity-epoch-contract.md) adopt scoped concurrency with production
-partition-local capacity P=1. The native STORE, bounded all-home bootstrap, ordered preparation/cancellation and
-Library identity binding implement that route; their TypeScript contracts describe the same actual producers.
-The old global-control proposal is superseded. Native evidence for these producers does not establish complete
-publication or freeze the remaining Cost obligations.
-
-The contract retains REQUIRED admission/publication/HTTP/cutover native schedules, scoped finite-owner progress,
-complete excluded/order dependencies, coherent cap/ABA, P=1 claims, uncertain cancellation, legitimate first apply,
-all-home bootstrap, all-table overflow, physical retention/ref/reclaim every step, verify/reversal in flight and
-actual late/failed locator/custody. Primitive negatives are separate from full Search/Library completion; no
-consumer cycle or fake ACK. No formatter or earlier setup red is native performance or publication proof.
-Old identity-basis/home-sweep/sealed-repair scaffolding supplies neither readiness nor a revived certificate ABI.
-Unrelated core/graph/history/command/lifecycle and existing concurrent CPU-validation adoption remain unchanged.
+Library owns its canonical Source participant and cost: the raw-key page remains capped at 100, the aggregate input is independently capped at 256, and native row and identity-metadata bounds remain separate. See the [Library identity participant](../library/README.md#native-identity-scope-planning-and-current-seals). A same-query aggregate does not expand its Source page cap.
 
 ## Definition publication preparation
 
