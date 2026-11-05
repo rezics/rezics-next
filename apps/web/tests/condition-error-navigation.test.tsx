@@ -23,6 +23,8 @@ test('summary navigation focuses the scoped qualifier field, then its group when
     Node: window.Node,
     Event: window.Event,
     MouseEvent: window.MouseEvent,
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   for (const [key, value] of Object.entries(globals)) {
