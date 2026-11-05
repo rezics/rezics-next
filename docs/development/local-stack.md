@@ -224,6 +224,8 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
 2. Names the stack's containers and volumes `rezics-walk-<task>-database` and `rezics-walk-<task>-search`, and gives
    it its slot's loopback ports: `20000 + 10 × slot` plus 0 for Web, 1 for the Auth pages, 2 for native Auth, 3 for
    Kernel, 4 for PostgreSQL and 5 for search.
+   Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
+   Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
 3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web and the Auth pages
    answer, for at most ten minutes. Its output goes to `.temp/walk/<task>/stack.log`.
 4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
