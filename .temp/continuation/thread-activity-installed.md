@@ -28,5 +28,6 @@ invalidation, equal session replacement, remount and A/B/A. Coordinate thread-pa
 receivers. Controller retains broader native/growth/mounted acceptance execution.
 
 Commit before checks. Type-check Web and run changed tests through
-`bun apps/web/scripts/focused.ts --private-network -- bun test <files>` after the final edit. The current attempt
+`bun apps/web/scripts/focused.ts --private-network -- bun test <files>` after the final edit; test paths are relative
+to apps/web (for example tests/thread-reading.test.ts and tests/thread-activity-retry.test.tsx). The current attempt
 updates only the owner decision and this continuation; installed delivery remains unfinished.
