@@ -660,9 +660,9 @@ export async function resolveDefaultDiscoveryOwnerAdapters(config: {
     state,
   }));
   return Object.freeze({
-    collection: available.has('collection') ? all.collection : { readiness: 'unavailable' },
-    review: available.has('review') ? all.review : { readiness: 'unavailable' },
-    space: available.has('space') ? all.space : { readiness: 'unavailable' },
+    collection: available.has('collection') ? all.collection : ({ readiness: 'unavailable' } as const),
+    review: available.has('review') ? all.review : ({ readiness: 'unavailable' } as const),
+    space: available.has('space') ? all.space : ({ readiness: 'unavailable' } as const),
     metadataProducers: Object.freeze(
       Object.fromEntries(classification.availableKinds.map((kind) => [kind, all.metadataProducers[kind]!])) as Partial<
         Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>
@@ -696,9 +696,9 @@ function bindDefaultDiscoveryOwnerAdaptersToPublishedKinds(
     Object.entries(adapters.capabilityWitnesses).filter(([kind]) => published.has(kind)),
   ) as DiscoveryCapabilityWitnesses;
   return Object.freeze({
-    collection: available.has('collection') ? adapters.collection : { readiness: 'unavailable' },
-    review: available.has('review') ? adapters.review : { readiness: 'unavailable' },
-    space: available.has('space') ? adapters.space : { readiness: 'unavailable' },
+    collection: available.has('collection') ? adapters.collection : ({ readiness: 'unavailable' } as const),
+    review: available.has('review') ? adapters.review : ({ readiness: 'unavailable' } as const),
+    space: available.has('space') ? adapters.space : ({ readiness: 'unavailable' } as const),
     metadataProducers: Object.freeze(
       Object.fromEntries([...available].map((kind) => [kind, adapters.metadataProducers[kind]!])) as Partial<
         Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>
