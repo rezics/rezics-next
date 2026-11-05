@@ -83,6 +83,13 @@ function page(subject = A, cursor: string | null = null): CreatorSalesCurrentRea
     },
   };
 }
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
 afterAll(async () => {
   mock.restore();
   await window.happyDOM.close();
