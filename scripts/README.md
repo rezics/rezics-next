@@ -304,6 +304,10 @@ loss, timeout and compiler launch failure without diagnostics are reported as in
 never as type errors without diagnostics. The local prelanding cache is copy-on-write from the dev commit to the
 candidate commit and includes compiler, lockfile, Reylo configuration, Kernel/Auth SQL sources and migrations.
 
+Kernel SQL analysis uses the immutable host-local Reylo cache described in the [Kernel scripts owner document](../services/kernel/scripts/README.md).
+Phase receipts separate database image, migrations, SQL analysis and TypeScript checking so the measured cache effect
+can be compared without timing assertions.
+
 Decision: Web's public typecheck delegates workspace selection, placement and the shared migrated compiler database to
 root; root runs its `typecheck:root` entrypoint so Web compiles with its own Reylo mapper configuration.
 

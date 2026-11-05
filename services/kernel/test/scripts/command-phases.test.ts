@@ -48,8 +48,15 @@ test('Kernel command phases pair without a duration assertion', async () => {
   expect(lines).toHaveLength(2);
   expect(lines[0]).toMatch(/^compiler\tstart\t\d+$/);
   expect(lines[1]).toMatch(/^compiler\tend\t\d+$/);
-  expect(KERNEL_COMMAND_PHASES).toEqual(['database-image', 'migrations', 'sql-schema', 'compiler', 'cleanup']);
-  expect(KERNEL_COMPILER_NESTED_PHASES).toEqual(['client-emit', 'tsc', 'construct', 'openapi']);
+  expect(KERNEL_COMMAND_PHASES).toEqual([
+    'database-image',
+    'migrations',
+    'sql-analysis',
+    'compiler',
+    'sql-schema',
+    'cleanup',
+  ]);
+  expect(KERNEL_COMPILER_NESTED_PHASES).toEqual(['client-emit', 'typecheck', 'tsc', 'construct', 'openapi']);
 });
 
 test('slice memory and IO pressure parse without inventing zeros', () => {
@@ -138,9 +145,13 @@ test('admitted typecheck uses one throwaway database for compiler work and recor
     'database-image',
     'migrations',
     'migrations',
+    'sql-analysis',
+    'sql-analysis',
     'compiler',
+    'typecheck',
     'tsc',
     'tsc',
+    'typecheck',
     'construct',
     'construct',
     'compiler',
@@ -181,11 +192,15 @@ test('nested compiler markers pair in publication order and skip after a failed 
   };
   expect(await runKernelTypecheck(env, dependencies, ['--emit-client', '--emit-openapi'])).toBe(0);
   expect(phaseNames(phases)).toEqual([
+    'sql-analysis',
+    'sql-analysis',
     'compiler',
     'client-emit',
     'client-emit',
+    'typecheck',
     'tsc',
     'tsc',
+    'typecheck',
     'construct',
     'construct',
     'openapi',
@@ -195,5 +210,14 @@ test('nested compiler markers pair in publication order and skip after a failed 
   writeFileSync(phases, '');
   writeExecutable(directory, 'tsc', '#!/bin/sh\nexit 2\n');
   expect(await runKernelTypecheck({ ...env, REZICS_CHECK_PHASES: phases }, dependencies, [])).toBe(2);
-  expect(phaseNames(phases)).toEqual(['compiler', 'tsc', 'tsc', 'compiler']);
+  expect(phaseNames(phases)).toEqual([
+    'sql-analysis',
+    'sql-analysis',
+    'compiler',
+    'typecheck',
+    'tsc',
+    'tsc',
+    'typecheck',
+    'compiler',
+  ]);
 });

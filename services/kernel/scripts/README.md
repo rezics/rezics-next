@@ -10,8 +10,10 @@
 | ---------------- | ----------------------------------------------------- |
 | `database-image` | Postgres image and one throwaway container            |
 | `migrations`     | Schema migrations on that container                   |
+| `sql-analysis`   | Schema dump identity and Reylo analysis of changed SQL files |
 | `compiler`       | Outer bucket around the nested compiler commands      |
 | `client-emit`    | Optional `--emit-client`, nested in `compiler`        |
+| `typecheck`      | Workspace TypeScript check, nested in `compiler`      |
 | `tsc`            | Workspace `tsc --noEmit`, nested in `compiler`        |
 | `construct`      | `bun run construct`, nested in `compiler`             |
 | `openapi`        | Optional `--emit-openapi`, nested in `compiler`       |
@@ -19,6 +21,17 @@
 | `cleanup`        | Remove the one-run container and its volume           |
 
 Client emit stays before the workspace compiler so tests see source-checked declarations. Client emit, `tsc` and construct share the same migrated database; they do not start a second compiler database. `--emit-client` still runs a declaration compiler and then `tsc --noEmit`; that is the accepted client-publication order, not duplicate preparation.
+
+Reylo analyses are cached in immutable snapshots under the host's typecheck cache directory. The snapshot key includes
+the Bun, TypeScript, Reylo and Postgres engine inputs plus the digest of the migrated schema dump. Each command gets a
+private `.reylo/` copy, and the cache manifest records each source SQL file's content digest. An unchanged run reads
+the existing analyses offline; a changed SQL file is regenerated on its own, while a changed schema dump selects a
+new snapshot. A failed cache generation continues through the ordinary compiler path so TypeScript retains its SQL
+diagnostics. An explicit `REYLO_CONFIG` or workspace Reylo project file keeps its configured behavior and bypasses
+this cache. Reylo's stored entries carry a database-wide schema fingerprint, so a migration that changes the schema
+invalidates the analyses for that database; a data-only migration with an unchanged schema dump reuses them.
+
+Decision: Keep successful Reylo analyses in immutable host-local snapshots keyed by schema-dump digest and compiler/config/dependency identity; each run gets a private copy and only changed SQL statements are regenerated.
 
 The one-run compiler database uses a labelled anonymous volume inside the run slice, matching kernel check storage. It does not use a 1 GiB tmpfs and does not bind-mount the checkout. Persistent derived reuse for local schema/contract generation keeps its existing tmpfs cache.
 
@@ -31,5 +44,5 @@ Cache-aware admission (`3afee00d49` / `b1841e43808feae3d6f1c1f8617bc8ffdde2512f`
 ### Cost: Kernel typecheck phases
 
 - Touches: one phase-file append per start/end, one optional cgroup `memory.stat` and `io.pressure` read, one `git rev-parse`.
-- Bound: constant in the number of Kernel phases (five outer pairs plus at most four nested compiler pairs).
+- Bound: constant in the number of Kernel phases (six outer pairs plus at most five nested compiler pairs).
 - Growth check: `test/scripts/command-phases.test.ts` pins pairing, nested compiler order, failed-`tsc` pairing, observation keys, one-run volume/slice args and a single throwaway database for compiler work.

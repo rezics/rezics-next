@@ -2,6 +2,7 @@
 // Typecheck every workspace from the repository root. One throwaway database receives the Kernel and Auth schemas,
 // is shared by mapper-enabled projects, then removed.
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -11,6 +12,11 @@ import { runOnCheckHost, type StackRun } from './stack-run.ts';
 import { recognizeCheckHostRun } from './check-placement.ts';
 
 const repository = resolve(fileURLToPath(new URL('..', import.meta.url)));
+
+/** Shared cache storage is host-local, so disposable workspaces on one check host reuse the same entries. */
+export function typecheckCacheRoot(env: NodeJS.ProcessEnv = process.env): string {
+  return resolve(env.TYPECHECK_CACHE_ROOT ?? join(homedir(), '.cache', 'rezics', 'typecheck'));
+}
 
 export type CompilerPlacementDependencies = {
   place?: typeof runOnCheckHost;
@@ -229,6 +235,8 @@ export function parseTypecheckSelection(args: readonly string[]): { changedFiles
 
 export type StartedDatabase = {
   url: string;
+  /** The database container lets schema dump helpers use docker exec instead of starting another client image. */
+  container?: string;
   remove: () => void | Promise<void>;
 };
 
@@ -438,6 +446,7 @@ async function runWorkspaces(
   if (!databaseUrl && workspaces.some((workspace) => workspace.needsDatabase))
     throw new Error('DATABASE_URL is not set');
   const childEnv = environmentWith(env, databaseUrl ?? '');
+  childEnv.TYPECHECK_CACHE_ROOT = typecheckCacheRoot(env);
   if (!databaseUrl) delete childEnv.DATABASE_URL;
   const failures: string[] = [];
   const results: WorkspaceResult[] = [];
@@ -510,7 +519,11 @@ async function withStartedDatabase(
   let failure: string | undefined;
   let cleanupFailure: string | undefined;
   try {
-    result = await run({ ...env, DATABASE_URL: database.url });
+    result = await run({
+      ...env,
+      DATABASE_URL: database.url,
+      ...(database.container === undefined ? {} : { KERNEL_DATABASE_CONTAINER: database.container }),
+    });
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
   } finally {
