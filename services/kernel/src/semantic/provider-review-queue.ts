@@ -24,7 +24,7 @@ import type { SemanticCopyRole } from './erasure-producer.ts';
 import { fencedIds } from './fences.ts';
 import { factDataTypes, resolveItem, type Statement } from './item.ts';
 import { PageCursorError } from './page.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { candidateFact, currentAcceptance, resolveSlot, slotView, type Candidate } from './slots.ts';
 import { refreshStatementReaderAuthorization, statementAudience } from './statement-disclosure.ts';
 import { readRelated } from './subject.ts';

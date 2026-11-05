@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { realmSubjectHome } from './realm-subject-candidates.ts';
 import type { ReviewDiscoveryContinuation, ReviewDiscoveryHomeObservation } from './review-discovery.ts';
 

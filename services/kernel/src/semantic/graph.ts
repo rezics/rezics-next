@@ -4,7 +4,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { encodeCursor } from '../tokens/cursor.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { SubjectNotFoundError } from './candidates.ts';
 import { SubjectRedirectError, redirectOf } from './merges.ts';
 import readVisibility from './read-visibility.sql';

@@ -21,7 +21,7 @@ import {
   type VoteCommandAdmission,
   type PreparedPutVote,
 } from '../rating/votes.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';

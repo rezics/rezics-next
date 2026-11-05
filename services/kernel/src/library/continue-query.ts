@@ -7,7 +7,7 @@ import { ProblemError } from '../http/problem.ts';
 import { systemClock } from '../clock.ts';
 import { routeOf } from '../route/route.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
-import { zeroScopeWork } from '../search/scope-execution.ts';
+import { zeroScopeWork } from '../work-ledger/scope-work.ts';
 import type { PoolClient } from 'pg';
 import { builtinCollectionId } from './builtin-identity.ts';
 import { openOwnerQuery, ownerQueryWork, type OwnerQueryDependencies } from './builtin-runtime-query.ts';

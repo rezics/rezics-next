@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { readPartitions } from '../partition/partition.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from './read-transaction.ts';
 import { publicFilterCreationConsumer } from '../semantic/public-filter-creation-consumer.ts';
 import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 export { publicFilterCreationConsumer } from '../semantic/public-filter-creation-consumer.ts';

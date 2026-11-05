@@ -148,7 +148,7 @@ async function reversal(tx: CommandTransaction, receipt: Receipt): Promise<Rever
 
 /** Resolve only the exact Global decision and pending receipt. Personal JSON/history is never searched. */
 async function verificationDecision(pool: Pool, receipt: Receipt) {
-  const { withReadTransaction } = await import('../semantic/read.ts');
+  const { withReadTransaction } = await import('./read-transaction.ts');
   const request = await withReadTransaction(
     pool,
     async (tx) =>

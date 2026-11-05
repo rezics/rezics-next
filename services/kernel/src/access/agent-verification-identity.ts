@@ -31,7 +31,7 @@ import type {
   IdentityJobRef,
   IdentityReceipt,
 } from '../semantic/identity-epoch-contract.ts';
-import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
+import { IdentityEpochStoreError } from '../identity-epoch/errors.ts';
 import insert from './agent-verification-identity-insert.sql';
 import read from './agent-verification-identity-read.sql';
 import {
@@ -528,7 +528,7 @@ export async function publishedAccountIdentityUndo(
 
 /** Actual Global decision locator, resolved before the account home is acquired. */
 export async function readOriginalAgentIdentityDecision(pool: Pool, requestId: string, receiptId: string) {
-  const { withReadTransaction } = await import('../semantic/read.ts');
+  const { withReadTransaction } = await import('./read-transaction.ts');
   const row = await withReadTransaction(
     pool,
     async (tx) =>

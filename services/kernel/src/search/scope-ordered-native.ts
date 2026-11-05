@@ -27,7 +27,7 @@ import type { PublicFilterQueriedObservation } from './public-filter-consumer-co
 import type { OpenSearch } from './opensearch.ts';
 import { discoveryIndexUuid, subjectGenerations } from './indices.ts';
 import type { SearchHit } from './query.ts';
-import { type ScopeWork, zeroScopeWork } from './scope-execution.ts';
+import { type ScopeWork, zeroScopeWork } from '../work-ledger/scope-work.ts';
 import {
   addScopePublicCost,
   emptyScopePublicCost,

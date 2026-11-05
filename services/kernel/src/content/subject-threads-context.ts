@@ -6,7 +6,7 @@ import { routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { readSubjectReference } from '../semantic/references.ts';
 import { prepareEditionSubjectIdentities } from './edition-subject.ts';
 import type { ReadContext } from './model.ts';

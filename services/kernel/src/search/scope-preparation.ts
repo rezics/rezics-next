@@ -10,7 +10,7 @@ import { createNativeLibrarySourceCustody } from '../library/native-source-custo
 import { readRelease } from '../semantic/definitions.ts';
 import type { IdentityScopeRegistration, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { createScopePreparationStore, type ScopePreparationRecord } from './scope-preparation-store.ts';
-import { ScopeWork, scopeAllowance, zeroScopeWork } from './scope-execution.ts';
+import { ScopeWork, scopeAllowance, zeroScopeWork } from '../work-ledger/scope-work.ts';
 import { sameScopeObservation } from './service-scope-order.ts';
 import {
   advanceConceptBrowse,

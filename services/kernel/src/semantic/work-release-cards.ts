@@ -9,7 +9,7 @@ import { slotView } from './slots.ts';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { isRelationProperty, type FactRow, type Statement } from './item.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { waitForSubjectLinks } from './link-freshness.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 

@@ -19,7 +19,7 @@ import {
 } from './statement-disclosure.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 import { activeRelease } from './definitions.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import type { Source } from '@rezics/definitions/bulk';
 import { SubjectRedirectError } from './merges.ts';
 import { checkSubjectInput } from '@rezics/definitions/validate';

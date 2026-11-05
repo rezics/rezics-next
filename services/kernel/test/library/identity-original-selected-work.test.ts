@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import type { Pool, PoolClient } from 'pg';
 import * as installed from '../../src/library/collection-source-work.ts';
+import { instrumentNativeCollectionWork, NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
 import {
   assembleLibraryIdentityOriginalComponents,
   assembleLibraryIdentitySelectedBodies,
@@ -142,7 +143,7 @@ test('a delegated body observer ends before executor controls without becoming p
   }) as unknown as Pool;
   const { sql, values } = LIBRARY_IDENTITY_SELECTED_STATEMENTS.plan;
   const price = libraryIdentitySelectedFootprint(sql, values)!;
-  const work = new installed.NativeCollectionWork({ reservationId: 'body-only', remaining: price }, Date.now() + 5000);
+  const work = new NativeCollectionWork({ reservationId: 'body-only', remaining: price }, Date.now() + 5000);
   const calls: string[] = [];
   const client = {
     query: async (text: string) => {
@@ -150,7 +151,7 @@ test('a delegated body observer ends before executor controls without becoming p
       return { rows: [], rowCount: 0 };
     },
   } as unknown as Pick<PoolClient, 'query'>;
-  await installed.instrumentNativeCollectionWork(
+  await instrumentNativeCollectionWork(
     pool,
     work,
     libraryIdentitySelectedFootprint,
@@ -164,7 +165,7 @@ test('a delegated body observer ends before executor controls without becoming p
   expect(calls).toEqual([sql, 'COMMIT']);
   expect(work.receipt().used.statements).toBe(1);
   await expect(
-    installed.instrumentNativeCollectionWork(
+    instrumentNativeCollectionWork(
       pool,
       work,
       libraryIdentitySelectedFootprint,

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { currentCommand, registerCommandCallback, runCommand } from '../../src/command/command.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
 import type { WorkDimensions } from '../../src/library/collection-source.ts';
 import { searchIdentityWriterChanged } from '../../src/search/identity-epoch-participant-events.ts';
 import { recordSemanticSourceCommit } from '../../src/semantic/erasure-producer.ts';

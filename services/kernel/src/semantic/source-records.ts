@@ -9,7 +9,7 @@ import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf } from '../route/route.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import writeMetadata from './source-records-write.sql';
 
 export type SourceRecord = {

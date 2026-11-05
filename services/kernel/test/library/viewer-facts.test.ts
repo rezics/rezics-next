@@ -15,7 +15,7 @@ import {
 import { readViewerPersonalActionsPage } from '../../src/library/viewer-personal-actions.ts';
 import { subjectViewerActionResources } from '../../src/semantic/viewer-actions.ts';
 import { createCollectionReads } from '../../src/library/collection-reads.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
+import { withReadTransaction } from '../../src/access/read-transaction.ts';
 import { routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { communityFixtureRuntime } from '../community/community-driver.ts';

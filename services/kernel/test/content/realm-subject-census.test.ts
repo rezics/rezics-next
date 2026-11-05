@@ -9,7 +9,7 @@ import {
   type RealmSubjectCandidate,
 } from '../../src/content/realm-subject-candidates.ts';
 import { createRealmSubjectSource } from '../../src/content/realm-subject-source.ts';
-import { ScopeWork, scopeAllowance } from '../../src/search/scope-execution.ts';
+import { ScopeWork, scopeAllowance } from '../../src/work-ledger/scope-work.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { realmBoardWorld } from './realm-board-create-support.ts';
 

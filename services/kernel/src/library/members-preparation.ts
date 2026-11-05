@@ -1,5 +1,5 @@
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -25,7 +25,7 @@ import {
   withNativeOwnerFilterSource,
   sameOwnerFilterSource,
 } from './owner-filter-native-binding.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import { retainNativeOwnerFilterPopulation } from './owner-filter-native-closure.ts';
 import { createCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
 import canonicalize from 'canonicalize';

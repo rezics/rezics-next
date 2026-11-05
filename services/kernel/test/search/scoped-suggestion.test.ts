@@ -5,7 +5,7 @@ import type {
   PublicFilterConsumerQuery,
 } from '../../src/search/public-filter-consumer-contract.ts';
 import { executeScopedSuggestions } from '../../src/search/scoped-suggestion.ts';
-import { ScopeWork, scopeAllowance, zeroScopeWork } from '../../src/search/scope-execution.ts';
+import { ScopeWork, scopeAllowance, zeroScopeWork } from '../../src/work-ledger/scope-work.ts';
 import type { PreparedSearchScope, SearchScopeEvaluation } from '../../src/search/scope-source.ts';
 import type { IndexedSubject, SubjectSource } from '../../src/search/source.ts';
 import type { PublicSuggestionOperations } from '../../src/search/public-suggestion.ts';

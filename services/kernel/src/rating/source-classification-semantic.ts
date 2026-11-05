@@ -7,7 +7,7 @@ import { readContext, publicContextEligibility } from '../semantic/context.ts';
 import { currentRelationFacts, currentRelationKey } from '../semantic/current-relations.ts';
 import { candidateSources } from '../semantic/fences.ts';
 import { readRelease } from '../semantic/definitions.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';

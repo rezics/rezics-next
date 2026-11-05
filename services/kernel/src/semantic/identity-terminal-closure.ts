@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { currentCommand, runCommand, withSingleCommandAttempt, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';
 import { reserveIdentityTerminalClosure } from './identity-epoch-mapping.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';

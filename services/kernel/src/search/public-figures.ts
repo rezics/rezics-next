@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { readPublicFigureViews, type PublicFigureView } from '../rating/public-figure-http.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import type { SearchHit } from './hits.ts';
 
 export type PublicSearchHit = SearchHit & { figure: PublicFigureView };

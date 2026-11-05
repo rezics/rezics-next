@@ -5,7 +5,7 @@ import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, commandAttemptDeadline, type CommandEvent } from '../command/command.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import { withConnection } from '../database/pool.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import {
   createIdentityRatingCommitParticipant,
   readIdentityRatingReview,

@@ -4,7 +4,7 @@ import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition, readPartitions } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accessCheck } from '../request/access.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';

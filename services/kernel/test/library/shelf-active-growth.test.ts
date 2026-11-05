@@ -4,7 +4,7 @@ import { createShelfActiveReader } from '../../src/library/shelf-active.ts';
 import type { ShelfSession } from '../../src/library/shelf-contract.ts';
 import { readSession } from '../../src/library/progress-store.ts';
 import { newId } from '../../src/route/route.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
+import { withReadTransaction } from '../../src/access/read-transaction.ts';
 import { capture, checkGrowth, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 let db: GrowthDatabase;

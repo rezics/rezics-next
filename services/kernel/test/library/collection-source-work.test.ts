@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
 import { createCollectionSource, type WorkDimensions } from '../../src/library/collection-source.ts';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
 import {

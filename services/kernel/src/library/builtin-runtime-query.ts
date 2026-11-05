@@ -6,7 +6,7 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { scopeAllowance, ScopeWork } from '../search/scope-execution.ts';
+import { scopeAllowance, ScopeWork } from '../work-ledger/scope-work.ts';
 import { createSearchScopeForService, type SearchService } from '../search/service-scope.ts';
 import { readCanonicalSourceGroup, readCanonicalSourceState, type CanonicalWork } from './canonical-source-store.ts';
 import {

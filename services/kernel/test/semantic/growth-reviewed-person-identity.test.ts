@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { checkGrowth, capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { identityFixture, type IdentityFixture } from './identity-fixture.ts';
 import { observeReviewedPersonIdentity } from '../../src/semantic/reviewed-person-identity.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
+import { withReadTransaction } from '../../src/access/read-transaction.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 
 let db: GrowthDatabase;

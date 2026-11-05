@@ -9,7 +9,7 @@ import {
   scopedFacetIdentityKey,
   type ScopedFacetIdentity,
 } from '../../src/search/scoped-facet-source.ts';
-import { ScopeWork, scopeAllowance, zeroScopeWork } from '../../src/search/scope-execution.ts';
+import { ScopeWork, scopeAllowance, zeroScopeWork } from '../../src/work-ledger/scope-work.ts';
 import type { PreparedRealmScope } from '../../src/search/realm-scope.ts';
 
 const cost: PublicFilterCost = {

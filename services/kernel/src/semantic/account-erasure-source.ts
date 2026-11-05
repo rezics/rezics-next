@@ -9,7 +9,7 @@ import {
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';

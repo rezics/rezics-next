@@ -9,7 +9,7 @@ import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { globalReadEligibility } from '../semantic/eligibility.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import directory from './question-directory.sql';
 import realmDirectory from './question-directory-realm.sql';
 import lifecycleGenerationRead from './question-lifecycle-generation-read.sql';

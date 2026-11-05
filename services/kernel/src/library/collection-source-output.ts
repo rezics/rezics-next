@@ -19,7 +19,7 @@ import {
 } from './collection-publication-episodes.ts';
 import type { CollectionPublicationEpisode } from './collection-publication-episode-contract.ts';
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
-import type { NativeCollectionWork } from './collection-source-work.ts';
+import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import { readCollection } from './collection-store.ts';
 import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
 

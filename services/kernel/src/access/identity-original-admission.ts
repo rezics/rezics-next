@@ -14,7 +14,7 @@ import type { HistoryRegistry } from '../history/registry.ts';
 import type { WorkClient } from '../work/client.ts';
 import { routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
-import { NativeCollectionWork } from '../library/collection-source-work.ts';
+import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 
 // This selected original has always had an absolute five-second lifetime.
 export const IDENTITY_ORIGINAL_DEADLINE_MS = 5000;

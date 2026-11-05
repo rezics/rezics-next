@@ -30,7 +30,7 @@ import {
   identitySourceConsumerLibraryWork,
   identitySourceConsumerNativeWork,
 } from '../semantic/identity-source-consumer-maintenance.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { subjectAlias } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';

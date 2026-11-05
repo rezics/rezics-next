@@ -9,7 +9,7 @@ import type {
   PublicFilterConsumerContext,
 } from '../search/public-filter-consumer-contract.ts';
 import type { PublicFilterCost } from './public-filter-source-contract.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { requireAccessDeadline, classifyUnavailability } from '../access/unavailable.ts';
 import { mintReadTime } from '../command/command.ts';

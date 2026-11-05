@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { PoolClient } from 'pg';
 import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
-import type { NativeCollectionWork } from '../library/collection-source-work.ts';
+import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
 
 const zero = (): { -readonly [Axis in keyof WorkDimensions]: number } => ({

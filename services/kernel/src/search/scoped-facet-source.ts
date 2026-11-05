@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
 import type { FacetDiscoveryScope } from './facet-discovery-contract.ts';
-import { ScopeWork, zeroScopeWork } from './scope-execution.ts';
+import { ScopeWork, zeroScopeWork } from '../work-ledger/scope-work.ts';
 import type { ScopeEvaluationProgress, PreparedSearchScope } from './scope-source.ts';
 import type { createSearchScopeForService } from './service-scope.ts';
 import { subjectPartition } from './source.ts';

@@ -26,7 +26,7 @@ import {
   type CommandDispatchOwner,
 } from '../../src/command/dispatch-lifetime.ts';
 import { createPool } from '../../src/database/pool.ts';
-import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
 import { declareCommandRecordSources } from '../../src/history/record-source.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';

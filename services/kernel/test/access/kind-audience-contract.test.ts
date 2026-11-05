@@ -154,7 +154,7 @@ test('pre-Type Kind input is a committed raw operand and does not require a posi
 test('a raw-input locator and constructor-funded work cannot replace private live native admission', async () => {
   const { resolveCollectionKindRawInput, collectionKindInputWork } =
     await import('../../src/library/collection-kind-input.ts');
-  const { NativeCollectionWork } = await import('../../src/library/collection-source-work.ts');
+  const { NativeCollectionWork } = await import('../../src/work-ledger/native-collection-work.ts');
   const locator = {
     route: 0xc100,
     ownerAccountId: newId(0xc100),

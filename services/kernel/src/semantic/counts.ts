@@ -6,7 +6,7 @@ import { SubjectNotFoundError } from './candidates.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
 import readVisibility from './read-visibility.sql';
 import readSubjectCounts from './read-subject-counts.sql';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 
 export type SubjectRelationCounts = {
   properties: Record<string, { out?: number; in?: number }>;

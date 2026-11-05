@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { Access, Actor } from '../request/access.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import {
   readViewerActions,
   type ViewerActionBindings,

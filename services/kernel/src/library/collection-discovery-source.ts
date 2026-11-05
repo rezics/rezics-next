@@ -8,7 +8,7 @@ import { readCollectionDiscoveryFollowCounts } from './follow-count-reads.ts';
 import { readDiscoverySubjectMembership } from './collection-discovery-context.ts';
 import { readPartition } from '../partition/partition.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import selectedOutput from './collection-source-output-head.sql';
 import type { CollectionOutputRef } from './collection-source-output.ts';
 

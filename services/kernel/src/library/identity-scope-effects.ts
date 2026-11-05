@@ -2,7 +2,7 @@ import { ProblemError } from '../http/problem.ts';
 import type { Pool } from 'pg';
 import { currentCommand, currentCommandResources, noEffect, type CommandTransaction } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import { identityJobPartition } from '../semantic/identity-adapters/index.ts';
 import { isPrepaidIdentitySourceConsumerMaintenance } from '../semantic/identity-source-consumer-maintenance.ts';
 import {

@@ -19,7 +19,7 @@ import { slotView } from './slots.ts';
 import { contextSnapshot } from './context.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 import { matchesTarget } from './targets.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';

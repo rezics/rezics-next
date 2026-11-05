@@ -29,7 +29,7 @@ import { beginSemanticRecordSourceSet } from '../../src/semantic/record-source-s
 import { writeIdentityScopeConsumerNativeCommit } from '../../src/semantic/identity-epoch-native-commit.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { enterCommandGate } from '../../src/command/gate.ts';
-import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
 import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
 
 // Genuine executor/native association outcomes. This fixture's real ledger exercises the

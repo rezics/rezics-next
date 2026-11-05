@@ -37,14 +37,14 @@ import original from './members-preparation-original.sql';
 import sourceMetadata from './members-preparation-source.sql';
 import ownerFence from './owner-filter-native-binding-fence.sql';
 import { collectionPublicationScopeRuntime } from '../search/work.ts';
-import { scopeAllowance } from '../search/scope-execution.ts';
+import { scopeAllowance } from '../work-ledger/scope-work.ts';
 import { meterMembersDefinition, withMembersWorkBudget } from '../search/scope-members-work-cost.ts';
 import { MEMBERS_PREPARATION_STEP_CEILING, MEMBERS_PREPARATION_LOCAL_COST } from './members-preparation-cost.ts';
 import {
   MEMBERS_PREPARATION_SOURCE_COST,
   MEMBERS_PREPARATION_SOURCE_PATHS,
 } from '../search/scope-members-source-declaration.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import {
   createMembersPreparation,

@@ -1,7 +1,7 @@
 import { runCommand, authoritativeTimeValue, type CommandTransaction } from '../command/command.ts';
 import type { OperationalTransaction } from '../command/operational.ts';
 import type { Pool, PoolClient } from 'pg';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from './read-transaction.ts';
 import { runOperationalTransaction } from '../command/operational.ts';
 import { createWorkClient } from '../work/client.ts';
 import { routeOf, partitionOf } from '../route/route.ts';

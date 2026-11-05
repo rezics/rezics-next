@@ -4,7 +4,7 @@ import { readViewerActions, type ViewerActionBindings } from '../access/viewer-a
 import { authoritativeTimeValue } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { latestAdoption } from './slots.ts';
 import readSlotOperation from './slots-read-operation.sql';

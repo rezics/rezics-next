@@ -6,7 +6,7 @@ import { accessCheck } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease } from './definitions.ts';
 import { relatedReadEligibility } from './eligibility.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryReaderDependencies } from './summaries.ts';
 import statesRead from './subject-summary-states.sql';
 

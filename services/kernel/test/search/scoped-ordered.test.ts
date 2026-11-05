@@ -5,7 +5,8 @@ import type { NativeOrdinalKey, RawOrdinalCollectionPrefix } from '../../src/lib
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
 import { createIdentityScopedObservations } from '../../src/semantic/identity-scoped-observations.ts';
 import type { IdentityScopedObservations } from '../../src/semantic/identity-scope-types.ts';
-import { ScopeWork, scopeAllowance, zeroScopeWork, evaluateScopeSubjects } from '../../src/search/scope-execution.ts';
+import { evaluateScopeSubjects } from '../../src/search/scope-execution.ts';
+import { ScopeWork, scopeAllowance, zeroScopeWork } from '../../src/work-ledger/scope-work.ts';
 import { compileCurrentOwnerFilter } from '../../src/search/current-filter-plan.ts';
 import { createSearchScopeSource } from '../../src/search/scope-source.ts';
 import {

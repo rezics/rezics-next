@@ -15,7 +15,7 @@ import type { SavedCollectionRule } from './collection-rules.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { CollectionOutputPublication, CollectionOutputRef } from './collection-source-output.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
-import type { NativeCollectionWork } from './collection-source-work.ts';
+import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 
 /** Same actual Collection as the target; this reference selects its PRIVATE working population.
  * Native bodies must validate the relationship, owner, incarnation and generation explicitly.

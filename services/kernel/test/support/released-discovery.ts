@@ -38,7 +38,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { isRelationProperty } from '../../src/semantic/item.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
+import { withReadTransaction } from '../../src/access/read-transaction.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import {
   createSemanticDriver,

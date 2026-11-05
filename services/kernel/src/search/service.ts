@@ -83,7 +83,7 @@ import { serviceRealmScopeFacetAdmission, serviceScopeFacetAdmission } from './s
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
 import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
-import { ScopeWork, scopeAllowance } from './scope-execution.ts';
+import { ScopeWork, scopeAllowance } from '../work-ledger/scope-work.ts';
 import type { ScopeBasis } from './scope-source.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';

@@ -4,7 +4,7 @@ import {
   bindCollectionKindPreparationStep,
   readCollectionKindWorkDefinition,
 } from '../../src/library/collection-kind-work-admission.ts';
-import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
 import type { OperationalTransaction } from '../../src/command/operational.ts';
 import { newId } from '../../src/route/route.ts';
 

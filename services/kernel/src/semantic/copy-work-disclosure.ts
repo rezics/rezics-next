@@ -27,7 +27,7 @@ import { candidateSources, fenceKey, sourceTuple } from './fences.ts';
 import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
 import { isRelationProperty } from './item.ts';
 import subjectsSQL from './list-presentation-subjects.sql';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { readSubjectSummaryObservation, type SubjectSummary, type SubjectSummaryObservation } from './summaries.ts';
 
 export type {

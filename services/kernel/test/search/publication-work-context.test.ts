@@ -8,7 +8,7 @@ import type {
 import { createCollectionSource, type CollectionSourceContext } from '../../src/library/collection-source.ts';
 import type { Access } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { scopeAllowance } from '../../src/search/scope-execution.ts';
+import { scopeAllowance } from '../../src/work-ledger/scope-work.ts';
 import {
   admitScopeWork,
   readCollectionKindPreparationWorkDefinition,

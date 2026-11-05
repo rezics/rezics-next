@@ -6,7 +6,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { itemFacts } from '../../src/semantic/item.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { writeFacts } from '../../src/semantic/write-facts.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
+import { withReadTransaction } from '../../src/access/read-transaction.ts';
 import { capture, openGrowthDatabase, type Capture, type GrowthDatabase } from '../support/growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;

@@ -2,7 +2,7 @@
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { ProblemError } from '../http/problem.ts';
 import type { WorkDimensions } from './collection-source.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import admitEpisode from './collection-kind-work-admit.sql';
 import readSource from './collection-kind-work-source.sql';
 import readState from './collection-kind-input-state.sql';

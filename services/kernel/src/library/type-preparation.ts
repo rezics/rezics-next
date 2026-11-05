@@ -16,7 +16,7 @@ import { requireAccessDeadline } from '../access/unavailable.ts';
 import { withRequestDeadline, deadlineFor } from '../request/deadline.ts';
 import type { Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
 import { resolveSubject } from './subject-anchor.ts';

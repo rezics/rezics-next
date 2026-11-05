@@ -3,7 +3,7 @@ import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { readAggregate } from '../../src/rating/aggregate-effect.ts';
 import { readAggregateFigure } from '../../src/rating/aggregate-read.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
+import { withReadTransaction } from '../../src/access/read-transaction.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const questionRoute = 0x3110;

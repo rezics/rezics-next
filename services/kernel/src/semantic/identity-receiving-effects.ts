@@ -19,7 +19,7 @@ import {
 } from '../library/native-source-custody.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { IDENTITY_EPOCH_ADMITTED } from './events.ts';
 import { identityErasureRoles, bindSemanticProducerRoles } from './erasure-producer.ts';
 import {

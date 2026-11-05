@@ -224,7 +224,7 @@ import {
   probeNativeCollectionOriginal,
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
-import { CollectionSourceLedger } from './collection-source-work.ts';
+import { CollectionSourceLedger } from '../work-ledger/native-collection-work.ts';
 import {
   readCanonicalSourceState,
   readCanonicalSourceGroup,

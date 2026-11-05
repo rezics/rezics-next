@@ -1,5 +1,5 @@
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 export { SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
 

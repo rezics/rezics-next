@@ -7,7 +7,7 @@ import {
   type CommandEvent,
   type CommandTransaction,
 } from '../command/command.ts';
-import type { NativeCollectionWork } from '../library/collection-source-work.ts';
+import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import type { IdentityJobRef } from './identity-epoch-contract.ts';
 import type { IdentityScopeKey } from './identity-scope-types.ts';

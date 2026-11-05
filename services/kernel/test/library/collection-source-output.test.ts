@@ -15,7 +15,7 @@ import {
   revalidateNativePublicCollectionOutputHold,
   transferNativePublicCollectionOutputHold,
 } from '../../src/library/collection-source-native.ts';
-import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
 import { declareLibraryIdentityStatement } from '../../src/library/identity-original-work.ts';
 import {
   nativePublicOutputFootprint,

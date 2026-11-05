@@ -17,7 +17,7 @@ import {
   type IdentityReceivingEffect,
   type IdentityReceivingSelection,
 } from '../semantic/identity-receiving-effects.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
 import { WORK_STEP_DEADLINE_MS, workStepDeadline } from './command-support.ts';
 import {

@@ -1,7 +1,7 @@
 import type { CommandTransaction } from '../command/command.ts';
 import type { Pool } from 'pg';
 import { partitionReadClient } from '../database/read-snapshot.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { VoteReviewStaleError, VoteReviewUnavailableError, type VoteReviewEpoch } from '../rating/own-votes-review.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityEpochStore } from './identity-adapters/index.ts';

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { currentCommand, noEffect, runCommand, type CommandTransaction } from '../../src/command/command.ts';
-import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
 import { readNativeCollectionMetadata } from '../../src/library/collection-source-native.ts';
 import {
   createNativeLibrarySourceCustody,

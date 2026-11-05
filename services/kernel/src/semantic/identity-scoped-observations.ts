@@ -19,7 +19,7 @@ import {
   type NativeLibrarySourceCustody,
   type NativeSourceFrontier,
 } from '../library/native-source-custody.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import { libraryIdentityFootprint } from '../library/identity-native-planner-work.ts';
 import {
   readLibraryScopeEffectsPage,
@@ -51,7 +51,7 @@ import {
   publicIdentityCaptureLocator,
   verifyPublicIdentitySourceCaptureLocator,
 } from './identity-scoped-public-source.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { writeIdentityScopeConsumerNativeCommit } from './identity-epoch-native-commit.ts';
 import {
   prepayIdentityScopeNativeAssociation,

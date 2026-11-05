@@ -1,5 +1,5 @@
 import type { WorkDimensions } from '../library/collection-source.ts';
-import type { NativeCollectionWork } from '../library/collection-source-work.ts';
+import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import s0 from './identity-public-output-accepted.sql';
 import s1 from './identity-public-output-insert.sql';
 import s2 from './identity-public-output-progress.sql';

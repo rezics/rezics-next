@@ -25,7 +25,7 @@ import {
 import { holdsCurrentStatements, holdsCurrentType } from '../search/current-leaf.ts';
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { createCollectionSource, type PrepareCollectionSource, type WorkDimensions } from './collection-source.ts';
-import type { NativeCollectionWork } from './collection-source-work.ts';
+import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import type { AdmittedCollectionRule, CollectionRuleSource } from './collection-rules.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import {

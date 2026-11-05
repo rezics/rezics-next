@@ -10,7 +10,7 @@ import { withConnection } from '../database/pool.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from './read-transaction.ts';
 import { accessClock } from './access-clock.ts';
 import { readAccount, readOrganizationRole } from './account-data.ts';
 import { readManagedAuthActions } from './account-management-auth-actions.ts';

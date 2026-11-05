@@ -5,7 +5,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount, type Account } from '../access/account-data.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import type { IdentityMapping } from '../semantic/identity-core/index.ts';
 import { readableSubjects } from '../library/subject-anchor.ts';

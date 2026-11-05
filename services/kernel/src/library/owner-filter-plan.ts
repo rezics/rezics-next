@@ -38,7 +38,7 @@ import {
   type PreparedCollectionSource,
   type WorkDimensions,
 } from './collection-source.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import {
   admitCollectionMemberQuery,
   evaluateOwnerFilterLeaves,

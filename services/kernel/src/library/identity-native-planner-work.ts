@@ -8,7 +8,7 @@ import {
   isPrepaidIdentitySourceConsumerMaintenance,
   identitySourceConsumerScheduleReceipt,
 } from '../semantic/identity-source-consumer-maintenance.ts';
-import { type NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
+import { type NativeCollectionWork, instrumentNativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import type { WorkAllowance, WorkDimensions } from './collection-source.ts';
 import {
   isLibraryIdentityFullPartitionSQL,

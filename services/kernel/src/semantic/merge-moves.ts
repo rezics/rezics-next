@@ -5,7 +5,7 @@ import {
   readSubjectPageContinuation,
   type PublicationOrigin,
 } from './subject-page-publication-store.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandTransaction } from '../command/command.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';

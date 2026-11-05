@@ -1,5 +1,5 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from './read-transaction.ts';
 import { runOperationalTransaction, enqueueIntent } from '../command/operational.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';

@@ -8,7 +8,7 @@ import {
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';

@@ -16,7 +16,7 @@ import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.
 import * as semanticPublicCapture from '../semantic/identity-scoped-public-source.ts';
 import { observeNativePublicCollectionOutput, type CanonicalRangeKey } from './collection-source-native.ts';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
 import type {
   LockPublicOutputDisposition,

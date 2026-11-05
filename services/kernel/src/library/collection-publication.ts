@@ -39,7 +39,7 @@ import {
   beginCollectionSourceOutput,
   completeCollectionSourceOutput,
 } from './collection-source-output.ts';
-import { NativeCollectionWork, withNativeCollectionWorkAllowance } from './collection-source-work.ts';
+import { NativeCollectionWork, withNativeCollectionWorkAllowance } from '../work-ledger/native-collection-work.ts';
 import {
   COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST,
   collectionSelectedPublicationOutputReservation,

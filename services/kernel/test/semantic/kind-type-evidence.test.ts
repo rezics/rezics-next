@@ -170,7 +170,7 @@ import {
   type NativeKindTypeRetainedBody,
 } from '../../src/semantic/kind-type-evidence.ts';
 import type { NativeKindTypeAnchor } from '../../src/semantic/scope-leaf-selection.ts';
-import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
 import { routeOf } from '../../src/route/route.ts';
 
 function structuralAnchor(subjectId: string): NativeKindTypeAnchor {

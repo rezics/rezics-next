@@ -4,7 +4,7 @@ import { AccessWorkAccounting, type AccessWork, type AccessWorkSink } from '../a
 import { ProblemError } from '../http/problem-error.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
-import { ScopeWork, zeroScopeWork } from '../search/scope-execution.ts';
+import { ScopeWork, zeroScopeWork } from '../work-ledger/scope-work.ts';
 import type {
   RealmSubjectDisclosureContext,
   RealmSubjectDisclosureDependencies,

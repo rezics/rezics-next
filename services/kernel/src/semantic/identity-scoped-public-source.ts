@@ -15,7 +15,7 @@ import {
 } from './public-filter-source-binding.ts';
 import { createSubjectSourceKeyPages } from './subject-source-key-pages.ts';
 import { publicFilterSource } from './public-filter-source.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';
 
 declare const publicSourceCapture: unique symbol;

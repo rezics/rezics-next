@@ -5,7 +5,7 @@ import {
   type AccessWorkSink,
 } from '../access/work.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
-import { NativeCollectionWork } from '../library/collection-source-work.ts';
+import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import {
   currentCommandWorkAssociation,
   registerCommandWorkAssociation,

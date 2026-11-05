@@ -25,7 +25,7 @@ import {
   recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
 } from '../semantic/identity-adapters/index.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import {
   isPrepaidIdentitySourceConsumerMaintenance,
   withIdentitySourceNoEffectCommand,
@@ -36,7 +36,7 @@ import type {
   IdentityReceivingDisposition,
   IdentityReceivingSelection,
 } from '../semantic/identity-receiving-effects-types.ts';
-import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
+import { instrumentNativeCollectionWork, NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import {
   createNativeLibrarySourceCustodyWithWork,
   readNativeIdentitySourceBasis,

@@ -13,7 +13,7 @@ import {
   type WorkReceipt,
   type WorkDimensions,
 } from '../library/collection-source.ts';
-import { CollectionSourceLedger } from '../library/collection-source-work.ts';
+import { CollectionSourceLedger } from '../work-ledger/native-collection-work.ts';
 import {
   readCanonicalSourceState,
   seekCanonicalSourceGroup,
@@ -23,7 +23,7 @@ import {
 import { readNativeCollectionScopeIdentity } from '../library/collection-source-native.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { scopeAllowance, scopeWorkAxes, zeroScopeWork } from '../search/scope-execution.ts';
+import { scopeAllowance, scopeWorkAxes, zeroScopeWork } from '../work-ledger/scope-work.ts';
 import { createSearchScopeForService, type SearchService } from '../search/service-scope.ts';
 import type {
   PreparedSearchScope,

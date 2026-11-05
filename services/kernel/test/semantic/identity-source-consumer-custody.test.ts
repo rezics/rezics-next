@@ -1003,7 +1003,7 @@ async function accountingTransport(failSQL?: string) {
 
 test('unknown SQL cannot hide behind a transferred Library local ledger and rollback stays funded', async () => {
   const { NativeCollectionWork, instrumentNativeCollectionWork, requireNativeCollectionFootprint } =
-    await import('../../src/library/collection-source-work.ts');
+    await import('../../src/work-ledger/native-collection-work.ts');
   const { withIdentitySourceConsumerLibraryRemainder } =
     await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const { pool, dispatched } = await accountingTransport();
@@ -1061,7 +1061,7 @@ test('unknown SQL cannot hide behind a transferred Library local ledger and roll
 });
 
 test('held terminal work and failed dispatched SQL consume the cumulative planned remainder', async () => {
-  const { instrumentNativeCollectionWork } = await import('../../src/library/collection-source-work.ts');
+  const { instrumentNativeCollectionWork } = await import('../../src/work-ledger/native-collection-work.ts');
   const { withIdentitySourceConsumerLibraryRemainder } =
     await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const { pool, dispatched } = await accountingTransport('SELECT 1');
@@ -1156,7 +1156,7 @@ test('a planned Library remainder rejects foreign identity and cannot escape its
 });
 
 test('an undispatched reservation and nested remainder cannot outlive their original plan', async () => {
-  const { NativeCollectionWork } = await import('../../src/library/collection-source-work.ts');
+  const { NativeCollectionWork } = await import('../../src/work-ledger/native-collection-work.ts');
   const remaining = {
     candidateKeys: 0,
     identityMetadataRows: 0,
@@ -1197,9 +1197,9 @@ test('an undispatched reservation and nested remainder cannot outlive their orig
 
 test('Source callback return permanently closes escaped ledger handles and cannot mint a nested original or deadline', async () => {
   const { pool, dispatched } = await accountingTransport();
-  const escaped: { ledger?: import('../../src/library/collection-source-work.ts').NativeCollectionWork } = {};
+  const escaped: { ledger?: import('../../src/work-ledger/native-collection-work.ts').NativeCollectionWork } = {};
   let held:
-    | ReturnType<import('../../src/library/collection-source-work.ts').NativeCollectionWork['reserve']>
+    | ReturnType<import('../../src/work-ledger/native-collection-work.ts').NativeCollectionWork['reserve']>
     | undefined;
   const deadline = Date.now() + 5000;
   await withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline }, async (funded) => {
@@ -1229,7 +1229,7 @@ test('Source callback return permanently closes escaped ledger handles and canno
 
 test('a completed nested instrumenter cannot dispatch through an escaped callback while its Source frame remains live', async () => {
   const { instrumentNativeCollectionWork, requireNativeCollectionFootprint } =
-    await import('../../src/library/collection-source-work.ts');
+    await import('../../src/work-ledger/native-collection-work.ts');
   const { pool, dispatched } = await accountingTransport();
   await withIdentitySourceConsumerMaintenance({ pool, env: {} }, { deadline: Date.now() + 5000 }, async (funded) => {
     const ledger = identitySourceConsumerLibraryWork(pool, funded.identityConsumerWork, funded.deadline)!;
@@ -1286,7 +1286,7 @@ test('a completed nested instrumenter cannot dispatch through an escaped callbac
 
 test('a manually metered local custody ledger cannot suppress the existing Source observer or add receiving funds', async () => {
   const { NativeCollectionWork, instrumentNativeCollectionWork } =
-    await import('../../src/library/collection-source-work.ts');
+    await import('../../src/work-ledger/native-collection-work.ts');
   const { withIdentitySourceConsumerLibraryRemainder } =
     await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const { pool, dispatched } = await accountingTransport();
@@ -1409,7 +1409,7 @@ test('original parent composition requires every explicit eight-axis operand and
 
 test('The actual Library scope seal verifier and receiving and durable fence commands are charged before dispatch to the one existing Source frame with exact known SQL footprints, while unknown SQL is refused and same-home verification remains mandatory', async () => {
   const { scopeConsumerFootprint } = await import('../../src/semantic/identity-scoped-observations.ts');
-  const { instrumentNativeCollectionWork } = await import('../../src/library/collection-source-work.ts');
+  const { instrumentNativeCollectionWork } = await import('../../src/work-ledger/native-collection-work.ts');
   const { withIdentitySourceConsumerLibraryRemainder } =
     await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const selection = (await import('../../src/semantic/identity-receiving-selection-read.sql')).default;
@@ -1742,7 +1742,7 @@ test('scope literal accounting rejects malformed unbounded and receipt-writing o
 });
 
 test('failed COMMIT keeps its charged work and dispatches the separately held ROLLBACK on the same cumulative plan', async () => {
-  const { instrumentNativeCollectionWork } = await import('../../src/library/collection-source-work.ts');
+  const { instrumentNativeCollectionWork } = await import('../../src/work-ledger/native-collection-work.ts');
   const { withIdentitySourceConsumerLibraryRemainder } =
     await import('../../src/semantic/identity-source-consumer-maintenance.ts');
   const { pool, dispatched } = await accountingTransport('COMMIT');
@@ -1794,7 +1794,7 @@ test('failed COMMIT keeps its charged work and dispatches the separately held RO
 
 test('a manually reserved query cannot suppress the original literal policy or repeat its single dispatch', async () => {
   const { NativeCollectionWork, instrumentNativeCollectionWork } =
-    await import('../../src/library/collection-source-work.ts');
+    await import('../../src/work-ledger/native-collection-work.ts');
   const { pool, dispatched } = await accountingTransport();
   const bound = {
     candidateKeys: 0,
@@ -1845,7 +1845,7 @@ test('a manually reserved query cannot suppress the original literal policy or r
 
 test('an unreleased checkout and its saved query method lose dispatch authority when their observer ends', async () => {
   const { NativeCollectionWork, instrumentNativeCollectionWork } =
-    await import('../../src/library/collection-source-work.ts');
+    await import('../../src/work-ledger/native-collection-work.ts');
   const { pool, dispatched } = await accountingTransport();
   const bound = {
     candidateKeys: 0,

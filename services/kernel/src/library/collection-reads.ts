@@ -71,7 +71,7 @@ import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { MAX_VIEWER_FACTS_ROWS } from './viewer-facts-schema.ts';
 import { specializeCollectionListPolicy } from './collection-list-policy.ts';
 import { createSearchScopeForService } from '../search/service-scope.ts';
-import { scopeAllowance, ScopeWork } from '../search/scope-execution.ts';
+import { scopeAllowance, ScopeWork } from '../work-ledger/scope-work.ts';
 
 type CuratorPageOptions = {
   curatorAccountId: string | null;

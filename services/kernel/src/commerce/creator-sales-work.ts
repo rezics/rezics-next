@@ -12,7 +12,7 @@ import {
   type OperationalTransaction,
 } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

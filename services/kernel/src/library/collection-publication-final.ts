@@ -19,8 +19,8 @@ import {
   type CommandOutcome,
 } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
-import { scopeAllowance, zeroScopeWork } from '../search/scope-execution.ts';
+import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { scopeAllowance, zeroScopeWork } from '../work-ledger/scope-work.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

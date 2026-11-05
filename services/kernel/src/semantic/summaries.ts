@@ -20,7 +20,7 @@ import { slotId } from './slots.ts';
 import { chooseLabel } from './language.ts';
 import readSummaries from './summaries-read.sql';
 import readRepresentativeEditions from './summaries-representative-editions.sql';
-import { currentReadSnapshot, withReadTransaction } from './read.ts';
+import { currentReadSnapshot, withReadTransaction } from '../access/read-transaction.ts';
 
 export type CoverSummary = {
   media: string;

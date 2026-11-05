@@ -6,7 +6,7 @@ import type { OperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
 import { nativeSourceFence, type CanonicalRawKey } from './canonical-source-store.ts';
 import { readNativeCollectionMetadata, readNativeCollectionRawPage } from './collection-source-native.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import type { NativeSourceIdentity, NativeSourceCustody } from './native-source-custody.ts';
 import {
   COLLECTION_KIND_INPUT_BYTE_LIMIT,

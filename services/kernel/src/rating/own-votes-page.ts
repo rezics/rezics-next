@@ -14,7 +14,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { admitIdentityRatingEffect } from '../semantic/identity-rating-admission.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';

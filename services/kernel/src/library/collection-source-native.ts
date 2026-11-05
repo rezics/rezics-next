@@ -29,7 +29,7 @@ import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
 import { grantCapable } from './collection-reads.ts';
 import { admittedOwnerWorkingSource } from './owner-filter-working-source.ts';
-import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
+import { instrumentNativeCollectionWork, NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import {
   assertLibraryIdentityWork,
   assertLibraryIdentityResources,

@@ -11,7 +11,7 @@ import {
   principalCommandIdentity,
   runCommand,
 } from '../command/command.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import realmRead from '../community/realm-read.sql';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem.ts';

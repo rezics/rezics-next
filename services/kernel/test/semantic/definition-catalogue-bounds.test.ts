@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { CatalogueArtifactError } from '@rezics/definitions';
-import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
+import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
 import { CATALOGUE_COMMAND_BOUND } from '../../src/semantic/definition-catalogue-publication-work.ts';
 import {
   CATALOGUE_BODY_COST,

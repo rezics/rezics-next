@@ -8,7 +8,7 @@ import { collectRetainedUsefulPage } from './useful-page.ts';
 import type { PublicSuggestionOperations } from './public-suggestion.ts';
 import type { SearchHit as NativeSearchHit } from './query.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
-import { ScopeWork } from './scope-execution.ts';
+import { ScopeWork } from '../work-ledger/scope-work.ts';
 import type { PreparedSearchScope } from './scope-source.ts';
 import type { createSearchScopeForService } from './service-scope.ts';
 

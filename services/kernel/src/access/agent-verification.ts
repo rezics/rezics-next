@@ -30,7 +30,7 @@ import {
   type Resource,
 } from '../request/access.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from './read-transaction.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { viewerActionReadTime } from './index.ts';
 import { deadlineClient, within } from './authenticate.ts';

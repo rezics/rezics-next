@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { REVIEW_DISCOVERY_CHANGE_LIMIT } from './review-discovery-lifecycle.ts';
 import type { ReviewDiscoveryOrigin } from './review-discovery-events.ts';
 import type { IndexedReview, ReviewDiscoverySource } from './review-discovery.ts';

@@ -50,7 +50,7 @@ import installGate from './identity-epoch-bootstrap-install-gate.sql';
 import type { Pool } from 'pg';
 import { noEffect, registerCommandCallback, runCommand, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { withReadTransaction } from './read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';

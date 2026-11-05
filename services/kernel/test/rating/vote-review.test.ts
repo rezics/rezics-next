@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createVoteCommands, STANDARD_QUESTION_ID, type VoteReviewGuard } from '../../src/rating/votes.ts';
 import { admitIdentityRatingEffect } from '../../src/semantic/identity-rating-admission.ts';
-import { withReadTransaction } from '../../src/semantic/read.ts';
+import { withReadTransaction } from '../../src/access/read-transaction.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';

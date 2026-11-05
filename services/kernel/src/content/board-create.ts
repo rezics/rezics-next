@@ -21,7 +21,7 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { readItemTypes } from '../semantic/subject.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from '../access/read-transaction.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readConceptSchemeReference } from '../semantic/concept-scheme-reference.ts';
