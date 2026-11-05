@@ -14,6 +14,7 @@ import {
 } from '../../../packages/conversion/src/support.ts';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { vndbTagsRatingEndpoint, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
+import { ImportTransportError } from './import-client.ts';
 import type { Owner } from './record-bindings.ts';
 import {
   emptyCrossMediaPlan,
@@ -85,7 +86,7 @@ export type VndbPublicTagKnownBindings = {
   concepts: readonly { category: VndbPublicTagCategory; code: string; id: string }[];
 };
 
-/** Current disclosed/adopted VNDB tag schemes and concepts. Retracted or hidden identities are withheld. */
+/** Current disclosed/adopted VNDB tag schemes and concepts. Missing identities are withheld. */
 export async function readVndbPublicTagBindings(
   port: Pick<CrossMediaPort, 'readReviewedSubject'>,
   known: VndbPublicTagKnownBindings,
@@ -97,8 +98,9 @@ export async function readVndbPublicTagBindings(
     let schemeRead;
     try {
       schemeRead = await port.readReviewedSubject(item.id);
-    } catch {
-      continue;
+    } catch (error) {
+      if (error instanceof ImportTransportError && error.status === 404) continue;
+      throw error;
     }
     const scheme = schemeRead as { subject?: { id?: string; type?: string } };
     if (scheme.subject?.id !== item.id || scheme.subject.type !== 'skos:ConceptScheme') continue;
@@ -120,8 +122,9 @@ export async function readVndbPublicTagBindings(
     let conceptRead;
     try {
       conceptRead = await port.readReviewedSubject(item.id);
-    } catch {
-      continue;
+    } catch (error) {
+      if (error instanceof ImportTransportError && error.status === 404) continue;
+      throw error;
     }
     const concept = conceptRead as { subject?: { id?: string; type?: string } };
     if (concept.subject?.id !== item.id || concept.subject.type !== 'skos:Concept') continue;
