@@ -107,13 +107,6 @@ export type AvatarUploadAdvice = {
   allowedActions: ['upload'] | [];
 };
 
-function adviceGet(client: KernelClient): { get: (input: object) => Promise<unknown> } | undefined {
-  const route = Reflect.get(client.media, 'avatar-upload-advice');
-  if (!route || typeof route !== 'object') return undefined;
-  const get = Reflect.get(route, 'get');
-  return typeof get === 'function' ? { get: get.bind(route) } : undefined;
-}
-
 export function parseAvatarUploadAdvice(value: unknown, viewerId: string): AvatarUploadAdvice | null {
   if (!value || typeof value !== 'object') return null;
   const body = value as Record<string, unknown>;
@@ -154,13 +147,7 @@ export async function readAvatarUploadAdvice(
   credential: string | null,
   viewerId: string,
 ): Promise<AvatarUploadAdvice> {
-  const route = adviceGet(client);
-  if (!route) throw dependencyUnavailable();
-  const result = (await route.get({ headers: viewerHeaders(credential) })) as {
-    data?: unknown;
-    error?: { value: unknown; status: number };
-    headers?: HeadersInit;
-  };
+  const result = await client.media['avatar-upload-advice'].get({ headers: viewerHeaders(credential) });
   if (result.error) throwClientError(result.error, result.headers);
   const advice = parseAvatarUploadAdvice(result.data, viewerId);
   if (!advice) throw dependencyUnavailable();

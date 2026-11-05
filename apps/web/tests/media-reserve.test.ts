@@ -531,19 +531,24 @@ test(
 );
 
 test(
-  'avatar upload advice stays unavailable until the generated Content handle is installed',
+  'avatar upload advice uses the installed Content handle and preserves its native constraints',
   async () => {
     const accountId = '0192f3a0-6c1e-7b2a-9d4e-0000000000ab';
     const alice = await signIn(accountId);
     const before = calls.length;
     const response = await fetch(`${alice.origin}/media/avatar-upload-advice`, { headers: alice.headers });
-    expect(response.status, await response.clone().text()).toBe(502);
+    expect(response.status, await response.clone().text()).toBe(200);
     privateResponse(response);
-    expect(await response.json()).toMatchObject({ code: 'dependency_unavailable', status: 502 });
-    expect(calls.length).toBe(before);
+    expect(await response.json()).toMatchObject({
+      viewer: { accountId },
+      target: { containerId: accountId, purpose: 'avatar' },
+      constraints: { maxByteCount: 20_971_520 },
+      allowedActions: ['upload'],
+    });
+    expect(calls.length).toBe(before + 1);
     const unknown = await fetch(`${alice.origin}/media/avatar-upload-advice?extra=1`, { headers: alice.headers });
     expect(unknown.status).toBe(400);
-    expect(calls.length).toBe(before);
+    expect(calls.length).toBe(before + 1);
   },
   timeout,
 );
