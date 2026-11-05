@@ -2275,6 +2275,8 @@ function currentBangumiRelationEndpoint(
 }
 
 export type CrossMediaSeedExtras = {
+  /** Calendar date from verified source snapshot provenance for VNDB observations. */
+  sourceSnapshotAsOf?: string;
   vocabularyAdmission?: ImporterOptions['vocabularyAdmission'];
   vocabularyAdmissions?: readonly NonNullable<ImporterOptions['vocabularyAdmission']>[];
   /** Native IDs returned by the common explicit reviewed-catalogue publisher. */
@@ -2653,6 +2655,9 @@ export async function seedCrossMedia(
       const registration = createSourceRegistration(provider, {
         source: crossMediaAliases[provider],
         converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
+        ...(provider === 'vndb' && extras?.sourceSnapshotAsOf !== undefined
+          ? { sourceSnapshotAsOf: extras.sourceSnapshotAsOf }
+          : {}),
       });
       for (const record of [...plan.records[provider], ...plan.entities[provider]]) {
         const conversion = registration.convert(
@@ -3232,6 +3237,8 @@ export type CrossMediaSeedCliOptions = {
   episodeCatalogueSubjects?: Readonly<Record<string, string>>;
   reviewedCatalogueSubjects?: Readonly<Record<string, string>>;
   selection?: CrossMediaSelection;
+  /** Calendar date from the selected VNDB dump's verified snapshot provenance. */
+  sourceSnapshotAsOf?: string;
   composePersona?: (context: DevelopmentShowcaseContext) => Promise<DevelopmentShowcaseResult>;
 };
 
@@ -3577,6 +3584,7 @@ export async function runCrossMediaSeedCli(
         ? { groups: [...(vndbReleaseStateBindings?.groups ?? []), ...releaseClassificationPreparation.groups] }
         : {}),
       extras: {
+        ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
         ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
         vndbCharacterProfileBindings: characterProfileBindings,
         ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
@@ -3671,6 +3679,9 @@ export async function runCrossMediaSeedCli(
           destination: { origin: api },
           ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
           extras: {
+            ...(options.sourceSnapshotAsOf === undefined
+              ? {}
+              : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
             ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
             vndbCharacterProfileBindings: characterProfileBindings,
             ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
@@ -3995,6 +4006,7 @@ export async function runCrossMediaSeedCli(
         destination: { origin: api },
         ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
         extras: {
+          ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
           ...(currentVndbCreditReferences ? { vndbCreditReferences: currentVndbCreditReferences } : {}),
           vndbCharacterProfileBindings: characterProfileBindings,
           ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),

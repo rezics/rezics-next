@@ -72,7 +72,7 @@ test('VNDB imports and refreshes its licensed source statistic through the API w
     },
   } as unknown as ImportTransport;
   const importer = new Importer({ path: ':memory:', transport });
-  const registration = createSourceRegistration('vndb');
+  const registration = createSourceRegistration('vndb', { sourceSnapshotAsOf: '2026-10-25' });
 
   try {
     const first = await importer.runRecords(
@@ -218,6 +218,7 @@ async function statisticRefreshFixture() {
   const batches: BatchWriteRequest[] = [];
   const statisticRuns: Run[] = [];
   const writes: { body: string; key: string | null }[] = [];
+  let sourceSnapshotAsOf = '2026-11-04';
   let failure: 'denied' | 'lost' | null = null;
   const metadata = sourceRecordMetadataFixture();
   const transport = createImportTransport({
@@ -270,11 +271,14 @@ async function statisticRefreshFixture() {
     },
     run(average: number) {
       return importer.runRecords(
-        createSourceRegistration('vndb'),
+        createSourceRegistration('vndb', { sourceSnapshotAsOf }),
         (async function* () {
           yield vnRecord(average, 20, 7);
         })(),
       );
+    },
+    setSourceSnapshotAsOf(value: string) {
+      sourceSnapshotAsOf = value;
     },
     semanticState() {
       return {
@@ -368,8 +372,10 @@ for (const failure of ['denied', 'lost'] as const) {
       const uncertain = f.writes.slice();
       expect(uncertain).toHaveLength(failure === 'denied' ? 1 : 3);
       for (const write of uncertain) expect(write).toEqual(uncertain[0]!);
+      expect(JSON.parse(uncertain[0]!.body).asOf).toBe('2026-11-04');
       await f.reopen();
       expect(f.importer.session.store.source('vndb')).toEqual(baseline);
+      f.setSourceSnapshotAsOf('2026-11-05');
       f.fail(null);
       expect((await f.run(735)).status).toBe('committed');
       expect(f.writes.at(-1)).toEqual(uncertain[0]!);

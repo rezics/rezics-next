@@ -109,7 +109,10 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
     const run = (version: number, absent = false, alias: string = source, invalid = false) => {
       activeAlias = alias;
       return importer.runRecords(
-        createSourceRegistration(source, { source: alias }),
+        createSourceRegistration(source, {
+          source: alias,
+          ...(source === 'vndb' ? { sourceSnapshotAsOf: '2026-10-25' } : {}),
+        }),
         (async function* () {
           for (let i = absent ? 1 : 0; i < 5; i++) yield record(source, i, version);
           if (invalid) throw new Error('Synthetic late acquisition failure');

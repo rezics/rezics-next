@@ -64,8 +64,6 @@ type VocabularySource = {
   readonly normalizedRecord?: Record<string, unknown>;
 };
 
-// This importer consumes the pinned VNDB dump declared in packages/definitions/sources/vndb.yaml.
-const VNDB_DUMP_AS_OF = '2026-10-25';
 const selectedBangumiRevision = `${crossMediaRevision}+${bangumiRevision}`;
 
 type NativeSource = Readonly<{
@@ -165,12 +163,13 @@ function addAliases(
   sourceAlias: string,
   sourceKind: SourceId,
   context: ConversionContext,
+  sourceSnapshotAsOf?: string,
 ): ImportConversion<SourceAssets> {
   const coverAssets = 'coverAssets' in result ? result.coverAssets : [];
   const mediaImportIntents = 'mediaImportIntents' in result ? result.mediaImportIntents : [];
   let sourceStatistic: ImportSourceStatistic | undefined;
   let sourceStatisticClear: ImportSourceStatisticClear | undefined;
-  if (result.source === 'vndb' && 'vn' in result.normalizedRecord) {
+  if (result.source === 'vndb' && sourceSnapshotAsOf !== undefined && 'vn' in result.normalizedRecord) {
     const count = result.normalizedRecord.vn.c_votecount;
     const average = result.normalizedRecord.vn.c_average;
     if (count === 0 && average !== undefined) {
@@ -179,7 +178,7 @@ function addAliases(
         ...(sourceAlias === 'vndb' ? {} : { sourceAlias }),
         sourceRecordId: result.normalizedRecord.vn.id,
         count: 0,
-        asOf: VNDB_DUMP_AS_OF,
+        asOf: sourceSnapshotAsOf,
       };
     }
     if (count !== undefined && count > 0 && average !== undefined && average !== null && average >= 100) {
@@ -190,7 +189,7 @@ function addAliases(
         scale: { min: 1, max: 10 },
         mean: average / 100,
         count,
-        asOf: VNDB_DUMP_AS_OF,
+        asOf: sourceSnapshotAsOf,
         licence: 'ODbL-1.0',
         attribution: 'VNDB',
       };
@@ -285,7 +284,7 @@ function sourceVocabularyResult(
 /** Register one of the four pure native converters under trusted application metadata. */
 export function createSourceRegistration(
   sourceKind: SourceId,
-  options?: { source?: string; converterRevision?: string },
+  options?: { source?: string; converterRevision?: string; sourceSnapshotAsOf?: string },
 ): SourceRegistration<SourceAssets> {
   if (!Object.hasOwn(nativeSources, sourceKind)) throw new TypeError('Unknown source kind');
   const native = nativeSources[sourceKind];
@@ -335,7 +334,7 @@ export function createSourceRegistration(
         }
       }
       const result = native.convert(input, context, { converterRevision });
-      return addAliases(result, source, sourceKind, context);
+      return addAliases(result, source, sourceKind, context, options?.sourceSnapshotAsOf);
     },
   };
 }

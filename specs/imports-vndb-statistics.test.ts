@@ -79,6 +79,13 @@ async function scenario(run: (d: VndbStatisticsDriver) => Promise<void>) {
 }
 const puts = (requests: Exchange[]) =>
   requests.filter((r) => r.method === 'PUT' && r.path.endsWith('/source-statistics/vndb'));
+function runHistoricalSnapshot(
+  driver: VndbStatisticsDriver,
+  input: AsyncIterable<Uint8Array>,
+  options: Parameters<VndbStatisticsDriver['run']>[1] = {},
+) {
+  return driver.run(input, { ...options, sourceSnapshotAsOf: '2026-10-25' });
+}
 async function permits(d: VndbStatisticsDriver, bearer: string) {
   const { accessCheck } = await import('../services/kernel/src/request/access.ts');
   const { withConnection } = await import('../services/kernel/src/database/pool.ts');
@@ -114,7 +121,7 @@ test('pinned COPY reaches seven-scope Auth, real Access, public bulk identity an
     expect(actor.accountId).toBe(d.identity.bulk.accountId);
     expect([...actor.scopes].sort()).toEqual([...scopes].sort());
     expect(await permits(d, d.identity.bulk.bearer)).toBe(true);
-    const run = await d.run(archive());
+    const run = await runHistoricalSnapshot(d, archive());
     expect(run.outcome).toBe('committed');
     expect(run.sourceRecords.find((r) => r.key === 'v123')).toEqual({
       key: 'v123',
@@ -161,14 +168,14 @@ test('pinned COPY reaches seven-scope Auth, real Access, public bulk identity an
 
 test('reimport and reopen are no-ops; changed native average updates once without native votes', () =>
   scenario(async (d) => {
-    await d.run(archive());
+    await runHistoricalSnapshot(d, archive());
     const before = await d.observe();
     for (const reopen of [false, true]) {
       if (reopen) await d.reopen();
-      expect((await d.run(archive())).outcome).toBe('committed');
+      expect((await runHistoricalSnapshot(d, archive())).outcome).toBe('committed');
       expect(await d.observe()).toEqual(before);
     }
-    const changed = await d.run(archive(810));
+    const changed = await runHistoricalSnapshot(d, archive(810));
     expect(changed.outcome).toBe('committed');
     expect(changed.sourceRecords.find((r) => r.key === 'v123')).toEqual({
       key: 'v123',
@@ -189,7 +196,7 @@ test('reimport and reopen are no-ops; changed native average updates once withou
 
 test('lost committed response retries original bytes and idempotency identity with one effect', () =>
   scenario(async (d) => {
-    const run = await d.run(archive(), { loseStatisticResponse: true });
+    const run = await runHistoricalSnapshot(d, archive(), { loseStatisticResponse: true });
     expect(run.outcome).toBe('committed');
     const requests = puts(run.exchanges);
     expect(requests.length).toBeGreaterThanOrEqual(2);
@@ -209,7 +216,7 @@ test('lost committed response retries original bytes and idempotency identity wi
 
 test('zero votes invent neither statistic nor native votes', () =>
   scenario(async (d) => {
-    const run = await d.run(archive(735, 0));
+    const run = await runHistoricalSnapshot(d, archive(735, 0));
     expect(run.outcome).toBe('committed');
     expect(puts(run.exchanges)).toEqual([]);
     const view = await d.observe();
@@ -230,13 +237,13 @@ test('reduced real Auth scope denies before persistence; revoked grant denies or
     expect(limited.accountId).toBe(d.identity.bulk.accountId);
     expect(await permits(d, limited.bearer)).toBe(false);
     const before = (await d.observe()).storage;
-    const rejected = await d.run(archive(), { credential: limited });
+    const rejected = await runHistoricalSnapshot(d, archive(), { credential: limited });
     expect(rejected.outcome).toBe('denied');
     expect(puts(rejected.exchanges)).toHaveLength(1);
     denied(puts(rejected.exchanges)[0]!);
     expect((await d.observe()).storage).toEqual(before);
     await d.reopen();
-    const success = await d.run(archive());
+    const success = await runHistoricalSnapshot(d, archive());
     expect(success.outcome).toBe('committed');
     const original = puts(success.exchanges)[0]!;
     expect(original.authorization).toBe(`Bearer ${d.identity.bulk.bearer}`);
@@ -247,7 +254,7 @@ test('reduced real Auth scope denies before persistence; revoked grant denies or
     expect(await permits(d, bearer)).toBe(false);
     denied(await d.replay(original));
     expect(await d.observe()).toEqual(baseline);
-    const changed = await d.run(archive(810));
+    const changed = await runHistoricalSnapshot(d, archive(810));
     expect(changed.outcome).toBe('denied');
     expect(puts(changed.exchanges)).toHaveLength(1);
     denied(puts(changed.exchanges)[0]!);
@@ -256,7 +263,7 @@ test('reduced real Auth scope denies before persistence; revoked grant denies or
 
 test('source acquisition and mass disappearance failure send no statistic and preserve baseline', () =>
   scenario(async (d) => {
-    await d.run(archive());
+    await runHistoricalSnapshot(d, archive());
     const baseline = await d.observe();
     async function* broken() {
       for await (const bytes of archive(810)) {
@@ -268,7 +275,7 @@ test('source acquisition and mass disappearance failure send no statistic and pr
       [broken(), 'invalid-dump'],
       [archive(735, 20, true), 'mass-disappearance'],
     ] as const) {
-      const run = await d.run(input, { disappearanceThreshold: 0 });
+      const run = await runHistoricalSnapshot(d, input, { disappearanceThreshold: 0 });
       expect(run.outcome).toBe(outcome);
       expect(puts(run.exchanges)).toEqual([]);
       expect(await d.observe()).toEqual(baseline);
