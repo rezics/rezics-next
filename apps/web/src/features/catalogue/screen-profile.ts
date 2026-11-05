@@ -1,5 +1,5 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
-import { pickText } from '@rezics/composition';
+import { PAGE_GLOBAL_CONTEXT, pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { SessionEnv } from '../../session/client';
@@ -113,12 +113,13 @@ export function screenInitialFacts(release: Release, initial: InitialSubject, st
 export async function readScreenProfile(client: KernelClient, address: ScreenAddress = {}): Promise<ScreenRead> {
   const id = screenSeriesId(address.id);
   const seriesId = screenSeriesId(address.series);
+  const context = address.context ?? PAGE_GLOBAL_CONTEXT;
   if (address.id && !id) return { ok: false, reason: 'invalid' };
   try {
     const [subject, active, series] = await Promise.all([
       id
         ? client.subjects({ id }).get({
-            ...(address.context ? { query: { context: address.context } } : {}),
+            query: { context },
             fetch: { cache: 'no-store', redirect: 'manual' },
           })
         : undefined,
@@ -128,6 +129,8 @@ export async function readScreenProfile(client: KernelClient, address: ScreenAdd
     if (subject && [403, 404, 308].includes(subject.status)) return { ok: false, reason: 'concealed' };
     if (active.status !== 200 || !active.data || (id && (subject?.status !== 200 || subject.data?.subject.id !== id)))
       return { ok: false, reason: 'unavailable' };
+    if (subject?.data && subject.data.subject.context !== context) return { ok: false, reason: 'invalid' };
+    if (subject?.data && subject.data.subject.release !== active.data.digest) return { ok: false, reason: 'unavailable' };
     if (subject?.data && !isScreenType(subject.data.subject.type)) return { ok: false, reason: 'invalid' };
     const bundle = await client.definitions.releases({ digest: active.data.digest }).get();
     if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== active.data.digest)

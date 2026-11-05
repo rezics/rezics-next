@@ -941,6 +941,46 @@ The People profile groups multilingual authored biography, occupations and worki
 
 Decision: Person and Character fact visits filter only displayed text in the active local window (20 rows), with explicit previous/next controls over the supplied native current selection; the whole added projection must fit 1 MiB of UTF-8 and 64 fields/4096 facts. This is not catalogue, candidate or source completeness. One embedded existing ValueExplanationSession retains the original Subject/property/assertion/Context and retires with its profile reading. Modified clicks retain the existing value URL. Close returns to the original row, or its field with a changed-reading notice; existing correction and Sources destinations cannot restore detailed local state after navigation.
 Screen correction also retains only private editor holders across refusal, including concealment; only a fresh matching read restores identity, selected evidence, nested editors and explicit sealed retries.
+
+### Screen correction visit and return
+
+Decision: Selected Screen readings retain their native Context and Realm for inspection and return; non-Global
+correction is read-only, and a named Global choice starts a fresh correction admission.
+
+The installed `/screen` route accepts one independently validated `screenVisit` descriptor. It binds the canonical
+Subject ID, released Screen Type, native Context, optional Realm, locale, effective Definition, one same-origin
+overview source, and at most one exact `{holder, property, statement}` occurrence. The descriptor is intent only;
+the route performs a fresh native read and verifies ID, Context, Type and Definition before it presents selected
+facts. A Global reading may use the existing Global fact and candidate editors. Other Contexts retain the selected
+reading as read-only inspection and offer a separately named Global destination. Opening that destination drops the
+old visit descriptor and Realm, preserves a valid classification handoff, and performs a fresh Global read.
+
+The decoded visit or return descriptor is capped at 2,048 UTF-8 bytes, its same-origin source address at 2,048
+bytes, and the installed route search at 2,048 characters. The combined route search includes any existing
+`classificationHandoff`; each destination is refused as invalid when it cannot fit. No field is truncated. Bodies,
+drafts, advice, session proofs and command receipts are never navigation state. One current inspection and one source
+address are retained. A stale ID, Context, Type or Definition, duplicate/contradictory selector, foreign source,
+oversized address or incompatible non-Global/classification-handoff pair yields a recovery page that preserves a
+valid handoff on its named Global link.
+
+One already-loaded Movie overview uses one ordinary Subject read, then the Screen reader's three native reads:
+Subject in the selected Context, active Definition and immutable Definition. The installed correction visit adds
+one canonical Subject lookup and the same three current Screen reads. A fresh return performs one ordinary Subject
+read and the three Screen reads again. Therefore a complete Movie overview → correction → fresh return uses 12
+Screen/Subject/Definition requests including the initial overview. TVSeries and TVSeason overviews add one current
+inverse-membership links page per public admission: at most 20 rows and 1 MiB retained JSON each; the correction
+session adds no episode page. Existing signed-in correction advice and any deliberate candidate comparison remain
+with their current owners. A candidate page keeps its native `limit: 20`; no Screen entry adds per-row hydration,
+automatic refill or a broader scan.
+
+An exact visit is admitted only when the statement ID, holder ID and property still occur together in the fresh
+reading. Equal values remain separate statements. Current rank, qualifiers and each reference group render with
+released field labels and the existing `CandidateValue`; the full association, including links and accessible text,
+stays behind its spoiler gate. Missing, changed, withheld or concealed evidence retires its old action without
+exposing its former identity. Returning carries only the bounded locator, then reloads the public overview and focuses
+the surviving exact statement, current correction entry or reader heading. Pointer movement, focus/key interaction,
+source/caller replacement or another return intent cancels pending focus. The Screen episode visit still owns its
+membership locator, cursor and return focus; correction return does not settle or focus an episode visit.
 Literary creation retains metadata only for its drafts; a refused or unavailable page or scalar current subject read removes identity, facts and editor markup, permanently retires old callbacks/results, and retains private drafts and exact sealed retries until a fresh matching read restores editing; relation and authored holders reread their original addresses before resuming. An existing Literary correction reload retires current public identity and assertion markup at start while keeping private correction holders and exact retries; only a fresh matching success restores current reading and proposal admission, and callbacks from the preceding observation stay retired across equal-identity recovery.
 Story Arc reload starts a new page observation: cached identity, links, facts and nested editor markup retire at reload start, while private holders keep unsent drafts and exact sealed retry intent; only a fresh successful matching Story Arc/work read restores page authority, and earlier callbacks/results stay retired even when identities match. Reload sends no command, and nested holders resume through their existing fresh-address recovery.
 Story Arc local arc and work choices share one departure decision across creation, scalar, classification and work-relation holders, including hidden unresolved recovery; Stay retains the exact workspace and opener, while Leave changes only the captured local choice and retires all replaced holders without cancelling native commands. Repeated choices keep the first destination until the decision settles.

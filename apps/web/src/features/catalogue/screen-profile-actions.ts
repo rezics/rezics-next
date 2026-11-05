@@ -16,14 +16,21 @@ export const loadScreenProfile = createServerFn({ method: 'GET', strict: false }
       const id = screenSeriesId(input);
       return input ? { id: id ?? '' } : {};
     }
+    if (input !== undefined && (!input || typeof input !== 'object' || Array.isArray(input)))
+      throw new Error('Invalid Screen profile address');
+    if (input && Object.keys(input).some((key) => !['id', 'series', 'context'].includes(key)))
+      throw new Error('Invalid Screen profile address');
     const id = screenSeriesId(input?.id);
     const series = screenSeriesId(input?.series);
+    const context = input?.context === undefined ? undefined : screenSeriesId(input.context);
     if (input?.id && !id) return { id: '' };
-    return { ...(id ? { id } : {}), ...(series ? { series } : {}) };
+    if (input?.series && !series) return { id: '' };
+    if (input?.context !== undefined && !context) throw new Error('Invalid Screen profile address');
+    return { ...(id ? { id } : {}), ...(series ? { series } : {}), ...(context ? { context } : {}) };
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    if (data.id === '') return { ok: false as const, reason: 'concealed' as const };
+    if (data.id === '') return { ok: false as const, reason: 'invalid' as const };
     return readScreenProfile(kernelClient(), data);
   });
 export const createCatalogueScreen = createServerFn({ method: 'POST', strict: false })

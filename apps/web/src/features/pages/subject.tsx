@@ -770,7 +770,16 @@ export function SubjectPage({
             />
           )}
           {isScreenType(read.subject.type) && (
-            <ScreenProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+            <ScreenProfileEntry
+              id={read.subject.id}
+              label={subjectPageTitle(page, locale)}
+              locale={locale}
+              context={page.context?.id ?? read.subject.context}
+              realm={realm}
+              type={read.subject.type}
+              definition={read.subject.release}
+              {...(currentHref ? { source: currentHref } : {})}
+            />
           )}
           {(read.subject.type === 'schema:ComicSeries' || read.subject.type === 'schema:PublicationVolume') && (
             <MangaProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
@@ -1112,6 +1121,7 @@ export function SubjectPage({
                 bounds={boundedProfileRelations(page)}
                 link={ContextLink}
                 {...(page.context?.id ? { context: page.context.id } : {})}
+                {...(realm ? { realm } : {})}
                 viewerKey={page.requestedReader ?? null}
                 readerSpoilerLevel={reader?.spoilerLevel ?? 0}
               />
