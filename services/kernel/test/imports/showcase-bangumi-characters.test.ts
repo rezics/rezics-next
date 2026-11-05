@@ -22,6 +22,7 @@ import {
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 const characterKindsUri = 'https://rezics.com/schemes/bangumi/character-kinds';
 
@@ -114,10 +115,10 @@ test('selected anime character vocabulary is separately adopted and refreshed th
     const editor = await openApiObserver(runtime);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     const plan = await planCrossMediaSeed(sourceTables());
     expect(

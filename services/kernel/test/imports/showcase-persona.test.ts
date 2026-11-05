@@ -23,6 +23,7 @@ import {
   type CollectionPresentationFixture,
 } from '../library/support/collection-presentation-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 let f: CollectionPresentationFixture;
 let directory: string;
@@ -67,7 +68,7 @@ beforeAll(async () => {
     ).toBe(201);
     const publicClient = createPublicBulkClient({
       origin: f.runtime.origin,
-      fetch: async (input, init) => f.runtime.replay(new Request(input, init)),
+      fetch: fixtureFetch(async (input, init) => f.runtime.replay(new Request(input, init))),
     });
     const publication = await publishShowcase({
       plan,

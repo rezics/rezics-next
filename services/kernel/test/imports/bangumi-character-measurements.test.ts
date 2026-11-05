@@ -17,6 +17,7 @@ import {
 } from '../../../importer/src/showcase-publication.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const characterId = 'character:200';
@@ -100,10 +101,10 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
   const editor = await openApiObserver(runtime);
   const publicClient = createPublicBulkClient({
     origin: runtime.origin,
-    fetch: async (input) => {
+    fetch: fixtureFetch(async (input) => {
       const url = new URL(String(input));
       return runtime.request(`${url.pathname}${url.search}`);
-    },
+    }),
   });
 
   async function importSelected(sourceInfobox: string) {

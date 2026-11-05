@@ -23,6 +23,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { developmentShowcaseSelection } from '../../../../scripts/datasets/cross-media-seed.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 const sourceUrl = 'https://lain.bgm.tv/pic/cover/l/12/34/native-101.png';
 const personImageUrl = 'https://lain.bgm.tv/pic/crt/l/native-29.png';
@@ -78,7 +79,7 @@ test('synthetic selected Person and Organization images use the common authorize
     const sourcePlan = await acquireBangumiCoverSources(rawPlan, {
       journal,
       sleep: async () => {},
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         if (url.pathname.startsWith('/v0/persons/')) {
           const id = Number(url.pathname.split('/').at(-1));
@@ -106,7 +107,7 @@ test('synthetic selected Person and Organization images use the common authorize
           }),
           { status: 200, headers: { etag: '"native-subject-101"', 'content-type': 'application/json' } },
         );
-      },
+      }),
     });
     const batch = runtime.importTransport.batch.bind(runtime.importTransport);
     const mediaPort = {
@@ -190,10 +191,10 @@ test('synthetic selected Person and Organization images use the common authorize
     expect(grant.status).toBe(201);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     const publication = await publishShowcase({
       plan: sourcePlan,
@@ -348,7 +349,7 @@ test('default finite Bangumi selection imports a direct Character image through 
     await runtime.mediaBoundary.source(characterWorkCoverSourceUrl, undefined, bytes);
     await runtime.mediaBoundary.source(characterSourceUrl, undefined, bytes);
     const apiReads: string[] = [];
-    const sourceFetch: typeof fetch = async (input) => {
+    const sourceFetch = fixtureFetch(async (input) => {
       const endpoint = String(input);
       apiReads.push(endpoint);
       if (endpoint === 'https://api.bgm.tv/v0/characters/11546')
@@ -382,7 +383,7 @@ test('default finite Bangumi selection imports a direct Character image through 
         status: 200,
         headers: { etag: `"native-subject-${subjectId}"` },
       });
-    };
+    });
     const sourcePlan = await acquireBangumiCoverSources(rawPlan, {
       journal,
       sleep: async () => {},
@@ -533,10 +534,10 @@ test('default finite Bangumi selection imports a direct Character image through 
     expect(grant.status).toBe(201);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     const publication = await publishShowcase({
       plan: resumedPlan,

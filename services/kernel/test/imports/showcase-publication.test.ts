@@ -19,6 +19,7 @@ import {
 } from '../../../importer/src/showcase-publication.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 
@@ -60,10 +61,10 @@ test('local publication accepts only its acknowledged plan after authorization a
     const unrelatedId = (unrelated.body as { candidate: string }).candidate;
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     expect(
       (await publicClient.readSubject(workId).then((read) => read.subject as { statements: Record<string, unknown[]> }))
@@ -201,10 +202,10 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
     runtime.captures.filter((capture) => capture.body.includes('wdt:P155')).map(({ body }) => body);
   const publicClient = createPublicBulkClient({
     origin: runtime.origin,
-    fetch: async (input) => {
+    fetch: fixtureFetch(async (input) => {
       const url = new URL(String(input));
       return runtime.request(`${url.pathname}${url.search}`);
-    },
+    }),
   });
 
   try {
@@ -274,12 +275,12 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
 
     const unavailableTargetClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         if (url.pathname.endsWith(`/${relation.targetSubjectId}`))
           return Response.json({ title: 'Unavailable' }, { status: 503 });
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     const withheld = await publishShowcase({
       plan,

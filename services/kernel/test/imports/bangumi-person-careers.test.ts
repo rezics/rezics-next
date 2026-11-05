@@ -30,6 +30,7 @@ import {
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 type ReadStatement = {
   value: { content: unknown };
@@ -121,10 +122,10 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     expect(grant.status).toBe(201);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: (async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      }) as typeof fetch,
+      }),
     });
     let port = captureShowcaseCommands(runtime.importTransport, journal);
     const personBytes = JSON.stringify({
@@ -135,10 +136,10 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     });
     let plan = await acquireBangumiPersonCareerSources(planFor('星見', 'archive-v1'), {
       journal,
-      fetch: (async (input) => {
+      fetch: fixtureFetch(async (input) => {
         expect(String(input)).toBe('https://api.bgm.tv/v0/persons/8101');
         return new Response(personBytes, { headers: { etag: '"person-8101-v1"' } });
-      }) as typeof fetch,
+      }),
       sleep: async () => {},
     });
     expect(plan.personCareerSources?.[0]?.responseDigest).toBe(createHash('sha256').update(personBytes).digest('hex'));
@@ -375,7 +376,7 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     const changedBytes = JSON.stringify({ id: 8101, type: 1, career: ['actor'] });
     const changedPlan = await acquireBangumiPersonCareerSources(planFor('星見 改訂', 'archive-v2'), {
       journal,
-      fetch: (async () => new Response(changedBytes, { headers: { etag: '"person-8101-v2"' } })) as typeof fetch,
+      fetch: fixtureFetch(async () => new Response(changedBytes, { headers: { etag: '"person-8101-v2"' } })),
       sleep: async () => {},
     });
     const withheldAdmission = bangumiPersonCareerAdmission(
@@ -493,7 +494,7 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     const fencedBytes = JSON.stringify({ id: 8101, type: 1, career: ['actor'] });
     const fencedPlan = await acquireBangumiPersonCareerSources(planFor('星見 fencing', 'archive-v3'), {
       journal,
-      fetch: (async () => new Response(fencedBytes, { headers: { etag: '"person-8101-v3"' } })) as typeof fetch,
+      fetch: fixtureFetch(async () => new Response(fencedBytes, { headers: { etag: '"person-8101-v3"' } })),
       sleep: async () => {},
     });
     const fenceCaptureStart = runtime.captures.length;
