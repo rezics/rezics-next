@@ -49,7 +49,7 @@ import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure, estimateOverrun } from './failures.ts';
-import { ensureGateOutcomeRefusal, guardIdsForFailure } from './guards.ts';
+import { ensureGateOutcomeRefusal, guardIdsForFailure, type GuardId } from './guards.ts';
 import { controlPlaneReleaseBrief, devProductBrief, matchesPath } from './briefs.ts';
 import { blockerFingerprint, noProgressTwice, toolRetryDelay } from './attempt-progress.ts';
 import { checkHostsInOutage } from './watchdog.ts';
@@ -2014,7 +2014,7 @@ export class WorkerJob implements GateOutcomeSink {
     let schedule = false;
     store.write(ref, () => {
       if (store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'dev-landing-transpile-returned')) return;
-      record.guardIds = [...new Set([...(record.guardIds ?? []), 'dev-landing-transpile'])];
+      record.guardIds = [...new Set<GuardId>([...(record.guardIds ?? []), 'dev-landing-transpile'])];
       store.putRecord(record);
       store.event(ref, 'dev-landing-transpile-returned', {
         entryId: handoff.entryId,

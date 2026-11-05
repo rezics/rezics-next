@@ -7375,7 +7375,7 @@ export class MergeTrain {
     lifecycleEvidence: string,
     compatibilityCommand: string[],
     logPath: string,
-  ): {
+  ): Promise<{
     prepared?: PreparedControlPlaneRelease;
     conflicts?: string[];
     sourceBranch?: string;
@@ -7383,7 +7383,7 @@ export class MergeTrain {
     cause?: string;
     transpileHandoff?: DevLandingTranspileHandoff;
     devTranspile?: GateOutcome['devTranspile'];
-  } {
+  }> {
     if (!this.controlPlaneSnapshotMatches(snapshot)) return {};
     let stabilizeCommit: string | undefined;
     let devSource = candidate;

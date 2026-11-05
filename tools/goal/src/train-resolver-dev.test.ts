@@ -516,7 +516,7 @@ test('a dev compile defect returns to the original worker session, repairs in pl
     const landed = git(h.root, 'show', `dev:${file}`);
     expect(landed).toBe('export const count = 2;');
     const outcome = h.outcomes.find((item) => item.taskId === task.id && item.passed)!;
-    expect(git(h.root, 'rev-parse', 'dev')).toBe(outcome.devTranspile?.candidate);
+    expect(git(h.root, 'rev-parse', 'dev')).toBe(outcome.devTranspile!.candidate);
     expect(outcome.devTranspile).toMatchObject({ outcome: 'passed', typescriptFileCount: 1 });
     const price = flowReport(readFlow(h.store.db), readFlowTasks(h.store.db));
     expect(price.devTranspile).toMatchObject({ successfulChecks: 1, repairHandbacks: 1, unavailable: 0, measuredChecks: 2 });
@@ -610,7 +610,7 @@ test('a moving dev head replays the candidate and publishes only the freshly tra
     expect(git(h.root, 'show', `dev:${path}`)).toBe('export const replayed = true;');
     expect(git(h.root, 'show', 'dev:packages/fixture/replay-peer.ts')).toBe('export const peer = true;');
     const outcome = h.outcomes.find((item) => item.taskId === task.id && item.passed)!;
-    expect(git(h.root, 'rev-parse', 'dev')).toBe(outcome.devTranspile?.candidate);
+    expect(git(h.root, 'rev-parse', 'dev')).toBe(outcome.devTranspile!.candidate);
     const report = flowReport(readFlow(h.store.db), readFlowTasks(h.store.db));
     expect(report.devTranspile).toMatchObject({ successfulChecks: 1, repairHandbacks: 0, measuredChecks: 1 });
   } finally {
