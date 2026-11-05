@@ -114,7 +114,7 @@ function ScreenOccurrence({
   visit?: ScreenCurrentVisit;
   inspect?: boolean;
   detailed?: boolean;
-  targetId?: string;
+  targetId?: string | undefined;
   identity: string;
 }) {
   const o = options(locale);
@@ -233,7 +233,7 @@ function ScreenCurrentEvidence({
   locale: string;
   readerSpoilerLevel: number;
   identity: string;
-  targetId?: string;
+  targetId?: string | undefined;
 }) {
   const occurrence = statementOf(publicRead, inspection);
   const hidden = occurrence && spoilerLevel(occurrence) > readerSpoilerLevel;
@@ -304,8 +304,8 @@ export function ScreenProfileReader({
   currentVisit?: ScreenCurrentVisit;
   inspection?: ScreenCurrentOccurrence;
   unsupportedCorrection?: boolean;
-  globalHref?: string;
-  returnHref?: string;
+  globalHref?: string | undefined;
+  returnHref?: string | undefined;
   visitIdentity?: string;
   returnNotice?: boolean;
 }) {
