@@ -66,6 +66,8 @@ export type Pool = {
     allowUnknown: boolean;
     maxAgeMs: number;
     maxBurnPerHour?: number;
+    /** Optional cap on this pool's current pending, running and waiting attempts. */
+    maxConcurrent?: number;
   };
 };
 export type AffectedTestCheck = { paths: string[]; command: string[] };

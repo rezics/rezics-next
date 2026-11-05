@@ -8,6 +8,8 @@ export type PoolSelectionOptions = {
   now?: number;
   policy?: ControlPolicy['provider'] | undefined;
   spanMs?: number;
+  /** Current pending, running and waiting attempts on each pool name. */
+  running?: Readonly<Record<string, number>>;
 };
 
 export type PoolBurnStatus = {
@@ -15,7 +17,21 @@ export type PoolBurnStatus = {
   allowanceKey: string;
   burnPerHour: number;
   maxBurnPerHour?: number;
+  running?: number;
+  maxConcurrent?: number;
 };
+
+const occupyingStates = new Set(['pending', 'running', 'waiting']);
+
+/** Occupancy that fills `policy.maxConcurrent`: pending, running and waiting attempts on each pool. */
+export function countRunningByPool(attempts: readonly { pool: string; state: string }[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const attempt of attempts) {
+    if (!occupyingStates.has(attempt.state)) continue;
+    counts[attempt.pool] = (counts[attempt.pool] ?? 0) + 1;
+  }
+  return counts;
+}
 
 // Milliseconds per hour, minutes per day and percentages below are unit conversions, not admission policy.
 /** Same-window consumption over the measurement span, excluding resets. All reserve and pacing thresholds are local policy. */
@@ -60,6 +76,7 @@ export function poolBurnStatus(
   history: readonly PoolReading[],
   now = Date.now(),
   spanMs = defaultPolicy.pacing.burnSpanMs,
+  running: Readonly<Record<string, number>> = {},
 ): PoolBurnStatus[] {
   return pools.map((pool) => {
     const series = history.filter((reading) => reading.allowanceKey === pool.allowanceKey && reading.observedAt);
@@ -72,6 +89,9 @@ export function poolBurnStatus(
       allowanceKey: pool.allowanceKey,
       burnPerHour: latest ? burnPerHour(latest, series, { now, spanMs }) : 0,
       ...(pool.policy.maxBurnPerHour === undefined ? {} : { maxBurnPerHour: pool.policy.maxBurnPerHour }),
+      ...(pool.policy.maxConcurrent === undefined
+        ? {}
+        : { running: running[pool.name] ?? 0, maxConcurrent: pool.policy.maxConcurrent }),
     };
   });
 }
@@ -116,7 +136,9 @@ function assessPool(
   now: number,
   policy: ControlPolicy['provider'] | undefined,
   spanMs: number,
+  running: Readonly<Record<string, number>>,
 ): PoolAllowance {
+  if (pool.policy.maxConcurrent !== undefined && (running[pool.name] ?? 0) >= pool.policy.maxConcurrent) return null;
   const shared = indexedReadings.get(pool.allowanceKey) ?? [];
   const fresh = shared.filter(({ reading }) =>
     reading.observedAt
@@ -155,7 +177,10 @@ function selectPool(
   const ranked = candidates
     .map((pool) => {
       if (!allowanceByPool.has(pool))
-        allowanceByPool.set(pool, assessPool(pool, indexedReadings, now, options.policy, spanMs));
+        allowanceByPool.set(
+          pool,
+          assessPool(pool, indexedReadings, now, options.policy, spanMs, options.running ?? {}),
+        );
       const allowance = allowanceByPool.get(pool);
       return allowance ? { pool, score: allowance.score, preferred: pool.name === options.preferred } : null;
     })
@@ -220,8 +245,8 @@ export function findAllowedPool(
 /**
  * The routed profile's pool, or the first fallback profile that has one when the routed CLI has no quota. With a pacing
  * measure, a new task instead goes to the allowed profile whose allowance most needs spending before it resets; a
- * retry keeps its engine while that has quota. A pool over its burn ceiling is skipped; with no allowed fallback the
- * task waits. Running attempts are not stopped.
+ * retry keeps its engine while that has quota. A pool over its burn ceiling or concurrent-worker cap is skipped; with
+ * no allowed fallback the task waits. Running attempts are not stopped.
  */
 export function choosePoolWithFallback(
   profile: Profile,

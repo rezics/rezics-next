@@ -440,6 +440,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           table: readRouting(settings.routingFile, settings.policy?.routing),
           ownership: readRiskOwnership(settings.riskAreasFile, settings.policy?.brief),
           pools: settings.pools,
+          running: store.runningAttemptsByPool(),
         },
       }),
     promote: () => promoteNow(),

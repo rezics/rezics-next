@@ -433,20 +433,21 @@ fields listed below; the empty policy object deliberately provides no account po
 }
 ```
 
-| Pool field              | Meaning                                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------- |
-| `name`                  | Local pool name; appears only in local state and configuration.                          |
-| `cli`                   | `codex`, `grok` or `cursor` for workers; `claude` is available only for managers.        |
-| `classes`               | Routing pool classes it permits, such as `codex`; add `manager` for manager admission.   |
-| `command`               | Official CLI executable or an absolute local launcher path.                              |
-| `configDirectory`       | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`.           |
-| `allowanceKey`          | Pools and CLI aliases sharing quota must use the same local key.                         |
-| `usageFile`             | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events. |
-| `policy.weight`         | Required positive number for relative pool preference.                                   |
-| `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                     |
-| `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.         |
-| `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                  |
-| `policy.maxBurnPerHour` | Optional same-window percent-per-hour ceiling over the burn span.                        |
+| Pool field              | Meaning                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| `name`                  | Local pool name; appears only in local state and configuration.                            |
+| `cli`                   | `codex`, `grok` or `cursor` for workers; `claude` is available only for managers.          |
+| `classes`               | Routing pool classes it permits, such as `codex`; add `manager` for manager admission.     |
+| `command`               | Official CLI executable or an absolute local launcher path.                                |
+| `configDirectory`       | Becomes `CODEX_HOME`, `GROK_HOME`, `CURSOR_CONFIG_DIR` or `CLAUDE_CONFIG_DIR`.             |
+| `allowanceKey`          | Pools and CLI aliases sharing quota must use the same local key.                           |
+| `usageFile`             | Optional normalized `PoolReading` JSON for providers without Codex rollout quota events.   |
+| `policy.weight`         | Required positive number for relative pool preference.                                     |
+| `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                       |
+| `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.           |
+| `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                    |
+| `policy.maxBurnPerHour` | Optional same-window percent-per-hour ceiling over the burn span.                          |
+| `policy.maxConcurrent`  | Optional positive integer cap on this pool's current pending, running and waiting workers. |
 
 Only local policy determines unknown-quota admission, reserves and pacing. A retry prefers its current pool. When a
 CLI reports a usage-limit refusal, Goal checks the pool's latest quota reading: a used-up window or a reading older
@@ -457,6 +458,10 @@ failures exclude all aliases of that allowance immediately. There is no credit p
 Decision: each selection indexes retained same-window readings once by allowance key (one per pool per minute, last 90
 minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks. A reset is not burn. `status` lists
 each pool's rate and the ready tasks waiting on it.
+
+Decision: `policy.maxConcurrent` is an optional positive integer per pool name, not per shared allowance. Selection
+counts that pool's current pending, running and waiting attempts and skips a full pool like an exhausted one, for new
+tasks and retries alike. `status` lists running against the cap. Pools that omit the key keep today's admission.
 
 Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
 pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If a changed
