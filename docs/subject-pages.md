@@ -1806,6 +1806,8 @@ tests exercise the real client/reader boundary; they do not claim native SQL gro
 
 ## Relations, characters and credits on pages
 
+Decision: ordinary relation readers and Subject history share one exact node, property, direction and cursor selection on retry and return. Omitted native counts stay unknown. Franchise navigation stays with the existing franchise journey.
+
 Relations are shown from the reader's side of the fact: on a sequel the original appears under "Prequel", using the
 property's inverse label. Symmetric relations appear on both sides under the same label. A relation group shows its
 count, and the full Relations view pages through each group.

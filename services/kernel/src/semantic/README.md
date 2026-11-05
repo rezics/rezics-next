@@ -509,6 +509,8 @@ reads candidate decisions and slot selection; proposal availability never grants
 
 A relation is a statement whose property is an item property and whose value is another subject. Subject-to-subject relations, credits and character appearances all use this one shape; none has a table, endpoint or read path of its own.
 
+Decision: generic relation, reference and history exhaustion uses authored native fixtures and the actual returned candidate, acceptance and adoption heads. Incoming-link freshness is the links worker catch-up flag. Referenced labels are the per-partition summary batches. Independent public readback follows Global adoption. The existing franchise journey owns imported cross-media navigation.
+
 ### Relation properties
 
 Every item property in a definition release declares how it reads in both directions:
