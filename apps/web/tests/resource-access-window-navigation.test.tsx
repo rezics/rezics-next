@@ -34,8 +34,8 @@ test('three windows branch from the admitted predecessor and First deliberately 
   await recovery.next();
   await recovery.next();
   expect(recovery.snapshot().page).toMatchObject({ status: 'ready', page: { identities: [{}, { displayName: 'cursor-c' }] } });
-  await recovery.previous();
   next.set(opaqueCursor, 'branch');
+  await recovery.previous();
   await recovery.next();
   await recovery.previous();
   await recovery.next();
@@ -58,13 +58,13 @@ test('three windows branch from the admitted predecessor and First deliberately 
 test('Previous and First keep their exact staged target through preparing, denial and thrown reads', async () => {
   const reads: (string | undefined)[] = [];
   const preparing = Promise.withResolvers<AccessState>();
-  let initialPrevious = true;
+  let deferPrevious = false;
   let previousRetries = 0;
   let firstRetry = false;
   const recovery = controller(page('cursor-a'), async (cursor) => {
     reads.push(cursor);
-    if (cursor === 'cursor-a' && initialPrevious) {
-      initialPrevious = false;
+    if (cursor === 'cursor-a' && deferPrevious) {
+      deferPrevious = false;
       return preparing.promise;
     }
     if (cursor === 'cursor-a' && previousRetries++ === 0) return { status: 'denied' };
@@ -78,6 +78,7 @@ test('Previous and First keep their exact staged target through preparing, denia
 
   await recovery.next();
   await recovery.next();
+  deferPrevious = true;
   const movingBack = recovery.previous();
   expect(recovery.snapshot().busy).toBe(true);
   expect(await recovery.previous()).toBe(false);
