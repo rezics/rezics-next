@@ -431,6 +431,8 @@ The concrete media resolver bounds calls and scheduled waits per invocation, whi
 
 Importer prepares source records and candidate commands through its bounded APIs. Native runtime, authorization, command execution and public acceptance remain Kernel-owned. Source conversion, native acceptance, adoption and independent readback are separate stages. The [Imports capability acceptance map](../../docs/goals/imports.capabilities.md) describes coverage without recording prior attempt results here.
 
+Decision: reviewed Person merges remain bound to the generated asynchronous admission contract. A paired original-identity read only prepares explicit confirmation; HTTP 202 admission starts separate publication and current public readback. A synchronous HTTP 200 merge result or an application-side reread cannot stand in for that boundary, so dependent credits stay withheld until current identity and independent reads establish publication.
+
 ## Selected source acquisition and publication
 
 Development dump acquisition fixes VNDB to the November 4 archive, SHA-256 and TIMESTAMP documented in
