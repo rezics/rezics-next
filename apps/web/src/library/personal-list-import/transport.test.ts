@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { vndbApplyBody, vndbReviewBody } from './requests';
-import type { VndbCommand } from './contract';
+import type { VndbCommand, VndbReviewInput, VndbScoreDecision } from './contract';
 
 const owner = '00000000-0000-4000-8000-000000000001';
 const targetId = '00000000-0000-4000-8000-000000000002';
@@ -16,7 +16,7 @@ mock.module('../../session/request', () => ({
 const { kernelVndbPort } = await import('./native');
 
 test('request boundary preserves deliberate zero, clear, explicit occurrence and both review identities', () => {
-  const common = { ordinal: 0, action: 'score', targetId, questionId: targetId, questionRevision: 1 };
+  const common = { ordinal: 0, action: 'score' as const, targetId, questionId: targetId, questionRevision: 1 };
   for (const [selection, consent] of [
     [{ kind: 'vote', units: 0 }, 'adopt-native-vote'],
     [{ kind: 'clear' }, 'clear-native-vote'],
@@ -25,8 +25,8 @@ test('request boundary preserves deliberate zero, clear, explicit occurrence and
   const progress = {
     occurrence: { kind: 'existing', sessionId: targetId },
     measures: [{ field: 'minutes', action: 'adopt', replace: true }],
-  };
-  const body = { ordinal: 1, action: 'progress', targetId, progress };
+  } satisfies Extract<VndbReviewInput, { action: 'progress' }>['progress'];
+  const body = { ordinal: 1, action: 'progress' as const, targetId, progress };
   expect(vndbReviewBody(body)).toEqual(body);
   expect(vndbReviewBody({ ...body, action: 'state', state: 'playing', replace: false })).toEqual({
     ...body,
@@ -52,7 +52,26 @@ test('request boundary preserves deliberate zero, clear, explicit occurrence and
 
 test('authenticated generated transport accepts conditional score and native Progress without losing command bytes', async () => {
   const calls: { path: string; authorization: string | null; key: string | null; body: unknown }[] = [];
-  const score = { reviewId, status: 'reviewed', targetId, action: 'vote', units: 0, nativeAdmission: 'conditional' };
+  const score: VndbScoreDecision = {
+    reviewId,
+    status: 'reviewed',
+    targetId,
+    action: 'vote',
+    units: 0,
+    nativeAdmission: 'conditional',
+    question: {
+      id: targetId,
+      revision: 1,
+      meaning: 'enjoyment',
+      label: 'Enjoyment',
+      grain: 'work',
+      scale: { min: 0, max: 20, step: 1 },
+      aggregateEffect: 'public-standard-aggregate',
+    },
+    currentVote: { state: 'absent' },
+    consent: 'adopt-native-vote',
+    sourceReason: 'deliberate native units',
+  };
   const client = createKernelClient('https://kernel.invalid', {
     fetch: (async (input, init) => {
       const request = new Request(input, init);
@@ -135,7 +154,7 @@ test('authenticated generated transport accepts conditional score and native Pro
 test('lost transport keeps the original command', async () => {
   const command = { kind: 'apply' as const, uploadId, body: { rows: [{ ordinal: 0, reviewId }] } };
   const client = createKernelClient('https://kernel.invalid', {
-    fetch: (async () => {
+    fetch: (async (_input, _init) => {
       throw new TypeError('lost acknowledgement');
     }) as typeof fetch,
   });

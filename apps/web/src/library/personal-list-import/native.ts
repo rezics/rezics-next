@@ -2,7 +2,14 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
-import { quotedVndbKey, type VndbCommand, type VndbFailure, type VndbPort, type VndbUnknown } from './contract';
+import {
+  quotedVndbKey,
+  type VndbCommand,
+  type VndbFailure,
+  type VndbPage,
+  type VndbPort,
+  type VndbUnknown,
+} from './contract';
 
 type VndbSurface = KernelClient['libraryImports']['vndb'];
 
@@ -100,7 +107,8 @@ export function kernelVndbPort(
             query: { offset: command.offset },
             headers: headers(authorization),
           }),
-        (value) => ({ kind: 'page', value }),
+        // Retained evidence comes from the importer's stored JSON, typed unknown by the emitter.
+        (value) => ({ kind: 'page', value: value as VndbPage }),
       );
     },
     source(command) {
