@@ -365,6 +365,7 @@ test('MAL score review records explicit native units, preserves corrections and 
       subject: { canonicalId: targets[0] }, ownVote: { state: 'absent' } },
   });
   expect(page.rows[0].review.score.question).toHaveProperty('meaning');
+  expect(page.rows[0].currentScoreVote).toBeNull();
   await json(
     'PUT',
     `/v1/subjects/${targets[0]}/ratings/${STANDARD_QUESTION_ID}/vote`,
@@ -460,6 +461,7 @@ test('MAL score review records explicit native units, preserves corrections and 
     409,
   );
   const unsupportedPage = await json('GET', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
+  expect(unsupportedPage.rows[0].currentScoreVote).toMatchObject({ units: 6 });
   expect(unsupportedPage.rows[3]).toMatchObject({
     score: { kind: 'invalid', raw: '11' },
     review: {
