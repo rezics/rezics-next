@@ -13,7 +13,16 @@ test('selected inventory budgets require an explicit native catalogue mode and r
   expect(securityInventoryResponseByteBudget('clients', 'native-no-catalogue')).toBe(
     securityResponseByteBudgets(1000, 20).clients,
   );
-  for (const invalid of [undefined, null, '', '1000', 'catalogue:0', 'catalogue:-1', 'catalogue:1.5', 'catalogue:9007199254740991'])
+  for (const invalid of [
+    undefined,
+    null,
+    '',
+    '1000',
+    'catalogue:0',
+    'catalogue:-1',
+    'catalogue:1.5',
+    'catalogue:9007199254740991',
+  ])
     expect(securityInventoryResponseByteBudget('clients', invalid)).toBeNull();
 });
 
