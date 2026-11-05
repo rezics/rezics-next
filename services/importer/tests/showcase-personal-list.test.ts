@@ -34,7 +34,7 @@ test('uploads through the generated VNDB route and resumes the exact private int
   try {
     expect(await seedShowcasePersonalList({ client, journal, xml })).toEqual({
       state: 'unknown-delivery',
-      code: 'transport-unavailable',
+      code: 'http-503',
     });
     expect(await seedShowcasePersonalList({ client, journal, xml })).toEqual({
       state: 'uploaded',
