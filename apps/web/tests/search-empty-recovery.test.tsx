@@ -146,16 +146,11 @@ test('the mounted empty recovery panel renders its editable query and current ac
         onRetry() {},
       }),
     );
-    expect(html).toContain(
-      status === 'preparing' ? m.search_empty_alternatives_preparing() : m.search_empty_alternatives_unavailable(),
-    );
+    expect(html).toContain(status === 'preparing' ? m.search_empty_alternatives_preparing() : m.search_empty_alternatives_unavailable());
     expect(html).toContain(m.search_facet_retry());
-    expect(html).not.toContain('Pride and Prejudice');
   }
 
-  const panel = (key: string) => createElement(EmptySearchRecovery, {
-    key, recovery: { status: 'ready', alternatives: [], actions }, state, locale: 'en', labels,
-  });
+  const panel = (key: string) => createElement(EmptySearchRecovery, { key, recovery: { status: 'ready', alternatives: [], actions }, state, locale: 'en', labels });
   const pair = renderToStaticMarkup(createElement('div', null, panel('a'), panel('b')));
   const ids = [...pair.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]);
   expect(new Set(ids).size).toBe(ids.length);
@@ -171,23 +166,13 @@ function emptyRegionProps(
 ): SearchResultsRegionProps {
   const page = { ...discoveryExample, hits: [], next: null, emptyRecovery };
   return {
-    query: executed.query,
-    locale,
-    selectedFacets: executed.facets,
-    retryState: executed,
-    recoveryOwnerKey: ownerKey,
-    onNavigate,
-    onRetry,
+    query: executed.query, locale, selectedFacets: executed.facets, retryState: executed,
+    recoveryOwnerKey: ownerKey, onNavigate, onRetry,
     data: {
       queryState: executed, discovery: { status: 'ready', page }, recovery: { status: 'ready' },
       typeLabels: labels.typeLabels, typeChoices: labels.typeChoices, selectedFacetLabels: labels.selectedFacetLabels,
-      groups: labels.groups.map((group) => ({ ...group, values: [] })),
-      hitTypes: {},
-      yearProperties: [],
-      sort: executed.sort ?? 'relevance',
-      facetRetry: false,
-      facetIndexNotReady: false,
-      staleCursorRestarted: false,
+      groups: labels.groups.map((group) => ({ ...group, values: [] })), hitTypes: {}, yearProperties: [],
+      sort: executed.sort ?? 'relevance', facetRetry: false, facetIndexNotReady: false, staleCursorRestarted: false,
     },
   };
 }

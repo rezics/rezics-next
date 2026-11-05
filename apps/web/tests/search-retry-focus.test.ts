@@ -1,7 +1,8 @@
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import type { SearchPageData } from '../src/search/search';
 import type { DiscoveryState } from '../src/search/discovery';
@@ -25,6 +26,8 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
 const { createRoot } = await import('react-dom/client');
+const queryClient = new QueryClient();
+const withQueryClient = (child: ReactNode) => createElement(QueryClientProvider, { client: queryClient }, child);
 const { SearchPage } = await import('../src/search/search');
 const { searchRetryFocusTarget } = await import('../src/search/search-retry-focus');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -68,19 +71,10 @@ async function show(
   root ??= createRoot(host);
   const query = extra?.query ?? data.queryState?.query ?? 'Mira';
   await act(async () =>
-    root.render(
-      createElement(
-        'div',
-        null,
-        createElement('button', { type: 'button', 'data-move-focus': true }, 'Other control'),
-        createElement(SearchPage, {
-          query,
-          data,
-          onRetry: extra?.onRetry ?? (() => {}),
-          session: extra?.session ?? null,
-        }),
-      ),
-    ),
+    root.render(withQueryClient(createElement('div', null,
+      createElement('button', { type: 'button', 'data-move-focus': true }, 'Other control'),
+      createElement(SearchPage, { query, data, onRetry: extra?.onRetry ?? (() => {}), session: extra?.session ?? null }),
+    ))),
   );
 }
 
