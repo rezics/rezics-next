@@ -148,6 +148,10 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
       await act(async () => {
         if (select.multiple) {
           for (const option of select.options) option.selected = values.includes(option.value);
+        } else if (values[0]) {
+          const setValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!;
+          select.selectedIndex = -1;
+          setValue.call(select, values[0]);
         } else {
           select.selectedIndex = [...select.options].findIndex((option) => option.value === (values[0] ?? ''));
         }
