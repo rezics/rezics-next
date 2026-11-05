@@ -10,6 +10,7 @@ import { catalogueFileCorrectionHref } from './catalogue-file-reader/navigation'
 import { isReleaseType } from './release-fidelity/model';
 import { releaseEntryHref, RELEASE_ENTRY_BYTES } from './release-fidelity/navigation';
 import { factsPublicCorrectionHref, type FactsPublicOrigin } from './facts-public-visit';
+import { authoredPublicCorrectionHref, type AuthoredPublicOrigin } from './authored-public-visit';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -111,11 +112,18 @@ export const catalogueEntries = {
     label: m.catalogue_create_title({}, options(locale)),
     href: `/${locale}/catalogue/new?relatedWorkHandoff=${encodeURIComponent(token)}`,
   }),
-  authored: ({ id, title, locale }: Locale & { id: string; title: string }): CatalogueEntry => ({
-    group: 'edit',
-    label: m.authored_title({}, options(locale)),
-    href: `${subject({ id, label: title, locale })}/authored`,
-  }),
+  authored: ({ id, title, locale, origin }: Locale & {
+    id: string;
+    title: string;
+    origin?: AuthoredPublicOrigin | undefined;
+  }): CatalogueEntry => {
+    const base = `${subject({ id, label: title, locale })}/authored`;
+    return {
+      group: 'edit',
+      label: m.authored_title({}, options(locale)),
+      href: origin ? authoredPublicCorrectionHref(base, origin) : base,
+    };
+  },
   facts: (address: Subject & { origin?: FactsPublicOrigin | undefined }): CatalogueEntry => ({
     group: 'edit',
     label: m.facts_title({}, options(address.locale)),

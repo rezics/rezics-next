@@ -24,6 +24,7 @@ import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { ReleaseFidelityEntry } from '../catalogue/release-fidelity/entry';
 import { CatalogueFileProfileEntry } from '../catalogue/catalogue-file-profile/entry';
 import { candidateContext } from '../../subject/candidates';
+import type { AuthoredPublicOrigin } from '../catalogue/authored-public-visit';
 import type { KernelClient } from '@rezics/client';
 import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
 import {
@@ -283,6 +284,15 @@ export function SubjectFrame({
         returnHref: contextHref(base, realm),
       }
     : undefined;
+  const authoredOrigin: AuthoredPublicOrigin | undefined = observedContext
+    ? {
+        subject: frame.id,
+        context: observedContext,
+        ...(realm ? { realm } : {}),
+        locale,
+        returnHref: contextHref(base, realm),
+      }
+    : undefined;
   const facts = [typeLabel, frame.date].filter((fact): fact is string => !!fact);
   return (
     <div data-slot="subject-frame" className="flex min-w-0 flex-col gap-4">
@@ -358,7 +368,7 @@ export function SubjectFrame({
               {(view === 'characters' || view === 'credits') && frame.type !== 'wd:Q95074' && (
                 <CharacterProfileEntry work={frame.id} locale={locale} />
               )}
-              <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
+              <AuthoredFieldEntry id={frame.id} title={title} locale={locale} origin={authoredOrigin} />
               <SubjectFactsEntry id={frame.id} label={title} locale={locale} origin={factsOrigin} />
               {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
               {isScreenType(frame.type) && <ScreenProfileEntry id={frame.id} label={title} locale={locale} />}
