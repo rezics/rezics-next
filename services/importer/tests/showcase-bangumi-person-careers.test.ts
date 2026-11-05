@@ -7,7 +7,7 @@ import { emptyCrossMediaPlan } from '../src/cross-media-seed.ts';
 import { acquireBangumiPersonCareerSources } from '../src/showcase-bangumi-careers.ts';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
 
-test('selected actual Persons use bounded API career fallback and sealed source replay', async () => {
+test('selected PersonDetail requests preserve archive careers, fill missing fields and replay exact receipts', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-person-careers-'));
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
