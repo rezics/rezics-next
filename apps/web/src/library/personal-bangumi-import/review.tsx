@@ -1,11 +1,17 @@
 import { m } from '../../paraglide/messages.js';
 import type { BangumiJourneySnapshot } from './controller';
+import type { BangumiImportPort, BangumiLabelPanelState } from './contract';
 import { BangumiAction } from './controls';
 import { BangumiRowReview, type RowDraft } from './row';
+import type { BangumiVisit } from './visit';
 
 export function BangumiReviewPage({
   snap,
   busy,
+  port,
+  visit,
+  labelPanels,
+  onLabelPanelChange,
   onSave,
   onChoose,
   onNext,
@@ -13,6 +19,10 @@ export function BangumiReviewPage({
 }: {
   snap: BangumiJourneySnapshot;
   busy: boolean;
+  port: BangumiImportPort;
+  visit: BangumiVisit;
+  labelPanels: Record<string, BangumiLabelPanelState>;
+  onLabelPanelChange: (key: string, update: (previous: BangumiLabelPanelState | undefined) => BangumiLabelPanelState) => void;
   onSave: (draft: RowDraft) => void;
   onChoose: (draft: RowDraft) => void;
   onNext: () => void;
@@ -37,6 +47,11 @@ export function BangumiReviewPage({
               <BangumiRowReview
                 row={row}
                 {...(meta ? { meta } : {})}
+                uploadId={snap.uploadId}
+                port={port}
+                visit={visit}
+                labelPanel={labelPanels[`${snap.uploadId}:${row.ordinal}`]}
+                onLabelPanelChange={(update) => onLabelPanelChange(`${snap.uploadId}:${row.ordinal}`, update)}
                 busy={busy || snap.cancelled}
                 onSave={onSave}
                 onChoose={onChoose}

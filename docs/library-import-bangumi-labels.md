@@ -1,12 +1,16 @@
 # Review retained Bangumi tags as private labels
 
-This extends the [installed Bangumi upload engine](library-import-bangumi.md). Web324 remains the complete
+This extends the [installed Bangumi upload engine](library-import-bangumi.md). Web remains the complete
 upload-to-result interface and consumes these generated methods; there is no additional page, parser, matcher,
 upload format, catalogue producer or importer store. The REZICS collection wrapper is not an official Bangumi export.
 
 Decision: label review has its own confirmation epoch, with at most 16 selected mappings per retained row and 16
 native creations and 16 effective assignments over that row's lifetime, including refreshed reviews; unchanged assignments and original
 receipt replay consumes no additional allowance. The Subject review token is the immutable retained row's revision.
+
+Decision: the first retained tag read captures the existing encrypted private-entry credential envelope for the
+mounted import session; label review and apply retries reuse that envelope and their exact original operands after a
+current viewer/CSRF check, while assignment readback always uses fresh credentials.
 
 ## Installed owner methods
 
@@ -71,6 +75,22 @@ Comments, notes, source privacy, timestamps, progress counts, scores, state and 
 from label adoption. No Entry, Session, public Collection, review, follow or publication is created by tags. The state
 engine and any subsequent metadata/progress confirmation keep their own exact operands and epochs.
 
+## Web composition
+
+The existing retained-row review owns a separate collapsible label panel. It pages tags from `after: -1` in native
+batches of 32, displays missing/empty/known/invalid/unknown evidence distinctly, and only offers mappings for native
+supported values. Original text remains visible beside the native proposal. The user explicitly selects an owned label
+ID from one bounded search result or proposes a deliberate new name, starting from the native proposal when useful. Web submits only the selected indexes and exact
+targets; native review supplies the immutable review token and captured Subject/label revisions.
+
+The panel shows the complete native review before its separate confirmation action. It then renders native per-index
+outcomes, identities/revisions, creation state and remaining indexes. Unknown review/apply acknowledgements retain the
+original command and encrypted envelope in the mounted importer session; retry resends those exact operands. A fresh
+tag read displays retained native review/outcomes but does not resolve an uncertain command. After acknowledged apply,
+Web reads the Subject's actual current assignment page through the existing full assignment reader. Viewer, CSRF,
+source and locale replacement retire callbacks and displayed state. Source cancellation clears the panel and leaves
+accepted labels/assignments intact.
+
 ## Cost and validation
 
 Let R=1 selected row, T<=16 selections, M<=T new-label requests, P<=10 retained rows per existing source page,
@@ -79,8 +99,11 @@ and B be bounded retained/output bytes. Existing upload limits remain 256 KiB/fi
 bounds it). Label review JSON adds at most 32 KiB per row. Tag pages expose <=32 values plus that fixed review bound.
 No source evidence admission limit or command payer is enlarged.
 
-Review uses indexed owner/upload/row points, <=T addressed label or unique live-name probes and no History scan.
-Apply uses <=R*T decisions and <=M native creations, current Subject/profile preparation, original receipt reads,
+The Web caller cost is `R * (K + S + V + A + F) + Q`, where R is selected rows, K tag-page reads per row, S bounded
+owned-label searches, V native label reviews, A native label confirmations, F fresh assignment readbacks and Q exact
+retries. Native review uses indexed owner/upload/row points, <=T addressed label or unique live-name probes and no
+History scan. Native apply uses <=R*T decisions, <=M native creations and <=T original assignment commands/receipts,
+current Subject/profile preparation and original receipt reads,
 owner controls, upload locks, native History/events and source-fence work, including the locked absolute-expiry check.
 Each assignment materializes <=32
 reservations and <=33 sorted parent locks, returns effective duplicates before capacity refusal, and may reclaim

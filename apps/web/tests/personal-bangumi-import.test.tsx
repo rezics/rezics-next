@@ -59,6 +59,7 @@ const visit = (viewer = 'alice', csrf = 'csrf-1'): BangumiVisit => {
   return {
     subject: viewer,
     csrfToken: csrf,
+    locale: 'en',
     controller,
     retire() {
       retired = true;
@@ -221,6 +222,33 @@ function recordingPort(
     },
     async delete() {
       return { kind: 'deleted' };
+    },
+    async tags(command) {
+      return {
+        kind: 'tags',
+        page: { ordinal: command.ordinal, rowRevision: token, evidence: 'missing', tags: [], next: null, labels: null },
+        custody: command.custody ?? { viewer: 'alice', csrfToken: 'csrf-1', credential: 'encrypted' },
+      };
+    },
+    async searchLabels() {
+      return { kind: 'label-options', labels: [] };
+    },
+    async reviewLabels(command) {
+      return {
+        kind: 'labels-reviewed',
+        ordinal: command.ordinal,
+        labels: {
+          review: { token, rowRevision: command.rowRevision, subject: null, evidence: 'missing', items: [] },
+          confirmed: false,
+          outcomes: [],
+        },
+      };
+    },
+    async applyLabels(command) {
+      return { kind: 'labels-applied', result: { uploadId: command.uploadId, ordinal: command.ordinal, outcomes: [], remaining: [] } };
+    },
+    async readAssignments(subjectId) {
+      return { kind: 'assignments', subjectId, assignments: [] };
     },
   };
   return { port, previews, applies, reviews };

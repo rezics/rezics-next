@@ -4,12 +4,16 @@ import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { mapSourceAdmissionPort } from '../rich-private-entry/admission';
 import { admitPrivateSourceObservation } from '../rich-private-entry/native';
+import { readSubjectLabelAssignments } from '../subject-labels';
 import {
   BANGUMI_APPLY,
   BANGUMI_PAGE,
   SUBJECT_ID,
+  type BangumiLabelApplyData,
+  type BangumiLabelState,
+  type BangumiLabelOption,
+  type BangumiTagPage,
   quotedIdempotencyKey,
-  type BangumiApplyBody,
   type BangumiApplyCallResult,
   type BangumiApplyResult,
   type BangumiChoice,
@@ -35,50 +39,22 @@ import {
 
 type NativeResult = { data?: unknown; error?: { value?: unknown }; status: number };
 type NativeHeaders = { authorization: string; 'idempotency-key'?: string };
-type PreviewResource = {
-  post: (body: { upload: string }, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type ReviewResource = {
-  post: (body: { ordinal: number; target?: string }, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type ApplyResource = {
-  post: (body: BangumiApplyBody, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type CancelResource = {
-  post: (body?: Record<string, never>, options?: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-type IdResource = {
-  get: (options: { query?: { after?: number }; headers: NativeHeaders }) => Promise<NativeResult>;
-  $review?: ReviewResource;
-  review?: ReviewResource;
-  $apply?: ApplyResource;
-  apply?: ApplyResource;
-  $cancel?: CancelResource;
-  cancel?: CancelResource;
-  delete: (body: undefined, options: { headers: NativeHeaders }) => Promise<NativeResult>;
-};
-export type BangumiSurface = ((params: { uploadId: string }) => IdResource) & {
-  $preview?: PreviewResource;
-  preview?: PreviewResource;
-};
+export type BangumiSurface = NonNullable<KernelClient['libraryImports']['bangumi']>;
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function asSurface(value: unknown): BangumiSurface | undefined {
-  if (typeof value !== 'function') return undefined;
-  const surface = value as BangumiSurface;
-  const preview = surface.$preview ?? surface.preview;
-  if (!preview || typeof preview.post !== 'function') return undefined;
-  return surface;
+function statusOfError(error: unknown): number | undefined {
+  return record(error) && typeof error.status === 'number' ? error.status : undefined;
 }
 
-/** Bind installed `libraryImports.bangumi` methods. Missing methods stay unavailable. */
+/** Bind the generated mounted route surface. */
 export function nativeBangumiImport(client: KernelClient): BangumiSurface | undefined {
   const imports = client.libraryImports;
-  if (!imports || typeof imports !== 'object' || !('bangumi' in imports)) return undefined;
-  return asSurface(imports.bangumi);
+  if (!imports || typeof imports !== 'object') return undefined;
+  const bangumi = imports.bangumi;
+  return typeof bangumi === 'function' ? bangumi : undefined;
 }
 
 function publicDetail(detail: unknown): string | undefined {
@@ -223,6 +199,153 @@ function isApply(value: unknown): value is BangumiApplyResult {
   return value.outcomes.every(isOutcome) && value.remaining.every((ordinal) => typeof ordinal === 'number');
 }
 
+function isLabelVersion(value: unknown): value is { id: string; revision: number } {
+  return (
+    record(value) &&
+    typeof value.id === 'string' &&
+    SUBJECT_ID.test(value.id) &&
+    typeof value.revision === 'number' &&
+    Number.isSafeInteger(value.revision) &&
+    value.revision > 0
+  );
+}
+
+function isLabelState(value: unknown): value is BangumiLabelState {
+  if (!record(value) || typeof value.confirmed !== 'boolean' || !Array.isArray(value.outcomes) || value.outcomes.length > 16) return false;
+  const review = value.review;
+  if (
+    !record(review) ||
+    typeof review.token !== 'string' ||
+    !SUBJECT_ID.test(review.token) ||
+    typeof review.rowRevision !== 'string' ||
+    !SUBJECT_ID.test(review.rowRevision) ||
+    !['missing', 'empty', 'known', 'invalid', 'unknown'].includes(String(review.evidence)) ||
+    !Array.isArray(review.items) ||
+    review.items.length > 16
+  )
+    return false;
+  if (
+    review.subject !== null &&
+    (!record(review.subject) ||
+      typeof review.subject.subjectId !== 'string' ||
+      !SUBJECT_ID.test(review.subject.subjectId) ||
+      typeof review.subject.identityEpoch !== 'string' ||
+      typeof review.subject.acceptingType !== 'string' ||
+      !(review.subject.releaseDigest === null || typeof review.subject.releaseDigest === 'string'))
+  )
+    return false;
+  const items = review.items.every((item) => {
+    if (
+      !record(item) ||
+      !Number.isSafeInteger(item.index) ||
+      !isJson(item.source) ||
+      (item.status !== 'ready' && item.status !== 'invalid' && item.status !== 'duplicate') ||
+      !(item.duplicateOf === null || Number.isSafeInteger(item.duplicateOf))
+    )
+      return false;
+    if (!record(item.target)) return false;
+    if ('labelId' in item.target)
+      return typeof item.target.labelId === 'string' && SUBJECT_ID.test(item.target.labelId) &&
+        Number.isSafeInteger(item.target.revision) && item.target.revision > 0;
+    return typeof item.target.name === 'string';
+  });
+  if (!items) return false;
+  return value.outcomes.every((outcome) => {
+    if (
+      !record(outcome) ||
+      !Number.isSafeInteger(outcome.index) ||
+      ![
+        'assigned',
+        'unchanged',
+        'duplicate',
+        'invalid',
+        'stale',
+        'capacity',
+        'conflict',
+        'limit',
+        'failed',
+      ].includes(String(outcome.status)) ||
+      typeof outcome.created !== 'boolean'
+    )
+      return false;
+    return (outcome.label === null || isLabelVersion(outcome.label)) &&
+      (outcome.assignment === null || isLabelVersion(outcome.assignment));
+  });
+}
+
+function isTagPage(value: unknown): value is BangumiTagPage {
+  if (
+    !record(value) ||
+    !Number.isSafeInteger(value.ordinal) ||
+    !(value.rowRevision === null || (typeof value.rowRevision === 'string' && SUBJECT_ID.test(value.rowRevision))) ||
+    !['missing', 'empty', 'known', 'invalid', 'unknown'].includes(String(value.evidence)) ||
+    !Array.isArray(value.tags) ||
+    value.tags.length > 32 ||
+    !(value.next === null || (Number.isSafeInteger(value.next) && value.next >= 0)) ||
+    !(value.labels === null || isLabelState(value.labels))
+  )
+    return false;
+  return value.tags.every(
+    (tag) =>
+      record(tag) &&
+      Number.isSafeInteger(tag.index) &&
+      'value' in tag &&
+      isJson(tag.value) &&
+      (tag.status === 'supported' || tag.status === 'invalid' || tag.status === 'unknown') &&
+      (tag.proposedName === null || typeof tag.proposedName === 'string'),
+  );
+}
+
+function isLabelApply(value: unknown): value is BangumiLabelApplyData {
+  if (
+    !record(value) ||
+    typeof value.uploadId !== 'string' ||
+    !SUBJECT_ID.test(value.uploadId) ||
+    !Number.isSafeInteger(value.ordinal) ||
+    !Array.isArray(value.outcomes) ||
+    value.outcomes.length > 16 ||
+    !Array.isArray(value.remaining) ||
+    value.remaining.length > 16
+  )
+    return false;
+  return (
+    value.outcomes.every((outcome) => {
+      if (
+        !record(outcome) ||
+        !Number.isSafeInteger(outcome.index) ||
+        ![
+          'assigned',
+          'unchanged',
+          'duplicate',
+          'invalid',
+          'stale',
+          'capacity',
+          'conflict',
+          'limit',
+          'failed',
+        ].includes(String(outcome.status)) ||
+        typeof outcome.created !== 'boolean'
+      )
+        return false;
+      return (outcome.label === null || isLabelVersion(outcome.label)) &&
+        (outcome.assignment === null || isLabelVersion(outcome.assignment));
+    }) && value.remaining.every((index) => Number.isSafeInteger(index))
+  );
+}
+
+function isLabelOptions(value: unknown): value is { labels: BangumiLabelOption[] } {
+  if (!record(value) || !Array.isArray(value.labels) || value.labels.length > 20) return false;
+  return value.labels.every(
+    (label) =>
+      record(label) &&
+      typeof label.id === 'string' &&
+      SUBJECT_ID.test(label.id) &&
+      typeof label.name === 'string' &&
+      Number.isSafeInteger(label.revision) &&
+      label.revision > 0,
+  );
+}
+
 function isChoice(value: unknown): value is BangumiChoice {
   if (!record(value) || typeof value.ordinal !== 'number' || typeof value.reviewToken !== 'string') return false;
   if (!SUBJECT_ID.test(value.reviewToken) || typeof value.skip !== 'boolean') return false;
@@ -242,7 +365,8 @@ async function withSession(
     return { authorization };
   } catch (error) {
     if (isPlatformClosedError(error)) return { kind: 'unavailable' };
-    return { kind: 'unavailable' };
+    if (statusOfError(error) === 401 || statusOfError(error) === 403) return { kind: 'denied' };
+    throw error;
   }
 }
 
@@ -265,16 +389,18 @@ export function kernelBangumiPort(
     if ('kind' in session) return session;
     const bangumi = nativeBangumiImport(client);
     if (!bangumi) return { kind: 'unavailable' };
+    let result: NativeResult;
     try {
-      const result = await send(bangumi, session.authorization);
-      if (result.error) return outcomeOf(result.status, result.error.value, command);
-      const value = read(result.data);
-      if (!value) return { kind: 'unavailable' };
-      return value;
+      result = await send(bangumi, session.authorization);
     } catch (error) {
       if (isPlatformClosedError(error)) return { kind: 'unavailable' };
-      return unknown(command);
+      if (error instanceof TypeError) return unknown(command);
+      throw error;
     }
+    if (result.error) return outcomeOf(result.status, result.error.value, command);
+    const value = read(result.data);
+    if (!value) return { kind: 'unavailable' };
+    return value;
   }
   return {
     async preview(command) {
@@ -358,6 +484,73 @@ export function kernelBangumiPort(
         (data) => (record(data) && data.deleted === true ? ({ kind: 'deleted' } as const) : undefined),
       );
     },
+    async tags(command) {
+      return call(
+        command,
+        (bangumi, authorization) =>
+          bangumi({ uploadId: command.uploadId })
+            .rows({ ordinal: command.ordinal })
+            .tags.get({ query: { after: command.after }, headers: headers(authorization) }),
+        (data) =>
+          isTagPage(data) && data.ordinal === command.ordinal
+            ? ({ kind: 'tags', page: data, ...(command.custody ? { custody: command.custody } : {}) } as const)
+            : undefined,
+      );
+    },
+    async searchLabels(query) {
+      const session = await withSession(request, sessionEnv, originConfigured);
+      if ('kind' in session) return session;
+      try {
+        const result = await client.libraryLabels.get({
+          query: { q: query, limit: 20 },
+          headers: { authorization: session.authorization },
+        });
+        if (result.error) return failure(result.status, result.error.value);
+        if (!isLabelOptions(result.data)) return { kind: 'unavailable' };
+        return { kind: 'label-options', labels: result.data.labels };
+      } catch (error) {
+        if (isPlatformClosedError(error)) return { kind: 'unavailable' };
+        if (error instanceof TypeError) return { kind: 'unavailable' };
+        throw error;
+      }
+    },
+    async reviewLabels(command) {
+      return call(
+        command,
+        (bangumi, authorization) =>
+          bangumi({ uploadId: command.uploadId }).$reviewLabels.post(
+            { ordinal: command.ordinal, rowRevision: command.rowRevision, mappings: command.mappings },
+            { headers: headers(authorization, command.key) },
+          ),
+        (data) =>
+          record(data) &&
+          data.ordinal === command.ordinal &&
+          isLabelState(data.labels) &&
+          data.labels.review.rowRevision === command.rowRevision
+            ? ({ kind: 'labels-reviewed', ordinal: data.ordinal, labels: data.labels } as const)
+            : undefined,
+      );
+    },
+    async applyLabels(command) {
+      return call(
+        command,
+        (bangumi, authorization) =>
+          bangumi({ uploadId: command.uploadId }).$applyLabels.post(
+            { ordinal: command.ordinal, reviewToken: command.reviewToken },
+            { headers: headers(authorization) },
+          ),
+        (data) =>
+          isLabelApply(data) && data.uploadId === command.uploadId && data.ordinal === command.ordinal
+            ? ({ kind: 'labels-applied', result: data } as const)
+            : undefined,
+      );
+    },
+    async readAssignments(subjectId) {
+      const session = await withSession(request, sessionEnv, originConfigured);
+      if ('kind' in session) return session;
+      const assignments = await readSubjectLabelAssignments(client, subjectId, session.authorization);
+      return { kind: 'assignments', subjectId, assignments };
+    },
     async admitSource(command) {
       const session = await withSession(request, sessionEnv, originConfigured);
       if ('kind' in session) return session;
@@ -371,7 +564,8 @@ export function kernelBangumiPort(
         return mapSourceAdmissionPort(result, command);
       } catch (error) {
         if (isPlatformClosedError(error)) return { kind: 'unavailable' };
-        return unknown(command);
+        if (error instanceof TypeError) return unknown(command);
+        throw error;
       }
     },
   };

@@ -9,6 +9,10 @@ URL, persistent browser storage, logs or public metadata. Viewer, CSRF-session o
 rows, late delivery and retry authority. Unmatched target search reuses the existing authenticated subject picker;
 only the UUID submitted as `review.target` is identity.
 
+Decision: the first retained tag read captures the existing encrypted private-entry credential envelope for this
+mounted import session; label review and apply retries reuse the same envelope and exact command, while assignment
+readback uses a fresh credential after current viewer/CSRF checks.
+
 ## Native methods
 
 Mounted under `/v1/libraryImports/bangumi` after Commerce dependency `fd3f1482`. Web binds
@@ -20,6 +24,9 @@ Missing methods render unavailable rather than a local parser or successful fixt
 | Upload  | `POST :preview` `{ upload }` with quoted Idempotency-Key                                | File stays local until submit; bytes drop after native ownership                              |
 | Preview | `GET :uploadId?after=-1` pages of 10                                                    | Current page only; titles assist display/search, never automatic identity                     |
 | Review  | `POST :uploadId:review` `{ ordinal, target? }`                                          | Unmatched rows may set an explicit readable subject; titles never auto-match                  |
+| Tags     | `GET :uploadId/rows/:ordinal/tags?after=-1` pages of 32                               | Original values and validity stay visible; only supported values can be mapped                |
+| Labels   | `POST :uploadId:reviewLabels`, then `POST :uploadId:applyLabels`                      | Explicit label ID or deliberate new name, exact native review and separate confirmation      |
+| Readback | `GET /v1/libraryLabelAssignments?subjectId=…&view=FULL&limit=32`                     | Fresh current assignments show actual label and assignment identities                        |
 | Confirm | `POST :uploadId:apply` `{ rows: [{ ordinal, reviewToken, state, skip }] }` batches of 5 | Default `preserve`; `replace` authorizes the reviewed revision/incarnation, including absence |
 | Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply                    | Separate typed command; record id is `subject_id`; date-like failed parse is unsupported      |
 | Stop    | `POST :uploadId:cancel`                                                                 | Stops new admission; acknowledged effects remain                                              |
@@ -45,10 +52,12 @@ per-row metadata for N rows and exact uncertain-command operands.
 - Operation: personal Bangumi upload preview, paged read, per-row review, batched apply, cancel and delete.
 - Touched neighbourhood: installed `libraryImports.bangumi` methods, the mounted visit, current page evidence and
   N bounded row metadata. No client matching, parser or per-field native fan-out.
-- Formula: `1 + K + M + Q + lifecycle + R` native calls for K returned pages, M reviewed rows, Q apply batches,
-  cancel/delete lifecycle calls and explicit retries R, with `M <= N`, `Q <= M`, page size `<= 10` and apply size
-  `<= 5`. Full 5-row batches reduce Q to `ceil(M/5)`; single-row choices keep `Q = M`. Source admission is a
-  separate typed command after apply and is omitted from this import cost formula.
+- Formula: upload calls remain `1 + K + M + Q + lifecycle + R`. Label work adds `Rr * (P + S + V + A + F) + X`,
+  where `Rr` rows are opened for adoption, P is bounded 32-value tag-page reads, S is bounded owned-label searches,
+  V is native label reviews, A is confirmations, F is current assignment readbacks and X is exact retries. The
+  complete native label caller also includes addressed label/name probes, create/assign receipts, Subject/profile
+  preparation, owner controls, upload locks, events/History, source fences, reservations and parent locks. Source
+  admission is a separate typed command after state apply.
 
 Decision: Confirm without the two source checkboxes still applies the import; the confirmation page disables Confirm
 until both are checked. Date-like failed parses stay unsupported; non-date tokens stay unknown.
@@ -56,4 +65,6 @@ until both are checked. Date-like failed parses stay unsupported; non-date token
 - Retained bound: `O(U + 10 × page-row bytes + N × metadata bytes)` with U the upload during submission only.
 - Installed caps: `BANGUMI_LIMITS` in `list-import-bangumi-model.ts` (256 KiB, 100 rows, 8 KiB row, 32 KiB evidence,
   depth 16, page 10, apply 5).
-- Test reference: `apps/web/tests/personal-bangumi-import.test.tsx` growth cases at 10/50/100 rows.
+- Test references: `apps/web/tests/personal-bangumi-import.test.tsx` growth cases and
+  `apps/web/tests/personal-bangumi-label-adoption.test.tsx` label review/retry/readback; native composition is in
+  `services/kernel/test/library/list-import-bangumi-labels-web.test.ts`.

@@ -1,5 +1,6 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useMemo, useSyncExternalStore } from 'react';
+import { getLocale } from '../../paraglide/runtime.js';
 import { sessionQuery } from '../../session/query';
 
 type SessionValue = { state?: string; subject?: string | null; csrfToken?: string | null };
@@ -7,6 +8,7 @@ type SessionValue = { state?: string; subject?: string | null; csrfToken?: strin
 export type BangumiVisit = {
   subject: string;
   csrfToken: string;
+  locale: string;
   controller: AbortController;
   current: (signal?: AbortSignal) => boolean;
   retire: () => void;
@@ -28,6 +30,7 @@ function useSessionValue(): SessionValue | undefined {
 /** Private visit bound to the current signed-in viewer and CSRF. Replacement retires Bangumi state. */
 export function useBangumiVisit(): BangumiVisit | null {
   const session = useSessionValue();
+  const locale = getLocale();
   const owner = sessionIdentity(session);
   const ready =
     session?.state === 'signed-in' &&
@@ -45,14 +48,15 @@ export function useBangumiVisit(): BangumiVisit | null {
       owner,
       subject,
       csrfToken,
+      locale,
       retire() {
         state.retired = true;
         state.controller.abort();
       },
       current(signal) {
-        return !state.retired && !state.controller.signal.aborted && signal?.aborted !== true;
+        return !state.retired && !state.controller.signal.aborted && signal?.aborted !== true && getLocale() === locale;
       },
     };
     return state;
-  }, [csrfToken, owner, ready, subject]);
+  }, [csrfToken, locale, owner, ready, subject]);
 }

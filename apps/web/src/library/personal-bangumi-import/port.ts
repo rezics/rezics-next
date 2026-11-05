@@ -57,6 +57,26 @@ const productionPort: BangumiImportPort = {
     const { deleteBangumiImport } = await import('./server');
     return deleteBangumiImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
   },
+  async tags(command) {
+    const { readBangumiTags } = await import('./server');
+    return readBangumiTags({ data: command });
+  },
+  async searchLabels(query) {
+    const { searchBangumiLabels } = await import('./server');
+    return searchBangumiLabels({ data: { query } });
+  },
+  async reviewLabels(command) {
+    const { reviewBangumiLabels } = await import('./server');
+    return reviewBangumiLabels({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
+  },
+  async applyLabels(command) {
+    const { applyBangumiLabels } = await import('./server');
+    return applyBangumiLabels({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
+  },
+  async readAssignments(subjectId) {
+    const { readBangumiLabelAssignments } = await import('./server');
+    return readBangumiLabelAssignments({ data: { subjectId } });
+  },
 };
 
 export function useBangumiImportPort(): BangumiImportPort {

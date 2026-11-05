@@ -1,6 +1,30 @@
-import type { PersonalEntrySourceAdmission } from '@rezics/client';
+import type { KernelClient, PersonalEntrySourceAdmission } from '@rezics/client';
 import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
+
+type GeneratedBangumi = NonNullable<KernelClient['libraryImports']['bangumi']>;
+type GeneratedBangumiUpload = ReturnType<GeneratedBangumi>;
+type GeneratedBangumiRow = ReturnType<GeneratedBangumiUpload['rows']>;
+type GeneratedBangumiTagCall = ReturnType<GeneratedBangumiRow['tags']['get']>;
+type GeneratedBangumiReviewLabelsCall = GeneratedBangumiUpload['$reviewLabels']['post'];
+type GeneratedBangumiApplyLabelsCall = GeneratedBangumiUpload['$applyLabels']['post'];
+type GeneratedLibraryLabels = NonNullable<
+  Awaited<ReturnType<KernelClient['libraryLabels']['get']>>['data']
+>['labels'][number];
+
+export type BangumiTagPage = NonNullable<Awaited<GeneratedBangumiTagCall>['data']>;
+export type BangumiLabelReviewBody = Parameters<GeneratedBangumiReviewLabelsCall>[0];
+export type BangumiLabelMapping = BangumiLabelReviewBody['mappings'][number];
+export type BangumiLabelState = NonNullable<
+  NonNullable<Awaited<ReturnType<GeneratedBangumiReviewLabelsCall>>['data']>['labels']
+>;
+export type BangumiLabelApplyData = NonNullable<Awaited<ReturnType<GeneratedBangumiApplyLabelsCall>>['data']>;
+export type BangumiLabelOutcome = BangumiLabelState['outcomes'][number];
+export type BangumiLabelReview = BangumiLabelState['review'];
+export type BangumiLabelItem = BangumiLabelReview['items'][number];
+export type BangumiLabelOption = Pick<GeneratedLibraryLabels, 'id' | 'name' | 'revision'>;
+export type BangumiLabelAssignment = { id: string; labelId: string; name: string; revision: number };
+export type BangumiCredentialCustody = Readonly<{ viewer: string; csrfToken: string; credential: string }>;
 
 /** Native Bangumi personal-list caps, verified at Commerce delivery. */
 export const BANGUMI_UPLOAD_BYTES = 262_144;
@@ -131,7 +155,30 @@ export type BangumiCommand =
       custody?: SourceAdmissionCustody;
     }
   | { kind: 'cancel'; key: string; uploadId: string }
-  | { kind: 'delete'; key: string; uploadId: string };
+  | { kind: 'delete'; key: string; uploadId: string }
+  | {
+      kind: 'tags';
+      uploadId: string;
+      ordinal: number;
+      after: number;
+      custody?: BangumiCredentialCustody;
+    }
+  | {
+      kind: 'review-labels';
+      uploadId: string;
+      ordinal: number;
+      rowRevision: string;
+      mappings: BangumiLabelMapping[];
+      key: string;
+      custody: BangumiCredentialCustody;
+    }
+  | {
+      kind: 'apply-labels';
+      uploadId: string;
+      ordinal: number;
+      reviewToken: string;
+      custody: BangumiCredentialCustody;
+    };
 
 export type BangumiUnknown = { kind: 'unknown'; command: BangumiCommand };
 export type BangumiPreviewResult =
@@ -150,6 +197,22 @@ export type BangumiMutateResult =
   | BangumiFailure
   | BangumiUnknown;
 export type BangumiAdmitResult = { kind: 'admitted' } | { kind: 'conflict' } | BangumiFailure | BangumiUnknown;
+export type BangumiTagPageResult =
+  | { kind: 'tags'; page: BangumiTagPage; custody?: BangumiCredentialCustody }
+  | BangumiFailure
+  | BangumiUnknown;
+export type BangumiLabelOptionsResult = { kind: 'label-options'; labels: BangumiLabelOption[] } | BangumiFailure;
+export type BangumiLabelReviewResult =
+  | { kind: 'labels-reviewed'; ordinal: number; labels: BangumiLabelState }
+  | BangumiFailure
+  | BangumiUnknown;
+export type BangumiLabelApplyResult =
+  | { kind: 'labels-applied'; result: BangumiLabelApplyData }
+  | BangumiFailure
+  | BangumiUnknown;
+export type BangumiLabelAssignmentsResult =
+  | { kind: 'assignments'; subjectId: string; assignments: BangumiLabelAssignment[] }
+  | BangumiFailure;
 
 export type BangumiImportPort = {
   preview(command: Extract<BangumiCommand, { kind: 'preview' }>): Promise<BangumiPreviewResult>;
@@ -159,6 +222,31 @@ export type BangumiImportPort = {
   admitSource(command: Extract<BangumiCommand, { kind: 'admit-source' }>): Promise<BangumiAdmitResult>;
   cancel(command: Extract<BangumiCommand, { kind: 'cancel' }>): Promise<BangumiMutateResult>;
   delete(command: Extract<BangumiCommand, { kind: 'delete' }>): Promise<BangumiMutateResult>;
+  tags(command: Extract<BangumiCommand, { kind: 'tags' }>): Promise<BangumiTagPageResult>;
+  searchLabels(query: string): Promise<BangumiLabelOptionsResult>;
+  reviewLabels(command: Extract<BangumiCommand, { kind: 'review-labels' }>): Promise<BangumiLabelReviewResult>;
+  applyLabels(command: Extract<BangumiCommand, { kind: 'apply-labels' }>): Promise<BangumiLabelApplyResult>;
+  readAssignments(subjectId: string): Promise<BangumiLabelAssignmentsResult>;
+};
+
+export type BangumiLabelPanelState = {
+  rowRevision: string | null;
+  pages: BangumiTagPage[];
+  pageIndex: number;
+  custody: BangumiCredentialCustody | null;
+  mappings: Record<number, BangumiLabelMapping['target']>;
+  reviewedMappings: BangumiLabelMapping[] | null;
+  newNames: Record<number, string>;
+  queries: Record<number, string>;
+  options: Record<number, BangumiLabelOption[]>;
+  searchState: Record<number, 'idle' | 'loaded' | 'unavailable'>;
+  labels: BangumiLabelState | null;
+  result: BangumiLabelApplyData | null;
+  assignments: BangumiLabelAssignment[] | null;
+  assignmentState: 'idle' | 'loading' | 'loaded' | 'unavailable';
+  command: Extract<BangumiCommand, { kind: 'tags' | 'review-labels' | 'apply-labels' }> | null;
+  notice: BangumiFailure | null;
+  busy: boolean;
 };
 
 export function newCommandKey(): string {
