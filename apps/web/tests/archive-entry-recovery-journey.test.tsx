@@ -20,6 +20,7 @@ function fixture() {
   let current: typeof binding | null = binding;
   let applied = false;
   let resultReads = 0;
+  let cancelUnknown = false;
   const rows: ArchiveRow[] = [
     { ordinal: 0, section: 'entries', evidence: { subject_id: 'old-source', state: 'old-state' }, status: 'unresolved', review: null, reviewRevision: 0 },
     { ordinal: 1, section: 'labels', evidence: { name: 'Old name' }, status: 'unresolved', review: null, reviewRevision: 0 },
@@ -46,11 +47,12 @@ function fixture() {
       if (path.includes('/libraryEntries/')) return Response.json({ libraryEntry: { subjectId, state: 'in_progress', revision: 8 } });
       if (path.endsWith('/libraryLabelAssignments')) return Response.json({ label: { id: labelId, name: 'Current renamed label', revision: 3 }, assignments: [], next: null });
       if (path.endsWith('/results')) return Response.json({ uploadId: id, state: 'ready', results: applied && resultReads++ === 0 ? [{ ordinal: 0, section: 'entries', status: 'acknowledged', result: { effect: 'entry.put', subjectId } }] : [], next: null });
+      if (request.method === 'DELETE' && cancelUnknown) return Response.json({ code: 'temporarily_unavailable' }, { status: 503 });
       return Response.json(status);
     }, { preconnect: fetch.preconnect }),
   });
   const journey = new ArchiveEntryRecoveryJourney(archiveRecoveryNative(client, 'Bearer original-sender'), () => current, Date.now() + 60_000);
-  return { journey, calls, applied: () => applied, acknowledge: () => { unknown = false; }, stale: () => { stale = true; }, refuse: () => { refuseReplay = true; }, retire: () => { current = null; } };
+  return { journey, calls, applied: () => applied, acknowledge: () => { unknown = false; }, cancellation: (unknown: boolean) => { cancelUnknown = unknown; }, stale: () => { stale = true; }, refuse: () => { refuseReplay = true; }, retire: () => { current = null; } };
 }
 
 // Transport fixtures exercise the mounted receiving composition; native artifact acceptance has its own fixture.
@@ -114,5 +116,12 @@ test('Acknowledged matching receipts allow actual current label readback and cha
     await acknowledged.journey.apply();
     await acknowledged.journey.readCurrent(1);
     expect(acknowledged.journey.snapshot().readback?.value).toMatchObject({ label: { name: 'Current renamed label', revision: 3 } });
+    acknowledged.cancellation(true);
+    await acknowledged.journey.cancel();
+    expect(acknowledged.journey.snapshot().state!.phase).toBe('cancelling');
+    expect(acknowledged.journey.snapshot().retryOriginal).toBe(false);
+    acknowledged.cancellation(false);
+    await acknowledged.journey.cancel();
+    expect(acknowledged.journey.snapshot().state!.phase).toBe('cancelled');
   } finally { acknowledged.journey.retire(); }
 });
