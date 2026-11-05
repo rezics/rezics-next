@@ -32,11 +32,9 @@ test('admitted starts retain capacity throughout delayed preparation until runni
       preparing.push(id);
       // Model the time spent rebasing and installing before launch records the attempt as running.
       await new Promise((resolve) => setTimeout(resolve, 400));
-      db.query('UPDATE worker_attempts SET body = ? WHERE task_id = ? AND attempt = ?').run(
-        JSON.stringify({ state: 'running' }),
-        id,
-        1,
-      );
+      store.updateAttempt({ taskId: id, attempt: 1 }, (attempt) => {
+        attempt.state = 'running';
+      });
     });
     await new Promise((resolve) => setTimeout(resolve, 100));
     const queue = join(directory, 'capacity-queue');
