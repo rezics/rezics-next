@@ -18,10 +18,7 @@ import { runLibraryBoundedStep } from './command-support.ts';
 import { initializeCollectionMetadataHistory } from './collection-metadata-history.ts';
 import type { CollectionDraft } from './collection-model.ts';
 import type { PreparationDefinition } from './members-preparation.ts';
-import {
-  collectionRuleReadPlan,
-  executeCollectionRuleRead,
-} from './collection-rule-read-bounds.ts';
+import { collectionRuleReadPlan, executeCollectionRuleRead } from './collection-rule-read-bounds.ts';
 import {
   collectionRuleInsertPlan,
   collectionRuleUpdatePlan,

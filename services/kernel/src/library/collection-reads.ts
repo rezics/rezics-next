@@ -598,38 +598,39 @@ export function createCollectionReads(
       cursorPartitionEpoch = decoded.after[2];
       cursorPartitionNode = decoded.after[3];
     }
-    const capture = () => withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
-      const route = routeOf(id)!;
-      const partition = await readPartition(client, partitionOf(route));
-      if (!partition || partition.writeState !== 'active') throw new ProblemError('dependency_unavailable');
-      if (
-        cursorEpoch !== null &&
-        (cursorEpoch !== row.revision ||
-          cursorLifetime !== account.minimumAuthnEpoch.toString() ||
-          cursorPartitionEpoch !== partition.epoch ||
-          cursorPartitionNode !== partition.node)
-      )
-        throw new ProblemError('stale_cursor');
-      const coverage = await readCollectionMetadataHistoryState(client, {
-        route,
-        collectionId: id,
-        curatorAccountId: viewer.accountId,
+    const capture = () =>
+      withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+        const route = routeOf(id)!;
+        const partition = await readPartition(client, partitionOf(route));
+        if (!partition || partition.writeState !== 'active') throw new ProblemError('dependency_unavailable');
+        if (
+          cursorEpoch !== null &&
+          (cursorEpoch !== row.revision ||
+            cursorLifetime !== account.minimumAuthnEpoch.toString() ||
+            cursorPartitionEpoch !== partition.epoch ||
+            cursorPartitionNode !== partition.node)
+        )
+          throw new ProblemError('stale_cursor');
+        const coverage = await readCollectionMetadataHistoryState(client, {
+          route,
+          collectionId: id,
+          curatorAccountId: viewer.accountId,
+        });
+        const rows = await pageCollectionMetadataHistory(client, {
+          route,
+          collectionId: id,
+          curatorAccountId: viewer.accountId,
+          afterRevision,
+          limit: limit + 1,
+        });
+        return {
+          basis: historyBasis(row, viewer, account),
+          coverage,
+          rows,
+          partition: { epoch: partition.epoch, node: partition.node },
+          operator: account.operatorAccountId,
+        };
       });
-      const rows = await pageCollectionMetadataHistory(client, {
-        route,
-        collectionId: id,
-        curatorAccountId: viewer.accountId,
-        afterRevision,
-        limit: limit + 1,
-      });
-      return {
-        basis: historyBasis(row, viewer, account),
-        coverage,
-        rows,
-        partition: { epoch: partition.epoch, node: partition.node },
-        operator: account.operatorAccountId,
-      };
-    });
     const first = await capture();
     const final = await capture();
     if (JSON.stringify(first) !== JSON.stringify(final)) throw new ProblemError('dependency_unavailable');
@@ -649,12 +650,7 @@ export function createCollectionReads(
         hasMore && last
           ? encodeCursor(tokens, binding, {
               epoch: first.basis.collectionRevision,
-              after: [
-                last.revision,
-                first.basis.minimumAuthnEpoch,
-                first.partition.epoch,
-                first.partition.node,
-              ],
+              after: [last.revision, first.basis.minimumAuthnEpoch, first.partition.epoch, first.partition.node],
             })
           : null,
       actions: { review: true, reapply: false },

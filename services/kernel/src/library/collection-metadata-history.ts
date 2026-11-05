@@ -194,9 +194,7 @@ export async function readCollectionMetadataHistoryEntry(
   input: { route: number; collectionId: string; curatorAccountId: string; revision: number },
   plan = collectionMetadataHistoryEntryPlan(input),
 ) {
-  return await runLibraryBoundedStep(plan.kind, plan.total, () =>
-    executeCollectionMetadataHistoryEntry(client, plan),
-  );
+  return await runLibraryBoundedStep(plan.kind, plan.total, () => executeCollectionMetadataHistoryEntry(client, plan));
 }
 
 export function collectionMetadataHistoryEntry(row: {
