@@ -66,7 +66,6 @@ function publish(slot: ReturnSlot, receipt: InboxReturnReceipt | null) {
 
 function clear(slot: ReturnSlot, id?: string) {
   if (id !== undefined && slot.receipt?.id !== id) return;
-  if (slot.receipt) console.info('Inbox return receipt cleared', new Error().stack);
   slot.stop?.();
   slot.stop = null;
   if (slot.onFocus && typeof document !== 'undefined') document.removeEventListener('focusin', slot.onFocus, true);
@@ -140,10 +139,6 @@ export function inboxReturnFor(router: object, expectedHistoryKey: string): Inbo
     receipt.owner.isCurrent()
     ? receipt
     : null;
-}
-
-export function inboxReturnIsCurrent(receipt: InboxReturnReceipt) {
-  return receipt.owner.isCurrent();
 }
 
 export function completeInboxReturn(router: object, id: string) {
