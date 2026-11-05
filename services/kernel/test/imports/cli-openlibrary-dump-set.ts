@@ -326,9 +326,11 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
     let lostRequest: Exchange | undefined;
     let replayedRequest: Exchange | undefined;
     if (publicationWork) {
-      firstCandidate = (await datePage(workId)).candidates[0];
+      const initialDateCandidate = (await datePage(workId)).candidates[0];
+      firstCandidate = initialDateCandidate;
       expect(firstCandidate).toBeDefined();
-      expect(firstCandidate!.statement.value).toEqual({
+      if (!initialDateCandidate) throw new Error('Missing the first work date candidate');
+      expect(initialDateCandidate.statement.value).toEqual({
         type: 'value',
         content: {
           time: '+1853-00-00T00:00:00Z',
@@ -338,7 +340,7 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
       });
       expect(await currentDate(workId)).toBeUndefined();
       expect(
-        firstCandidate!.statement.references[0]!.parts.map((part) => [
+        initialDateCandidate.statement.references[0]!.parts.map((part) => [
           part.property.id,
           part.value.type === 'value' ? part.value.content : null,
         ]),
@@ -361,9 +363,9 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
           calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
         },
       });
-      await selectDate(workId, firstCandidate, (await datePage(workId)).adoption);
+      await selectDate(workId, initialDateCandidate, (await datePage(workId)).adoption);
       firstSelected = await currentDate(workId);
-      expect(firstSelected).toEqual(firstCandidate.statement);
+      expect(firstSelected).toEqual(initialDateCandidate.statement);
       const unchanged = await invoke(own, firstManifest);
       expect(unchanged.code).toBe(0);
       expect(claim(own, currentWork.key)).toBe(workId);
@@ -421,14 +423,15 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
             }),
       );
       expect(refreshedCandidate).toBeDefined();
-      expect(refreshedCandidate!.id).not.toBe(firstCandidate.id);
-      expect(refreshedCandidate!.statement.references[0]!.parts).toContainEqual({
-        property: { id: 'schema:version' },
+      if (!refreshedCandidate) throw new Error('Missing the refreshed work date candidate');
+      expect(refreshedCandidate.id).not.toBe(firstCandidate.id);
+      expect(refreshedCandidate.statement.references[0]!.parts).toContainEqual({
+        property: { id: 'schema:version', data_type: 'string' },
         value: { type: 'value', content: '121' },
       });
-      await selectDate(workId, refreshedCandidate!, page.adoption);
+      await selectDate(workId, refreshedCandidate, page.adoption);
       refreshedSelected = await currentDate(workId);
-      expect(refreshedSelected).toEqual(refreshedCandidate!.statement);
+      expect(refreshedSelected).toEqual(refreshedCandidate.statement);
     }
     const session = new ImportSession(state);
     try {

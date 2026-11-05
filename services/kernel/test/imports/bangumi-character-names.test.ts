@@ -198,7 +198,11 @@ test('default selected Bangumi character names publish, retain adoption, and ref
     expect(sourced.status).toBe(200);
     const sourcedBody = sourced.body as {
       candidates: {
-        statement: { references?: { parts: { property: { id: string }; value: { content: unknown } }[] }[] };
+        statement: {
+          references?: {
+            parts: { property: { id: string }; value: { type: 'value'; content: unknown } }[];
+          }[];
+        };
       }[];
     };
     const citation = sourcedBody.candidates.find((candidate) => candidate.statement.references?.length)?.statement

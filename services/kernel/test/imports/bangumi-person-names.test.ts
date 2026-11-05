@@ -20,7 +20,11 @@ test('ordinary selected-family names are separately accepted and read on the ack
   const importer = createImporter({
     path: join(directory, 'state.sqlite'),
     destination: { origin: 'https://kernel.import.test' },
-    transport: runtime.importTransport,
+    transport: {
+      batchWrite: (request) => runtime.importTransport.batch(request),
+      readFence: (tuple) =>
+        runtime.importTransport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
+    },
   });
   try {
     const editor = await openApiObserver(runtime);
@@ -60,8 +64,10 @@ test('ordinary selected-family names are separately accepted and read on the ack
     const candidates = page.body.candidates as {
       id: string;
       statement: {
-        value: { content: unknown };
-        references?: { parts: { property: { id: string }; value: { content: unknown } }[] }[];
+        value: { type: 'value'; content: unknown };
+        references?: {
+          parts: { property: { id: string }; value: { type: 'value'; content: unknown } }[];
+        }[];
       };
     }[];
     expect(candidates.map(({ statement }) => statement.value.content)).toEqual([
