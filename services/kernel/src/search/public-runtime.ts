@@ -259,7 +259,11 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         if (subjects.get(key) === operations) subjects.delete(key);
       });
     }
-    const retired = [...subjects].filter(([candidate]) => candidate !== key);
+    // Saved rules can read an older accepted meaning while ordinary Search reads the active one.
+    // Closing that meaning's factory would close its retained observations and break continuation.
+    const retired = [...subjects].filter(
+      ([candidate]) => (JSON.parse(candidate) as [string, string])[0] !== physicalTarget,
+    );
     for (const [candidate, old] of retired) {
       subjects.delete(candidate);
       await (await old).close();
