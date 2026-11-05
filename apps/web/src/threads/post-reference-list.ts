@@ -46,6 +46,7 @@ export type PostReadingProjection = Readonly<{
 
 const containers = new Set([
   'doc',
+  'paragraph',
   'blockquote',
   'bulletList',
   'orderedList',
