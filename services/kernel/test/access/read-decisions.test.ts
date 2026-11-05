@@ -7,7 +7,7 @@ import { nativeFixture } from './native-account-bindings-fixture.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import {

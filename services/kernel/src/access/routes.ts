@@ -25,7 +25,7 @@ import {
   SHELF_TABLE_COLUMNS,
   SHELF_TABS,
 } from './preferences.ts';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 import { NOTIFICATION_KINDS, type Notifications, type NotificationsPatch } from './notification-kinds.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';

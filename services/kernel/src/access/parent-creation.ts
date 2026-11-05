@@ -1,5 +1,5 @@
 import { accessEvidence } from './evidence.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import {
   authoritativeTimeValue,
   currentCommand,

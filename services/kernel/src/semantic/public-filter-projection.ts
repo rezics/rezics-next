@@ -6,7 +6,7 @@ import type { Pool, PoolClient } from 'pg';
 import { accessCheck, type AccessCheck } from '../request/access.ts';
 import { mintReadTime, type AuthoritativeTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { requireAccessDeadline, AccessUnavailableError } from '../access/unavailable.ts';
+import { requireAccessDeadline, AccessUnavailableError } from '../request/unavailable.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';

@@ -1,4 +1,4 @@
-import { requireAccessDeadline } from './unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { accessEvidence } from './evidence.ts';
 import { createHash } from 'node:crypto';
 import { runCommand, authoritativeTimeValue, type CommandAuthorization } from '../command/command.ts';

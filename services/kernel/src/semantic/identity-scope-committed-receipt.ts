@@ -10,7 +10,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { instrumentNativeCollectionWork, type NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

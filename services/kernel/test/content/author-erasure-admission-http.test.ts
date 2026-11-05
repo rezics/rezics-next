@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import readEndpoints from '../../src/content/read-first-erasure-post.sql';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId } from '../../src/route/route.ts';

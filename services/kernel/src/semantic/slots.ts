@@ -1,5 +1,5 @@
 import { collectSemanticRecordFacts } from './record-source-set.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import { statementAudience } from './statement-disclosure.ts';

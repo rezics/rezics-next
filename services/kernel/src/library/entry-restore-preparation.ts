@@ -3,7 +3,7 @@ import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime, CommandAttempt } from '../command/command.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { readRelease } from '../semantic/definitions.ts';

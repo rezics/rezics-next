@@ -24,7 +24,7 @@ import withdrawalAck from './definition-catalogue-withdrawal-ack.sql';
 import type { CommandTransaction } from '../command/command.ts';
 import { currentCommand, currentCommandResources } from '../command/command.ts';
 import { hasLiveOperationalTransaction, currentOperationalResources } from '../command/operational.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { GLOBAL_CONTEXT, StaleEditorialHeadError } from './definitions.ts';
 import { CATALOGUE_BODY_COST as cost, catalogueBodyWork, catalogueSQLCost } from './definition-catalogue-work-cost.ts';
 import registerRoot from './definition-catalogue-register-root.sql';

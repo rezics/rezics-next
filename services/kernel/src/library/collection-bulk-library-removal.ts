@@ -8,7 +8,7 @@ import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { PlatformClosedError } from '../access/gates/admission.ts';
 import { resourceAuthorization, type AuthorizationAnchor } from '../access/resource-authorization.ts';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import {
   authoritativeTimeValue,
   mintReadTime,

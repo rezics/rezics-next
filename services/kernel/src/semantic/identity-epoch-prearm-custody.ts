@@ -2,7 +2,7 @@ import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { withReadTransaction } from './read.ts';
 import { identityJobPartition, serializeIdentityValue as json } from './identity-adapters/index.ts';
 import jobSQL from './identity-epoch-prearm-custody-job.sql';

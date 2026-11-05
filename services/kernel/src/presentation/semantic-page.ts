@@ -7,7 +7,7 @@ import {
 } from '@rezics/composition';
 import type { PropertyDefinition, Release } from '@rezics/definitions';
 import { deadlineClient } from '../access/authenticate.ts';
-import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';

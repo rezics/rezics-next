@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import type { Access, ReadDecisions } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { realmViewerActionResource } from './realm.ts';

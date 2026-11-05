@@ -3,7 +3,7 @@ import { createAuthErasureObligationBindings } from './auth-erasure-obligations.
 import { accessClock } from './access-clock.ts';
 import { systemClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 import type {
   AuthErasureProofPorts,
   AuthReceivingClosurePorts,

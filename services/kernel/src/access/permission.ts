@@ -19,7 +19,7 @@ import {
 import { ACCOUNT_ROLE_BITS as HISTORY_ROLE } from '../history/contracts.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
-import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import { readNativeAccessTime } from './authenticate.ts';
 import { readNativeAccountStates, readNativePermissionAccount, type PermissionAccount } from './account-authority.ts';
 import { readAccount, type Account } from './account-data.ts';

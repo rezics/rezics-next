@@ -10,7 +10,7 @@ import {
 } from '../commerce/creator-sales-work.ts';
 import { recoverSubjectListing, bootstrapSubjectListingHome } from '../library/listing.ts';
 import { LiveCopyPendingError } from './live-copy.ts';
-import { CommandUnavailableError } from './unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 
 const WORKFLOW = 'access.liveCopy.recover';
 type Sweep = { accounts: []; partition: number; root: string; segment: number };

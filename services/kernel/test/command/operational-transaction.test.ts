@@ -20,7 +20,7 @@ import {
 } from '../../src/command/operational.ts';
 import { shareAccount } from '../../src/access/account-share.ts';
 import { LifecycleDeniedError } from '../../src/access/lifecycle-20261025094010-command.ts';
-import { CommandUnavailableError } from '../../src/access/unavailable.ts';
+import { CommandUnavailableError } from '../../src/request/unavailable.ts';
 import { problemResponse } from '../../src/http/problem.ts';
 import { capture } from '../support/growth.ts';
 import { Denied, operationalFixture, workflowName } from './support/operational-fixture.ts';

@@ -6,7 +6,7 @@ import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { GrantDeniedError } from './grant-commands.ts';
 import { REALM_OWNER_ROLE } from './realm-ownership.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
-import { AccessUnavailableError } from './unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import lock from './realm-ownership-lock.sql';
 import frontier from './realm-claim-frontier.sql';
 import holders from './realm-claim-holders.sql';

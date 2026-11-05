@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { CommandUnavailableError } from '../../src/access/unavailable.ts';
+import { CommandUnavailableError } from '../../src/request/unavailable.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { accessCommandAuthorization, type AccountActor, type Actor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';

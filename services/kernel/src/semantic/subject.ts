@@ -37,7 +37,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import {
   fencedIds,

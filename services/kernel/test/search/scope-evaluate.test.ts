@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { FilterDocument } from '@rezics/filter';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
-import { classifyUnavailability } from '../../src/access/unavailable.ts';
+import { classifyUnavailability } from '../../src/request/unavailable.ts';
 import { createKernel, createKernelAccessResolver } from '../../src/http/kernel.ts';
 import type { Access } from '../../src/request/access.ts';
 import {

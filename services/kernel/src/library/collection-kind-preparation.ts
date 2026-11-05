@@ -1,7 +1,7 @@
 /** Native Collection-kind binding. Locators resolve retained owner records on every call. */
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandTime, mintReadTime } from '../command/command.ts';
 import {

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { Account, CommunityDriver, Fixture, Subject } from '../../../../specs/community-driver.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { preparePublicationPage } from '../../src/community/publication.ts';
 import type { RealmHomePublicationPage } from '../../src/community/realm-home-publications.ts';
 import { readSubjectSummaryObservation } from '../../src/semantic/summaries.ts';

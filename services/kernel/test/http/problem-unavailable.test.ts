@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import type { Pool } from 'pg';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { CommandUnavailableError, runCommand } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createApp } from '../../src/http/app.ts';

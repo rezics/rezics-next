@@ -1,6 +1,6 @@
 import type { Release } from '@rezics/definitions';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { AccessUnavailableError, classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability, requireAccessDeadline } from '../request/unavailable.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { partitionReadClients } from '../database/read-snapshot.ts';

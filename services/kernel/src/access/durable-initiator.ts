@@ -1,6 +1,6 @@
 import { finishDurableRateIdentity } from './write-rate-identity.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 import type { Pool } from 'pg';
 import { commandAccessContext } from './command-admission.ts';
 import { discardDurableIdentity, restoreOperationIdentity } from './durable-identity.ts';

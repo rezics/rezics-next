@@ -1,5 +1,5 @@
 import type { BatchResult, Envelope } from '../events/log.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readIdentityHome, type HomeIdentity } from '../semantic/identity-basis.ts';
 import { withConnection } from '../database/pool.ts';

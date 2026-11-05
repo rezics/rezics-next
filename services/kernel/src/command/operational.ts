@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { fenceOperationalAccount } from '../access/account-share.ts';
-import { AccessUnavailableError, classifyUnavailability, CommandUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability, CommandUnavailableError } from '../request/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';

@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount, readPublicAccountByAgent } from '../access/account-data.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '../command/command.ts';
 import { readSpace } from '../community/space.ts';
 import { withConnection } from '../database/pool.ts';

@@ -15,7 +15,7 @@ import { accessClock } from './access-clock.ts';
 import { readAccount } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import assignmentRead from './delegation-read.sql';
-import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import operatorRead from './management-source-operator.sql';
 
 /** Private native point read. This is neither an approval nor a transfer receipt. */

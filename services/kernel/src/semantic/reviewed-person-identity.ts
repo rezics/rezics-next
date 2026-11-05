@@ -1,7 +1,7 @@
 import { t } from 'elysia';
 import type { Release } from '@rezics/definitions';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
-import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError } from '../request/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { tupleRoute } from '../content/imported-contract.ts';

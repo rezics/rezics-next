@@ -7,7 +7,7 @@ import { readAccount } from './account-data.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { readOperatorTransferState, ManagementSourceRefusedError } from './management-source.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 
 export type OperatorOpeningPage = {
   stage: 'current';

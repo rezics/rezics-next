@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { readAccount } from '../access/account-data.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
-import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';

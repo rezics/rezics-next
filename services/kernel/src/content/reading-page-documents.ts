@@ -1,5 +1,5 @@
 import type { DocumentNode } from '@rezics/document';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';
 import { t } from 'elysia';

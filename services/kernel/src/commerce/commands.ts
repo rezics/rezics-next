@@ -22,7 +22,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import {
   authoritativeTimeValue,
   CommandUnavailableError,

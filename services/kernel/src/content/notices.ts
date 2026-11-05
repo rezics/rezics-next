@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import { notificationAllowed } from '../access/preferences.ts';
 import { readAccount } from '../access/account-data.ts';
 import readFinalization from './notice-read-finalization.sql';

@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { approveRealmClaim } from '../../src/access/realm-claim.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { readOwnRealmClaim, type RealmClaimStatus } from '../../src/community/realm-claim-status.ts';
 import { requestRealmClaim } from '../../src/community/realm-continuity.ts';
 import { newId, routeOf } from '../../src/route/route.ts';

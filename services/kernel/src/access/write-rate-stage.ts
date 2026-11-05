@@ -1,4 +1,4 @@
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import { isIP } from 'node:net';
 import type { WriteRateContext, WriteRateLimiter } from './write-rate.ts';
 import { bindAnonymousRateIdentity } from './write-rate-identity.ts';

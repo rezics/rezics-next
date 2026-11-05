@@ -49,7 +49,7 @@ import type { AccountActor, Resource } from '../../src/request/access.ts';
 import type { PublicGrantSubject } from '../../src/access/grant-subject.ts';
 import { CONTENT_QUEUES } from '../../src/content/work-contract.ts';
 import { buildBoardAndThreads, type FixtureResources } from '../content/support/erasure-operation-fixtures.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 
 const barrierTable = 'content.erasure_operation_test_barrier';
 const sleep = () => new Promise<void>((resolve) => setTimeout(resolve, 15));

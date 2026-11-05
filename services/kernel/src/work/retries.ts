@@ -1,5 +1,5 @@
 import type { StepConfig } from '@dbos-inc/dbos-sdk';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 
 /** Shared DBOS retry policy for durable steps that issue kernel commands. */
 export const COMMAND_STEP_RETRIES = Object.freeze({

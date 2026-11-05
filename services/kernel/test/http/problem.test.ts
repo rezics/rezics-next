@@ -3,7 +3,7 @@ import { t } from 'elysia';
 import { Value } from 'typebox/value';
 import { RealmLastOwnerError } from '../../src/access/realm-ownership.ts';
 import { ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { ProblemError, problemResponse, problemSchema } from '../../src/http/problem.ts';
 
 test('RealmLastOwnerError has an exact evidence-free nonretryable409 response and schema', async () => {

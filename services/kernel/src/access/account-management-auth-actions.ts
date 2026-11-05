@@ -11,7 +11,7 @@ import { deriveAccess } from './derived-access.ts';
 import assignmentRead from './delegation-read.sql';
 import { ManagementSourceRefusedError, readNativeOperatorTransferRelation } from './management-source.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
-import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { managedAuthWorkflowDescriptor } from './workflow-approvals.ts';
 
 type Actions = NonNullable<AccountManagementPage['authActions']>;

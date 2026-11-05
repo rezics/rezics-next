@@ -3,7 +3,7 @@ import readChain from '../../src/content/read-chain.sql';
 import readDates from '../../src/content/read-revision-batch.sql';
 import readSubject from '../../src/semantic/read-subject-reference.sql';
 import readLabels from '../../src/semantic/read-related.sql';
-import { CommandUnavailableError } from '../../src/access/unavailable.ts';
+import { CommandUnavailableError } from '../../src/request/unavailable.ts';
 import { assertGrowthAccessPaths, checkGrowth, type ReportSample } from '../support/growth.ts';
 import { observeSql, type SqlExecution } from './support/sql-observer.ts';
 import {

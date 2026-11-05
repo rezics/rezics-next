@@ -1,5 +1,5 @@
 import { bindSemanticProducerRoles } from '../erasure-producer.ts';
-import { classifyUnavailability } from '../../access/unavailable.ts';
+import { classifyUnavailability } from '../../request/unavailable.ts';
 import { readAccountIdentityTechnicalSource } from '../../access/agent-verification-identity-retention.ts';
 import { withRequestDeadline } from '../../request/deadline.ts';
 import {

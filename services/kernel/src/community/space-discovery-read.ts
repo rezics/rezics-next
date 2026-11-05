@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';

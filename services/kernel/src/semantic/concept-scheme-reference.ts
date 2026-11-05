@@ -2,7 +2,7 @@ import type { Source } from '@rezics/definitions/bulk';
 import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { permissionEvidenceDeadline } from '../access/permission.ts';
-import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';

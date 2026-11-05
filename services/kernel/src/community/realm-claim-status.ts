@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError } from '../request/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';

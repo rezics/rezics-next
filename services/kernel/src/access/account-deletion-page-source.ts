@@ -17,7 +17,7 @@ import { deadlineClient, within } from './authenticate.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import { deriveAccess } from './derived-access.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
-import { CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { managedAuthWorkflowDescriptor } from './workflow-approvals.ts';
 
 export type AccountDeletionAdvice = { kind: 'available' | 'refused' | 'changed' | 'unavailable' };

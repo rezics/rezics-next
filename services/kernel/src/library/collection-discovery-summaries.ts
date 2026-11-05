@@ -10,7 +10,7 @@ import {
   type DiscoveryMemberKey,
 } from './collection-discovery-context.ts';
 import { deadlineClient } from '../access/authenticate.ts';
-import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';

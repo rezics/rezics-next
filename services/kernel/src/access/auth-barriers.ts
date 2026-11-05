@@ -2,7 +2,7 @@ import { accessClock } from './access-clock.ts';
 import { systemClock } from '../clock.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import type { Access } from '../request/access.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import type { CredentialFloorPort, CredentialFloorReceipt } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';

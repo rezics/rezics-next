@@ -1,5 +1,5 @@
 import { deadlineClient } from '../access/authenticate.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { currentCommand, currentCommandResources, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { VoteReviewStaleError, VoteReviewUnavailableError, type VoteReviewGuard } from './own-votes-review.ts';

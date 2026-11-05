@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';

@@ -3,7 +3,7 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import type { CommandAttempt } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';

@@ -1,6 +1,6 @@
 import { ProblemError, PROBLEMS } from '../http/problem.ts';
 import { GrantDeniedError } from './grant-commands.ts';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 
 // Existing owning-module denial contracts have no common base class. Keep their
 // closed set of names here instead of importing domains into Access.

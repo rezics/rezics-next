@@ -72,7 +72,7 @@ import insertNativeCommit from './identity-epoch-store-insert-native-commit.sql'
 import commandTime from '../command/time.sql';
 import commandNoEffect from '../command/no-effect-fence.sql';
 import partitionRead from '../partition/read.sql';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import {
   identitySourceConsumerLibraryWork,

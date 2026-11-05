@@ -3,7 +3,7 @@ import { enrollCommerceCopyIntents } from '../access/live-copy-erasure.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { fenceOperationalAccount } from '../access/account-share.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import {
   runOperationalTransaction,
   enqueueIntent,

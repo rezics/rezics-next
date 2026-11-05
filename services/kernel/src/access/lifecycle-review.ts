@@ -11,7 +11,7 @@ import { suspensionDeclaration, suspensionRequestDigest } from './suspension.ts'
 import { reinstatementDeclaration, reinstatementRequestDigest } from './reinstatement.ts';
 import { activeHome, effects, hash, originalResult, sameHome, unknownOriginal } from './lifecycle-review-source.ts';
 import type { LifecycleReview, LifecycleReviewInput, LifecycleOriginalResult } from './lifecycle-review-contract.ts';
-import { classifyUnavailability } from './unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 
 const declarations = [suspensionDeclaration, reinstatementDeclaration] as const;
 type Target = LifecycleReview['account'] &

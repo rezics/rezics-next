@@ -27,7 +27,7 @@ import type { Pool } from 'pg';
 import { readPublicAccountByAgent } from '../../access/account-data.ts';
 import { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
 import { deadlineClient } from '../../access/authenticate.ts';
-import { AccessUnavailableError } from '../../access/unavailable.ts';
+import { AccessUnavailableError } from '../../request/unavailable.ts';
 import { readItemTypes } from '../../semantic/subject.ts';
 import { withConnection } from '../../database/pool.ts';
 import type { createApp } from '../../http/app.ts';

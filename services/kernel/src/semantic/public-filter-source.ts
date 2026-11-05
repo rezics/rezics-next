@@ -10,7 +10,7 @@ import type {
   PublicFilterSourceFactory,
   RecordPrivacyReduction as RecordPrivacyReductionType,
 } from './public-filter-source-contract.ts';
-import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError } from '../request/unavailable.ts';
 import type { JoinedPopulationRequest, PublicFilterNativeSource } from './public-filter-source-binding.ts';
 import type {
   PublicFilterConsumerContext,
@@ -20,7 +20,7 @@ import { readPublicFilterPopulation } from './public-filter-coverage-population.
 import { createPublicFilterSourceBinding } from './public-filter-source-binding.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Pool } from 'pg';

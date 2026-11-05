@@ -1,4 +1,4 @@
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { readRealm, type RealmView } from '../community/realm.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck } from '../request/access.ts';

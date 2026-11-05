@@ -34,7 +34,7 @@ import { withReadTransaction } from '../semantic/read.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { viewerActionReadTime } from './index.ts';
 import { deadlineClient, within } from './authenticate.ts';
-import { AccessUnavailableError, classifyUnavailability, requireAccessDeadline } from './unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability, requireAccessDeadline } from '../request/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import globalRead from './bootstrap-governance-read.sql';
 import accountRead from './agent-verification-account-read.sql';

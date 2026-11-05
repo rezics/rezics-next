@@ -6,7 +6,7 @@ import {
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from '../content/source-fences.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';

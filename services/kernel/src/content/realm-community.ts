@@ -1,6 +1,6 @@
 import { t } from 'elysia';
 import { isDeepStrictEqual } from 'node:util';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { BOARD_RECENT_THREAD_LIMIT, observeBoardRecentThreads, type ContentBoardDependencies } from './boards.ts';
 import { createConversationActivityBatch } from './conversation-activity.ts';
 import {

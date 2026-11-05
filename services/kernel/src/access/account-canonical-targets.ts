@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { readAccountDiscoveryBindings, readAccountDiscoverySummaries } from './account-discovery-source.ts';
 import { readPublicViews, type PublicViews } from './public-views.ts';
-import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accountAgentId, accountAgentsForSubjects, type AccountAgentLink } from '../semantic/agents.ts';

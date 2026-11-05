@@ -5,7 +5,7 @@ import { readPartitions } from '../partition/partition.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { publicFilterCreationConsumer } from '../semantic/public-filter-creation-consumer.ts';
-import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 export { publicFilterCreationConsumer } from '../semantic/public-filter-creation-consumer.ts';
 
 export type AccountDiscoveryReductionHead = Readonly<{

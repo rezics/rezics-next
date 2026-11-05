@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

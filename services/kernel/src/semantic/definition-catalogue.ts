@@ -16,7 +16,7 @@ import {
 } from '@rezics/definitions';
 import { accessCheck, type Actor, type Access } from '../request/access.ts';
 import { EMPTY_ACCESS_WORK, type AccessWorkAccounting } from '../access/work.ts';
-import { AccessUnavailableError, CommandUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError, throwAccessUnavailable } from '../request/unavailable.ts';
 import { releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { readNativeAccessTime } from '../access/authenticate.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';

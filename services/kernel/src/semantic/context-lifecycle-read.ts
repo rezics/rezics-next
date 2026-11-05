@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { viewerActionReadTime } from '../access/index.ts';
 import { deadlineClient } from '../access/authenticate.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { prepareReadDecisions, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';

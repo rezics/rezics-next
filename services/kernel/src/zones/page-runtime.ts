@@ -3,7 +3,7 @@ import { parseFilter, type FilterDocument } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { isDeepStrictEqual } from 'node:util';
 import { admitGroup } from '../access/gates/admission.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { ProblemError, PROBLEMS } from '../http/problem.ts';
 import { createBuiltinRuntime } from '../library/builtin-runtime.ts';
 import { activeProfile } from '../presentation/profiles.ts';

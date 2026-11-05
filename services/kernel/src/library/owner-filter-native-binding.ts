@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,

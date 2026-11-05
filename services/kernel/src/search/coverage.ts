@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { createCoverageProjection, observeCoverageHome } from './coverage-projection.ts';
 import type { BatchResult } from '../events/log.ts';
 import { ProblemError } from '../http/problem.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { readIdentityBasis } from '../semantic/identity-basis.ts';
 import { createCoverageStore, type HomeGuard } from './coverage-store.ts';
 import * as codec from './coverage-store-codec.ts';

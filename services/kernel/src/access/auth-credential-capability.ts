@@ -12,7 +12,7 @@ import consumedWorkflow from './auth-credential-capability-workflow-read.sql';
 import reservationRead from './operator-reservation.sql';
 import memberRead from './operator-member.sql';
 import { createCredentialFloorHook } from './auth-barriers.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import type {
   AuthSessionPort,
   CredentialApprovalPorts,

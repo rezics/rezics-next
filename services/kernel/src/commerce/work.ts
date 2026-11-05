@@ -1,5 +1,5 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import type { WorkerAuthorization } from '../work/authorization.ts';
 import { registerSubjectOfferWork } from './subject-offer-work.ts';
 import { registerCreatorSales } from './creator-sales-work.ts';

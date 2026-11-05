@@ -1,4 +1,4 @@
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { tupleRoute, type ImportedFieldGroup } from '../content/imported-contract.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';

@@ -1,5 +1,5 @@
 import { systemClock, type KernelClock } from '../clock.ts';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, currentCommand } from '../command/command.ts';
 import type { Access, AccessClient } from '../request/access.ts';

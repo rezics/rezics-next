@@ -13,7 +13,7 @@ import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { accessClock } from './access-clock.ts';
-import { AccessUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import { readAccount, readOrganizationRole, readPublicIdentities } from './account-data.ts';
 import membersPage from './management-members.sql';

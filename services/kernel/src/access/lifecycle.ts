@@ -6,7 +6,7 @@ import { ProblemError } from '../http/problem.ts';
 import { accessClock } from './access-clock.ts';
 import { workflowApprovalBinding } from './workflow-approvals.ts';
 import tombstoneOperator from './workflow-approvals-tombstone-operator.sql';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { createHash } from 'node:crypto';

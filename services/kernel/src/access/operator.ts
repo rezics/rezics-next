@@ -1,6 +1,6 @@
 import { accessClock } from './access-clock.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import { verifiedKernelExpiry } from './approved-identity.ts';
 import credentialBind from './operator-opening-credential-bind.sql';

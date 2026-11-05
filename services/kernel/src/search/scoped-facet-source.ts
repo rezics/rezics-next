@@ -9,7 +9,7 @@ import type { createSearchScopeForService } from './service-scope.ts';
 import { subjectPartition } from './source.ts';
 import type { PreparedRealmScope } from './realm-scope.ts';
 import { ProblemError } from '../http/problem.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 
 type SearchResourceScope = FacetDiscoveryScope;
 

@@ -2,7 +2,7 @@ import type { DurableOperationAnchor } from './durable-initiator.ts';
 import { routeOf } from '../route/route.ts';
 import { defineQuery } from 'reylo';
 import chunkStatement from './write-rate-chunk.sql';
-import { throwAccessUnavailable } from './unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 import type { Pool } from 'pg';
 import type { Actor } from '../request/access.ts';
 import { deadlineClient } from './authenticate.ts';

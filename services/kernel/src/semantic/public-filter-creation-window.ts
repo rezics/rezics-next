@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 
 /** A finite original outbox interval. This is retained inside the existing
  * immutable Source repair-step state, never supplied by a public caller.

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../../src/clock.ts';
-import { CommandUnavailableError } from '../../src/access/unavailable.ts';
+import { CommandUnavailableError } from '../../src/request/unavailable.ts';
 import { PageCursorError } from '../../src/semantic/page.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 import { newId } from '../../src/route/route.ts';

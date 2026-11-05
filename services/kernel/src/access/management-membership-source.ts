@@ -6,7 +6,7 @@ import { withConnection } from '../database/pool.ts';
 import { mintReadTime, authoritativeTimeValue, releaseOperationalTime } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import { accessClock } from './access-clock.ts';
-import { AccessUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import actorSource from './management-membership-source-actor.sql';
 import accountSource from './management-membership-source-account.sql';

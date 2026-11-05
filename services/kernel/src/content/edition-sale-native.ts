@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { createInitiatorRestorer, DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
 import { createAuthConsentReader, readAuthConsentConfig } from '../access/auth-consent.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { accessCheck, type Access } from '../request/access.ts';
 import type { ContentEditionSaleAuthority } from './edition-model.ts';

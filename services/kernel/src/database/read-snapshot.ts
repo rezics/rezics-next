@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import { readPartition, readPartitions, type Partition } from '../partition/partition.ts';
 
 /** Bind a logical home and retain the exact partition observation used by the read. */

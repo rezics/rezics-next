@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { actingCommandAccount, commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
 import { admitGroup } from '../access/gates/admission.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { throwAccessUnavailable } from '../access/unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Access, Actor } from '../request/access.ts';

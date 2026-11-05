@@ -4,7 +4,7 @@ import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts
 import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
 import { ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
 import { REALM_OWNER_ROLE } from '../../src/access/realm-ownership.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import {
   createRealmMembership,
   readMembershipInitiator,

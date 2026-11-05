@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { CommandUnavailableError, IdempotencyConflictError } from '../../src/command/command.ts';
 import { COMMAND_STEP_RETRIES } from '../../src/work/retries.ts';
 

@@ -1,5 +1,5 @@
 import { t } from 'elysia';
-import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import {

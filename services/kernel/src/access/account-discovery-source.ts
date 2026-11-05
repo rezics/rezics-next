@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient } from 'pg';
 import type { AccountKind } from './account-data.ts';
-import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
 import { readPartitions } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

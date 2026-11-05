@@ -11,7 +11,7 @@ import type {
 import type { PublicFilterCost } from './public-filter-source-contract.ts';
 import { withReadTransaction } from './read.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { requireAccessDeadline, classifyUnavailability } from '../access/unavailable.ts';
+import { requireAccessDeadline, classifyUnavailability } from '../request/unavailable.ts';
 import { mintReadTime } from '../command/command.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';

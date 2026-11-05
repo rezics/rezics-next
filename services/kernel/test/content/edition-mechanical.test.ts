@@ -10,7 +10,7 @@ import {
   readContentEditionSaleAuthority,
   readContentEditionMechanicalSaleAuthority,
 } from '../../src/content/edition-sale.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { seedGovernanceAuthority, seedResourceDenial } from './support/disclosure-fixtures.ts';
 import { createNativeContentSystem, type NativeContentSystem } from './support/native-system.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';

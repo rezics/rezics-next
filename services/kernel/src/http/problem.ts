@@ -16,7 +16,7 @@ export {
   type FieldError,
 } from './problem-error.ts';
 import { commandTimingSnapshot } from '../command/timing.ts';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
 import { NotFound, ParseError, ValidationError, t } from 'elysia';

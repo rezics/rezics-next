@@ -1,6 +1,6 @@
 import type { DocumentNode } from '@rezics/document';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import {
   discloseThreads,
   readCitationDisclosure,

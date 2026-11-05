@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { deriveAccess } from '../../src/access/derived-access.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { readableSubjects, resolveSubject } from '../../src/library/subject-anchor.ts';

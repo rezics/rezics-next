@@ -8,7 +8,7 @@ import { readAccount } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { readAssignment } from './delegation-commands.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import {
   type createWorkflowApprovals,
   workflowApprovalBinding,

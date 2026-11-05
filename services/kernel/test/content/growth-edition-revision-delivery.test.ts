@@ -1,7 +1,7 @@
 import { afterAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { serializeDocument } from '@rezics/document';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { clearErasedPostRevisions } from '../../src/content/erased-post-cleanup.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { assertGrowthAccessPaths, checkGrowth, type GrowthReport } from '../support/growth.ts';

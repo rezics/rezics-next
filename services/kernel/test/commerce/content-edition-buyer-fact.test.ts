@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import pg from 'pg';
 import { matchesContentEditionBuyerFact, type ContentEditionBenefit } from '../../src/access/authenticated-benefit.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../../src/command/command.ts';
 import { createContentEditionBuyerFactReader } from '../../src/commerce/content-edition-buyer-fact.ts';
 import type { CapturedContentEdition } from '../../src/commerce/model.ts';

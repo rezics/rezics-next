@@ -1,5 +1,5 @@
 import { readNativePermissionAccount } from './account-authority.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';

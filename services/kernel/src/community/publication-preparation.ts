@@ -1,6 +1,6 @@
 import { t } from 'elysia';
 import { deadlineClient } from '../access/authenticate.ts';
-import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Actor } from '../request/access.ts';

@@ -4,7 +4,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { accessClock } from '../../src/access/access-clock.ts';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import roles from '../../src/access/resource-roles.json';
-import { AccessUnavailableError, classifyUnavailability } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError, classifyUnavailability } from '../../src/request/unavailable.ts';
 import { ConfigError } from '../../src/commerce/config.ts';
 import { receiptKeysFor } from '../../src/command/receipt-key.ts';
 import { mountedContentEditionConsent } from '../../src/content/edition-sale-consent.ts';

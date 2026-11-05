@@ -141,7 +141,7 @@ export function decodeDiscoveryCursor(
 
 import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { DISCOVERY_PARTITION, discoverySnapshot, stateColumns } from './discovery-projection-store.ts';
 import {
   currentDiscoveryCandidates,

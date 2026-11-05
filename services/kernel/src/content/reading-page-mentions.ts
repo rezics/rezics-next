@@ -2,7 +2,7 @@ import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { Pool } from 'pg';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';

@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import { resourceAuthorization } from '../access/index.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, commandTime, principalCommandIdentity, runCommand } from '../command/command.ts';

@@ -8,7 +8,7 @@ import type { SearchService } from '../search/service-scope.ts';
 import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';
 import { AuthenticationError } from '../request/access.ts';
 import { ProblemError } from '../http/problem.ts';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { createContinueReads } from '../library/continue-reads.ts';
 import { createFollowActivitySource } from '../library/follow-activity.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';

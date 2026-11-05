@@ -18,7 +18,7 @@ import {
 } from '../access/account-discovery-source.ts';
 import { readRelease, freeze } from './definitions.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import registerSource from './public-filter-source-binding-register.sql';
 import defineSource from './public-filter-source-binding-define.sql';

@@ -1,5 +1,5 @@
 import { accessClock } from './access-clock.ts';
-import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';

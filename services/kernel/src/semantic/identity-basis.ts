@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { withReadTransaction } from './read.ts';
 

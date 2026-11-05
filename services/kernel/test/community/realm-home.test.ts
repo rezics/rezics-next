@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { Account, CommunityDriver, Fixture } from '../../../../specs/community-driver.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { REALM_OWNER_ROLE } from '../../src/access/realm-ownership.ts';
 import { createRealmHomeBoardObservationReader } from '../../src/content/realm-board-home.ts';
 import { createRealmHomePublicationObservationReader } from '../../src/community/realm-home-publications.ts';

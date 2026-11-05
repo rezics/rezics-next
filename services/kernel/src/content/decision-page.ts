@@ -4,7 +4,7 @@ import { readAccount } from '../access/account-data.ts';
 import { ApprovalIdentityDeniedError, verifiedBearerExpiry } from '../access/approved-identity.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { readAssignment } from '../access/delegation-commands.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, actorOf, AuthenticationError, type Actor } from '../request/access.ts';

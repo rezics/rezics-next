@@ -1,6 +1,6 @@
 import type { AccessWorkAccounting, AccessWorkProducer } from '../access/work.ts';
 import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
-import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
 import { accessRoot } from '../access/derived-access.ts';
 import { hasOriginalAuthenticator } from '../access/authentication-work.ts';
 import type { Pool, PoolClient } from 'pg';

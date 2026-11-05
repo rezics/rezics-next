@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { releaseDigest } from '@rezics/definitions';
-import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
+import { classifyUnavailability, requireAccessDeadline } from '../request/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';

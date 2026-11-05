@@ -758,7 +758,7 @@ test('missing exact immutable Copy release never borrows current labels and tran
     native.pool.query = query;
   }
   const { deriveAccess } = await import('../../src/access/derived-access.ts');
-  const { AccessUnavailableError } = await import('../../src/access/unavailable.ts');
+  const { AccessUnavailableError } = await import('../../src/request/unavailable.ts');
   const access = deriveAccess(native.access, {
     async prepare(actor, action, resource, context) {
       if (action === 'subject:read') throw new AccessUnavailableError('overloaded');

@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { createAuthConsentReader, readAuthConsentConfig, type CurrentConsentReader } from '../access/auth-consent.ts';
 import { createAccess } from '../access/index.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { readReceiptKeyRing } from '../command/receipt-key.ts';
 import { createKernel } from '../http/kernel.ts';

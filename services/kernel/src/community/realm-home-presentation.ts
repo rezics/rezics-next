@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import type { CommunityPresentation } from '../content/community-presentation-model.ts';
 import { readCommunityPresentations } from '../content/community-presentation.ts';
 import type { ReadContext } from '../content/model.ts';

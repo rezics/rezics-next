@@ -1,7 +1,7 @@
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { Actor, AccountActor } from '../request/access.ts';

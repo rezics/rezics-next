@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { readAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
 import { noEffect, type CommandEvent, type CommandTransaction } from '../command/command.ts';

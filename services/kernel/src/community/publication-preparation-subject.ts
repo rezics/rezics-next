@@ -1,4 +1,4 @@
-import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError } from '../request/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

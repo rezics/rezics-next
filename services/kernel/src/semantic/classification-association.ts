@@ -3,7 +3,7 @@ import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { accessCheck, type Access, type Actor, type Resource } from '../request/access.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
-import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { withReadTransaction } from './read.ts';
 import { readCandidateDisclosure } from './disclosure.ts';
 import { readItemIdentityVersion } from './item-identity.ts';

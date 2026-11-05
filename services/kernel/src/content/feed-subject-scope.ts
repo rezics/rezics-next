@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PoolClient } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';

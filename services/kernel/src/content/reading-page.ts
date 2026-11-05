@@ -1,6 +1,6 @@
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { readViewerActions, type ViewerActionBindings } from '../access/viewer-actions.ts';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { t } from 'elysia';

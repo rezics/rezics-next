@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { readPartition } from '../partition/partition.ts';
 import { routeOf } from '../route/route.ts';

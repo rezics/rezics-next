@@ -9,7 +9,7 @@ import { deadlineClient, within } from './authenticate.ts';
 import { readAccount } from './account-data.ts';
 import { ERASURE_PARTICIPANTS, readErasureStatus } from './erasure.ts';
 import { GLOBAL_CONTEXT } from './gates/catalogue.ts';
-import { classifyUnavailability } from './unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 
 export type ManagedErasureStatus = Readonly<{
   accountId: string;

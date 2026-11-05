@@ -1,4 +1,4 @@
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { readViewerActions } from '../access/viewer-actions.ts';
 import { AuthenticationError, type Actor } from '../request/access.ts';
 import type { FeedItem, FeedReactionAdvice, FeedReactionTarget } from './feed-contract.ts';

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { completeAgentVerification, writeAgentVerificationPage } from '../../src/access/agent-verification.ts';
-import { CommandUnavailableError } from '../../src/access/unavailable.ts';
+import { CommandUnavailableError } from '../../src/request/unavailable.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import type { Access } from '../../src/request/access.ts';

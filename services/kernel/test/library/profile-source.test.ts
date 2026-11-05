@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { authoritativeTimeValue, runCommand, type AuthoritativeTime } from '../../src/command/command.ts';
 import { readLibraryProfileSource, type LibraryProfileSource } from '../../src/library/profile-source.ts';
 import type { Access, Actor } from '../../src/request/access.ts';

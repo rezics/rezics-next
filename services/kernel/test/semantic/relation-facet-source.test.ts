@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg, { type Pool } from 'pg';
 import { lookupEventType } from '../../src/events/catalogue.ts';
-import { classifyUnavailability } from '../../src/access/unavailable.ts';
+import { classifyUnavailability } from '../../src/request/unavailable.ts';
 import * as semanticSource from '../../src/semantic/search-source.ts';
 import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';

@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import { runOperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';

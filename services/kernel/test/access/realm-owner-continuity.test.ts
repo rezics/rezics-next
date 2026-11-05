@@ -8,7 +8,7 @@ import {
   RealmLastOwnerError,
 } from '../../src/access/index.ts';
 import { problemResponse } from '../../src/http/problem.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { resolveResourceRoles } from '../../src/access/resource-roles.ts';
 import { ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
 import { authoritativeTimeValue, currentCommand, mintReadTime } from '../../src/command/command.ts';

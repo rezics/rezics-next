@@ -1,4 +1,4 @@
-import { requireAccessDeadline } from '../unavailable.ts';
+import { requireAccessDeadline } from '../../request/unavailable.ts';
 import type { Pool } from 'pg';
 import { deadlineClient, within } from '../authenticate.ts';
 import {

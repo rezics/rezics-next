@@ -7,7 +7,7 @@ import type { DurableInitiatorRecord, DurableOperationAnchor } from '../access/d
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { assertRealmOwnerMayLeave, lockRealmOwnership, REALM_OWNER_ROLE } from '../access/realm-ownership.ts';
 import { resourceRoleHeld } from '../access/resource-role-held.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,

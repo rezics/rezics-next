@@ -11,7 +11,7 @@ import {
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf, newId } from '../route/route.ts';
 import type { WorkClient } from '../work/client.ts';
-import { CommandUnavailableError } from './unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import { encodeLocator } from '../history/locator.ts';
 import { validateRoleMask } from '../history/contracts.ts';
 

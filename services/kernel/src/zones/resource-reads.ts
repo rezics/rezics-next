@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { CompositionDocument } from '@rezics/composition';
 import { createHash } from 'node:crypto';
 import { readAccount } from '../access/account-data.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';

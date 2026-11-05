@@ -6,7 +6,7 @@ import { routeOf } from '../route/route.ts';
 import { type AccountLink, type AccountPublicViews } from './account-data.ts';
 import { viewerActionReadTime } from './index.ts';
 import { deadlineClient, within } from './authenticate.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import {
   accessCheckout,
   accessNativeDeclaration,

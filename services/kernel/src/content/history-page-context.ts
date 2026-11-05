@@ -1,6 +1,6 @@
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { readViewerActions } from '../access/viewer-actions.ts';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';

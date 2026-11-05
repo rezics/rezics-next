@@ -16,7 +16,7 @@ import { readAccount, readOrganizationRole } from './account-data.ts';
 import { readManagedAuthActions } from './account-management-auth-actions.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
-import { CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 
 export type OrganizationDeletionRead =
   | { kind: 'ready'; account: { id: string; kind: 'organization'; handle: string | null; displayName: string | null } }

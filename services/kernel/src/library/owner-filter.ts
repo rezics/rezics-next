@@ -12,7 +12,7 @@ import { systemClock, type KernelClock } from '../clock.ts';
 import { ProblemError } from '../http/problem.ts';
 import { parseStrictJson } from '../http/strict-json.ts';
 import { accessCheck, AuthenticationError, type Access, type Actor } from '../request/access.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { routeOf } from '../route/route.ts';
 import { activeRelease, freeze, readRelease } from '../semantic/definitions.ts';
 import type { RelationFacetMatch } from '../search/source.ts';

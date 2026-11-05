@@ -1,4 +1,4 @@
-import { throwAccessUnavailable } from './unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { authoritativeTimeValue } from '../command/command.ts';

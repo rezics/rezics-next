@@ -12,7 +12,7 @@ import {
 } from '../command/command.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import readReceipt from '../command/read-receipt.sql';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { withRequestDeadline, deadlineFor } from '../request/deadline.ts';
 import type { Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';

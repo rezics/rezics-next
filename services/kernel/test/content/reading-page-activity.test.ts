@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Compile } from 'typebox/compile';
-import { CommandUnavailableError } from '../../src/access/unavailable.ts';
+import { CommandUnavailableError } from '../../src/request/unavailable.ts';
 import type {
   ConversationActivityBatch,
   ConversationActivityCurrent,

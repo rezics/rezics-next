@@ -8,7 +8,7 @@ import {
   PublicFilterSourceDefinitionError,
   readPublicFilterSourceDefinition,
 } from '../semantic/public-filter-source-binding.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { readIdentitySourceProjection } from '../semantic/search-source.ts';

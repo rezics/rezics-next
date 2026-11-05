@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import migrationPhase from './entry-profile-migration-phase-read.sql';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';

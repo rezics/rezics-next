@@ -4,7 +4,7 @@ import { resourceAuthorization } from '../access/resource-authorization.ts';
 import { noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../request/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, AuthenticationError, type AccountActor, type Actor } from '../request/access.ts';

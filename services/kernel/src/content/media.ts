@@ -18,7 +18,7 @@ import { initializeResourceGrants, parentCreationAuthorization } from '../access
 import { commandAccessContext } from '../access/command-admission.ts';
 import { readAccount as readAccountHome } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';

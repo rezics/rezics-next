@@ -1,6 +1,6 @@
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 
 export type ContentEditionBenefit = Readonly<{
   kind: 'content-edition';

@@ -9,7 +9,7 @@ import {
   type CommandReceipt,
   type CommandAuthorization,
 } from '../command/command.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';

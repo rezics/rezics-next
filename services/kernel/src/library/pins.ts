@@ -4,7 +4,7 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
 import { admitGroup } from '../access/gates/admission.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { throwAccessUnavailable } from '../access/unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,

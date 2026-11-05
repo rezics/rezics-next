@@ -9,7 +9,7 @@ import { accessCheck, AuthenticationError, type Access, type Actor } from '../..
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../../tokens/list-cursor.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { deadlineClient, within } from '../authenticate.ts';
-import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../../request/unavailable.ts';
 import { GLOBAL_CONTEXT, readExposure } from './catalogue.ts';
 import { mountedExposureCatalogue } from './visibility.ts';
 

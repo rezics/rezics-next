@@ -7,7 +7,7 @@ import {
 } from '../access/authenticated-benefit.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { readAccount } from '../access/account-data.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';

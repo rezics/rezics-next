@@ -11,7 +11,7 @@ import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { readAccount, readOrganizationRole, readPublicIdentities } from './account-data.ts';
 import { readMembershipInverse, MembershipInverseIncompleteError } from './membership-inverse.ts';
-import { classifyUnavailability } from './unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import operatorPage from './operator-page.sql';
 import membersPage from './management-members.sql';
 import relationRead from './management-relation.sql';

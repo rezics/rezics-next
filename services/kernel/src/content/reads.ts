@@ -34,7 +34,7 @@ import {
   type DurableOperationAnchor,
   type InitiatorRestorer,
 } from '../access/durable-initiator.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition, readPartitions, type Partition } from '../partition/partition.ts';

@@ -80,7 +80,7 @@ import { revisionResource, StaleRevisionAuthorshipError } from '../authorship.ts
 import { readSubjectCorrectionActions } from '../viewer-actions.ts';
 import { workReleaseCardFieldLimit, workReleaseCardLimit } from '../work-release-cards.ts';
 import type { ViewerActionBindings } from '../../access/viewer-actions.ts';
-import { requireAccessDeadline } from '../../access/unavailable.ts';
+import { requireAccessDeadline } from '../../request/unavailable.ts';
 import { PublicDocumentViewSchema } from '../../content/document-public.ts';
 import { readCharacterPublicDocuments } from '../character-public-reading-documents.ts';
 import { withReadTransaction } from '../read.ts';

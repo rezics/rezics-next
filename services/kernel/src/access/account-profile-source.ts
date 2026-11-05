@@ -14,7 +14,7 @@ import { deadlineClient } from './authenticate.ts';
 import { routeOf } from '../route/route.ts';
 import { readAccount } from './account-data.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
-import { requireAccessDeadline } from './unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import type { AccountManagementPage } from './account-management.ts';
 
 export type RenameAccountProfile = { profile: { id: string; kind: 'actor'; handle: string | null } };

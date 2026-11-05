@@ -6,7 +6,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts';
 import { accessCheck, type AccessClient, type Resource } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';

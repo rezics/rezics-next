@@ -19,7 +19,7 @@ import {
   CommandUnavailableError,
   requireAccessDeadline,
   throwAccessUnavailable,
-} from './unavailable.ts';
+} from '../request/unavailable.ts';
 import humanSource from './automated-operator-source-human.sql';
 import operatorSource from './automated-operator-source.sql';
 

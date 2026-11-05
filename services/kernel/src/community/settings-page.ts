@@ -2,7 +2,7 @@ import { documentText, DocumentSnapshotSchema } from '@rezics/document';
 import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { readExactPublishedRules } from '../content/reads.ts';
 import { rulesKey } from '../content/community-presentation-rules.ts';

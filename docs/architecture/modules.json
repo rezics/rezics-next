@@ -478,7 +478,8 @@
         "services/kernel/src/command/execution-contract.ts",
         "services/kernel/src/history/operational-work.ts",
         "services/kernel/src/work/selected-runtime.ts",
-        "services/kernel/src/http/kernel.ts"
+        "services/kernel/src/http/kernel.ts",
+        "services/kernel/src/request/unavailable.ts"
       ],
       "allowedDependencies": [
         "bounds",

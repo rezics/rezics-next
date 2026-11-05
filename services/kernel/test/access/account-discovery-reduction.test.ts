@@ -6,7 +6,7 @@ import {
 } from '../../src/access/account-discovery-reduction.ts';
 import { accountDiscoverySource, readAccountDiscoveryBindings } from '../../src/access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../../src/access/account-discovery-work.ts';
-import { AccessUnavailableError, CommandUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError } from '../../src/request/unavailable.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 

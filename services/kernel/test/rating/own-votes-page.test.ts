@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { STANDARD_QUESTION_ID, VoteInvalidError } from '../../src/rating/votes.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
 import * as summaries from '../../src/semantic/summaries.ts';
 import { createOwnVotesReader } from '../../src/rating/own-votes-page.ts';

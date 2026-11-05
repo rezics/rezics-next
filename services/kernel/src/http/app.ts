@@ -1,5 +1,5 @@
 import { Elysia, t, ValidationError } from 'elysia';
-import { throwAccessUnavailable } from '../access/unavailable.ts';
+import { throwAccessUnavailable } from '../request/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';

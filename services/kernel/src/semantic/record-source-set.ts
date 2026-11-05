@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import { declareCommandRecordSourceSet, recordHistorySourceKey } from '../history/record-source.ts';
 import { readAuthoredFieldHistorySource } from '../content/authored-fields-history.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { FactRow } from './item.ts';

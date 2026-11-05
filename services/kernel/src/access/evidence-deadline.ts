@@ -1,4 +1,4 @@
-import { requireAccessDeadline } from './unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 
 export const ACCESS_EVIDENCE_TTL_MS = 1_000;
 

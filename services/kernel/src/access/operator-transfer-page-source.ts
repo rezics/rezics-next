@@ -22,7 +22,7 @@ import {
 } from './management-source.ts';
 import { managedAuthWorkflowDescriptor } from './workflow-approvals.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
-import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 
 export type OperatorTransferHandoff = OperatorTransferState & {
   version: 1;

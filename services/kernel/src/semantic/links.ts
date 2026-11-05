@@ -6,7 +6,7 @@ import { semanticCopyRoles } from './erasure-producer.ts';
 import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
 import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 import { readWorkReleaseCards, workReleaseCardLimit, type WorkReleaseCards } from './work-release-cards.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';

@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { withConnection, discardConnection } from '../database/pool.ts';
-import { requireAccessDeadline, CommandUnavailableError } from '../access/unavailable.ts';
+import { requireAccessDeadline, CommandUnavailableError } from '../request/unavailable.ts';
 
 /** Internal domain key. It cannot be a public property, inferred hit or caller filter key. */
 export const PUBLIC_FILTER_ACCOUNT_DOMAIN = '["domain","accounts"]';

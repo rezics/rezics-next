@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
-import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
+import { classifyUnavailability, requireAccessDeadline } from '../request/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import {
   decodePublicFilterNativeState as decode,

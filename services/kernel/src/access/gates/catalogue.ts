@@ -1,5 +1,5 @@
 import { accessNativeWork, accessCheckout, accessTransaction, type AccessWorkAccounting } from '../work.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline } from '../../request/unavailable.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';

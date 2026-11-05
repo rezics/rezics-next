@@ -1,7 +1,7 @@
 import { expect, mock, spyOn, test } from 'bun:test';
 import pg from 'pg';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { ConfigError } from '../../src/commerce/config.ts';
 import { receiptKeysFor } from '../../src/command/receipt-key.ts';
 import { mountedContentEditionConsent } from '../../src/content/edition-sale-consent.ts';

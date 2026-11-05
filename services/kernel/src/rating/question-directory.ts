@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { readRealm } from '../community/realm.ts';
 import { withConnection } from '../database/pool.ts';

@@ -8,7 +8,7 @@ import {
   type ContentEditionBuyerFactReader,
 } from '../../src/access/authenticated-benefit.ts';
 import { createAccess, type PermissionConfig, type PermissionContext } from '../../src/access/permission.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { commandAccessContext } from '../../src/access/command-admission.ts';

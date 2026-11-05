@@ -5,7 +5,7 @@ import type { Pool, PoolClient } from 'pg';
 import { checkMediaObjects, type CoverReference } from '../content/cover-reference.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
-import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { fenceKey } from './fences.ts';

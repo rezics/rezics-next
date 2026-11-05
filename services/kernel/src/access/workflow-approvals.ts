@@ -3,7 +3,7 @@ import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-c
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle } from './handle-policy.ts';
 import { accessClock } from './access-clock.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import { createSuspensionCommands } from './suspension.ts';
 import { createSessionRevocationCommands } from './session-revocation.ts';
 import type { CredentialFloorBinding as CredentialEffectBinding } from '@rezics/auth-contract';

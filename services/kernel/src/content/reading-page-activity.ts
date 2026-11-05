@@ -1,6 +1,6 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
-import { classifyUnavailability } from '../access/unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { ConversationActivityBatch, ConversationActivitySelection } from './conversation-activity.ts';
 import type { AnchoredPosition } from './model.ts';

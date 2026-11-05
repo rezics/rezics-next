@@ -1,4 +1,4 @@
-import { AccessUnavailableError, requireAccessDeadline } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 /** Neutral native dimensions, structurally compatible with the Source ledger. */

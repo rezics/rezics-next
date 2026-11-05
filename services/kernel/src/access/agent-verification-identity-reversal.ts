@@ -29,7 +29,7 @@ import {
   isLiveIdentitySourceConsumerMaintenance,
   reserveIdentitySourceConsumerNativeWork,
 } from '../semantic/identity-source-consumer-maintenance.ts';
-import { classifyUnavailability } from './unavailable.ts';
+import { classifyUnavailability } from '../request/unavailable.ts';
 import {
   accountIdentityUnavailable,
   readAccountIdentitySource,

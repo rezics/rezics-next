@@ -2,7 +2,7 @@ import canonicalize from 'canonicalize';
 import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
 import { readNativeAccountStates } from '../access/account-authority.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError } from '../request/unavailable.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';

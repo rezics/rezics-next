@@ -4,7 +4,7 @@ import { noEffect, runCommand } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { deadlineClient } from '../access/authenticate.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import { withReadTransaction } from './read.ts';

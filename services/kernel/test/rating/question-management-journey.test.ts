@@ -6,7 +6,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { readQuestionManagementPage } from '../../src/rating/question-management.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import labelPage from '../../src/rating/question-label-page.sql';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { assertGrowthAccessPaths, checkGrowth, openGrowthDatabase } from '../support/growth.ts';

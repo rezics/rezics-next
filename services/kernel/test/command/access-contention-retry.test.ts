@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Type } from 'typebox';
 import { runCommand, type CommandAuthorization } from '../../src/command/command.ts';
 import { deadlineClient } from '../../src/access/authenticate.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { registerEventTypes } from '../../src/events/catalogue.ts';
 import { problemResponse } from '../../src/http/problem.ts';

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { withConnection, discardConnection } from '../database/pool.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 
 type Chain = Readonly<{ bootstrap: string; execution: string; binding: string }>;
 type Page = Readonly<{

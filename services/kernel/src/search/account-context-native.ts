@@ -3,7 +3,7 @@ import { accountAgentId, accountAgentsForSubjects } from '../semantic/agents.ts'
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import { routeOf } from '../route/route.ts';
 
 type Account = {

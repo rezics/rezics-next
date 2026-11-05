@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import { AccessWorkAccounting, type AccessWork, type AccessWorkSink } from '../access/work.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';

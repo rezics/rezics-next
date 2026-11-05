@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { classifyUnavailability } from '../../src/access/unavailable.ts';
+import { classifyUnavailability } from '../../src/request/unavailable.ts';
 import {
   completeAgentVerification,
   mergeVerifiedAgent,

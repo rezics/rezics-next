@@ -3,7 +3,7 @@ import { types } from 'node:util';
 import type { Pool, PoolClient } from 'pg';
 import type { AccountDiscoveryEnrollment } from '../access/account-discovery-reduction.ts';
 import { publicFilterCreationConsumer } from './public-filter-creation-consumer.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 
 type Binding = Readonly<{

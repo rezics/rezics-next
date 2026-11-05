@@ -6,7 +6,7 @@ import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,

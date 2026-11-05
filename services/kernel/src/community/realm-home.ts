@@ -2,7 +2,7 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { KeyRing } from '../tokens/seal.ts';
 import { deadlineClient } from '../access/authenticate.ts';
-import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { mintReadTime, authoritativeTimeValue } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { accessCheck } from '../request/access.ts';

@@ -9,7 +9,7 @@ import { createResourceCreationManifest } from '../../src/access/creation-manife
 import { resourceAuthorization, resourceAuthorizationPage } from '../../src/access/resource-authorization.ts';
 import { DurableInitiatorUnavailableError } from '../../src/access/durable-initiator.ts';
 import { createWorkflowApprovals, WorkflowApprovalDeniedError } from '../../src/access/workflow-approvals.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import { runCommand, type CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';

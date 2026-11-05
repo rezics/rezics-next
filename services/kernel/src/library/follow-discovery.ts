@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import { deadlineClient } from '../access/authenticate.ts';
 import { readAccount } from '../access/account-data.ts';
-import { classifyUnavailability, requireAccessDeadline, CommandUnavailableError } from '../access/unavailable.ts';
+import { classifyUnavailability, requireAccessDeadline, CommandUnavailableError } from '../request/unavailable.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';

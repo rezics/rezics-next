@@ -1,5 +1,5 @@
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import { commandAccessContext } from './command-admission.ts';
 import {
   ANONYMOUS_PRINCIPAL_ID,

@@ -7,7 +7,7 @@ import {
   type AuthoritativeTime,
   type CommandAttempt,
 } from '../command/command.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readNativeCollectionMemberAdmission, type CollectionMemberAdmission } from './owner-filter.ts';

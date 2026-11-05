@@ -31,7 +31,7 @@ export { readPublicViews, type PublicViews } from './public-views.ts';
 export { applyAccountAgentEffect, createAccountAgentEffect } from './account-agent-effect.ts';
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { throwEvidenceFailure } from './evidence.ts';
-export { AccessUnavailableError } from './unavailable.ts';
+export { AccessUnavailableError } from '../request/unavailable.ts';
 export {
   createContentEditionBuyerFact,
   type ContentEditionBenefit,
@@ -40,7 +40,7 @@ export {
   type ContentEditionBuyerFactReader,
 } from './authenticated-benefit.ts';
 export { createRatingCounter, type RatingCounter } from './rating-counter.ts';
-import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
 import { credentialFloorIdentityClaims, installCredentialFloorBridge } from './auth-credential-capability.ts';
 import { installAccessClock } from './access-clock.ts';
 export { accessClock } from './access-clock.ts';

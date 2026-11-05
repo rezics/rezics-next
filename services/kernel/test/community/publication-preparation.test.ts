@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { Account, CommunityDriver, Fixture, Publication } from '../../../../specs/community-driver.ts';
-import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { AccessUnavailableError } from '../../src/request/unavailable.ts';
 import readSlot from '../../src/community/publication-preparation-read.sql';
 import { readPublicationPreparation } from '../../src/community/publication-preparation.ts';
 import { newId, routeOf } from '../../src/route/route.ts';

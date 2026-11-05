@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { contentEditionBenefitBinding, copyContentEditionBenefit } from '../access/authenticated-benefit.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../request/unavailable.ts';
 import type { AccountActor } from '../request/access.ts';
 import { newId, routeOf } from '../route/route.ts';
 import { decodeCapturedContentEdition } from './benefit.ts';
