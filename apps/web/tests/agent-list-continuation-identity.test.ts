@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import type { CompositionNode } from '@rezics/composition';
-import { continueAgentList } from '../src/features/pages/agent';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { continueAgentList } = await import('../src/features/pages/agent');
 
 const node = (id: string, type = 'AccountPosts', props: Record<string, unknown> = { limit: 3 }): CompositionNode => ({
   type,

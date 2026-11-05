@@ -5,7 +5,6 @@ import { createKernelClient } from '@rezics/client';
 import { createMemoryHistory, createRootRouteWithContext, createRouter, RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
-import { contributionPage } from '../src/stories/pages/accounts-public-profile/fixtures';
 import { CollectionVisit, collectionWindowHref } from '../src/accounts/public-profile/collection-windows/visit';
 
 const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
@@ -22,6 +21,7 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
 mock.module('../src/accounts/public-profile/reader-presentation/adapter', () => ({ useProfileReading: () => undefined }));
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
+const { contributionPage } = await import('../src/stories/pages/accounts-public-profile/fixtures');
 const { loadPublicAccountJourney } = await import('../src/accounts/public-profile/page-read');
 const requests: URL[] = [];
 let fail = false;
