@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { SourceRecord } from '@rezics/conversion';
+import { projectBangumiPersonName } from '../../../packages/conversion/src/bangumi-person-names.ts';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createBoundedPublicGet, MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
 import type { CrossMediaPlan } from './cross-media-seed.ts';
@@ -54,7 +55,24 @@ function receipt(source: BangumiPersonCareerSource, row: SourceRecord): BangumiP
     source.careers.length > 7 ||
     source.careers.some(
       (career) => typeof career !== 'string' || !career.isWellFormed() || Buffer.byteLength(career, 'utf8') > 64,
-    )
+    ) ||
+    (source.personChineseName !== undefined &&
+      (!source.personChineseName.isWellFormed() ||
+        source.personChineseName.trim().length === 0 ||
+        Buffer.byteLength(source.personChineseName, 'utf8') > 4096 ||
+        [...source.personChineseName].length > 500 ||
+        /\p{Cc}/u.test(source.personChineseName))) ||
+    (source.personNameDiagnostics !== undefined &&
+      (!Array.isArray(source.personNameDiagnostics) ||
+        source.personNameDiagnostics.length > 16 ||
+        source.personNameDiagnostics.some(
+          (item) =>
+            !item ||
+            typeof item.pointer !== 'string' ||
+            item.pointer.length > 96 ||
+            typeof item.code !== 'string' ||
+            item.code.length > 64,
+        )))
   )
     throw new TypeError('Invalid sealed Bangumi Person career source');
   return source;
@@ -92,6 +110,7 @@ async function readCareers(
     if (
       !person ||
       person.id !== id ||
+      person.type !== 1 ||
       !Array.isArray(careers) ||
       careers.length > 7 ||
       careers.some(
@@ -106,10 +125,19 @@ async function readCareers(
     const etagHeader = response.headers.get('etag');
     const responseEtag = etag(etagHeader);
     if (etagHeader !== null && responseEtag === undefined) throw new TypeError('Invalid Bangumi Person ETag');
+    const names = projectBangumiPersonName(
+      person.name_cn,
+      Object.hasOwn(person, 'name_cn'),
+      person.infobox,
+      Object.hasOwn(person, 'infobox'),
+      bytes.byteLength,
+    );
     return {
       ...base,
       sourceStatus: 'available',
       careers: [...new Set(careers as string[])],
+      ...(names.chineseName === undefined ? {} : { personChineseName: names.chineseName }),
+      ...(names.diagnostics.length ? { personNameDiagnostics: names.diagnostics } : {}),
       responseDigest,
       ...(responseEtag ? { etag: responseEtag } : {}),
     };
@@ -118,7 +146,7 @@ async function readCareers(
   }
 }
 
-/** Fill only absent archive careers for selected actual Person rows through the bounded public API. */
+/** Reuse one bounded PersonDetail response for absent careers or Chinese names on selected actual Persons. */
 export async function acquireBangumiPersonCareerSources(
   plan: CrossMediaPlan,
   options: {
@@ -154,7 +182,14 @@ export async function acquireBangumiPersonCareerSources(
   const failures = new Set<string>();
   const people = selectedPeople(plan).filter((row) => {
     const payload = object(row.payload);
-    return payload?.type === 1 && !Object.hasOwn(payload, 'career');
+    if (payload?.type !== 1) return false;
+    const archiveName = projectBangumiPersonName(
+      payload.name_cn,
+      Object.hasOwn(payload, 'name_cn'),
+      undefined,
+      false,
+    ).chineseName;
+    return !Object.hasOwn(payload, 'career') || archiveName === undefined;
   });
   for (let index = 0; index < people.length; index++) {
     const row = people[index]!;
@@ -179,21 +214,69 @@ export async function acquireBangumiPersonCareerSources(
     }
   }
   const sourceByPerson = new Map(sources.map((source) => [source.externalId, source]));
+  const gaps = [...plan.gaps];
   const entities = plan.entities.bangumi.map((row) => {
     const source = sourceByPerson.get(row.key);
-    if (!source || !source.careers) return row;
-    return { ...row, payload: { ...row.payload, career: [...source.careers] } };
+    if (!source) return row;
+    const original = object(row.payload);
+    if (!original) return row;
+    const payload = { ...original };
+    if (!Object.hasOwn(payload, 'career') && source.careers) payload.career = [...source.careers];
+    if (source.personChineseName !== undefined) {
+      const archiveName = projectBangumiPersonName(
+        payload.name_cn,
+        Object.hasOwn(payload, 'name_cn'),
+        undefined,
+        false,
+      ).chineseName;
+      payload.name_cn = archiveName !== undefined && archiveName !== source.personChineseName ? null : source.personChineseName;
+      if (archiveName !== undefined && archiveName !== source.personChineseName)
+        gaps.push({
+          source: 'bangumi',
+          externalId: row.key,
+          fields: ['person.name_cn'],
+          record: { id: Number(row.key.slice('person:'.length)) },
+          reason: 'Bangumi Person name_cn sources conflict; the Chinese name was withheld',
+          property: 'schema:name',
+        });
+    } else if (
+      source.personNameDiagnostics?.some((diagnostic) =>
+        ['conflicting_source_name', 'conflicting_infobox_name', 'infobox_entry_limit'].includes(diagnostic.code),
+      )
+    ) {
+      payload.name_cn = null;
+    }
+    return { ...row, payload };
   });
-  const gaps = [...plan.gaps];
+  for (const source of sources)
+    for (const diagnostic of source.personNameDiagnostics ?? [])
+      gaps.push({
+        source: 'bangumi',
+        externalId: source.externalId,
+        fields: ['person.name_cn'],
+        record: { id: Number(source.externalId.slice('person:'.length)) },
+        reason: `Bangumi Person Chinese name withheld or reconciled: ${diagnostic.code}`,
+        property: 'schema:name',
+      });
   for (const key of failures)
-    gaps.push({
-      source: 'bangumi',
-      externalId: key,
-      fields: ['person.career'],
-      record: { id: Number(key.slice('person:'.length)) },
-      reason: 'Bangumi Person career source unavailable; dependent occupations withheld',
-      property: 'wdt:P106',
-    });
+    gaps.push(
+      {
+        source: 'bangumi',
+        externalId: key,
+        fields: ['person.career'],
+        record: { id: Number(key.slice('person:'.length)) },
+        reason: 'Bangumi Person career source unavailable; dependent occupations withheld',
+        property: 'wdt:P106',
+      },
+      {
+        source: 'bangumi',
+        externalId: key,
+        fields: ['person.name_cn'],
+        record: { id: Number(key.slice('person:'.length)) },
+        reason: 'Bangumi PersonDetail source unavailable; Chinese name withheld',
+        property: 'schema:name',
+      },
+    );
   return { ...plan, entities: { ...plan.entities, bangumi: entities }, personCareerSources: sources, gaps };
 }
 

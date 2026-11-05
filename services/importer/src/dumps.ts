@@ -114,6 +114,8 @@ export async function* readDump(
     maxChunkBytes?: number;
     counters?: DumpCounters;
     openLibraryFamily?: OpenLibraryDumpFamily;
+    /** Explicit Bangumi cross-media imports also accept pinned PersonDetail TSV rows. */
+    bangumiPersonDetailRows?: boolean;
   } = {},
 ): AsyncGenerator<SourceRecord> {
   const chunkCap = dumpChunkLimit(options.maxChunkBytes);
@@ -292,26 +294,52 @@ export async function* readDump(
             revision = rev!;
           }
         } else {
-          payload = object(text);
-          if (source === 'bangumi') {
-            if (!positive(payload.id) || ![1, 2, 3, 4, 6].includes(payload.type as number)) return invalid();
-            key = String(payload.id);
-          } else {
-            const hasRevision = Object.prototype.hasOwnProperty.call(payload, 'lastrevid');
-            const identity =
-              payload.type === 'item' ? /^Q[1-9][0-9]*/ : payload.type === 'property' ? /^P[1-9][0-9]*/ : null;
+          if (source === 'bangumi' && options.bangumiPersonDetailRows && text.includes('\t')) {
+            const cells = text.split('\t');
+            memory.hold(12, cells);
+            if (cells.length !== 5) return invalid();
+            const [type, id, sourceRevision, responseEtag, json] = cells;
             if (
-              !identity ||
-              typeof payload.id !== 'string' ||
-              // Compare the whole match: JavaScript's $ also admits a final newline.
-              identity.exec(payload.id)?.[0] !== payload.id ||
-              (hasRevision && !positive(payload.lastrevid))
+              type !== '/type/person' ||
+              !/^person:[1-9][0-9]*$/u.test(id!) ||
+              sourceRevision !== 'unversioned' ||
+              responseEtag!.length > 64 ||
+              !/^[\x20-\x7e]*$/u.test(responseEtag!) ||
+              Buffer.byteLength(json!, 'utf8') > 65_536
             )
               return invalid();
-            // Properties consume framing but never become catalogue source members.
-            if (payload.type === 'property') continue;
-            key = payload.id;
-            if (hasRevision) revision = String(payload.lastrevid);
+            payload = object(json!);
+            const requestedId = Number(id!.slice('person:'.length));
+            if (
+              !Number.isSafeInteger(requestedId) ||
+              payload.id !== requestedId ||
+              payload.type !== 1
+            )
+              return invalid();
+            key = id!;
+            revision = null;
+          } else {
+            payload = object(text);
+            if (source === 'bangumi') {
+              if (!positive(payload.id) || ![1, 2, 3, 4, 6].includes(payload.type as number)) return invalid();
+              key = String(payload.id);
+            } else {
+              const hasRevision = Object.prototype.hasOwnProperty.call(payload, 'lastrevid');
+              const identity =
+                payload.type === 'item' ? /^Q[1-9][0-9]*/ : payload.type === 'property' ? /^P[1-9][0-9]*/ : null;
+              if (
+                !identity ||
+                typeof payload.id !== 'string' ||
+                // Compare the whole match: JavaScript's $ also admits a final newline.
+                identity.exec(payload.id)?.[0] !== payload.id ||
+                (hasRevision && !positive(payload.lastrevid))
+              )
+                return invalid();
+              // Properties consume framing but never become catalogue source members.
+              if (payload.type === 'property') continue;
+              key = payload.id;
+              if (hasRevision) revision = String(payload.lastrevid);
+            }
           }
         }
         memory.hold(13, key);

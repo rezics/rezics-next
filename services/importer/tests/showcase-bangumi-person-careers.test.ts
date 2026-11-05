@@ -49,8 +49,8 @@ test('selected actual Persons use bounded API career fallback and sealed source 
 
     const requests: string[] = [];
     const bodies = new Map([
-      [8101, JSON.stringify({ id: 8101, career: ['producer', 'writer'] })],
-      [8105, JSON.stringify({ id: 9999, career: ['actor'] })],
+      [8101, JSON.stringify({ id: 8101, type: 1, career: ['producer', 'writer'] })],
+      [8105, JSON.stringify({ id: 9999, type: 1, career: ['actor'] })],
     ]);
     const fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -78,6 +78,9 @@ test('selected actual Persons use bounded API career fallback and sealed source 
     expect(selected.entities.bangumi.find(({ key }) => key === 'person:8105')?.payload).not.toHaveProperty('career');
     expect(selected.gaps).toContainEqual(
       expect.objectContaining({ externalId: 'person:8105', property: 'wdt:P106', fields: ['person.career'] }),
+    );
+    expect(selected.gaps).toContainEqual(
+      expect.objectContaining({ externalId: 'person:8105', property: 'schema:name', fields: ['person.name_cn'] }),
     );
     const source = selected.personCareerSources?.[0];
     expect(source).toMatchObject({

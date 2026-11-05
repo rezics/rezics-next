@@ -143,6 +143,8 @@ export type ImportRunResult = {
 export type ImportRunOptions = {
   disappearanceThreshold?: number;
   maxRecordBytes?: number;
+  /** Permit pinned PersonDetail TSV rows only for the explicitly selected Bangumi family. */
+  bangumiPersonDetailRows?: boolean;
   signal?: AbortSignal;
   /** Explicit fixture/diagnostic bound; production defaults to no collected keys. */
   collectionLimit?: number;
@@ -314,6 +316,7 @@ export class Importer {
       registration,
       readDump(registration.sourceKind, bytes, {
         maxRecordBytes: options.maxRecordBytes,
+        bangumiPersonDetailRows: options.bangumiPersonDetailRows,
       }),
       options,
     );

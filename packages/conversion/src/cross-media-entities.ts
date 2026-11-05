@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual, types as utilTypes } from 'node:util';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { checkStatementInput } from '@rezics/definitions/validate';
 import type { Release } from '@rezics/definitions';
 import {
   BATCH_LIMIT,
@@ -16,6 +17,7 @@ import {
   bangumiCharacterNameLimits,
   parseBangumiCharacterInfoboxNames,
 } from './bangumi-character-names.ts';
+import { projectBangumiPersonName } from './bangumi-person-names.ts';
 import {
   canonicalLanguageTag,
   commandKey,
@@ -36,7 +38,7 @@ import {
   type BangumiCharacterMeasurementProjection,
 } from './bangumi-character-measurements.ts';
 
-export const converter_revision = 'cross-media-entities@12';
+export const converter_revision = 'cross-media-entities@13';
 export const bangumiCharacterNameCommandLimit =
   2 +
   bangumiCharacterNameLimits.maxNameFacts +
@@ -1448,16 +1450,32 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   const label =
     name !== undefined ? text(name, '/name', 500) : title !== undefined ? text(title, '/title', 500) : expected;
   const chinese = own(raw, 'name_cn', '/name_cn');
+  const isBangumiPerson = kind === 'bangumi-person';
+  const selectedPersonType = isBangumiPerson ? personType(raw) : undefined;
+  const personNameProjection =
+    isBangumiPerson && selectedPersonType === 'schema:Person'
+      ? projectBangumiPersonName(
+          chinese,
+          Object.hasOwn(raw, 'name_cn'),
+          own(raw, 'infobox', '/infobox'),
+          Object.hasOwn(raw, 'infobox'),
+        )
+      : undefined;
+  const bangumiPersonIndividual = personNameProjection !== undefined;
   const labels: Record<string, string> = { und: label };
-  if (typeof chinese === 'string' && chinese.trim()) labels.zh = text(chinese, '/name_cn', 500, true);
+  if (personNameProjection?.chineseName !== undefined) labels.zh = personNameProjection.chineseName;
+  else if (!bangumiPersonIndividual && typeof chinese === 'string' && chinese.trim())
+    labels.zh = text(chinese, '/name_cn', 500, true);
   const normalized: Normalized = { id: nativeId, name: label };
   let minimumAge: Projected['minimumAge'];
   const diagnostics: ConversionDiagnostic[] = [];
   let characterMeasurements: BangumiCharacterMeasurementProjection | undefined;
-  if (chinese !== undefined) normalized.name_cn = labels.zh ?? '';
+  if (personNameProjection?.chineseName !== undefined) normalized.name_cn = personNameProjection.chineseName;
+  else if (!bangumiPersonIndividual && chinese !== undefined) normalized.name_cn = labels.zh ?? '';
   if (kind === 'bangumi-person') {
-    type = personType(raw);
+    type = selectedPersonType!;
     normalized.type = own(raw, 'type', '/type');
+    if (personNameProjection) diagnostics.push(...personNameProjection.diagnostics);
     const summary = own(raw, 'summary', '/summary');
     if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
     const career = own(raw, 'career', '/career');
@@ -1628,9 +1646,18 @@ function convert(
     projected.names ??
     projected.nameFacts ??
     Object.entries(projected.labels).map(([language, value]) => ({ language, text: value }));
+  const nameStatements = names.map((name) => {
+    const statement = fact('schema:name', name);
+    if (
+      kind === 'bangumi-person' &&
+      checkStatementInput(statement, bundledRelease).violations.length > 0
+    )
+      fail('/name', 'invalid_source_name_statement');
+    return statement;
+  });
   const facts: BatchStatement[] = [
     ...(omitOrganizationIdentifier ? [] : [fact(profile.identifier, identifierContent)]),
-    ...names.map((name) => fact('schema:name', name)),
+    ...nameStatements,
     ...(projected.alternateNames ?? []).map((name) => fact('schema:alternateName', name)),
 
     ...(kind === 'vndb-release' && projected.minimumAge ? [fact('wdt:P2899', projected.minimumAge)] : []),

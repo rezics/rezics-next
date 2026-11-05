@@ -38,6 +38,8 @@ export type BangumiPersonCareerSource = Readonly<{
   endpoint: string;
   sourceStatus: 'available' | 'unavailable';
   careers?: readonly string[];
+  personChineseName?: string;
+  personNameDiagnostics?: readonly Readonly<{ pointer: string; code: string }>[];
   responseDigest?: string;
   etag?: string;
   code?: 'source-api-http' | 'source-api-unavailable' | 'source-payload-invalid';
