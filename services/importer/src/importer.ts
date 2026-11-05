@@ -187,8 +187,13 @@ export type ImporterOptions = {
       owner: Owner;
       conversion: ImportConversion;
       subject?: string;
+    }): ConversionContext['sourceVocabulary'];
+    resolve?(input: {
+      owner: Owner;
+      conversion: ImportConversion;
+      subject?: string;
       signal: AbortSignal;
-    }): ConversionContext['sourceVocabulary'] | Promise<ConversionContext['sourceVocabulary']>;
+    }): Promise<ConversionContext['sourceVocabulary']>;
   };
   onConversionOutput?(output: ImportConversion): void;
   afterBulkSuccess?(request: BatchWriteRequest, result: BatchWriteResult): void | Promise<void>;
@@ -1965,7 +1970,10 @@ export class Importer {
             resolvedReferences = resolution.resolvedReferences;
           } else resolvedReferences = resolution as Readonly<Record<string, string>>;
         }
-        const vocabulary = await this.options.vocabularyAdmission?.request?.({ owner, conversion, subject, signal });
+        const admission = this.options.vocabularyAdmission;
+        const vocabulary = admission?.resolve
+          ? await admission.resolve({ owner, conversion, subject, signal })
+          : admission?.request?.({ owner, conversion, subject });
         const context = {
           subjectId: subject,
           ...(resolvedReferences ? { resolvedReferences } : {}),

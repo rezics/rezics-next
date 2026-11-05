@@ -57,7 +57,7 @@ export function createBangumiPersonCareerAdmission(
   port: { readReviewedSubject(id: string, signal?: AbortSignal): Promise<ReviewedSubjectRead> },
 ): NonNullable<ImporterOptions['vocabularyAdmission']> {
   return {
-    async request({ owner, conversion, subject, signal }) {
+    async resolve({ owner, conversion, subject, signal }) {
       if (!owner.external_id.startsWith('person:') || !subject) return undefined;
       const normalized = conversion.normalized as { type: number; career?: (string | null)[] | null };
       if (normalized.type !== 1 || !Array.isArray(normalized.career)) return undefined;

@@ -305,14 +305,13 @@ export function createSourceRegistration(
       if (context.source !== source) throw new TypeError('Conversion context source differs from registration');
       if (sourceKind === 'bangumi' || sourceKind === 'vndb') {
         const kind = crossMediaEntityKind(sourceKind, input.external_id, input.record);
-        const entityRevision =
-          kind === 'bangumi-person' && converterRevision === bangumiRevision ? crossMediaRevision : converterRevision;
         if (
           kind &&
-          (entityRevision === crossMediaRevision ||
-            (sourceKind === 'bangumi' && isCrossMediaBangumiRevision(entityRevision)))
+          (kind === 'bangumi-person' ||
+            converterRevision === crossMediaRevision ||
+            (sourceKind === 'bangumi' && isCrossMediaBangumiRevision(converterRevision)))
         ) {
-          const entity = convertCrossMediaEntity(input, context, { converterRevision: entityRevision, sourceKind });
+          const entity = convertCrossMediaEntity(input, context, { converterRevision, sourceKind });
           const base: ImportConversion<SourceAssets> = {
             ...entity,
             normalized: entity.normalizedRecord,

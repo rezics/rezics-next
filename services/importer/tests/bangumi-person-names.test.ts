@@ -7,7 +7,7 @@ import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/
 import { readDump } from '../src/dumps.ts';
 import { IMPORTER_SCOPES } from '../src/credentials.ts';
 import { runImportCli } from '../src/cli.ts';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { converter_revision as bangumiRevision } from '@rezics/conversion/bangumi';
 import { crossMediaBangumiRevision } from '../src/source-registry.ts';
 
 const origin = 'http://127.0.0.1:43179';
@@ -65,7 +65,7 @@ test.each(['bangumi', 'bangumi_cross_media'])(
         if (url.pathname === '/v1/sourceFences:check') return Response.json({ fenced: false, securityRevision: null });
         if (request.method === 'GET' && url.pathname.startsWith('/v1/subjects/')) {
           const id = url.pathname.split('/').at(-1)!;
-          expect([schemeId, conceptId]).toContain(id);
+          expect(id === schemeId || id === conceptId).toBe(true);
           return Response.json({
             subject: {
               id,
@@ -148,7 +148,7 @@ test.each(['bangumi', 'bangumi_cross_media'])(
         { language: 'zh', text: '岸本齐史' },
       ]);
       expect(names.every((command) => command.source.record_revision === 'unversioned')).toBe(true);
-      const revision = alias === 'bangumi' ? entityRevision : crossMediaBangumiRevision;
+      const revision = alias === 'bangumi' ? bangumiRevision : crossMediaBangumiRevision;
       expect(names.every((command) => command.source.converter_revision === revision)).toBe(true);
       expect(
         sent.filter((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P106'),
