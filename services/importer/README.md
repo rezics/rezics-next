@@ -2090,6 +2090,7 @@ licensed statistic pair. The fourteen-case oracle asserts that field. Caps stay
 64 alias lines, 162 commands.
 
 ### Publish a completed VNDB table generation
+
 - Touches: one ready table acquisition, its RunStore generation, licensed
   observation and immutable ACKs through the existing archive operator.
 - Bound: O(file bytes) to stage; pages of 16; one generation and acquisition

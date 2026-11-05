@@ -195,9 +195,9 @@ test('interrupted publication and a later different archive keep the last comple
     expect((await f.facade.commit(other)).status).toBe('committed');
     expect(f.facade.baseline('v123')!.run).toBe(changed);
     expect(f.facade.baseline('v123')!.digest).not.toBe(before!.digest);
-    expect(f.facade.page(changed, null, 1).records[0]!.record.vn_titles.find((title) => title.lang === 'en')!.title).toBe(
-      'Changed Harbor',
-    );
+    expect(
+      f.facade.page(changed, null, 1).records[0]!.record.vn_titles.find((title) => title.lang === 'en')!.title,
+    ).toBe('Changed Harbor');
     await f.reopen();
     expect(f.facade.baseline('v123')!.run).toBe(changed);
   } finally {
