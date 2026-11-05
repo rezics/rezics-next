@@ -135,8 +135,7 @@ test('public Organization entry preserves Context and current return, refuses un
     [...host.querySelectorAll<HTMLAnchorElement>('a')].find((item) => item.textContent === name)!;
   const navigate = async (href: string) =>
     act(async () => {
-      history.push(href);
-      await router.load();
+      await router.navigate({ href });
       await tick();
     });
 
