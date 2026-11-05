@@ -2446,11 +2446,20 @@ export async function seedCrossMedia(
               error.status !== 408 &&
               error.status !== 409 &&
               error.status !== 429;
+            if (refused) {
+              mediaAttempts.set(recordKey, {
+                ...source,
+                status: 'refused',
+                containerId: input.subject,
+                code: 'media-import-refused',
+              });
+              throw error;
+            }
             mediaAttempts.set(recordKey, {
               ...source,
-              status: refused ? 'refused' : 'unknown',
+              status: 'unknown',
               containerId: input.subject,
-              code: refused ? 'media-import-refused' : 'media-import-unknown',
+              code: 'media-import-unknown',
             });
             return { status: 'pending' };
           }
