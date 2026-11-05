@@ -52,21 +52,12 @@ const projection: CollectionViewerProjection = {
         revision: 4,
       },
       vote: { state: 'present', questionId, questionRevision: 1, units: 14, revision: 5 },
-      actions: {
-        state: 'current',
-        allowed: [
-          { action: 'library_entry:update', operations: ['library_entry.put'] },
-          { action: 'progress_session:create', operations: ['progress_session.create'] },
-          { action: 'rating:vote_put', operations: ['rating.vote_put'] },
-        ],
-      },
     },
     {
       rowKey: memberIds[1]!,
       subjectId,
       entry: { state: 'absent' },
       vote: { state: 'absent', questionId, questionRevision: 1 },
-      actions: { state: 'current', allowed: [] },
     },
     {
       rowKey: memberIds[2]!,
@@ -126,10 +117,8 @@ async function readingExample(canvasElement: HTMLElement) {
   await expect(canvas.getByText('Your rating: 7')).toBeVisible();
   await expect(canvas.getByText('Not in your Library.')).toBeVisible();
   await expect(canvas.getByText('Your personal rating is unavailable.')).toBeVisible();
-  const action = canvas.getByRole('link', { name: 'Open your Library controls' });
-  await expect(action).toHaveAttribute('href', expect.stringContaining('via='));
-  await expect(canvas.getAllByText('Your personal controls are unavailable.')).toHaveLength(1);
-  await expect(canvasElement.querySelectorAll('[data-viewer-actions="current"]')).toHaveLength(2);
+  await expect(canvas.queryByRole('link', { name: 'Open your Library controls' })).toBeNull();
+  await expect(canvas.getAllByText('Your personal controls are unavailable.')).toHaveLength(3);
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
 
@@ -167,7 +156,6 @@ export const ReaderReplacement: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Your rating: 7')).toBeVisible();
-  await expect(canvas.getByRole('link', { name: 'Open your Library controls' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Replace reader' }));
     await expect(canvas.queryByText('Your rating: 7')).toBeNull();
     await expect(canvas.queryByRole('link', { name: 'Open your Library controls' })).toBeNull();
