@@ -7,6 +7,7 @@ export { publicationLimits, PUBLICATION_LIMITS } from './publication-constructio
 import { libraryProfileSemantics, libraryProgressSemantics } from './library-profile.ts';
 import { RELEASE_LIMITS, valueSchema, type Release, type ReleaseViolation, type ValueOptions } from './portable.ts';
 export * from './portable.ts';
+export { chooseLabel, languageRanges } from './language.ts';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const subjectIdPattern = new RegExp(UUID);

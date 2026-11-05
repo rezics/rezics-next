@@ -4,8 +4,8 @@ The immutable definition catalogue release format stored by the kernel. This pac
 exports the release types, the JSON Schema 2020-12 document at
 `@rezics/definitions/schema/release.json`, and pure validation and digest functions.
 
-The root export's `browser` condition provides release types, constants, `valueSchema`
-and the synchronous `releaseDigest`, with the same canonical UTF-8 SHA-256 identity as
+The root export's `browser` condition provides release types, constants, `valueSchema`,
+the pure `languageRanges`/`chooseLabel` policy and the synchronous `releaseDigest`, with the same canonical UTF-8 SHA-256 identity as
 the native entry. The `/bundled` browser export provides the compiled `bundledRelease`
 and `bundledDigest` without reading source files. `/validate`, `/bulk`, `/media-import`
 and `/slug` also support browser use. Publication validation/admission (`validateRelease`,
@@ -13,6 +13,14 @@ and `/slug` also support browser use. Publication validation/admission (`validat
 and `bundledSources` remain native operations; they are not exposed by the browser
 root or bundled entry. Browser publication callers use the ordinary Definitions API
 so the native validator retains its isolated checker and exact analysis limits.
+
+## Semantic language selection
+
+The existing root and browser entries export the same pure `languageRanges` and `chooseLabel` implementation from
+`src/language.ts`. It orders valid RFC language ranges by quality, caps preferences at 16, truncates ranges according
+to RFC 4647, maximizes likely scripts, then tries the original language, English and a deterministic sorted fallback.
+`chooseLabel` returns the selected label with its actual stored language tag. It performs no I/O and adds no runtime
+dependency.
 
 The joint contract lives in [Collection presentation and editor](../../docs/collection-presentation.md).
 This package delivers its optional Type list-presentation data through the compiler, release schema,
