@@ -225,10 +225,8 @@ async function mounted(initialPath = '/library/ratings') {
   function expose(subject: string, csrfToken: string) {
     return perform(() => applyViewer(subject, csrfToken));
   }
-  function exposeSequence(subjects: string[]) {
-    return perform(() => {
-      subjects.forEach((subject, index) => applyViewer(subject, `csrf-sequence-${index}`));
-    });
+  async function exposeSequence(subjects: string[]) {
+    for (const [index, subject] of subjects.entries()) await expose(subject, `csrf-sequence-${index}`);
   }
   const tree = createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }));
   host.innerHTML = renderToString(tree);
@@ -244,6 +242,7 @@ async function mounted(initialPath = '/library/ratings') {
     router,
     perform,
     expose,
+    exposeSequence,
     click: (node: Element) =>
       act(async () =>
         node.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
