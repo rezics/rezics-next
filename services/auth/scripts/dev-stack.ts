@@ -20,11 +20,33 @@ const CONTENT_R2_VARIABLES = [
   'CONTENT_R2_ACCESS_KEY_ID',
   'CONTENT_R2_SECRET_ACCESS_KEY',
 ] as const;
+function localOrigin(variable: string, fallback: string): string {
+  const value = process.env[variable];
+  if (value === undefined) return fallback;
+  const url = new URL(value);
+  if (
+    url.protocol !== 'http:' ||
+    url.hostname !== '127.0.0.1' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.pathname !== '/' ||
+    url.search !== '' ||
+    url.hash !== ''
+  )
+    throw new Error(`${variable} must be an unauthenticated loopback HTTP origin`);
+  return url.origin;
+}
+
+function localPort(origin: string): number {
+  const url = new URL(origin);
+  return Number(url.port || '80');
+}
+
 export const origins = {
-  web: 'http://127.0.0.1:3000',
-  issuer: 'http://127.0.0.1:4200',
-  native: 'http://127.0.0.1:3100',
-  kernel: 'http://127.0.0.1:4100',
+  web: localOrigin('REZICS_LOCAL_STACK_WEB_ORIGIN', 'http://127.0.0.1:3000'),
+  issuer: localOrigin('REZICS_LOCAL_STACK_ISSUER_ORIGIN', 'http://127.0.0.1:4200'),
+  native: localOrigin('REZICS_LOCAL_STACK_NATIVE_ORIGIN', 'http://127.0.0.1:3100'),
+  kernel: localOrigin('REZICS_LOCAL_STACK_KERNEL_ORIGIN', 'http://127.0.0.1:4100'),
   audience: 'https://api.rezics.test',
 };
 
@@ -604,7 +626,7 @@ async function serveHost() {
   }
   const server = Bun.serve({
     hostname: '127.0.0.1',
-    port: 3100,
+    port: localPort(origins.native),
     fetch: async (request) => {
       if (new URL(request.url).hostname !== '127.0.0.1') return new Response('Loopback only', { status: 403 });
       if (new URL(request.url).pathname === '/local-turnstile.js')
@@ -640,7 +662,7 @@ async function launch(action: 'pages' | 'web', args: string[]) {
       '--host',
       '127.0.0.1',
       '--port',
-      pages ? '4200' : '3000',
+      String(localPort(pages ? origins.issuer : origins.web)),
       '--strictPort',
       ...args,
     ],
@@ -672,7 +694,12 @@ async function launch(action: 'pages' | 'web', args: string[]) {
 }
 
 async function start() {
-  const env = { ...process.env, ...(await kernelEnvironment()), KERNEL_HOSTNAME: '127.0.0.1', KERNEL_PORT: '4100' };
+  const env = {
+    ...process.env,
+    ...(await kernelEnvironment()),
+    KERNEL_HOSTNAME: '127.0.0.1',
+    KERNEL_PORT: String(localPort(origins.kernel)),
+  };
   const children = [
     ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
     ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],

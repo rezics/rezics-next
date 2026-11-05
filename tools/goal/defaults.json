@@ -253,7 +253,8 @@
     "containers": {
       "commandTimeoutMs": 15000,
       "maxAgeHours": 4,
-      "cleanupIntervalMs": 600000
+      "cleanupIntervalMs": 600000,
+      "keep": ["rezics-pagecheck-"]
     },
     "process": {
       "groupPollMs": 1000,
@@ -456,6 +457,17 @@
       "gitBufferBytes": 33554432,
       "residentPollMs": 60000,
       "bootSmokeTimeoutMs": 120000
+    },
+    "pageData": {
+      "intervalMs": 7200000,
+      "bootTimeoutMs": 300000,
+      "commandTimeoutMs": 600000,
+      "installTimeoutMs": 600000,
+      "seedTimeoutMs": 3600000,
+      "checkTimeoutMs": 3600000,
+      "stopTimeoutMs": 10000,
+      "outputBytes": 1048576,
+      "reportRuns": 24
     },
     "leases": {
       "waitMs": 30000,

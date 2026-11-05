@@ -8,7 +8,7 @@ import { BriefContractUnchangedError, WorkerTasks } from './tasks.ts';
 import { WorkerJob } from './job.ts';
 import { importAttempt, importRunDirectory } from './import-attempt.ts';
 import { formatLifecycleMetrics, formatUsageReport, report } from './report.ts';
-import { flowReport, readFlow, readFlowTasks } from './flow.ts';
+import { flowReport, formatPageDataFlowRuns, readFlow, readFlowTasks } from './flow.ts';
 import { formatGuardLedger, guardLedger } from './guards.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
@@ -272,6 +272,7 @@ export async function runWorkerCommand(
               `Over-budget launches by layer: ${JSON.stringify(result.overBudgetLaunchesByLayer)}`,
               `Attempts per integrated task: ${result.attemptsPerIntegrated ?? 'unknown'}`,
               `Urgent: ${result.urgent.tasks.length} tasks; ${result.urgent.integrated} integrated (${result.urgent.tasks.join(', ') || 'none'}); excluded from throughput.`,
+              ...formatPageDataFlowRuns(result.pageDataRuns),
               ...result.stages.map((s) => `${s.stage}: total ${s.totalMs}ms, p50 ${s.p50Ms}ms, p90 ${s.p90Ms}ms`),
               ...result.queues.map(
                 (q) => `Queue ${q.stage}: ${q.length}, oldest ${Math.round(q.oldestAgeMs / 60000)}m`,
