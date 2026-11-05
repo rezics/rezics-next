@@ -115,3 +115,7 @@ The offer page keeps its received observation until deliberate review. Inspectio
 observation, draft, key or recovery. Selection retires with the current origin or visit; a missing row offers an
 explicit restart without scanning pages. Management may inspect its retained row, while public destinations require
 an active row on the received page.
+
+Decision: the creator offer and historical sales walk binds a published Content edition through creator inventory,
+ordinary create/revise/delist, Subject discovery and a signed test-mode sale. Historical sale identities stay the
+captured order, offer and subject locators; later offer terms do not rewrite them.
