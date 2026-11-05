@@ -192,7 +192,7 @@ function countItems(value: unknown): number {
   if (typeof value === 'number') return value > 0 ? value : 0;
   if (isRecord(value)) {
     const entries = Object.values(value);
-    const nestedItems = entries.reduce((total, entry) => total + (Array.isArray(entry) ? entry.length : 0), 0);
+    const nestedItems = entries.reduce<number>((total, entry) => total + (Array.isArray(entry) ? entry.length : 0), 0);
     return nestedItems || (entries.length > 0 ? 1 : 0);
   }
   return 0;
@@ -390,7 +390,7 @@ async function nativeCall(
       new Request(url, {
         method: call.method,
         headers,
-        body: call.method === 'POST' ? JSON.stringify(call.body ?? {}) : undefined,
+        ...(call.method === 'POST' ? { body: JSON.stringify(call.body ?? {}) } : {}),
         signal: AbortSignal.timeout(timeoutMs),
       }),
     );
@@ -460,7 +460,7 @@ async function observeSection(
         const matches = [...document.querySelectorAll<HTMLElement>(selector)];
         const wanted = heading?.trim().toLocaleLowerCase();
         const node = wanted === undefined ? matches[0] : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
-        return Boolean(node) && !loading(node);
+        return node !== undefined && !loading(node);
       },
       { selector: section.selector, heading: section.heading },
       { timeout: timeoutMs },
@@ -519,6 +519,11 @@ async function observeSection(
     { selector: section.selector, heading: section.heading, itemSelector: section.itemSelector, timedOut },
   );
   return { observation, timedOut };
+}
+
+async function clickSectionAction(page: Page, section: ManifestSection, timeoutMs: number): Promise<void> {
+  const action = section.native.action!;
+  await page.getByRole(action.role, { name: action.name, exact: true }).click({ timeout: timeoutMs });
 }
 
 export function signInRequestBody(email: string, password: string): {

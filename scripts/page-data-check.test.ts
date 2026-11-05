@@ -277,6 +277,19 @@ const fixtureManifest = (paths: Record<string, string>, kernelPath: string): Man
             itemSelector: '[data-item]',
             native: { method: 'GET', path: `${kernelPath}/data`, items: '/relations' },
           },
+          {
+            id: 'following-action',
+            name: 'Following feed action',
+            selector: '[data-case="action-feed"]',
+            heading: 'Following feed',
+            itemSelector: 'li[data-item]',
+            native: {
+              method: 'GET',
+              path: `${kernelPath}/data`,
+              items: '/relations',
+              action: { role: 'button', name: 'Following' },
+            },
+          },
         ],
       },
       {
@@ -338,7 +351,16 @@ const pages = {
     <section data-case="root-item" data-item>
       <h2>Root reader</h2><span data-item>nested row</span>
     </section>
+    <button type="button">Following</button>
+    <section data-case="action-feed" aria-label="Following feed" data-state="empty">
+      <h2>Home</h2><p>No visible entries</p>
+    </section>
     <script>setTimeout(() => document.querySelector('[data-case="aria-label"] [role="status"]').textContent = '', 80)</script>
+    <script>document.querySelector('button').addEventListener('click', () => {
+      const section = document.querySelector('[data-case="action-feed"]');
+      section.dataset.state = 'ready';
+      section.innerHTML = '<h2>Following feed</h2><ul><li data-item>following row</li></ul>';
+    })</script>
   </body></html>`,
 };
 
@@ -420,6 +442,7 @@ test('fixture pages exercise classification, reader readiness and coverage after
     expect(printed).toContain('reader-states anonymous aria-labelledby DATA');
     expect(printed).toContain('reader-states anonymous empty-title-fallback DATA');
     expect(printed).toContain('reader-states anonymous root-item DATA');
+    expect(printed).toContain('reader-states anonymous following-action DATA');
     expect(printed).toContain('slow-navigation anonymous bounded-reader UNAVAILABLE');
     expect(printed).toContain('after-timeout anonymous continues EMPTY');
     expect(diagnosticText).toContain('Page navigation timed out for slow-navigation anonymous');
