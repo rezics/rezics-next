@@ -276,6 +276,7 @@ export async function readMusicContext(
             };
           });
       }
+    }
   }
   return {
     ok: true,
