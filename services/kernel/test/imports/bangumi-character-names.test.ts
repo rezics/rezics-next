@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -31,6 +32,9 @@ const sourceAliases = [
   '[重要绰号|克里斯蒂娜/クリスティーナ/Christina]',
   '[网名|栗悟饭和龟波功（栗悟飯と亀波功）（网名）]',
 ];
+const officialCharacter = JSON.parse(
+  readFileSync(new URL('../../../../specs/fixtures/imports/bangumi/character-api-names.json', import.meta.url), 'utf8'),
+) as Record<string, unknown>;
 
 function tables(aliases = sourceAliases): CrossMediaTables {
   const rows: Record<string, Record<string, unknown>[]> = {
@@ -50,6 +54,19 @@ function tables(aliases = sourceAliases): CrossMediaTables {
       },
     ],
     person: [{ id: 25284, name: 'Miyano Mamoru', name_cn: '宮野真守', type: 1 }],
+  };
+  return {
+    async *rows(provider, table) {
+      if (provider === 'bangumi') yield* rows[table] ?? [];
+    },
+  };
+}
+
+function parsedCharacterTables(character: Record<string, unknown> = officialCharacter): CrossMediaTables {
+  const rows: Record<string, Record<string, unknown>[]> = {
+    subject: [{ id: 10380, type: 2, name: 'STEINS;GATE' }],
+    'subject-characters': [{ subject_id: 10380, character_id: character.id, type: 1, order: 0 }],
+    character: [character],
   };
   return {
     async *rows(provider, table) {
@@ -120,6 +137,9 @@ test('default selected Bangumi character names publish, retain adoption, and ref
         publicClient,
       });
     }
+    const capturedApiNameCommands = () => journal.acknowledgedCommands().filter(({ command }) =>
+      command.source.external_id === 'character:1' && command.op === 'propose' &&
+      ['schema:name', 'schema:alternateName'].includes(command.statement.property.id));
     const first = await run(tables());
     const character = first.result.readings.find((row) => row.externalId === characterExternalId);
     const performer = first.result.readings.find((row) => row.externalId === performerExternalId);
@@ -240,6 +260,42 @@ test('default selected Bangumi character names publish, retain adoption, and ref
     expect(alternates).not.toContainEqual({ language: 'und', text: '助手' });
     expect(alternates).toContainEqual({ language: 'fr', text: 'La Red' });
     expect(alternates).toContainEqual({ language: 'en', text: 'Chris Makise' });
+
+    const apiFirst = await run(parsedCharacterTables());
+    expect(apiFirst.plan.entities.bangumi.find((record) => record.key === 'character:1')?.payload).toEqual(officialCharacter);
+    const apiCharacterId = idOf(apiFirst.result.readings.find((row) => row.externalId === 'character:1')!);
+    expect(apiCharacterId).toBeTruthy();
+    await publish(apiFirst);
+    const apiPublic = (await publicClient.readSubject(apiCharacterId!)).subject as {
+      id: string;
+      type: string;
+      statements: Record<string, BatchStatement[]>;
+    };
+    expect(apiPublic).toMatchObject({ id: apiCharacterId, type: 'wd:Q95074' });
+    expect(apiPublic.statements['schema:name']?.map(valueContent)).toEqual(
+      expect.arrayContaining([
+        { language: 'und', text: 'ルルーシュ・ランペルージ' },
+        { language: 'zh-Hans', text: '鲁路修·兰佩路基' },
+      ]),
+    );
+    expect(apiPublic.statements['schema:alternateName']?.map(valueContent)).toEqual(
+      expect.arrayContaining([
+        { language: 'en', text: 'Lelouch Lamperouge' },
+        { language: 'zh', text: '鲁路修·冯·布里塔尼亚' },
+        { language: 'ja', text: 'ルルーシュ・ヴィ・ブリタニア' },
+      ]),
+    );
+    expect(apiPublic.statements['schema:alternateName']?.map(valueContent)).not.toEqual(
+      expect.arrayContaining([{ language: 'und', text: 'L.L.' }, { language: 'en', text: 'Lelouch Vie Britannia' }]),
+    );
+    const sealedDigests = capturedApiNameCommands().map(({ command, commandDigest }) => [command.key, commandDigest]);
+    expect(sealedDigests).toHaveLength(5);
+    journal.close();
+    journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+    const apiReplay = await run(parsedCharacterTables());
+    expect(apiReplay.result.runs.bangumi?.counts.unchanged).toBeGreaterThan(0);
+    expect(idOf(apiReplay.result.readings.find((row) => row.externalId === 'character:1')!)).toBe(apiCharacterId);
+    expect(capturedApiNameCommands().map(({ command, commandDigest }) => [command.key, commandDigest])).toEqual(sealedDigests);
   } finally {
     journal.close();
     await runtime.close();

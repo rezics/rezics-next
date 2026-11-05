@@ -1503,25 +1503,30 @@ Selected default Bangumi character records retain their exact `infobox` payload
 through `planCrossMediaSeed` and the shared `cross-media-entities@14` converter.
 The reviewed `Crt` grammar supplies cited `schema:name` facts from `name`,
 `name_cn` and `简体中文名`, plus cited `schema:alternateName` facts from its
-labelled `别名` rows. A malformed alias group is withheld as a whole; usable
-names and summary remain independent. Unsupported custom labels are omitted
-with bounded diagnostics while known labels remain usable. The source character ID alone binds the
-native Character. Names do not resolve performers, merge identities, or change
-appearance and voice-credit qualification. The common publication manifest
-owns acceptance/adoption and current public reads; this local journey does not
-claim Search indexing.
+labelled `别名` rows. The exact type-1 CharacterDetail path also accepts its
+parsed `{key, value}` array alongside the Crt string. The captured response
+excerpt is documented against the [official endpoint](https://api.bgm.tv/v0/characters/1)
+and [Bangumi API schema](https://bangumi.github.io/api/dist.json); malformed
+and refresh derivatives are synthetic. A malformed alias group is withheld as
+a whole; usable names and summary remain independent. Unsupported custom labels
+are omitted with bounded diagnostics while known labels remain usable. The
+source character ID alone binds the native Character. Names do not resolve
+performers, merge identities, or change appearance and voice-credit
+qualification. The common publication manifest owns acceptance/adoption and
+current public reads; this local journey does not claim Search indexing.
 
-Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `纯假名` use `ja`, `罗马字` uses `und-Latn`, and `昵称` uses `und`; top-level `name` stays `und`, `name_cn` stays `zh`, and `简体中文名` is a `zh-Hans` preferred name; within nicknames only the observed full-width comma splits entries and slash sequences stay intact.
+Decision: accept parsed CharacterDetail name arrays beside the existing Crt grammar, preserving captured response evidence in the same converter and journal without another fetch.
 
 - Touches: one default-selected character payload, up to 16 preferred names,
   64 alternate names and 85 ordinary converter commands, including up to two
   existing physical-profile facts.
-- Bound: 1 MiB source line; 32 KiB infobox; depth 2; 64 fields and aliases;
-  4 KiB/500 codepoints per name; 16 diagnostics; existing 65,536-byte
-  normalized record cap. Unsupported nested fields are not interpreted.
+- Bound: existing 1 MiB source row; one captured response per existing
+  acquisition; 32 KiB name evidence; depth 2; 64 fields/alias rows; 4 KiB/500
+  codepoints per scalar; 16 diagnostics; 65,536-byte normalized-record cap.
+  Nested values are not stringified or interpreted.
 - Growth check: `packages/conversion/tests/bangumi-character-names.test.ts`
-  pins alias language and refresh behavior. The real Auth/Access default-seed
-  and common-publication scenario is
+  pins source values, released statements and bounded losses. The Auth/Access
+  selected-seed and common-publication scenario is
   `services/kernel/test/imports/bangumi-character-names.test.ts`; broader native
   acceptance remains controller-owned.
 

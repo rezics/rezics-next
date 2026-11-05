@@ -40,7 +40,26 @@ function tables(): CrossMediaTables {
       { subject_id: 103, character_id: 902, type: 1 },
       { subject_id: 201, character_id: 903, type: 1 },
     ],
-    'bangumi/character': [{ id: 901, name: 'Okabe Rintaro', type: 1 }],
+    // Synthetic API-shaped row for selected-path forwarding; the source fixture lives under specs/fixtures/imports.
+    'bangumi/character': [
+      {
+        id: 901,
+        name: 'Okabe Rintaro',
+        name_cn: null,
+        type: 1,
+        infobox: [
+          { key: '简体中文名', value: '冈部伦太郎' },
+          {
+            key: '别名',
+            value: [
+              { v: '未标记别名' },
+              { k: '英文名', v: 'Hououin Kyouma' },
+              { k: '英文名二', v: 'Unsupported English guess' },
+            ],
+          },
+        ],
+      },
+    ],
     'vndb/vn': [
       { id: 'v1', olang: 'ja', alias: null },
       { id: 'v2', olang: 'ja', alias: null },
@@ -181,6 +200,20 @@ test('default local adapter keeps character kinds separate from each anime appea
           rows: [{ kind: 'character-kind', path: '/character/901/type', character, code: 1 }],
         },
       },
+    );
+    const selectedNames = kindResult.proposals.flatMap((command) =>
+      command.op === 'propose' &&
+      ['schema:name', 'schema:alternateName'].includes(command.statement.property.id)
+        ? [command.statement.value]
+        : [],
+    );
+    expect(selectedNames).toEqual([
+      { type: 'value', content: { language: 'und', text: 'Okabe Rintaro' } },
+      { type: 'value', content: { language: 'zh-Hans', text: '冈部伦太郎' } },
+      { type: 'value', content: { language: 'en', text: 'Hououin Kyouma' } },
+    ]);
+    expect(kindResult.diagnostics.map(({ code }) => code)).toEqual(
+      expect.arrayContaining(['unlabelled_alias', 'unsupported_alias_label']),
     );
     expect(
       kindResult.proposals.find(

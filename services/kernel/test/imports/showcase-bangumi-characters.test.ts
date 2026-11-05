@@ -37,7 +37,26 @@ function sourceTables(): CrossMediaTables {
       { subject_id: 101, character_id: 901, type: 1, order: 0 },
       { subject_id: 102, character_id: 901, type: 2, order: 4 },
     ],
-    'bangumi/character': [{ id: 901, name: 'Okabe Rintaro', type: 1 }],
+    // Synthetic API-shaped row; the separately pinned official response is fixture evidence only.
+    'bangumi/character': [
+      {
+        id: 901,
+        name: 'Okabe Rintaro',
+        name_cn: null,
+        type: 1,
+        infobox: [
+          { key: '简体中文名', value: '冈部伦太郎' },
+          {
+            key: '别名',
+            value: [
+              { v: '未标记别名' },
+              { k: '英文名', v: 'Hououin Kyouma' },
+              { k: '英文名二', v: 'Unsupported English guess' },
+            ],
+          },
+        ],
+      },
+    ],
     'vndb/vn': [
       { id: 'v1', olang: 'ja', alias: null },
       { id: 'v2', olang: 'ja', alias: null },
@@ -207,6 +226,9 @@ test('selected anime character vocabulary is separately adopted and refreshed th
     const firstWork = subjectStatements(await publicClient.readSubject(workOneId));
     const secondWork = subjectStatements(await publicClient.readSubject(workTwoId));
     const character = subjectStatements(await publicClient.readSubject(characterId));
+    expect(character['schema:name']?.map((statement) => statement.value.content)).toContainEqual({
+      language: 'und', text: 'Okabe Rintaro',
+    });
     const firstAppearance = firstWork['schema:character']?.find((statement) => statement.value.content === characterId);
     const secondAppearance = secondWork['schema:character']?.find(
       (statement) => statement.value.content === characterId,

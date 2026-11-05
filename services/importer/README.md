@@ -1423,6 +1423,21 @@ bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
 
+### Import Bangumi Character source names
+
+- Touches: one selected Character record, up to 16 preferred-name facts, 64
+  alternate-name facts and 85 ordinary proposal commands, including existing
+  physical-profile facts. Local parsing visits at most 64 fields and 64 alias
+  rows; it adds no native name lookup.
+- Bound: source lines stay within the existing 1 MiB cap; name evidence stays
+  within 32 KiB, depth 2, 4 KiB/500 codepoints per scalar, 16 diagnostics and
+  the 65,536-byte normalized-record ceiling.
+- Growth check: conversion and selected-registration tests pin exact values,
+  released citations, malformed/overflow losses and unchanged sealed replay.
+  Native publication batches and current reads keep their existing bounds; no
+  call is added for name lookup. The native runtime checks separate publication
+  and public read; broader acceptance remains controller-owned.
+
 ### Import authored Bangumi television original-run and episode count
 
 - Touches: one admitted type-2 TVAnime infobox on the ordinary Bangumi JSON-lines
@@ -2599,30 +2614,21 @@ Decision: The default character vocabulary and appearance adapter follows Bangum
 
 ### Bangumi character source names
 
-The default cross-media selection follows selected anime `subject-characters`
-and `person-characters` endpoints, then keeps each selected `character` JSONL
-row intact through `planCrossMediaSeed`. The shared entity converter reads the
-bounded `Crt` source-name fields and creates ordinary cited `schema:name` and
-`schema:alternateName` assertions on the exact Bangumi Character identity. The
-common `publishShowcase` manifest remains responsible for independent candidate
-acceptance, adoption and anonymous public reads; local plan output alone proves
-neither publication nor Search indexing.
+`planCrossMediaSeed` retains each selected `character` row for the existing
+`bangumi_cross_media` registration. The shared converter accepts the pinned Crt
+string and exact type-1 CharacterDetail `infobox` array; the official bounded
+fixture is an excerpt of [CharacterDetail](https://api.bgm.tv/v0/characters/1)
+and its [API schema](https://bangumi.github.io/api/dist.json). It emits cited
+`schema:name` and `schema:alternateName` facts on the source-bound Character.
+The array path preserves scalar punctuation, diagnoses unlabelled/unknown
+labels, and withholds conflicting or over-limit projections. Its evidence
+fingerprints only bounded name fields and retains absent/null/top-level name
+states; nested API values are not interpreted. An already captured response
+uses the same converter and journal, with no name-only fetch or graph expansion.
+The ordinary Bangumi dump CLI remains JSONL; the fixture and malformed or
+refresh derivatives are source review and synthetic test inputs respectively.
 
-Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `纯假名` use `ja`, `罗马字` uses `und-Latn`, and `昵称` uses `und`; top-level `name` is `und`, `name_cn` is `zh`, and `简体中文名` is `zh-Hans`; within nicknames only the observed full-width comma splits entries and slash sequences stay intact.
-
-- Touches: one selected character record and its source-owned name candidate
-  set; no new source table, page, publisher or native lookup is added.
-- Bound: source rows remain under the existing 1 MiB line cap; infobox parsing
-  is limited to 32 KiB, depth 2, 64 fields, 64 aliases, 4 KiB/500 codepoints per
-  name, 16 diagnostics and at most 85 commands, including up to two existing
-  physical-profile facts. Structurally malformed alias groups are withheld as a
-  whole; unsupported custom labels are omitted with diagnostics while
-  supported aliases, names and summary remain.
-- Growth check: `packages/conversion/tests/bangumi-character-names.test.ts`
-  covers exact language mapping and changed alias removal;
-  `services/kernel/test/imports/bangumi-character-names.test.ts` exercises the
-  default selected payload through same-state importer refresh, common
-  publication and an anonymous public read.
+Decision: admit parsed CharacterDetail arrays beside the existing Crt grammar and reuse already captured selected responses in the same converter and journal; add no name-only fetch or graph expansion. Top-level `name` is `und`, `name_cn` is `zh`, `简体中文名` is `zh-Hans`, and only exact reviewed alias labels are mapped. The Crt path alone splits its observed full-width-comma nickname syntax.
 
 ### Bangumi character physical profile
 

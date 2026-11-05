@@ -1283,6 +1283,28 @@ function projectVndbCharacterProfile(raw: object, normalized: Normalized, diagno
   }
 }
 
+function characterNameFieldEvidence(
+  raw: object,
+  field: 'name' | 'name_cn',
+  parsed: ReturnType<typeof bangumiCharacterNameScalar>,
+): Record<string, unknown> {
+  const descriptor = Object.getOwnPropertyDescriptor(raw, field);
+  if (!descriptor) return { status: 'absent' };
+  if (!descriptor.enumerable || !('value' in descriptor)) fail(`/${field}`);
+  const value = descriptor.value;
+  if (value === null) return { status: 'null' };
+  if (value === undefined) return { status: 'undefined' };
+  if (value === '') return { status: 'empty', sha256: sourceDigest(value) };
+  if (parsed.status === 'admitted')
+    return {
+      status: 'admitted',
+      bytes: Buffer.byteLength(parsed.text, 'utf8'),
+      sha256: sourceDigest(parsed.text),
+    };
+  if (parsed.status === 'invalid') return { ...parsed };
+  return { status: 'absent' };
+}
+
 function project(kind: EntityKind, input: ConversionInput): Projected {
   const raw = object(input.record, '');
   const idField = kind.startsWith('vndb')
@@ -1411,6 +1433,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     const nameInput = bangumiCharacterNameScalar(own(raw, 'name', '/name'));
     const chineseInput = bangumiCharacterNameScalar(own(raw, 'name_cn', '/name_cn'));
     const infobox = own(raw, 'infobox', '/infobox');
+    const apiInfobox = Array.isArray(infobox);
     const infoboxNames = parseBangumiCharacterInfoboxNames(infobox);
     const retainedSource = own(raw, 'infobox_source', '/infobox_source') as
       | { kind?: unknown; bytes?: unknown }
@@ -1430,11 +1453,38 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     const aliases: Record<string, string[]> = Object.create(null);
     const diagnostics: ConversionDiagnostic[] = [];
 
-    if (nameInput.status === 'admitted') nameFacts.push({ language: 'und', text: nameInput.text });
-    else if (nameInput.status === 'invalid') diagnostics.push({ pointer: '/name', code: 'invalid_source_name' });
-    if (chineseInput.status === 'admitted') nameFacts.push({ language: 'zh', text: chineseInput.text });
-    else if (chineseInput.status === 'invalid') diagnostics.push({ pointer: '/name_cn', code: 'invalid_source_name' });
-    nameFacts.push(...infoboxNames.names);
+    const apiTypeMatches = !apiInfobox || own(raw, 'type', '/type') === 1;
+    if (!apiTypeMatches) diagnostics.push({ pointer: '/type', code: 'invalid_character_api_type' });
+    if (apiTypeMatches) {
+      if (nameInput.status === 'admitted') nameFacts.push({ language: 'und', text: nameInput.text });
+      else if (nameInput.status === 'invalid') diagnostics.push({ pointer: '/name', code: 'invalid_source_name' });
+
+      const parsedChinese = infoboxNames.names.find((item) => item.language === 'zh-Hans');
+      const parsedChineseAmbiguous =
+        apiInfobox &&
+        infoboxNames.diagnostics.some(
+          (diagnostic) => diagnostic.pointer === '/infobox/简体中文名' && diagnostic.code === 'ambiguous_source_name',
+        );
+      const chineseConflict =
+        apiInfobox &&
+        (parsedChineseAmbiguous ||
+          (chineseInput.status === 'admitted' &&
+            parsedChinese !== undefined &&
+            chineseInput.text !== parsedChinese.text));
+      if (chineseConflict) {
+        diagnostics.push({
+          pointer: parsedChineseAmbiguous && chineseInput.status === 'admitted' ? '/name_cn' : '/infobox/简体中文名',
+          code: 'conflicting_source_name',
+        });
+      } else if (chineseInput.status === 'admitted') {
+        nameFacts.push({ language: 'zh', text: chineseInput.text });
+      } else if (chineseInput.status === 'invalid') {
+        diagnostics.push({ pointer: '/name_cn', code: 'invalid_source_name' });
+      }
+      if (!chineseConflict) {
+        nameFacts.push(...infoboxNames.names.filter((item) => !(parsedChinese && chineseInput.status === 'admitted')));
+      }
+    } else alternateNames.length = 0;
     diagnostics.push(...infoboxNames.diagnostics);
 
     for (const nameFact of nameFacts) {
@@ -1459,6 +1509,17 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       (typeof infobox !== 'string' ||
         Buffer.byteLength(infobox, 'utf8') <= bangumiCharacterMeasurementLimits.sourceBytes)
         ? { infobox }
+        : {}),
+      ...(apiInfobox
+        ? {
+            api_name_evidence: {
+              name: characterNameFieldEvidence(raw, 'name', nameInput),
+              name_cn: characterNameFieldEvidence(raw, 'name_cn', chineseInput),
+              type: apiTypeMatches
+                ? { status: 'admitted', value: 1 }
+                : { status: 'invalid', kind: typeof own(raw, 'type', '/type') },
+            },
+          }
         : {}),
     };
     const characterKind = own(raw, 'type', '/type');

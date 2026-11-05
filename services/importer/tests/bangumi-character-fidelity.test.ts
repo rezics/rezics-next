@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { checkStatementInput } from '@rezics/definitions/validate';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import type { NativeIdentity, SourceVocabularyBindings, SourceVocabularyRow } from '@rezics/conversion';
@@ -49,6 +52,34 @@ const work: NativeIdentity = { id: uuid(6), type: 'schema:TVSeries', releaseDige
 const registration = createSourceRegistration('bangumi', {
   source: crossMediaAliases.bangumi,
   converterRevision: entityRevision,
+});
+const officialCharacter = JSON.parse(
+  readFileSync(new URL('./fixtures/bangumi-character-api-names.json', import.meta.url), 'utf8'),
+) as Record<string, unknown>;
+
+test('ordinary selected Character registration converts captured CharacterDetail names with released citations', () => {
+  const result = registration.convert(
+    { external_id: 'character:1', record_revision: null, record: officialCharacter },
+    { source: crossMediaAliases.bangumi, subjectId: character.id },
+  );
+  const nameStatements = result.proposals.filter((command) =>
+    command.op === 'propose' && ['schema:name', 'schema:alternateName'].includes(command.statement.property.id));
+  expect(nameStatements.map((command) => [command.statement.property.id, command.statement.value])).toEqual([
+    ['schema:name', { type: 'value', content: { language: 'und', text: 'ルルーシュ・ランペルージ' } }],
+    ['schema:name', { type: 'value', content: { language: 'zh-Hans', text: '鲁路修·兰佩路基' } }],
+    ['schema:alternateName', { type: 'value', content: { language: 'en', text: 'Lelouch Lamperouge' } }],
+    ['schema:alternateName', { type: 'value', content: { language: 'zh', text: '鲁路修·冯·布里塔尼亚' } }],
+    ['schema:alternateName', { type: 'value', content: { language: 'ja', text: 'ルルーシュ・ヴィ・ブリタニア' } }],
+  ]);
+  expect(nameStatements.map(({ source }) => source.external_id)).toEqual(Array(5).fill('character:1'));
+  for (const command of nameStatements) {
+    expect(checkStatementInput(command.statement, bundledRelease).violations).toEqual([]);
+    expect(command.statement.references?.[0]?.parts).toContainEqual({
+      property: { id: 'schema:url' },
+      value: { type: 'value', content: 'https://bgm.tv/character/1' },
+    });
+  }
+  expect(result.diagnostics.map(({ code }) => code)).toEqual(expect.arrayContaining(['unlabelled_alias', 'unsupported_alias_label']));
 });
 
 test('Bangumi character facts retain source identities, concepts, citation, and unsupported order diagnostics', () => {

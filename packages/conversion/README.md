@@ -604,24 +604,23 @@ rejected rather than truncated.
 
 ### Bangumi character names and aliases
 
-`cross-media-entities@14` reads only the selected character's `name`, `name_cn`
-and the pinned `Crt` infobox fields `简体中文名` and labelled `别名` rows. Top-level
-`name` remains `und`, `name_cn` remains `zh`, and `简体中文名` is a `zh-Hans`
-preferred name. Every supported `别名` row is an alternate name; its exact label
-supplies `zh`, `en`, `ja`, `und-Latn` or `und`. Romanization and nicknames never
-become preferred names. An in-limit infobox contributes a SHA-256 fingerprint
-and byte count to the sanitized source digest; oversized strings contribute only bounded markers, and non-string
-values emit no infobox facts. The normalized record also retains infobox input within the physical-profile
-parser's 65,536-byte source bound, subject to the combined 65,536-byte record cap, so durable importer replay can
-reproduce names, aliases and measurements. Oversized withheld infobox markers survive replay without admitting facts.
-Emitted facts preserve source spelling and cite
-the Bangumi character URL. Within a nickname value, only the full-width comma
-separator observed in the pinned character record splits individual aliases;
-slashes and their language mixture stay inside the exact alias text. Unsupported
-custom labels are omitted with exact bounded diagnostics while known labels stay
-usable; a structurally malformed alias group is withheld as a whole.
+`cross-media-entities@14` reads the selected Character's `name`, `name_cn` and
+either the pinned Crt string or the exact type-1 CharacterDetail `infobox`
+array of `{key, value}` rows. The captured response has `name_cn: null` and a
+`简体中文名` field; the fixture is an excerpt of
+[CharacterDetail](https://api.bgm.tv/v0/characters/1), defined by the
+[Bangumi API schema](https://bangumi.github.io/api/dist.json). Top-level `name`
+remains `und`, explicit `name_cn` is `zh`, and `简体中文名` is `zh-Hans`; exact
+alias labels use `zh`, `en`, `ja`, `und-Latn` or `und`. API scalar punctuation
+stays intact. The Crt path retains its observed full-width-comma nickname
+splitting. Exact Chinese duplicates reconcile; conflicting or ambiguous entries
+withhold only their projection. Unknown and unlabelled labels are diagnosed.
+Normalized evidence preserves API name presence and fingerprints bounded parsed
+name fields. The normalized record retains bounded raw infobox input so durable
+replay reproduces names, aliases and measurements. Statements cite the Character
+URL; names never resolve or merge identity.
 
-Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `纯假名` use `ja`, `罗马字` uses `und-Latn`, and `昵称` uses `und`; top-level and `简体中文名` fields keep separate preferred-name roles, and only the observed full-width comma splits nicknames.
+Decision: admit exact parsed CharacterDetail arrays beside the existing Crt grammar; reuse an already captured selected Character response in the same converter and journal, with no name-only fetch or graph expansion.
 
 - Touches: one selected character projection, at most 16 preferred-name facts,
   64 alternate-name facts and 85 public commands, including up to two existing
@@ -631,7 +630,8 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   codepoints per name, 16 bounded diagnostics and the existing 65,536-byte
   normalized-record cap. Structurally malformed alias groups are withheld as a
   whole; unsupported custom labels are diagnosed and omitted. Independent valid
-  names and summary remain available.
+  names and summary remain available. Unknown nested API values are not
+  hydrated or interpreted.
 - Growth check: `tests/bangumi-character-names.test.ts` pins source grammar,
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
