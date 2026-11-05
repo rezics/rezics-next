@@ -584,7 +584,9 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
     });
     expect(editorial.status).toBe(201);
     await acceptAdopt(work.subjectId, 'schema:genre');
-    const changed = new TextDecoder().decode(response).replace(/"rating":([0-9.]+)/u, '"rating":1.5000');
+    const changed = new TextDecoder()
+      .decode(response)
+      .replace(/("id"\s*:\s*"g105"[^}]*"rating"\s*:\s*)[0-9.]+/u, (_match, prefix) => `${prefix}1.5000`);
     prepared = await prepare(
       async (_input, init) =>
         new Response(
@@ -599,6 +601,9 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
     expect(refreshed.omissions.filter((row) => row.sourceKey === 'v2002')).toEqual([]);
     expect(journal.vndbTagRatingSource('v2002')!.pending).toBe(false);
     expect(journal.vndbTagRatingSource('v2002')!.snapshot!.bytes).toEqual(new TextEncoder().encode(changed));
+    const refreshedRead = await publicClient.readSubject(work.subjectId);
+    expect(JSON.stringify(refreshedRead.subject)).toContain('"amount":"+1.5000"');
+    expect(JSON.stringify(refreshedRead.subject)).not.toContain(digest);
     expect(
       journal.acknowledgedCommands().filter((row) => sealed.some((old) => old.key === row.command.key)),
     ).toHaveLength(sealed.length);
