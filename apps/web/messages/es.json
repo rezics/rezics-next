@@ -2540,6 +2540,8 @@
   "inbox_notice_marked_seen": "Esta notificación se marcó como leída.",
   "inbox_notice_seen_unknown": "No se conoce el resultado. Al reintentar se usará la misma notificación.",
   "inbox_notice_seen_retry": "Reintentar marcar esta notificación como leída",
+  "inbox_acknowledged_observation_unavailable": "No se pudo cargar la página actual de la bandeja de entrada o el resumen de no leídos después de esta actualización.",
+  "inbox_acknowledged_observation_stale": "Los avisos visibles pertenecen a la última página cargada, no a una página actual de la bandeja de entrada.",
   "discovery_loading": "Cargando resultados…",
   "discovery_not_in_library": "No está en tu biblioteca.",
   "discovery_viewer_unavailable": "Los detalles de tu biblioteca y tus valoraciones no están disponibles. Vuelve a cargar esta búsqueda para intentarlo de nuevo.",

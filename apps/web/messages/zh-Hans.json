@@ -2540,6 +2540,8 @@
   "inbox_notice_marked_seen": "此通知已标记为已读。",
   "inbox_notice_seen_unknown": "结果尚不确定。重试时会继续使用同一条通知。",
   "inbox_notice_seen_retry": "重试将此通知标记为已读",
+  "inbox_acknowledged_observation_unavailable": "此次更新后无法加载当前收件箱页面或未读摘要。",
+  "inbox_acknowledged_observation_stale": "可见通知来自上次加载的页面，不是当前收件箱页面。",
   "discovery_loading": "正在加载结果…",
   "discovery_not_in_library": "不在你的收藏库中。",
   "discovery_viewer_unavailable": "你的收藏库和评分详情暂时不可用。请重新加载此搜索并重试。",

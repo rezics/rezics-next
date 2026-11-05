@@ -37,12 +37,17 @@ and the latest details; a successful page replaces the retained window rather th
 **Decision:** Count Retry-After is observed once as an absolute deadline on the current Inbox viewer; expiry enables
 the page retry control and does not schedule a fetch. The shell badge stays a compact unknown-or-count indicator.
 
+**Decision:** A validated native acknowledgement is consumed even when later page or unread-count refresh fails. Those
+failed observations are current-read recovery with a deliberate reload. They do not reopen the original command or
+label the last loaded notices as a current page.
+
 **Decision:** Inbox list and detail share one local actor presenter for available, withheld and system labels and
 identity fallbacks; native actor disclosure remains unchanged until the additive media summary is officially installed.
 
 **Cost:** Each Inbox page dispatches one private list request for at most 20 items and zero actor/target requests. A
 successful continuation replaces the prior page, so the view retains at most 20 notices; during a pending or failed
 continuation it retains only the prior 20-row window. A chosen or bulk acknowledgement dispatches one native command,
-followed by the existing deliberate badge/list invalidation. Sequential visits release the previous page and callbacks;
+followed by the existing deliberate badge/list invalidation. A completed command stays consumed when that follow-up
+observation fails; the page then offers a current read, not another command. Sequential visits release the previous page and callbacks;
 the browser growth check varies unrelated list size and visits while checking request, retained-row and materialized-byte
 bounds. Native database and Access history growth are owned by Content, not inferred from browser requests.

@@ -2601,6 +2601,8 @@
   "inbox_notice_marked_seen": "This notification was marked as read.",
   "inbox_notice_seen_unknown": "The result is unknown. Retrying will use the same notification.",
   "inbox_notice_seen_retry": "Retry marking this notification as read",
+  "inbox_acknowledged_observation_unavailable": "The current Inbox page or unread summary could not be loaded after this update.",
+  "inbox_acknowledged_observation_stale": "The visible notices are from the last loaded page, not a current Inbox page.",
   "discovery_loading": "Loading results…",
   "discovery_not_in_library": "Not in your Library.",
   "discovery_viewer_unavailable": "Your Library and rating details are unavailable. Reload this search to try again.",
