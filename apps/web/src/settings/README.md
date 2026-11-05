@@ -118,15 +118,19 @@ exact original for deliberate retry, while a timed-out read remains unavailable 
 
 A refreshed choice list can stop admitting a retained draft value. The editor keeps and labels that local intent, then
 requires every changed value in a new patch to be admitted before sending. A singleton suitability choice is shown as
-read-only while the native effective and default values remain visible. This admission check never changes an
-uncertain original patch or its retry.
+read-only while the native effective and default values remain visible, even when the default is not currently offered.
+Reset is available only when both native defaults are admitted. This admission check never changes an uncertain
+original patch or its retry.
 
 **Decision:** Retained unsupported choices stay local until explicitly changed or discarded; new patches are admitted
 as a whole against current advice, uncertain originals retry unchanged, and a singleton suitability choice is read-only.
 
 **Decision:** A current Reading read rebases fields without local intent onto native values. A matching receipt consumes
 only that command's fields. Edits outside the command or after dispatch, including an edit back to an earlier value,
-stay for review; Use current clears them. A clean read does not open review or save.
+stay for review; Use current clears them. Explicit edits made during conflict or review remain intent even when they
+equal the older baseline. Every successful acknowledgement is followed by a separate current read; a read Retry-After
+does not block replay of the original write, and a write acknowledgement does not erase the read's absolute wait.
+A clean read does not open review or save.
 
 **Decision:** Reset PATCHes the admitted native defaults with the reviewed version; missing or malformed choice/default
 advice leaves reset unavailable. Viewer state and read/update actions live as additive siblings of the notification

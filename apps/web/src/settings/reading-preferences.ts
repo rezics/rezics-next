@@ -44,6 +44,9 @@ export function readingMutation(known: ReadingPreferences, draft: ReadingValues)
 export function readingReset(known: ReadingPreferences): Readonly<PreferenceChange> | null {
   const defaults = readingDefaults(known.advice);
   if (!defaults || !ownerMayChangeReading(known.advice) || !validReading(known, known.version)) return null;
+  const supported = known.advice!.reading.supported;
+  if (!supported.spoilerLevels.includes(defaults.spoilerLevel) || !supported.suitability.includes(defaults.suitability))
+    return null;
   if (sameReading(known, defaults)) return null;
   return Object.freeze({
     expectedVersion: known.version,
@@ -111,9 +114,7 @@ export function readingAdviceReady(advice: ReadingPreferences['advice']): boolea
     suitability.includes(effective.suitability) &&
     !!defaults &&
     isSpoilerLevel(defaults.spoilerLevel) &&
-    isSuitability(defaults.suitability) &&
-    levels.includes(defaults.spoilerLevel) &&
-    suitability.includes(defaults.suitability)
+    isSuitability(defaults.suitability)
   );
 }
 
@@ -179,6 +180,7 @@ export async function sendReading(
   input: Readonly<PreferenceChange>,
   recovering: boolean,
   currentVersion: () => number,
+  canReadCurrent: () => boolean = () => true,
 ): Promise<ReadingAttemptResult> {
   let result: PreferenceWriteResult;
   try {
@@ -203,7 +205,7 @@ export async function sendReading(
     (input.suitability !== undefined && receipt.suitability !== input.suitability)
   )
     return { kind: 'uncertain', reason: 'unavailable' };
-  if (!recovering && currentVersion() <= receipt.version) return { kind: 'confirmed', preferences: receipt, receipt };
+  if (!canReadCurrent()) return { kind: 'confirmed-read-failed', receipt, reason: 'unavailable' };
   const current = await readReading(io, () => Math.max(receipt.version, currentVersion()));
   if (!current.ok)
     return {

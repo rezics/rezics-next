@@ -166,7 +166,7 @@ export class ReadingDraftRecovery {
       knownCurrent: false,
       confirmedReceipt: null,
     });
-    const result = await sendReading(this.io, input, recovering, () => this.owner.version());
+    const result = await sendReading(this.io, input, recovering, () => this.owner.version(), () => !this.readWaiting());
     if (!this.owner.canWrite()) return;
     if (result.kind === 'confirmed-read-failed') {
       const retireAdvice = result.reason === 'forbidden' || result.reason === 'closed';
@@ -180,7 +180,7 @@ export class ReadingDraftRecovery {
         reason: result.reason,
         failure: result.failure,
         failureOrigin: 'read',
-        readRetryAt: preferenceRetryDeadline(result.failure?.retryAfter),
+        readRetryAt: Math.max(this.state.readRetryAt, preferenceRetryDeadline(result.failure?.retryAfter)),
         commandRetryAt: 0,
       });
       this.owner.onVersionChange(Math.max(this.owner.version(), result.receipt.version));
@@ -199,7 +199,9 @@ export class ReadingDraftRecovery {
         reason: result.reason,
         failure: result.failure,
         failureOrigin: result.kind === 'uncertain' ? result.operation : deniedWrite ? 'write' : undefined,
-        ...(readOperation ? { readRetryAt: retryAt } : { commandRetryAt: retryAt }),
+        ...(readOperation
+          ? { readRetryAt: Math.max(this.state.readRetryAt, retryAt) }
+          : { commandRetryAt: retryAt }),
       });
       return;
     }
@@ -216,7 +218,7 @@ export class ReadingDraftRecovery {
       failure: undefined,
       advice: preferences.advice,
       commandRetryAt: 0,
-      readRetryAt: recovering ? 0 : this.state.readRetryAt,
+      readRetryAt: 0,
     });
     this.owner.onVersionChange(Math.max(this.owner.version(), preferences.version));
   }
@@ -253,8 +255,8 @@ export class ReadingDraftRecovery {
     const supported = this.state.advice?.reading.supported;
     if (next.spoilerLevel !== undefined && supported && !supported.spoilerLevels.includes(next.spoilerLevel)) return;
     if (next.suitability !== undefined && supported && !supported.suitability.includes(next.suitability)) return;
-    if (this.afterDispatch()) this.laterEdits = { ...this.laterEdits, ...next };
     const autosave = this.state.phase === 'idle' || this.state.phase === 'saved';
+    if (this.afterDispatch() || !autosave) this.laterEdits = { ...this.laterEdits, ...next };
     this.update({ draft: { ...this.state.draft, ...next } });
     if (autosave && !this.state.pending) await this.submit();
   }
@@ -279,11 +281,7 @@ export class ReadingDraftRecovery {
     }
     const defaults = readingDefaults(this.state.advice);
     const input = readingReset(this.state.known);
-    if (!input || !defaults) {
-      this.laterEdits = {};
-      this.update({ phase: 'idle', draft: this.state.known });
-      return;
-    }
+    if (!input || !defaults) return;
     this.laterEdits = {};
     this.update({ draft: defaults, pending: input });
     await this.send(false);
@@ -316,7 +314,7 @@ export class ReadingDraftRecovery {
         reason: result.reason,
         failure: result.failure,
         failureOrigin: 'read',
-        readRetryAt: preferenceRetryDeadline(result.failure?.retryAfter),
+        readRetryAt: Math.max(this.state.readRetryAt, preferenceRetryDeadline(result.failure?.retryAfter)),
       });
       return;
     }
@@ -373,7 +371,7 @@ export class ReadingDraftRecovery {
     });
   }
   async retry(_waiting?: boolean) {
-    if (this.readWaiting() || this.commandWaiting() || !this.canWrite() || this.state.phase !== 'uncertain') return;
+    if (this.commandWaiting() || !this.canWrite() || this.state.phase !== 'uncertain') return;
     await this.send(true);
   }
 }
@@ -505,6 +503,7 @@ export function ReadingCard({
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const adviceReady = readingAdviceReady(state.advice);
   const defaults = readingDefaults(state.advice);
+  const reset = state.knownCurrent ? readingReset(state.known) : null;
   const ownerMayChange = adviceReady && ownerMayChangeReading(state.advice);
   const mayWrite = credentialed && ownerMayChange;
   const offered = adviceReady ? state.advice!.reading.supported.spoilerLevels : [];
@@ -660,7 +659,7 @@ export function ReadingCard({
               </p>
             ) : null}
             <ReadingPreview ids={ids} draft={state.draft} confirmed={state.known} />
-            {ownerMayChange && defaults && !recovery && !sameReading(state.known, defaults) ? (
+            {ownerMayChange && reset && !recovery ? (
               <Button
                 className={preferenceActionClassName}
                 type="button"
@@ -750,7 +749,7 @@ export function ReadingCard({
                     className={preferenceActionClassName}
                     type="button"
                     variant="outline"
-                    disabled={waiting || busy || !mayWrite}
+                    disabled={commandWaiting || busy || !mayWrite}
                     onClick={() => void editor.retry()}
                   >
                     {m.settings_reading_retry_original()}
