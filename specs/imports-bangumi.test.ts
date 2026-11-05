@@ -283,6 +283,33 @@ test('all supported subject types retain title facts Chinese labels and source r
     }
   }));
 
+test('TVAnime keeps distinct top-level and infobox Chinese names as separate cited facts', () =>
+  scenario((driver) => {
+    const topLevelName = '另一座天文台';
+    const infoboxName = '发条天文台特别篇';
+    const record = {
+      ...structuredClone(fixture),
+      type: 2,
+      name_cn: topLevelName,
+      infobox: fixture.infobox.replace('|中文名=发条天文台', `|中文名=${infoboxName}`),
+    };
+    const output = driver.convert(input(record), context);
+    const fields = driver.inspect(output).fields.filter((candidate) => candidate.role === 'chinese-label');
+
+    expect(fields).toHaveLength(2);
+    expect(fields.map((candidate) => at(output, candidate.value)).sort()).toEqual([topLevelName, infoboxName].sort());
+    expect(new Set(fields.map((candidate) => candidate.command)).size).toBe(2);
+    for (const candidate of fields) {
+      expect(candidate.references.map((pointer) => at(output, pointer))).toContain(SOURCE);
+      const command = at(output, candidate.command) as CommandProposal;
+      expect(command.op).toBe('propose');
+      if (command.op === 'propose') {
+        expect(command.statement.property.id).toBe('schema:name');
+        expect(command.statement.value).toMatchObject({ type: 'value', content: { language: 'zh' } });
+      }
+    }
+  }));
+
 test('an absent Chinese name never fabricates a Chinese label', () =>
   scenario((driver) => {
     for (const name_cn of ['', undefined]) {
