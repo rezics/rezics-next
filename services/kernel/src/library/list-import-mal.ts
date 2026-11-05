@@ -790,7 +790,12 @@ export function createMalImport(deps: Dependencies) {
     observation: Awaited<ReturnType<typeof observe>>,
   ): Promise<'observations-match' | 'stale' | 'unavailable'> {
     const selected = review.score;
-    if (!selected?.guard || !review.target) return 'unavailable';
+    if (!selected || !review.target) return 'unavailable';
+    if (!selected.guard) {
+      // Pre-guard retained reviews still require current Rating disclosure authority.
+      await votes.readOwnVote(actor, selected.question.id, review.target);
+      return 'unavailable';
+    }
     try {
       const current = await votes.readVoteReview(actor, selected.question.id, review.target);
       return sameReviewContext(review, observation) && hash(current.guard) === hash(selected.guard) &&
