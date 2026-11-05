@@ -1,4 +1,5 @@
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
 import {
   currentOperationalResources,
   hasLiveOperationalTransaction,
@@ -597,7 +598,7 @@ export async function readNativeCollectionMetadataForWork(
       const requestBytes = Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(values));
       if (requestBytes > bound.bytes) throw new ProblemError('dependency_unavailable');
       calls.add(key);
-      const result = await tx.query({ text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) });
+      const result = await deadlineClient(tx, deadline).query(sql, values);
       const resultBytes = Buffer.byteLength(JSON.stringify(result.rows) ?? '');
       if (result.rows.length > 1 || resultBytes > bound.bytes - requestBytes)
         throw new ProblemError('dependency_unavailable');

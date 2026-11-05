@@ -210,9 +210,13 @@ export async function pageCollectionMetadataHistory(
   });
 }
 
-export function collectionMetadataHistoryFields(value: readonly string[]): CollectionMetadataField[] {
+export function collectionMetadataHistoryFields(value: readonly (string | null)[]): CollectionMetadataField[] {
   const fields = new Set(value);
-  if ([...fields].some((field) => !(COLLECTION_METADATA_FIELDS as readonly string[]).includes(field)))
+  if (
+    [...fields].some(
+      (field) => typeof field !== 'string' || !(COLLECTION_METADATA_FIELDS as readonly string[]).includes(field),
+    )
+  )
     throw new Error('Invalid Collection metadata history field');
   return COLLECTION_METADATA_FIELDS.filter((field) => fields.has(field));
 }

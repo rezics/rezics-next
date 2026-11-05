@@ -323,8 +323,11 @@ export function createCollectionReads(
   dependencies: PreviewPreparationDependencies & {
     tokens: KeyRing;
     search?: SearchService;
-    viewerPersonalActions?: ViewerPersonalActionsReader;
-  },
+  } &
+    (
+      | { viewerPersonalActions?: undefined }
+      | { viewerPersonalActions: ViewerPersonalActionsReader; routeKey: Uint8Array }
+    ),
 ) {
   const retainPreview = createCollectionPreviewPreparation(dependencies);
   const { pool, access, tokens } = dependencies;
@@ -948,22 +951,24 @@ export function createCollectionReads(
       throw new RangeError('Collection personal actions accept at most 100 raw members');
     let facts: ViewerPersonalActionsPage;
     try {
-      const subjects = await readSubjectSummaryObservation({ ...dependencies, actor: viewer, deadline }, [
-        ...new Set(result.members.map((member) => member.subjectId)),
-      ]);
-      // Missing native type evidence is unavailable, never a fabricated type or canonical sibling operand.
-      const rows = result.members.flatMap((member, index) => {
-        const subject = subjects.summaries.get(member.subjectId);
-        return subject?.id === member.subjectId
-          ? [{ rowKey: member.id ?? String(index), subjectId: member.subjectId, resourceType: subject.type }]
-          : [];
-      });
-      if (rows.length !== result.members.length) {
-        facts = { state: 'unavailable', reason: 'identity', retryable: true };
-      } else if (!dependencies.viewerPersonalActions) {
+      if (!dependencies.viewerPersonalActions) {
         facts = { state: 'unavailable', reason: 'currentness', retryable: true };
       } else {
-        facts = await dependencies.viewerPersonalActions(viewer, rows, STANDARD_QUESTION_ID, deadline);
+        const subjects = await readSubjectSummaryObservation(
+          { ...dependencies, actor: viewer, deadline },
+          [...new Set(result.members.map((member) => member.subjectId))],
+        );
+        // Missing native type evidence is unavailable, never a fabricated type or canonical sibling operand.
+        const rows = result.members.flatMap((member, index) => {
+          const subject = subjects.summaries.get(member.subjectId);
+          return subject?.id === member.subjectId
+            ? [{ rowKey: member.id ?? String(index), subjectId: member.subjectId, resourceType: subject.type }]
+            : [];
+        });
+        facts =
+          rows.length !== result.members.length
+            ? { state: 'unavailable', reason: 'identity', retryable: true }
+            : await dependencies.viewerPersonalActions(viewer, rows, STANDARD_QUESTION_ID, deadline);
       }
       if (!(await subjects.current())) facts = { state: 'unavailable', reason: 'currentness', retryable: true };
     } catch (error) {
