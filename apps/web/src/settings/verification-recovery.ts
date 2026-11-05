@@ -310,7 +310,7 @@ export class VerificationRecovery {
     );
   }
   async reload() {
-    if (!this.active || !this.isCurrent() || this.readWaiting()) return;
+    if (!this.active || !this.isCurrent() || this.state.readStatus === 'reading' || this.readWaiting()) return;
     await this.readCurrent(this.epoch);
   }
   private readCurrent(epoch: number): Promise<void> {

@@ -175,7 +175,7 @@ test('the current card announces loading, native read failure and explicit empty
     for (const locale of locales)
       storage.run({ locale }, () => {
         expect(markup()).toContain(
-          `<div role="status" aria-live="polite" aria-atomic="true"><p>${m.settings_verification_loading()}</p>`,
+          `<div tabindex="-1" role="status" aria-live="polite" aria-atomic="true"><p>${m.settings_verification_loading()}</p>`,
         );
         expect(markup()).not.toContain(m.settings_verification_read_empty());
       });
@@ -208,7 +208,7 @@ test('the current card announces loading, native read failure and explicit empty
       storage.run({ locale }, () => {
         const html = markup();
         expect(html).toContain(
-          `<div role="status" aria-live="polite" aria-atomic="true"><p>${m.settings_verification_read_empty()}</p>`,
+          `<div tabindex="-1" role="status" aria-live="polite" aria-atomic="true"><p>${m.settings_verification_read_empty()}</p>`,
         );
         expect(html).not.toContain(m.settings_verification_load_failed());
         expect(html).not.toContain(m.settings_verification_sent());

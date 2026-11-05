@@ -52,6 +52,8 @@ Only a readable status at that floor retires the acknowledged attempt. A stale r
 One coalesced status read may settle while a command remains in flight, without resolving its original or admitting
 a second command. Each channel retains its own deadline and viewer retirement discards both late completions.
 
+**Decision:** A duplicate explicit status reload returns immediately while the installed read continues; command readback may await that same read. Request setup precedes deployment binding imports so setup failures stay inside the private failure envelope. The existing recovery and rename-envelope assertions cover these boundaries; the status markup assertion includes its keyboard focus target.
+
 **Decision:** Verification and rename resolve the same private Settings viewer boundary, including session refresh,
 server setup, current account, native client and locale. Module setup failures enter their existing private envelopes.
 Rename still reads exactly the native profile and one exact-account viewer-actions batch independently. Verification
@@ -66,7 +68,7 @@ command completion returns to the surviving control, current withdrawal control 
 already moved elsewhere. A captured local withdrawal confirmation must still match the current observation at dispatch.
 The native withdrawal endpoint currently accepts an empty body and selects the latest pending request, so atomic
 binding to that observation requires an Access producer contract before cross-client replacement is covered.
-The existing recovery and chooser files pin these repairs; no extra stories or test family is introduced.
+The existing recovery and chooser files pin these repairs; no extra stories or test family is introduced. Full acceptance still requires mounted native identity-bound withdrawal and final readback through the seeded API/browser journey; these local assertions do not replace it.
 
 ## Profile avatar
 

@@ -1,5 +1,3 @@
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import type { KernelClient } from '@rezics/client';
 import { withManagedReadDeadline } from './managed-read-deadline';
@@ -29,12 +27,13 @@ export async function readSettingsViewer(): Promise<SettingsViewer | null> {
   const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
+  const { env } = await import('cloudflare:workers');
+  const { kernelClient, requestLocale } = await import('../kernel/client');
   const { prepareSession, sessionSubject, viewerCredential } = await import('../session/request');
   await withManagedReadDeadline(() => prepareSession(request, env as Partial<SessionEnv>), request.signal);
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return null;
-  const { requestLocale } = await import('../kernel/client');
   return {
     request,
     authorization,
@@ -235,6 +234,8 @@ export async function submitNotificationForm(request: Request): Promise<Response
   if (!change) return redirect(true);
   const token = form.get('csrf_token');
   if (typeof token !== 'string') return redirect(true);
+  const { env } = await import('cloudflare:workers');
+  const { kernelClient } = await import('../kernel/client');
   if (recovery.length) {
     const mode = recovery[0] as 'retry' | 'review' | 'confirmed';
     const confirmedVersion = mode === 'confirmed' ? Number(receipts[0]) : undefined;
