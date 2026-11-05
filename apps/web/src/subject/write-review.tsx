@@ -76,10 +76,10 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
     try {
       const expected = await expectedReviewReader(ticket.visit);
       if (!reviewEntryReadIsCurrent(ticket)) return;
-      const result = (await readMyRealmsPageForReview({
+      const result = await readMyRealmsPageForReview({
         data: { expected, ...(cursor ? { cursor } : {}) },
         signal: ticket.controller.signal,
-      }));
+      });
       if (!reviewEntryReadIsCurrent(ticket)) return;
       if (result.kind !== 'ready' || !result.page.signedIn || !sameReviewReader(expected, result.provenance)) {
         setRealms({ state: 'failed', ...(cursor === undefined ? {} : { cursor }), expired: false });
@@ -110,7 +110,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
     try {
       const expected = await expectedReviewReader(ticket.visit);
       if (!reviewEntryReadIsCurrent(ticket)) return;
-      const result = (await readReviewDestination({
+      const result = await readReviewDestination({
         data: {
           realmId: realm.realmId,
           subjectId: ticket.visit.target.subjectId,
@@ -119,7 +119,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
           expected,
         },
         signal: ticket.controller.signal,
-      }));
+      });
       if (!reviewEntryReadIsCurrent(ticket)) return;
       if (result.kind !== 'ready' || !sameReviewReader(expected, result.provenance)) {
         setBoards({ state: 'failed', ...(cursor === undefined ? {} : { cursor }), expired: false });
@@ -158,7 +158,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
     try {
       const expected = await expectedReviewReader(ticket.visit);
       if (!reviewEntryReadIsCurrent(ticket)) return;
-      const result = (await readReviewDestination({
+      const result = await readReviewDestination({
         data: {
           realmId: realm.realmId,
           subjectId: board.native.subjectIds[0],
@@ -167,7 +167,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
           expected,
         },
         signal: ticket.controller.signal,
-      }));
+      });
       if (!reviewEntryReadIsCurrent(ticket)) return;
       if (result.kind !== 'ready' || !sameReviewReader(expected, result.provenance)) {
         setInspection({ state: 'failed', boardId: board.id });

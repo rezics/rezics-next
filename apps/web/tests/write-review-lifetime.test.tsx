@@ -68,8 +68,11 @@ function destinationPage(
   subjectId: string,
   items: ReturnType<typeof destinationItem>[],
   next: string | null = null,
-  state: 'choices' | 'sparse' | 'no-destinations' | 'exhausted' =
-    items.length > 0 ? 'choices' : next ? 'sparse' : 'no-destinations',
+  state: 'choices' | 'sparse' | 'no-destinations' | 'exhausted' = items.length > 0
+    ? 'choices'
+    : next
+      ? 'sparse'
+      : 'no-destinations',
 ) {
   return Response.json({
     state,
@@ -420,7 +423,10 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   await until(() => membershipCalls().length > pagesBeforeMany, 'the many-choice membership read');
   const boardsBeforeMany = destinationCalls().length;
   await surface.clickRealm('Realm 1');
-  await until(() => surface.host.textContent?.includes(m.thread_review_sparse()) === true, 'the sparse destination page');
+  await until(
+    () => surface.host.textContent?.includes(m.thread_review_sparse()) === true,
+    'the sparse destination page',
+  );
   expect(destinationCalls()).toHaveLength(boardsBeforeMany + 1);
   await surface.clickText(m.thread_review_more());
   await until(() => (surface.host.textContent ?? '').includes('Second review board'), 'the continued choices');
@@ -443,7 +449,10 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   const boardsBeforeAccountReplacement = destinationCalls().length;
   await surface.clickRealm('Realm 1');
   await until(() => destinationCalls().length > boardsBeforeAccountReplacement, 'the replacement-account destination');
-  await until(() => (surface.host.textContent ?? '').includes('Account replacement choice'), 'the replacement-account choice');
+  await until(
+    () => (surface.host.textContent ?? '').includes('Account replacement choice'),
+    'the replacement-account choice',
+  );
   expect(credentialReads.at(-1)).toEqual({ subject: readerB, csrfToken: 'csrf-b' });
   expect(navigations).toHaveLength(1);
 
@@ -475,7 +484,9 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   // page settles while a session fetch is merely in flight, then its successful replacement retires.
   const oldBoardGate = deferred<Response>();
   destinationRead = (_realmId, _subjectId, boardId) =>
-    boardId ? destinationPage(realmA, subjectA, [destinationItem(boardA, 'Inspected Board', subjectA)]) : oldBoardGate.promise;
+    boardId
+      ? destinationPage(realmA, subjectA, [destinationItem(boardA, 'Inspected Board', subjectA)])
+      : oldBoardGate.promise;
   const pagesBeforeFetch = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
   await surface.clickWrite();
@@ -537,10 +548,12 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   expect(surface.host.textContent ?? '').not.toContain('Obsolete single choice');
   expect(surface.host.textContent ?? '').toContain(m.thread_review_preparing());
 
-  newTargetGate.resolve(destinationPage(realmA, subjectB, [
-    destinationItem(boardB, 'Current target board', subjectB),
-    destinationItem(boardC, 'Another current board', subjectB),
-  ]));
+  newTargetGate.resolve(
+    destinationPage(realmA, subjectB, [
+      destinationItem(boardB, 'Current target board', subjectB),
+      destinationItem(boardC, 'Another current board', subjectB),
+    ]),
+  );
   await until(() => (surface.host.textContent ?? '').includes('Current target board'), 'the new target choices');
   await surface.clickBoard('Current target board');
   await until(() => navigations.length === 2, 'the replacement-target navigation');
@@ -563,7 +576,10 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   await until(() => destinationCalls().length > firstDestination, 'the selected Realm destinations');
   expect(destinationCalls().slice(firstDestination)).toHaveLength(1);
   expect(destinationCalls().at(-1)?.path).toBe(`/v1/realms/${realm(1).realmId}/review-destinations`);
-  await until(() => (surface.host.textContent ?? '').includes(m.thread_review_no_board()), 'the selected Realm empty page');
+  await until(
+    () => (surface.host.textContent ?? '').includes(m.thread_review_no_board()),
+    'the selected Realm empty page',
+  );
 
   // A failed session read and removal retire in-flight membership data. After recovery the new
   // owner reads again; stale completion/finally cannot replace its pending state.
@@ -686,7 +702,9 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   );
   const navigationCount = navigations.length;
   await surface.unmount();
-  finalBoardGate.resolve(destinationPage(realmA, subjectA, [destinationItem(boardA, 'Unmounted single choice', subjectA)]));
+  finalBoardGate.resolve(
+    destinationPage(realmA, subjectA, [destinationItem(boardA, 'Unmounted single choice', subjectA)]),
+  );
   await settle();
   expect(navigations).toHaveLength(navigationCount);
   expect(serverCalls.every(({ data }) => !JSON.stringify(data).includes('access-'))).toBe(true);
