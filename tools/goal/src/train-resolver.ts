@@ -628,8 +628,13 @@ export class TrainResolver {
     }
     let pool;
     try {
-      const { pools, readings } = this.tasks.resolverPools();
-      pool = choosePool(profile, pools, readings, { policy: this.tasks.settings.policy?.provider });
+      const { pools, readings, history, now, spanMs } = this.tasks.resolverPools();
+      pool = choosePool(profile, pools, readings, {
+        policy: this.tasks.settings.policy?.provider,
+        history,
+        now,
+        spanMs,
+      });
     } catch (error) {
       throw new TrainResolverInfrastructureError(String(error));
     }

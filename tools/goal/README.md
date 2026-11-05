@@ -429,17 +429,17 @@ fields listed below; the empty policy object deliberately provides no account po
 | `policy.reservePercent` | Required number from zero up to, but excluding, 100.                                     |
 | `policy.allowUnknown`   | Required boolean: whether dispatch may proceed without fresh quota observations.         |
 | `policy.maxAgeMs`       | Required positive observation lifetime in milliseconds.                                  |
-| `policy.maxBurnPerHour` | Optional positive limit on recent same-window percentage consumption per hour.           |
+| `policy.maxBurnPerHour` | Optional same-window percent-per-hour ceiling over the burn span.                        |
 
 Only local policy determines unknown-quota admission, reserves and pacing. A retry prefers its current pool. When a
 CLI reports a usage-limit refusal, Goal checks the pool's latest quota reading: a used-up window or a reading older
 than `maxAgeMs` excludes that allowance. A fresh reading with allowance left retries the same pool after three
-minutes; the attempt records the refusal and the primary and secondary windows it read. Three usage-limit refusals on
-one pool within an hour temporarily exclude its allowance for one hour. Other native quota failures exclude all
-aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
+minutes. Three usage-limit refusals on one pool within an hour exclude its allowance for one hour. Other native quota
+failures exclude all aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
 
-Decision: each pool selection indexes current readings and reverse-array history predecessors once by allowance key,
-then reuses that projection across profile fallbacks.
+Decision: each selection indexes retained same-window readings once by allowance key (one per pool per minute, last 90
+minutes / `policy.pacing.burnSpanMs`) and reuses that span rate across fallbacks. A reset is not burn. `status` lists
+each pool's rate.
 
 Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
 pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If a changed

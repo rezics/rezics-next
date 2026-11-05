@@ -21,6 +21,9 @@ import { submitOwnerDecision } from './owner-decisions.ts';
 import { projectToolIncidentStatus } from './tool-incidents.ts';
 import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 import { trainLaneStatus } from './lease.ts';
+import { poolBurnStatus } from './allowance.ts';
+import { defaultPolicy } from './policy.ts';
+import { readRetainedPoolReadings } from './pacing.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -192,10 +195,16 @@ export async function runWorkerCommand(
       };
       const selectedTasks = cohort.map(show);
       const trains = trainLaneStatus(settings.stateDirectory);
+      const pools = poolBurnStatus(
+        settings.pools ?? [],
+        readRetainedPoolReadings(settings.stateDirectory),
+        Date.now(),
+        settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs,
+      );
       print(
         JSON.stringify(
           arg
-            ? { ...selectedTasks[0]!, toolIncidents: incidentProjection.toolIncidents, trains }
+            ? { ...selectedTasks[0]!, toolIncidents: incidentProjection.toolIncidents, trains, pools }
             : {
                 devVerification: devVerificationState(
                   settings.mainCheckout,
@@ -205,6 +214,7 @@ export async function runWorkerCommand(
                 ),
                 toolIncidents: incidentProjection.toolIncidents,
                 trains,
+                pools,
                 tasks: selectedTasks,
               },
           null,

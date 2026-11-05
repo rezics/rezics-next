@@ -336,7 +336,8 @@
       "alertPercentPerHour": 2,
       "alertUnusedPercent": 20,
       "alertResetHours": 24,
-      "alertEveryMs": 10800000
+      "alertEveryMs": 10800000,
+      "burnSpanMs": 5400000
     },
     "manager": {
       "sleepAlarmPerHour": 10,

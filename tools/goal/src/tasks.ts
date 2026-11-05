@@ -28,8 +28,8 @@ import {
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError } from './lease.ts';
 import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.ts';
-import { choosePoolWithFallback, PoolPolicyReloader } from './pools.ts';
-import { pace, readCodexSchedule } from './pacing.ts';
+import { choosePoolWithFallback, PoolPolicyReloader, withRetainedHistory } from './pools.ts';
+import { pace, readCodexSchedule, retainPoolReadings } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { applyRenderedPrompt, launch, renderWorkerPrompt, type RunningWorker } from './launch.ts';
 import { awaitHostCapacity, startsFirst } from './launch-capacity.ts';
@@ -258,9 +258,15 @@ export class WorkerTasks {
   /** Use the same live pool policy and observed allowance as worker launches. */
   resolverPools() {
     const pools = this.poolPolicies.read();
+    const now = Date.now();
+    const readings = pools.map((pool) => withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory));
+    const spanMs = this.settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs;
     return {
       pools,
-      readings: pools.map((pool) => withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory)),
+      readings,
+      now,
+      spanMs,
+      history: retainPoolReadings(this.settings.stateDirectory, readings, now, spanMs),
     };
   }
   /**
@@ -1517,10 +1523,6 @@ export class WorkerTasks {
       const readings = pools.map((pool) =>
         withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory),
       );
-      const history = this.store
-        .attempts()
-        .flatMap((a) => [a.before, a.after])
-        .filter((r) => r !== null);
       const routing = readRouting(this.settings.routingFile, this.settings.policy?.routing);
       let fallbacks =
         options.profile || pinned || nextBrief.kind === 'verification' ? [] : retryFallbacks(routing, nextTaskClass);
@@ -1558,12 +1560,16 @@ export class WorkerTasks {
         fallbacks,
         pools,
         readings,
-        {
-          history,
-          policy: this.settings.policy?.provider,
-          ...(old && !switched ? { preferred: old.pool } : {}),
-          ...(options.excludePools ? { exclude: options.excludePools } : {}),
-        },
+        withRetainedHistory(
+          this.settings.stateDirectory,
+          readings,
+          {
+            policy: this.settings.policy?.provider,
+            ...(old && !switched ? { preferred: old.pool } : {}),
+            ...(options.excludePools ? { exclude: options.excludePools } : {}),
+          },
+          this.settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs,
+        ),
         // A new task goes to the allowance that would otherwise expire unused first; an explicit profile, a switched
         // engine, or a class routed with paced: false keeps its order.
         pinned || options.profile || switched || !paced

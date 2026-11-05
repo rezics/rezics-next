@@ -15,7 +15,74 @@ import type { Pool, PoolReading } from './types.ts';
 export type CodexSchedule = { scheduledAt: string | null; latestResetAt: string | null; fetchedAt: string };
 
 const SCHEDULE_FILE = 'codex-schedule.json';
+const READINGS_FILE = 'pool-readings.json';
 const HOUR_MS = 3_600_000; // Unit conversion for provider reset timestamps.
+const MINUTE_MS = 60_000;
+
+function asRetainedReading(value: unknown): PoolReading | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const reading = value as PoolReading;
+  if (typeof reading.pool !== 'string' || typeof reading.allowanceKey !== 'string') return undefined;
+  if (typeof reading.observedAt !== 'string' || !Number.isFinite(Date.parse(reading.observedAt))) return undefined;
+  if (!Array.isArray(reading.windows)) return undefined;
+  return reading;
+}
+
+/** Bounded window readings already taken for selection or alerts; a non-JSON file is ignored so dispatch continues. */
+export function readRetainedPoolReadings(stateDirectory: string): PoolReading[] {
+  try {
+    const value = JSON.parse(readFileSync(join(stateDirectory, READINGS_FILE), 'utf8')) as {
+      version?: unknown;
+      readings?: unknown;
+    };
+    if (value.version !== 1 || !Array.isArray(value.readings)) return [];
+    return value.readings.flatMap((item) => {
+      const reading = asRetainedReading(item);
+      return reading ? [reading] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** Keep at most one reading per pool per minute and drop samples older than the burn span. */
+export function retainPoolReadings(
+  stateDirectory: string,
+  incoming: readonly PoolReading[],
+  now = Date.now(),
+  spanMs = defaultPolicy.pacing.burnSpanMs,
+): PoolReading[] {
+  const start = now - spanMs;
+  const merged = readRetainedPoolReadings(stateDirectory).filter(
+    (reading) => reading.observedAt && Date.parse(reading.observedAt) >= start,
+  );
+  for (const reading of incoming) {
+    if (!reading.observedAt) continue;
+    const observedAt = Date.parse(reading.observedAt);
+    if (!Number.isFinite(observedAt) || observedAt < start) continue;
+    const minute = Math.floor(observedAt / MINUTE_MS);
+    const index = merged.findIndex(
+      (item) =>
+        item.pool === reading.pool && item.observedAt && Math.floor(Date.parse(item.observedAt) / MINUTE_MS) === minute,
+    );
+    if (index >= 0) merged[index] = reading;
+    else merged.push(reading);
+  }
+  const path = join(stateDirectory, READINGS_FILE);
+  const temp = `${path}.${process.pid}-${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temp, JSON.stringify({ version: 1, readings: merged }));
+    renameSync(temp, path);
+  } catch (error) {
+    try {
+      unlinkSync(temp);
+    } catch {
+      /* The next retain rewrites a complete file. */
+    }
+    throw error;
+  }
+  return merged;
+}
 
 function optionalTimestamp(value: unknown): string | null | undefined {
   if (value === null) return null;
@@ -174,13 +241,22 @@ export function alertUnspentAllowances(
   const schedule = readCodexSchedule(stateDirectory);
   const seen = new Set<string>();
   let count = 0;
+  const observed = new Map<Pool, PoolReading>();
+  const readingFor = (pool: Pool) => {
+    const cached = observed.get(pool);
+    if (cached) return cached;
+    const reading = read(pool);
+    observed.set(pool, reading);
+    return reading;
+  };
   // Pools sharing an allowance can keep different reserves; the one that keeps the most is the one work is limited by.
   for (const pool of [...pools].sort(
-    (a, b) => effectiveReserve(b, longestOrEmpty(read(b)), now) - effectiveReserve(a, longestOrEmpty(read(a)), now),
+    (a, b) =>
+      effectiveReserve(b, longestOrEmpty(readingFor(b)), now) - effectiveReserve(a, longestOrEmpty(readingFor(a)), now),
   )) {
     if (seen.has(pool.allowanceKey)) continue;
     seen.add(pool.allowanceKey);
-    const current = pace(read(pool), pool, now, schedule, policy);
+    const current = pace(readingFor(pool), pool, now, schedule, policy);
     if (!current) continue;
     const atRisk =
       current.urgency > policy.alertPercentPerHour ||
@@ -199,5 +275,6 @@ export function alertUnspentAllowances(
     writeFileSync(`${path}.tmp`, JSON.stringify(sent, null, 2));
     renameSync(`${path}.tmp`, path);
   }
+  retainPoolReadings(stateDirectory, [...observed.values()], now, policy.burnSpanMs);
   return count;
 }
