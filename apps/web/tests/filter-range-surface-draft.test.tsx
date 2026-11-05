@@ -35,6 +35,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   FormData: window.FormData,
   IS_REACT_ACT_ENVIRONMENT: true,
 };
@@ -63,6 +64,7 @@ test('range drafts survive Filters remounts and reset to the next committed rang
       queryState: { query: committed.query, facets: {}, ranges: committed.ranges },
       ranges: committed.ranges,
       selectedFacets: {},
+      discovery: { status: 'ready', page: { kinds: { values: [] }, applicability: { statement: 'all' } } },
       refinement: {
         key: committed.query,
         properties: [
@@ -215,6 +217,7 @@ test('mounted criteria reserve IME keys, then Apply ordered labels without chang
         for (const listener of mediaListeners) listener({} as MediaQueryListEvent);
       });
       let input = document.querySelector<HTMLInputElement>('input[id$="-custom"]')!;
+      expect(input, host.textContent ?? 'Mounted Search criteria').not.toBeNull();
       const form = input.form!;
       const submit = () => form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
       const languages = () => [...form.querySelectorAll('ol li code')].map((node) => node.textContent);
