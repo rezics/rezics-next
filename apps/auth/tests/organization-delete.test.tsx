@@ -58,13 +58,14 @@ test('uncertainty retains the original identity through unavailable, missing, de
   await confirm(page.host, '@first');
   await flush(() => page.calls[0]!.resolve(approval()));
   await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
+  await flush(() => page.calls[2]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
   const saved = readOrganizationDeleteUnknown(first);
   expect(saved.kind).toBe('pending');
   for (result of [{ kind: 'unavailable' }, { kind: 'missing' }, { kind: 'denied' }, ready(first)]) {
     await flush(() => button(page.host, 'Check current organization')!.click());
     expect(readOrganizationDeleteUnknown(first)).toEqual(saved);
     expect(page.host.querySelector('form')).toBeNull();
-    expect(page.calls).toHaveLength(2);
+    expect(page.calls).toHaveLength(3);
     expect(page.host.textContent).not.toContain('Organization deletion committed');
   }
   await page.render(
@@ -256,7 +257,10 @@ test('refused unknown-marker persistence retains custody and cannot dispatch or 
   try {
     await confirm(page.host, '@first');
     await flush(() => page.calls[0]!.resolve(approval()));
-    expect(page.calls).toHaveLength(1);
+    expect(setItem.mock.calls.some(([key]) => key === `rezics.organization-delete.step-up.unknown.${first}`)).toBe(
+      true,
+    );
+    expect(page.calls.map(({ path }) => path)).toEqual(['/account-operations/approve']);
     expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
     expect(page.host.textContent).toContain('The deletion result is unknown');
     expect(page.host.querySelector('form')).toBeNull();

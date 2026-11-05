@@ -63,6 +63,7 @@ test('single readback survives storage loss; late advice cannot affect replaceme
   });
   await flush(() => page.calls[0]!.resolve(approval()));
   await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
+  await flush(() => page.calls[2]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
   const original = readOrganizationDeleteUnknown(first);
   window.sessionStorage.clear();
   const check = button(page.host, 'Check current organization')!;
@@ -93,7 +94,7 @@ test('single readback survives storage loss; late advice cannot affect replaceme
   expect(unload()).toBe(true);
   window.sessionStorage.removeItem('rezics.organization-delete.step-up');
   expect(unload()).toBe(false);
-  expect(page.calls).toHaveLength(2);
+  expect(page.calls).toHaveLength(3);
   storeOrganizationDeleteStepUp({ ...replacement, organizationId: first });
   await page.render(content(second, async () => ready(second)));
   expect(unload()).toBe(false);
@@ -101,7 +102,7 @@ test('single readback survives storage loss; late advice cannot affect replaceme
   await page.render(content(first, read));
   expect(page.host.querySelector('form')).toBeNull();
   expect(unload()).toBe(true);
-  expect(page.calls).toHaveLength(2);
+  expect(page.calls).toHaveLength(3);
 });
 
 for (const restored of ['exact', 'malformed', 'wrong-target'] as const)

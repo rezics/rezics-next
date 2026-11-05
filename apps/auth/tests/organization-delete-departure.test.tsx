@@ -6,7 +6,7 @@ import {
   createRouter,
   RouterContextProvider,
 } from '@tanstack/react-router';
-import { creationFixture, approval, button, dom, fill, flush, open, send, session } from './creation-page-fixture';
+import { creationFixture, approval, button, dom, fill, flush, leave, open, send, session } from './creation-page-fixture';
 import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
 import { readOrganizationDeleteStepUp, readOrganizationDeleteUnknown } from '../src/organization-delete-step-up';
 import type { OrganizationDeletionRead, OrganizationDeletionReader } from '../src/organization-deletion';
@@ -211,6 +211,7 @@ for (const kind of [
     });
     await flush(() => page.calls[0]!.resolve(approval()));
     await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
+    await flush(() => page.calls[2]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
     const saved = readOrganizationDeleteUnknown(first);
     result =
       kind === 'ready'
@@ -219,7 +220,7 @@ for (const kind of [
           ? { kind, humanAccountId: human, action: 'authenticate' }
           : { kind };
     await page.choose('Check current organization');
-    expect(page.calls).toHaveLength(2);
+    expect(page.calls).toHaveLength(3);
     expect(readOrganizationDeleteUnknown(first)).toEqual(saved);
     expect(page.host.querySelector('form')).toBeNull();
     expect(page.host.textContent).not.toContain('@first');
