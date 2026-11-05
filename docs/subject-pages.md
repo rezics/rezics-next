@@ -2409,6 +2409,9 @@ remain integration-owned.
 Decision: a direct native Character read opts into public document previews with `includeDocuments=true`; page
 composition keeps its existing dependent document plan, so a page does not hydrate each body twice.
 
+Decision: Semantic and native Document routes share the public view mapper and strict schema from Content's narrow
+`document-public.ts` entry; the route module keeps compatibility exports for existing callers.
+
 `GET /v1/subjects/:id?includeDocuments=true` adds `documents`, keyed by the selected original candidate UUID, for
 `wd:Q95074`. It selects only document properties admitted on the Character by its recorded release and actually
 present in the current Context observation. Best rank, requested language and original-language fallback use

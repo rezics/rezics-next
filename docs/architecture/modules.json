@@ -213,7 +213,10 @@
       "owner": "content",
       "paths": ["services/kernel/src/content/**", "services/kernel/db/content/**"],
       "excludes": ["services/kernel/src/content/community-projection/**"],
-      "publicEntries": ["services/kernel/src/content/realm-board-home.ts"],
+      "publicEntries": [
+        "services/kernel/src/content/document-public.ts",
+        "services/kernel/src/content/realm-board-home.ts"
+      ],
       "allowedDependencies": [
         "definitions",
         "document",

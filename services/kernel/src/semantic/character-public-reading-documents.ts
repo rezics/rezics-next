@@ -3,7 +3,7 @@ import type { Release } from '@rezics/definitions';
 import { serializeDocument } from '@rezics/document';
 import { createHash } from 'node:crypto';
 import { readDocument, type DocumentReadDependencies } from '../content/document-read.ts';
-import { publicDocument, type PublicDocumentView } from '../content/document-routes.ts';
+import { publicDocument, type PublicDocumentView } from '../content/document-public.ts';
 import type { AnchoredPosition, ReadContext } from '../content/model.ts';
 import type { Item } from './item.ts';
 

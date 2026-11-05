@@ -6,6 +6,10 @@ composition; this route adds no publisher or generated-tree writer.
 
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
+The supported `document-public.ts` entry owns `PublicDocumentView`, `publicDocument` and the strict public schema shared
+by the native Document route and Semantic's Character preview. `document-routes.ts` retains the route compatibility
+exports; GET and DELETE behavior, document authority, disclosure and erasure remain in their existing owners.
+
 ## Native moderation directory
 
 Decision: enumerate native Content Board references independently of memberships; keep the mounted directory
