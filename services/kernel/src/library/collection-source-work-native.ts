@@ -1,3 +1,11 @@
+import {
+  CANONICAL_SOURCE_RECEIVING_COST as COLLECTION_SOURCE_WORK_COST,
+  CANONICAL_SOURCE_STATEMENTS,
+  assertCanonicalSourceStatement,
+  canonicalSourceGroupStatement,
+  canonicalSourceWorkDimensions,
+  type CanonicalSourceStatement,
+} from './canonical-source-bounds.ts';
 /** Same-client structural reads for the selected Source branch. Declarations constrain calls, never fund them. */
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -9,14 +17,6 @@ import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
 import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
 import type { Access } from '../request/access.ts';
-import {
-  CANONICAL_SOURCE_RECEIVING_COST,
-  CANONICAL_SOURCE_STATEMENTS,
-  assertCanonicalSourceStatement,
-  canonicalSourceGroupStatement,
-  canonicalSourceWorkDimensions,
-  type CanonicalSourceStatement,
-} from './canonical-source-bounds.ts';
 import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 export { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 import { nativeSourceFence, type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
@@ -37,7 +37,7 @@ export type CollectionSourceWorkState = Readonly<{
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
 
 /** Upper bounds follow the exact indexed statements in the canonical Source plan. */
-export const COLLECTION_SOURCE_WORK_COST = CANONICAL_SOURCE_RECEIVING_COST;
+export { CANONICAL_SOURCE_RECEIVING_COST as COLLECTION_SOURCE_WORK_COST } from './canonical-source-bounds.ts';
 
 const sourceReceipt = (bound: Bound): WorkReceipt =>
   Object.freeze({

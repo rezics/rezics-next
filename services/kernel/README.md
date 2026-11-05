@@ -48,7 +48,8 @@ the supplied port type so review commands remain available to the existing nativ
 retains each confirmed choice across later edits; private-entry callers retain native authorization and idempotency
 headers through the generated command signatures. Ordinary Search evidence remains required; only grouped release
 evidence is optional. Native basis composition retains the original SQL query identities used by its bound and
-projection maps.
+projection maps. Static Source costs re-export the canonical leaf declaration, and ordinal SQL initializes before
+runtime dependencies can request its bound during module assembly.
 
 Decision: Account client exports project mounted route types and add no parallel producer for account profile, avatar,
 managed-account navigation or unread data.
