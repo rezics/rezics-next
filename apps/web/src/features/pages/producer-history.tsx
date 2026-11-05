@@ -71,6 +71,7 @@ function ProducerHistoryPageLive({
   const nextInstance = useRef(0);
   const sliceHeading = useRef<HTMLHeadingElement>(null);
   const readFocus = useConsentFocus();
+  const correctionRefresh = useRef<number | undefined>(undefined);
   const focusAfterClose = useRef<{ target: HTMLElement; revision: number } | undefined>(undefined);
   const o = { locale: locale as never };
   const stream = read?.stream;
@@ -103,9 +104,18 @@ function ProducerHistoryPageLive({
     else sliceHeading.current?.focus();
   }, [draft, lease, slice.revision]);
 
-  function load(intent: HistoryIntent, event?: Pick<MouseEvent<HTMLElement>, 'currentTarget' | 'detail'>) {
+  function admittedFocus() {
+    const index = admittedSelection.current;
+    return index === undefined
+      ? sliceHeading.current
+      : sliceHeading.current?.ownerDocument.getElementById(`${streamId}-org-${index}`);
+  }
+  function load(intent: HistoryIntent, event?: MouseEvent<HTMLButtonElement>, preserveFocus = false) {
     if (!lifetime.active()) return;
-    readFocus.cancel();
+    if (!preserveFocus) {
+      readFocus.cancel();
+      correctionRefresh.current = undefined;
+    }
     lease.retire();
     setSelected(undefined);
     setPart([]);
@@ -113,17 +123,14 @@ function ProducerHistoryPageLive({
     setDraft((current) => (current ? { ...current, retired: true } : undefined));
     const pending = reader.request(intent);
     const revision = reader.currentRevision();
-    readFocus.begin(
-      event,
-      () => reader.owned(revision),
-      () => {
-        const index = reader.currentRevision() === revision ? admittedSelection.current : undefined;
-        return index === undefined
-          ? sliceHeading.current
-          : sliceHeading.current?.ownerDocument.getElementById(`${streamId}-org-${index}`);
-      },
-      () => reader.admitted(revision),
-    );
+    if (preserveFocus) correctionRefresh.current = revision;
+    else
+      readFocus.begin(
+        event,
+        () => reader.owned(revision),
+        admittedFocus,
+        () => reader.admitted(revision),
+      );
     void pending;
   }
   function inspect(index: number, button: HTMLButtonElement) {
@@ -342,6 +349,20 @@ function ProducerHistoryPageLive({
         <section
           className="space-y-3 border-t border-border pt-6"
           aria-label={m.producer_history_correction_context({}, o)}
+          onClickCapture={(event) => {
+            const source = event.target instanceof Element ? event.target.closest('button') : null;
+            if (!correctionCurrent || !(source instanceof HTMLButtonElement)) return;
+            correctionRefresh.current = undefined;
+            // Capture keyboard consent before the asynchronous command, not from whichever
+            // element happens to have focus when a later selection callback arrives.
+            readFocus.begin(
+              { currentTarget: source, detail: event.detail },
+              () =>
+                correctionRefresh.current === undefined ? lease.active() : reader.owned(correctionRefresh.current),
+              admittedFocus,
+              () => correctionRefresh.current !== undefined && reader.admitted(correctionRefresh.current),
+            );
+          }}
         >
           {correctionCurrent ? (
             <>
@@ -396,16 +417,7 @@ function ProducerHistoryPageLive({
               requireCloseConfirmation={draft.confirmClose}
               onClose={closeDraft}
               onSelected={() => {
-                if (correctionCurrent && lease.active()) {
-                  const source = draft.returnFocus.ownerDocument.activeElement;
-                  load(
-                    draft.origin,
-                    source instanceof HTMLElement &&
-                      (source.tagName === 'BUTTON' || source === source.ownerDocument.body)
-                      ? { currentTarget: source, detail: 0 }
-                      : undefined,
-                  );
-                }
+                if (correctionCurrent && lease.active()) load(draft.origin, undefined, true);
               }}
             />
           </CatalogueCurrentReading>

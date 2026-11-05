@@ -67,7 +67,6 @@ export function useProducerHistorySlice({
   }
   async function request(intent: HistoryIntent) {
     if (!lifetime.active()) return;
-    if (intent.movement === 'replace') path.current = { previous: [] };
     const revision = ++sequence.current;
     const before = current.current;
     const next: HistorySlice = {
