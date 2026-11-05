@@ -328,7 +328,13 @@ export function InboxPageView({
   historyKey?: string;
 } = {}) {
   const router = useRouter({ warn: false });
-  const routedHistoryKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
+  const routedHistoryKey = useRouterState({
+    select: (state) => {
+      const routeState = state.location.state as { key?: unknown; __TSR_key?: unknown };
+      const key = typeof routeState.key === 'string' ? routeState.key : routeState.__TSR_key;
+      return typeof key === 'string' ? key : state.location.href;
+    },
+  });
   const historyKey = suppliedHistoryKey ?? routedHistoryKey;
   const queryClient = useQueryClient();
   const { state, csrfToken, viewer, sessionRead } = useInboxViewer();
