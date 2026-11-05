@@ -58,7 +58,8 @@ search or current-copy enumeration. Archive UUIDs, pins, timestamps and revision
 Decision: the copy adapter uses the shared V2 section vocabulary for V3, with coverage
 `private-library-owner-facts-v3` and journal-local `assessment:{meaningRevision:1,units:0..20|null}`;
 V4 provider additions remain refused. This is a decoder seam, not a producer or assessment-adoption writer.
-The installed base producer emits V2; an actual V3 producer remains a separately delivered integration seam.
+The installed producer defaults to V4. Recovery fixtures complete an installed V2 capture selected before paging;
+completed V4 artifacts cannot be relabeled as a supported version.
 
 V2/V3 require exactly the original 14 sections followed by `annotations`, `provenance`, `journals`,
 `coverage:"private-library-owner-facts-v2"` or `"private-library-owner-facts-v3"`, and `sectionTotals` with
