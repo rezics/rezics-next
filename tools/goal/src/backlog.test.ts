@@ -752,7 +752,7 @@ function observed(pool: Pool, usedPercent: number, at: number): PoolReading {
     observedAt: new Date(at).toISOString(),
     exhausted: usedPercent >= 100,
     error: null,
-    windows: [{ usedPercent, minutes: 10080, resetsAt: at + 8 * 3_600_000 }],
+    windows: [{ usedPercent, minutes: 10080, resetsAt: NOW + 8 * 3_600_000 }],
   };
 }
 
