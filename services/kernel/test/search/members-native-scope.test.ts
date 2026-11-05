@@ -162,6 +162,11 @@ async function preparedFixture(native: Runtime) {
       )
     ).status,
   ).toBe(204);
+  const repeated = await native.send(f.owner, 'POST', `/v1/collections/${f.collectionId}/members`, {
+    subjectId: accepted,
+  });
+  expect(repeated.status).toBe(201);
+  members.push(((await repeated.json()) as { member: (typeof members)[number] }).member);
   // Exercise the ordinary native Source producer before the work consumer. No capture/generation is seeded.
   expect((await native.send(f.owner, 'GET', `/v1/collections/${f.collectionId}/members`)).status).toBe(200);
   return {
@@ -309,6 +314,7 @@ test('genuine Members native scopes evaluate owner facts and continue ID/ordinal
               for (let page = 0; page < 5; page++) {
                 const next = await scope.ordinalPrefix(prepared, { after, quota: 1, allowance: payer.next() });
                 payer.settle(next.work);
+                expect(next.frontier.after?.memberId).toBe(f.members[Math.min(page, f.members.length - 1)]!.id);
                 if (page === 0) {
                   expect(next.subjects).toEqual([]);
                   expect(next.frontier.after?.memberId).toBe(f.members[0]!.id);
@@ -356,9 +362,9 @@ test('genuine Members native scopes evaluate owner facts and continue ID/ordinal
               code: 'dependency_unavailable',
               work: { used: { statements: 0 } },
             });
-            if (requested.sort === 'id') {
+            if (requested.sort === 'id' || requested.sort === 'ordinal') {
               // Change the supplied episode during real dependent SQL, without faking a native getter result.
-              // The final fresh reread must refuse both a positive and an empty result.
+              // The final fresh reread must refuse both a positive and an empty result, including ordinal selection.
               const mutable = { ...locator };
               const currentScope = adapter(native, { ...work, locator: mutable }, deadline);
               const captured = await currentScope.prepare(requested.filter, { allowance: original().next() });
@@ -374,13 +380,25 @@ test('genuine Members native scopes evaluate owner facts and continue ID/ordinal
                 return result;
               }) as typeof read;
               try {
-                await expect(
-                  currentScope.evaluate(captured, [f.accepted], {
-                    rawKeys: 256,
-                    native: { points: 8192, witnesses: 8192, rows: 65536, bytes: 8 * 1024 ** 3, emptySeeks: 1024 },
-                    allowance: original().next(),
-                  }),
-                ).rejects.toMatchObject({ code: 'semantic_not_ready' });
+                const selection =
+                  requested.sort === 'ordinal'
+                    ? currentScope.ordinalPrefix(captured, {
+                        after: null,
+                        quota: 1,
+                        allowance: original().next(),
+                      })
+                    : currentScope.evaluate(captured, [f.accepted], {
+                        rawKeys: 256,
+                        native: {
+                          points: 8192,
+                          witnesses: 8192,
+                          rows: 65536,
+                          bytes: 8 * 1024 ** 3,
+                          emptySeeks: 1024,
+                        },
+                        allowance: original().next(),
+                      });
+                await expect(selection).rejects.toMatchObject({ code: 'semantic_not_ready' });
                 expect(changed).toBe(true);
               } finally {
                 work.tx.query = read;

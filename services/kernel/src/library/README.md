@@ -370,7 +370,11 @@ pending. No Account is invented from a Collection ID and no public catalogue cap
 Retained deletion episodes advance its frontier and consume work; they provide no disclosed membership or
 canonical completeness. The projection excludes notes and other retained payload, and its statements, rows,
 points, keys and bytes use the existing native Source work ledger. Native observation and current source fences
-are checked on each page. The public factory call remains explicitly unavailable pending the shared scoped binding.
+are checked on each page. The selected Members path consumes one raw occurrence per existing preparation
+invocation; Search advances deleted and duplicate occurrences on that raw frontier and establishes canonical,
+disclosed output before continuing its ordered page. An exactly full window requires a later actual exhaustion read.
+Unsupported or unbound source/work contexts remain unavailable. Decision: keep selected ordinal dispatch at its
+declared one-row limit and preserve the existing finite preparation and page continuation schedule.
 
 Source storage retains at most two generations, including cancelled, abandoned and superseded copies. With no
 actual destination-disposition producer, a third allocation returns `dependency_unavailable`; it never reuses a

@@ -1,5 +1,6 @@
 import { expect, expectTypeOf, spyOn, test } from 'bun:test';
 import type { Pool } from 'pg';
+import { BOUND_AXES, isBound, sumBounds, withinCeiling } from '@rezics/bounds';
 import type { NativeOrdinalKey, RawOrdinalCollectionPrefix } from '../../src/library/collection-source-order.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
 import { createIdentityScopedObservations } from '../../src/semantic/identity-scoped-observations.ts';
@@ -7,7 +8,11 @@ import type { IdentityScopedObservations } from '../../src/semantic/identity-sco
 import { ScopeWork, scopeAllowance, zeroScopeWork, evaluateScopeSubjects } from '../../src/search/scope-execution.ts';
 import { compileCurrentOwnerFilter } from '../../src/search/current-filter-plan.ts';
 import { createSearchScopeSource } from '../../src/search/scope-source.ts';
-import { createSearchScopeOrder, sameScopeObservation } from '../../src/search/service-scope-order.ts';
+import {
+  createSearchScopeOrder,
+  sameScopeObservation,
+  SEARCH_SCOPE_ORDINAL_OPERATION,
+} from '../../src/search/service-scope-order.ts';
 import { createSearchScopeForService } from '../../src/search/service-scope.ts';
 
 const nativePreconnect = globalThis.fetch.preconnect;
@@ -20,6 +25,32 @@ test('closed ordering API imports the canonical native ordinal key and raw row c
   expectTypeOf<Awaited<ReturnType<Order['rawOrdinal']>>>().toEqualTypeOf<RawOrdinalCollectionPrefix>();
   expectTypeOf<ReturnType<typeof createIdentityScopedObservations>>().toEqualTypeOf<IdentityScopedObservations>();
   expectTypeOf<Parameters<typeof createSearchScopeForService>[1]>().toEqualTypeOf<LeafOptions>();
+});
+
+test('selected ordinal dispatch follows its complete immutable Source ceiling and one-row schedule', () => {
+  const plan = SEARCH_SCOPE_ORDINAL_OPERATION;
+  expect(plan.axes).toEqual(BOUND_AXES);
+  expect(plan.rawLimit).toBe(1);
+  expect(plan.schedule).toMatchObject({
+    definitionGetters: 11,
+    membersSnapshots: 4,
+    orderCurrentnessReads: 2,
+    sourcePrepare: 1,
+    ordinalPrefix: 1,
+    rawOrdinalRowsMaximum: 1,
+    closurePasses: 2,
+  });
+  expect(plan.nativeStatement).toMatchObject({
+    limit: 1,
+    requestBytes: expect.any(Number),
+    resultBytes: 512,
+    work: { engineRequests: 0, statements: 1, candidateKeys: 1 },
+  });
+  expect(isBound(plan.cost)).toBe(true);
+  expect(plan.cost).toEqual(sumBounds(...Object.values(plan.terms)));
+  expect(withinCeiling(plan.cost, plan.ceiling)).toBe(true);
+  expect(Object.isFrozen(plan)).toBe(true);
+  expect(Object.isFrozen(plan.terms)).toBe(true);
 });
 
 test('one ledger retains prefix, alias, metadata, native refusal and leaf work without refilling axes', () => {

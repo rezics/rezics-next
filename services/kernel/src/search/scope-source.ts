@@ -25,6 +25,7 @@ import { createPublicFilterSourceBinding } from '../semantic/public-filter-sourc
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import {
   createSearchScopeOrder,
+  SEARCH_SCOPE_ORDINAL_OPERATION,
   sameScopeObservation,
   type SearchScopeOrder,
   type SearchScopeCollection,
@@ -1600,8 +1601,7 @@ export function createSearchScopeSource({
       if (value.members) {
         const members = value.members;
         // One fixed raw window, including deletions/rejections. Unknown work stops before that raw slot.
-        const limit = Math.min(request.quota, work.remaining().remaining.candidateKeys);
-        if (limit < 1) membersFailure(new ProblemError('dependency_unavailable'), work);
+        const limit = SEARCH_SCOPE_ORDINAL_OPERATION.rawLimit;
         const raw = await runMembersWork(members.input, work, (budget) =>
           membersSource(budget, 4, (allowance) =>
             order!.rawOrdinal(value.collection!, request.after, limit, allowance),
@@ -1682,8 +1682,7 @@ export function createSearchScopeSource({
       if (!retained.complete) {
         // Each retry advances a retained, finite native frontier. No request scans the
         // collection to completion, and raw exhaustion alone never publishes a page.
-        const limit = Math.min(1, work.remaining().remaining.candidateKeys);
-        if (limit < 1) unavailable();
+        const limit = SEARCH_SCOPE_ORDINAL_OPERATION.rawLimit;
         const raw = await order!.rawOrdinal(value.collection, retained.frontier, limit, work.remaining());
         work.native(raw.work);
         const rows: { subject: string; after: NativeOrdinalKey }[] = [];
