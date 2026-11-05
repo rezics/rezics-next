@@ -88,5 +88,6 @@ export async function changeBoardPinRequest(
     if (isPlatformClosedError(error)) return { state: 'unavailable' };
     return { state: 'unknown' };
   }
+  if (result.response === undefined) return { state: 'unknown' };
   return parseBoardPinCommandResult(result.status, result.error ?? result.data, command);
 }
