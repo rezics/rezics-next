@@ -6314,6 +6314,7 @@
   "home_space_retry": "Reintentar búsqueda de Space",
   "home_space_invalid": "Introduce una dirección del Space o un enlace a este Space desde este sitio.",
   "home_space_unavailable": "No se pudo cargar este Space. Inténtalo de nuevo o quítalo.",
+  "home_space_not_found": "No se encontró este Space. Revisa la dirección o quítalo.",
   "home_space_changed": "Este Space ha cambiado. Inicio está actualizando tus resultados.",
   "home_feed_sparse": "No hay elementos en esta página. Continúa a la siguiente.",
   "home_feed_public_discovery_unavailable": "El descubrimiento público de colecciones, reseñas y Spaces aún no está disponible en el feed nativo.",

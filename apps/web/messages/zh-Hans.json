@@ -6319,6 +6319,7 @@
   "home_space_retry": "重试 Space 查找",
   "home_space_invalid": "请输入 Space 地址或本站的 Space 链接。",
   "home_space_unavailable": "无法加载此 Space。请重试或清除该选择。",
+  "home_space_not_found": "找不到此 Space。请检查地址或清除该选择。",
   "home_space_changed": "此 Space 已更改，正在更新主页结果。",
   "home_feed_sparse": "本页没有条目。请继续下一页。",
   "home_feed_public_discovery_unavailable": "原生信息流暂不支持发现公开合集、评论和 Space。",

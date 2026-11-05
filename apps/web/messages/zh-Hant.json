@@ -6322,6 +6322,7 @@
   "home_space_retry": "重試 Space 查詢",
   "home_space_invalid": "請輸入 Space 位址或本站的 Space 連結。",
   "home_space_unavailable": "無法載入此 Space。請重試或清除選取項目。",
+  "home_space_not_found": "找不到此 Space。請檢查地址或清除選取項目。",
   "home_space_changed": "此 Space 已變更，正在更新首頁結果。",
   "home_feed_sparse": "本頁沒有項目。請繼續下一頁。",
   "home_feed_public_discovery_unavailable": "原生動態目前尚未支援探索公開合集、評論與 Space。",
