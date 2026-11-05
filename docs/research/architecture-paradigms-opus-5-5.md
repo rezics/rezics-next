@@ -425,6 +425,185 @@ The adopted rules are in [architecture](../architecture.md#modules-and-boundarie
 
 ## Recommended target paradigm
 
+**Levelled capability modules: a functional core, effects passed as capabilities, registrations as declared
+values.** Five rules carry it; each is decidable by a tool from paths and imports.
+
+1. **Levels, no cycles at any granularity.** Every production file belongs to a module of one kind, and kinds have
+   levels: contract (0), core (1), application (2), adapter (3), composition root (4). A module may import only
+   lower levels, plus same-level modules that the manifest orders explicitly. The declared module graph is a DAG;
+   existing back edges live only in the baseline.
+2. **Nothing runs across modules at load.** A module's top-level code may evaluate literals, its own module's
+   declarations, and values from contract and core modules. It may not call or read a value from an application,
+   adapter or another domain's module at load. Registration, wiring and caching happen when the composition root
+   calls the module.
+3. **Effects are capabilities.** Code above the core reaches durable I/O, the clock, randomness, IDs, environment and
+   logging only through parameters it was handed: a capability record typed by narrow interfaces declared in a
+   contract. Only adapters implement them and only composition roots construct them.
+4. **Registrations are declared values.** A module's effect on the shared runtime (routes and operation descriptors,
+   events, queues, DBOS workflows, permission catalogue entries, projections, scheduled work) is returned as data from
+   one definition, validated by the composition root before anything mounts, and started through a function that
+   returns its disposer.
+5. **A module is verified alone.** Each module has tests that run under an import fence loading only the module and its
+   declared dependencies' public entries, with fakes for its ports and a fixed clock. An adapter's tests use only its
+   own schema.
+
+### Effects
+
+Three classes, each with one representation:
+
+| Class | Examples | Representation | Where implemented |
+| --- | --- | --- | --- |
+| Durable I/O | Postgres reads and writes, DBOS steps, object storage, outbound HTTP, Stripe | Port interfaces in the owning module's contract (`LibraryEntryStore`, `ReceiptLedger`), passed in a capability record; commands and durable steps returned as values where the work is deferred | Adapters (`*-store.ts`, `*.sql`, `*-work.ts`) |
+| Ambient effects | clock, random IDs, environment, logging, metrics | One `Ambient` capability record (`now()`, `id()`, `log`) created once by the composition root; tests pass a fixed one | Composition root |
+| Registration effects | routes, events, queues, workflows, catalogue entries | Declared values in the module definition (rule 4); started with a disposer | Composition root mounts them |
+
+This is capability-passing style (Effekt) and ports and adapters (Cockburn) in plain TypeScript. The Kernel is
+already halfway: 350 files take a database client as a parameter and only one imports a pool singleton. What is
+missing is (a) narrow port types instead of a raw client, so a use case states what it does rather than receiving the
+whole database; (b) the same discipline for ambient effects; (c) a tool rule that forbids importing effect libraries
+and calling ambient globals outside adapters and composition roots.
+
+**Decision: do not adopt Effect (TypeScript) for the Kernel or Web now.** Effect's `R` parameter is a typed coeffect
+and its layers are a disciplined composition root; both are the right ideas. But adopting it means changing the return
+type of every effectful function (95% of Kernel lines are effectful through their imports), adapting Elysia, DBOS and
+the Reylo SQL layer, and teaching every worker a second programming model. Its production evidence is vendor-channel
+testimony with no published measurements. Capability records give the visible requirement at the call site, test
+substitution and composition-root construction; they lose inference of what a function may do, which the import
+rules partly replace. Reopen if, after steps 1–5 of the migration, ambient-effect and adapter-import violations keep
+landing despite the gate, or if a pilot in one leaf module shows a measurable gain in defects or worker time. The
+choice is reversible: capability records map one-to-one onto Effect services and layers.
+
+**Decision: do not adopt Cordis or another runtime component framework.** Hot replacement and live unloading are not
+REZICS requirements, Cordis links components by global key names extended through TypeScript declaration merging on
+one `Context` interface (for example `packages/timer/src/index.ts:3-7`), which is the hidden global namespace the
+manifest exists to remove, and the paper itself flags nominal linking as an open problem (section 6.6). Adopt its
+*discipline* statically: declared provides and requires, registration through one primitive that returns a disposer,
+cycles reported from declarations, and the core/integration decomposition of section 6.5.
+
+### State
+
+- **Essential state is in Postgres**, owned by one module per table family (the module's `db/<module>` directory,
+  as today). Another module reads it only through the owner's port or a declared projection.
+- **No module-level mutable state.** The 38 top-level `Map`/`Set` registries, 8 module-level `let` and 18 `install*`
+  setters become fields of values the composition root creates per process (Out of the Tar Pit's accidental state,
+  scoped). A test creates a fresh one; two kernels in one process do not share it.
+- **Derived values** (bound sums, compiled schemas, SQL statements) are computed either inside the module that owns
+  their inputs, from contract and core values only (allowed at load by rule 2), or lazily when the composition root
+  calls the module.
+
+### Time
+
+- **Domain time is a value.** Use cases receive `now` from the ambient capability; cores receive it as an argument
+  (already adopted for cores). The composition root injects one clock, as `architecture.md` already requires.
+- **Durable time is data.** Deadlines, retention and scheduled work are stored instants processed by DBOS workflows
+  declared as module registrations, not timers created at load.
+- **Real time stays in adapters** where the protocol needs it (authentication expiry, rate-limit windows), behind the
+  same capability so tests can still fix it. `http/kernel.ts:150` already distinguishes "trusted domain time" from real
+  time; make that distinction a type.
+
+### How modules compose
+
+**Inside a domain.** Each domain directory splits into four manifest modules: `<domain>/contract` (types, error
+classes, constants, schemas, port interfaces, operation and event descriptors), `<domain>/core` (pure rules),
+`<domain>/application` (use cases over ports), `<domain>/adapters` (Elysia handlers, stores, SQL, DBOS work). The
+domain's public entry is its contract plus a definition exported from the adapters (rule 4). The Kernel's platform
+directories (`command`, `http`, `request`, `history`, `work`, `events`) follow the same split and import no domain
+module.
+
+**Across domains.** A domain may import another domain's *contract* and *core*. It never imports another domain's
+application or adapters. Behaviour that crosses domains goes one of two ways:
+
+- **Port owned by the consumer, implemented by the provider.** Search needs Semantic's subject summaries: Search's
+  contract declares `SubjectSummaryReader`; Semantic's adapters implement it; the composition root passes it in. The
+  dependency points from Semantic's adapter to Search's contract, never between applications.
+- **Integration module** (spatiotemporal paper, section 6.5). When two domains interact in both directions, the
+  interaction becomes a third module that depends on both cores and contracts: `library-semantic` for the 57/15 edges
+  between Library and Semantic, `access-semantic` for 26/29. Neither domain imports the other.
+
+The simulation in "Measurements" shows the size of this work: about 400 edges change to dissolve every cross-module
+file cycle, and 71 of them are the minority direction of bidirectional domain pairs.
+
+**Declared levels between domains.** Choose and record one order of domains for the DAG, by stability (Martin's SDP):
+contracts and identity first, then Access policy, Semantic, Library, Search and the presentation-facing domains. The
+order lives in the manifest; a new allowed dependency against it requires an owner decision, not a snapshot.
+
+### Registrations as declared values
+
+Sketch (a design, not code to copy):
+
+```ts
+// <domain>/adapters/definition.ts — the only effectful entry of a domain
+export const definition = defineModule({
+  id: 'library',
+  provides: [libraryEntryReaderKey],          // ports this module implements for others
+  requires: [subjectSummaryReaderKey, ambientKey, databaseKey],
+  operations: [addEntryOperation, moveEntryOperation],   // static descriptors (rule 6 of architecture.md)
+  events: [entryAddedEvent],
+  queues: [shelfMaintenanceQueue],
+  start(capabilities) {                       // called by the composition root only
+    const routes = mountLibraryRoutes(capabilities);
+    return () => routes.dispose();            // revertible: tests and shutdown unwind it
+  },
+});
+```
+
+The composition root collects every definition, resolves `requires` against `provides`, rejects missing keys,
+duplicate operation IDs and cycles among keys, checks descriptors, and only then calls `start`. The same validation runs
+statically at landing by importing definitions without starting them, which rule 2 makes safe: a definition's module
+evaluates nothing from other modules at load. Keys are typed values exported from contracts, not strings, so the
+spatiotemporal paper's key-collision problem cannot arise.
+
+### How a worker verifies a module in isolation
+
+1. **Static, seconds.** `bun scripts/architecture.ts --changed <files>`: public entries, levels, no new cycles, no
+   cross-module load-time evaluation, no ambient effects outside adapters.
+2. **Typecheck of the module's level.** Contracts and cores import no `.sql` files, so their typecheck needs no
+   database. Packages already have their own `tsconfig`; for domain contract and core modules, a per-module
+   `tsconfig` with TypeScript project references makes the compiler reject reference cycles and check the module from
+   its dependencies' declarations (<https://www.typescriptlang.org/docs/handbook/project-references.html>). Whether
+   the Kernel's SQL-typed adapters can be checked without a database is unresolved (earlier report); this design does
+   not depend on it.
+3. **Fenced module tests.** `bun test <module>` with a preload that registers a Bun runtime plugin whose `onResolve`
+   callback runs "once for each `import` or `require()` as it executes" (Bun `docs/runtime/plugins.mdx`, line 167, at
+   `c643ea8`). The plugin fails the test when a file of module M resolves a production file outside M and its
+   declared dependencies' public entries. This is the runtime half Packwerk lacked: zero static violations *and* the
+   module actually runs alone.
+4. **Fakes and conformance.** Each port has one in-memory fake, owned by the port's module, and one conformance suite
+   run against both the fake and the Postgres adapter. Applications test against fakes; adapters run the conformance
+   suite against their own schema in check infrastructure.
+5. **Dependents of a changed contract.** When a contract's exports change, the landing runs the fenced tests of the
+   modules that import it, found from the manifest, and the brief or commit states the change in a sentence (the
+   Xia et al. remedy). Because dependents' tests are fenced, this costs the dependents' modules, not the system.
+6. **System proof after integration.** One boot and acceptance run on dev, as today, now expected to fail rarely.
+
+### What the control plane enforces at landing
+
+On the merged candidate, by exit code:
+
+| Check | Source of truth | Cost | Refuses |
+| --- | --- | --- | --- |
+| Architecture check, `--changed` (full scan when the manifest changes) | `modules.json`, baseline | 10.5 s full, under 5 s budgeted cached | new public-entry, level, cycle, load-time and ambient-effect violations; baseline growth |
+| Ratchet metrics | baseline file plus four counters: largest file SCC, files in cycles, cross-module load-time initialisers, ambient-effect call sites | included | any counter increase |
+| Static composition check | module definitions | seconds (imports definitions, starts nothing) | missing provides, duplicate operation IDs, key cycles, descriptor errors |
+| Fenced tests of touched modules and contract dependents | manifest | proportional to the change | test failure or a fence breach |
+| Typecheck of touched contract and core modules | per-module tsconfig | seconds | type errors |
+
+Prompts carry the module map (already generated by `--map`) and, for the brief's module, its contract file list. A
+worker that needs a new allowed dependency against the declared order asks the module owner through the inbox; the
+landing does not accept a manifest edit that adds a back edge.
+
+### Web
+
+The same paradigm, with the Web's own adapters. Pure view models, formatters and validation are cores (some already
+are: `search/personal-recovery`, `subject-catalogue-metadata`). Data access is an adapter: TanStack Router loaders and
+TanStack Query functions over the generated client, injected through route context rather than imported clients
+(85 Web files call `fetch(` directly; 101 call `Date.now()`/`new Date()`). Components receive data and callbacks by
+props and import only their feature's public entry, shared UI packages and cores. Routes are already declared values
+(file routes); each feature exports one definition of its routes, loaders and query keys. The largest Web cycle (82
+files, 78 in `features`) and the 24-of-28 directory cycle are smaller and mostly intra-feature, so the Web migration
+is the same ratchet at lower cost. Storybook stories are the Web's fenced module tests: a story that renders a
+feature with fake loaders is its isolation proof.
+
 ## Migration under a ratchet
 
 ## Prices
