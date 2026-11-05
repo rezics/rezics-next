@@ -494,7 +494,7 @@ test.each(['denied', 'unknown'] as const)('source replacement retires review bef
     state: null,
     baseline: null,
     replace: false,
-    action: 'state',
+    action: 'skip',
   };
   const journey = createVndbJourney({
     visit: visit(),
