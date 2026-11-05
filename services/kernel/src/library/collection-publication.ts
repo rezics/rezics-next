@@ -33,7 +33,7 @@ import {
 } from './collection-rules.ts';
 import { readCollection } from './collection-store.ts';
 import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
-import { createCollectionSource, type CollectionSourceObservation, type WorkDimensions } from './collection-source.ts';
+import { createCollectionSource, type WorkDimensions } from './collection-source.ts';
 import {
   appendCollectionSourceOutput,
   beginCollectionSourceOutput,
@@ -48,8 +48,13 @@ import {
   nativeWorkDimensions,
   type CollectionSelectedPublicationPlan,
 } from './collection-selected-publication-bounds.ts';
-import { revalidateNativeOwnerFilter, withNativeOwnerFilterSource } from './owner-filter-native-binding.ts';
-import { admitCollectionMemberQuery } from './owner-filter.ts';
+import {
+  nativeOwnerFilterBinding,
+  revalidateNativeOwnerFilter,
+  sameOwnerFilterSource as sameSource,
+  withNativeOwnerFilterSource,
+} from './owner-filter-native-binding.ts';
+import { admitSavedCollectionMemberQuery } from './owner-filter.ts';
 import {
   bindOwnerFilterRead,
   readOwnerFilterCandidate,
@@ -113,17 +118,6 @@ async function header(client: Client, route: number, collectionId: string, owner
         [route, collectionId, owner],
       )
     ).rows[0] ?? null
-  );
-}
-
-function sameSource(before: CollectionSourceObservation, after: CollectionSourceObservation) {
-  return (
-    before.collectionId === after.collectionId &&
-    before.route === after.route &&
-    before.incarnation === after.incarnation &&
-    before.revision === after.revision &&
-    before.basis.digest === after.basis.digest &&
-    canonicalize(before.authority) === canonicalize(after.authority)
   );
 }
 
@@ -206,13 +200,11 @@ async function prepareSelection(
       throw error;
     }
   });
-  const admission = await admitCollectionMemberQuery(
+  const admission = await admitSavedCollectionMemberQuery(
     deps,
     actor,
-    {
-      filter: JSON.stringify(saved.rule.filter),
-      sort: saved.rule.sort,
-    },
+    saved.rule,
+    {},
     deadline,
   );
   if (!admission.filter || admission.releaseDigest !== saved.rule.releaseDigest) throw unavailable();
@@ -237,7 +229,7 @@ async function prepareSelection(
     sourceKey.identity.generation !== saved.header.sourceGeneration
   )
     throw unavailable();
-  const workingIdentity = sourceKey.identity;
+  const workingSource = nativeOwnerFilterBinding(binding)!.observation;
   const work = new NativeCollectionWork(binding.input.allowance, deadline);
   return withNativeOwnerFilterSource(binding, work, async () => {
     // Hold output, activation, History, events, receipt and rollback before Source verification begins.
@@ -252,15 +244,7 @@ async function prepareSelection(
           (allowance) => source.prepare({ ...binding.input, allowance }),
           nativeWorkDimensions(plan.terms.sourcePreparation),
         );
-        if (
-          prepared.source.observation.collectionId !== collectionId ||
-          prepared.source.observation.route !== route ||
-          prepared.source.observation.revision !== saved.header.revision ||
-          prepared.source.observation.incarnation !== workingIdentity.incarnation ||
-          prepared.source.observation.authority.kind !== 'private_builtin' ||
-          prepared.source.observation.authority.curatorAccountId !== actor.accountId
-        )
-          throw unavailable();
+        if (!sameSource(workingSource, prepared.source.observation)) throw unavailable();
         await currentScope(deps, binding, work, plan.terms.scopeCurrentness);
         async function resolveCurrent(originalId: string) {
           // Raw selections AND every complete-original fact reference pay original/terminal disclosure.

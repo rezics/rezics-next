@@ -26,7 +26,7 @@ import { holdsCurrentStatements, holdsCurrentType } from '../search/current-leaf
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { createCollectionSource, type PrepareCollectionSource, type WorkDimensions } from './collection-source.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
-import type { AdmittedCollectionRule } from './collection-rules.ts';
+import type { AdmittedCollectionRule, CollectionRuleSource } from './collection-rules.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import {
   hasCopyStatus,
@@ -432,6 +432,7 @@ const nativeAdmissions = new WeakMap<
     pool: Pool;
     deadline: number;
     retainedMeaning: boolean;
+    source: CollectionRuleSource;
   }>
 >();
 
@@ -550,9 +551,6 @@ export async function admitSavedCollectionMemberQuery(
   deadline: number,
 ): Promise<CollectionMemberAdmission> {
   requireAccessDeadline(deadline);
-  // This adapter owns private OWNER execution only. Search-origin catalogue rules must enter
-  // through the composed Search Source instead of being narrowed to these private facts.
-  if (rule.source.kind === 'catalogue') throw new ProblemError('dependency_unavailable');
   if (options.sort !== undefined && options.sort !== rule.sort) throw new ProblemError('unsupported_query');
   const release = await readRelease(deps.pool, rule.releaseDigest);
   requireAccessDeadline(deadline);
@@ -568,7 +566,7 @@ export async function admitSavedCollectionMemberQuery(
       invalidFilter(error);
     }
   }
-  return finishCollectionMemberAdmission(deps, viewer, filter, release, rule.releaseDigest, deadline, true);
+  return finishCollectionMemberAdmission(deps, viewer, filter, release, rule.releaseDigest, deadline, true, rule.source);
 }
 
 async function finishCollectionMemberAdmission(
@@ -579,6 +577,7 @@ async function finishCollectionMemberAdmission(
   releaseDigest: string | null,
   deadline: number,
   retainedMeaning = false,
+  source: CollectionRuleSource = { kind: 'owner' },
 ): Promise<CollectionMemberAdmission> {
   const reads = filter === undefined ? [] : collectionMemberPrivateReads(filter);
   if (reads.length) {
@@ -626,7 +625,7 @@ async function finishCollectionMemberAdmission(
         : null,
   };
   freeze(admission);
-  nativeAdmissions.set(admission, { actor: viewer, pool: deps.pool, deadline, retainedMeaning });
+  nativeAdmissions.set(admission, { actor: viewer, pool: deps.pool, deadline, retainedMeaning, source });
   return admission;
 }
 

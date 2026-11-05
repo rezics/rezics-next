@@ -321,13 +321,17 @@ Canonical session and Subject links remain ordinary shareable addresses. Same-ta
 
 ## Selected Collection publication
 
-The page reviews at most 100 disclosed canonical subjects from the current page, preserves the first canonical
-occurrence, and asks for explicit confirmation even for an empty set. Its native selected-set command uses the
-Kernel's finite nine-axis plan: fixed owner/Source/scope preparation and pre-receipt checks, one bounded positive
-membership plus complete original-reference closure per selected ID, or a complete negative membership refusal,
-then output rows sized to the selection and fixed activation, History, events, receipt, serialization and rollback
-terms. The native adapter explicitly supplies `engineRequests: 0` to the older eight-axis Work port. Selected IDs,
-including `[]`, never certify whole-query exhaustion.
+Saved population remains explicit: owner rules use Library facts; catalogue rules include matching Subjects
+without curator facts. Current catalogue membership and properties change fresh private results B, while shared
+last-complete A stays until explicit publication commits. Native catalogue binding is still required; a listing,
+private fact insertion or successful save cannot substitute for it.
+
+The page reviews at most 100 disclosed canonical subjects, preserves first canonical occurrence and explicitly
+confirms even an empty set. The Kernel retains one complete nine-axis declaration for Source preparation/currentness,
+positive and negative membership, complete original closure/disclosure, private leaves and native output, activation,
+History/events, receipts, rollback and serialization across bounded attempts. Native compatibility translation is
+explicit; an eight-axis receipt with zero engine work does not establish catalogue execution or receiving. Selected
+IDs and `[]` never certify whole-query exhaustion. Publication preserves the saved expanded rule and accepted release.
 
 The generated `collections({ collectionId }).$publishSelected.post` operation is the only publication transport.
 Session setup, server imports and response decoding stay inside safe result boundaries; the response is consumed into

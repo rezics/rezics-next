@@ -222,11 +222,8 @@ Current implementation evidence is narrower than the capability:
   The original per-call raw/physical allowances and retained preparation authority are unchanged. No request-time
   owner/alias scan, public/Everything permission or new positive receipt supplies coverage. The native cases in
   `test/library/owner-filter-native-closure.test.ts` await controller-owned execution; typing is not journey proof.
-  This does not supply `requireCollectionRuleExecution`'s missing saved-rule admission body or a private working
-  Source for publication replay after public activation. Those cases remain unavailable. The Semantic scope/public-capture
-  modules retain their own producer qualifications. Combined native journey and physical-bound proof of this closure
-  remains controller-owned after actual runtime release; source typing does not certify those outcomes.
-  their null built-in kind. The admitted actual curator can also bind that private working Source after selected
+  The Semantic scope/public-capture modules retain their producer qualifications; source typing does not certify
+  combined native journey or physical-bound acceptance. The actual curator can bind that private working Source after selected
   public activation. `owner-filter-working-source.ts` carries the immutable native query admission, actor, actual
   time/attempt and transferred ledger through all ordinary Source and closure calls. Working metadata uses the
   current native curator/incarnation/epoch/source/rule/fact fences, with no public output generation or receipt.
@@ -493,10 +490,15 @@ method consents to publishing the current title/description/presentation metadat
 omitted array is invalid. This is not publication of an entire saved-query snapshot. Complete saved-query result
 publication remains a separate producer and outcome; neither a first page nor a query-wide count fulfills it.
 
-The target must be an actual stored active saved-dynamic Collection with the current caller as curator. Curated
-Collections and logical built-ins retain their existing live semantics and are concealed as unsupported targets.
-Another owner, including an owner on the same route, cannot read the private rule through this command. Ordinary
-current `collection:update`, private leaf scopes/gates/Access, account share fencing and native header CAS apply.
+Saved `source.kind` selects the population: `owner` uses Library facts, while `catalogue` includes matching
+catalogue Subjects without requiring curator facts. Omitted source retains owner compatibility; built-ins remain
+independent. Publication admits the stored expanded rule and accepted release, rather than reinterpreting it against
+current activation. Native saved admission carries population to the execution seam. The catalogue Source producer
+is not installed there yet, so that branch remains unavailable; owner capture and discovery listings cannot replace it.
+
+The target is an active saved-dynamic Collection owned by the caller. Curated Collections, built-ins and another
+curator's private rules remain concealed. Current `collection:update`, expanded private leaf scopes/gates/Access,
+account share fencing and native header CAS apply.
 All of those checks also precede Core receipt replay. Selected original and terminal identity/disclosure and actual
 Source membership are prepared after releasing the parent home. Every raw reference and every complete-original
 private fact reference consumes current original/terminal disclosure before fact hydration and canonical
@@ -505,17 +507,15 @@ existing owner-filter interpreter and native complete-original closure, never a 
 self fallback. A selected nonmember is concealed, and an unproved selection returns `503 dependency_unavailable`
 without a write. No whole-source scan, result truncation, query count, Actor or permission payload is published.
 
-Preparation consumes the existing `bindOwnerFilterRead`, `CollectionSource`, `readOwnerFilterCandidateClosure`
-and scoped-observation declarations. The immutable service plan composes the public nine-axis `@rezics/bounds`
-declarations with safe sums, bounded repeats and ceiling checks. For `n` raw IDs, one attempt includes binding and
-fixed Source/scope/private-authority work, bounded canonical deduplication, `n` selected branches, pre-receipt
-reauthorization and the native output transaction. Each branch pays the Source's 100-key canonical group and saved
-query probe ceiling, then the larger of a positive result with its complete closure or a complete negative scan.
-Probe work uses the native producer's full 32-label cap; owner-fact matching uses the accepted Members Source bound.
-The closure is capped independently at 100 references and 50 distinct originals, with disclosure repeated for each
-original; 100 selected IDs do not cap aliases. Empty `[]` still pays live Source preparation, private capture and
-command authority. The maximum operation is repeated by the existing three-attempt bound. `engineRequests` is
-translated explicitly to the legacy eight-axis native port and must be zero; it is never omitted from the plan.
+Preparation uses `bindOwnerFilterRead`, `CollectionSource`, complete native closure and scoped observations.
+One immutable nine-axis plan sums binding, fixed Source/scope/private authority, canonical deduplication, each
+positive/negative selected branch, pre-receipt reauthorization and output transaction. Each branch pays the native
+100-key group, full 32-label probe and accepted Members Source bound. Closure independently caps 100 references
+and 50 originals; every original pays disclosure even after deduplication. Empty selection still pays live Source,
+capture and command work. Three bounded attempts repeat the maximum operation. Compatibility translation refuses
+nonzero `engineRequests`; zero in the SQL-only declaration does not price an uninstalled catalogue route or establish
+receiving. Incorporation must derive reached catalogue costs from producer SQL/binds, escaped projections,
+currentness, disclosure and existing attempts, retaining all nine axes.
 
 The selected consumer transfers that finite plan through the existing `NativeCollectionWork` port. It holds the full
 actual-size output, activation, History/events, receipt, serialization and rollback price before verification,
@@ -526,9 +526,11 @@ unavailable. The final owning transaction compares the complete native header/ru
 and revalidates scope before receipt lookup. No foreign home is opened while the parent is held. Relevant changes
 roll back the entire command and leave the prior selected output active.
 
-Decision: selected publication owns one immutable nine-axis plan for up to 100 disclosed canonical IDs and each
-complete native original closure; a timeout preserves the same uncertain receipt intent, and only the native receipt
-confirms it. The selected IDs and explicit empty set remain distinct from whole-query exhaustion.
+Decision: reuse the selected publisher with saved population and accepted meaning; incorporate the catalogue
+producer at the existing binding, never through another adapter. One causal regression covers release changes,
+fresh publication and currently authorized exact replay. Catalogue membership/properties must affect fresh private B;
+last-complete public A changes only on explicit activation. Timeout retains the original uncertain intent and only
+its receipt confirms it. Selected IDs and explicit empty sets never prove whole-query exhaustion.
 
 One authorized Core command changes public visibility/header revision, calls begin/append/complete on the existing
 output hooks, and emits the ordinary Collection updated/listing events and receipt. Only COMPLETE advances the
