@@ -360,7 +360,7 @@ export function SubjectFrame({
                 <MangaProfileEntry id={frame.id} label={title} locale={locale}
                   origin={(context ?? frame.context) ? mangaObservedOrigin({ subject: frame.id,
                     type: frame.type as 'schema:ComicSeries' | 'schema:PublicationVolume', context: (context ?? frame.context)!,
-                    ...(realm ? { realm } : {}), returnHref: contextHref(base, realm) }) : undefined} />
+                    ...(realm ? { realm } : {}), returnHref: `${contextHref(base, realm)}#manga-reader` }) : undefined} />
               )}
               {!realm && (context ?? frame.context) === candidateContext && frame.type === 'schema:MusicAlbum' && (
                 <AlbumProfileEntry id={frame.id} label={title} locale={locale} />
