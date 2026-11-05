@@ -272,6 +272,10 @@ This is scoped native execution, not a clean kernel compiler, table-materializat
 - `reduced real Auth scope denies before persistence; revoked grant denies original-bearer receipt replay`
 - `source acquisition and mass disappearance failure send no statistic and preserve baseline`
 
+Decision: Imports owns completing the dev-seed caller journey and any demonstrated caller correction. Preserve Commerce's
+`source_statistic:write` authorization on the existing Global Context and repair only the seed credential/composition
+stage shown to be wrong; do not change native grants, scopes or authorization rules.
+
 ### Import-to-discovery
 
 **Job:** import actual supported provider facts, accept/adopt candidates through ordinary Semantic APIs and discover
