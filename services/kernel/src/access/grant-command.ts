@@ -144,7 +144,6 @@ export async function grantCommand<T>(
         proofs.set(proof, { attempt, checks });
         return proof;
       } catch (error) {
-        console.error('[dbg-grant] prepare', options.kind, error instanceof Error ? `${error.name}: ${error.message}\n${error.stack}` : String(error));
         throwAccessUnavailable(error, context.deadline);
         throw options.denied();
       }
@@ -159,11 +158,7 @@ export async function grantCommand<T>(
         attempt.basis.requestedBy !== basis.requestedBy
       )
         throw options.denied();
-      for (const [index, check] of prepared.checks.entries())
-        if (!(await check.check(tx, attempt.time))) {
-          console.error('[dbg-grant] authorize denied', options.kind, index, prepared.checks[index]!.action, 'inScopes', actor.scopes.includes(prepared.checks[index]!.action), 'scopeCount', actor.scopes.length, JSON.stringify(actor.scopes.filter((scope) => /create|grant/.test(scope))));
-          throw options.denied();
-        }
+      for (const check of prepared.checks) if (!(await check.check(tx, attempt.time))) throw options.denied();
       requireAccessDeadline(context.deadline);
       return 'execute';
     },
@@ -200,10 +195,7 @@ export async function grantCommand<T>(
             addsGrant: options.zoneGrantTarget.addsGrant,
           }))
         )
-          {
-            console.error('[dbg-grant] zone lock denied', options.kind);
-            throw options.denied();
-          }
+          throw options.denied();
         const value = await mutate(tx, transactionId);
         requireAccessDeadline(context.deadline);
         return {

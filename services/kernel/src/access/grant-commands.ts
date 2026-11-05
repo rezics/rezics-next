@@ -145,10 +145,7 @@ export function createGrantCommands(config: {
                   previous_valid: previous!.valid,
                 })
               : await revokeStatement.run(tx, parameters);
-        if (rows.length !== actions.length) {
-          console.error('[dbg-grant] rows mismatch', operation, rows.length, actions.length);
-          throw new GrantDeniedError();
-        }
+        if (rows.length !== actions.length) throw new GrantDeniedError();
         const value: {
           resource: Resource;
           subject?: PublicGrantSubject;
