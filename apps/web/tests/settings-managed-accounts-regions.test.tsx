@@ -182,8 +182,8 @@ test('two mounted inventories name their independent feeds and retain exact spar
     expect(a.innerHTML).not.toContain(initial.responsibilities.items[1]!.accountId);
     expect(otherOrg.textContent).toContain(m.managed_no_current_page());
     expect(otherOrg.textContent).not.toContain(m.managed_no_organizations());
-    await view.click(button(org, m.settings_managed_load_more()));
-    await view.click(button(resp, m.settings_managed_load_more()));
+    await view.click(button(org, m.managed_next()));
+    await view.click(button(resp, m.managed_next()));
     expect(org.getAttribute('aria-busy')).toBe('true');
     expect(resp.getAttribute('aria-busy')).toBe('true');
     expect(region(a, m.managed_your_account()).getAttribute('aria-busy')).toBe('false');
@@ -198,7 +198,7 @@ test('two mounted inventories name their independent feeds and retain exact spar
     await first.answer(ready({ ...initial, organizations: { state: 'ready', items: [], next: 'next org +/=' } }));
     expect(org.getAttribute('aria-busy')).toBe('false');
     expect(within(org).queryByRole('heading', { name: longName, level: 4 })).toBeNull();
-    expect(document.activeElement).toBe(within(org).getByRole('heading', { level: 3 }));
+    expect(document.activeElement).not.toBe(within(org).getByRole('heading', { level: 3 }));
     expect(org.textContent).toContain(m.managed_no_current_page());
     expect(resp.textContent).toContain(m.settings_managed_responsibilities_retry_wait());
     expect(org.textContent).not.toContain(m.settings_managed_responsibilities_retry_wait());
@@ -212,10 +212,11 @@ test('two mounted inventories name their independent feeds and retain exact spar
       { organizationsCursor: initial.organizations.next! },
       { operatorsCursor: initial.responsibilities.next! },
     ]);
-    await view.click(button(otherOrg, m.settings_managed_load_more()));
+    await view.click(button(otherOrg, m.managed_next()));
     await second.answer(ready({ ...sparse, organizations: { state: 'ready', items: [], next: null } }));
     expect(otherOrg.textContent).toContain(m.managed_no_organizations());
-    expect(within(otherOrg).queryByRole('button')).toBeNull();
+    expect(button(otherOrg, m.prq_previous()).disabled).toBe(false);
+    expect(button(otherOrg, m.settings_managed_restart_list()).disabled).toBe(false);
     expect(second.calls).toEqual([{}, { organizationsCursor: '' }]);
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -236,7 +237,7 @@ test('two mounted inventories name their independent feeds and retain exact spar
     expect(resp.textContent).toContain(m.managed_no_responsibilities());
     expect(within(resp).queryByRole('button')).toBeNull();
     expect(org.contains(identity)).toBe(false);
-    expect(document.activeElement).toBe(within(resp).getByRole('heading', { level: 3 }));
+    expect(document.activeElement).not.toBe(within(resp).getByRole('heading', { level: 3 }));
     expect(within(org).queryByText(m.managed_preparing_text())).toBeNull();
     expect(first.calls).toEqual([
       {},
@@ -283,7 +284,7 @@ test('organization retry and first-page controls preserve retained responsibilit
     const org = region(inventory, m.managed_organizations_title());
     const resp = region(inventory, m.managed_operated_title());
     const retained = resp.innerHTML;
-    await view.click(button(org, m.settings_managed_load_more()));
+    await view.click(button(org, m.managed_next()));
     await feed.answer(managedAccountsFailure(400, { code: 'invalid_cursor' }));
     associations(inventory);
     await view.click(button(org, m.settings_retry()));
@@ -342,7 +343,7 @@ test('inventory failure, preparing and sparse responsibility recovery keep their
     expect(within(org).getAllByRole('status')).toHaveLength(1);
     expect(within(org).queryByRole('button', { name: m.settings_managed_restart_list() })).toBeNull();
     await feed.answer(ready({ ...preparing, organizations: { state: 'ready', items: [], next: null } }));
-    await view.click(button(resp, m.settings_managed_load_more()));
+    await view.click(button(resp, m.managed_next()));
     await feed.answer(ready({ ...preparing, responsibilities: { items: [], next: null } }));
     expect(resp.textContent).toContain(m.managed_no_responsibilities());
     expect(feed.calls).toEqual([{}, {}, {}, { operatorsCursor: preparing.responsibilities.next! }]);
@@ -377,7 +378,7 @@ test('supplied handle and unnamed fallbacks stay human while unavailable respons
       initial.responsibilities.items[1]!.reservationId,
     ])
       expect(inventory.innerHTML).not.toContain(value);
-    const next = button(org, m.settings_managed_load_more());
+    const next = button(org, m.managed_next());
     next.focus();
     expect(document.activeElement).toBe(next);
     associations(inventory);
@@ -395,7 +396,7 @@ test('current-viewer withdrawal withholds every identity and refuses retained co
     await feed.answer(ready(initial));
     const inventory = view.inventory();
     const controls = [...inventory.querySelectorAll('button')];
-    await view.click(button(region(inventory, m.managed_organizations_title()), m.settings_managed_load_more()));
+    await view.click(button(region(inventory, m.managed_organizations_title()), m.managed_next()));
     await act(async () => {
       view.client
         .getQueryCache()
@@ -428,7 +429,9 @@ test('credential replacement and an A-to-B-to-A transition retire pending direct
     try {
       await feed.answer(ready(managedAccountsExample()));
       const org = region(view.inventory(), m.managed_organizations_title());
-      const control = button(org, m.settings_managed_load_more());
+      await view.click(button(org, m.managed_next()));
+      await feed.answer(ready(managedAccountsExample()));
+      const control = button(org, m.prq_previous());
       await view.click(control);
       await act(async () => {
         view.client.setQueryData(sessionQuery.queryKey, {
@@ -444,7 +447,7 @@ test('credential replacement and an A-to-B-to-A transition retire pending direct
         control.click();
         await tick();
       });
-      expect(feed.calls).toHaveLength(3); // The new lifecycle has one fresh initial read.
+      expect(feed.calls).toHaveLength(4); // The new lifecycle has one fresh initial read.
       await feed.answer(ready(managedAccountsExample())); // Retired next-page response.
       expect(within(view.inventory()).queryByRole('list')).toBeNull();
       await feed.answer(ready(managedAccountsExample()));
@@ -452,6 +455,50 @@ test('credential replacement and an A-to-B-to-A transition retire pending direct
     } finally {
       await view.close();
     }
+  }
+});
+
+test('keyboard terminal movement owns focus only until another feed or Settings section takes it', async () => {
+  const feed = source();
+  const view = await mounted([feed]);
+  const outside = document.createElement('button');
+  document.body.append(outside);
+  try {
+    const initial = managedAccountsExample();
+    await feed.answer(ready(initial));
+    const org = region(view.inventory(), m.managed_organizations_title());
+    const resp = region(view.inventory(), m.managed_operated_title());
+    const keyboard = async (control: HTMLElement) => {
+      control.focus();
+      await view.click(control); // A focused, zero-detail activation is the native keyboard click.
+    };
+    await keyboard(button(org, m.managed_next()));
+    await keyboard(button(resp, m.managed_next()));
+    await feed.answer(ready({ ...initial, organizations: { state: 'ready', items: [], next: null } }));
+    expect(document.activeElement).not.toBe(within(org).getByRole('heading', { level: 3 }));
+    await feed.answer(ready({ ...initial, responsibilities: { items: [], next: null } }));
+    expect(document.activeElement).toBe(within(resp).getByRole('heading', { level: 3 }));
+    expect(button(org, m.managed_next()).disabled).toBe(true);
+    await keyboard(button(org, m.prq_previous()));
+    outside.focus();
+    await feed.answer(ready(initial));
+    expect(document.activeElement).toBe(outside);
+    await keyboard(button(resp, m.settings_managed_restart_list()));
+    await feed.answer(managedAccountsFailure(503));
+    await keyboard(button(resp, m.settings_retry()));
+    await feed.answer(ready(initial));
+    expect(document.activeElement).toBe(within(resp).getByRole('heading', { level: 3 }));
+    expect(feed.calls).toEqual([
+      {},
+      { organizationsCursor: initial.organizations.next! },
+      { operatorsCursor: initial.responsibilities.next! },
+      {},
+      {},
+      {},
+    ]);
+  } finally {
+    outside.remove();
+    await view.close();
   }
 });
 

@@ -148,13 +148,13 @@ export const IndependentCursors: Story = {
       await expect(row.getAllByRole('heading')).toHaveLength(1);
       await expect(row.queryByRole('link')).toBeNull();
     }
-    await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
     await organizations.findByRole('alert');
     await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
-    await userEvent.click(responsibilities.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(responsibilities.getByRole('button', { name: m.managed_next() }));
     await expect(responsibilities.queryByRole('button')).toBeNull();
     await userEvent.click(organizations.getByRole('button', { name: m.settings_retry() }));
-    await organizations.findByRole('button', { name: m.settings_managed_load_more() });
+    await organizations.findByRole('button', { name: m.managed_next() });
     await expect(responsibilities.queryByRole('button')).toBeNull();
   },
 };
@@ -165,7 +165,7 @@ export const PartialPreparing: Story = {
     const canvas = within(canvasElement);
     await canvas.findByText(m.managed_preparing_text());
     await expect(canvas.getByRole('heading', { level: 4, name: 'Atlas Indexer' })).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.managed_next() }));
     await expect(canvas.getByText(m.managed_preparing_text())).toBeVisible();
   },
 };
@@ -235,9 +235,9 @@ export const IndependentRetryDelays: Story = {
     await canvas.findByRole('list', { name: m.managed_your_account() });
     const organizations = within(canvas.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
     const responsibilities = within(canvas.getByRole('list', { name: m.managed_operated_title() }).parentElement!);
-    await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
     await organizations.findByRole('alert');
-    await userEvent.click(responsibilities.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(responsibilities.getByRole('button', { name: m.managed_next() }));
     await responsibilities.findByRole('alert');
     const organizationRetry = organizations.getByRole('button', { name: m.settings_retry() });
     const responsibilityRetry = responsibilities.getByRole('button', { name: m.settings_retry() });
@@ -270,7 +270,7 @@ export const DenialClearsInventory: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
     const organizations = within(canvas.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
-    await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
     await canvas.findByText(m.managed_denied_text());
     await expect(canvas.queryAllByRole('list')).toHaveLength(0);
     await expect(canvas.queryByRole('heading', { level: 4, name: 'Atlas Indexer' })).toBeNull();
@@ -285,7 +285,7 @@ export const InvalidCursorFirstPageRecovery: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
     const organizations = within(canvas.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
-    await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
     await organizations.findByRole('alert');
     const retry = organizations.getByRole('button', { name: m.settings_retry() });
     const firstPage = organizations.getByRole('button', { name: m.settings_managed_restart_list() });
@@ -300,7 +300,8 @@ export const InvalidCursorFirstPageRecovery: Story = {
     await expect(retry).toBeDisabled();
     await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
     await organizations.findByText(m.managed_no_organizations());
-    await expect(organizations.queryByRole('button')).toBeNull();
+    await expect(organizations.getByRole('button', { name: m.prq_previous() })).toBeEnabled();
+    await expect(organizations.getByRole('button', { name: m.settings_managed_restart_list() })).toBeEnabled();
     await expect(organizations.queryByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeNull();
     await expect(canvas.getByRole('heading', { level: 4, name: 'Atlas Indexer' })).toBeVisible();
   },
@@ -314,15 +315,16 @@ export const StaleCursorIndependentRecovery: Story = {
     await canvas.findByRole('list', { name: m.managed_your_account() });
     const organizations = within(canvas.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
     const responsibilities = within(canvas.getByRole('list', { name: m.managed_operated_title() }).parentElement!);
-    await userEvent.click(responsibilities.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(responsibilities.getByRole('button', { name: m.managed_next() }));
     await responsibilities.findByRole('alert');
-    await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
     await waitFor(() => expect(organizations.queryByRole('button')).toBeNull());
     await userEvent.click(responsibilities.getByRole('button', { name: m.settings_managed_restart_list() }));
     await responsibilities.findByText(m.managed_no_responsibilities());
     await expect(responsibilities.queryByRole('link')).toBeNull();
     await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
-    await expect(organizations.queryByRole('button')).toBeNull();
+    await expect(organizations.getByRole('button', { name: m.prq_previous() })).toBeEnabled();
+    await expect(organizations.getByRole('button', { name: m.settings_managed_restart_list() })).toBeEnabled();
   },
 };
 
@@ -333,7 +335,7 @@ export const FailedFirstPageRecovery: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
     const organizations = within(canvas.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
-    await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
     await organizations.findByRole('alert');
     await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_restart_list() }));
     const firstPage = organizations.getByRole('button', { name: m.settings_managed_restart_list() });
@@ -358,7 +360,7 @@ export const DeniedFirstPageClearsInventory: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole('list', { name: m.managed_your_account() });
     const organizations = within(canvas.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
-    await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
     await organizations.findByRole('alert');
     await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_restart_list() }));
     await canvas.findByText(m.managed_denied_text());
@@ -450,14 +452,14 @@ const longRecoveryPlay: NonNullable<Story['play']> = async ({ canvasElement }) =
   await expect(canvas.getByText(m.managed_current())).toBeVisible();
   await expect(canvas.getByText(m.managed_reconciling())).toBeVisible();
   await assertInventoryGeometry(canvasElement);
-  const more = organizations.getByRole('button', { name: m.settings_managed_load_more() });
+  const more = organizations.getByRole('button', { name: m.managed_next() });
   more.focus();
   await expect(more).toHaveFocus();
   await userEvent.keyboard('{Enter}');
   await organizations.findByRole('alert');
   const restart = organizations.getByRole('button', { name: m.settings_managed_restart_list() });
   await expect(restart).toBeDisabled();
-  await userEvent.click(responsibilities.getByRole('button', { name: m.settings_managed_load_more() }));
+  await userEvent.click(responsibilities.getByRole('button', { name: m.managed_next() }));
   await responsibilities.findByRole('alert');
   await assertInventoryGeometry(canvasElement);
   await waitFor(() => expect(restart).toBeEnabled(), { timeout: 3000 });
@@ -472,9 +474,10 @@ const longRecoveryPlay: NonNullable<Story['play']> = async ({ canvasElement }) =
   await userEvent.click(responsibilities.getByRole('button', { name: m.settings_retry() }));
   await waitFor(() => expect(responsibilities.queryByRole('alert')).toBeNull());
   await expect(responsibilities.getByText(m.managed_reconciling())).toBeVisible();
-  await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+  await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
   await organizations.findByText(m.managed_no_organizations());
-  await expect(organizations.queryByRole('button')).toBeNull();
+  await expect(organizations.getByRole('button', { name: m.prq_previous() })).toBeEnabled();
+  await expect(organizations.getByRole('button', { name: m.settings_managed_restart_list() })).toBeEnabled();
   await assertInventoryGeometry(canvasElement);
 };
 
@@ -535,9 +538,9 @@ export const LongLocaleBusy: Story = {
     await canvas.findByRole('list', { name: m.managed_your_account() });
     const organizations = within(canvas.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
     const responsibilities = within(canvas.getByRole('list', { name: m.managed_operated_title() }).parentElement!);
-    await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
     await expect(organizations.getByRole('button', { name: m.settings_managed_loading() })).toBeDisabled();
-    await expect(responsibilities.getByRole('button', { name: m.settings_managed_load_more() })).toBeEnabled();
+    await expect(responsibilities.getByRole('button', { name: m.managed_next() })).toBeEnabled();
     await assertInventoryGeometry(canvasElement);
   },
 };
