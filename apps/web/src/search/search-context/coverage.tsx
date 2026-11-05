@@ -147,10 +147,22 @@ export function SearchCoverage({
             ))}
           </ul>
           {state.condition && (
-            <PredicateDescription value={state.condition} locale={locale} label={label} unitText={unitText} saved={saved} />
+            <PredicateDescription
+              value={state.condition}
+              locale={locale}
+              label={label}
+              unitText={unitText}
+              saved={saved}
+            />
           )}
           {resourcePredicate && (
-            <PredicateDescription value={resourcePredicate} locale={locale} label={label} unitText={unitText} saved={saved} />
+            <PredicateDescription
+              value={resourcePredicate}
+              locale={locale}
+              label={label}
+              unitText={unitText}
+              saved={saved}
+            />
           )}
           {(state.condition || state.filter) && <p>{m.search_context_predicates({}, options)}</p>}
           <p>{m.search_context_limits({}, options)}</p>

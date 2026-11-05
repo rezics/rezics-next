@@ -20,9 +20,16 @@ export function rangeDescription(
   return (
     <>
       {range.gte !== undefined && <span>≥ {end(range.gte)}</span>}
-      {range.lte !== undefined && <span>{range.gte !== undefined ? ' ' : ''}≤ {end(range.lte)}</span>}
+      {range.lte !== undefined && (
+        <span>
+          {range.gte !== undefined ? ' ' : ''}≤ {end(range.lte)}
+        </span>
+      )}
       {unit !== undefined && (
-        <span title={range.type === 'time' ? undefined : range.unit} data-unit-id={range.type === 'time' ? undefined : range.unit}>
+        <span
+          title={range.type === 'time' ? undefined : range.unit}
+          data-unit-id={range.type === 'time' ? undefined : range.unit}
+        >
           {range.gte !== undefined || range.lte !== undefined ? ' ' : ''}
           {unit}
         </span>

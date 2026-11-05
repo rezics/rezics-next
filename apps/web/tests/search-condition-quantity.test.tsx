@@ -58,7 +58,8 @@ async function mounted(
       async (element) => act(async () => root!.render(element)),
       async (element, value) =>
         act(async () => {
-          const prototype = element.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
+          const prototype =
+            element.tagName === 'SELECT' ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
           Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value);
           element.dispatchEvent(new window.Event(element.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
         }),
@@ -244,8 +245,12 @@ test('a retained non-roster unit stays visible and repairs without losing its bo
       });
     }
     await render(createElement(Harness));
-    const unit = host.querySelector<HTMLSelectElement>(`[data-condition-field-pointer="${CONDITION_POINTER}/statement/range/unit"] select`)!;
-    const lower = host.querySelector<HTMLInputElement>(`[data-condition-field-pointer="${CONDITION_POINTER}/statement/range/gte"] input`)!;
+    const unit = host.querySelector<HTMLSelectElement>(
+      `[data-condition-field-pointer="${CONDITION_POINTER}/statement/range/unit"] select`,
+    )!;
+    const lower = host.querySelector<HTMLInputElement>(
+      `[data-condition-field-pointer="${CONDITION_POINTER}/statement/range/gte"] input`,
+    )!;
     expect(unit.value).toBe(units.minutes);
     expect(unit.options[unit.selectedIndex]?.textContent).toContain('Not admitted for this property: min');
     expect(lower.value).toBe('170');

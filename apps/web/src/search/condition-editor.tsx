@@ -646,7 +646,14 @@ function NodeEditor({
     }
     if (pendingPropertyChange && (context.disabled || pendingPropertyChange.identity !== context.identity))
       setPendingPropertyChange(undefined);
-  }, [context.disabled, context.identity, pendingPropertyChange, pendingUnitChange, range?.unit, rangeMagnitudeIdentity]);
+  }, [
+    context.disabled,
+    context.identity,
+    pendingPropertyChange,
+    pendingUnitChange,
+    range?.unit,
+    rangeMagnitudeIdentity,
+  ]);
   const properties = facetProperties(context.metadata, Object.keys(context.metadata.types));
   const fieldChoices = (ids: readonly string[], selected: string) => {
     const choices = ids.map((id) => ({
@@ -1027,9 +1034,7 @@ function NodeEditor({
                         } else replaceRangeUnit(nextUnit);
                       }}
                     >
-                      <NativeSelectOption value="">
-                        {unitText(undefined, definition?.units ?? [])}
-                      </NativeSelectOption>
+                      <NativeSelectOption value="">{unitText(undefined, definition?.units ?? [])}</NativeSelectOption>
                       {range.unit && !definition?.units?.includes(range.unit) && (
                         <NativeSelectOption value={range.unit} title={range.unit}>
                           {unitText(range.unit, definition?.units ?? [])}

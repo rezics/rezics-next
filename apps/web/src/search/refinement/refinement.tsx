@@ -501,8 +501,7 @@ function RefinementInstance({
                         ),
                       })}
                     >
-                      {label(definition?.labels ?? {})}:{' '}
-                      {range.gte === undefined ? '…' : `≥ ${range.gte}`} –{' '}
+                      {label(definition?.labels ?? {})}: {range.gte === undefined ? '…' : `≥ ${range.gte}`} –{' '}
                       {range.lte === undefined ? '…' : `≤ ${range.lte}`}{' '}
                       {definition?.datatype === 'quantity' && (
                         <span title={range.unit} data-unit-id={range.unit}>
@@ -890,8 +889,7 @@ function RangeControl({
     )
       setPendingUnitChange(undefined);
   }, [disabled, identity, lower, pendingUnitChange, unit, upper]);
-  const unitText = (value: string | undefined) =>
-    searchQuantityUnitText(value, definition.units, locale, unitMessages);
+  const unitText = (value: string | undefined) => searchQuantityUnitText(value, definition.units, locale, unitMessages);
   const resolvePendingUnitChange = (confirmed: boolean) => {
     if (!pendingUnitChange) return;
     if (
