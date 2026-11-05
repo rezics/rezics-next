@@ -128,8 +128,10 @@ export const ChangedReleaseOnReturn: Story = {
     const canvas = within(canvasElement);
     await canvas.findByText(m.music_release_changed());
     await expect(canvasElement.querySelectorAll('[data-slot="music-release-row"]').length).toBe(0);
-    await userEvent.click(canvas.getByRole('button', { name: m.work_parts_restart() }));
-    await canvas.findAllByText(m.album_tracks_inspect());
+    const current = canvas.getByRole('link', { name: m.music_release_recover() });
+    const url = new URL(current.getAttribute('href')!, window.location.origin);
+    await expect(url.searchParams.get('context')).toBe(musicAddress.context);
+    await expect(url.searchParams.has('musicReturnRevision')).toBe(false);
   },
 };
 export const IndependentStreamRetryAndPrevious: Story = {
