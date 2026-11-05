@@ -298,11 +298,14 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
             h(WorkFranchiseReading, {
               page,
               reading: subjectBody(page),
-              selection: { node: 'selected', property, direction: 'inverse' },
+              selection: { node: 'selected', property, direction: 'inverse', cursor: page.continuation?.cursor },
               definitions,
               locale: 'en',
               returnTo: `/en/subjects/${id(1)}/source`,
-              currentHref: `${browser.location.pathname}${browser.location.search}${browser.location.hash}`,
+              currentHref: `/en/subjects/${id(1)}/source/relations?${new URLSearchParams({
+                realm: id(5), node: 'selected', streamProperty: property, streamDirection: 'inverse',
+                ...(page.continuation ? { cursor: page.continuation.cursor } : {}),
+              })}`,
               onContinue: (next) => continued.push(next),
             }),
           ),
@@ -319,6 +322,20 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     expect(continued).toEqual([{ node: 'selected', cursor: 'node-owned-next' }]);
     host.querySelector<HTMLDetailsElement>('[data-work-statement] details')!.open = true;
     const equal = structuredClone(native);
+    const failed = structuredClone(native);
+    failed.continuation = { node: 'selected', cursor: 'original+cursor' };
+    const failedPlan = planReads(platformRegistry, nativeDocument, {
+      subject: subject.id, context: value.context, continuation: failed.continuation,
+    });
+    failed.reads[failedPlan.nodes.selected!] = { status: 503, body: {} };
+    await drawNative(failed);
+    expect(host.querySelectorAll('[data-work-stream]')).toHaveLength(1);
+    const retry = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((el) => el.textContent === 'Retry')!;
+    const retryUrl = new URL(retry.href);
+    expect(Object.fromEntries(retryUrl.searchParams)).toEqual({
+      realm: id(5), node: 'selected', streamProperty: property, streamDirection: 'inverse', cursor: 'original+cursor',
+    });
+    expect(workFranchiseReturn(retryUrl.hash)).toMatchObject({ node: 'selected', stream: `in:${property}` });
     await drawNative(equal);
     expect(host.querySelector<HTMLDetailsElement>('[data-work-statement] details')!.open).toBe(false);
     await drawNative(equal, { ...value, cacheReader: 'replacement' });

@@ -252,6 +252,9 @@ Released fixture: Real adopted Concept/scheme and edition relations; more-than-p
 
 Scenarios and binding: Existing relation/reference suites; TO-FREEZE subject-traversal composed page plus Details/history journey, reusing existing route coverage.
 
+Decision: a failed selected Work relation group retries the same node, property, direction and native cursor through
+its current page address, restoring that group's heading without switching to the overview.
+
 Stages: Declared: yes. Partial bound/exposed: relation and reference APIs; composed traversal open. API-passed: unrecorded; promoted: no.
 
 Native acceptance for the existing bound slice (full pending job is not claimed by this command):
