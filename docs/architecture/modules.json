@@ -558,11 +558,20 @@
       "capabilities": ["search-personal-read-settlement"]
     },
     {
+      "id": "curation-opening-read",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/features/pages/curation-opening-read/**"],
+      "publicEntries": ["apps/web/src/features/pages/curation-opening-read/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["curation-opening-read-transport"]
+    },
+    {
       "id": "web-search",
       "kind": "UI/transport library",
       "owner": "search",
       "paths": ["apps/web/src/search/**", "apps/web/src/features/pages/**"],
-      "excludes": ["apps/web/src/search/personal-recovery/**"],
+      "excludes": ["apps/web/src/search/personal-recovery/**", "apps/web/src/features/pages/curation-opening-read/**"],
       "publicEntries": [
         "apps/web/src/search/search.tsx",
         "apps/web/src/search/search-window/index.ts",
@@ -584,7 +593,8 @@
         "web-performance",
         "web-semantic",
         "search-text",
-        "search-personal-recovery"
+        "search-personal-recovery",
+        "curation-opening-read"
       ],
       "capabilities": ["search-pages"]
     },

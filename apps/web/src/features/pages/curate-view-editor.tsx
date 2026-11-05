@@ -74,6 +74,7 @@ import {
   type CurationCommandAdvice,
 } from './curation-publish';
 import { type CurationAdmissionLease, CurationReaderAdmission } from './curation-reader-admission';
+import { startCurationOpeningRead, type CurationOpeningRead } from './curation-opening-read';
 import {
   canDispatchCurationRead,
   retireCurationReadWait,
@@ -108,7 +109,7 @@ const editorRecoveryClass =
 /** The existing whole-profile publication helper owns transport; no retry protocol lives in the editor. */
 export type CurationEditorTransport = PublicationTransport & {
   previewDraft?: DraftPreviewRead;
-  readOpening?: (expectedReader: string) => Promise<CurationRead>;
+  readOpening?: (expectedReader: string, signal: AbortSignal) => Promise<CurationRead>;
 };
 export type ObservedCurationSession = {
   state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
@@ -173,7 +174,12 @@ type FreshAdmissionResult = {
   lease?: CurationAdmissionLease;
 };
 
-type AdmissionReadRequest = { reader: string; version: number; promise: Promise<CurationRead | undefined> };
+type AdmissionReadRequest = {
+  reader: string;
+  version: number;
+  source: CurationEditorTransport;
+  work: CurationOpeningRead<CurationRead | undefined>;
+};
 type CurationAdviceLease = {
   reader: string;
   locale: string;
@@ -183,9 +189,15 @@ type CurationAdviceLease = {
   advice: CurationAdvice;
 };
 
-async function readCurationOpening(transport: CurationEditorTransport, reader: string): Promise<CurationRead> {
-  if (transport.readOpening) return transport.readOpening(reader);
+async function readCurationOpening(
+  transport: CurationEditorTransport,
+  reader: string,
+  signal: AbortSignal,
+): Promise<CurationRead> {
+  signal.throwIfAborted();
+  if (transport.readOpening) return transport.readOpening(reader, signal);
   const active = await transport.read(reader);
+  signal.throwIfAborted();
   if (!active.ok) return active;
   if (active.reader !== reader) return { ok: false, reason: 'forbidden', admissionChanged: true };
   return { ...active, advice: unavailableCurationAdvice() };
@@ -257,6 +269,11 @@ function ActualPresentationViewEditor({
   const retainedDrafts = useRef(new Map<string, PresentationDraft>());
   const previewFocusHandoff = useRef(new Set<string>());
   const readRequest = useRef<AdmissionReadRequest | null>(null);
+  const openingSource = useRef(transport);
+  openingSource.current = transport;
+  useLayoutEffect(() => {
+    if (readRequest.current?.source !== transport) readRequest.current?.work.retire();
+  }, [transport]);
 
   const readCurrent = (expectedReader: string, version: number, invocationTransport: CurationEditorTransport) => {
     if (!admission.canRead(expectedReader, version)) return () => {};
@@ -264,29 +281,47 @@ function ActualPresentationViewEditor({
     if (!canDispatchCurationRead(waitRef.current, owner)) return () => {};
 
     let request = readRequest.current;
-    if (!request || request.reader !== expectedReader || request.version !== version) {
-      const promise = Promise.resolve().then(() => {
+    if (
+      !request ||
+      request.reader !== expectedReader ||
+      request.version !== version ||
+      request.source !== invocationTransport ||
+      request.work.signal.aborted
+    ) {
+      request?.work.retire();
+      const work = startCurationOpeningRead(async (signal) => {
         if (!canDispatchCurationRead(waitRef.current, owner)) return;
         return admission.canRead(expectedReader, version)
-          ? readCurationOpening(invocationTransport, expectedReader)
-          : ({ ok: false, reason: 'unavailable' } as const);
+          ? readCurationOpening(invocationTransport, expectedReader, signal)
+          : undefined;
       });
-      request = { reader: expectedReader, version, promise };
+      const release = admission.ownOpeningRead(expectedReader, version, work.retire);
+      request = { reader: expectedReader, version, source: invocationTransport, work };
       readRequest.current = request;
-      void promise.then(
+      void work.promise.then(
         () => {
+          release();
           if (readRequest.current === request) readRequest.current = null;
         },
         () => {
+          release();
           if (readRequest.current === request) readRequest.current = null;
         },
       );
     }
 
     let live = true;
-    request.promise.then(
+    const work = request.work;
+    work.promise.then(
       (result) => {
-        if (!live || result === undefined || !admission.canRead(expectedReader, version)) return;
+        if (
+          !live ||
+          work.signal.aborted ||
+          openingSource.current !== invocationTransport ||
+          result === undefined ||
+          !admission.canRead(expectedReader, version)
+        )
+          return;
         if (result.ok) {
           retireCurationReadWait(waitRef.current);
           replaceWait(null);
@@ -312,7 +347,13 @@ function ActualPresentationViewEditor({
         );
       },
       () => {
-        if (!live || !admission.canRead(expectedReader, version)) return;
+        if (
+          !live ||
+          work.signal.aborted ||
+          openingSource.current !== invocationTransport ||
+          !admission.canRead(expectedReader, version)
+        )
+          return;
         const unavailable = { ok: false as const, reason: 'unavailable' as const };
         replaceWait(waitAfterCurationRead(waitRef.current, owner, unavailable));
         setFreshResult((previous) =>
@@ -332,7 +373,7 @@ function ActualPresentationViewEditor({
     if (!needsRead || !reader) return;
     const invocationTransport = transport;
     return readCurrent(reader, snapshot.version, invocationTransport);
-  }, [admission, needsRead, reader, snapshot.version]);
+  }, [admission, needsRead, reader, snapshot.version, transport]);
 
   function retryAdmission() {
     if (!needsRead || !reader) return;
@@ -445,6 +486,9 @@ function StandalonePresentationViewEditor({
 
   const [admission, setAdmission] = useState<AdmissionResult | null>(null);
   const admissionRequest = useRef(0);
+  const admissionWork = useRef<CurationOpeningRead<CurationRead> | null>(null);
+  const openingSource = useRef(transport);
+  openingSource.current = transport;
   const reader = lifecycle.reader;
   const waitOwner = reader ? { reader, generation: lifecycle.epoch } : null;
   const { waitRef, waiting, replaceWait } = useCurationReadWait(waitOwner);
@@ -469,14 +513,31 @@ function StandalonePresentationViewEditor({
   function readAdmission(expectedReader: string, epoch: number, invocationTransport: CurationEditorTransport) {
     const owner = { reader: expectedReader, generation: epoch };
     if (!canDispatchCurationRead(waitRef.current, owner)) return 0;
+    if (admissionWork.current) return admissionRequest.current;
     const serial = ++admissionRequest.current;
-    void readCurationOpening(invocationTransport, expectedReader)
-      .then((result) => {
-        if (admissionRequest.current === serial) applyAdmission(epoch, expectedReader, result);
-      })
-      .catch(() => {
-        if (admissionRequest.current === serial)
-          applyAdmission(epoch, expectedReader, { ok: false, reason: 'unavailable' });
+    const work = startCurationOpeningRead((signal) => readCurationOpening(invocationTransport, expectedReader, signal));
+    admissionWork.current = work;
+    void work.promise
+      .then(
+        (result) => {
+          if (
+            !work.signal.aborted &&
+            openingSource.current === invocationTransport &&
+            admissionRequest.current === serial
+          )
+            applyAdmission(epoch, expectedReader, result);
+        },
+        () => {
+          if (
+            !work.signal.aborted &&
+            openingSource.current === invocationTransport &&
+            admissionRequest.current === serial
+          )
+            applyAdmission(epoch, expectedReader, { ok: false, reason: 'unavailable' });
+        },
+      )
+      .finally(() => {
+        if (admissionWork.current === work) admissionWork.current = null;
       });
     return serial;
   }
@@ -484,11 +545,13 @@ function StandalonePresentationViewEditor({
   useEffect(() => {
     if (!needsRead || !reader) return;
     const epoch = lifecycle.epoch;
-    const serial = readAdmission(reader, epoch, transport);
+    readAdmission(reader, epoch, transport);
     return () => {
-      if (serial && admissionRequest.current === serial) admissionRequest.current += 1;
+      admissionRequest.current += 1;
+      admissionWork.current?.retire();
+      admissionWork.current = null;
     };
-  }, [lifecycle.epoch, needsRead, reader]);
+  }, [lifecycle.epoch, needsRead, reader, transport]);
 
   function retryAdmission() {
     if (!needsRead || !reader) return;
@@ -569,6 +632,7 @@ function AdmittedPresentationViewEditor({
   const [adviceFailure, setAdviceFailure] = useState<CurationReadFailure | null>(null);
   const [adviceRefreshing, setAdviceRefreshing] = useState(false);
   const adviceSequence = useRef(0);
+  const openingWork = useRef<{ kind: 'profile' | 'advice'; work: CurationOpeningRead<CurationRead> } | null>(null);
   const waitOwner = { reader, generation: epoch };
   const { waitRef, waiting, replaceWait } = useCurationReadWait(waitOwner);
   const [failure, setFailure] = useState<CurationFailure | null>(null);
@@ -595,7 +659,7 @@ function AdmittedPresentationViewEditor({
   const transportRef = useRef(transport);
   transportRef.current = transport;
   const adviceContext = useRef({ reader, locale, epoch, source: transport });
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previous = adviceContext.current;
     if (
       previous.reader !== reader ||
@@ -603,6 +667,12 @@ function AdmittedPresentationViewEditor({
       previous.epoch !== epoch ||
       previous.source !== transport
     ) {
+      if (previous.source !== transport || openingWork.current?.kind === 'advice') {
+        openingWork.current?.work.retire();
+        openingWork.current = null;
+        inFlight.current = false;
+        setLoadingProfile(false);
+      }
       adviceSequence.current += 1;
       setAdviceLease(null);
       setAdviceFailure(null);
@@ -615,7 +685,12 @@ function AdmittedPresentationViewEditor({
     lifetime.current.active = true;
     const currentVisit = publication.activate(transport, lease ?? null);
     setVisit((previous) => (currentVisit.isCurrent() ? currentVisit : previous));
+    const stopReadRetirement = lease?.onRetire(() => openingWork.current?.work.retire());
     return () => {
+      stopReadRetirement?.();
+      openingWork.current?.work.retire();
+      openingWork.current = null;
+      inFlight.current = false;
       lifetime.current.active = false;
       publication.retire(currentVisit);
     };
@@ -818,16 +893,19 @@ function AdmittedPresentationViewEditor({
       if (!isCurrent() || !currentVisit.isCurrent()) return;
       return;
     }
-    if (!canDispatchCurationRead(waitRef.current, waitOwner)) return;
+    if (openingWork.current || !canDispatchCurationRead(waitRef.current, waitOwner)) return;
     const invocationTransport = transport;
+    const invocationLocale = localeRef.current;
+    const work = startCurationOpeningRead((signal) => readCurationOpening(invocationTransport, reader, signal));
+    openingWork.current = { kind: 'profile', work };
     inFlight.current = true;
     setOwned(setLoadingProfile, true);
     setOwned(setFailure, null);
     setOwned(setCorrection, null);
     setOwned(setMessage, '');
     try {
-      const next = await readCurationOpening(invocationTransport, reader);
-      if (!isCurrent()) return;
+      const next = await work.promise;
+      if (work.signal.aborted || !isCurrent() || transportRef.current !== invocationTransport) return;
       if (next.ok) {
         retireCurationReadWait(waitRef.current);
         replaceWait(null);
@@ -841,7 +919,7 @@ function AdmittedPresentationViewEditor({
         setOwned(setDraft, presentationDraft(next));
         setOwned(setAdviceLease, {
           reader,
-          locale: localeRef.current,
+          locale: invocationLocale,
           digest: next.digest,
           head: next.head,
           source: invocationTransport,
@@ -860,12 +938,13 @@ function AdmittedPresentationViewEditor({
         setOwned(setFailure, next);
       }
     } catch {
-      if (!isCurrent()) return;
+      if (work.signal.aborted || !isCurrent() || transportRef.current !== invocationTransport) return;
       const unavailable = { ok: false as const, reason: 'unavailable' as const };
       replaceWait(waitAfterCurationRead(waitRef.current, waitOwner, unavailable));
       setOwned(setFailure, unavailable);
     } finally {
-      if (isCurrent()) {
+      if (openingWork.current?.work === work) openingWork.current = null;
+      if (!work.signal.aborted && isCurrent() && transportRef.current === invocationTransport) {
         inFlight.current = false;
         setOwned(setLoadingProfile, false);
       }
@@ -879,17 +958,21 @@ function AdmittedPresentationViewEditor({
       adviceRefreshing ||
       busy ||
       inFlight.current ||
+      openingWork.current ||
       !canDispatchCurationRead(waitRef.current, waitOwner)
     )
       return;
     const request = ++adviceSequence.current;
     const expected = { reader, locale: localeRef.current, digest: current.digest, head: current.head };
     const invocationTransport = transport;
+    const work = startCurationOpeningRead((signal) => readCurationOpening(invocationTransport, reader, signal));
+    openingWork.current = { kind: 'advice', work };
     setOwned(setAdviceRefreshing, true);
     setOwned(setAdviceFailure, null);
     try {
-      const next = await readCurationOpening(invocationTransport, reader);
+      const next = await work.promise;
       if (
+        work.signal.aborted ||
         !isCurrent() ||
         request !== adviceSequence.current ||
         transportRef.current !== invocationTransport ||
@@ -920,12 +1003,21 @@ function AdmittedPresentationViewEditor({
         advice: next.advice ?? unavailableCurationAdvice(),
       });
     } catch {
-      if (!isCurrent() || request !== adviceSequence.current) return;
+      if (
+        work.signal.aborted ||
+        !isCurrent() ||
+        request !== adviceSequence.current ||
+        transportRef.current !== invocationTransport ||
+        localeRef.current !== expected.locale
+      )
+        return;
       setOwned(setAdviceLease, null);
       setOwned(setAdviceFailure, { ok: false, reason: 'unavailable' });
       replaceWait(waitAfterCurationRead(waitRef.current, waitOwner, { reason: 'unavailable' }));
     } finally {
+      if (openingWork.current?.work === work) openingWork.current = null;
       if (
+        !work.signal.aborted &&
         isCurrent() &&
         request === adviceSequence.current &&
         transportRef.current === invocationTransport &&
