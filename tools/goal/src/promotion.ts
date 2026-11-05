@@ -28,6 +28,16 @@ import {
   finishPromotionParentWindow,
   recoverIncompletePromotionWindows,
 } from './promotion-observation.ts';
+import {
+  advancePreparedStabilize,
+  controlPlaneOnly,
+  createPreparedStabilize,
+  head,
+  optionalHead,
+  publishMain,
+  publishPrefix,
+  ref,
+} from './promotion-publication.ts';
 
 export { PROMOTION_GATE_TIMEOUT_MS, commandsFor, coveredByRootGate, promotionCommand } from './promotion-checks.ts';
 
@@ -57,21 +67,10 @@ const STABILIZE_QUICK_GATE = [
   ['bun', 'scripts/typecheck.ts'],
   ['bun', 'run', '--cwd', 'packages/definitions', 'release'],
 ] as const;
-const ref = (branch: string) => `refs/heads/${branch}`;
 function sourceDevBranch(settings: Settings): string {
   // 'dev-verified' records verifier progress and known findings; promotion always freezes the latest integration head
   // and must pass its own full candidate gate.
   return settings.integrationBranch;
-}
-function head(cwd: string, branch: string): string {
-  return git(cwd, 'rev-parse', '--verify', ref(branch));
-}
-function optionalHead(cwd: string, branch: string): string | undefined {
-  try {
-    return head(cwd, branch);
-  } catch {
-    return undefined;
-  }
 }
 function workingFiles(cwd: string): string[] {
   const tracked = spawnSync('git', ['diff', '--name-only', '-z', 'HEAD', '--'], { cwd, encoding: 'utf8' });
@@ -257,187 +256,6 @@ function prepareCulpritOutcome(options: PromotionOptions, run: PromotionRun): vo
   });
 }
 
-/** Publish a proven prefix when main can fast-forward to it; main's own commits reach dev only through later merges. */
-function publishPrefix(
-  options: PromotionOptions,
-  run: PromotionRun,
-  target: string,
-  taskIds: readonly string[],
-): boolean {
-  const settings = options.settings,
-    store = options.job.tasks.store,
-    checkout = settings.mainCheckout;
-  if (git(checkout, 'symbolic-ref', 'HEAD') !== ref(settings.mainBranch))
-    throw new Error(`The main checkout must have ${settings.mainBranch} checked out`);
-  if (!isAncestor(checkout, head(checkout, settings.mainBranch), target)) return false;
-  store.publishPromotion(taskIds, target, () => {
-    options.beforeAdvance?.();
-    git(checkout, 'merge', '--ff-only', '--no-edit', target);
-  });
-  options.job.onPromotionComplete(taskIds, run.id);
-  return true;
-}
-
-// Promotion regenerates derived files on stabilize alone, so dev can lack main's last commit. The merge keeps dev's
-// side of a derived-file conflict, since the next promotion regenerates those files anyway.
-function mergeMainIntoDev(
-  options: PromotionOptions,
-  target: string,
-  branch = sourceDevBranch(options.settings),
-): string | undefined {
-  const settings = options.settings,
-    checkout = settings.mainCheckout;
-  const derived = (options.derivedFiles ?? defaultDerivedFiles).map((file) => file.path);
-  for (let attempt = 0; attempt < (options.settings.policy ?? defaultPolicy).promotion.advanceAttempts; attempt++) {
-    const dev = optionalHead(checkout, branch);
-    if (!dev) return undefined;
-    if (isAncestor(checkout, target, dev)) return dev;
-    const tree = join(settings.worktreeRoot, `promotion-merge-${randomUUID()}`);
-    mkdirSync(settings.worktreeRoot, { recursive: true });
-    git(checkout, 'worktree', 'add', '--detach', tree, dev);
-    try {
-      const merged = spawnSync('git', ['merge', '--no-ff', '--no-edit', '-m', `Merge main into ${branch}`, target], {
-        cwd: tree,
-        encoding: 'utf8',
-      });
-      if (merged.status !== 0) {
-        const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean);
-        if (!conflicts.length || conflicts.some((path) => !matchesPath(path, derived, settings.policy?.brief)))
-          return undefined;
-        try {
-          git(tree, 'checkout', '--ours', '--', ...conflicts);
-          git(tree, 'add', '--', ...conflicts);
-          git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
-        } catch {
-          return undefined;
-        }
-      }
-      const commit = git(tree, 'rev-parse', 'HEAD');
-      try {
-        git(checkout, 'update-ref', ref(branch), commit, dev);
-        return commit;
-      } catch {
-        // Dev moved during the merge; merge again onto its new head.
-      }
-    } finally {
-      git(checkout, 'worktree', 'remove', '--force', tree);
-    }
-  }
-  return undefined;
-}
-
-/** The paths main may take directly while a snapshot is gated. */
-const CONTROL_PLANE_PATHS = ['tools/goal/'];
-
-function controlPlaneOnly(checkout: string, main: string, snapshot: string): boolean {
-  const base = git(checkout, 'merge-base', main, snapshot);
-  const changed = git(checkout, 'diff', '--name-only', base, main).split('\n').filter(Boolean);
-  return changed.length > 0 && changed.every((path) => CONTROL_PLANE_PATHS.some((prefix) => path.startsWith(prefix)));
-}
-
-/** Merge main's newer control-plane commits into the gated candidate; undefined when they conflict. */
-function mergeMainIntoCandidate(
-  options: PromotionOptions,
-  main: string,
-  snapshot: string,
-  branch: string,
-): string | undefined {
-  const settings = options.settings,
-    checkout = settings.mainCheckout;
-  const tree = join(settings.worktreeRoot, `promotion-candidate-${randomUUID()}`);
-  mkdirSync(settings.worktreeRoot, { recursive: true });
-  git(checkout, 'worktree', 'add', '--detach', tree, snapshot);
-  try {
-    const merged = spawnSync(
-      'git',
-      ['merge', '--no-ff', '--no-edit', '-m', `Merge ${settings.mainBranch} into ${settings.stabilizeBranch}`, main],
-      { cwd: tree, encoding: 'utf8' },
-    );
-    if (merged.status !== 0) return undefined;
-    const candidate = git(tree, 'rev-parse', 'HEAD');
-    try {
-      git(checkout, 'update-ref', ref(branch), candidate, snapshot);
-      return candidate;
-    } catch {
-      return undefined;
-    }
-  } finally {
-    git(checkout, 'worktree', 'remove', '--force', tree);
-  }
-}
-
-async function advanceStabilizeAfterPublish(options: PromotionOptions, run: PromotionRun): Promise<boolean> {
-  const settings = options.settings,
-    checkout = settings.mainCheckout,
-    target = run.promoteHead!;
-  const stabilize = optionalHead(checkout, settings.stabilizeBranch);
-  if (stabilize === undefined) return false;
-  if (stabilize !== target) return true;
-  const dev = mergeMainIntoDev(options, target);
-  if (!dev) {
-    notifySupermanager(
-      options,
-      `Published main at ${target}, but main does not merge into dev; stabilize remains at ${target}.`,
-    );
-    return true;
-  }
-  if (!(await stabilizeQuickGate(options, dev))) return true;
-  try {
-    git(checkout, 'update-ref', ref(settings.stabilizeBranch), dev, target);
-  } catch {
-    // A concurrent stabilize update must win over this stale promotion snapshot.
-  }
-  return true;
-}
-
-async function publishMain(options: PromotionOptions, run: PromotionRun): Promise<boolean> {
-  const settings = options.settings,
-    store = options.job.tasks.store,
-    checkout = settings.mainCheckout;
-  let target = run.promoteHead!;
-  if (git(checkout, 'symbolic-ref', 'HEAD') !== ref(settings.mainBranch))
-    throw new Error(`The main checkout must have ${settings.mainBranch} checked out`);
-  const taskIds = run.promoteTaskIds ?? [];
-  const now = head(checkout, settings.mainBranch);
-  if (now !== target && !isAncestor(checkout, target, now) && !isAncestor(checkout, now, target)) {
-    // Control-plane fixes land on main directly while a snapshot is gated; they do not touch what the gate checked, so
-    // the snapshot is published merged with them. Any other commit on main drops the run for a fresh gate.
-    const merged = controlPlaneOnly(checkout, now, target)
-      ? mergeMainIntoCandidate(options, now, target, settings.stabilizeBranch)
-      : undefined;
-    if (!merged) {
-      store.clearPromotion();
-      return false;
-    }
-    run.promoteHead = target = merged;
-    store.savePromotion(run);
-  }
-  store.publishPromotion(taskIds, target, () => {
-    const current = head(checkout, settings.mainBranch);
-    if (current !== target && !isAncestor(checkout, target, current)) {
-      if (!isAncestor(checkout, current, target)) throw new Error('Main moved to a different history during promotion');
-      options.beforeAdvance?.();
-      git(checkout, 'merge', '--ff-only', '--no-edit', target);
-    } else if (git(checkout, 'rev-parse', 'HEAD') !== current) {
-      git(checkout, 'reset', '--hard', current);
-    }
-  });
-  options.job.onPromotionComplete(taskIds, run.id);
-  // A merged main is in no candidate yet; the next window must contain it, or no later snapshot could be published.
-  const stabilize = optionalHead(checkout, settings.stabilizeBranch);
-  if (stabilize !== undefined && !isAncestor(checkout, target, stabilize)) {
-    const advanced = mergeMainIntoDev(options, target, settings.stabilizeBranch);
-    if (!advanced)
-      notifySupermanager(
-        options,
-        `Published main at ${target}, but main does not merge into ${settings.stabilizeBranch}.`,
-      );
-  }
-  const stabilized = await advanceStabilizeAfterPublish(options, run);
-  store.clearPromotion();
-  return stabilized;
-}
-
 /** Create the next frozen candidate only from a dev snapshot that passes the short preflight. */
 async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promise<boolean> {
   const { settings } = options;
@@ -474,18 +292,7 @@ async function cutStabilizeCandidate(options: PromotionOptions, dev: string): Pr
   )
     return false;
   if (head(checkout, sourceBranch) !== prepared.head) return false;
-  try {
-    git(
-      checkout,
-      'update-ref',
-      ref(settings.stabilizeBranch),
-      prepared.head,
-      '0000000000000000000000000000000000000000',
-    );
-    return true;
-  } catch {
-    return optionalHead(checkout, settings.stabilizeBranch) !== undefined;
-  }
+  return createPreparedStabilize(checkout, settings.stabilizeBranch, prepared.head);
 }
 
 /** Gate integrated work, publish passing commits on main, or isolate the first failing task on dev. */
@@ -528,11 +335,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
           optionalHead(settings.mainCheckout, settings.stabilizeBranch) !== stabilize
         )
           continue;
-        try {
-          git(settings.mainCheckout, 'update-ref', ref(settings.stabilizeBranch), dev, stabilize);
-        } catch {
-          // A concurrent stabilize update wins; re-read it under the same promotion lease.
-        }
+        advancePreparedStabilize(settings.mainCheckout, settings.stabilizeBranch, stabilize, dev);
         continue;
       }
       const stabilization = stabilize !== undefined;
@@ -722,7 +525,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
         store.savePromotion(run);
       }
       if (run.phase === 'publish-main') {
-        const published = await publishMain(options, run);
+        const published = await publishMain(options, run, (snapshot) => stabilizeQuickGate(options, snapshot));
         if (published) {
           for (const taskId of run.promoteTaskIds ?? []) {
             const task = store.task(taskId);
