@@ -1,3 +1,4 @@
+import { consumeMemberRetention, memberRetentionControl, memberRetentionPartitionPlan, memberRetentionContinuationPlan, MEMBER_RETENTION_LIMITS } from './member-retention-bounds.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -27,16 +28,17 @@ export async function registerLibraryMemberRetentionWork({ pool, client, clock }
       const result: Page = { cursor: { ...start }, examined: 0, purged: 0, pending: 0, probes: 0 };
       let loaded: number | undefined;
       let seeks = 0;
-      while (result.cursor.partition < PARTITIONS && seeks < 100 && Date.now() < deadline - 100) {
+      while (result.cursor.partition < PARTITIONS && seeks < MEMBER_RETENTION_LIMITS.seeks && Date.now() < deadline - 100) {
         const partition = result.cursor.partition;
         const found = await withConnection(pool, async (connection) => {
-          await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          await memberRetentionControl(connection, 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           try {
             if (loaded !== partition) {
-              const metadata = await readPartition(connection, partition);
+              const metadata = await consumeMemberRetention('partition', memberRetentionPartitionPlan(partition).total,
+                () => readPartition(connection, partition));
               result.probes++;
               if (!metadata || metadata.writeState !== 'active') {
-                await connection.query('COMMIT');
+                await memberRetentionControl(connection, 'COMMIT');
                 return { pending: true as const };
               }
               loaded = partition;
@@ -48,10 +50,10 @@ export async function registerLibraryMemberRetentionWork({ pool, client, clock }
               ...(result.cursor.after ? { after: result.cursor.after } : {}),
               limit: 1,
             });
-            await connection.query('COMMIT');
+            await memberRetentionControl(connection, 'COMMIT');
             return { key: keys[0] };
           } catch (error) {
-            await connection.query('ROLLBACK');
+            await memberRetentionControl(connection, 'ROLLBACK');
             throw error;
           }
         });
@@ -77,21 +79,20 @@ export async function registerLibraryMemberRetentionWork({ pool, client, clock }
   );
   const continuation = DBOS.registerStep(
     async (next: Segment) => {
-      await client.enqueue(
-        {
-          workflowName: SEGMENT_WORKFLOW,
-          queueName: 'maintenance',
-          workflowID: `library.memberRetention:${next.root}:${next.sequence}`,
-          workflowIDReusePolicy: 'return-existing',
-        },
-        next,
-      );
+      const options = {
+        workflowName: SEGMENT_WORKFLOW,
+        queueName: 'maintenance',
+        workflowID: `library.memberRetention:${next.root}:${next.sequence}`,
+        workflowIDReusePolicy: 'return-existing' as const,
+      };
+      await consumeMemberRetention('continuation', memberRetentionContinuationPlan(next, options),
+        () => client.enqueue(options, next));
     },
     { name: 'library.memberRetentionContinue', ...COMMAND_STEP_RETRIES },
   );
   const segment = async (input: Segment) => {
     let cursor = input.cursor;
-    for (let n = 0; n < 100 && cursor.partition < PARTITIONS; n++) cursor = (await page(input.cutoff, cursor)).cursor;
+    for (let n = 0; n < MEMBER_RETENTION_LIMITS.pages && cursor.partition < PARTITIONS; n++) cursor = (await page(input.cutoff, cursor)).cursor;
     if (cursor.partition < PARTITIONS) await continuation({ ...input, sequence: input.sequence + 1, cursor });
   };
   DBOS.registerWorkflow(segment, { name: SEGMENT_WORKFLOW });
