@@ -13,6 +13,7 @@ import {
 } from '../../../importer/src/showcase-publication.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createReleasedDiscoveryFixture, type ReleasedDiscoveryFixture } from '../support/released-discovery.ts';
+import { valueContent } from './type-helpers.ts';
 
 const payload = {
   id: 884,
@@ -113,7 +114,7 @@ test('default seed publishes the reviewed source Concept publicly and retracts o
   const publicSubject = (await publicClient.readSubject(workId)).subject as {
     statements: Record<string, BatchStatement[]>;
   };
-  expect(publicSubject.statements['schema:keywords']?.map((statement) => statement.value.content)).toContain(
+  expect(publicSubject.statements['schema:keywords']?.map((statement) => valueContent(statement.value))).toContain(
     sourceConcept,
   );
 
@@ -132,7 +133,7 @@ test('default seed publishes the reviewed source Concept publicly and retracts o
       ),
   ).toBe(false);
   const after = (await publicClient.readSubject(workId)).subject as { statements: Record<string, BatchStatement[]> };
-  expect(after.statements['schema:keywords']?.map((statement) => statement.value.content) ?? []).not.toContain(
+  expect(after.statements['schema:keywords']?.map((statement) => valueContent(statement.value)) ?? []).not.toContain(
     sourceConcept,
   );
   expect(after.statements['schema:name']?.length).toBeGreaterThan(0);

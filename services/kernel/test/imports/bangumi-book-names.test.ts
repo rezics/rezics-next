@@ -13,7 +13,7 @@ import {
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
-import { fixtureFetch } from './type-helpers.ts';
+import { currentCandidates, fixtureFetch } from './type-helpers.ts';
 
 const externalId = '990411';
 const record = (aliasState: 'malformed' | 'corrected' | 'fenced') => ({
@@ -91,12 +91,13 @@ test('Book names move through explicit publication and same-UUID refresh without
       context: GLOBAL_CONTEXT,
       limit: 100,
     });
-    expect(firstPage.candidates.map((candidate) => candidate.statement.value.content)).toContainEqual({
+    const firstCandidates = currentCandidates(firstPage.candidates);
+    expect(firstCandidates.map((candidate) => candidate.statement.value.content)).toContainEqual({
       language: 'zh',
       text: 'Source Chinese title',
     });
     expect(
-      firstPage.candidates.some((candidate) =>
+      firstCandidates.some((candidate) =>
         JSON.stringify(candidate.statement.value.content).includes('Must not leak'),
       ),
     ).toBe(false);
@@ -153,7 +154,7 @@ test('Book names move through explicit publication and same-UUID refresh without
       context: GLOBAL_CONTEXT,
       limit: 100,
     });
-    expect(hasTitleCandidate(correctedCandidates.candidates, 'und', 'New alias')).toBe(true);
+    expect(hasTitleCandidate(currentCandidates(correctedCandidates.candidates), 'und', 'New alias')).toBe(true);
     expect(
       titleValues((await publicClient.readSubject(id)).subject?.statements?.['schema:name'] as BatchStatement[]),
     ).toEqual(titleValues(publicSubject.statements['schema:name']));
@@ -173,7 +174,7 @@ test('Book names move through explicit publication and same-UUID refresh without
       limit: 100,
     });
     expect(
-      afterFence.candidates.some((candidate) =>
+      currentCandidates(afterFence.candidates).some((candidate) =>
         JSON.stringify(candidate.statement.value.content).includes('Fenced alias'),
       ),
     ).toBe(false);

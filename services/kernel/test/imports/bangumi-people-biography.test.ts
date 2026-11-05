@@ -22,6 +22,7 @@ import { createSourceRegistration } from '../../../importer/src/source-registry.
 import type { ImportTransport, SourceRegistration } from '../../../importer/src/import-contract.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { valueContent } from './type-helpers.ts';
 
 const alias = crossMediaAliases.bangumi;
 const globalContext = '00000000-0000-8000-8000-000000000000';
@@ -388,7 +389,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
       obligations: ['cc:Attribution', 'cc:ShareAlike'],
       attribution: 'Bangumi contributors (https://bgm.tv/person/8101)',
     });
-    const sentBiography = personBiography.statement.value.content as {
+    const sentBiography = valueContent(personBiography.statement.value) as {
       language: string;
       document: { doc: { content: { content?: { text: string }[] }[] } };
     };
@@ -573,16 +574,16 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     );
     expect(fencedFacts?.op).toBe('propose');
     if (!fencedFacts || fencedFacts.op !== 'propose') throw new Error('Facts did not refresh behind the summary fence');
-    expect(fencedFacts.statement.value.content).toEqual({ language: 'und', text: '星見 改訂' });
-    expect(
-      fencedCommands.some(
+    expect(valueContent(fencedFacts.statement.value)).toEqual({ language: 'und', text: '星見 改訂' });
+    const fencedNames = fencedCommands
+      .filter(
         (command) =>
           command.op === 'propose' &&
           command.source.external_id === 'person:8101' &&
-          command.statement.property.id === 'schema:name' &&
-          (command.statement.value.content as { language?: string }).language === 'zh',
-      ),
-    ).toBe(false);
+          command.statement.property.id === 'schema:name',
+      )
+      .map((command) => (command.op === 'propose' ? valueContent(command.statement.value) : undefined));
+    expect(fencedNames).not.toContainEqual({ language: 'zh', text: '星見中文' });
     expect(await publicNames(editor, personId)).toContainEqual({ language: 'zh', text: '星見中文 改' });
     expect(
       fencedCommands.some(

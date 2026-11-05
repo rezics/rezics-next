@@ -30,7 +30,7 @@ import {
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
-import { fixtureFetch } from './type-helpers.ts';
+import { currentCandidates, fixtureFetch, valueContent } from './type-helpers.ts';
 
 type ReadStatement = {
   value: { content: unknown };
@@ -211,13 +211,14 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
         (command) => command.op === 'propose' && command.statement.property.id === 'wdt:P106',
       ),
     ).toBe(false);
-    const proposedNames = (
-      await runtime.importTransport.reviewedCandidates(personId, {
+    const proposedPage = await runtime.importTransport.reviewedCandidates(personId, {
         property: 'schema:name',
         context: GLOBAL_CONTEXT,
         limit: 100,
-      })
-    ).candidates.map(({ statement }) => statement.value.content);
+      });
+    const proposedNames = currentCandidates(proposedPage.candidates).map(({ statement }) =>
+      valueContent(statement.value),
+    );
     expect(proposedNames).toEqual([
       { language: 'und', text: '星見' },
       { language: 'zh', text: '星見中文' },
@@ -335,9 +336,11 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     const careerBodies = capturedWriteBodies(runtime, 'wdt:P106', careerCaptureStart);
     expect(careerBodies).toHaveLength(2);
     expect(careerBodies[0]).toBe(careerBodies[1]);
-    expect(replayedCareerCommands[0]?.op === 'propose' ? replayedCareerCommands[0].statement.value.content : null).toBe(
-      producer?.id,
-    );
+    expect(
+      replayedCareerCommands[0]?.op === 'propose'
+        ? valueContent(replayedCareerCommands[0].statement.value)
+        : null,
+    ).toBe(producer?.id);
     await publishShowcase({
       plan,
       result: imported,
@@ -409,11 +412,11 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
         command.op === 'propose' && command.statement.property.id === 'schema:name',
     );
-    expect(changedNameCandidates.map(({ statement }) => statement.value.content)).toContainEqual({
+    expect(changedNameCandidates.map(({ statement }) => valueContent(statement.value))).toContainEqual({
       language: 'und',
       text: '星見 改訂',
     });
-    expect(changedNameCandidates.map(({ statement }) => statement.value.content)).not.toContainEqual({
+    expect(changedNameCandidates.map(({ statement }) => valueContent(statement.value))).not.toContainEqual({
       language: 'zh',
       text: '星見中文',
     });
@@ -465,13 +468,12 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     expect(publicRead['wdt:P6298']?.[0]?.value.content).toBe('8101');
     expect(publicRead['schema:abstract']).toHaveLength(1);
     expect(publicRead['wdt:P106']?.map(({ value }) => value.content)).toContain(actor?.id);
-    const occupation = (
-      await runtime.importTransport.reviewedCandidates(personId, {
+    const occupationPage = await runtime.importTransport.reviewedCandidates(personId, {
         property: 'wdt:P106',
         context: GLOBAL_CONTEXT,
         limit: 100,
-      })
-    ).candidates.find(
+      });
+    const occupation = currentCandidates(occupationPage.candidates).find(
       (candidate) => candidate.statement.value.type === 'value' && candidate.statement.value.content === actor?.id,
     );
     expect(occupation?.source).toMatchObject({

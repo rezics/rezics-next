@@ -19,7 +19,7 @@ import {
 } from '../../../importer/src/showcase-publication.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
-import { fixtureFetch } from './type-helpers.ts';
+import { currentCandidates, fixtureFetch, valueContent } from './type-helpers.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 
@@ -48,7 +48,9 @@ test('local publication accepts only its acknowledged plan after authorization a
       context: globalContext,
       limit: 100,
     });
-    const selectedName = selectedPage.candidates.find((candidate) => candidate.source?.external_id === '101');
+    const selectedName = currentCandidates(selectedPage.candidates).find(
+      (candidate) => candidate.source?.external_id === '101',
+    );
     if (!selectedName) throw new Error('Selected source name candidate is missing');
     const unrelated = await editor.http(`/v1/subjects/${workId}/candidates`, {
       statement: {
@@ -89,8 +91,8 @@ test('local publication accepts only its acknowledged plan after authorization a
           context: globalContext,
           limit: 100,
         })
-        .then((page) => page.adoption?.selection?.map((entry) => entry.candidate)),
-    ).toBeUndefined();
+        .then((page) => page.adoption),
+    ).toBeNull();
 
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
@@ -123,11 +125,11 @@ test('local publication accepts only its acknowledged plan after authorization a
     expect(subject.type).toBe(published.manifest.records[0]?.nativeType);
     const expected = published.manifest.records[0]!.assertions.map(({ property, statement }) => ({
       property,
-      value: statement.value.content,
+      value: valueContent(statement.value),
     }));
     const actual = expected.map(({ property }) => ({
       property,
-      value: subject.statements[property]?.map((statement) => statement.value.content),
+      value: subject.statements[property]?.map((statement) => valueContent(statement.value)),
     }));
     for (const fact of expected)
       expect(actual.find((row) => row.property === fact.property)?.value).toContain(fact.value);
@@ -136,7 +138,13 @@ test('local publication accepts only its acknowledged plan after authorization a
       context: globalContext,
       limit: 100,
     });
-    expect(after.adoption?.selection?.some((entry) => entry.candidate === unrelatedId)).toBe(false);
+    expect(after.adoption?.mode).toBe('replace');
+    expect(
+      subject.statements['schema:name']?.some(
+        (statement) =>
+          JSON.stringify(valueContent(statement.value)) === JSON.stringify({ language: 'en', text: 'Unrelated title' }),
+      ),
+    ).toBe(false);
     expect(runtime.captures.some((capture) => capture.request.url.endsWith(`/candidates/${unrelatedId}:accept`))).toBe(
       false,
     );

@@ -17,7 +17,7 @@ import {
 } from '../../../importer/src/showcase-publication.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
-import { fixtureFetch } from './type-helpers.ts';
+import { currentCandidates, fixtureFetch } from './type-helpers.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const characterId = 'character:200';
@@ -138,8 +138,12 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
       context: globalContext,
       limit: 100,
     });
-    const heightCandidate = initialHeight.candidates.find((candidate) => candidate.source?.external_id === characterId);
-    const weightCandidate = initialWeight.candidates.find((candidate) => candidate.source?.external_id === characterId);
+    const heightCandidate = currentCandidates(initialHeight.candidates).find(
+      (candidate) => candidate.source?.external_id === characterId,
+    );
+    const weightCandidate = currentCandidates(initialWeight.candidates).find(
+      (candidate) => candidate.source?.external_id === characterId,
+    );
     if (!heightCandidate || !weightCandidate) throw new Error('Selected physical candidates are missing');
     expect(heightCandidate.source).toMatchObject({
       source: crossMediaAliases.bangumi,
@@ -197,7 +201,10 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
         context: globalContext,
         limit: 100,
       });
-      expect(adopted.adoption?.selection?.map((entry) => entry.candidate)).toContain(candidate.id);
+      expect(adopted.adoption?.mode).toBe('replace');
+      expect(values(await publicClient.readSubject(first.id), property)).toContainEqual(
+        candidate.statement.value.type === 'value' ? candidate.statement.value.content : undefined,
+      );
     }
     expect(values(await publicClient.readSubject(first.id), 'schema:height')).toContainEqual({
       amount: '+172',

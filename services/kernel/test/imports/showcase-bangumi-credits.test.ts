@@ -25,7 +25,7 @@ import {
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
-import { fixtureFetch } from './type-helpers.ts';
+import { currentCandidates, fixtureFetch } from './type-helpers.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 
@@ -272,13 +272,13 @@ test('default anime staff and voice publication adopts exact cited endpoints and
       ],
     });
     const candidateId = (wrongScheme.results[0] as { value: { candidate: string } }).value.candidate;
-    const candidate = (
-      await runtime.importTransport.reviewedCandidates(role.conceptId, {
+    const candidatePage = await runtime.importTransport.reviewedCandidates(role.conceptId, {
         property: 'skos:inScheme',
         context: globalContext,
         limit: 100,
-      })
-    ).candidates.find((item) => item.id === candidateId)!;
+      });
+    const candidate = currentCandidates(candidatePage.candidates).find((item) => item.id === candidateId);
+    if (!candidate) throw new Error('Accepted credit candidate is missing');
     const accept = await runtime.importTransport.acceptReviewedCandidate(
       role.conceptId,
       candidateId,

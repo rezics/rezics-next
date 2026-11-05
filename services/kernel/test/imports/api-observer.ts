@@ -1,20 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import type { BatchWriteResult, Rights, Source as SourceEnvelope } from '@rezics/definitions/bulk';
 import { parseDocument, serializeDocument } from '@rezics/document';
-import type { ImportApiDriver, Proposal, RecordView, Effects } from '../../../../specs/imports-api-driver.ts';
+import type { ImportApiDriver, Proposal, RecordView, Effects, Source } from '../../../../specs/imports-api-driver.ts';
 import type { Json, Statement, Subject, HttpResponse } from '../../../../specs/semantic-driver.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import { identitySupport } from './identity-fixture.ts';
 import type { ApiRuntime } from './api-runtime.ts';
 
-type Candidate = {
-  id: string;
-  statement: Statement;
-  revision: number;
-  source: SourceEnvelope | null;
-  retracted: number | null;
-  retraction: { source: SourceEnvelope; references: Proposal['references'] } | null;
-};
+type Candidate =
+  | { id: string; deleted: true }
+  | {
+      id: string;
+      statement: Statement;
+      revision: number;
+      source: SourceEnvelope | null;
+      retracted: number | null;
+      retraction: { source: SourceEnvelope; references: Proposal['references'] } | null;
+    };
 const envelope = (source: SourceEnvelope) => ({
   source: source.source as Source,
   externalId: source.external_id,
@@ -124,6 +126,7 @@ export async function openApiObserver(runtime: ApiRuntime) {
         view.responses.push(page);
         if (page.status !== 200) throw new Error(`Candidate disclosure: HTTP ${page.status}`);
         for (const candidate of page.body.candidates as Candidate[]) {
+          if ('deleted' in candidate) continue;
           if (!candidate.source) continue;
           originalRevisions.set(candidate.id, candidate.revision);
           view.proposals.push({
