@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
@@ -197,27 +197,23 @@ beforeAll(async () => {
   personas = await createPersonas(kernel, { version: 1, pool, auth });
   grants = createGrantCommands({ pool, access: kernel.testAccess, managementAction: 'access:grant' });
   const seller = personas.orgOwner;
-  // The existing native Commerce fixture seeds offer:create; local showcase board
-  // authority stays with its bootstrapped owner, while the seller uses a real board grant.
+  // The existing paid Commerce journey creates native editions with a seller that
+  // holds subject, board and offer creation on Global.
   await seedGovernanceAuthority(pool, PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, seller.accountId, [
+    'subject:create',
+    'board:create',
     'offer:create',
   ]);
-  await bootstrapLocalShowcaseBoardCreation(pool, personas.staff.accountId);
   for (const group of ['personal_library', 'purchases', 'selling'])
     await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
   const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) => {
-    const creator = path === '/v1/subjects' || path === '/v1/boards' ? personas.staff : seller;
     const response = await kernel.handle(
       new Request(`http://kernel.test${path}`, {
         method,
-        headers: { authorization: `Bearer ${creator.bearer}`, ...headers },
+        headers: { authorization: `Bearer ${seller.bearer}`, ...headers },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
     );
-    if (method === 'POST' && path === '/v1/boards' && response.status === 201) {
-      const value = (await response.clone().json()) as { board: { id: string } };
-      await grant(seller, { route: routeOf(value.board.id)!, id: value.board.id }, ['board:read', 'thread:create']);
-    }
     return response;
   });
   contentEdition = await editionPublisher.publish({
