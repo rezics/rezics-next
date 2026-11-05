@@ -384,6 +384,7 @@ function NativeMembership({
         </>
       ) : signIn ? (
         <Button
+          nativeButton={false}
           className="h-auto min-h-11 max-w-full whitespace-normal px-6 text-base"
           render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`} />}
         >

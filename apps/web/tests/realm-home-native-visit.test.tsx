@@ -363,8 +363,8 @@ function capture() {
 }
 async function paint(page: SpacePageData, source = operations, admission?: SpacePageAdmission) {
   const content = <SpacePage page={page} nativeOperations={source} />;
-  if (!admission) client.setQueryData(sessionModule.sessionQuery.queryKey, session);
-  await settle(() =>
+  await settle(() => {
+    if (!admission) client.setQueryData(sessionModule.sessionQuery.queryKey, session);
     root.render(
       <Frame.Provider
         value={
@@ -387,8 +387,9 @@ async function paint(page: SpacePageData, source = operations, admission?: Space
           <RouterProvider router={router} />
         </QueryClientProvider>
       </Frame.Provider>,
-    ),
-  );
+    );
+  });
+  await settle(() => {});
 }
 beforeEach(() => {
   joinAdviceReads.length = 0;
@@ -524,7 +525,7 @@ test('presentation replacement and credential, account or reader retirement disc
         },
       }),
     );
-    expect(host.textContent).not.toContain('Late board');
+    expect(host.textContent, replacement).not.toContain('Late board');
     expect(host.textContent).not.toContain('Original presentation');
     if (replacement !== 'presentation') {
       session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
@@ -544,7 +545,7 @@ test('anonymous advice remains localized and a missing or replaced carrier never
     native = fixture(0, 'anonymous');
     await paint(await readNativeRealmHome(operations, input));
     expect(host.textContent).toContain(m.realm_sign_in_to_join());
-    expect(host.querySelector('a[href*="auth/sign-in"]')?.className).toContain('min-h-11');
+    expect(host.querySelector('[data-native-advice] a[href*="auth/sign-in"]')?.className).toContain('min-h-11');
   }
   native = fixture();
   native.space.realmId = null;
