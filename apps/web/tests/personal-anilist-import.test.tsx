@@ -12,8 +12,10 @@ import {
 } from '../src/library/personal-anilist-import/contract';
 import { aniListCallTotal, expectedAniListCalls } from '../src/library/personal-anilist-import/cost';
 import { createAniListJourney } from '../src/library/personal-anilist-import/controller';
+import { kernelAniListPort } from '../src/library/personal-anilist-import/native';
 import { libraryNavigation } from '../src/library/navigation';
 import type { AniListVisit } from '../src/library/personal-anilist-import/visit';
+import { QUESTION } from '../src/features/pages/subject-ratings';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -183,7 +185,17 @@ function pageOf(rows: AniListRow[], extra: Partial<AniListPage> = {}): AniListPa
 
 function recordingPort(
   total: number,
-  options: { failApplyOnce?: boolean; replace?: boolean; chunk?: boolean; groups?: boolean; partial?: boolean } = {},
+  options: {
+    failApplyOnce?: boolean;
+    replace?: boolean;
+    chunk?: boolean;
+    groups?: boolean;
+    partial?: boolean;
+    existingVote?: number | null;
+    stateStatus?: 'applied' | 'failed';
+    scoreStatus?: 'applied' | 'unavailable';
+    scoreReason?: string;
+  } = {},
 ): {
   port: AniListImportPort;
   previews: { upload: string; scoreFormat?: string }[];
@@ -198,8 +210,9 @@ function recordingPort(
   const tokens = new Map<number, string>();
   let applyAttempts = 0;
   const stored = Array.from({ length: total }, (_, index) =>
-    row(index, {
+      row(index, {
       source: source(index, options.groups ? { name: index % 2 ? 'Watching again' : 'Watching' } : null),
+        ...(index === 0 ? { scoreLexeme: '0.00' } : {}),
     }),
   );
   const port: AniListImportPort = {
@@ -251,7 +264,49 @@ function recordingPort(
           replace: command.replace,
           ...(command.skip ? { skip: true } : {}),
           ...(command.subjectId ? { subjectId: command.subjectId } : {}),
+          ...(command.score ? { score: command.score } : {}),
         },
+        ...(command.score ? {
+          score: {
+            source: {
+              present: true,
+              value: current.source.evidence.score,
+              lexeme: current.scoreLexeme ?? null,
+              scale: 'POINT_10',
+              validity: 'valid',
+              reason: 'Exact source evidence.',
+            },
+            action: command.score.action,
+            units: command.score.action === 'vote' ? command.score.units : null,
+            conversion: 'owner-selected-native-units',
+            native: {
+              availability: 'available',
+              guard: { version: 1 },
+              question: {
+                id: QUESTION,
+                revision: 17,
+                label: 'Overall',
+                meaning: 'How strong is this work overall?',
+                grain: 'work',
+                minimumUnits: 0,
+                maximumUnits: 20,
+                stepUnits: 1,
+                lifecycleState: 'active',
+                lifecycleRevision: 1,
+              },
+              target: { subjectId: command.subjectId ?? subject, identityEpoch: '1', matchFingerprint: `fp-${command.ordinal}` },
+              currentVote: {
+                status: 'current',
+                vote: options.existingVote === undefined || options.existingVote === null
+                  ? null
+                  : { units: options.existingVote, revision: 3 },
+              },
+              commandKey: `vote-command-${command.ordinal}`,
+              consentKey: `vote-consent-${command.ordinal}`,
+              consented: false,
+            },
+          },
+        } : {}),
       });
       tokens.set(command.ordinal, review.id);
       stored[command.ordinal] = { ...current, review };
@@ -262,11 +317,28 @@ function recordingPort(
       applyAttempts += 1;
       if (options.failApplyOnce && applyAttempts === 1) return { kind: 'unknown', command };
       const last = command.body.confirmations.at(-1);
-      const outcomes = command.body.confirmations.map((item) => ({
-        ordinal: item.ordinal,
-        status: options.partial && item.ordinal === last?.ordinal ? ('failed' as const) : ('applied' as const),
-        retained: ['mediaId', 'score', 'progress', 'notes', 'extra_unknown'],
-      }));
+      const outcomes = command.body.confirmations.map((item) => {
+        const scoreInput = stored[item.ordinal]?.review?.input.score;
+        const scoreStatus = scoreInput && item.confirmNativeVoteEffects === true ? (options.scoreStatus ?? 'applied') : 'skipped';
+        if (scoreInput && item.confirmNativeVoteEffects === true) {
+          stored[item.ordinal] = {
+            ...stored[item.ordinal]!,
+            currentScore: scoreStatus === 'unavailable'
+              ? { status: 'unavailable', reason: options.scoreReason ?? 'atomic_guard_unavailable' }
+              : {
+                  status: 'current',
+                  question: { id: QUESTION, revision: 17, label: 'Overall' },
+                  vote: scoreInput.action === 'clear' ? null : { units: scoreInput.units, revision: 4 },
+                },
+          };
+        }
+        return {
+          ordinal: item.ordinal,
+          status: options.partial && item.ordinal === last?.ordinal ? ('failed' as const) : (options.stateStatus ?? 'applied'),
+          retained: ['mediaId', 'score', 'progress', 'notes', 'extra_unknown'],
+          ...(scoreInput ? { score: { status: scoreStatus, ...(scoreStatus === 'unavailable' ? { reason: options.scoreReason ?? 'atomic_guard_unavailable' } : {}) } } : {}),
+        };
+      });
       return {
         kind: 'applied',
         result: { outcomes: options.partial ? outcomes.slice(0, -1) : outcomes, complete: !options.partial },
@@ -274,6 +346,20 @@ function recordingPort(
     },
     async admitSource() {
       return { kind: 'admitted' as const };
+    },
+    async question() {
+      return {
+        kind: 'question',
+        question: {
+          id: QUESTION,
+          revision: 17,
+          label: 'Overall',
+          meaning: 'How strong is this work overall?',
+          grain: 'work',
+          scale: { min: 0, max: 20, displayStep: 1 },
+          lifecycle: { state: 'active', revision: 1 },
+        },
+      };
     },
     async cancel(command) {
       cancels.push(JSON.parse(JSON.stringify(command)));
@@ -314,6 +400,33 @@ async function clickLabel(label: string) {
     await Promise.resolve();
   });
   await settle();
+}
+
+async function uploadCollection(total = 1) {
+  const file = new File([envelope(total)], 'collection.json', { type: 'application/json' });
+  Object.defineProperty(host.querySelector('input[type="file"]') as HTMLInputElement, 'files', {
+    configurable: true,
+    value: [file],
+  });
+  await click(m.library_anilist_upload());
+}
+
+async function setTarget(value = subject) {
+  const target = host.querySelector('[data-anilist-target]') as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(target, value);
+    target.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await Promise.resolve();
+  });
+}
+
+async function setNativeUnits(value: number) {
+  const input = host.querySelector('input[id$="-score-units"]') as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, String(value));
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await Promise.resolve();
+  });
 }
 
 async function mount(port: AniListImportPort, current = visit()) {
@@ -413,6 +526,105 @@ test('preview does not apply, explicit replacement and exact uncertain retry kee
   expect(host.textContent).toContain('extra_unknown');
 });
 
+test('native zero vote review, explicit replacement consent, exact uncertain retry and mixed readback stay distinct', async () => {
+  const { port, applies, reviews } = recordingPort(1, {
+    failApplyOnce: true,
+    existingVote: 7,
+    stateStatus: 'failed',
+    scoreStatus: 'applied',
+  });
+  await mount(port);
+  await uploadCollection();
+  expect(host.querySelector('input[value="keep"]')).toHaveProperty('checked', true);
+  expect(host.textContent).toContain('How strong is this work overall?');
+  expect(host.textContent).toContain(m.library_anilist_question_scale({ min: 0, max: 20, step: 1 }));
+  await clickLabel(m.library_anilist_score_vote());
+  await setNativeUnits(0);
+  await setTarget();
+  await click(m.library_anilist_save_review());
+  expect(host.textContent).toContain('0.00');
+  expect(host.textContent).toContain(m.library_anilist_source_zero_unrated());
+  expect(host.textContent).toContain(m.library_anilist_native_zero_is_vote());
+  expect(host.textContent).toContain(m.library_anilist_review_vote_present({ units: 7 }));
+  await click(m.library_anilist_continue_confirm());
+  await clickLabel(m.library_anilist_confirm_native_vote_effects());
+  await click(m.library_anilist_return_review());
+  await clickLabel(m.library_anilist_replace_vote_and_state());
+  await click(m.library_anilist_save_review());
+  expect(reviews).toHaveLength(2);
+  expect(reviews[1]).toMatchObject({ replace: true, score: { action: 'vote', units: 0, questionId: QUESTION, questionRevision: 17 } });
+  await click(m.library_anilist_continue_confirm());
+  expect(host.textContent).toContain(m.library_anilist_confirm_vote({ units: 0 }));
+  expect(host.textContent).toContain(m.library_anilist_review_vote_present({ units: 7 }));
+  expect(host.textContent).toContain(m.library_anilist_confirm_replace_vote());
+  const consent = host.querySelector('#anilist-vote-consent-0') as HTMLInputElement;
+  expect(consent.checked).toBe(false);
+  await clickLabel(m.library_anilist_confirm_native_vote_effects());
+  await clickLabel(m.library_import_source_privacy_confirm());
+  await clickLabel(m.library_import_source_timestamps_confirm());
+  await click(m.library_anilist_confirm());
+  expect(host.textContent).toContain(m.library_anilist_uncertain());
+  await click(m.library_anilist_retry_command());
+  expect(applies).toHaveLength(2);
+  expect(applies[0]).toEqual(applies[1]);
+  expect(applies[1]).toMatchObject({
+    body: { confirmations: [{ ordinal: 0, reviewId: `${reviewId.slice(0, -1)}0`, confirmNativeVoteEffects: true }] },
+  });
+  expect(host.textContent).toContain(m.library_anilist_result_failed());
+  expect(host.textContent).toContain(m.library_anilist_score_outcome_applied());
+  expect(host.textContent).toContain(m.library_anilist_score_readback_vote({ units: 0 }));
+  expect(host.textContent).toContain(m.library_anilist_source_score_retained());
+});
+
+test('clear is explicit and results replace the supplied current vote observation on refresh', async () => {
+  const fixture = recordingPort(1, { existingVote: 4 });
+  let replaceObservation = false;
+  const port: AniListImportPort = {
+    ...fixture.port,
+    async page(command) {
+      const result = await fixture.port.page(command);
+      if (replaceObservation && result.kind === 'page') {
+        return {
+          ...result,
+          page: {
+            ...result.page,
+            rows: result.page.rows.map((item) => item.ordinal === 0
+              ? {
+                  ...item,
+                  currentScore: {
+                    status: 'current',
+                    question: { id: QUESTION, revision: 18, label: 'Overall' },
+                    vote: { units: 6, revision: 5 },
+                  },
+                }
+              : item),
+          },
+        };
+      }
+      return result;
+    },
+  };
+  await mount(port);
+  await uploadCollection();
+  await clickLabel(m.library_anilist_score_clear());
+  await setTarget();
+  await click(m.library_anilist_save_review());
+  expect(host.textContent).toContain(m.library_anilist_review_vote_present({ units: 4 }));
+  await click(m.library_anilist_continue_confirm());
+  expect(host.textContent).toContain(m.library_anilist_confirm_clear());
+  expect(host.textContent).toContain(m.library_anilist_review_vote_present({ units: 4 }));
+  await clickLabel(m.library_anilist_confirm_native_vote_effects());
+  await clickLabel(m.library_import_source_privacy_confirm());
+  await clickLabel(m.library_import_source_timestamps_confirm());
+  await click(m.library_anilist_confirm());
+  expect(host.textContent).toContain(m.library_anilist_score_outcome_applied());
+  expect(host.textContent).toContain(m.library_anilist_score_readback_absent());
+  replaceObservation = true;
+  await click(m.library_anilist_fresh_read());
+  expect(host.textContent).toContain(m.library_anilist_score_readback_vote({ units: 6 }));
+  expect(host.textContent).not.toContain(m.library_anilist_score_readback_absent());
+});
+
 test('a changed account retires the upload and former-account callbacks', async () => {
   let pages = 0;
   const { port } = recordingPort(1);
@@ -473,6 +685,145 @@ test('partial acknowledgement, cancellation and evidence removal stay independen
   expect(cancels[1]).toMatchObject({ remove: true });
 });
 
+test('installed AniList adapter forwards score consent and preserves owner readback and outcomes', async () => {
+  const reviewScore = {
+    source: { present: true, value: 0, lexeme: '0.00', scale: 'POINT_10', validity: 'valid', reason: 'Exact source.' },
+    action: 'vote',
+    units: 0,
+    conversion: 'owner-selected-native-units',
+    native: {
+      availability: 'available',
+      guard: { version: 1 },
+      question: {
+        id: QUESTION,
+        revision: 17,
+        label: 'Overall',
+        meaning: 'How strong is this work overall?',
+        grain: 'work',
+        minimumUnits: 0,
+        maximumUnits: 20,
+        stepUnits: 1,
+        lifecycleState: 'active',
+        lifecycleRevision: 1,
+      },
+      target: { subjectId: subject, identityEpoch: '1', matchFingerprint: 'fp-0' },
+      currentVote: { status: 'current', vote: null },
+      commandKey: 'native-score-command',
+      consentKey: 'native-score-consent',
+      consented: false,
+    },
+  };
+  const command = {
+    kind: 'review' as const,
+    key: 'review-key-1',
+    importId: id,
+    ordinal: 0,
+    subjectId: subject,
+    fields: ['status'],
+    replace: true,
+    score: { action: 'vote' as const, questionId: QUESTION, questionRevision: 17, units: 0 },
+  };
+  const reviewResponse = {
+    ordinal: 0,
+    review: reviewed(0, {
+      input: { fields: ['status'], replace: true, subjectId: subject, score: command.score },
+      score: reviewScore,
+    }),
+  };
+  const ownerReadback = {
+    status: 'current',
+    question: { id: QUESTION, revision: 17, label: 'Overall' },
+    vote: { units: 0, revision: 4 },
+  };
+  const rowPayload = {
+    ordinal: 0,
+    source: source(0),
+    scoreLexeme: '0.00',
+    match: { state: 'matched', candidates: [subject], fingerprint: 'fp-0' },
+    proposal: null,
+    review: reviewResponse.review,
+    started: true,
+    outcome: null,
+    currentScore: ownerReadback,
+  };
+  let postedReview: unknown;
+  let postedApply: unknown;
+  let pointRequest: unknown;
+  const item = () => ({
+    get: async () => ({
+      status: 200,
+      data: {
+        header: { document: null, rawUpload: '', scoreFormat: 'POINT_10', count: 1, cancelled: false },
+        rows: [rowPayload],
+        next: null,
+      },
+    }),
+    $review: {
+      post: async (body: unknown) => {
+        postedReview = body;
+        return { status: 200, data: reviewResponse };
+      },
+    },
+    $apply: {
+      post: async (body: unknown) => {
+        postedApply = body;
+        return {
+          status: 200,
+          data: {
+            complete: true,
+            outcomes: [{ ordinal: 0, status: 'applied', retained: [], score: { status: 'unavailable', reason: 'atomic_guard_unavailable' } }],
+          },
+        };
+      },
+    },
+    $cancel: { post: async () => ({ status: 200, data: { cancelled: true } }) },
+  });
+  const anilist = Object.assign(item, {
+    $preview: { post: async () => ({ status: 200, data: { id, count: 1 } }) },
+  });
+  const client = {
+    libraryImports: { anilist },
+    'rating-questions': (input: unknown) => ({
+      get: async (options: unknown) => {
+        pointRequest = { input, options };
+        return {
+          status: 200,
+          data: {
+            id: QUESTION,
+            revision: 17,
+            label: 'Overall',
+            meaning: 'How strong is this work overall?',
+            grain: 'work',
+            scale: { min: 0, max: 20, displayStep: 1 },
+          },
+        };
+      },
+    }),
+  };
+  const request = new Request('https://site.test/en/library/import-anilist', {
+    headers: { authorization: 'Bearer test-token' },
+  });
+  const port = kernelAniListPort(client as never, request, {}, true);
+  const readQuestion = await port.question();
+  expect(readQuestion).toMatchObject({ kind: 'question', question: { id: QUESTION, revision: 17 } });
+  expect(pointRequest).toMatchObject({ input: { questionId: QUESTION }, options: { fetch: { cache: 'no-store', redirect: 'manual' } } });
+  const reviewedResult = await port.review(command);
+  expect(postedReview).toMatchObject({ score: command.score });
+  expect(reviewedResult).toMatchObject({ kind: 'reviewed', review: { score: reviewScore } });
+  const pageResult = await port.page({ kind: 'page', importId: id, after: -1 });
+  expect(pageResult).toMatchObject({ kind: 'page', page: { rows: [{ currentScore: ownerReadback, scoreLexeme: '0.00' }] } });
+  const applyResult = await port.apply({
+    kind: 'apply',
+    importId: id,
+    body: { confirmations: [{ ordinal: 0, reviewId, confirmNativeVoteEffects: true }] },
+  });
+  expect(postedApply).toMatchObject({ confirmations: [{ confirmNativeVoteEffects: true }] });
+  expect(applyResult).toMatchObject({
+    kind: 'applied',
+    result: { outcomes: [{ score: { status: 'unavailable', reason: 'atomic_guard_unavailable' } }] },
+  });
+});
+
 test('growth at 20, 100 and 200 rows stays within native page, apply and retained bounds', async () => {
   for (const total of [20, 100, 200]) {
     const { port, applies } = recordingPort(total);
@@ -506,6 +857,8 @@ test('growth at 20, 100 and 200 rows stays within native page, apply and retaine
         applyBatches: cost.applyBatches,
         lifecycle: cost.calls.cancel,
         retries: cost.retries,
+        questionReads: cost.calls.question,
+        scoreReadbacks: cost.calls['score-readback'],
       }),
     );
     expect(
@@ -518,4 +871,28 @@ test('growth at 20, 100 and 200 rows stays within native page, apply and retaine
     expect(discarded.page).toEqual([]);
     expect(discarded.cost.retainedBytes).toBe(0);
   }
+});
+
+test('question point reads and owner-page score readbacks are counted explicitly', async () => {
+  const { port } = recordingPort(1);
+  const journey = createAniListJourney({ port, visit: visit() });
+  await journey.preview(envelope(1), 'POINT_10');
+  await journey.readQuestion();
+  journey.choose(0, { scoreAction: 'vote', scoreUnits: 0 });
+  await journey.review(0, subject);
+  await journey.refresh();
+  const cost = journey.snapshot().cost;
+  expect(cost.calls.question).toBe(3);
+  expect(cost.calls['score-readback']).toBe(1);
+  expect(aniListCallTotal(cost)).toBe(
+    expectedAniListCalls({
+      pages: cost.pagesVisited,
+      reviews: cost.reviewed,
+      applyBatches: cost.applyBatches,
+      lifecycle: cost.calls.cancel,
+      retries: cost.retries,
+      questionReads: cost.calls.question,
+      scoreReadbacks: cost.calls['score-readback'],
+    }),
+  );
 });

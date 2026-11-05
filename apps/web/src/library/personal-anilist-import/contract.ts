@@ -1,5 +1,16 @@
-import type { PersonalEntrySourceAdmission } from '@rezics/client';
+import type { KernelClient, PersonalEntrySourceAdmission } from '@rezics/client';
 import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
+import type { HomeQuestion } from '../../features/pages/home-feed-questions';
+
+type NativeAniList = NonNullable<KernelClient['libraryImports']['anilist']>;
+type NativeAniListItem = ReturnType<NativeAniList>;
+type NativeAniListPage = NonNullable<Awaited<ReturnType<NativeAniListItem['get']>>['data']>;
+type NativeAniListReviewBody = Parameters<NonNullable<NativeAniListItem['$review']>['post']>[0];
+type NativeAniListApplyBody = Parameters<NonNullable<NativeAniListItem['$apply']>['post']>[0];
+type NativeAniListApplyResult = NonNullable<Awaited<ReturnType<NonNullable<NativeAniListItem['$apply']>['post']>>['data']>;
+type NativeAniListRow = NativeAniListPage['rows'][number];
+type NativeAniListReview = NonNullable<NativeAniListRow['review']>;
+type NativeAniListOutcome = NonNullable<NativeAniListRow['outcome']>;
 
 /** Native AniList personal-list caps, verified at Commerce delivery. */
 export const ANILIST_UPLOAD_BYTES = 1_048_576;
@@ -27,85 +38,43 @@ export const ANILIST_ROLES = {
 export type AniListScoreFormat = (typeof ANILIST_SCORE_FORMATS)[number];
 export type AniListStatus = (typeof ANILIST_STATUSES)[number];
 export type AniListMatchState = 'matched' | 'ambiguous' | 'unmatched' | 'unavailable';
-export type AniListOutcomeStatus = 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
 export type AniListFieldValidity = 'valid' | 'unknown' | 'invalid';
 export type AniListWrapper = 'array' | 'lists' | 'MediaListCollection' | 'data' | 'unknown';
 export type AniListJson = string | number | boolean | null | AniListJson[] | { readonly [key: string]: AniListJson };
 export type AniListRecord = { readonly [key: string]: AniListJson };
-
-export type AniListIdentifier = { source: 'anilist' | 'myanimelist'; externalId: string };
-export type AniListSourceField = { field: string; validity: AniListFieldValidity; reason: string };
-export type AniListSource = {
-  evidence: AniListRecord;
-  group: AniListRecord | null;
-  identifiers: AniListIdentifier[];
-  fields: AniListSourceField[];
-};
-export type AniListMatch = {
-  state: AniListMatchState;
-  candidates: string[];
-  fingerprint: string;
-};
-export type AniListCurrent = { state: string; revision: number; incarnationId: string | null };
-export type AniListObservation = {
-  subjectId: string;
-  epoch: string;
-  pin: AniListJson | null;
-  proposedState: string | null;
-  current: AniListCurrent | null;
-  states: { id: string; role?: string }[];
-};
-export type AniListReviewInput = {
-  subjectId?: string;
-  skip?: boolean;
-  fields: string[];
-  replace?: boolean;
-};
-export type AniListReview = {
-  id: string;
-  match: AniListMatch;
-  observation: AniListObservation | null;
-  input: AniListReviewInput;
-  commandKey: string;
-  clientId: string;
-  requestedBy: string | null;
-};
-export type AniListOutcome = {
-  ordinal: number;
-  status: AniListOutcomeStatus;
-  retained: string[];
-};
-export type AniListHeader = {
-  document: AniListJson | null;
-  rawUpload: string;
-  scoreFormat: AniListScoreFormat | null;
-  count: number;
-  cancelled: boolean;
-};
-export type AniListRow = {
-  ordinal: number;
-  source: AniListSource;
-  match: AniListMatch;
-  proposal: AniListObservation | null;
+export type AniListIdentifier = NativeAniListRow['source']['identifiers'][number];
+export type AniListSourceField = NativeAniListRow['source']['fields'][number];
+export type AniListSource = NativeAniListRow['source'];
+export type AniListMatch = NativeAniListRow['match'];
+export type AniListCurrent = NonNullable<NonNullable<NativeAniListRow['proposal']>['current']>;
+export type AniListObservation = NonNullable<NativeAniListRow['proposal']>;
+export type AniListReviewInput = NativeAniListReview['input'];
+// The installed client return types own native DTOs. `unknown` here preserves additive score payloads
+// until their generated declaration catches up without introducing a second native schema.
+export type AniListReview = Omit<NativeAniListReview, 'score'> & { score?: unknown };
+export type AniListOutcome = Omit<NativeAniListOutcome, 'score'> & { score?: unknown };
+export type AniListOutcomeStatus = AniListOutcome['status'];
+export type AniListHeader = NativeAniListPage['header'];
+export type AniListRow = Omit<NativeAniListRow, 'review' | 'outcome' | 'currentScore'> & {
   review: AniListReview | null;
-  started: boolean;
   outcome: AniListOutcome | null;
+  currentScore?: unknown;
+  scoreLexeme?: string;
 };
 export type AniListCompleteness = {
   wrapper: AniListWrapper;
   hasNextChunk: boolean;
   listedGroups: number;
 };
-export type AniListPage = {
+export type AniListPage = Omit<NativeAniListPage, 'rows'> & {
   importId: string;
-  header: AniListHeader;
   completeness: AniListCompleteness;
   rows: AniListRow[];
-  next: number | null;
 };
-export type AniListConfirmation = { ordinal: number; reviewId: string };
-export type AniListApplyBody = { confirmations: AniListConfirmation[] };
-export type AniListApplyResult = { outcomes: AniListOutcome[]; complete: boolean };
+export type AniListConfirmation = NativeAniListApplyBody['confirmations'][number];
+export type AniListApplyBody = NativeAniListApplyBody;
+export type AniListApplyResult = Omit<NativeAniListApplyResult, 'outcomes'> & { outcomes: AniListOutcome[] };
+export type AniListQuestion = HomeQuestion;
 
 export type AniListRowMeta = {
   ordinal: number;
@@ -122,6 +91,39 @@ export type AniListRowMeta = {
   applyStatus: boolean;
   started: boolean;
   outcome: AniListOutcome | null;
+  reviewInvalidated: boolean;
+  scoreSource: { value: AniListJson; lexeme: string | null; scale: string | null; validity: AniListFieldValidity; reason: string } | null;
+  scoreAction: 'keep' | 'vote' | 'clear';
+  scoreUnits: number | null;
+  scoreReview: {
+    reviewId: string;
+    commandKey: string | null;
+    consentKey: string | null;
+    action: 'vote' | 'clear';
+    units: number | null;
+    questionId: string | null;
+    questionRevision: number | null;
+    questionLabel: string | null;
+    questionMeaning: string | null;
+    questionGrain: string | null;
+    minimumUnits: number | null;
+    maximumUnits: number | null;
+    stepUnits: number | null;
+    questionLifecycleState: string | null;
+    questionLifecycleRevision: number | null;
+    targetId: string | null;
+    identityEpoch: string | null;
+    matchFingerprint: string | null;
+    currentVoteUnits: number | null;
+    currentVote: 'present' | 'absent' | 'unavailable';
+    currentVoteReason: string | null;
+    availability: 'available' | 'unavailable';
+    availabilityReason: string | null;
+    guard: unknown;
+    nativeEvidence: unknown;
+  } | null;
+  currentScore: unknown;
+  nativeVoteConsent: { reviewId: string; consentKey: string } | null;
   identifiers: AniListIdentifier[];
   groupLabel: string | null;
   repeating: boolean;
@@ -151,6 +153,7 @@ export type AniListCommand =
       skip?: boolean;
       fields: string[];
       replace: boolean;
+      score?: NativeAniListReviewBody['score'];
     }
   | { kind: 'apply'; importId: string; body: AniListApplyBody }
   | {
@@ -175,6 +178,7 @@ export type AniListReviewResult =
 export type AniListApplyCallResult = { kind: 'applied'; result: AniListApplyResult } | AniListFailure | AniListUnknown;
 export type AniListMutateResult = { kind: 'cancelled'; removed: boolean } | AniListFailure | AniListUnknown;
 export type AniListAdmitResult = { kind: 'admitted' } | { kind: 'conflict' } | AniListFailure | AniListUnknown;
+export type AniListQuestionResult = { kind: 'question'; question: AniListQuestion } | AniListFailure;
 
 export type AniListImportPort = {
   preview(command: Extract<AniListCommand, { kind: 'preview' }>): Promise<AniListPreviewResult>;
@@ -183,6 +187,7 @@ export type AniListImportPort = {
   apply(command: Extract<AniListCommand, { kind: 'apply' }>): Promise<AniListApplyCallResult>;
   admitSource(command: Extract<AniListCommand, { kind: 'admit-source' }>): Promise<AniListAdmitResult>;
   cancel(command: Extract<AniListCommand, { kind: 'cancel' }>): Promise<AniListMutateResult>;
+  question(): Promise<AniListQuestionResult>;
 };
 
 export function newCommandKey(): string {

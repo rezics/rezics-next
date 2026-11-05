@@ -8,7 +8,7 @@ import {
 } from './contract';
 
 /** Machine-independent work at the AniList loader/controller boundary. */
-export type AniListCallKind = 'preview' | 'page' | 'review' | 'apply' | 'cancel';
+export type AniListCallKind = 'preview' | 'page' | 'review' | 'apply' | 'cancel' | 'question' | 'score-readback';
 
 export type AniListCostSnapshot = {
   calls: Record<AniListCallKind, number>;
@@ -30,7 +30,7 @@ export type AniListCostSnapshot = {
 
 export function emptyAniListCost(): AniListCostSnapshot {
   return {
-    calls: { preview: 0, page: 0, review: 0, apply: 0, cancel: 0 },
+    calls: { preview: 0, page: 0, review: 0, apply: 0, cancel: 0, question: 0, 'score-readback': 0 },
     retries: 0,
     pagesVisited: 0,
     reviewed: 0,
@@ -50,7 +50,15 @@ export function emptyAniListCost(): AniListCostSnapshot {
 
 export function aniListCallTotal(cost: AniListCostSnapshot): number {
   const calls = cost.calls;
-  return calls.preview + calls.page + calls.review + calls.apply + calls.cancel;
+  return (
+    calls.preview +
+    calls.page +
+    calls.review +
+    calls.apply +
+    calls.cancel +
+    calls.question +
+    calls['score-readback']
+  );
 }
 
 /**
@@ -64,8 +72,19 @@ export function expectedAniListCalls(input: {
   lifecycle: number;
   retries: number;
   preview?: number;
+  questionReads?: number;
+  scoreReadbacks?: number;
 }): number {
-  return (input.preview ?? 1) + input.pages + input.reviews + input.applyBatches + input.lifecycle + input.retries;
+  return (
+    (input.preview ?? 1) +
+    input.pages +
+    input.reviews +
+    input.applyBatches +
+    input.lifecycle +
+    input.retries +
+    (input.questionReads ?? 0) +
+    (input.scoreReadbacks ?? 0)
+  );
 }
 
 export function aniListRetainedBound(input: {
@@ -89,6 +108,7 @@ export class AniListCostLedger {
     this.snapshot.pagesVisited += 1;
     this.snapshot.maxPageRows = Math.max(this.snapshot.maxPageRows, page.rows.length);
     this.snapshot.processed += page.rows.reduce((sum, row) => sum + 1 + row.source.fields.length, 0);
+    this.snapshot.calls['score-readback'] += page.rows.filter((row) => row.review?.score !== undefined).length;
   }
 
   recordReview(): void {

@@ -10,6 +10,8 @@ import {
   type AniListFailure,
   type AniListHeader,
   type AniListImportPort,
+  type AniListQuestion,
+  type AniListQuestionResult,
   type AniListOutcome,
   type AniListPage,
   type AniListRow,
@@ -52,6 +54,9 @@ export type AniListJourneySnapshot = {
   applied: number;
   confirmPrivacy: boolean;
   confirmTimestamps: boolean;
+  question: AniListQuestion | null;
+  questionPending: boolean;
+  questionNotice: AniListFailure | null;
   owner: string;
   cost: AniListCostSnapshot;
 };
@@ -66,8 +71,80 @@ function emptyHeader(): AniListHeader {
   return { document: null, rawUpload: '', scoreFormat: null, count: 0, cancelled: false };
 }
 
-function metaFromRow(row: AniListRow, previous?: AniListRowMeta): AniListRowMeta {
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function finiteInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) ? value : null;
+}
+
+function scoreReviewMeta(row: AniListRow): AniListRowMeta['scoreReview'] {
   const review = row.review;
+  const raw = review?.score;
+  if (!review || !record(raw) || (raw.action !== 'vote' && raw.action !== 'clear')) return null;
+  const native = record(raw.native) ? raw.native : {};
+  const question = record(native.question) ? native.question : {};
+  const target = record(native.target) ? native.target : {};
+  const current = record(native.currentVote) ? native.currentVote : {};
+  const vote = current.status === 'current' && record(current.vote) ? current.vote : null;
+  const reason = typeof current.reason === 'string' ? current.reason : null;
+  const unavailable = native.availability !== 'available' ? 'unavailable' : 'available';
+  return {
+    reviewId: review.id,
+    commandKey: typeof native.commandKey === 'string' ? native.commandKey : null,
+    consentKey: typeof native.consentKey === 'string' ? native.consentKey : null,
+    action: raw.action,
+    units: finiteInteger(raw.units),
+    questionId: typeof question.id === 'string' ? question.id : null,
+    questionRevision: finiteInteger(question.revision),
+    questionLabel: typeof question.label === 'string' ? question.label : null,
+    questionMeaning: typeof question.meaning === 'string' ? question.meaning : null,
+    questionGrain: typeof question.grain === 'string' ? question.grain : null,
+    minimumUnits: finiteInteger(question.minimumUnits),
+    maximumUnits: finiteInteger(question.maximumUnits),
+    stepUnits: finiteInteger(question.stepUnits),
+    questionLifecycleState: typeof question.lifecycleState === 'string' ? question.lifecycleState : null,
+    questionLifecycleRevision: finiteInteger(question.lifecycleRevision),
+    targetId: typeof target.subjectId === 'string' ? target.subjectId : null,
+    identityEpoch: typeof target.identityEpoch === 'string' ? target.identityEpoch : null,
+    matchFingerprint: typeof target.matchFingerprint === 'string' ? target.matchFingerprint : null,
+    currentVoteUnits: vote ? finiteInteger(vote.units) : null,
+    currentVote:
+      current.status === 'unavailable' || unavailable === 'unavailable'
+        ? 'unavailable'
+        : vote
+          ? 'present'
+          : 'absent',
+    currentVoteReason: reason,
+    availability: unavailable,
+    availabilityReason: typeof native.reason === 'string' ? native.reason : null,
+    guard: native.guard ?? null,
+    nativeEvidence: raw,
+  };
+}
+
+function scoreSourceMeta(
+  row: AniListRow,
+  scoreFormat: AniListScoreFormat | null,
+): AniListRowMeta['scoreSource'] {
+  if (!Object.hasOwn(row.source.evidence, 'score')) return null;
+  const field = row.source.fields.find((candidate) => candidate.field === 'score');
+  return {
+    value: row.source.evidence.score,
+    lexeme: typeof row.scoreLexeme === 'string' ? row.scoreLexeme : null,
+    scale: scoreFormat,
+    validity: field?.validity ?? 'unknown',
+    reason: field?.reason ?? 'The source score was retained without a field mapping.',
+  };
+}
+
+function metaFromRow(
+  row: AniListRow,
+  previous?: AniListRowMeta,
+  scoreFormat: AniListScoreFormat | null = null,
+): AniListRowMeta {
+  const review = previous?.reviewInvalidated ? null : row.review;
   const observation = review?.observation ?? row.proposal;
   const match = review?.match.state ?? row.match.state;
   const status = aniListStatusOf(row.source.evidence);
@@ -80,12 +157,29 @@ function metaFromRow(row: AniListRow, previous?: AniListRowMeta): AniListRowMeta
     target: review?.input.subjectId ?? observation?.subjectId ?? previous?.target ?? null,
     proposedState: observation?.proposedState ?? previous?.proposedState ?? null,
     current: observation?.current ?? previous?.current ?? null,
-    reviewId: review?.id ?? previous?.reviewId ?? null,
+    reviewId: previous?.reviewInvalidated ? null : review?.id ?? previous?.reviewId ?? null,
     skip: previous?.skip ?? review?.input.skip ?? false,
     replace: previous?.replace ?? review?.input.replace ?? false,
     applyStatus: previous?.applyStatus ?? review?.input.fields.includes('status') ?? true,
     started: row.started || previous?.started === true,
     outcome: row.outcome ?? previous?.outcome ?? null,
+    currentScore: Object.hasOwn(row, 'currentScore') ? row.currentScore : (previous?.currentScore ?? null),
+    reviewInvalidated: previous?.reviewInvalidated ?? false,
+    scoreSource: scoreSourceMeta(row, scoreFormat) ?? previous?.scoreSource ?? null,
+    scoreAction: previous?.reviewInvalidated
+      ? (previous.scoreAction ?? 'keep')
+      : (scoreReviewMeta(row)?.action ?? previous?.scoreAction ?? 'keep'),
+    scoreUnits: previous?.reviewInvalidated
+      ? (previous.scoreUnits ?? null)
+      : (scoreReviewMeta(row)?.units ?? previous?.scoreUnits ?? null),
+    scoreReview: previous?.reviewInvalidated ? null : scoreReviewMeta(row) ?? previous?.scoreReview ?? null,
+    nativeVoteConsent:
+      !previous?.reviewInvalidated &&
+      previous?.nativeVoteConsent &&
+      scoreReviewMeta(row)?.reviewId === previous.nativeVoteConsent.reviewId &&
+      scoreReviewMeta(row)?.consentKey === previous.nativeVoteConsent.consentKey
+        ? previous.nativeVoteConsent
+        : null,
     identifiers: row.source.identifiers,
     groupLabel: aniListGroupLabel(row.source.group),
     repeating: aniListIsRepeating(status),
@@ -128,6 +222,10 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   let confirmPrivacy = false;
   let confirmTimestamps = false;
   let generation = 0;
+  let questionGeneration = 0;
+  let question: AniListQuestion | null = null;
+  let questionPending = false;
+  let questionNotice: AniListFailure | null = null;
 
   function live(): boolean {
     return (
@@ -186,6 +284,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       applied,
       confirmPrivacy,
       confirmTimestamps,
+      question,
+      questionPending,
+      questionNotice,
       owner: sender.subject,
       cost: { ...cost.snapshot, calls: { ...cost.snapshot.calls } },
     };
@@ -200,6 +301,10 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     stopApply = false;
     confirmPrivacy = false;
     confirmTimestamps = false;
+    questionGeneration += 1;
+    question = null;
+    questionPending = false;
+    questionNotice = null;
     uploadText = null;
     importId = null;
     count = 0;
@@ -254,7 +359,12 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     return;
   }
 
-  async function loadPage(id: string, cursor: number, retry = false): Promise<AniListJourneySnapshot> {
+  async function loadPage(
+    id: string,
+    cursor: number,
+    retry = false,
+    loadedStage: 'review' | 'results' = 'review',
+  ): Promise<AniListJourneySnapshot> {
     const command: Extract<AniListCommand, { kind: 'page' }> = { kind: 'page', importId: id, after: cursor };
     const response = await run(command, () => port.page(command), retry);
     if (!response || response.kind !== 'page' || !live()) return snapshot();
@@ -266,10 +376,29 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     scoreFormat = current.header.scoreFormat;
     completeness = current.completeness;
     count = current.header.count || count;
-    for (const row of current.rows) meta.set(row.ordinal, metaFromRow(row, meta.get(row.ordinal)));
+    for (const row of current.rows) meta.set(row.ordinal, metaFromRow(row, meta.get(row.ordinal), scoreFormat));
     cost.recordPage(current);
-    stage = cancelled ? 'cancelled' : 'review';
+    stage = cancelled ? 'cancelled' : loadedStage;
     retain();
+    return snapshot();
+  }
+
+  async function readQuestion(): Promise<AniListJourneySnapshot> {
+    if (!live() || busy) return snapshot();
+    const token = ++questionGeneration;
+    questionPending = true;
+    questionNotice = null;
+    cost.recordCall('question');
+    const response: AniListQuestionResult = await port.question();
+    if (!live() || token !== questionGeneration) return snapshot();
+    questionPending = false;
+    if (response.kind === 'question') {
+      question = response.question;
+      questionNotice = null;
+    } else {
+      question = null;
+      questionNotice = response;
+    }
     return snapshot();
   }
 
@@ -314,7 +443,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   async function review(ordinal: number, target?: string | null): Promise<AniListJourneySnapshot> {
     const id = importId;
     const current = meta.get(ordinal);
-    if (!id || !live()) return snapshot();
+    if (!id || !live() || heldUnknown() || busy) return snapshot();
     if (stage === 'applying') return snapshot();
     if (current?.started) {
       notice = { kind: 'started-locked' };
@@ -323,6 +452,53 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     const skip = current?.skip ?? false;
     const replace = current?.replace ?? false;
     const applyStatus = current?.applyStatus ?? true;
+    const scoreAction = skip ? 'keep' : (current?.scoreAction ?? 'keep');
+    let score: Extract<NonNullable<Extract<AniListCommand, { kind: 'review' }>['score']>, { action: 'vote' | 'clear' }> | undefined;
+    if (scoreAction !== 'keep') {
+      busy = true;
+      let questionResult: AniListQuestionResult;
+      try {
+        questionResult = await port.question();
+      } finally {
+        busy = false;
+      }
+      cost.recordCall('question');
+      if (!live()) return snapshot();
+      if (questionResult.kind !== 'question') {
+        question = null;
+        questionNotice = questionResult;
+        questionPending = false;
+        return snapshot();
+      }
+      const latest = questionResult.question;
+      question = latest;
+      questionNotice = null;
+      questionPending = false;
+      const units = current?.scoreUnits;
+      if (
+        scoreAction === 'vote' &&
+        (units === null || units === undefined ||
+          !Number.isSafeInteger(units) ||
+          units < latest.scale.min ||
+          units > latest.scale.max ||
+          (units - latest.scale.min) % latest.scale.displayStep !== 0)
+      ) {
+        questionNotice = { kind: 'conflict' };
+        return snapshot();
+      }
+      score =
+        scoreAction === 'vote'
+          ? { action: 'vote', questionId: latest.id, questionRevision: latest.revision, units: units! }
+          : { action: 'clear', questionId: latest.id, questionRevision: latest.revision };
+    }
+    if (current) {
+      current.reviewId = null;
+      current.scoreReview = null;
+      current.nativeVoteConsent = null;
+      current.reviewInvalidated = true;
+    }
+    const currentPageRow = page.find((item) => item.ordinal === ordinal);
+    if (currentPageRow) currentPageRow.review = null;
     const command: Extract<AniListCommand, { kind: 'review' }> = {
       kind: 'review',
       key: newCommandKey(),
@@ -330,6 +506,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       ordinal,
       fields: skip || !applyStatus ? [] : ['status'],
       replace,
+      ...(score === undefined ? {} : { score }),
       ...(skip ? { skip: true } : {}),
       ...(target ? { subjectId: target } : {}),
     };
@@ -359,6 +536,13 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       skip: response.review.input.skip === true,
       replace: response.review.input.replace === true,
       applyStatus: response.review.input.fields.includes('status'),
+      reviewInvalidated: false,
+      scoreSource: row ? scoreSourceMeta(row, scoreFormat) : current?.scoreSource ?? null,
+      scoreAction: response.review.input.score?.action ?? 'keep',
+      scoreUnits: response.review.input.score?.action === 'vote' ? response.review.input.score.units : null,
+      scoreReview: row ? scoreReviewMeta(row) : null,
+      currentScore: row && Object.hasOwn(row, 'currentScore') ? row.currentScore : (current?.currentScore ?? null),
+      nativeVoteConsent: null,
       outcome: null,
     });
     retain();
@@ -367,13 +551,43 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
 
   function choose(
     ordinal: number,
-    choice: { skip?: boolean; replace?: boolean; applyStatus?: boolean },
+    choice: {
+      skip?: boolean;
+      replace?: boolean;
+      applyStatus?: boolean;
+      scoreAction?: 'keep' | 'vote' | 'clear';
+      scoreUnits?: number | null;
+    },
   ): AniListJourneySnapshot {
     const current = meta.get(ordinal);
-    if (!current || stage === 'applying' || current.started) return snapshot();
+    if (!current || stage === 'applying' || current.started || heldUnknown()) return snapshot();
+    const before = [current.skip, current.replace, current.applyStatus, current.scoreAction, current.scoreUnits];
     current.skip = choice.skip ?? current.skip;
     current.replace = current.skip ? false : (choice.replace ?? current.replace);
     current.applyStatus = current.skip ? false : (choice.applyStatus ?? current.applyStatus);
+    current.scoreAction = current.skip ? 'keep' : (choice.scoreAction ?? current.scoreAction);
+    current.scoreUnits =
+      current.scoreAction === 'vote'
+        ? (choice.scoreUnits === undefined ? current.scoreUnits : choice.scoreUnits)
+        : null;
+    const after = [current.skip, current.replace, current.applyStatus, current.scoreAction, current.scoreUnits];
+    if (before.some((value, index) => value !== after[index])) {
+      current.reviewId = null;
+      current.scoreReview = null;
+      current.nativeVoteConsent = null;
+      current.reviewInvalidated = true;
+      const row = page.find((item) => item.ordinal === ordinal);
+      if (row) row.review = null;
+    }
+    retain();
+    return snapshot();
+  }
+
+  function confirmVoteEffect(ordinal: number, consent: boolean): AniListJourneySnapshot {
+    const row = meta.get(ordinal);
+    const score = row?.scoreReview;
+    if (!row || stage !== 'confirm' || heldUnknown() || !score?.consentKey || !score.reviewId) return snapshot();
+    row.nativeVoteConsent = consent ? { reviewId: score.reviewId, consentKey: score.consentKey } : null;
     retain();
     return snapshot();
   }
@@ -381,7 +595,20 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   function reviewedConfirmations(): AniListConfirmation[] {
     return [...meta.values()]
       .filter((row) => row.reviewId)
-      .map((row) => ({ ordinal: row.ordinal, reviewId: row.reviewId! }));
+      .map((row) => {
+        const score = row.scoreReview;
+        const consent = row.nativeVoteConsent;
+        return {
+          ordinal: row.ordinal,
+          reviewId: row.reviewId!,
+          ...(score &&
+          consent?.reviewId === score.reviewId &&
+          consent.consentKey === score.consentKey &&
+          score.consentKey
+            ? { confirmNativeVoteEffects: true as const }
+            : {}),
+        };
+      });
   }
 
   async function applyBatch(batch: AniListConfirmation[], retry = false): Promise<boolean> {
@@ -474,7 +701,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   async function confirm(): Promise<AniListJourneySnapshot> {
-    if (!importId || cancelled || !live()) return snapshot();
+    if (!importId || cancelled || !live() || heldUnknown()) return snapshot();
     const rows = reviewedConfirmations();
     if (!rows.length) return snapshot();
     stage = 'applying';
@@ -495,6 +722,13 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     if (!live()) return snapshot();
     stage = cancelled ? 'cancelled' : 'results';
     retain();
+    if (importId && stage === 'results') {
+      const id = importId;
+      await loadPage(id, after, false, 'results');
+      if (!live()) return snapshot();
+      stage = cancelled ? 'cancelled' : 'results';
+      retain();
+    }
     return snapshot();
   }
 
@@ -524,7 +758,12 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
         queueSourceAdmissions();
         await admitQueued();
       }
+      if (!heldUnknown() && importId && !cancelled) {
+        const id = importId;
+        await loadPage(id, after, false, 'results');
+      }
       if (done || outcomes.length) stage = 'results';
+      retain();
       return snapshot();
     }
     if (command.kind === 'admit-source') {
@@ -543,7 +782,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
 
   async function retryFailed(): Promise<AniListJourneySnapshot> {
     const command = applyCommand;
-    if (!command || !live()) return snapshot();
+    if (!command || !live() || heldUnknown()) return snapshot();
     const failed = command.body.confirmations.filter((row) => meta.get(row.ordinal)?.outcome?.status === 'failed');
     if (!failed.length) return snapshot();
     await applyBatch(failed, true);
@@ -552,12 +791,14 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       await admitQueued();
     }
     stage = 'results';
+    if (importId && !heldUnknown()) await loadPage(importId, after, false, 'results');
+    stage = cancelled ? 'cancelled' : 'results';
     return snapshot();
   }
 
   async function cancelAdmission(): Promise<AniListJourneySnapshot> {
     const id = importId;
-    if (!id || !live()) return snapshot();
+    if (!id || !live() || heldUnknown()) return snapshot();
     stopApply = true;
     const command: Extract<AniListCommand, { kind: 'cancel' }> = {
       kind: 'cancel',
@@ -574,6 +815,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   async function discard(): Promise<AniListJourneySnapshot> {
+    if (heldUnknown()) return snapshot();
     const id = importId;
     if (id) {
       const command: Extract<AniListCommand, { kind: 'cancel' }> = {
@@ -590,7 +832,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   function openConfirm(): AniListJourneySnapshot {
-    if (!reviewedConfirmations().length || cancelled) return snapshot();
+    if (!reviewedConfirmations().length || cancelled || heldUnknown()) return snapshot();
     confirmPrivacy = false;
     confirmTimestamps = false;
     stage = 'confirm';
@@ -605,7 +847,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   function backToReview(): AniListJourneySnapshot {
-    if (stage === 'applying') return snapshot();
+    if (stage === 'applying' || heldUnknown()) return snapshot();
     stage = cancelled ? 'cancelled' : 'review';
     return snapshot();
   }
@@ -615,6 +857,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     preview,
     loadPage,
     review,
+    readQuestion,
+    confirmVoteEffect,
     choose,
     confirm,
     confirmSource,
@@ -625,7 +869,12 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     cancelAdmission,
     discard,
     nextPage: () => (importId && next !== null ? loadPage(importId, next) : Promise.resolve(snapshot())),
-    refresh: () => (importId ? loadPage(importId, after) : Promise.resolve(snapshot())),
+    refresh: async () => {
+      if (heldUnknown()) return snapshot();
+      const readStage = stage === 'results' ? 'results' : 'review';
+      await readQuestion();
+      return importId ? loadPage(importId, after, false, readStage) : snapshot();
+    },
     cost: () => snapshot().cost,
     live,
   };

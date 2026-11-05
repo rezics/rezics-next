@@ -15,6 +15,7 @@ import {
   type AniListMutateResult,
   type AniListPageResult,
   type AniListPreviewResult,
+  type AniListQuestionResult,
   type AniListReviewResult,
 } from './contract';
 import { kernelAniListPort } from './native';
@@ -42,6 +43,27 @@ function requireOrdinal(value: unknown): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value >= ANILIST_ROWS)
     throw new Error('Invalid AniList import');
   return value;
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function requireConfirmations(value: unknown): AniListApplyBody['confirmations'] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > ANILIST_APPLY)
+    throw new Error('Invalid AniList import');
+  return value.map((item) => {
+    if (!record(item)) throw new Error('Invalid AniList import');
+    const ordinal = requireOrdinal(item.ordinal);
+    const reviewId = requireId(item.reviewId);
+    if (item.confirmNativeVoteEffects !== undefined && item.confirmNativeVoteEffects !== true)
+      throw new Error('Invalid AniList import');
+    return {
+      ordinal,
+      reviewId,
+      ...(item.confirmNativeVoteEffects === true ? { confirmNativeVoteEffects: true as const } : {}),
+    };
+  });
 }
 
 export const previewAniListImport = createServerFn({ method: 'POST' })
@@ -73,6 +95,9 @@ export const readAniListImportPage = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }): Promise<AniListPageResult> => port().page(data));
 
+export const readAniListStandardQuestion = createServerFn({ method: 'GET' })
+  .handler(async (): Promise<AniListQuestionResult> => port().question());
+
 export const reviewAniListImport = createServerFn({ method: 'POST' })
   .validator((input: unknown): Extract<AniListCommand, { kind: 'review' }> => {
     if (!input || typeof input !== 'object' || !('importId' in input) || !('key' in input) || !('ordinal' in input))
@@ -86,6 +111,17 @@ export const reviewAniListImport = createServerFn({ method: 'POST' })
     if (skip !== undefined && typeof skip !== 'boolean') throw new Error('Invalid AniList import');
     const replace = 'replace' in input ? input.replace : false;
     if (typeof replace !== 'boolean') throw new Error('Invalid AniList import');
+    const score = 'score' in input ? input.score : undefined;
+    if (score !== undefined) {
+      if (!record(score) || typeof score.questionId !== 'string' || !SUBJECT_ID.test(score.questionId))
+        throw new Error('Invalid AniList import');
+      if (!Number.isSafeInteger(score.questionRevision) || (score.questionRevision as number) < 1)
+        throw new Error('Invalid AniList import');
+      if (score.action === 'vote') {
+        if (!Number.isSafeInteger(score.units) || (score.units as number) < 0)
+          throw new Error('Invalid AniList import');
+      } else if (score.action !== 'clear') throw new Error('Invalid AniList import');
+    }
     return {
       kind: 'review',
       importId: requireId(input.importId),
@@ -95,6 +131,7 @@ export const reviewAniListImport = createServerFn({ method: 'POST' })
       replace,
       ...(subjectId ? { subjectId } : {}),
       ...(skip ? { skip: true } : {}),
+      ...(score === undefined ? {} : { score: score as Extract<NonNullable<Extract<AniListCommand, { kind: 'review' }>['score']>, { action: 'vote' | 'clear' }> }),
     };
   })
   .handler(async ({ data }): Promise<AniListReviewResult> => port().review(data));
@@ -103,14 +140,8 @@ export const applyAniListImport = createServerFn({ method: 'POST' })
   .validator((input: unknown): Extract<AniListCommand, { kind: 'apply' }> => {
     if (!input || typeof input !== 'object' || !('importId' in input) || !('body' in input))
       throw new Error('Invalid AniList import');
-    const body = input.body as AniListApplyBody;
-    if (
-      !body ||
-      !Array.isArray(body.confirmations) ||
-      body.confirmations.length === 0 ||
-      body.confirmations.length > ANILIST_APPLY
-    )
-      throw new Error('Invalid AniList import');
+    if (!record(input.body)) throw new Error('Invalid AniList import');
+    const body: AniListApplyBody = { confirmations: requireConfirmations(input.body.confirmations) };
     return { kind: 'apply', importId: requireId(input.importId), body };
   })
   .handler(async ({ data }): Promise<AniListApplyCallResult> => port().apply(data));

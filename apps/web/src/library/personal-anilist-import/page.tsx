@@ -37,7 +37,14 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
   const journey = useRef<AniListJourney | null>(null);
   if (!journey.current) journey.current = createAniListJourney({ port, visit });
   const [snap, setSnap] = useState<AniListJourneySnapshot>(() => journey.current!.snapshot());
-  useEffect(() => () => visit.retire(), [visit]);
+  const questionReadStarted = useRef(false);
+  useEffect(() => {
+    if (!questionReadStarted.current) {
+      questionReadStarted.current = true;
+      void journey.current!.readQuestion().then(setSnap);
+    }
+    return () => visit.retire();
+  }, [visit]);
 
   async function act(run: (current: AniListJourney) => Promise<AniListJourneySnapshot> | AniListJourneySnapshot) {
     if (!journey.current) return;
@@ -46,7 +53,13 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
 
   async function saveReview(draft: RowDraft) {
     await act(async (current) => {
-      current.choose(draft.ordinal, { skip: draft.skip, replace: draft.replace, applyStatus: draft.applyStatus });
+      current.choose(draft.ordinal, {
+        skip: draft.skip,
+        replace: draft.replace,
+        applyStatus: draft.applyStatus,
+        scoreAction: draft.scoreAction,
+        scoreUnits: draft.scoreUnits,
+      });
       return current.review(draft.ordinal, draft.target);
     });
   }
@@ -74,7 +87,7 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
       {snap.stage === 'review' ? (
         <AniListReviewPage
           snap={snap}
-          busy={snap.busy}
+          busy={locked}
           onSave={(draft) => void saveReview(draft)}
           onChoose={(draft) =>
             act((current) =>
@@ -82,9 +95,12 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
                 skip: draft.skip,
                 replace: draft.replace,
                 applyStatus: draft.applyStatus,
+                scoreAction: draft.scoreAction,
+                scoreUnits: draft.scoreUnits,
               }),
             )
           }
+          onRefreshQuestion={() => void act((current) => current.readQuestion())}
           onNext={() => void act((current) => current.nextPage())}
           onConfirm={() => act((current) => current.openConfirm())}
         />
@@ -98,6 +114,7 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
           onBack={() => act((current) => current.backToReview())}
           onConfirm={() => void act((current) => current.confirm())}
           onConfirmSource={(choice) => act((current) => current.confirmSource(choice))}
+          onVoteConsent={(ordinal, consent) => act((current) => current.confirmVoteEffect(ordinal, consent))}
         />
       ) : null}
       {snap.stage === 'applying' ? <AniListApplying applied={snap.applied} applying={snap.applying} /> : null}
