@@ -1,3 +1,4 @@
+import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } from '@tanstack/react-router';
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
@@ -10,7 +11,10 @@ const { explainSubjectSources, readSubjectSources } = await import('../src/featu
 const { catalogueSourcesFixture, citationUrl, sourceDefinitions } =
   await import('../src/kernel/fake/catalogue-sources');
 
-const render = (result: SourcesResult) => renderToString(createElement(SubjectSourcesPage, { result, locale: 'en' }));
+const render = (result: SourcesResult) => {
+  const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ['/en'] }) });
+  return renderToString(createElement(RouterContextProvider, { router, children: createElement(SubjectSourcesPage, { result, locale: 'en' }) }));
+};
 
 test('Explain the currently selected subject facts and their sources through the existing API and reader with honest failure states', async () => {
   const fixture = catalogueSourcesFixture();
