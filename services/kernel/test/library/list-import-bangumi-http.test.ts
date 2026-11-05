@@ -614,10 +614,10 @@ test('score review retains source scale and native vote while requiring separate
     expect(await votes.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, setTarget)).toMatchObject({
       currentVote: { state: 'counted', units: 0 },
     });
-    const preserved = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+    const preservedAfterSet = await score.send('owner', 'POST', `/${uploadId}:apply`, {
       rows: [{ ordinal: 2, reviewToken: reviews[2].token, state: 'omit', skip: false }],
     });
-    expect((await ok(preserved)).outcomes[0].score).toMatchObject({
+    expect((await ok(preservedAfterSet)).outcomes[0].score).toMatchObject({
       action: 'preserve',
       status: 'skipped',
       reason: 'existing_native_vote_preserved',
@@ -726,7 +726,7 @@ test('native redirect requires a deliberate review of the canonical Bangumi targ
       new AbortController().signal,
       Date.now() + 120000,
     );
-    expect(unavailable.outcomes[0].score).toMatchObject({
+    expect(unavailable.outcomes[0]!.score).toMatchObject({
       action: 'set',
       status: 'unavailable',
       reason: 'identity_observation_unavailable',
