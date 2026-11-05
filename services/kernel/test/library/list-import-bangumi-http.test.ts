@@ -144,6 +144,33 @@ test('own native HTTP preview, identifier match, explicit unmatched target, skip
   expect((await f.send('other', 'POST', `${root}/${uploadId}:apply`, { rows: confirmed })).status).toBe(404);
 });
 
+test('changed Bangumi re-import updates the same Entry incarnation', async () => {
+  const firstUpload = await preview([record()]);
+  const firstReview = await review(firstUpload.uploadId, 0);
+  expect(firstReview.target).toBe(matched);
+  expect((await apply(firstUpload.uploadId, [choice(0, firstReview, 'replace')])).outcomes[0]).toMatchObject({
+    status: 'applied',
+    applied: ['type'],
+  });
+  const before = await f.commands.readEntry(f.owner.actor, matched);
+
+  const changedUpload = await preview([{ ...record(), type: 2 }]);
+  const changedReview = await review(changedUpload.uploadId, 0);
+  expect(changedReview).toMatchObject({ target: matched, proposedState: 'completed' });
+  const changed = await apply(changedUpload.uploadId, [choice(0, changedReview, 'replace')]);
+  const after = await f.commands.readEntry(f.owner.actor, matched);
+
+  expect(changed.outcomes[0]).toMatchObject({ status: 'applied', applied: ['type'] });
+  expect(after.state).toBe('completed');
+  expect(after.incarnationId).toBe(before.incarnationId);
+  await f.commands.putEntry(
+    f.owner.actor,
+    matched,
+    { state: before.state, revision: after.revision, incarnationId: after.incarnationId },
+    randomUUID(),
+  );
+});
+
 test('metadata review uses explicit field consent and keeps one selection per confirmation', async () => {
   const { uploadId } = await preview([record()]),
     sourceReview = await review(uploadId, 0),
@@ -489,13 +516,17 @@ test('absolute expiry denies fresh source work while scheduled cleanup scrubs th
 test('score review retains source scale and native vote while requiring separate consent', async () => {
   const score = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
   try {
-    const target = await score.createSubject('game');
+    const setTarget = await score.createSubject('game');
+    const clearTarget = await score.createSubject('game');
+    const unsupportedTarget = await score.createSubject('game');
     const votes = createVoteCommands({ pool: score.pool, access: score.access });
-    await votes.putVoteOutcome(
-      score.owner.actor,
-      { questionId: STANDARD_QUESTION_ID, targetId: target, units: 7 },
-      randomUUID(),
-    );
+    for (const targetId of [setTarget, clearTarget])
+      await votes.putVoteOutcome(
+        score.owner.actor,
+        { questionId: STANDARD_QUESTION_ID, targetId, units: 7 },
+        randomUUID(),
+      );
+    await score.commands.putEntry(score.owner.actor, setTarget, { state: 'paused' }, randomUUID());
     const rows = [
       { ...record(900001), subject_type: 4, rate: 8 },
       { ...record(900002), subject_type: 4, rate: 0 },
@@ -505,12 +536,15 @@ test('score review retains source scale and native vote while requiring separate
     const created = await score.send('owner', 'POST', `${root}:preview`, upload(rows));
     const { uploadId } = await ok(created);
     const reviews = [];
+    const targets = [setTarget, clearTarget, setTarget, unsupportedTarget];
     for (let ordinal = 0; ordinal < rows.length; ordinal++) {
       const response = await score.send('owner', 'POST', `/${uploadId}:review`, {
         ordinal,
-        target,
+        target: targets[ordinal],
         score:
-          ordinal === 0 || ordinal === 3
+          ordinal === 0
+            ? { action: 'set', units: 0 }
+            : ordinal === 3
             ? { action: 'set', units: 13 }
             : ordinal === 1
               ? { action: 'clear' }
@@ -525,7 +559,7 @@ test('score review retains source scale and native vote while requiring separate
         questionId: STANDARD_QUESTION_ID,
         question: { id: STANDARD_QUESTION_ID, revision: 1, scale: { minimum: 0, maximum: 20, step: 1 } },
         currentVote: { state: 'set', units: 7 },
-        selection: { action: 'set', units: 13 },
+        selection: { action: 'set', units: 0 },
         admission: { status: 'reviewed', reason: 'native_review_observed' },
       },
     });
@@ -539,7 +573,7 @@ test('score review retains source scale and native vote while requiring separate
           reviewToken: reviews[0].token,
           state: 'preserve',
           skip: false,
-          score: { action: 'set', units: 13 },
+          score: { action: 'set', units: 0 },
         },
       ],
     });
@@ -555,7 +589,7 @@ test('score review retains source scale and native vote while requiring separate
           reviewToken: reviews[0].token,
           state: 'preserve',
           skip: false,
-          score: { action: 'set', units: 12, consent: true },
+          score: { action: 'set', units: 1, consent: true },
         },
       ],
     });
@@ -565,24 +599,35 @@ test('score review retains source scale and native vote while requiring separate
         {
           ordinal: 0,
           reviewToken: reviews[0].token,
-          state: 'preserve',
+          state: 'replace',
           skip: false,
-          score: { action: 'set', units: 13, consent: true },
+          score: { action: 'set', units: 0, consent: true },
         },
       ],
     });
     expect((await ok(applied)).outcomes[0]).toMatchObject({
-      status: 'unsupported',
-      applied: ['type'],
-      score: { action: 'set', status: 'unavailable', reason: 'atomic_guard_unavailable' },
+      status: 'applied',
+      applied: ['type', 'rate'],
+      score: { action: 'set', status: 'applied', vote: { units: 0 } },
     });
-    expect(await score.commands.readEntry(score.owner.actor, target)).toMatchObject({ state: 'planned' });
+    expect(await score.commands.readEntry(score.owner.actor, setTarget)).toMatchObject({ state: 'planned' });
+    expect(await votes.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, setTarget)).toMatchObject({
+      currentVote: { state: 'counted', units: 0 },
+    });
+    const preserved = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+      rows: [{ ordinal: 2, reviewToken: reviews[2].token, state: 'omit', skip: false }],
+    });
+    expect((await ok(preserved)).outcomes[0].score).toMatchObject({
+      action: 'preserve',
+      status: 'skipped',
+      reason: 'existing_native_vote_preserved',
+    });
     const clear = await score.send('owner', 'POST', `/${uploadId}:apply`, {
       rows: [
         {
           ordinal: 1,
           reviewToken: reviews[1].token,
-          state: 'preserve',
+          state: 'omit',
           skip: false,
           score: { action: 'clear', consent: true },
         },
@@ -590,11 +635,129 @@ test('score review retains source scale and native vote while requiring separate
     });
     expect((await ok(clear)).outcomes[0].score).toMatchObject({
       action: 'clear',
-      status: 'unavailable',
-      reason: 'atomic_guard_unavailable',
+      status: 'applied',
     });
-    expect(await votes.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, target)).toMatchObject({
-      currentVote: { state: 'counted', units: 7 },
+    expect(await votes.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, clearTarget)).toMatchObject({
+      currentVote: { state: 'clear' },
+    });
+    const unsupported = await score.send('owner', 'POST', `/${uploadId}:apply`, {
+      rows: [
+        {
+          ordinal: 3,
+          reviewToken: reviews[3].token,
+          state: 'omit',
+          skip: false,
+          score: { action: 'set', units: 13, consent: true },
+        },
+      ],
+    });
+    expect((await ok(unsupported)).outcomes[0].score).toMatchObject({
+      action: 'set',
+      status: 'applied',
+      vote: { units: 13 },
+    });
+  } finally {
+    await score.close();
+  }
+});
+test('native redirect requires a deliberate review of the canonical Bangumi target', async () => {
+  const score = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
+  try {
+    const subjects = [await score.createSubject('game'), await score.createSubject('game')].sort();
+    const canonical = subjects[0]!;
+    const selected = subjects[1]!;
+    const merger = await score.identity(['subject:merge']);
+    await createGrantCommands({ pool: score.pool, access: score.access, managementAction: 'access:grant' }).create(
+      { pool: score.pool, actor: score.steward.actor, deadline: Date.now() + 30000 },
+      {
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: merger.actor.accountId },
+        actions: ['subject:merge'],
+        valid: '(,)',
+        key: randomUUID(),
+      },
+    );
+    const native = createVoteCommands({ pool: score.pool, access: score.access });
+    let redirected = false;
+    const importer = createBangumiImport({
+      pool: score.pool,
+      access: score.access,
+      tokens: score.tokens,
+      routeKey: testRouteKey(),
+      votes: {
+        ...native,
+        async readVoteReview(actor, questionId, targetId) {
+          if (!redirected) {
+            const response = await score.sendWithHeaders(
+              merger.bearer,
+              'POST',
+              '/v1/subjects:merge',
+              { subjects: [canonical, selected] },
+              { 'idempotency-key': JSON.stringify(randomUUID()) },
+            );
+            expect(response.status).toBe(202);
+            redirected = true;
+          }
+          return native.readVoteReview(actor, questionId, targetId);
+        },
+      },
+    });
+    const { uploadId } = await importer.preview(
+      score.owner.actor,
+      upload([{ ...record(900007), subject_type: 4, rate: 8 }]).upload,
+      randomUUID(),
+    );
+    const first = await importer.review(
+      score.owner.actor,
+      uploadId,
+      0,
+      selected,
+      { action: 'set', units: 13 },
+      randomUUID(),
+    );
+    expect(first.review!.score!.native.admission).toEqual({
+      status: 'unavailable',
+      reason: 'identity_observation_unavailable',
+    });
+    const unavailable = await importer.apply(
+      score.owner.actor,
+      uploadId,
+      [{ ...choice(0, first.review!, 'omit'), score: { action: 'set', units: 13, consent: true } }],
+      new AbortController().signal,
+      Date.now() + 120000,
+    );
+    expect(unavailable.outcomes[0].score).toMatchObject({
+      action: 'set',
+      status: 'unavailable',
+      reason: 'identity_observation_unavailable',
+    });
+    const stored = (
+      await score.pool.query(
+        'SELECT review FROM library.bangumi_upload_row WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=0',
+        [routeOf(score.owner.actor.accountId), score.owner.actor.accountId, uploadId],
+      )
+    ).rows[0]!;
+    expect(stored.review.scoreNativeGuard).toBeNull();
+
+    const reviewed = await importer.review(
+      score.owner.actor,
+      uploadId,
+      0,
+      canonical,
+      { action: 'set', units: 13 },
+      randomUUID(),
+    );
+    expect(reviewed.review!.score!.native.admission).toEqual({ status: 'reviewed', reason: 'native_review_observed' });
+    const applied = await importer.apply(
+      score.owner.actor,
+      uploadId,
+      [{ ...choice(0, reviewed.review!, 'omit'), score: { action: 'set', units: 13, consent: true } }],
+      new AbortController().signal,
+      Date.now() + 120000,
+    );
+    expect(applied.outcomes[0]).toMatchObject({ status: 'applied', score: { action: 'set', status: 'applied' } });
+    expect(await native.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, canonical)).toMatchObject({
+      currentVote: { state: 'counted', units: 13 },
     });
   } finally {
     await score.close();
@@ -605,32 +768,12 @@ test('uncertain score delivery retains exact native operands and a changed own v
   try {
     const target = await score.createSubject('game');
     const native = createVoteCommands({ pool: score.pool, access: score.access });
-    const redirected = await score.createSubject('game');
-    const mismatched = createBangumiImport({
-      pool: score.pool,
-      access: score.access,
-      tokens: score.tokens,
-      routeKey: testRouteKey(),
-      votes: { ...native, readVoteReview: (actor, questionId) => native.readVoteReview(actor, questionId, redirected) },
-    });
-    const otherUpload = await mismatched.preview(
-      score.owner.actor,
-      upload([{ ...record(900006), subject_type: 4, rate: 8 }]).upload,
-      randomUUID(),
-    );
-    const mismatch = await mismatched.review(
-      score.owner.actor,
-      otherUpload.uploadId,
-      0,
-      target,
-      { action: 'set', units: 0 },
-      randomUUID(),
-    );
-    expect(mismatch.review!.score!.native.admission).toEqual({
-      status: 'unavailable',
-      reason: 'identity_observation_unavailable',
-    });
-    const attempts: { input: Parameters<typeof native.putVoteOutcome>[1]; key: string }[] = [];
+    const attempts: {
+      actor: Parameters<typeof native.putVoteOutcome>[0];
+      input: Parameters<typeof native.putVoteOutcome>[1];
+      key: Parameters<typeof native.putVoteOutcome>[2];
+    }[] = [];
+    const admissions: unknown[] = [];
     const importer = createBangumiImport({
       pool: score.pool,
       access: score.access,
@@ -638,10 +781,14 @@ test('uncertain score delivery retains exact native operands and a changed own v
       routeKey: testRouteKey(),
       votes: {
         ...native,
-        async putVoteOutcome(actor, input, key) {
-          attempts.push({ input, key });
+        preparePutVote(actor, input, key, admission) {
+          admissions.push(admission?.input);
+          return native.preparePutVote(actor, input, key, admission);
+        },
+        async putVoteOutcome(actor, input, key, admission) {
+          attempts.push({ actor, input, key });
           if (attempts.length === 1) throw new Error('delivery unknown');
-          return native.putVoteOutcome(actor, input, key);
+          return native.putVoteOutcome(actor, input, key, admission);
         },
       },
     });
@@ -674,7 +821,19 @@ test('uncertain score delivery retains exact native operands and a changed own v
       )
     ).rows[0]!;
     expect(attempts[0]!.input.guard).toEqual(stored.review.scoreNativeGuard);
-    expect(stored.choice.scorePlan.nativeGuard).toEqual(attempts[0]!.input.guard);
+    expect(stored.choice.scorePlan.command.input.guard).toEqual(attempts[0]!.input.guard);
+    expect(stored.choice.scorePlan.command.input.observation).toEqual(stored.review.scoreObservation);
+    expect(stored.choice.scorePlan.commandActor).toEqual(score.owner.actor);
+    expect(attempts[0]!.key).toBe(stored.choice.scorePlan.command.receipt.requestKey);
+    expect(admissions[0]).toMatchObject({
+      provider: 'bangumi',
+      uploadId,
+      ordinal: 0,
+      reviewToken: reviewed.review!.token,
+      sourceDigest: stored.choice.scorePlan.sourceDigest,
+      reviewDigest: stored.choice.scorePlan.reviewDigest,
+      match: stored.review.guard,
+    });
     expect(stored.choice.scorePlan.units).toBe(0);
     expect(Buffer.byteLength(JSON.stringify(stored.choice))).toBeLessThanOrEqual(8192);
     expect(Buffer.byteLength(JSON.stringify(stored.review))).toBeLessThanOrEqual(71680);
@@ -695,6 +854,129 @@ test('uncertain score delivery retains exact native operands and a changed own v
     });
     const refreshed = await importer.review(score.owner.actor, uploadId, 0, target, { action: 'clear' }, randomUUID());
     expect(refreshed.review!.score!.native.currentVote).toMatchObject({ state: 'set', units: 7 });
+    const cleared = await importer.apply(
+      score.owner.actor,
+      uploadId,
+      [
+        {
+          ...choice(0, refreshed.review!, 'omit'),
+          score: { action: 'clear' as const, consent: true as const },
+        },
+      ],
+      new AbortController().signal,
+      Date.now() + 120000,
+    );
+    expect(cleared.outcomes[0]).toMatchObject({ status: 'applied', score: { action: 'clear', status: 'applied' } });
+    expect(await native.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, target)).toMatchObject({
+      currentVote: { state: 'clear' },
+    });
+  } finally {
+    await score.close();
+  }
+});
+test('source scrub retains only a started vote receipt and reconciles it with current Rating readback', async () => {
+  const score = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
+  try {
+    const target = await score.createSubject('game');
+    const native = createVoteCommands({ pool: score.pool, access: score.access });
+    const interrupted = createBangumiImport({
+      pool: score.pool,
+      access: score.access,
+      tokens: score.tokens,
+      routeKey: testRouteKey(),
+      votes: {
+        ...native,
+        async putVoteOutcome(actor, input, key, admission) {
+          await native.putVoteOutcome(actor, input, key, admission);
+          throw new Error('Lost Bangumi score acknowledgement');
+        },
+      },
+    });
+    const { uploadId } = await interrupted.preview(
+      score.owner.actor,
+      upload([{ ...record(900008), subject_type: 4, rate: 8 }]).upload,
+      randomUUID(),
+    );
+    const reviewed = await interrupted.review(
+      score.owner.actor,
+      uploadId,
+      0,
+      target,
+      { action: 'set', units: 0 },
+      randomUUID(),
+    );
+    const selected = [
+      { ...choice(0, reviewed.review!, 'omit'), score: { action: 'set' as const, units: 0, consent: true as const } },
+    ];
+    await expect(
+      interrupted.apply(score.owner.actor, uploadId, selected, new AbortController().signal, Date.now() + 120000),
+    ).rejects.toThrow('Lost Bangumi score acknowledgement');
+
+    const frozen = (
+      await score.pool.query(
+        'SELECT choice FROM library.bangumi_upload_row WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=0',
+        [routeOf(score.owner.actor.accountId), score.owner.actor.accountId, uploadId],
+      )
+    ).rows[0]!.choice;
+    const receipt = frozen.scorePlan.command.receipt;
+    expect(frozen.scorePlan).toMatchObject({ started: true, command: { receipt } });
+    expect((await native.reconcilePutVote(score.owner.actor, receipt))?.vote).toMatchObject({ units: 0 });
+
+    const expired = await score.pool.query<{ route: number; expiresAt: string }>(
+      `UPDATE library.bangumi_upload SET expires_at=clock_timestamp()-interval '1 second'
+       WHERE route=$1 AND account_id=$2 AND upload_id=$3 RETURNING route,expires_at::text AS "expiresAt"`,
+      [routeOf(score.owner.actor.accountId), score.owner.actor.accountId, uploadId],
+    );
+    const expiry = {
+      ...expired.rows[0]!,
+      accountId: score.owner.actor.accountId,
+      uploadId,
+      stage: 'source' as const,
+      dueAt: expired.rows[0]!.expiresAt,
+      page: 0,
+    };
+    expect(await purgeExpiredBangumiUploadPage({ pool: score.pool }, expiry)).toEqual({ removed: 1, complete: true });
+    const scrubbed = (
+      await score.pool.query<{ evidence: string; choice: string }>(
+        `SELECT evidence::text AS evidence,choice::text AS choice FROM library.bangumi_upload_row
+         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=0`,
+        [routeOf(score.owner.actor.accountId), score.owner.actor.accountId, uploadId],
+      )
+    ).rows[0]!;
+    expect(scrubbed.evidence).toBe('{}');
+    expect(JSON.parse(scrubbed.choice)).toEqual({
+      ordinal: 0,
+      reviewToken: reviewed.review!.token,
+      state: 'omit',
+      skip: false,
+      score: { action: 'set', units: 0, consent: true },
+      scorePlan: { receiptOnly: true, action: 'set', started: true, receipt },
+    });
+    expect(scrubbed.choice).not.toContain('commandActor');
+    expect(scrubbed.choice).not.toContain('observation');
+
+    const recovery = createBangumiImport({
+      pool: score.pool,
+      access: score.access,
+      tokens: score.tokens,
+      routeKey: testRouteKey(),
+      votes: native,
+    });
+    const before = await native.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, target);
+    const result = await recovery.apply(
+      score.owner.actor,
+      uploadId,
+      selected,
+      new AbortController().signal,
+      Date.now() + 120000,
+    );
+    const after = await native.readVoteReview(score.owner.actor, STANDARD_QUESTION_ID, target);
+    expect(result.outcomes[0]).toMatchObject({
+      status: 'applied',
+      applied: ['rate'],
+      score: { action: 'set', status: 'applied', vote: { units: 0 } },
+    });
+    expect(after.currentVote).toEqual(before.currentVote);
   } finally {
     await score.close();
   }
