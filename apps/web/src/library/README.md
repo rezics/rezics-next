@@ -52,12 +52,14 @@ authorization remains decisive when reading the inventory.
 Library presentation resolves explicit valid URL choices first, then the current account's native shelf defaults, then
 the existing application defaults. Layouts use an exact absolute-IRI type scope when the address type is an IRI and
 otherwise use `all`. Settings edits `all` and individual admitted types. Grid sizes map `small`/`medium`/`large` to the current `s`/`m`/`l`
-controls. `last_activity`, `added` and `finished` map to the currently admitted native Library date orders.
+controls. `last_activity`, `added` and `finished` map to the currently admitted native Library date orders. Saved
+`title` maps to native localized title order and uses its explicit bounded preparation step; priority order is
+selectable for a visit but is not a saved preference.
 Saved `rating` maps losslessly to the `personalScore` address and direction for each state, including `all`.
 This preserves intent only: the existing whole-shelf capability fence still reports score ordering unavailable,
 with retry of the same intent or an explicit date-order recovery. Settings shows the retained score direction as a
-disabled saved choice; it does not offer new unsupported orders. Title, release-date and progress orders remain
-saved and are described as unavailable. The table maps the
+disabled saved choice; it does not offer new unsupported orders. Release-date and progress orders remain saved and
+are described as unavailable. The table maps the
 currently supplied cover, title, type, status, active progress, added, finished and last-activity fields. Unsupported
 creator, rating and started columns remain in the native preference array and never appear as Library controls.
 

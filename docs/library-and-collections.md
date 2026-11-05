@@ -1088,3 +1088,15 @@ caller and returns to the diary; it does not withdraw any public snapshot.
 The installed generated client does not expose the state-history list/review/restore method family. The Subject
 Library visit says that state history is unavailable and keeps it distinct from the occurrence diary. No Web history
 or restoration endpoint is fabricated. See [state-history Web receiving](library-entry-state-history.md#web-receiving).
+
+## Personal shelf ordering
+
+The personal shelf reads one native FULL page of twenty entries. Priority and localized title orders use the native
+sort and opaque continuation; Web preserves the returned row order and never derives title keys from displayed labels.
+Title reads and preparation use the same native Accept-Language selection. Preparing title order exposes one explicit
+bounded preparation step and its progress. Query, language, current-viewer and relevant Entry changes retire the prior
+page under the existing address/current-viewer fence. Layout changes keep the same query. Unsupported saved sorts
+retain their existing recovery, while an explicit supported URL sort is preserved.
+
+Decision: each title-preparation step is user-triggered; retries keep that step's exact idempotency key, and a fresh
+key is created only when the user starts the next native step.

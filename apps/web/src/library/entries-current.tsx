@@ -271,7 +271,7 @@ export function SortControls({
   if (selection.address !== address) setSelection({ address, ...sort });
   const scoreOrder = selection.orderBy === 'personalScore';
   const priorityOrder = selection.orderBy === 'priority';
-  const unavailableOrder = scoreOrder || priorityOrder;
+  const unavailableOrder = scoreOrder;
   if (!entries || !progress) return null;
   return (
     <form
@@ -312,15 +312,14 @@ export function SortControls({
           onChange={(event) => {
             if (!(isCurrent?.() ?? true)) return;
             const orderBy = validateShelfSearch({ orderBy: event.target.value }).orderBy;
-            if (orderBy && orderBy !== 'personalScore' && orderBy !== 'priority')
-              setSelection({ ...selection, orderBy });
+            if (orderBy && orderBy !== 'personalScore') setSelection({ ...selection, orderBy });
           }}
           className="min-h-11 max-w-full rounded-md border bg-background p-2"
         >
           <option value="lastActivity">{m.library_sort_activity()}</option>
           <option value="createdAt">{m.library_sort_created()}</option>
           <option value="finishedAt">{m.library_sort_finished()}</option>
-          <option value="priority" disabled>
+          <option value="priority">
             {m.library_rich_entry_priority()}
           </option>
           <option value="title">{m.library_column_title()}</option>

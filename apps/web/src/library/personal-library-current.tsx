@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import { EntriesWindowNavigation, entriesWindowHref, type EntriesWindowControls } from './entries-window-navigation';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -13,10 +13,12 @@ import { shelfMutationLease, type ShelfMutationLease } from './shelf-rows';
 import {
   personalLibraryAddress,
   samePersonalLibraryAddress,
+  preparePersonalLibraryTitle,
   readPersonalLibraryCurrent,
   readPersonalLibraryContinue,
   type PersonalLibraryCurrentRead,
   type PersonalLibraryAddress,
+  type ShelfTitlePreparationReceipt,
 } from './personal-library-server';
 import type { ShelfDisplay, ShelfSearch } from './shelf-params';
 import type { ShelfPresentationResolution } from './shelf-preferences';
@@ -469,6 +471,23 @@ function PersonalLibraryRead({
       {m.library_window_retry()}
     </button>
   );
+  const prepareTitle = useCallback(
+    async (key: string): Promise<ShelfTitlePreparationReceipt> => {
+      if (!isCurrent()) throw new CancelledError({ silent: true, revert: true });
+      const result = await preparePersonalLibraryTitle({ data: { search: input, key } });
+      if (
+        !isCurrent() ||
+        result.sessionSubject !== subject ||
+        !samePersonalLibraryAddress(result.requested, address)
+      )
+        throw new CancelledError({ silent: true, revert: true });
+      return result.preparation;
+    },
+    [address, input, isCurrent, subject],
+  );
+  const refreshTitle = useCallback(async () => {
+    if (isCurrent()) await query.refetch();
+  }, [isCurrent, query.refetch]);
   if (!accepted)
     return (
       <div className="flex flex-col items-start gap-3">
@@ -517,6 +536,7 @@ function PersonalLibraryRead({
           continueCurrent={continueCurrent}
           continueScope={JSON.stringify([address, continueEpoch, readGeneration])}
           isCurrent={isCurrent}
+          titlePreparation={{ prepare: prepareTitle, refresh: refreshTitle }}
           originatingLease={mutationLease}
         />
       </PersonalShelfOrigin.Provider>

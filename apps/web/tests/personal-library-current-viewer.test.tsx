@@ -1,14 +1,15 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
+import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import type { PersonalLibraryCurrentRead, PersonalContinueRead } from '../src/library/personal-library-server';
 import type { LibraryMutationResult, PersonalLibraryEntry } from '../src/library/entries-read';
 import { nativeCollection } from './factories/collections';
 import type { ShelfDisplay, ShelfSearch } from '../src/library/shelf-params';
 
-// UNRUN: controller integration owns execution. These use the installed DOM, actual combined
-// server export and exported mounted composition with real shelf children; no native/visual proof.
+// UNRUN: controller integration owns execution and native/visual proof. This fixture covers the server export
+// and mounted composition with real shelf children against the generated kernel client.
 type Preparation = { subject?: string; accessToken?: string; status: 'active' | 'absent' | 'unavailable' };
 let preparations: Preparation[] = [];
 let preparationCalls = 0;
@@ -56,6 +57,17 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader: (name: string, value: string) => headers.set(name, value),
 }));
 mock.module('cloudflare:workers', () => ({ env }));
+const originalKernel = await import('../src/kernel/client');
+const nativeClient = createKernelClient('https://kernel.test', {
+  headers: { 'accept-language': 'en' },
+  fetch: (input, init) => globalThis.fetch(input, init),
+});
+mock.module('../src/kernel/client', () => ({
+  ...originalKernel,
+  configuredKernelOrigin: () => env.KERNEL_ORIGIN,
+  kernelClient: () => nativeClient,
+  requestLocale: () => 'en',
+}));
 afterAll(() => mock.restore());
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -207,20 +219,54 @@ async function personalLibraryBoundaryJourney(windowsOnly = false) {
     expect(calls.filter((call) => new URL(call.url).pathname === '/v1/libraryEntries')).toHaveLength(1);
     expect(calls.filter((call) => new URL(call.url).pathname === '/v1/libraryContinue')).toHaveLength(1);
     expect(calls.filter((call) => new URL(call.url).pathname === '/v1/collections')).toHaveLength(1);
-    expect(
-      calls
-        .filter((call) =>
-          ['/v1/libraryEntries', '/v1/libraryContinue', '/v1/libraryPins', '/v1/collections'].includes(
-            new URL(call.url).pathname,
-          ),
-        )
-        .every((call) => call.headers.get('authorization') === 'Bearer credential-A'),
-    ).toBe(true);
+    const privateCalls = calls.filter((call) =>
+      ['/v1/libraryEntries', '/v1/libraryContinue', '/v1/libraryPins', '/v1/collections'].includes(
+        new URL(call.url).pathname,
+      ),
+    );
+    expect(privateCalls.every((call) => call.headers.get('authorization') === 'Bearer credential-A')).toBe(true);
     expect(headers.get('cache-control')).toBe('private, no-store');
     stale = true;
-    const restarted = await reads.readPersonalLibraryCurrent({ data: { cursor: 'stale' } });
+    const restartOffset = calls.length;
+    const restarted = await reads.readPersonalLibraryCurrent({
+      data: {
+        type: 'core:Book',
+        state: 'planned',
+        orderBy: 'priority',
+        direction: 'desc',
+        cursor: 'stale',
+      },
+    });
     expect(restarted.page).toMatchObject({ cursorReset: true });
-    expect(restarted.requested.cursor).toBe('stale');
+    expect(restarted.requested).toEqual({
+      type: 'core:Book',
+      state: 'planned',
+      orderBy: 'priority',
+      direction: 'desc',
+      cursor: 'stale',
+      locale: 'en',
+    });
+    const restartPages = calls
+      .slice(restartOffset)
+      .filter((call) => new URL(call.url).pathname === '/v1/libraryEntries')
+      .map((call) => new URL(call.url));
+    expect(restartPages).toHaveLength(2);
+    expect(Object.fromEntries(restartPages[0]!.searchParams)).toMatchObject({
+      type: 'core:Book',
+      state: 'planned',
+      orderBy: 'priority',
+      direction: 'desc',
+      cursor: 'stale',
+      limit: '20',
+    });
+    expect(Object.fromEntries(restartPages[1]!.searchParams)).toEqual({
+      view: 'FULL',
+      limit: '20',
+      state: 'planned',
+      orderBy: 'priority',
+      direction: 'desc',
+      type: 'core:Book',
+    });
     stale = false;
     for (const mixed of [
       [
@@ -368,12 +414,15 @@ async function personalLibraryBoundaryJourney(windowsOnly = false) {
       if (!keepViewer || JSON.stringify(client.getQueryData(['session'])) !== JSON.stringify(viewer))
         client.setQueryData(['session'], viewer);
       const observation = viewerExposureLifetime(client).getSnapshot();
+      if (viewer.state === 'signed-in')
+        expect(observation).toMatchObject({ state: 'signed-in', observation: { subject: viewer.subject } });
       if (observation.state === 'signed-in')
         client.setQueryData(viewerExposureQuery(observation.observation).queryKey, {
           subject: observation.observation.subject,
           admitted: admitted
             ? ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign']
             : [],
+          state: admitted ? 'ready' : 'denied',
         });
       client.setQueryData(['exposure', 'anonymous'], []);
       if (!root) {
@@ -384,6 +433,14 @@ async function personalLibraryBoundaryJourney(windowsOnly = false) {
         root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
       } else root.render(tree());
     });
+    const observation = viewerExposureLifetime(client).getSnapshot();
+    if (viewer.state === 'signed-in')
+      expect(observation).toMatchObject({ state: 'signed-in', observation: { subject: viewer.subject } });
+    if (observation.state === 'signed-in')
+      expect(client.getQueryData(viewerExposureQuery(observation.observation).queryKey)).toMatchObject({
+        subject: observation.observation.subject,
+        state: admitted ? 'ready' : 'denied',
+      });
   };
   const tick = async () => {
     await act(async () => {
