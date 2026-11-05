@@ -493,10 +493,20 @@
       "capabilities": ["library-pages"]
     },
     {
+      "id": "search-personal-recovery",
+      "kind": "core",
+      "owner": "search",
+      "paths": ["apps/web/src/search/personal-recovery/**"],
+      "publicEntries": ["apps/web/src/search/personal-recovery/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["search-personal-read-settlement"]
+    },
+    {
       "id": "web-search",
       "kind": "UI/transport library",
       "owner": "search",
       "paths": ["apps/web/src/search/**", "apps/web/src/features/pages/**"],
+      "excludes": ["apps/web/src/search/personal-recovery/**"],
       "publicEntries": [
         "apps/web/src/search/search.tsx",
         "apps/web/src/search/search-window/index.ts",
@@ -515,7 +525,8 @@
         "web-library",
         "web-performance",
         "web-semantic",
-        "search-text"
+        "search-text",
+        "search-personal-recovery"
       ],
       "capabilities": ["search-pages"]
     },
