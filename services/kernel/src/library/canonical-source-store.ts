@@ -4,7 +4,6 @@ import type { Pool } from 'pg';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 
 import {
-  CANONICAL_SOURCE_RAW_KEY_LIMIT,
   CANONICAL_SOURCE_STATEMENTS,
   assertCanonicalSourceStatement,
   canonicalSourceGroupStatement,
@@ -16,7 +15,8 @@ import {
   type CanonicalSourceStatement,
 } from './canonical-source-bounds.ts';
 
-export { CANONICAL_SOURCE_RAW_KEY_LIMIT };
+import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
+export { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 
 /**
  * Reserved by the caller BEFORE dispatch; raw keys hard <=CANONICAL_SOURCE_RAW_KEY_LIMIT, shared Zone aggregate <=256 including final use.

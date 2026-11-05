@@ -61,7 +61,8 @@ capabilities it registers. The kinds are:
    concept is refused.
 2. Cross-module imports go through declared public entries only, including type-only and generated imports.
 3. The module graph is acyclic, and dependencies point from adapters and applications toward cores and contracts. No
-   new value-import cycle is admitted anywhere.
+   new value-import cycle is admitted anywhere. Shared numeric limits used across runtime dependency cycles live in
+   a leaf module with no runtime imports; implementation modules import or re-export those values.
 4. Cores and contracts are pure: no Elysia, `pg`, SQL, DBOS, React, runtime modules, environment, network, filesystem,
    clock or randomness. Time, IDs and facts arrive as values.
 5. Adapters own effects, applications own use cases, and only composition roots choose implementations.

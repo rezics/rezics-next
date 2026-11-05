@@ -10,7 +10,6 @@ import { routeOf } from '../route/route.ts';
 import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
 import type { Access } from '../request/access.ts';
 import {
-  CANONICAL_SOURCE_RAW_KEY_LIMIT,
   CANONICAL_SOURCE_RECEIVING_COST,
   CANONICAL_SOURCE_STATEMENTS,
   assertCanonicalSourceStatement,
@@ -18,6 +17,8 @@ import {
   canonicalSourceWorkDimensions,
   type CanonicalSourceStatement,
 } from './canonical-source-bounds.ts';
+import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
+export { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 import { nativeSourceFence, type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
 import { readNativeCollectionMetadataForWork, type NativeCollectionMetadata } from './collection-source-native.ts';
 import type { CollectionSourceObservation, WorkReceipt } from './collection-source.ts';
@@ -34,9 +35,6 @@ export type CollectionSourceWorkState = Readonly<{
   work: WorkReceipt;
 }>;
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
-
-/** The indexed canonical group page's fixed LIMIT. Selected Source reads cannot raise it. */
-export const COLLECTION_SOURCE_WORK_GROUP_LIMIT = CANONICAL_SOURCE_RAW_KEY_LIMIT;
 
 /** Upper bounds follow the exact indexed statements in the canonical Source plan. */
 export const COLLECTION_SOURCE_WORK_COST = CANONICAL_SOURCE_RECEIVING_COST;

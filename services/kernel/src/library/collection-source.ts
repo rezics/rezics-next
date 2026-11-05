@@ -13,10 +13,14 @@ import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from 
 import type { ScopeWorkContext } from '../search/scope-work-context.ts';
 import { isDeepStrictEqual } from 'node:util';
 import {
+  CANONICAL_SOURCE_RAW_KEY_LIMIT,
+  COLLECTION_SOURCE_WORK_GROUP_LIMIT,
+} from './canonical-source-limits.ts';
+export { COLLECTION_SOURCE_DRIVER_COUNT } from './canonical-source-limits.ts';
+import {
   readCollectionSourceWorkState,
   readCollectionSourceWorkGroup,
   seekCollectionSourceWorkGroup,
-  COLLECTION_SOURCE_WORK_GROUP_LIMIT,
   type CollectionSourceWorkState,
 } from './collection-source-work-native.ts';
 
@@ -229,7 +233,6 @@ import {
   readCanonicalSourceGroup,
   seekCanonicalSourceGroup,
   nativeSourceFence,
-  CANONICAL_SOURCE_RAW_KEY_LIMIT,
   type CanonicalAllowance,
   type CanonicalBasis,
   type CanonicalWork,
@@ -237,8 +240,6 @@ import {
 } from './canonical-source-store.ts';
 import { resolveSubject } from './subject-anchor.ts';
 
-const sourceDrivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
-export const COLLECTION_SOURCE_DRIVER_COUNT = sourceDrivers.length;
 type Prepared = {
   metadata: NativeCollectionMetadata;
   basis: CanonicalBasis;

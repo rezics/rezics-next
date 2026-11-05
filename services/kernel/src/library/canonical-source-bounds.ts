@@ -16,9 +16,10 @@ import {
 import type { WorkDimensions, WorkReceipt } from './collection-source.ts';
 import ownerFactsSql from './collection-source-native-facts.sql';
 import labelOriginalsSql from './owner-index-native-label-originals.sql';
+import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
+export { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 
 export const CANONICAL_SOURCE_AXES = BOUND_AXES;
-export const CANONICAL_SOURCE_RAW_KEY_LIMIT = 100;
 export const CANONICAL_SOURCE_ZONE_AGGREGATE = 256;
 export const CANONICAL_SOURCE_GENERATION_CAPACITY = 2;
 export const CANONICAL_SOURCE_SCOPE_CAPACITY = 2;
