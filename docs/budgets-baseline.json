@@ -55,7 +55,7 @@
     },
     {
       "path": "docs/goals/**/*.capabilities.*",
-      "bytes": 720402
+      "bytes": 572991
     },
     {
       "path": "docs/goals/accounts.capabilities.md",
@@ -75,7 +75,7 @@
     },
     {
       "path": "docs/goals/imports.capabilities.md",
-      "bytes": 159043
+      "bytes": 10873
     },
     {
       "path": "docs/goals/library.capabilities.md",
@@ -247,7 +247,7 @@
     },
     {
       "path": "packages/conversion/README.md",
-      "bytes": 85687
+      "bytes": 16353
     },
     {
       "path": "packages/definitions/README.md",
@@ -267,7 +267,7 @@
     },
     {
       "path": "services/importer/README.md",
-      "bytes": 338993
+      "bytes": 29469
     },
     {
       "path": "services/kernel/README.md",
