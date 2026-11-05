@@ -729,7 +729,13 @@ export function SubjectPage({
           )}
           {read.subject.type === 'wd:Q95074' && (
             <>
-              <CharacterProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+              <CharacterProfileEntry
+                id={read.subject.id}
+                label={subjectPageTitle(page, locale)}
+                context={page.context?.id ?? read.subject.context}
+                realm={realm}
+                locale={locale}
+              />
               <CharacterRelationshipsEntry
                 id={read.subject.id}
                 label={subjectPageTitle(page, locale)}

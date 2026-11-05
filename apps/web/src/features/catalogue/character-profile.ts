@@ -8,21 +8,29 @@ import type { SessionEnv } from '../../session/client';
 import { creationStatement, type StatementInput, type EditorRead } from './statement-editor';
 import type { RelationRead } from '../../subject/relation-candidates';
 import { readTypeDescriptor, type CurrentTypeDescriptor, type CurrentTypeRead } from './type-directory-client';
+import { candidateContext } from '../../subject/candidates';
 
 export const characterType = 'wd:Q95074';
 export const characterUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export type CharacterItem = ReturnType<typeof initialTerms>['item'] & { statements: Record<string, StatementInput[]> };
 export type CharacterCommand = { item: CharacterItem; key: string };
 export type CharacterRead =
-  | { ok: false; reason: 'invalid' | 'denied' | 'stale' | 'unavailable' }
+  | { ok: false; reason: 'invalid' | 'denied' | 'stale' | 'unsupported' | 'unavailable' }
   | {
       ok: true;
       release: Release;
+      context: string;
+      realm?: string;
       character: SubjectRead | null;
       work: SubjectRead | null;
       workDescriptor: CurrentTypeDescriptor | null;
     };
-export type CharacterAddress = { id?: string | undefined; work?: string | undefined };
+export type CharacterAddress = {
+  id?: string | undefined;
+  work?: string | undefined;
+  context?: string | undefined;
+  realm?: string | undefined;
+};
 // Retained profile content stays mounted for drafts; expose it only after a settled successful read matches this address.
 export function isCurrentCharacterRead(
   read: CharacterRead | undefined,
@@ -33,6 +41,8 @@ export function isCurrentCharacterRead(
     query.isSuccess &&
     !query.isFetching &&
     read?.ok === true &&
+    read.context === (address.context ?? candidateContext) &&
+    read.realm === address.realm &&
     (address.id === undefined ? read.character === null : read.character?.subject.id === address.id) &&
     (address.work === undefined
       ? read.work === null
@@ -131,43 +141,61 @@ export async function readCharacterProfile(
   address: CharacterAddress,
   locale = 'en',
 ): Promise<CharacterRead> {
-  if ([address.id, address.work].some((id) => id !== undefined && !characterUuid.test(id)))
+  const addressUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (
+    [address.id, address.work].some((id) => id !== undefined && !characterUuid.test(id)) ||
+    (address.context !== undefined && !addressUuid.test(address.context)) ||
+    (address.realm !== undefined && !addressUuid.test(address.realm))
+  )
     return { ok: false, reason: 'invalid' };
-  try {
-    const [active, character, work] = await Promise.all([
-      client.definitions.active.get(),
-      address.id ? client.subjects({ id: address.id }).get() : undefined,
-      address.work ? client.subjects({ id: address.work }).get() : undefined,
-    ]);
-    for (const [result, id] of [
-      [character, address.id],
-      [work, address.work],
-    ] as const) {
-      if (!id) continue;
-      if (result?.status === 403 || result?.status === 404) return { ok: false, reason: 'denied' };
-      if (result?.status === 308 || (result?.data && result.data.subject.id !== id))
-        return { ok: false, reason: 'stale' };
-      if (result?.status !== 200 || !result.data) return { ok: false, reason: 'unavailable' };
-    }
-    if (active.status !== 200 || !active.data) return { ok: false, reason: 'unavailable' };
-    const bundle = await client.definitions.releases({ digest: active.data.digest }).get();
-    if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== active.data.digest)
-      return { ok: false, reason: 'unavailable' };
-    const release = bundle.data.release as Release;
-    if (!release.types?.[characterType] || !release.properties) return { ok: false, reason: 'unavailable' };
-    const selectedType = work?.data ? await readTypeDescriptor(client, work.data.subject.type, locale) : undefined;
-    if (selectedType && !selectedType.ok)
-      return { ok: false, reason: selectedType.reason === 'missing' ? 'invalid' : 'unavailable' };
-    const workDescriptor = selectedType?.ok ? selectedType.descriptor : null;
-    if (
-      (character?.data && character.data.subject.type !== characterType) ||
-      (workDescriptor && !characterWork(characterWorkDefinitions(workDescriptor), workDescriptor.typeId))
-    )
-      return { ok: false, reason: 'invalid' };
-    return { ok: true, release, character: character?.data ?? null, work: work?.data ?? null, workDescriptor };
-  } catch {
-    return { ok: false, reason: 'unavailable' };
+  if (!address.id && (address.context !== undefined || address.realm !== undefined))
+    return { ok: false, reason: 'unsupported' };
+  if (address.realm && !address.context) return { ok: false, reason: 'unsupported' };
+  const context = address.context ?? candidateContext;
+  const [active, character, work] = await Promise.all([
+    client.definitions.active.get(),
+    address.id
+      ? client.subjects({ id: address.id }).get({ query: { context } })
+      : undefined,
+    // A Work is a separate address; it always uses the native default Global reading.
+    address.work ? client.subjects({ id: address.work }).get() : undefined,
+  ]);
+  for (const [result, id] of [
+    [character, address.id],
+    [work, address.work],
+  ] as const) {
+    if (!id) continue;
+    if (result?.status === 403 || result?.status === 404) return { ok: false, reason: 'denied' };
+    if (result?.status === 308 || (result?.data && result.data.subject.id !== id))
+      return { ok: false, reason: 'stale' };
+    if ((result?.status === 400 || result?.status === 422) && id === address.id && address.context)
+      return { ok: false, reason: 'unsupported' };
+    if (result?.status !== 200 || !result.data) return { ok: false, reason: 'unavailable' };
   }
+  if (active.status !== 200 || !active.data) return { ok: false, reason: 'unavailable' };
+  if (character?.data && character.data.subject.context !== context) return { ok: false, reason: 'unsupported' };
+  if (character?.data && character.data.subject.type !== characterType) return { ok: false, reason: 'invalid' };
+  const releaseDigest = character?.data.subject.release ?? active.data.digest;
+  const bundle = await client.definitions.releases({ digest: releaseDigest }).get();
+  if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== releaseDigest)
+    return { ok: false, reason: 'unavailable' };
+  const release = bundle.data.release as Release;
+  if (!release.types?.[characterType] || !release.properties) return { ok: false, reason: 'unavailable' };
+  const selectedType = work?.data ? await readTypeDescriptor(client, work.data.subject.type, locale) : undefined;
+  if (selectedType && !selectedType.ok)
+    return { ok: false, reason: selectedType.reason === 'missing' ? 'invalid' : 'unavailable' };
+  const workDescriptor = selectedType?.ok ? selectedType.descriptor : null;
+  if (workDescriptor && !characterWork(characterWorkDefinitions(workDescriptor), workDescriptor.typeId))
+    return { ok: false, reason: 'invalid' };
+  return {
+    ok: true,
+    release,
+    context,
+    ...(address.realm ? { realm: address.realm } : {}),
+    character: character?.data ?? null,
+    work: work?.data ?? null,
+    workDescriptor,
+  };
 }
 export function characterDraft(release: Release, terms: TermDraft[], facts: StatementInput[]) {
   const initial = initialTerms(characterType, terms);

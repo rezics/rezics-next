@@ -16,9 +16,10 @@ import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelati
 
 function CharacterProfileSessionLive({
   locale,
+  label,
   classificationHandoffToken,
   ...address
-}: CharacterAddress & { locale: string; classificationHandoffToken?: string }) {
+}: CharacterAddress & { locale: string; label?: string; classificationHandoffToken?: string }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
@@ -28,6 +29,7 @@ function CharacterProfileSessionLive({
   return (
     <CharacterProfile
       {...address}
+      label={label}
       locale={locale}
       session={state}
       search={search}
@@ -40,7 +42,13 @@ function CharacterProfileSessionLive({
       }}
       facts={(id) => ({
         read: async () => {
-          const read = await loadCharacterProfile({ data: { id } });
+          const read = await loadCharacterProfile({
+            data: {
+              id,
+              ...(address.context ? { context: address.context } : {}),
+              ...(address.realm ? { realm: address.realm } : {}),
+            },
+          });
           return read.ok ? characterFacts(read) : read;
         },
         propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),

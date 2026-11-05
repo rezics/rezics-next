@@ -16,13 +16,22 @@ import {
 } from './character-profile';
 import type { CreateResult } from './create-subject';
 
+const contextUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function characterAddress(input: CharacterAddress): CharacterAddress {
   if (
     !input ||
-    [input.id, input.work].some((id) => id !== undefined && (typeof id !== 'string' || !characterUuid.test(id)))
+    [input.id, input.work].some((id) => id !== undefined && (typeof id !== 'string' || !characterUuid.test(id))) ||
+    (input.context !== undefined && (typeof input.context !== 'string' || !contextUuid.test(input.context))) ||
+    (input.realm !== undefined && (typeof input.realm !== 'string' || !contextUuid.test(input.realm)))
   )
     throw new Error('Invalid character address');
-  return { ...(input.id ? { id: input.id } : {}), ...(input.work ? { work: input.work } : {}) };
+  return {
+    ...(input.id ? { id: input.id } : {}),
+    ...(input.work ? { work: input.work } : {}),
+    ...(input.context ? { context: input.context } : {}),
+    ...(input.realm ? { realm: input.realm } : {}),
+  };
 }
 export const loadCharacterProfile = createServerFn({ method: 'GET', strict: false })
   .validator(characterAddress)

@@ -112,12 +112,24 @@ export const catalogueEntries = {
     id,
     label,
     work,
+    context,
+    realm,
     locale,
-  }: Locale & { id?: string | undefined; label?: string | undefined; work?: string | undefined }): CatalogueEntry => ({
+  }: Locale & {
+    id?: string | undefined;
+    label?: string | undefined;
+    work?: string | undefined;
+    context?: string | undefined;
+    realm?: string | undefined;
+  }): CatalogueEntry => ({
     group: id ? 'edit' : 'create',
     label: m.character_title({}, options(locale)),
     href: id
-      ? `${subject({ id, label: label ?? '', locale })}/character`
+      ? `${subject({ id, label: label ?? '', locale })}/character${
+          context || realm
+            ? `?${new URLSearchParams({ ...(context ? { context } : {}), ...(realm ? { realm } : {}) })}`
+            : ''
+        }`
       : `/${locale}/catalogue/character${work ? `?work=${encodeURIComponent(work)}` : ''}`,
   }),
   characterRelationships: ({
