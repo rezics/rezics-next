@@ -1,6 +1,5 @@
 import { t } from 'elysia';
 import type { Release } from '@rezics/definitions';
-import type { PoolClient } from 'pg';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -73,7 +72,7 @@ export class ReviewedPersonGuardUnavailableError extends CommandUnavailableError
 
 /** Caller has already authorized this original in its final read transaction. Never follows redirects. */
 export async function observeReviewedPersonIdentity(
-  tx: PoolClient,
+  tx: CommandTransaction,
   subject: string,
   source: ReviewedPersonSource,
   routeKey: Uint8Array,
