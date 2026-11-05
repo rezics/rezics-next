@@ -1,3 +1,4 @@
+import './support/cloudflare-workers';
 import { expect, test } from 'bun:test';
 import { act } from 'react';
 import { ui } from './story-arc-reader-view.test';

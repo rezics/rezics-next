@@ -1,3 +1,4 @@
+import './support/cloudflare-workers';
 import { expect, mock, test } from 'bun:test';
 import { mangaReaderAddress } from '../src/features/catalogue/manga-reader/navigation';
 import {
