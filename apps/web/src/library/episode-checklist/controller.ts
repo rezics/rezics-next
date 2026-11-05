@@ -236,12 +236,11 @@ export function appendRetainedPage(
   if (visit.inspectRevision !== null && visit.inspectRevision !== revision) {
     return { ...visit, kind: 'stale', retainedNext: null, outcome: { state: 'stale_cursor' } };
   }
-  const seen = new Set(visit.rows.map((row) => row.episodeSubjectId).filter((id): id is string => !!id));
-  const extra = rows.filter((row) => !row.episodeSubjectId || !seen.has(row.episodeSubjectId));
   return {
     ...visit,
-    kind: visit.rows.length || extra.length ? 'ready' : 'empty',
-    rows: [...visit.rows, ...extra],
+    kind: rows.length ? 'ready' : 'empty',
+    rows,
+    selection: emptySelection(),
     retainedNext: next,
     inspectRevision: revision,
   };

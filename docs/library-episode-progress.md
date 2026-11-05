@@ -121,6 +121,10 @@ a stale revision, retain the exact key/body for transport retries, and never inf
 value. Reopening keeps canonical facts; a retired occurrence conceals current rows and refuses fresh mutations,
 including clear, while an authorized exact receipt may replay its original revision.
 
+Decision: a retained-fact continuation replaces the displayed checklist page and its selections rather than accumulating
+history. Each displayed page therefore remains within the native 20-ID inspection bound; Refresh returns to current
+catalogue membership. A changed revision retires the continuation before any page is replaced.
+
 The installed `@rezics/client` methods are `subjects({id}).get()`,
 `subjects({id}).links.get({query:{property:"schema:isPartOf",context,language,limit:20,cursor}})`,
 `progressSessions({sessionId}).episodes.get({query:{ids}})`, and

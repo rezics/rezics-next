@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
-import { admitHistory, historyPaths } from '../src/library/progress-history-windows/coordinates';
+import { admitHistory, historyPaths, historySearch } from '../src/library/progress-history-windows/coordinates';
+
+test('history movement carries admitted sibling positions after producer recovery', () => {
+  expect(
+    historySearch({ changes: 'old', units: 'stale', logs: 'log', history: 'open' }, { changes: 'next', logs: 'log' }),
+  ).toEqual({ changes: 'next', logs: 'log', history: 'open' });
+});
 
 test('native coordinate paths retain eight predecessors, reread Previous and abandon the forward branch', () => {
   const paths = historyPaths(undefined, 'independent');

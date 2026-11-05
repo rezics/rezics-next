@@ -5,6 +5,7 @@ import { candidateContext } from '../src/subject/candidates';
 import type { WorkPartsRead } from '../src/features/catalogue/work-parts';
 import {
   CHECKLIST_VISIT_READ_CALLS,
+  appendRetainedPage,
   bindFromIndex,
   captureEpisodeCommand,
   checklistActionClass,
@@ -426,6 +427,18 @@ test('sparse retained continuation stays bounded and a changed revision retires 
     kind: 'stale',
   });
   expect(page).toBe(3);
+  let visit = readyVisit(binding(), [row(episode1, false, 'member', '1')]);
+  for (let n = 0; n < 100; n++) {
+    const rows = Array.from({ length: 20 }, (_, i) => ({
+      ...row(ep(n * 20 + i + 10), true, 'detached', null),
+      source: 'retained' as const,
+    }));
+    visit = appendRetainedPage(visit, rows, `page-${n + 1}`, 3);
+    expect(visit.rows).toEqual(rows);
+    expect(visit.rows).toHaveLength(20);
+  }
+  expect(appendRetainedPage(visit, [], null, 4)).toMatchObject({ kind: 'stale', retainedNext: null });
+  expect(appendRetainedPage(visit, [], null, 3)).toMatchObject({ kind: 'empty', rows: [], retainedNext: null });
 });
 
 function subjectBody() {

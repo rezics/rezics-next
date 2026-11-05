@@ -21,8 +21,13 @@ export function ProgressCorrectionReview({
   return (
     <section className="space-y-4" aria-label={m.library_progress_review()}>
       <h2 className="text-xl font-semibold">{m.library_progress_review()}</h2>
+      {data.measureId !== undefined ? (
+        <p className="break-all">
+          {m.library_progress_unit()}: {data.measureId}
+        </p>
+      ) : null}
       {data.clear ? (
-        <p>{m.library_progress_clear_scope()}</p>
+        <p>{data.measureId === undefined ? m.library_progress_clear_scope() : m.library_progress_measure_clear()}</p>
       ) : (
         <dl className="space-y-3">
           {data.amount !== undefined ? (

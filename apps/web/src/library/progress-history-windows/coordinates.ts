@@ -9,6 +9,18 @@ export function historyPaths(changes?: string, units?: string): HistoryPaths {
   return { changes: { current: changes, previous: [] }, units: { current: units, previous: [] } };
 }
 
+/** Native recovery may admit different positions from the URL. Carry only those accepted coordinates. */
+export function historySearch<T extends { changes?: string; units?: string; logs?: string }>(
+  previous: T,
+  admitted: { changes?: string; units?: string; logs?: string },
+) {
+  const next = { ...previous };
+  delete next.changes;
+  delete next.units;
+  delete next.logs;
+  return { ...next, ...admitted };
+}
+
 /** Call only after the owning private reader admits this exact destination. */
 export function admitHistory(paths: HistoryPaths, target: HistoryTarget | undefined, changes?: string, units?: string) {
   for (const section of ['changes', 'units'] as const) {

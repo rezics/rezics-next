@@ -44,11 +44,12 @@ mock.module('../src/library/library-workspace-admission', () => ({
 }));
 
 const recordCalls: unknown[] = [];
+let startResult: { ok: true; id: string } | { ok: false; reason: string } = { ok: false, reason: 'unavailable' };
 let recordResult:
   | { ok: true; session: { id: string; revision: number; amount: string } }
   | { ok: false; reason: string } = { ok: false, reason: 'conflict' };
 mock.module('../src/library/progress-server', () => ({
-  startProgressSession: async () => ({ ok: false, reason: 'unavailable' }),
+  startProgressSession: async () => startResult,
   recordProgressSession: async (input: { data: unknown; headers: unknown }) => {
     recordCalls.push(input);
     return recordResult;
@@ -158,7 +159,7 @@ type RawSession = {
   unit: string;
   amount: string | null;
   total: string | null;
-  state: 'active';
+  state: 'active' | 'completed';
   revision: number;
   presentation?: typeof knownPresentation;
 };
@@ -397,6 +398,16 @@ test('zero amount, absent amount and absent session are distinct single-manual m
   if (absent.state === 'ready' && absent.progress.meaning === 'absent') expect(absent.progress.session).toBeUndefined();
 });
 
+test('a completed occurrence never receives the next reread value', async () => {
+  const completed = { ...sessionRow(1, SERIES, '24', 'chapter'), state: 'completed' as const };
+  const reread = sessionRow(2, SERIES, '0', 'chapter');
+  const loaded = await visit(MANGA_SERIES_TYPE, SERIES, populate(0, { copies: [], sessions: [completed, reread] }));
+  expect(loaded.state === 'ready' && loaded.progress).toMatchObject({ meaning: 'zero', session: { id: reread.id } });
+  const finished = await visit(MANGA_SERIES_TYPE, SERIES, populate(0, { copies: [], sessions: [completed] }));
+  expect(finished.state === 'ready' && finished.progress).toMatchObject({ meaning: 'absent' });
+  expect(finished.state === 'ready' && 'session' in finished.progress).toBe(false);
+});
+
 test('unavailable retry keeps sender, credential, key and operands; conflict does not reuse that command', async () => {
   const operands = { sessionId: id(8), revision: 3, amount: '12', idempotencyKey: id(7) };
   let attempts = 0;
@@ -520,7 +531,45 @@ test('conflict keeps the draft and the next save uses a new key', async () => {
     sessionId: id(8),
     revision: 3,
     amount: '12',
+    measureId: 'chapter',
   });
+  await act(async () => {
+    [...host.querySelectorAll('button')]
+      .find((button) => button.textContent === m.library_configured_clear_progress())!
+      .click();
+  });
+  expect((recordCalls[2] as { data: unknown }).data).toMatchObject({ measureId: 'chapter', clear: true });
+  startResult = { ok: true, id: id(10) };
+  await act(async () =>
+    root.render(
+      createElement(ConfiguredProgressPanel, {
+        key: 'reread',
+        subjectId: SERIES,
+        type: MANGA_SERIES_TYPE,
+        locale: 'en',
+        release,
+        progress: { meaning: 'absent', measure: progress.measure, rules: progress.rules },
+        credential: 'csrf',
+        current: () => true,
+        onAcknowledged() {},
+      }),
+    ),
+  );
+  const input = host.querySelector('input')!;
+  const propsKey = Object.keys(input).find((key) => key.startsWith('__reactProps$'))!;
+  await act(async () => Reflect.get(input, propsKey).onChange({ currentTarget: { value: '3' } }));
+  await act(async () => {
+    [...host.querySelectorAll('button')]
+      .find((button) => button.textContent === m.library_configured_start_progress())!
+      .click();
+  });
+  expect((recordCalls[3] as { data: unknown }).data).toMatchObject({
+    sessionId: id(10),
+    revision: 1,
+    measureId: 'chapter',
+    amount: '3',
+  });
+  startResult = { ok: false, reason: 'unavailable' };
   await act(async () => {
     root.unmount();
   });

@@ -131,7 +131,9 @@ function presentProgress(
 ): VisitProgress {
   const measure = capabilities.measure;
   if (!measure) return { meaning: 'unsupported' };
-  const session = sessions.find((item) => item.mode === measure.mode && item.unit === measure.unit.id);
+  const session = sessions.find(
+    (item) => item.state === 'active' && item.mode === measure.mode && item.unit === measure.unit.id,
+  );
   if (!session) return { meaning: 'absent', measure, rules: capabilities.measureRules };
   if (session.meaning !== 'known') return { meaning: 'historical', measure, rules: capabilities.measureRules, session };
   if (session.amount === null) return { meaning: 'absent', measure, rules: capabilities.measureRules, session };

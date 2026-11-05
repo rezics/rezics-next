@@ -21,6 +21,7 @@ import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, 
 import {
   admitHistory,
   historyPaths,
+  historySearch,
   type HistoryPaths,
   type HistorySection,
   type HistoryTarget,
@@ -70,6 +71,7 @@ import {
   recordCanonicalEpisodes,
 } from './episode-checklist/server';
 import { progressSessionAddress } from './progress-address';
+import { progressHistoryRecord } from './progress-history-restore';
 
 const buttonClass =
   'inline-flex min-h-[44px] min-w-[44px] items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -709,9 +711,7 @@ function ProgressHistoryLink({
       params={{ id }}
       search={(previous) => {
         if (!target || !navigation) return search;
-        const next = { ...previous };
-        delete next[target.section];
-        return { ...next, ...(target.cursor === undefined ? {} : { [target.section]: target.cursor }) };
+        return historySearch(previous, search);
       }}
       state={(previous) => previous}
       hash={(previous) => previous}
@@ -732,16 +732,14 @@ function ProgressHistoryLink({
         ) {
           event.preventDefault();
           const previous = router.state.location.search;
-          const next = { ...previous };
-          delete next[target.section];
-          const search = { ...next, ...(target.cursor === undefined ? {} : { [target.section]: target.cursor }) };
-          const destination = { ...originating!.address, [target.section]: target.cursor };
+          const destination = { id, ...search };
+          const nextSearch = historySearch(previous, search);
           const cancel = navigation.stage(target, destination, event.detail === 0);
           void router
             .navigate({
               to: '/library/progress/$id',
               params: { id },
-              search,
+              search: nextSearch,
               state: (previous) => previous,
               hash: (previous) => previous,
             })
@@ -1418,7 +1416,7 @@ function SessionEditor({
         ) : null}
         {pendingCommand ? <p role="status">{m.library_journal_retry_identity()}</p> : null}
         {session.state !== 'active' ? <p className="text-muted-foreground">{stateLabel(session.state)}</p> : null}
-        {offered && session.state === 'active' && sessionHasIndependentMeasures(session) ? (
+        {session.state === 'active' && sessionHasIndependentMeasures(session) ? (
           <IndependentMeasuresVisit
             session={session}
             credential={() => commandGuards.record?.headers() ?? csrfHeaders()}
@@ -1777,7 +1775,9 @@ function SessionEditor({
       {alert && !editing ? <p role="alert">{alert}</p> : null}
       {session.state === 'active' ? (
         <div className="flex items-center gap-2">
-          {offered ? <Button onClick={openUpdate}>{m.library_progress_update()}</Button> : null}
+          {offered || sessionHasIndependentMeasures(session) ? (
+            <Button onClick={openUpdate}>{m.library_progress_update()}</Button>
+          ) : null}
           {completeAllowed || abandonAllowed ? (
             <Menu
               title={m.library_collection_actions()}
@@ -1896,19 +1896,47 @@ function SessionEditor({
         </h2>
         {session.changes.length ? (
           <ol key={JSON.stringify([session.id, positions.changes])} className="space-y-1">
-            {session.changes.map((change, occurrence) => (
-              <ContentItem
-                key={change.id}
-                headingLevel={3}
-                title={
-                  change.action
-                    ? stateLabel(change.action === 'complete' ? 'completed' : 'abandoned')
-                    : m.library_progress_change_recorded()
-                }
-                metadata={<RelativeTime value={change.createdAt} />}
-                preview={progressHistoryPreview(change, occurrence + 1)}
-              />
-            ))}
+            {session.changes.map((change, occurrence) => {
+              const record = progressHistoryRecord(session, change);
+              return (
+                <ContentItem
+                  key={change.id}
+                  headingLevel={3}
+                  title={
+                    change.action
+                      ? stateLabel(change.action === 'complete' ? 'completed' : 'abandoned')
+                      : m.library_progress_change_recorded()
+                  }
+                  metadata={<RelativeTime value={change.createdAt} />}
+                  preview={
+                    <>
+                      {progressHistoryPreview(change, occurrence + 1)}
+                      {record ? (
+                        <Exposure operation="progress_session.record">
+                          <Button
+                            variant="outline"
+                            disabled={busy || pendingCommand}
+                            onClick={() =>
+                              stage({
+                                kind: 'record',
+                                data: {
+                                  sessionId: session.id,
+                                  revision: session.revision,
+                                  idempotencyKey: key,
+                                  ...record,
+                                },
+                              })
+                            }
+                          >
+                            {m.library_progress_review()}
+                          </Button>
+                        </Exposure>
+                      ) : null}
+                    </>
+                  }
+                />
+              );
+            })}
           </ol>
         ) : (
           <p className="text-muted-foreground">
