@@ -1,10 +1,24 @@
 import { defaultPolicy } from './policy.ts';
-import { closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync, readSync } from 'node:fs';
+import {
+  closeSync,
+  constants,
+  copyFileSync,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { hostname } from 'node:os';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 
-const CHECK_LOG_PATH_PREFIX = '.temp/goal/checks/worker-check-';
 const CHECK_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Each finished check's whole log is copied here, in the worktree, where the worker can read it. */
+const FULL_LOG_DIRECTORY = '.temp/check-logs';
 
 export type WorkerCheckObservationTask = {
   worktree: string;
@@ -34,12 +48,14 @@ function checkCommand(value: Record<string, unknown>, policy: WorkerCheckObserva
   return 'unknown (terminal record did not include argv)';
 }
 
+type OwnedLog = { path: string; original: string } | { path: null; original: string; reason: string };
+
 function ownedTerminalLogPath(
   task: WorkerCheckObservationTask,
   id: string,
   value: Record<string, unknown>,
   policy: WorkerCheckObservationPolicy,
-): { path: string; original: string } | { path: null; original: string; reason: string } {
+): OwnedLog {
   const raw = value.log ?? value.logPath ?? value.log_path;
   const original =
     typeof raw === 'string'
@@ -64,17 +80,11 @@ function ownedTerminalLogPath(
   if (typeof raw !== 'string' || !raw.length) return unknown('terminal record did not include an original log path');
 
   const normalized = raw.replaceAll('\\', '/');
-  if (
-    isAbsolute(raw) ||
-    normalized.split('/').some((part) => part === '..' || part === '.') ||
-    normalized !== `${CHECK_LOG_PATH_PREFIX}${id}.log`
-  )
-    return unknown('log path is outside this UUID-owned check log prefix');
-  const path = resolve(task.worktree, raw);
+  // The runner names a physical run's log after its check id, so a record can name only its own check's log.
+  const ownName = new RegExp(`^\\.temp/goal/checks/worker-check-${id}(?:-[^/]+)?\\.log$`);
+  if (!ownName.test(normalized)) return unknown('log path is outside this UUID-owned check log prefix');
+  const path = resolve(task.worktree, normalized);
   const checksDirectory = resolve(task.worktree, '.temp/goal/checks');
-  const relativePath = relative(resolve(task.worktree), path).replaceAll('\\', '/');
-  if (dirname(path) !== checksDirectory || relativePath !== normalized || basename(path) !== `worker-check-${id}.log`)
-    return unknown('log path is nested or does not match this check UUID');
 
   try {
     const components = [
@@ -97,17 +107,16 @@ function ownedTerminalLogPath(
 }
 
 function terminalCheckFailureEvidence(
-  task: WorkerCheckObservationTask,
   id: string,
   value: Record<string, unknown>,
   status: unknown,
+  log: OwnedLog,
   policy: WorkerCheckObservationPolicy,
 ): string {
   const command = checkCommand(value, policy);
   const exitValue =
     value.exitStatus ?? value.exit_status ?? value.exitCode ?? value.exit_code ?? value.exit ?? value.code;
   const exitCode = Number(exitValue);
-  const log = ownedTerminalLogPath(task, id, value, policy);
   const header = `check ${id} failure evidence: command ${command}; exit status ${singleLine(status, policy.checkStatusCharacters)}; evidence path ${log.original}`;
   if (!Number.isSafeInteger(exitCode) || exitCode === 0 || exitCode !== Number(status))
     return `${header}; excerpt unknown (terminal record exit status is missing or inconsistent).`;
@@ -149,6 +158,20 @@ function terminalCheckFailureEvidence(
   }
 }
 
+/** Copies a finished check's whole log into the worktree and returns the worktree-relative copy. */
+function copyFullLog(worktree: string, id: string, source: string): string {
+  const relativePath = `${FULL_LOG_DIRECTORY}/${id}.log`;
+  const destination = join(worktree, relativePath);
+  mkdirSync(dirname(destination), { recursive: true });
+  const size = statSync(source).size;
+  const existing = lstatSync(destination, { throwIfNoEntry: false });
+  if (!existing?.isFile() || existing.size !== size) {
+    rmSync(destination, { force: true });
+    copyFileSync(source, destination);
+  }
+  return relativePath;
+}
+
 function processAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -172,6 +195,7 @@ export function observeWorkerChecks(
   const directory = join(task.worktree, '.temp/goal/checks');
   const details: string[] = [];
   let settledChecks = 0;
+  let failed = false;
   for (const id of checks) {
     const resultPath = join(directory, 'results', `${id}.json`);
     if (!existsSync(resultPath)) {
@@ -246,16 +270,24 @@ export function observeWorkerChecks(
             ? 'passed'
             : 'check failed without a summary'
           : 'summary unavailable');
-      const log = value.logPath ?? value.log_path ?? value.log ?? 'unknown (result record did not name a log path)';
+      const reported =
+        value.logPath ?? value.log_path ?? value.log ?? 'unknown (result record did not name a log path)';
+      const owned = ownedTerminalLogPath(task, id, value, policy);
+      const fullLog =
+        owned.path === null
+          ? `full log unavailable (${owned.reason})`
+          : `full log ${copyFullLog(task.worktree, id, owned.path)}`;
       details.push(
         `check ${id}: exit status ${String(status)}; ${String(summary)
           .replace(/[\r\n]+/g, ' ')
-          .slice(0, policy.checkSummaryCharacters)}; log path ${String(log)
+          .slice(0, policy.checkSummaryCharacters)}; log path ${String(reported)
           .replace(/[\r\n]+/g, ' ')
-          .slice(0, policy.summaryCharacters)}`,
+          .slice(0, policy.summaryCharacters)}; ${fullLog}`,
       );
-      if (Number.isFinite(numericStatus) && numericStatus !== 0)
-        details.push(terminalCheckFailureEvidence(task, id, value, status, policy));
+      if (Number.isFinite(numericStatus) && numericStatus !== 0) {
+        failed = true;
+        details.push(terminalCheckFailureEvidence(id, value, status, owned, policy));
+      }
       settledChecks += 1;
     } catch (error) {
       details.push(
@@ -264,15 +296,18 @@ export function observeWorkerChecks(
       settledChecks += 1;
     }
   }
+  const instructions = failed
+    ? "\nRead each failed check's full log named above in this worktree, fix the cause, and rerun the check before you report."
+    : '';
   return details.some((line) => line.startsWith('check ') && line.includes('run vanished'))
     ? {
         status: 'terminal',
-        resumeText: `The checks completed or failed to run. Resume this same session with their results:\n${details.join('\n')}`,
+        resumeText: `The checks completed or failed to run. Resume this same session with their results:\n${details.join('\n')}${instructions}`,
       }
     : settledChecks === checks.length
       ? {
           status: 'terminal',
-          resumeText: `All checks have finished. Resume this same session with their results:\n${details.join('\n')}`,
+          resumeText: `All checks have finished. Resume this same session with their results:\n${details.join('\n')}${instructions}`,
         }
       : { status: 'pending' };
 }

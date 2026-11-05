@@ -37,6 +37,8 @@ const HOUR = 60 * 60 * 1000;
 export const temporaryEntryRules = [
   { pattern: /^\.[a-f0-9]+-\d+\.hm$/, maxAgeMs: HOUR },
   { pattern: /^node-compile-cache$/, maxAgeMs: 24 * HOUR },
+  // A worker's temporary directory, named by its task (goal workerTemporaryDirectory), left behind by a crash.
+  { pattern: /^rz-[0-9a-f]{8}$/, maxAgeMs: 24 * HOUR },
   {
     pattern:
       /^(?:goal-(?:rollout|gate-env|ws|mcp|db|capacity-critical|claude-usage|idle-probe)-|capacity-queue-|watch-or-poll-|claude-config-|rezics-(?:producer-lifecycle|web-check|web-worker|auth-worker)-)/,
