@@ -211,7 +211,7 @@ identity remains withheld. This research does not implement or promise the pendi
 Native acceptance belongs to `services/kernel/test/semantic/merges.test.ts`, supplemented by
 `bulk.test.ts`, `bulk-provenance.test.ts`, `sql-placement-merges.test.ts` and account-agent native suites.
 Use their actual `createPool`, `createKernel`, `createRealAccess` grants/bearers, `bootstrapRelease`, HTTP helpers
-and ordinary `batchCommand` / `/v1/subjects:batch` creates and proposals; use `decideCandidate` and
+and ordinary `batchCommand` / `/v1/subjects:batchWrite` creates and proposals; use `decideCandidate` and
 `adoptCandidates` (existing accept/adopt HTTP bindings) to establish selected identifier changes. These are real
 migrated-PostgreSQL fixtures. `updateSubjectIdentity` establishes type changes; moderation/disclosure APIs establish
 security ABA. Claim deletion is erasure maintenance, not an ordinary rebind; test it separately through that owner.
