@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode, useLayoutEffect, type ReactNode, type ComponentProps } from 'react';
+import { act, StrictMode, useLayoutEffect, useRef, type ReactNode, type ComponentProps } from 'react';
 import * as start from '../.storybook/react-start';
 import type { CopiesCurrentRead, CopyDetailCurrentRead, CopySubjectCurrentRead } from '../src/library/copies-actions';
 import type { CopyItem, CopyWriteResult, CopyRemoveResult } from '../src/library/copies-read';
@@ -131,12 +131,14 @@ mock.module('@rezics/ui/responsive-dialog', () => ({
     onOpenChangeComplete?: (open: boolean) => void;
     finalFocus?: () => HTMLElement | false;
   }) => {
+    const wasOpen = useRef(open);
     useLayoutEffect(() => {
-      if (!open) {
+      if (wasOpen.current && !open) {
         const target = finalFocus?.();
         if (target && target.isConnected) target.focus();
         onOpenChangeComplete?.(false);
       }
+      wasOpen.current = open;
     }, [open]);
     return open ? <div role="dialog">{children}</div> : null;
   },
@@ -617,7 +619,7 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
     await clickLink('Return to inventory');
     expect(routeReads.at(-1)).toMatchObject({ subjectId: id(10), cursor: 'c1' });
     expect(host.textContent).toContain('Fresh return');
-    expect(listReads).toHaveLength(6);
+    expect(listReads.map((call) => call.data.cursor)).toEqual(['c1', 'c2', 'c2', 'c1', undefined, 'c1']);
 
     await clickLink(m.library_copy_more());
     expect(listReads.at(-1)?.data.cursor).toBe('c2');
