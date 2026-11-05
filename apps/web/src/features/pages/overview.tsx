@@ -1557,23 +1557,22 @@ function SummaryContent({
     choiceSet.kind === 'ready' && selectedChoice && value.renderCandidateValue ? (
       <div id="subject-summary-evidence" tabIndex={-1} className="scroll-mt-32 space-y-2 focus-visible:outline-2">
         <h3 className="font-medium">{m.subject_synopsis_evidence({}, options)}</h3>
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.subject_synopsis_sources_unsupported({}, options)}
-        </p>
-        {sourceReturn && (
+        {sourceReturn && synopsisVisitHref(
+          `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/sources${value.realm ? `?${new URLSearchParams({ realm: value.realm })}` : ''}`,
+          sourceReturn, value.locale,
+        ) && (
           <p className="text-sm">
-            <a
-              className={`${linkClass} ${linkColor}`}
-              href={withSubjectVisitReturn(
-                `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/sources${value.realm ? `?${new URLSearchParams({ realm: value.realm })}` : ''}`,
-                sourceReturn,
-                value.locale,
-              )}
-            >
-              {m.subject_synopsis_general_sources({}, options)}
-            </a>
+            <a className={`${linkClass} ${linkColor}`} href={synopsisVisitHref(
+              `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/sources${value.realm ? `?${new URLSearchParams({ realm: value.realm })}` : ''}`,
+              sourceReturn, value.locale,
+            )}>{m.subject_synopsis_evidence({}, options)}</a>
           </p>
         )}
+        <p className="text-sm">
+          <a className={`${linkClass} ${linkColor}`} href={`${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/sources${value.realm ? `?${new URLSearchParams({ realm: value.realm })}` : ''}`}>
+            {m.subject_synopsis_general_sources({}, options)}
+          </a>
+        </p>
         {selectedChoice.statement.qualifiers.filter((part) => part.property.id !== 'rezics:spoilerLevel').length >
           0 && (
           <dl className="min-w-0 space-y-2 text-sm text-muted-foreground">
