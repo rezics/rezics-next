@@ -205,12 +205,7 @@ async function mount() {
       if (outcome instanceof Error) work.reject(outcome);
       else work.resolve(outcome);
     });
-  const refresh = () =>
-    flush(() => {
-      void client.refetchQueries({
-        queryKey: collectionPublicationQuery(session as PublicationViewer, currentAddress).queryKey,
-      });
-    });
+  const refresh = () => click(m.library_collection_reload());
   return {
     host,
     m,
