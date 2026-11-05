@@ -361,9 +361,9 @@ test('strict visit and Subject-return bounds reject malformed, oversized, and re
   expect(parseConceptVisitDescriptor(`${encoded}!`)).toBeUndefined();
   expect(parseConceptVisitDescriptor('a'.repeat(8193))).toBeUndefined();
   expect(originatingConceptReturn(`/en/subjects/${work}/${'概'.repeat(800)}`, 'en')).toBeUndefined();
-  const address = `/en/subjects/${parent}/concepts?conceptVisit=${encoded}&returnTo=${encodeURIComponent(origin)}`;
+  const address = `/en/subjects/${parent}/parent-concept/concepts?conceptVisit=${encoded}&returnTo=${encodeURIComponent(origin)}`;
   expect(subjectVisitReturn(address, 'en')).toBe(address);
   expect(subjectVisitReturn(address + '&cursor=old-work-cursor', 'en')).toBeUndefined();
-  const recursive = `/en/subjects/${parent}/concepts?conceptVisit=${encoded}&returnTo=${encodeURIComponent(address)}`;
+  const recursive = `/en/subjects/${parent}/parent-concept/concepts?conceptVisit=${encoded}&returnTo=${encodeURIComponent(address)}`;
   expect(subjectVisitReturn(recursive, 'en')).toBeUndefined();
 });
