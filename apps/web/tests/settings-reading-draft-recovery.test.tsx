@@ -104,6 +104,20 @@ test('rejected choices survive failed and successful reads until explicit save o
   }
 });
 
+test('an explicit edit back to the old baseline survives conflict rebasing', async () => {
+  const fixture = readingFixture('conflict');
+  const editor = new ReadingDraftRecovery(fixture.initial, fixture.io, owner());
+  await editor.edit({ spoilerLevel: 1 });
+  expect(editor.snapshot().phase).toBe('conflict');
+  await editor.edit({ spoilerLevel: 0 });
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({
+    phase: 'review',
+    known: { spoilerLevel: 2, suitability: 'show', version: 1 },
+    draft: { spoilerLevel: 0, suitability: 'show' },
+  });
+});
+
 test('a narrowed current choice keeps the old draft local until every changed value is admitted', async () => {
   const fixture = readingFixture();
   let narrowed = false;
@@ -204,6 +218,41 @@ test('loading current values retains the exact uncertain original and later edit
   });
   expect(editor.snapshot().phase).toBe('saved');
   expect(readingNeedsNavigationDecision(editor.snapshot())).toBe(false);
+});
+
+test('a read Retry-After keeps its absolute deadline without blocking exact original replay', async () => {
+  const fixture = readingFixture('lost');
+  let reads = 0;
+  const io: ReadingIO = {
+    ...fixture.io,
+    read: async () => {
+      reads++;
+      if (reads === 1)
+        return {
+          signedIn: true,
+          state: 'unavailable',
+          failure: { status: 503, retryAfter: '60' },
+          securityHref: null,
+        };
+      return fixture.io.read();
+    },
+  };
+  const editor = new ReadingDraftRecovery(fixture.initial, io, owner());
+  await editor.edit({ spoilerLevel: 1 });
+  const original = editor.snapshot().pending;
+  await editor.reload();
+  const readDeadline = editor.snapshot().readRetryAt;
+  expect(readDeadline).toBeGreaterThan(Date.now());
+  await editor.retry();
+  expect(fixture.calls).toHaveLength(2);
+  expect(fixture.calls[1]).toBe(original);
+  expect(reads).toBe(1);
+  expect(editor.snapshot()).toMatchObject({
+    phase: 'failed',
+    pending: null,
+    readRetryAt: readDeadline,
+    confirmedReceipt: { spoilerLevel: 1, version: 1 },
+  });
 });
 
 test('a confirmed command keeps later edit-back and recovers a failed current read without replaying stale fields', async () => {

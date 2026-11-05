@@ -3,7 +3,16 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readingFixture } from '../src/kernel/fake/settings-preferences-reading';
 import recording from '../src/kernel/recorded/settings-preferences.json';
-import { readingMutation, readReading, sendReading, type ReadingValues } from '../src/settings/reading-preferences';
+import {
+  readingAdviceFor,
+  readingAdviceReady,
+  readingDefaults,
+  readingMutation,
+  readingReset,
+  readReading,
+  sendReading,
+  type ReadingValues,
+} from '../src/settings/reading-preferences';
 import { managedReadTimeout } from '../src/settings/managed-read-deadline';
 import type { ReadingIO } from '../src/settings/reading-preferences';
 import { DisplayPreferences } from '../src/settings/display-preferences';
@@ -25,6 +34,35 @@ const owner = () => ({
 const flushPromiseJobs = async () => {
   for (let index = 0; index < 8; index++) await Promise.resolve();
 };
+
+test('a successful Reading acknowledgement always requires a current native readback', async () => {
+  const fixture = readingFixture();
+  let reads = 0;
+  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
+  const result = await sendReading(
+    {
+      ...fixture.io,
+      read: async () => {
+        reads++;
+        return fixture.io.read();
+      },
+    },
+    input,
+    false,
+    latest,
+  );
+  expect(result).toMatchObject({ kind: 'confirmed', preferences: { spoilerLevel: 1, version: 1 } });
+  expect(reads).toBe(1);
+});
+
+test('native defaults remain readable when a singleton choice does not admit reset', () => {
+  const advice = readingAdviceFor({ spoilerLevel: 1, suitability: 'show' });
+  advice.reading.supported.suitability = ['show'];
+  const known = { spoilerLevel: 1 as const, suitability: 'show' as const, version: 4, advice };
+  expect(readingAdviceReady(advice)).toBe(true);
+  expect(readingDefaults(advice)).toEqual({ spoilerLevel: 0, suitability: 'blur' });
+  expect(readingReset(known)).toBeNull();
+});
 
 const withControlledTimeout = async (run: (expire: () => void, delay: () => number | undefined) => Promise<void>) => {
   const originalSetTimeout = globalThis.setTimeout;
