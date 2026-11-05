@@ -909,7 +909,12 @@ test('retired, replaced and expired visits discard pending delivery completion',
     const current = visit();
     const pending = Promise.withResolvers<boolean>();
     let clock = Date.now();
-    const journey = createExportJourney({ port: ready.port, visit: current, now: () => clock, deliver: () => pending.promise });
+    const journey = createExportJourney({
+      port: ready.port,
+      visit: current,
+      now: () => clock,
+      deliver: () => pending.promise,
+    });
     expect((await journey.capture()).hasArtifact).toBe(true);
     const pages = [...ready.pageCursors];
     const delivery = journey.download();
