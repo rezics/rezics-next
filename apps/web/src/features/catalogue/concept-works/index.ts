@@ -81,7 +81,7 @@ export function conceptWorksRequest(
     facets: {},
     condition,
     cursor: selection.cursor,
-    sort: selection.sort ?? 'name',
+    sort: selection.sort === 'rating' ? 'rating' : undefined,
     kinds: ['subject'],
     languages: [locale],
   };
