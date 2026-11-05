@@ -24,6 +24,7 @@ import {
 } from './reaction-request';
 import { Button } from '@rezics/ui/shadcn/button';
 import type { useSession } from '../session/query';
+import { browserObservation } from '../session';
 
 function reactionLabels(failed: string | null) {
   return {
@@ -158,8 +159,14 @@ export function observeReactionSession(client: QueryClient | undefined) {
     snapshot,
     healthy,
     serverSnapshot: () => 0,
-    subscribe: (notify: () => void) =>
-      client?.getQueryCache().subscribe((event) => {
+    subscribe: (notify: () => void) => {
+      if (!client) return () => {};
+      const observation = browserObservation(client);
+      let active = true;
+      const publish = () => {
+        if (active) notify();
+      };
+      const stop = observation.subscribeCache((event) => {
         if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session') return;
         if (
           event.type !== 'added' &&
@@ -173,8 +180,13 @@ export function observeReactionSession(client: QueryClient | undefined) {
         if (next === previous && !(event.type === 'updated' && event.action.type === 'success')) return;
         previous = next;
         revision++;
-        notify();
-      }) ?? (() => {}),
+        observation.publish(publish);
+      });
+      return () => {
+        active = false;
+        stop();
+      };
+    },
   };
 }
 

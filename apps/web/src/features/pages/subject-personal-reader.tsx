@@ -130,8 +130,12 @@ class SubjectPersonalReaderRegistry {
 
   private notify() {
     this.version++;
-    for (const listener of this.listeners) listener();
+    this.observation.publish(this.publish);
   }
+
+  private publish = () => {
+    for (const listener of this.listeners) listener();
+  };
 
   private onCacheEvent = (event: BrowserCacheEvent) => {
     if (event.query.queryKey.length === 1 && event.query.queryKey[0] === 'session') {
