@@ -10,6 +10,8 @@ import { COLLECTION_PREVIEW_PAGE_LIMIT, type CollectionPreview } from './collect
 
 type CollectionRead = NonNullable<Awaited<ReturnType<KernelClient['collections']['get']>>['data']>;
 type RawCollection = CollectionRead['collections'][number];
+type SavedQueryCapability = 'available' | 'unavailable';
+type CollectionReadWithSavedQueryCapability = CollectionRead & { savedQueryCapability?: unknown };
 
 /** Page presentation boundary; absent native preview data is never a ready empty preview. */
 export type MineCollectionPreview =
@@ -142,14 +144,18 @@ export async function loadMineCollectionsForOwner(
   return {
     signedIn: true,
     collections,
-    savedQueryCapability: dynamicCollectionsAvailable(collections) ? 'available' : 'unavailable',
+    savedQueryCapability: savedQueryCapability(page) ?? 'unavailable',
     next: page.next,
   };
 }
 
-/** Dynamic support is proven by an admitted owner DTO, never inferred from an empty page. */
-function dynamicCollectionsAvailable(collections: readonly MineCollection[]): boolean {
-  return collections.some((collection) => collection.membershipKind === 'dynamic');
+/** Native capability evidence is independent of whether this bounded page contains a dynamic Collection. */
+function savedQueryCapability(page: CollectionRead): SavedQueryCapability | undefined {
+  const data = page as CollectionReadWithSavedQueryCapability;
+  if (!Object.hasOwn(data, 'savedQueryCapability')) return undefined;
+  if (data.savedQueryCapability === 'available' || data.savedQueryCapability === 'unavailable')
+    return data.savedQueryCapability;
+  throw new TypeError('Invalid native saved-query capability evidence');
 }
 
 /** Reads one signed-in person's collection page, including private and unlisted records. */
@@ -191,14 +197,13 @@ export async function loadMineCollectionsPage(
     if (!navigationPage) navigationPage = await readPage(client, accountId, authorization);
     const collections = page.collections.map(present);
     const navigationCollections = navigationPage.collections.map(present);
+    const capability = savedQueryCapability(page) ?? savedQueryCapability(navigationPage);
     return {
       signedIn: true,
       state: 'loaded',
       collections,
       navigationCollections,
-      savedQueryCapability: dynamicCollectionsAvailable([...collections, ...navigationCollections])
-        ? 'available'
-        : 'unavailable',
+      savedQueryCapability: capability ?? 'unavailable',
       next: page.next,
       ...(cursorReset ? { cursorReset: true } : {}),
     };

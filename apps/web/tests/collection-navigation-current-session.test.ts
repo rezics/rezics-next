@@ -113,13 +113,7 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
   let stale = false;
   let collectionStatus = 200;
   let pinsStatus = 200;
-  let paths: Record<string, unknown> = {
-    '/v1/libraryPins': { get: { operationId: 'library_pin.list' } },
-    '/v1/libraryPins/{collectionId}': {
-      put: { operationId: 'library_pin.put' },
-      delete: { operationId: 'library_pin.delete' },
-    },
-  };
+  let savedQueryCapability: 'available' | 'unavailable' = 'available';
   const collection = {
     id: 'own-private',
     title: 'Owner collection',
@@ -137,6 +131,18 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
         cover: null,
       },
     })),
+  };
+  let collectionInventory = [
+    collection,
+    { ...collection, id: 'pending', previewStatus: 'pending' as const, previewMembers: [] },
+    { ...collection, id: 'empty', previewMembers: [] },
+  ];
+  let paths: Record<string, unknown> = {
+    '/v1/libraryPins': { get: { operationId: 'library_pin.list' } },
+    '/v1/libraryPins/{collectionId}': {
+      put: { operationId: 'library_pin.put' },
+      delete: { operationId: 'library_pin.delete' },
+    },
   };
   const pins = [
     { collectionId: collection.id, target: { id: collection.id, title: collection.title } },
@@ -159,12 +165,9 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
           status: collectionStatus,
         });
       return Response.json({
-        collections: [
-          collection,
-          { ...collection, id: 'pending', previewStatus: 'pending', previewMembers: [] },
-          { ...collection, id: 'empty', previewMembers: [] },
-        ],
+        collections: collectionInventory,
         next,
+        savedQueryCapability,
       });
     }
     throw new Error(`Unexpected private read: ${call.method} ${url}`);
@@ -181,6 +184,7 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
     ]);
     const previewStart = calls.length;
     const previews = await readMineCollectionsPage({ data: { layout: 'previews', cursor } });
+    expect(previews.savedQueryCapability).toBe('available');
     expect(queries(previewStart)).toEqual([
       { view: 'FULL', limit: '20', preview: '3', curatorAccountId: 'owner', cursor },
     ]);
@@ -193,6 +197,14 @@ test('healthy owner, pins and preview navigation keep bounded current reads, res
       { state: 'preparing' },
       { state: 'loaded', members: [], emptyConfirmed: true },
     ]);
+    collectionInventory = [];
+    const emptyInventory = await loadMineCollectionsPage(client, currentRequest, sessionEnv, { layout: 'rows' });
+    expect(emptyInventory).toMatchObject({
+      state: 'loaded',
+      collections: [],
+      savedQueryCapability: 'available',
+    });
+    collectionInventory = [collection];
     let start = calls.length;
     expect(
       await loadMineCollectionsPage(client, currentRequest, sessionEnv, { cursor: 'stale', layout: 'previews' }),
