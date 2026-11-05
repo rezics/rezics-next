@@ -18,6 +18,8 @@ export type ThreadWatchProps = {
   viewerId?: string | undefined;
   sessionStamp: string;
   admitted: boolean;
+  canStart?: () => boolean;
+  allowDiscard?: boolean;
   returnTo: string;
   /** A current native card can seed this visit without a per-thread status request. */
   initialWatching?: boolean;
@@ -74,7 +76,7 @@ function binding(props: ThreadWatchProps, client: QueryClient | undefined): Bind
   };
 }
 
-function sameBinding(left: Binding, right: Binding): boolean {
+function sameBinding(left: Binding, right: Binding, retainCommand = false): boolean {
   return (
     left.client === right.client &&
     left.sessionData === right.sessionData &&
@@ -86,8 +88,8 @@ function sameBinding(left: Binding, right: Binding): boolean {
     left.props.sessionKnown === right.props.sessionKnown &&
     left.props.sessionStamp === right.props.sessionStamp &&
     left.props.admitted === right.props.admitted &&
-    left.props.initialWatching === right.props.initialWatching &&
-    left.props.adviceState === right.props.adviceState &&
+    (retainCommand || (left.props.initialWatching === right.props.initialWatching &&
+    left.props.adviceState === right.props.adviceState)) &&
     left.props.observation === right.props.observation &&
     left.props.readAuthority === right.props.readAuthority
   );
@@ -151,7 +153,7 @@ export class ThreadWatchVisit {
     return this.replacement;
   }
   matches(value: Binding) {
-    return sameBinding(this.binding, value);
+    return sameBinding(this.binding, value, !!this.view.command);
   }
   snapshot = () => this.view;
   subscribe = (listener: () => void) => {
@@ -184,8 +186,8 @@ export class ThreadWatchVisit {
     const next = this.latest();
     const observed = binding(this.binding.props, this.binding.client);
     if (
-      !sameBinding(this.binding, next) ||
-      !sameBinding(this.binding, observed) ||
+      !this.matches(next) ||
+      !this.matches(observed) ||
       !(this.binding.props.isCurrent?.() ?? true)
     ) {
       this.retire();
@@ -275,12 +277,12 @@ export class ThreadWatchVisit {
   canBegin = () => {
     const page = this.binding.props.observation;
     return (
-      !page ||
+      (this.latest().props.canStart?.() ?? true) && (!page ||
       threadPageOperation(
         page,
         { kind: 'thread', id: this.owner.threadId },
         this.view.watching ? 'thread.unwatch' : 'thread.watch',
-      ) === 'available'
+      ) === 'available')
     );
   };
 
@@ -300,6 +302,12 @@ export class ThreadWatchVisit {
   retry = () => {
     if (!this.current() || this.active || !this.view.command) return;
     void this.send(this.view.command);
+  };
+
+  discard = () => {
+    if (!this.current() || this.active || !this.view.command) return;
+    this.publish({ phase: 'read-failed' });
+    void this.read();
   };
 
   refreshAdvice = async () => {

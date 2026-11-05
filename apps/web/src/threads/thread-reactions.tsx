@@ -103,6 +103,7 @@ export type ThreadReactionsProps = {
   returnTo: string;
   onMutation?: (kind: ReactionKind | null) => Promise<void>;
   personalReady?: boolean;
+  canStart?: boolean;
   allowedKinds?: readonly ReactionKind[];
   /** Home can deliberately forget an uncertain command, then refresh its source. */
   allowDiscard?: boolean;
@@ -270,6 +271,7 @@ function ReactionCaller({
   sourceWatermark,
   signInAllowed,
   allowedKinds,
+  canStart = true,
   allowDiscard,
   commandRecovery,
   requireWatermark,
@@ -466,7 +468,7 @@ function ReactionCaller({
   }
 
   async function onChange(kind: ReactionKind | null) {
-    if (!current() || discarded || generation !== epoch.current || unresolved.current) return;
+    if (!canStart || !current() || discarded || generation !== epoch.current || unresolved.current) return;
     if (kind !== null && allowedKinds && !allowedKinds.includes(kind)) return;
     const commandId = crypto.randomUUID();
     const focus = keyboardFocus.current;
@@ -565,7 +567,7 @@ function ReactionCaller({
       <Reactions
         key={generation}
         counts={resolved?.snapshot.counts ?? counts}
-        disabled={disabled || discarded || recovery !== null || recovering}
+        disabled={disabled || !canStart || discarded || recovery !== null || recovering}
         {...(allowedKinds ? { allowedKinds } : {})}
         {...(target.kind === 'subject'
           ? {
