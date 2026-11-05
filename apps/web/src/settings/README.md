@@ -89,7 +89,7 @@ deliberate read recovery only, then review current native values and later local
 
 **Decision:** Native preference responses accept additive envelope fields while the consumed catalogue and action records remain closed. Edit and reset advice may be supplied independently. Form recovery retains the complete merge patch, including per-kind defaults, and requires current advice for the whole operation. An uncertain retry keeps its original version and key; acknowledgement followed by a failed current read offers only Reload. Focused transport, editor and form regressions pin these cases; seeded browser/native acceptance follows integration.
 
-**Decision:** Recovered drafts project only retained deliberate choices onto adopted native optional values; acknowledging a first send consumes its intent so only later edits can enter a reviewed patch.
+**Decision:** Recovered drafts project only retained deliberate choices onto adopted native optional values; acknowledging a first send consumes its intent so only later edits can enter a reviewed patch. A failed read after a Save or Restore receipt permits Reload, never another replay of that consumed command.
 
 **Decision:** Each notification Save and current GET uses the existing ten-second managed deadline independently. A Save timeout
 leaves its immutable original uncertain; a timed-out GET withdraws current advice and permits deliberate read recovery. Late

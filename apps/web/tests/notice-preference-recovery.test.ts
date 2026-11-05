@@ -8,6 +8,7 @@ import {
   changeNotifications,
   changePreferences,
   loadSettingsPage,
+  withShelfAdvice,
   type NotificationPreferences,
 } from '../src/settings/preferences';
 import { readingMutation, sendReading } from '../src/settings/reading-preferences';
@@ -54,6 +55,10 @@ function clientWith(fetcher: (request: Request) => Promise<Response> | Response)
     fetch: (async (input, init) => fetcher(new Request(input, init))) as typeof fetch,
   });
 }
+function preferenceEnvelope(notifications: NotificationPreferences, version: number) {
+  const { advice, ...values } = withShelfAdvice({ spoilerLevel: 1, suitability: 'blur', shelf: {}, version });
+  return { ...values, ...advice, notifications, page: settingsPreferencePage(notifications, version) };
+}
 function preferenceJourney() {
   let current = { notifications: { ...notifications }, version: 7 };
   let receipt = current;
@@ -69,12 +74,7 @@ function preferenceJourney() {
     if (request.method === 'GET')
       return unavailableRead
         ? Response.json({ code: 'dependency_unavailable', retryable: true }, { status: 503 })
-        : Response.json({
-            spoilerLevel: 1,
-            suitability: 'blur',
-            ...current,
-            page: settingsPreferencePage(current.notifications, current.version),
-          });
+        : Response.json(preferenceEnvelope(current.notifications, current.version));
     expect(request.headers.get('content-type')).toContain('application/merge-patch+json');
     const change = JSON.parse(body) as { expectedVersion: number; notifications: NotificationPreferences | null };
     const original = calls.find((call) => call.method === 'PATCH');
@@ -84,12 +84,7 @@ function preferenceJourney() {
       original.key === request.headers.get('idempotency-key')
     ) {
       expect(body).toBe(original.body);
-      return Response.json({
-        spoilerLevel: 1,
-        suitability: 'blur',
-        ...receipt,
-        page: settingsPreferencePage(receipt.notifications, receipt.version),
-      });
+      return Response.json(preferenceEnvelope(receipt.notifications, receipt.version));
     }
     if (change.expectedVersion !== current.version)
       return Response.json(
@@ -106,12 +101,7 @@ function preferenceJourney() {
       lose = false;
       return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
     }
-    return Response.json({
-      spoilerLevel: 1,
-      suitability: 'blur',
-      ...current,
-      page: settingsPreferencePage(current.notifications, current.version),
-    });
+    return Response.json(preferenceEnvelope(current.notifications, current.version));
   });
   const editor = new NotificationEditor(initial, {
     save: (change) => changeNotifications(client, owner.request('POST'), owner.env, change),
@@ -235,7 +225,7 @@ test('Closed, conflict, unknown-save and actual explicit readiness states preser
   await editor.retry();
   expect(editor.snapshot()).toMatchObject({
     phase: 'uncertain',
-    reason: 'unavailable',
+    commandReason: 'unavailable',
     known: { notifications, version: 7 },
     draft: { reply: false, mention: false },
   });
@@ -315,7 +305,7 @@ test('a refused Reading CSRF request remains forbidden without reaching the nati
   expect(calls).toBe(0);
 });
 
-test('closed or unavailable recovery reads retain the original notification command, confirmed fields and later draft', async () => {
+test('closed or unavailable recovery reads consume the confirmed command and retain its receipt and later draft', async () => {
   for (const [status, code, reason] of [
     [403, 'platform_closed', 'closed'],
     [503, 'deadline_exceeded', 'unavailable'],
@@ -328,13 +318,7 @@ test('closed or unavailable recovery reads retain the original notification comm
         ? Response.json({ code, retryable: status === 503, request_id: 'readback-request' }, { status })
         : calls.length === 1
           ? Response.json({ code: 'deadline_exceeded' }, { status: 503 })
-          : Response.json({
-              spoilerLevel: 2,
-              suitability: 'show',
-              version: 8,
-              notifications: { reply: false, mention: true },
-              page: settingsPreferencePage({ reply: false, mention: true }, 8),
-            });
+          : Response.json(preferenceEnvelope({ reply: false, mention: true }, 8));
     });
     const editor = new NotificationEditor(initial, {
       save: (input) => changeNotifications(client, owner.request('POST'), owner.env, input),
@@ -347,13 +331,16 @@ test('closed or unavailable recovery reads retain the original notification comm
     expect(calls.map(({ method }) => method)).toEqual(['PATCH', 'PATCH', 'GET']);
     expect(calls[1]).toEqual(calls[0]);
     expect(editor.snapshot()).toMatchObject({
-      phase: 'uncertain',
-      reason,
+      phase: 'failed',
+      readReason: reason,
       known: { notifications, version: 7 },
       draft: { reply: false, mention: false },
-      failure: { status, code, requestId: 'readback-request' },
+      readFailure: { status, code, requestId: 'readback-request' },
+      pending: null,
     });
-    expect(editor.snapshot().pending).toBe(pending);
+    expect(editor.snapshot().confirmedReceipt?.attempt).toBe(pending);
+    await editor.retry();
+    expect(calls).toHaveLength(3);
   }
 });
 
@@ -421,38 +408,41 @@ test('a lost save replays its original key and exact input, reads current native
     phase: 'review',
     pending: null,
     known: { notifications: { reply: true, mention: true }, version: 9 },
-    draft: { reply: false, mention: false },
+    draft: { reply: true, mention: false },
   });
   await editor.submit(9);
-  expect(JSON.parse(calls[3]!.body)).toEqual({ expectedVersion: 9, notifications: { reply: false, mention: false } });
+  expect(JSON.parse(calls[3]!.body)).toEqual({ expectedVersion: 9, notifications: { mention: false } });
   expect(calls[3]!.key).not.toBe(calls[0]!.key);
   expect(editor.snapshot().phase).toBe('saved');
   expect(journey.owner.reads()).toBe(4);
 });
 
-test('reset recovery keeps null and its original version/key until a fresh read succeeds; conflict requires reload and CSRF refusal never saves', async () => {
+test('reset retry keeps null and its original version/key until receipt; current-read recovery never resends and CSRF refusal never saves', async () => {
   const journey = preferenceJourney();
   await journey.editor.restore(7);
   journey.readFails(true);
   await journey.editor.retry();
   expect(journey.editor.snapshot()).toMatchObject({
-    phase: 'uncertain',
-    pending: { input: { expectedVersion: 7, notifications: null } },
+    phase: 'failed',
+    pending: null,
+    confirmedReceipt: { attempt: { input: { expectedVersion: 7, notifications: null } } },
   });
   journey.readFails(false);
   await journey.editor.retry();
-  expect(journey.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET', 'PATCH', 'GET']);
-  expect(journey.calls[3]).toEqual(journey.calls[0]);
+  expect(journey.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET']);
+  await journey.editor.reload();
+  expect(journey.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET', 'GET']);
+  expect(journey.calls[1]).toEqual(journey.calls[0]);
   expect(journey.editor.snapshot().phase).toBe('saved');
 
   journey.current({ reply: true, mention: false }, 12);
   await journey.editor.edit('reply', false, 8);
-  expect(journey.editor.snapshot().phase).toBe('conflict');
+  expect(journey.editor.snapshot().phase).toBe('review');
   await journey.editor.reload();
   expect(journey.editor.snapshot()).toMatchObject({
     phase: 'review',
     known: { version: 12 },
-    draft: { reply: false, mention: true },
+    draft: { reply: false, mention: false },
   });
   const before = journey.calls.length;
   const refused = await changeNotifications(
