@@ -23,7 +23,9 @@ import { basename, join, resolve } from 'node:path';
 import { loadSettings, mainCheckout } from '../src/config.ts';
 import { parseJsonLines, parseWorkerResult, requireWorkerCheck } from '../test-support/lifecycle-fixture.ts';
 import {
+  CHECK_ID,
   message,
+  requireSmokeWaitingCheckId,
   parseJsonLine,
   parseProviderObject,
   persistReport,
