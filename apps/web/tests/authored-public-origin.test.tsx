@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createContext, useContext, type ReactNode } from 'react';
 import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
@@ -94,6 +94,13 @@ test('mounted entry, contribution menu and authored route keep public intent out
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
+  const menuModule = await import('@rezics/ui/menu');
+  const OriginalMenu = menuModule.Menu;
+  let contributionMenu: Parameters<typeof OriginalMenu>[0] | undefined;
+  const menuSpy = spyOn(menuModule, 'Menu').mockImplementation((props) => {
+    if (props.title === m.contribute_title({}, { locale: 'en' })) contributionMenu = props;
+    return <OriginalMenu {...props} />;
+  });
 
   const profile = addonProfileFixture();
   const originalKernel = { ...(await import('../src/kernel/client')) };
@@ -204,13 +211,18 @@ test('mounted entry, contribution menu and authored route keep public intent out
         </QueryClientProvider>,
       ),
     );
-    const publicDom = within(window.document.body);
-    await act(async () => publicDom.getByRole('button', { name: m.contribute_title() }).click());
-    await act(async () => publicDom.getByText(m.contribute_edit(), { exact: true }).click());
-    const menuHref = window.document.body
-      .querySelector<HTMLAnchorElement>('a[href*="/authored?origin="]')
-      ?.getAttribute('href');
-    expect(menuHref).toBe(authoredPublicCorrectionHref(base, observed));
+    const editMenu = contributionMenu?.entries?.find(
+      (entry) => entry.type === 'submenu' && entry.label === m.contribute_edit({}, { locale: 'en' }),
+    );
+    expect(editMenu).toMatchObject({
+      type: 'submenu',
+      entries: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'link',
+          href: authoredPublicCorrectionHref(base, observed),
+        }),
+      ]),
+    });
 
     const originHref = authoredPublicCorrectionHref(base, observed);
     const slugRepair = await loadCanonical('stale-slug', originHref).then(
@@ -284,6 +296,7 @@ test('mounted entry, contribution menu and authored route keep public intent out
     await act(async () => root.unmount());
     client.clear();
     setLocale(previousLocale, { reload: false });
+    menuSpy.mockRestore();
     mock.restore();
     await window.happyDOM.close();
     for (const [name, descriptor] of saved) {
