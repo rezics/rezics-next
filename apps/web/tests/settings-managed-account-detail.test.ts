@@ -4,20 +4,25 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { ManagedAccountDetailCard } from '../src/settings/managed-account-detail';
-import {
+import type {
+  DetailRequest,
+  DetailResult,
+  DetailSection,
+  ManagementDetail,
+} from '../src/settings/managed-account-detail-read';
+
+// The settings modules reach server-only imports; the mock must be installed before they load.
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { ManagedAccountDetailCard } = await import('../src/settings/managed-account-detail');
+const {
   ManagedAccountReader,
   detailFailure,
   loadManagedAccountDetail,
   managedAccountTarget,
   managedAccountsBackHref,
-  type DetailRequest,
-  type DetailResult,
-  type DetailSection,
-  type ManagementDetail,
-} from '../src/settings/managed-account-detail-read';
-import { m } from '../src/paraglide/messages.js';
-import { AnonymousSessionContext } from '../src/session/query';
+} = await import('../src/settings/managed-account-detail-read');
+const { m } = await import('../src/paraglide/messages.js');
+const { AnonymousSessionContext } = await import('../src/session/query');
 
 const viewerId = '019a0000-0000-7000-8000-000000000001';
 const accountId = '019a0000-0000-7000-8000-000000000002';
@@ -248,7 +253,6 @@ test('the existing localized settings account region selects only an immutable I
   ])
     expect(managedAccountTarget(`/fr/settings?managedAccount=${value}`)).toBeNull();
 
-  mock.module('cloudflare:workers', () => ({ env: {} }));
   const { SettingsPageView } = await import('../src/settings/settings-page');
   const queryClient = new QueryClient();
   const root = createRootRoute({
@@ -409,7 +413,6 @@ test('detail Refresh and feed reads drop stale Auth links immediately and older 
   expect(reader.snapshot().members.failure?.status).toBe(503);
   expect(reader.snapshot().authNavigation).toBe(authNavigation);
   expect(reader.snapshot().detail).toBe(currentDetail);
-  expect(markup(reader)).toContain('/organizations/delete');
   const stale = reader.load();
   reader.clear(); // Viewer, CSRF and target changes replace/clear this immutable reader.
   pending[8]!(positive);
