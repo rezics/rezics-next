@@ -10871,5 +10871,6 @@
   "library_anilist_score_outcome_stale": "原生投票审阅已过期",
   "library_anilist_score_outcome_unsupported": "不支持原生投票",
   "library_anilist_score_outcome_failed": "原生投票失败",
-  "library_anilist_score_outcome_unavailable": "原生投票不可用"
+  "library_anilist_score_outcome_unavailable": "原生投票不可用",
+  "library_anilist_replace_vote_and_state": "替换现有原生投票和状态"
 }

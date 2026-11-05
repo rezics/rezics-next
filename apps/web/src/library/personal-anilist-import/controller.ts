@@ -719,7 +719,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     if (!live() || heldUnknown()) return snapshot();
     queueSourceAdmissions();
     await admitQueued();
-    if (!live()) return snapshot();
+    if (!live() || heldUnknown()) return snapshot();
     stage = cancelled ? 'cancelled' : 'results';
     retain();
     if (importId && stage === 'results') {

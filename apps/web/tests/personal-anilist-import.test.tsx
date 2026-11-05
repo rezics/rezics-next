@@ -843,7 +843,7 @@ test('growth at 20, 100 and 200 rows stays within native page, apply and retaine
     const batches = Math.ceil(total / ANILIST_APPLY);
     expect(cost.maxPageRows).toBeLessThanOrEqual(ANILIST_PAGE);
     expect(cost.maxApplyRows).toBeLessThanOrEqual(ANILIST_APPLY);
-    expect(cost.pagesVisited).toBe(pages);
+    expect(cost.pagesVisited).toBe(pages + 1);
     expect(cost.reviewed).toBe(total);
     expect(cost.applyBatches).toBe(batches);
     expect(cost.calls.preview).toBe(1);

@@ -10859,5 +10859,6 @@
   "library_anilist_score_outcome_stale": "Prüfung der nativen Stimme ist veraltet",
   "library_anilist_score_outcome_unsupported": "Native Stimme wird nicht unterstützt",
   "library_anilist_score_outcome_failed": "Native Stimme fehlgeschlagen",
-  "library_anilist_score_outcome_unavailable": "Native Stimme nicht verfügbar"
+  "library_anilist_score_outcome_unavailable": "Native Stimme nicht verfügbar",
+  "library_anilist_replace_vote_and_state": "Vorhandene native Stimme und Status ersetzen"
 }
