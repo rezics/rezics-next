@@ -18,6 +18,16 @@ import {
 import { RecoveryCostLedger, type RecoveryCost } from './cost';
 import { makeReviewBody, type OccurrenceSelection } from './selection';
 import type { RecoveryVisit } from './visit';
+import {
+  commitRecoveryRead,
+  emptyRecoveryReadWindow,
+  recoveryReadTarget,
+  sameRecoveryReadAdmission,
+  type RecoveryReadAdmission,
+  type RecoveryReadTarget,
+  type RecoveryReadWindow,
+  type RecoveryReader,
+} from './window';
 
 export type RecoveryStage =
   | 'upload'
@@ -31,6 +41,8 @@ export type RecoveryStage =
   | 'unavailable';
 
 export type RecoveryNotice = RecoveryFailure | RecoveryUnknown | null;
+
+export type RecoveryWindowSnapshot = { canPrevious: boolean; revision: number };
 
 export type RecoverySnapshot = {
   stage: RecoveryStage;
@@ -46,6 +58,10 @@ export type RecoverySnapshot = {
   targets: ReadonlyMap<string, EntityPickerSubject>;
   review: RecoveryReview | null;
   outcomesPage: RecoveryOutcomesPage | null;
+  collectionsWindow: RecoveryWindowSnapshot;
+  occurrencesWindow: RecoveryWindowSnapshot;
+  outcomesWindow: RecoveryWindowSnapshot;
+  readRetry: RecoveryReader | null;
   cost: RecoveryCost;
 };
 
@@ -54,8 +70,10 @@ export type ArchiveCollectionRecoveryJourney = {
   subscribe: (listener: () => void) => () => void;
   upload: (archiveBase64: string) => Promise<void>;
   loadCollections: (cursor?: string) => Promise<void>;
+  previousCollections: () => Promise<void>;
   chooseCollection: (collection: RecoveryCollection) => Promise<void>;
   loadOccurrences: (cursor?: string) => Promise<void>;
+  previousOccurrences: () => Promise<void>;
   setSelection: (selection: OccurrenceSelection) => void;
   prepareReview: () => void;
   setTarget: (sourceSubjectId: string, target: EntityPickerSubject | null) => void;
@@ -66,6 +84,8 @@ export type ArchiveCollectionRecoveryJourney = {
   readStatus: () => Promise<void>;
   refreshConflict: () => Promise<void>;
   loadOutcomes: (cursor?: string) => Promise<void>;
+  previousOutcomes: () => Promise<void>;
+  retryRead: () => Promise<void>;
   cancel: () => Promise<void>;
   retryUnknown: () => Promise<void>;
   restart: () => void;
@@ -96,6 +116,12 @@ export function createArchiveCollectionRecoveryJourney(input: {
   let targets = new Map<string, EntityPickerSubject>();
   let review: RecoveryReview | null = null;
   let outcomePageData: RecoveryOutcomesPage | null = null;
+  let windows = {
+    collections: emptyRecoveryReadWindow(),
+    occurrences: emptyRecoveryReadWindow(),
+    outcomes: emptyRecoveryReadWindow(),
+  };
+  let readRetry: RecoveryReader | null = null;
   let unknown: RecoveryEffectCommand | null = null;
   let expiredTimer: ReturnType<typeof setTimeout> | undefined;
   let retired = false;
@@ -116,6 +142,10 @@ export function createArchiveCollectionRecoveryJourney(input: {
       targets: new Map(targets),
       review,
       outcomesPage: outcomePageData,
+      collectionsWindow: { canPrevious: windows.collections.previous.length > 0, revision: windows.collections.revision },
+      occurrencesWindow: { canPrevious: windows.occurrences.previous.length > 0, revision: windows.occurrences.revision },
+      outcomesWindow: { canPrevious: windows.outcomes.previous.length > 0, revision: windows.outcomes.revision },
+      readRetry,
       cost: ledger.snapshot(),
     };
   }
@@ -135,6 +165,26 @@ export function createArchiveCollectionRecoveryJourney(input: {
     review = null;
     outcomePageData = null;
     unknown = null;
+    clearReadWindows();
+  }
+
+  function clearReadWindows() {
+    windows = {
+      collections: emptyRecoveryReadWindow(),
+      occurrences: emptyRecoveryReadWindow(),
+      outcomes: emptyRecoveryReadWindow(),
+    };
+    readRetry = null;
+  }
+
+  function clearReadWindow(kind: RecoveryReader) {
+    windows[kind] = emptyRecoveryReadWindow();
+    if (readRetry === kind) readRetry = null;
+  }
+
+  function clearSelectionWindows() {
+    clearReadWindow('collections');
+    clearReadWindow('occurrences');
   }
 
   function setExpiry(value: string | null) {
@@ -185,6 +235,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
   }
 
   function acceptStatus(value: RecoveryStatus) {
+    const previousState = status?.state;
     status = value;
     uploadId = value.uploadId;
     setExpiry(value.expiresAt);
@@ -192,7 +243,14 @@ export function createArchiveCollectionRecoveryJourney(input: {
       expire();
       return;
     }
-    if (value.state === 'cancelled' || value.state === 'complete' || value.state === 'partial') stage = 'results';
+    if (previousState && previousState !== value.state) {
+      outcomePageData = null;
+      clearReadWindow('outcomes');
+    }
+    if (value.state === 'cancelled' || value.state === 'complete' || value.state === 'partial') {
+      clearSelectionWindows();
+      stage = 'results';
+    }
   }
 
   function fail(response: RecoveryFailure) {
@@ -250,16 +308,15 @@ export function createArchiveCollectionRecoveryJourney(input: {
   }
 
   async function read<T>(inputRead: {
-    kind: 'status' | 'collections' | 'occurrences' | 'outcomes';
+    kind: 'status';
     send: () => Promise<{ kind: 'ok'; value: T } | RecoveryFailure | RecoveryUnknown>;
-    rows?: (value: T) => number;
     onValue: (value: T) => void | Promise<void>;
   }): Promise<void> {
     if (!live() || busy || unknown) return;
     const ticket = generation;
     busy = true;
     notice = null;
-    if (!['collections', 'occurrences', 'outcomes'].includes(inputRead.kind)) ledger.call(inputRead.kind);
+    ledger.call(inputRead.kind);
     publish();
     let result: { kind: 'ok'; value: T } | RecoveryFailure | RecoveryUnknown;
     try {
@@ -274,10 +331,6 @@ export function createArchiveCollectionRecoveryJourney(input: {
       publish();
       return;
     }
-    if (inputRead.rows) {
-      const rows = inputRead.rows(result.value);
-      ledger.page(inputRead.kind as 'collections' | 'occurrences' | 'outcomes', rows);
-    }
     notice = null;
     try {
       await inputRead.onValue(result.value);
@@ -287,61 +340,157 @@ export function createArchiveCollectionRecoveryJourney(input: {
     if (ticket === generation && live()) publish();
   }
 
+  function readerWindow(kind: RecoveryReader): RecoveryReadWindow {
+    return windows[kind];
+  }
+
+  function readAdmission(kind: RecoveryReader, sourceStage: RecoveryStage): RecoveryReadAdmission | null {
+    if (!uploadId) return null;
+    if (kind === 'occurrences' && !selectedCollection) return null;
+    return {
+      uploadId,
+      collectionId: kind === 'occurrences' ? selectedCollection!.id : null,
+      phase: kind === 'outcomes' ? 'results' : 'selection',
+      statusState: kind === 'outcomes' ? (status?.state ?? null) : null,
+      sourceStage,
+    };
+  }
+
+  function pageReadAdmitted(kind: RecoveryReader, target: RecoveryReadTarget): boolean {
+    if (!live() || uploadId !== target.admission.uploadId) return false;
+    if (kind === 'occurrences' && selectedCollection?.id !== target.admission.collectionId) return false;
+    if (target.admission.phase === 'results') {
+      return (
+        (stage === 'results' || stage === 'conflict') &&
+        status?.state === target.admission.statusState
+      );
+    }
+    if (kind === 'occurrences') return stage === 'occurrences' || stage === 'conflict';
+    return stage === 'collections' || stage === 'occurrences' || stage === 'conflict';
+  }
+
+  async function readPage(kind: RecoveryReader, direction: 'first' | 'next' | 'previous' | 'retry', cursor?: string) {
+    if (!live() || busy || unknown || !uploadId) return;
+    if (readRetry && direction !== 'retry') return;
+    const sourceStage = stage;
+    const admission = readAdmission(kind, sourceStage);
+    if (!admission) return;
+    let target =
+      direction === 'retry'
+        ? readerWindow(kind).staged
+        : recoveryReadTarget(readerWindow(kind), direction, admission, cursor);
+    if (!target) return;
+    if (direction === 'retry') {
+      if (
+        readRetry !== kind ||
+        !sameRecoveryReadAdmission(target.admission, admission) ||
+        !pageReadAdmitted(kind, target)
+      )
+        return;
+    } else if (!pageReadAdmitted(kind, target)) {
+      return;
+    }
+
+    const ticket = generation;
+    readerWindow(kind).staged = target;
+    busy = true;
+    notice = null;
+    ledger.pageRequest(kind, direction === 'retry');
+    publish();
+    let result:
+      | { kind: 'ok'; value: RecoveryCollectionsPage | RecoveryOccurrencesPage | RecoveryOutcomesPage }
+      | RecoveryFailure
+      | RecoveryUnknown;
+    try {
+      const query = { limit: RECOVERY_PAGE_ROWS, ...(target.cursor === null ? {} : { cursor: target.cursor }) };
+      switch (kind) {
+        case 'collections':
+          result = await port.collections(uploadId, query);
+          break;
+        case 'occurrences':
+          result = await port.occurrences(uploadId, selectedCollection!.id, query);
+          break;
+        case 'outcomes':
+          result = await port.outcomes(uploadId, query);
+          break;
+      }
+    } catch {
+      result = { kind: 'unavailable' };
+    }
+    if (ticket !== generation || !pageReadAdmitted(kind, target)) return;
+    busy = false;
+    if (result.kind !== 'ok') {
+      fail(result.kind === 'unknown' ? { kind: 'unavailable' } : result);
+      if (readerWindow(kind).staged === target) readRetry = kind;
+      publish();
+      return;
+    }
+
+    const page = result.value;
+    const previousState = status?.state;
+    const rows =
+      kind === 'collections'
+        ? (page as RecoveryCollectionsPage).collections.length
+        : kind === 'occurrences'
+          ? (page as RecoveryOccurrencesPage).occurrences.length
+          : (page as RecoveryOutcomesPage).outcomes.length;
+    ledger.pageResult(rows);
+    notice = null;
+    acceptStatus(page);
+    if (stage === 'expired' || stage === 'denied') {
+      publish();
+      return;
+    }
+
+    const changedOutcomeState = kind === 'outcomes' && previousState !== page.state;
+    if (changedOutcomeState && target.cursor !== null) {
+      outcomePageData = null;
+      clearReadWindow('outcomes');
+      stage = 'results';
+      publish();
+      return;
+    }
+
+    if (kind === 'collections') {
+      collectionPageData = page as RecoveryCollectionsPage;
+      if (stage !== 'results') stage = 'collections';
+    } else if (kind === 'occurrences') {
+      occurrencePageData = page as RecoveryOccurrencesPage;
+      if (stage !== 'results') stage = 'occurrences';
+    } else {
+      outcomePageData = page as RecoveryOutcomesPage;
+      stage = 'results';
+    }
+
+    if (changedOutcomeState) {
+      const freshAdmission = readAdmission('outcomes', 'results')!;
+      target = recoveryReadTarget(readerWindow('outcomes'), 'first', freshAdmission)!;
+      readerWindow('outcomes').staged = target;
+    }
+    if (readerWindow(kind).staged === target && pageReadAdmitted(kind, target)) {
+      windows[kind] = commitRecoveryRead(readerWindow(kind), target);
+      readRetry = null;
+    }
+    if (ticket === generation && live()) publish();
+  }
+
   async function loadOutcomePage(cursor?: string) {
-    if (!uploadId) return;
-    await read({
-      kind: 'outcomes',
-      send: () => port.outcomes(uploadId!, { limit: RECOVERY_PAGE_ROWS, ...(cursor ? { cursor } : {}) }),
-      rows: (page) => page.outcomes.length,
-      onValue: (page) => {
-        acceptStatus(page);
-        if (stage !== 'expired') {
-          outcomePageData = page;
-          stage = 'results';
-        }
-      },
-    });
+    await readPage('outcomes', cursor === undefined ? 'first' : 'next', cursor);
   }
 
   async function loadCollectionPage(cursor?: string) {
-    if (!uploadId) return;
-    await read({
-      kind: 'collections',
-      send: () => port.collections(uploadId!, { limit: RECOVERY_PAGE_ROWS, ...(cursor ? { cursor } : {}) }),
-      rows: (page) => page.collections.length,
-      onValue: (page) => {
-        acceptStatus(page);
-        if (stage !== 'expired') {
-          collectionPageData = page;
-          if (stage !== 'results') stage = 'collections';
-        }
-      },
-    });
+    await readPage('collections', cursor === undefined ? 'first' : 'next', cursor);
   }
 
   async function loadOccurrencePage(cursor?: string) {
-    if (!uploadId || !selectedCollection) return;
-    await read({
-      kind: 'occurrences',
-      send: () =>
-        port.occurrences(uploadId!, selectedCollection!.id, {
-          limit: RECOVERY_PAGE_ROWS,
-          ...(cursor ? { cursor } : {}),
-        }),
-      rows: (page) => page.occurrences.length,
-      onValue: (page) => {
-        acceptStatus(page);
-        if (stage !== 'expired') {
-          occurrencePageData = page;
-          if (stage !== 'results') stage = 'occurrences';
-        }
-      },
-    });
+    await readPage('occurrences', cursor === undefined ? 'first' : 'next', cursor);
   }
 
   async function acceptedMutationStatus(value: RecoveryStatus) {
     acceptStatus(value);
     if (stage !== 'expired' && stage !== 'denied') {
+      clearReadWindow('outcomes');
+      outcomePageData = null;
       stage = 'results';
       await loadOutcomePage();
     }
@@ -355,6 +504,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
           () => port.upload(command),
           async (value) => {
             acceptStatus(value);
+            if (stage !== 'expired' && stage !== 'denied') stage = 'collections';
             await loadCollectionPage();
           },
           retry,
@@ -398,9 +548,14 @@ export function createArchiveCollectionRecoveryJourney(input: {
     loadCollections(cursor?: string) {
       return loadCollectionPage(cursor);
     },
+    previousCollections() {
+      return readPage('collections', 'previous');
+    },
     async chooseCollection(collection: RecoveryCollection) {
       if (!live() || busy || unknown || !collection.eligible) return;
       selectedCollection = structuredClone(collection);
+      clearReadWindow('occurrences');
+      clearReadWindow('outcomes');
       selected = new Map();
       targets = new Map();
       review = null;
@@ -411,6 +566,9 @@ export function createArchiveCollectionRecoveryJourney(input: {
     loadOccurrences(cursor?: string) {
       return loadOccurrencePage(cursor);
     },
+    previousOccurrences() {
+      return readPage('occurrences', 'previous');
+    },
     setSelection(value: OccurrenceSelection) {
       if (!live() || busy || unknown) return;
       selected = new Map(value);
@@ -419,7 +577,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
       publish();
     },
     prepareReview() {
-      if (!live() || busy || unknown || !selected.size) return;
+      if (!live() || busy || unknown || readRetry || !selected.size) return;
       review = null;
       stage = 'review';
       publish();
@@ -487,22 +645,23 @@ export function createArchiveCollectionRecoveryJourney(input: {
       await read({
         kind: 'status',
         send: () => port.status(uploadId!),
-        onValue: async (value) => {
+        onValue: (value) => {
           acceptStatus(value);
           if (value.state === 'preview') {
             review = null;
-            if (selectedCollection) {
-              stage = 'occurrences';
-              await loadOccurrencePage();
-            } else {
-              await loadCollectionPage();
-            }
+            stage = selectedCollection ? 'occurrences' : 'collections';
           }
         },
       });
     },
     loadOutcomes(cursor?: string) {
       return loadOutcomePage(cursor);
+    },
+    previousOutcomes() {
+      return readPage('outcomes', 'previous');
+    },
+    retryRead() {
+      return readRetry ? readPage(readRetry, 'retry') : Promise.resolve();
     },
     cancel() {
       if (!live() || busy || unknown || !uploadId) return Promise.resolve();

@@ -8488,6 +8488,7 @@
   "library_archive_recovery_result_status": "Overall: {state}",
   "library_archive_recovery_result_title": "Recovery results",
   "library_archive_recovery_retry_original": "원래 명령 재시도",
+  "library_archive_recovery_retry_page": "페이지 다시 시도",
   "library_archive_recovery_return_library": "Library로 돌아가기",
   "library_archive_recovery_review_action": "이 선택 검토",
   "library_archive_recovery_review_help": "Review the new private destination, title, selected notes and native order before applying effects.",

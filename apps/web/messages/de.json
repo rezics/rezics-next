@@ -8488,6 +8488,7 @@
   "library_archive_recovery_result_status": "Overall: {state}",
   "library_archive_recovery_result_title": "Recovery results",
   "library_archive_recovery_retry_original": "Ursprünglichen Befehl wiederholen",
+  "library_archive_recovery_retry_page": "Seite erneut laden",
   "library_archive_recovery_return_library": "Zur Library zurückkehren",
   "library_archive_recovery_review_action": "Diese Auswahl prüfen",
   "library_archive_recovery_review_help": "Review the new private destination, title, selected notes and native order before applying effects.",
