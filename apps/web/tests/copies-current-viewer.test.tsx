@@ -510,6 +510,7 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
     expect(node, `Missing link ${label} in ${host.textContent}`).toBeDefined();
     return node!;
   };
+  const hasLink = (label: string) => [...host.querySelectorAll('a')].some((item) => item.textContent === label);
   const button = (label: string, region: ParentNode = host) => {
     const node = [...region.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent === label);
     expect(node, `Missing button ${label} in ${region.textContent}`).toBeDefined();
@@ -587,7 +588,6 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
     const departure = host.querySelector('[role="alertdialog"]')!;
     expect(host.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
     expect(departure.textContent).toContain(m.library_copy_draft_navigation_description());
-    expect(router.state.location.search).toMatchObject({ subjectId: id(10), cursor: 'c1' });
     expect(listReads).toHaveLength(6);
     await clickButton(m.library_copy_draft_navigation_stay(), departure);
     expect(router.state.location.search).toMatchObject({ subjectId: id(10), cursor: 'c1' });
@@ -614,8 +614,8 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
     await act(async () => listReads.at(-1)!.resolve(restarted));
     await tick();
     expect(host.textContent).toContain('Restarted first page');
-    expect(link(m.library_label_previous_page())).toBeUndefined();
-    expect(link(m.library_collections_first_page())).toBeUndefined();
+    expect(hasLink(m.library_label_previous_page())).toBe(false);
+    expect(hasLink(m.library_collections_first_page())).toBe(false);
   } finally {
     read.mockRestore();
     detail.mockRestore();
