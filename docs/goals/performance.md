@@ -64,6 +64,9 @@ derived before implementation; use the prescribed Auth scales above where applic
 not only calls, and observe projection or worker work within its operation context. Report independently owned
 background work separately.
 
+Type-contract-only repairs preserve existing behavioral assertions; add tests or stories only when a product
+correction changes a named behavior.
+
 Root, module and native evidence retain separate meaning. Root SQL acceptance uses the supported Reylo types through
 the affected Web/root checks; fast copy-on-write preparation does not establish SQL closure. Infrastructure failure
 or unavailable evidence is neither denial nor a product pass. Use [verification](../development/verification.md)
