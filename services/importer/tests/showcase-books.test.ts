@@ -514,14 +514,14 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
       illustrators: ['person:1467'],
       publishers: ['person:128'],
     });
-    for (const [key, type] of [
+    for (const [key, type] of ([
       ['2815', 'schema:BookSeries'],
       ['5329', 'schema:Book'],
       ['10862', 'schema:Book'],
       ['person:1466', 'schema:Person'],
       ['person:1467', 'schema:Person'],
       ['person:128', 'schema:Organization'],
-    ])
+    ] as const))
       expect(first.identities[key]?.type).toBe(type);
     expect(first.identities['233']?.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,

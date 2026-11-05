@@ -431,7 +431,7 @@ export async function planShowcaseBooks(input: {
           endpoint: String(asId(volume.row.id)),
           property: 'schema:position',
         }));
-        volume.ordinal = undefined;
+        delete volume.ordinal;
       }
       volumes.push(volume);
       const id = asId(volume.row.id)!;

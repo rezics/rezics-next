@@ -14,7 +14,7 @@ export type ShowcaseBookFamily = Readonly<{
 const archive = 'dump-2026-10-20.210332Z.zip';
 const digest = '9fe8de272398ff4bd12994b73e25aac37cca631372383f6aadc503528623aa93';
 
-export const showcaseBookFamilies = [
+export const showcaseBookFamilies: readonly ShowcaseBookFamily[] = [
   {
     id: 'book-girl',
     seriesId: '499',
@@ -42,7 +42,7 @@ export const showcaseBookFamilies = [
       ],
     },
   },
-] as const satisfies readonly ShowcaseBookFamily[];
+];
 
 /** The earlier admitted family stays first and keeps its original selection. */
-export const showcaseBookFamily = showcaseBookFamilies[0];
+export const showcaseBookFamily = showcaseBookFamilies[0]!;
