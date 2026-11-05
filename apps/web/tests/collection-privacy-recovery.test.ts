@@ -94,8 +94,7 @@ test('A lost Collection visibility save retains the exact attempted revision/inp
   });
   const retry = editor.retry();
   await editor.retry();
-  // Give the replay receipt a chance to start its one native readback.
-  await Promise.resolve();
+  await flushPromiseJobs();
   expect(commands).toHaveLength(2);
   expect(commands[0]).toBe(original);
   expect(commands[1]).toBe(original);
@@ -563,6 +562,9 @@ test('list restart cannot lose an unknown command or a later choice, and native 
   await pager.restart();
   expect(reads).toEqual([null]); // A resolved original command does not discard the later unsaved choice.
   await editor.reload();
+  expect(editor.snapshot()).toMatchObject({ current: receipt, desired: 'unlisted', phase: 'review' });
+  expect(pager.snapshot().restartBlocked).toBe(true);
+  editor.useCurrent();
   expect(pager.snapshot().restartBlocked).toBe(false);
   await pager.restart();
   expect(reads).toEqual([null, null]);
@@ -727,7 +729,6 @@ test('a stalled page keeps its window and cursor, and a late page cannot replace
       next: 'exact-next-page',
       failure: 'unavailable',
       loading: false,
-      restarting: false,
     });
     expect(pager.retryStartsAtFirstPage()).toBe(false);
     const retry = pager.load();
