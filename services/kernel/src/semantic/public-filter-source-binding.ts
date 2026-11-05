@@ -74,6 +74,7 @@ import {
   readPublicFilterConsumerCustody,
   readGenerationPublicationCustody,
   readPublicFilterRepairSettlement,
+  withPublicFilterRepairAllowance,
 } from '../search/public-filter-custody.ts';
 import type {
   PublicFilterConsumerCaptureInput,
@@ -2941,7 +2942,7 @@ export function createPublicFilterSourceBinding(
       const adopted = await bootstrapBinding.adopt({ bootstrap, queried: native.queried }, { deadline });
       addCost(cost, adopted.cost);
       if (adopted.status !== 'adopted') return { ...adopted, cost };
-      const settled = await settleNative(publication, { deadline });
+      const settled = await withPublicFilterRepairAllowance(cost, () => settleNative(publication, { deadline }));
       addCost(cost, settled.cost);
       if (settled.status !== 'joined') return { ...settled, cost };
       // Clean current population alone cannot replace the independently verified original
