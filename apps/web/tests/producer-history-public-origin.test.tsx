@@ -333,7 +333,8 @@ test('public Organization entry preserves Context and current return, refuses un
     expect(button(m.producer_history_previous())).toBeDefined();
     for (const [key, value] of [
       [['session'], { state: 'signed-in', subject: 'origin-reader', csrfToken: 'csrf-origin' }],
-      [['exposure', 'viewer'], { spoilerLevel: 0 }],
+      [['exposure', 'viewer'], []],
+      [['exposure', 'viewer'], []],
       [['session'], { state: 'signed-in', subject: 'other-reader', csrfToken: 'csrf-other' }],
       [['session'], { state: 'signed-in', subject: 'origin-reader', csrfToken: 'csrf-origin' }],
     ] as const) {

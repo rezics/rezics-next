@@ -29,8 +29,6 @@ export type HistorySlice =
 
 /** One read owns installation. Equal arguments and A/B/A choices still have distinct leases. */
 export function useProducerHistorySlice({
-  id,
-  locale,
   transport,
   initial,
 }: {
