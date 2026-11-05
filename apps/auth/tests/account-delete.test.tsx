@@ -169,14 +169,22 @@ test('replacement during unavailable retry keeps its own continuation and cannot
 test('refused submitted-marker persistence sends no execution', async () => {
   const page = await open(<DeleteAccountContent {...props} initial={initial} />, body);
   await submit(page.host);
-  const storage = spyOn(Object.getPrototypeOf(window.sessionStorage), 'setItem').mockImplementation(() => {
-    throw new Error('storage refused');
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'sessionStorage')!;
+  const storage = window.sessionStorage;
+  Object.defineProperty(window, 'sessionStorage', {
+    configurable: true,
+    value: {
+      getItem: storage.getItem.bind(storage),
+      setItem() {
+        throw new Error('storage refused');
+      },
+    },
   });
   try {
     await flush(() => page.calls[0]!.resolve(approval()));
     expect(page.calls).toHaveLength(1);
     expect(readPendingAccountOperationStepUp()?.submitted).toBe(false);
   } finally {
-    storage.mockRestore();
+    Object.defineProperty(window, 'sessionStorage', descriptor);
   }
 });
