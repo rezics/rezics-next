@@ -8,12 +8,12 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   COPY_FILTER_OPTION_QUERY_LIMIT,
+  MAX_COPY_FILTER_OPTIONS_BYTES,
   MAX_COPY_FILTER_OPTIONS,
   copyInventoryValuesStatementPlan,
 } from './copy-operation-bounds.ts';
 
 export { MAX_COPY_FILTER_OPTIONS };
-const MAX_COPY_FILTER_OPTIONS_BYTES = 65_536;
 
 export type CopyInventoryChoice = Readonly<{
   id: string;

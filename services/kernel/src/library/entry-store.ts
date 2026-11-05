@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { EntryShelfWrite, HeadSnapshot } from './shelf-contract.ts';
 import { assertPreProfileLibraryRead } from './profile-source.ts';
-import { newId } from '../route/route.ts';
+import { newId, routeOf } from '../route/route.ts';
 import type copyRead from './entry-store-copy-read.sql';
 import entryDelete from './entry-store-entry-delete.sql';
 import entryInsert from './entry-store-entry-insert.sql';
@@ -17,7 +17,9 @@ import {
   copyPageStatementPlan,
   copyReadStatementPlan,
   copyUpdateStatementPlan,
+  executeCopyStatementWork,
 } from './copy-operation-bounds.ts';
+import { sessionProfileMigrationWork } from './session-operation-bounds.ts';
 import {
   MAX_LIBRARY_PAGE_SIZE,
   type Copy,
@@ -48,6 +50,15 @@ const COPY_STATUSES = new Set<string>(['ordered', 'owned', 'lent', 'disposed']);
 
 function queryClient(client: Client): Client {
   return { query: client.query.bind(client) };
+}
+
+async function assertCopyProfileRead(client: Client, accountId: string): Promise<void> {
+  const route = routeOf(accountId)!;
+  await executeCopyStatementWork(
+    'copy.profile-migration',
+    sessionProfileMigrationWork(route, accountId),
+    () => assertPreProfileLibraryRead(client, accountId),
+  );
 }
 
 function iso(value: string): string {
@@ -267,7 +278,7 @@ export async function insertCopy(
 export async function readCopy(client: Client, route: number, copyId: string): Promise<Copy | null> {
   const row = await copyReadStatementPlan({ route, copy_id: copyId }).run(queryClient(client));
   if (row && decodeLibraryProfilePin(row.libraryProfilePin) === null) {
-    await assertPreProfileLibraryRead(client, row.accountId);
+    await assertCopyProfileRead(client, row.accountId);
     assertStatus(row.status);
   }
   return row ? asCopy(row) : null;
@@ -354,7 +365,7 @@ export async function pageCopies(
   const plan = copyPageStatementPlan(parameters, subjectId, kind, status);
   const rows = await plan.run(queryClient(client));
   if (rows.some((row) => row.libraryProfilePin === null)) {
-    await assertPreProfileLibraryRead(client, accountId);
+    await assertCopyProfileRead(client, accountId);
     for (const row of rows) if (row.libraryProfilePin === null) assertStatus(row.status);
   }
   return rows.map((row) => asCopy(row));
