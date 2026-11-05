@@ -1818,6 +1818,12 @@ groups, and are labelled with the Context they come from.
 
 The Character page composes adopted work appearances, Character-qualified voice credits and exact document previews. The visit retains at most two assertion windows of twenty rows each and 256 related-reference summaries, subject to tighter installed caps. The selected page and its evidence remain current; it does not drain cursors or hydrate each row separately.
 
+Decision: the mounted Character profile presents two twelve-row association windows through the existing Connections
+reader, window controller and whole-association spoiler renderer. Target and original-evidence returns enter the
+selected Connections window, whose Previous and focus behavior remains authoritative. Context, Realm, locale,
+caller or release replacement retires the local reading synchronously; retry reads current evidence without restoring
+a retired payload. Work language is shown only when supplied as the work's released `schema:inLanguage` fact.
+
 Appearances are inverse readings of admitted schema:character statements on works. Role, credited name, spoiler, part and appearance-specific quantities stay on that exact work statement; they do not become timeless Character biography or identity. Voice credit wdt:P725 keeps the Person or Organization performer as its main value. The released wdt:P453 value is the Character qualifier and slot key, not a second assertion. Forward Work cast and inverse Person credits retain distinct holders and evidence.
 
 A source spoiler gates the whole association, including href, label, evidence and accessible name. Direct native Character reads may request includeDocuments=true; aggregate pages keep their dependent document plan. Content owns the shared public document schema and mapper, current HTTP disclosure and erasure. Only an exact document, Subject, candidate, digest and language binding with an available validated body is readable. Mismatched, erased or invalid bodies remain unreadable and never supply biography.

@@ -1,5 +1,5 @@
 import { pickText } from '@rezics/composition';
-import { useLayoutEffect, useRef } from 'react';
+import { useContext, useLayoutEffect, useRef } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { defaultReader } from '../../../subject/reader';
 import { characterGroups } from '../../catalogue/character-profile';
@@ -16,9 +16,11 @@ import { useSubjectCommunityReading } from '../subject-community-lifetime';
 import { PlainLink } from '../shared';
 import { PeopleFacts } from '../../catalogue/people-facts/visit';
 import { SuppliedNames } from './names';
+import { CharacterPublicReading, type CharacterAssociations } from '../../catalogue/character-public-reading/view';
+import { OverviewContext } from '../overview';
 
 /** Public composition of supplied character facts. Appearances remain in the producer's bounded reader. */
-export function CharacterReader(input: ProfileReading) {
+export function CharacterReader(input: ProfileReading & { associations?: CharacterAssociations }) {
   const reading = { ...input, documents: input.documents ?? Reflect.get(input.public, 'documents') };
   const groups = characterGroups(reading.release);
   const fields = [
@@ -30,6 +32,7 @@ export function CharacterReader(input: ProfileReading) {
   return (
     <PeopleFacts reading={reading} fields={fields}>
       <CharacterFacts {...reading} />
+      {input.associations && <CharacterPublicReading {...input.associations} />}
     </PeopleFacts>
   );
 }
@@ -97,6 +100,7 @@ export function CharacterOverview({
   release?: PersonDefinitions | undefined;
   load?: PersonDefinitionsLoader;
 }) {
+  const overview = useContext(OverviewContext);
   const lifetime = useSubjectCommunityReading({
     source,
     reader: viewer,
@@ -106,6 +110,10 @@ export function CharacterOverview({
       reading.public.subject.context,
       reading.locale,
       reading.reader ?? defaultReader,
+      overview?.realm,
+      overview?.context,
+      overview?.releaseDigest,
+      release,
     ]),
   });
   const heading = useRef<HTMLHeadingElement>(null);
@@ -127,7 +135,7 @@ export function CharacterOverview({
       </h2>
       {lifetime.available ? (
         <ProfileDefinitions key={lifetime.key} locale={reading.locale} load={load} release={release}>
-          {(definitions) => <CharacterReader {...reading} release={definitions} />}
+          {(definitions) => <CharacterReader {...reading} release={definitions} associations={{ source, viewer }} />}
         </ProfileDefinitions>
       ) : (
         <p role="status">{m.candidate_value_unavailable({}, { locale: reading.locale as never })}</p>
