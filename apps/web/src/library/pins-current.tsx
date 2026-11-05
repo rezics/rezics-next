@@ -109,6 +109,7 @@ export function useLibraryReadOrigin(address: string, initialSubject?: string | 
     hydrated,
     pins,
     collections,
+    workspaceAdmission: store,
     client,
     lifetime: `${boundary.id}:${pins.id}:${collections.id}`,
     isCurrent,

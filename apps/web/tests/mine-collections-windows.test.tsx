@@ -11,7 +11,21 @@ mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => new Request('https://site.test'),
   setResponseHeader() {},
 }));
-mock.module('cloudflare:workers', () => ({ env: {} }));
+const env = {
+  KERNEL_ORIGIN: 'https://kernel.test',
+  AUTH_ISSUER: 'https://auth.test',
+  API_RESOURCE: 'https://kernel.test',
+  WEBSITE_SCOPES: 'openid',
+  WEBSITE_CLIENT_ID: 'mine-collections-windows',
+  WEBSITE_CLIENT_KEY: '{}',
+  SESSIONS: {
+    idFromName: (id: string) => id,
+    get: () => ({
+      credential: async () => ({ status: 'active', subject: 'viewer-A', accessToken: 'credential-A', csrfToken: 'csrf-A' }),
+    }),
+  },
+};
+mock.module('cloudflare:workers', () => ({ env }));
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -31,6 +45,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previousGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -158,6 +173,10 @@ test('the private Collections route retains admitted cursor coordinates across l
   });
   const host = document.createElement('main');
   document.body.append(host);
+  const canonical = document.createElement('link');
+  canonical.rel = 'canonical';
+  canonical.href = 'https://site.test/library/collections';
+  document.head.append(canonical);
   const root = createRoot(host);
   const flush = async () => {
     await act(async () => {
@@ -262,6 +281,7 @@ test('the private Collections route retains admitted cursor coordinates across l
     releaseObservation();
     client.clear();
     host.remove();
+    canonical.remove();
     reader.mockRestore();
   }
 });
