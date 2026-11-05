@@ -343,7 +343,11 @@ export function admitAppealInspection(
     throw new AppealReadFailure('unavailable');
   // The publisher's generated declaration may lag the producer. Keep its provenance type intact;
   // runtime evidence must still be present and valid, with no parent-anchor fallback.
-  if (!('sourceObservations' in provenance) || !Array.isArray(provenance.sourceObservations))
+  if (
+    !Object.hasOwn(provenance, 'sourceObservations') ||
+    !('sourceObservations' in provenance) ||
+    !Array.isArray(provenance.sourceObservations)
+  )
     throw new AppealReadFailure('unavailable');
   const retained = [...page.appeals, selected];
   if (provenance.sourceObservations.length > retained.length) throw new AppealReadFailure('unavailable');

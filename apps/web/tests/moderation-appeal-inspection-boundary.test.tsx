@@ -146,6 +146,12 @@ test('composed inspection seam admits only current actor/session, exact outcome,
     { ...page, appeals: Array.from({ length: 21 }, () => selected) },
     { ...page, appeals: [{ ...selected, source: { ...source, partition: 1 } }] },
     { ...page, selectedAppeal: { ...selected, source: { ...source, partition: 1 } } },
+    {
+      ...page,
+      provenance: Object.assign(Object.create({ sourceObservations: provenance.sourceObservations }), {
+        actorId: provenance.actorId, session: provenance.session, source: provenance.source,
+      }),
+    },
     { ...page, provenance: { ...provenance, actorId: 'other' } },
     { ...page, provenance: { ...provenance, session: { clientId: 'other', authnEpoch: 1 } } },
     { ...page, provenance: { ...provenance, session: { clientId: 'web', authnEpoch: 2 } } },

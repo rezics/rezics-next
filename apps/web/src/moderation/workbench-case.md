@@ -96,6 +96,11 @@ The provenance type comes from the existing Board/thread callable. While the gen
 producer’s additive observations, the reader uses a runtime validation seam on that response and keeps the installed
 type intact. No new native DTO or endpoint is authored by Web.
 
+Decision: observations must be an own response property; inherited observations cannot admit a selection. Keep the
+runtime seam until the complete-input publisher supplies the installed callable field. The mounted transport case
+connects admission, lost-response exact command retry, acknowledgement and an independently admitted resolved visit
+with the captured queue return; it does not replace native HTTP, installed publication or browser acceptance.
+
 Decision: `provenance.source` remains the authorized parent observation; `provenance.sourceObservations` carries one
 appeal-ID-bound final source anchor for each returned pending row and exact selection, without authorizing the parent read.
 
@@ -125,6 +130,9 @@ appeal-ID-bound final source anchor for each returned pending row and exact sele
 - **Bound:** one page of at most 20, one optional exact selection, the native continuation and one original command.
   Recovery retains one current projection, one in-flight read and one focus handoff, without a page history.
   An empty page with `next` stays sparse. A missing selection is unavailable even when the page contains its ID.
+- **Growth check:** the focused inspection-boundary and current-selection tests retain sparse pages, reject invalid
+  evidence and connect same-command recovery to a fresh exact read and captured return address. These transport tests
+  do not measure physical database work; native all-pool growth acceptance remains required.
 - **Growth:** pending adaptation retains the native page in O(rows + admitted bytes), with no deduplicated enrichment
   graph. Provenance validation is O(rows) with constant-size source comparisons. Inspection and same-input retry do not advance or refill the queue. Keyboard recovery adds constant work. Command retries retain the same sender, CSRF headers,
   frozen body, key and operands; they do not reread or recover request identity.
