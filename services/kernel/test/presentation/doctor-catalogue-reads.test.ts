@@ -50,6 +50,8 @@ type CandidateListing = { candidates: ImportedCandidate[]; adoptionHead: number 
 type HttpResult = { status: number; body: unknown };
 type Relation = { statement: RecordValue; target: string | null; type: string | null };
 type RelationPair = { anonymous: Relation[]; member: Relation[] };
+type EditionLink = { subject: string; property: string; statement: string; type: string };
+type EditionPair = { anonymous: EditionLink[]; member: EditionLink[] };
 
 function isRecord(value: unknown): value is RecordValue {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -360,6 +362,45 @@ async function relationPair(
   return { anonymous: anonymousRelations, member: memberRelations };
 }
 
+function parseEditionLinks(value: unknown): EditionLink[] {
+  const response = record(value, 'native Book edition links');
+  const freshness = record(response.freshness, 'Book edition link freshness');
+  expect(freshness).toMatchObject({ consistency: 'eventual', caught_up: true });
+  const next = response.next;
+  if (next !== null && typeof next !== 'string') throw new Error('Malformed Book edition link cursor');
+  const links = array(response.links, 'Book edition links').map((entry): EditionLink => {
+    const link = record(entry, 'Book edition link');
+    const subject = uuid(link.subject, 'edition Subject');
+    const property = string(link.property, 'edition relation property');
+    const statement = uuid(link.statement, 'edition relation statement');
+    const type = string(link.type, 'edition Subject type');
+    expect(property).toBe('schema:exampleOfWork');
+    expect(bundledRelease.types[type]).toBeDefined();
+    expect(descendantOf(type, 'schema:CreativeWork')).toBe(true);
+    if (link.assertion !== undefined) {
+      const assertionProperty = record(record(link.assertion, 'edition assertion').property, 'edition assertion property');
+      expect(assertionProperty.id).toBe('schema:exampleOfWork');
+    }
+    return { subject, property, statement, type };
+  });
+  if (links.length > RELATION_LIMIT) throw new Error('Native Book edition page exceeded its finite limit');
+  return links;
+}
+
+async function editionPair(origin: URL, bookId: string): Promise<EditionPair> {
+  const path = queryPath(`/v1/subjects/${bookId}/links`, {
+    property: 'schema:exampleOfWork',
+    context: GLOBAL_CONTEXT,
+    limit: String(RELATION_LIMIT),
+  });
+  const anonymous = await nativeRequest(origin, 'GET', path, 'anonymous');
+  const member = await nativeRequest(origin, 'GET', path, 'member');
+  const anonymousLinks = parseEditionLinks(status(anonymous, 200, 'anonymous Book editions link read'));
+  const memberLinks = parseEditionLinks(status(member, 200, 'member Book editions link read'));
+  expect(memberLinks).toEqual(anonymousLinks);
+  return { anonymous: anonymousLinks, member: memberLinks };
+}
+
 async function readSubject(
   origin: URL,
   subjectId: string,
@@ -412,9 +453,9 @@ async function discoverSynopsis(
   for (const binding of rows) {
     if (visited.has(binding.subjectId)) continue;
     visited.add(binding.subjectId);
-    const subject = await readSubject(origin, binding.subjectId, type, 'member');
+    await readSubject(origin, binding.subjectId, type, 'member');
     if (needsEdition) {
-      const editions = await relationPair(origin, binding.subjectId, 'schema:exampleOfWork', 'schema:CreativeWork');
+      const editions = await editionPair(origin, binding.subjectId);
       if (editions.anonymous.length === 0) continue;
     }
     const listing = await candidateListing(origin, binding.subjectId);
@@ -671,7 +712,7 @@ describe.skipIf(!retainedStackAvailable)('retained doctor catalogue readback', (
     const unknownProperty = await nativeRequest(
       origin,
       'GET',
-      queryPath(`/v1/subjects/${personId}/relations`, {
+      queryPath(`/v1/subjects/${book.target.binding.subjectId}/links`, {
         property: 'rezics:notReleased',
         context: GLOBAL_CONTEXT,
         limit: String(RELATION_LIMIT),
