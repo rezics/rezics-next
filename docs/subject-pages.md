@@ -2650,4 +2650,3 @@ Readable facts do not grant mutation. Authored and relationship corrections cont
 operation advice and command recovery. The locator carries no draft, permission, credential or nested return address;
 it does not change Context resolution or choose a replacement assertion. The browser review at 390/1440, light/dark
 and keyboard-only remains an integration acceptance.
-
