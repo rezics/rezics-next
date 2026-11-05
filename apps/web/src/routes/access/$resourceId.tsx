@@ -49,6 +49,7 @@ function AccessRoute() {
     const headers = { 'X-CSRF-Token': session?.csrfToken ?? '' };
     const current = () => source.snapshot() === revision && source.read()?.state === 'signed-in';
     return {
+      isCurrent: current,
       read: (cursor, signal) =>
         current()
           ? readResourceAccess({ data: { resourceId, ...(cursor ? { cursor } : {}) }, ...(signal ? { signal } : {}) })
