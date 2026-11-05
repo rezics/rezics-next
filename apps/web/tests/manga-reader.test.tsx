@@ -265,8 +265,8 @@ test('replacement of the current source, release, viewer, context, locale, view 
     { reader: 'changed-reader' },
     { address: 'another-address' },
   ])
-    expect(mangaReaderRetired(captured, observation(replacement))).toBe(true);
-  expect(mangaReaderRetired(captured, observation())).toBe(false);
+    expect(mangaReaderRetired(captured, { ...captured, ...replacement })).toBe(true);
+  expect(mangaReaderRetired(captured, { ...captured })).toBe(false);
 });
 
 test('a changed viewer or source hides old links and returning to the prior observation does not revive them', async () => {
@@ -434,6 +434,17 @@ test('withheld assertions, malformed evidence and full-assertion spoiler admissi
   expect(disclosed).toHaveLength(1);
   expect(disclosed[0]?.assertion).toBeUndefined();
   expect(disclosed[0]?.notes).toEqual([]);
+  const foreign = { ...row, assertion: { ...row.assertion, value: { type: 'value', content: editionId } } };
+  expect(mangaReaderWindowStatus(native([foreign]), definitions, defaultReader, seriesId)).toBe('unavailable');
+  expect(
+    mangaReaderRows(
+      native([foreign]),
+      definitions,
+      'en',
+      defaultReader,
+      mangaSubject(seriesId, 'schema:ComicSeries', 'The Harbour Atlas'),
+    ),
+  ).toEqual([]);
   for (const malformed of [
     { ...row.assertion, references: [{ hash: 'broken', parts: [null] }] },
     {

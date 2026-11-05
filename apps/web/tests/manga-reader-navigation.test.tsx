@@ -44,7 +44,7 @@ test('return links reject foreign, mismatched, nested or malformed windows', () 
     '//attacker.test/en/subjects/x/y',
     'https://attacker.test/en/subjects/x/y',
     `/ja/subjects/${seriesId}/title/contents`,
-    `/en/subjects/${seriesId}/unknown-view`,
+    `/en/subjects/${seriesId}/title/unknown-view`,
     `/en/subjects/${seriesId}/title?node=edition-window&cursor=opaque`,
     `/en/subjects/${seriesId}/title/contents?node=bad%20node&cursor=opaque`,
     `/en/subjects/${seriesId}/title/contents?node=edition-window&cursor=opaque&cursor=other`,
