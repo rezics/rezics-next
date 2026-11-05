@@ -80,5 +80,7 @@ export function subjectLabelReviewAlreadyAssigned(
   review: SubjectLabelReview,
   assignments: readonly SubjectLabelReviewAssignment[],
 ): boolean {
-  return review.choice.kind === 'existing' && assignments.some(({ labelId }) => labelId === review.choice.label.id);
+  if (review.choice.kind !== 'existing') return false;
+  const labelId = review.choice.label.id;
+  return assignments.some((assignment) => assignment.labelId === labelId);
 }
