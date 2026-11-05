@@ -190,7 +190,6 @@ function ReviewerJourney({
       const id = ++requestId.current;
       const requested = { id, cursor };
       const nextMovement = direction ? { direction, source: request.current?.cursor } : undefined;
-      console.log('review movement requested', requested, direction);
       request.current = requested;
       if (nextMovement) {
         movementRef.current = nextMovement;
