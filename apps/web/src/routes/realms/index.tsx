@@ -4,7 +4,12 @@ import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { myRealmsQuery } from '../../community/realm-membership-queries';
-import { captureMyRealmsCaller, MyRealmsCallerHost, retireMyRealmsNavigation } from '../../community/my-realms-caller';
+import {
+  captureMyRealmsCaller,
+  MyRealmsCallerHost,
+  retireMyRealmsNavigation,
+  useMyRealmsInventoryVisit,
+} from '../../community/my-realms-caller';
 import { ClosedErrorPage } from '../../shell/closed';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -58,6 +63,7 @@ function canRestartContinuation(error: unknown) {
 }
 
 function MyRealmsErrorPage({ error, reset }: { error: unknown; reset?: () => void }) {
+  useMyRealmsInventoryVisit();
   const { cursor } = Route.useSearch();
   return (
     <>
@@ -78,6 +84,7 @@ function MyRealmsErrorPage({ error, reset }: { error: unknown; reset?: () => voi
 }
 
 function MyRealms() {
+  useMyRealmsInventoryVisit();
   const initial = Route.useLoaderData()!;
   const { cursor } = Route.useSearch();
   return <MyRealmsCallerHost key={initial.visit.id} initial={initial} cursor={cursor} />;

@@ -90,7 +90,7 @@ const meta = {
     const canvas = within(canvasElement);
     if (args.unavailable) {
       await expect(await canvas.findByRole('heading', { level: 1, name: m.error_heading() })).toBeVisible();
-      await expect(canvas.getByText(m.error_message())).toBeVisible();
+      await expect(canvas.getByText(m.route_error_description())).toBeVisible();
       await expect(canvas.queryByText(m.realms_empty())).toBeNull();
       await expect(canvas.queryByText(m.realm_list_details_sparse_page_empty())).toBeNull();
       await expect(canvas.queryByRole('link', { name: m.realms_more() })).toBeNull();

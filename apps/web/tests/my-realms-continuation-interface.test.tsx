@@ -2,7 +2,14 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { renderToString } from 'react-dom/server';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { MyRealmsPageView } from '../src/community/my-realms-page';
 import type { MyRealmsPage } from '../src/community/space';
 import { m } from '../src/paraglide/messages.js';
@@ -34,7 +41,10 @@ const populated: MyRealmsPage = {
 
 async function render(pages: readonly MyRealmsPage[], locale: Locale, dir: 'ltr' | 'rtl' = 'ltr', unavailable = false) {
   await setLocale(locale, { reload: false });
-  const root = createRootRoute({
+  const root = createRootRoute({ component: Outlet });
+  const route = createRoute({
+    getParentRoute: () => root,
+    path: '/realms',
     component: () =>
       createElement(
         'main',
@@ -45,7 +55,7 @@ async function render(pages: readonly MyRealmsPage[], locale: Locale, dir: 'ltr'
       ),
   });
   const router = createRouter({
-    routeTree: root,
+    routeTree: root.addChildren([route]),
     isServer: true,
     context: { queryClient: new QueryClient() },
     history: createMemoryHistory({ initialEntries: [`/${locale}/realms`] }),
@@ -191,7 +201,7 @@ test('the existing unavailable presentation does not substitute a final empty or
   for (const locale of locales) {
     const markup = await render([], locale, 'ltr', true);
     expect(markup).toContain(m.error_heading({}, { locale }));
-    expect(markup).toContain(m.error_message({}, { locale }));
+    expect(markup).toContain(m.route_error_description({}, { locale }));
     expect(markup).not.toContain(m.realms_empty({}, { locale }));
     expect(markup).not.toContain(m.realm_list_details_sparse_page_empty({}, { locale }));
     expect(markup).not.toContain(m.realms_more({}, { locale }));

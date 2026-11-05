@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
@@ -169,6 +169,8 @@ class MyRealmsSessionSource {
   private visitGeneration = 0;
   private continuationFocus: ContinuationFocus | null = null;
   private navigation: InventoryNavigation | null = null;
+  private inventoryRouter: object | undefined;
+  private viewConnection = 0;
 
   constructor(readonly client: QueryClient) {
     this.snapshot = sessionFrom(client);
@@ -219,6 +221,21 @@ class MyRealmsSessionSource {
     this.visitGeneration++;
     this.active?.retire(preserveCache);
     return this.visitGeneration;
+  }
+
+  observeInventoryRouter(router: object) {
+    if (this.inventoryRouter && this.inventoryRouter !== router) this.clearNavigation();
+    this.inventoryRouter = router;
+  }
+
+  connectInventoryView() {
+    ++this.viewConnection;
+    return () => {
+      const disconnected = ++this.viewConnection;
+      queueMicrotask(() => {
+        if (this.viewConnection === disconnected) this.clearNavigation();
+      });
+    };
   }
 
   clearNavigation() {
@@ -959,6 +976,14 @@ export function beginMyRealmsRead(caller: MyRealmsCaller, client: QueryClient, s
     publish: (page: MyRealmsPage) => caller.publishResponse(page, query),
     finish: () => signal.removeEventListener('abort', onAbort),
   };
+}
+
+/** One named-route view spans both its admitted caller and its existing error recovery. */
+export function useMyRealmsInventoryVisit() {
+  const source = sourceFor(useQueryClient());
+  const router = useRouter();
+  source.observeInventoryRouter(router);
+  useEffect(() => source.connectInventoryView(), [source, router]);
 }
 
 export function retireMyRealmsNavigation(client: QueryClient) {
