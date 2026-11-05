@@ -716,7 +716,10 @@ test('later selected-family reseeds carry the newly current release classificati
     expect(laterPlatformProposals).toHaveLength(1);
     expect(
       laterPlatformProposals.some(
-        (command) => command.op === 'propose' && command.statement.value.type === 'value' && command.statement.value.content === platformWinId,
+        (command) =>
+          command.op === 'propose' &&
+          command.statement.value.type === 'value' &&
+          command.statement.value.content === currentPlatformId,
       ),
     ).toBe(true);
   } finally {
