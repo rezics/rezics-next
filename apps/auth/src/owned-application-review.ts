@@ -85,7 +85,8 @@ export function useOwnedApplicationReview({
       return;
     }
     // Commit navigation only when the whole observation is accepted, exactly once.
-    if (intent.direction === 'next') history.current = [...history.current, acceptedCursor.current].slice(-HISTORY_LIMIT);
+    if (intent.direction === 'next')
+      history.current = [...history.current, acceptedCursor.current].slice(-HISTORY_LIMIT);
     if (intent.direction === 'previous') history.current = history.current.slice(0, -1);
     if (intent.direction === 'restart') history.current = [];
     acceptedCursor.current = intent.cursor;
@@ -101,7 +102,13 @@ export function useOwnedApplicationReview({
       })),
       next: result.next,
     };
-    publish({ observation: { kind: 'ready', page }, expanded: null, copy: 'idle', previous: history.current.length > 0, accepted: true });
+    publish({
+      observation: { kind: 'ready', page },
+      expanded: null,
+      copy: 'idle',
+      previous: history.current.length > 0,
+      accepted: true,
+    });
   }
 
   useLayoutEffect(() => {
@@ -148,7 +155,8 @@ export function useOwnedApplicationReview({
   async function copy() {
     const value = current.current;
     const controller = readLifetime.current;
-    if (!controller || controller.signal.aborted || value.observation.kind !== 'ready' || value.copy === 'pending') return;
+    if (!controller || controller.signal.aborted || value.observation.kind !== 'ready' || value.copy === 'pending')
+      return;
     const row = value.observation.page.rows.find((row) => row.client_id === value.expanded);
     if (!row) return;
     const ticket = ++copyGeneration.current;
@@ -177,7 +185,9 @@ export function useOwnedApplicationReview({
       if (history.current.length) void read({ cursor: history.current.at(-1), direction: 'previous' });
     },
     reload: () => void read({ cursor: acceptedCursor.current, direction: 'reload' }),
-    retry: () => { if (intended.current) void read(intended.current); },
+    retry: () => {
+      if (intended.current) void read(intended.current);
+    },
     restart: () => void read(firstPage()),
   };
 }

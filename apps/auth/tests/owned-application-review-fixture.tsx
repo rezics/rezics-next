@@ -10,13 +10,20 @@ const { Window } = await import(
 );
 const dom = new Window({ url: 'https://auth.test/security' });
 const globals = {
-  window: dom, document: dom.document, navigator: dom.navigator,
-  HTMLElement: dom.HTMLElement, Element: dom.Element, Node: dom.Node,
-  Event: dom.Event, getComputedStyle: dom.getComputedStyle.bind(dom), IS_REACT_ACT_ENVIRONMENT: true,
+  window: dom,
+  document: dom.document,
+  navigator: dom.navigator,
+  HTMLElement: dom.HTMLElement,
+  Element: dom.Element,
+  Node: dom.Node,
+  Event: dom.Event,
+  getComputedStyle: dom.getComputedStyle.bind(dom),
+  IS_REACT_ACT_ENVIRONMENT: true,
 };
 const original = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 function install() {
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
 }
 install();
 const { createRoot } = await import('react-dom/client');
@@ -25,7 +32,10 @@ const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 export let host: HTMLDivElement;
 let root: Root | null = null;
 export const tick = (fn: () => void = () => {}) => act(async () => fn());
-beforeEach(() => { install(); overwriteGetLocale(() => 'en'); });
+beforeEach(() => {
+  install();
+  overwriteGetLocale(() => 'en');
+});
 afterEach(async () => {
   if (root) await tick(() => root!.unmount());
   root = null;
@@ -37,7 +47,11 @@ afterEach(async () => {
 });
 afterAll(() => dom.happyDOM.close());
 export async function render(node: ReactNode) {
-  if (!root) { host = document.createElement('div'); document.body.append(host); root = createRoot(host); }
+  if (!root) {
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+  }
   await tick(() => root!.render(node));
 }
 export function button(label: string) {
@@ -46,10 +60,15 @@ export function button(label: string) {
   return found;
 }
 export const click = (label: string) => tick(() => button(label).click());
-export const expand = (index = 0) => tick(() => host.querySelectorAll<HTMLButtonElement>('[data-owned-control]')[index]!.click());
+export const expand = (index = 0) =>
+  tick(() => host.querySelectorAll<HTMLButtonElement>('[data-owned-control]')[index]!.click());
 export const text = () => host.textContent ?? '';
 export const row = (id = 'client-A', extra: Partial<OwnedClient> = {}): OwnedClient => ({
-  client_id: id, display_name: 'Reading companion', disabled: false, scopes: ['subject:read', 'unfamiliar:future'], ...extra,
+  client_id: id,
+  display_name: 'Reading companion',
+  disabled: false,
+  scopes: ['subject:read', 'unfamiliar:future'],
+  ...extra,
 });
 export type Page = InventoryPage<'clients'>;
 export const ready = (id = 'client-A', next: string | null = null): Page => ({ kind: 'ready', rows: [row(id)], next });
@@ -59,7 +78,7 @@ export function inventory(...pages: (Page | Promise<Page>)[]) {
     calls.push({ view, cursor, signal });
     const page = pages.shift();
     if (!page) throw new Error('Unexpected inventory read');
-    return await page as InventoryPage<typeof view>;
+    return (await page) as InventoryPage<typeof view>;
   };
   return { source, calls, cursors: () => calls.map((call) => call.cursor) };
 }

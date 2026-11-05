@@ -1,15 +1,46 @@
 import { expect, test } from 'bun:test';
 import { OwnedApplicationReview } from '../src/owned-application-review-view';
 import { permissionDescription } from '../src/permission-description';
-import { button, click, expand, host, inventory, m, ready, render, row, text, tick, type Page } from './owned-application-review-fixture';
+import {
+  button,
+  click,
+  expand,
+  host,
+  inventory,
+  m,
+  ready,
+  render,
+  row,
+  text,
+  tick,
+  type Page,
+} from './owned-application-review-fixture';
 
 test('public identity, ordered capabilities, duplicate names and local disclosure/copy', async () => {
   const longId = `client-読書-${'長い識別子'.repeat(40)}`;
   const scopes = ['unfamiliar:future', 'subject:read', `scope:${'long'.repeat(80)}`];
-  const data = inventory({ kind: 'ready', rows: [row('same-1'), row('same-2'), row(longId, { display_name: '  ', disabled: true, scopes: [] }), row('literal', { display_name: '<b>読書</b>', scopes })], next: null });
+  const data = inventory({
+    kind: 'ready',
+    rows: [
+      row('same-1'),
+      row('same-2'),
+      row(longId, { display_name: '  ', disabled: true, scopes: [] }),
+      row('literal', { display_name: '<b>読書</b>', scopes }),
+    ],
+    next: null,
+  });
   const copied: string[] = [];
-  await render(<OwnedApplicationReview source={data.source} copyIdentifier={async (id) => { copied.push(id); }} />);
-  expect([...host.querySelectorAll('[data-owned-control]')].map((control) => control.getAttribute('aria-label'))).toEqual([
+  await render(
+    <OwnedApplicationReview
+      source={data.source}
+      copyIdentifier={async (id) => {
+        copied.push(id);
+      }}
+    />,
+  );
+  expect(
+    [...host.querySelectorAll('[data-owned-control]')].map((control) => control.getAttribute('aria-label')),
+  ).toEqual([
     m.auth_owned_details_for({ name: 'Reading companion', identifier: 'same-1' }),
     m.auth_owned_details_for({ name: 'Reading companion', identifier: 'same-2' }),
     m.auth_owned_details_for({ name: m.auth_inventory_unnamed(), identifier: longId }),
@@ -41,11 +72,20 @@ test('public identity, ordered capabilities, duplicate names and local disclosur
 test('held Next gates duplicate activation; exact retry commits history only once', async () => {
   const held = Promise.withResolvers<Page>();
   const next = 'signed/opaque?A=1+2';
-  const data = inventory(ready('page-first-id', next), held.promise, { kind: 'unavailable' }, ready('second', 'next-B'), ready('page-first-id', next));
+  const data = inventory(
+    ready('page-first-id', next),
+    held.promise,
+    { kind: 'unavailable' },
+    ready('second', 'next-B'),
+    ready('page-first-id', next),
+  );
   await render(<OwnedApplicationReview source={data.source} />);
   await expand();
   const nextButton = button(m.auth_inventory_next());
-  await tick(() => { nextButton.click(); nextButton.click(); });
+  await tick(() => {
+    nextButton.click();
+    nextButton.click();
+  });
   expect(data.cursors()).toEqual([undefined, next]);
   expect(text()).toContain(m.auth_inventory_loading());
   expect(text()).not.toContain('page-first-id');
@@ -64,7 +104,15 @@ test('held Next gates duplicate activation; exact retry commits history only onc
 });
 
 test('failed Next leaves accepted Previous/Reload targets; expired cursor needs explicit restart', async () => {
-  const data = inventory(ready('first', 'A'), ready('second', 'B'), { kind: 'denied' }, ready('second', 'B'), { kind: 'expired' }, ready('first'), ready('first'));
+  const data = inventory(
+    ready('first', 'A'),
+    ready('second', 'B'),
+    { kind: 'denied' },
+    ready('second', 'B'),
+    { kind: 'expired' },
+    ready('first'),
+    ready('first'),
+  );
   await render(<OwnedApplicationReview source={data.source} />);
   await click(m.auth_inventory_next());
   await click(m.auth_inventory_next());
@@ -94,7 +142,14 @@ test('late clipboard after collapse/navigation never announces in another disclo
   expect(text()).not.toContain(m.auth_owned_copied());
   await click(m.auth_inventory_next());
   await expand();
-  await render(<OwnedApplicationReview {...props} copyIdentifier={async () => { throw new Error('Unavailable'); }} />);
+  await render(
+    <OwnedApplicationReview
+      {...props}
+      copyIdentifier={async () => {
+        throw new Error('Unavailable');
+      }}
+    />,
+  );
   await click(m.auth_owned_copy());
   expect(text()).toContain(m.auth_owned_copy_failed());
   expect(host.querySelector('[role="region"] code')?.textContent).toBe('second');
@@ -106,10 +161,16 @@ test('retirement synchronously removes private DOM; replacement and aborted life
   const heldRead = Promise.withResolvers<Page>();
   const heldCopy = Promise.withResolvers<void>();
   const old = inventory(ready('private-old', 'old-cursor'), heldRead.promise);
-  await render(<OwnedApplicationReview source={old.source} lifetime={life.signal} copyIdentifier={() => heldCopy.promise} />);
+  await render(
+    <OwnedApplicationReview source={old.source} lifetime={life.signal} copyIdentifier={() => heldCopy.promise} />,
+  );
   await expand();
   await click(m.auth_owned_copy());
-  await tick(() => { life.abort(); expect(text()).not.toContain('private-old'); expect(host.querySelector('nav,[role="region"]')).toBeNull(); });
+  await tick(() => {
+    life.abort();
+    expect(text()).not.toContain('private-old');
+    expect(host.querySelector('nav,[role="region"]')).toBeNull();
+  });
   await tick(() => heldCopy.resolve());
   expect(text()).not.toContain(m.auth_owned_copied());
   const alreadyAborted = inventory(ready('forbidden'));
@@ -147,7 +208,9 @@ test('source replacement clears expanded copy feedback; abort and unmount fence 
   const delayed = Promise.withResolvers<Page>();
   const life = new AbortController();
   const old = inventory(ready('old-private'));
-  await render(<OwnedApplicationReview source={old.source} lifetime={life.signal} copyIdentifier={() => copy.promise} />);
+  await render(
+    <OwnedApplicationReview source={old.source} lifetime={life.signal} copyIdentifier={() => copy.promise} />,
+  );
   await expand();
   await click(m.auth_owned_copy());
   const fresh = inventory(ready('new-private'), delayed.promise);
@@ -157,7 +220,10 @@ test('source replacement clears expanded copy feedback; abort and unmount fence 
   await tick(() => copy.resolve());
   expect(text()).not.toContain(m.auth_owned_copied());
   await click(m.auth_owned_reload());
-  await tick(() => { life.abort(); expect(host.querySelector('nav')).toBeNull(); });
+  await tick(() => {
+    life.abort();
+    expect(host.querySelector('nav')).toBeNull();
+  });
   await tick(() => delayed.resolve(ready('late-private')));
   expect(text()).not.toContain('late-private');
   const unmounted = Promise.withResolvers<Page>();

@@ -4,7 +4,15 @@ import { OwnedApplicationReview } from '../src/owned-application-review-view';
 import { click, expand, inventory, m, ready, render } from './owned-application-review-fixture';
 
 test('one installed inventory call per deliberate page read; local inspection has zero reads', async () => {
-  const data = inventory(ready('first', 'opaque'), ready('second'), ready('second'), ready('first', 'opaque'), { kind: 'unavailable' }, ready('second'), ready('first'));
+  const data = inventory(
+    ready('first', 'opaque'),
+    ready('second'),
+    ready('second'),
+    ready('first', 'opaque'),
+    { kind: 'unavailable' },
+    ready('second'),
+    ready('first'),
+  );
   await render(createElement(OwnedApplicationReview, { source: data.source, copyIdentifier: async () => {} }));
   await expand();
   await click(m.auth_owned_copy());

@@ -8,9 +8,24 @@ test('Security composes independent ownership/consent data and retires both at t
   const calls: string[] = [];
   const source: InventorySource = async (view) => {
     calls.push(view);
-    return (view === 'clients'
-      ? { kind: 'ready', rows: [row('exact-owner-id')], next: null }
-      : { kind: 'ready', rows: [{ client_id: 'separate-consent', display_name: 'Connected only', granted: ['openid'], status: 'current', reducible: false, pending_reduction: false }], next: null }) as InventoryPage<typeof view>;
+    return (
+      view === 'clients'
+        ? { kind: 'ready', rows: [row('exact-owner-id')], next: null }
+        : {
+            kind: 'ready',
+            rows: [
+              {
+                client_id: 'separate-consent',
+                display_name: 'Connected only',
+                granted: ['openid'],
+                status: 'current',
+                reducible: false,
+                pending_reduction: false,
+              },
+            ],
+            next: null,
+          }
+    ) as InventoryPage<typeof view>;
   };
   await render(<SecurityInventory source={source} lifetime={life.signal} preflight />);
   expect(calls).toEqual(['clients', 'consents']);

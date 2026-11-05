@@ -44,8 +44,17 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
           : '';
 
   return (
-    <section ref={section} aria-labelledby={`${id}-heading`} className="flex min-w-0 flex-col gap-4 text-start wrap-anywhere">
-      <h2 ref={review.heading} id={`${id}-heading`} tabIndex={-1} className="font-semibold focus-visible:outline-2 focus-visible:outline-ring">
+    <section
+      ref={section}
+      aria-labelledby={`${id}-heading`}
+      className="flex min-w-0 flex-col gap-4 text-start wrap-anywhere"
+    >
+      <h2
+        ref={review.heading}
+        id={`${id}-heading`}
+        tabIndex={-1}
+        className="font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+      >
         {m.auth_inventory_clients_heading()}
       </h2>
       <p className="text-muted-foreground">{m.auth_owned_description()}</p>
@@ -87,28 +96,58 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
                       aria-expanded={expanded}
                       aria-controls={detailsId}
                       aria-label={m.auth_owned_details_for({ name, identifier: row.client_id })}
-                      onClick={() => expanded ? close(row.client_id, index) : review.toggle(row.client_id)}
+                      onClick={() => (expanded ? close(row.client_id, index) : review.toggle(row.client_id))}
                     >
                       {expanded ? m.auth_owned_close() : m.auth_owned_details()}
                     </Button>
                     {expanded ? (
-                      <div id={detailsId} role="region" aria-labelledby={`${detailsId}-heading`} className="grid min-w-0 gap-3 rounded-md border p-4">
-                        <h3 ref={detailsHeading} id={`${detailsId}-heading`} tabIndex={-1} className="grid min-w-0 gap-1 font-semibold focus-visible:outline-2 focus-visible:outline-ring">
+                      <div
+                        id={detailsId}
+                        role="region"
+                        aria-labelledby={`${detailsId}-heading`}
+                        className="grid min-w-0 gap-3 rounded-md border p-4"
+                      >
+                        <h3
+                          ref={detailsHeading}
+                          id={`${detailsId}-heading`}
+                          tabIndex={-1}
+                          className="grid min-w-0 gap-1 font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+                        >
                           <span>{name}</span>
                           <code className="select-text font-mono text-sm wrap-anywhere">{row.client_id}</code>
                         </h3>
-                        <Button type="button" variant="outline" className="justify-self-start" disabled={review.copy === 'pending'} aria-describedby={`${id}-status`} onClick={() => void review.copy()}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="justify-self-start"
+                          disabled={review.copy === 'pending'}
+                          aria-describedby={`${id}-status`}
+                          onClick={() => void review.copy()}
+                        >
                           {m.auth_owned_copy()}
                         </Button>
                         <h4 className="font-medium">{m.auth_owned_scopes()}</h4>
                         <p className="text-sm text-muted-foreground">{m.auth_owned_capabilities()}</p>
                         {row.scopes.length ? (
                           <ul aria-label={m.auth_owned_scopes()} className="grid min-w-0 gap-3">
-                            {row.scopes.map((scope) => <li key={scope} className="grid min-w-0 gap-1 select-text"><Permission scope={scope} /></li>)}
+                            {row.scopes.map((scope) => (
+                              <li key={scope} className="grid min-w-0 gap-1 select-text">
+                                <Permission scope={scope} />
+                              </li>
+                            ))}
                           </ul>
-                        ) : <p>{m.auth_owned_scopes_empty()}</p>}
-                        {row.disabled ? <p className="text-sm text-muted-foreground">{m.auth_owned_disabled_note()}</p> : null}
-                        <Button type="button" variant="outline" className="justify-self-start" onClick={() => close(row.client_id, index)}>
+                        ) : (
+                          <p>{m.auth_owned_scopes_empty()}</p>
+                        )}
+                        {row.disabled ? (
+                          <p className="text-sm text-muted-foreground">{m.auth_owned_disabled_note()}</p>
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="justify-self-start"
+                          onClick={() => close(row.client_id, index)}
+                        >
                           {m.auth_owned_close()}
                         </Button>
                       </div>
@@ -118,15 +157,39 @@ export function OwnedApplicationReview(options: OwnedApplicationReviewOptions) {
               );
             })}
           </ItemGroup>
-        ) : <p>{m.auth_owned_empty()}</p>
+        ) : (
+          <p>{m.auth_owned_empty()}</p>
+        )
       ) : null}
       {!retired ? (
-        <nav aria-label={m.auth_inventory_clients_heading()} className="flex min-w-0 flex-wrap gap-3" aria-busy={pending}>
-          {failure ? <Button type="button" variant="outline" disabled={pending} onClick={review.retry}>{m.auth_owned_retry()}</Button> : null}
-          {review.previous ? <Button type="button" variant="outline" disabled={pending} onClick={review.previousPage}>{m.auth_inventory_previous()}</Button> : null}
-          {page?.next ? <Button type="button" variant="outline" disabled={pending} onClick={review.next}>{m.auth_inventory_next()}</Button> : null}
-          {review.accepted ? <Button type="button" variant="outline" disabled={pending} onClick={review.reload}>{m.auth_owned_reload()}</Button> : null}
-          <Button type="button" variant="outline" disabled={pending} onClick={review.restart}>{m.auth_owned_restart()}</Button>
+        <nav
+          aria-label={m.auth_inventory_clients_heading()}
+          className="flex min-w-0 flex-wrap gap-3"
+          aria-busy={pending}
+        >
+          {failure ? (
+            <Button type="button" variant="outline" disabled={pending} onClick={review.retry}>
+              {m.auth_owned_retry()}
+            </Button>
+          ) : null}
+          {review.previous ? (
+            <Button type="button" variant="outline" disabled={pending} onClick={review.previousPage}>
+              {m.auth_inventory_previous()}
+            </Button>
+          ) : null}
+          {page?.next ? (
+            <Button type="button" variant="outline" disabled={pending} onClick={review.next}>
+              {m.auth_inventory_next()}
+            </Button>
+          ) : null}
+          {review.accepted ? (
+            <Button type="button" variant="outline" disabled={pending} onClick={review.reload}>
+              {m.auth_owned_reload()}
+            </Button>
+          ) : null}
+          <Button type="button" variant="outline" disabled={pending} onClick={review.restart}>
+            {m.auth_owned_restart()}
+          </Button>
         </nav>
       ) : null}
     </section>
