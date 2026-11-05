@@ -1,19 +1,19 @@
 import { createHash } from 'node:crypto';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
-import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { bangumiRecordUrl, crossMediaCoverDigest, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
-import type { CrossMediaMediaOutcome } from './showcase-media.ts';
-import { validAvailableCover } from './showcase-media.ts';
+import { BANGUMI_MEDIA_BATCH_LIMIT, validAvailableCover, type CrossMediaMediaOutcome } from './showcase-media.ts';
 import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
 
 export const showcaseLimits = Object.freeze({
   records: 768,
+  media: BANGUMI_MEDIA_BATCH_LIMIT,
   candidates: 8192,
   vocabulary: 512,
   candidatesPerRecord: 128,
@@ -431,7 +431,7 @@ export function showcaseMediaContext(input: {
     outcome.provenance.converter_revision.length === 0 ||
     outcome.credit?.rightsHolder !== '(c) rights holder' ||
     outcome.credit.via.name !== 'Bangumi' ||
-    outcome.credit.via.url !== `https://bgm.tv/subject/${row.key}` ||
+    outcome.credit.via.url !== bangumiRecordUrl(row.key) ||
     outcome.credit.license !== 'LicenseRef-unknown'
   )
     return undefined;
@@ -680,7 +680,7 @@ export function buildShowcaseManifest(input: {
   }
 
   const media: ShowcaseMediaRecord[] = [];
-  for (const outcome of mediaOutcomes.slice(0, 256)) {
+  for (const outcome of mediaOutcomes.slice(0, showcaseLimits.media)) {
     const record = records.find(
       (candidate) => candidate.sourceAlias === outcome.sourceAlias && candidate.sourceKey === outcome.externalId,
     );
@@ -722,7 +722,7 @@ export function buildShowcaseManifest(input: {
       ...(gap ? { gap } : {}),
     });
   }
-  if (mediaOutcomes.length > 256)
+  if (mediaOutcomes.length > showcaseLimits.media)
     omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'cover-source-unavailable' });
 
   const vocabulary: ShowcaseVocabularyRecord[] = [];

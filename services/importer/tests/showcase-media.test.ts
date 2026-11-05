@@ -72,7 +72,7 @@ test('default selected Bangumi media intent resumes its journalled reservation t
     const resumedPlan = await acquireBangumiCoverSources(sourcePlan, { journal, fetch, sleep: async () => {} });
     expect(firstPlan.records.bangumi[0]!.payload).toMatchObject({ images: { large: sourceUrl } });
     expect(resumedPlan.coverSources).toEqual(firstPlan.coverSources);
-    expect(sourceReads).toBe(1);
+    expect(sourceReads).toBe(2);
 
     const fake = {
       async batch(request: {
@@ -183,6 +183,84 @@ test('default selected Bangumi media intent resumes its journalled reservation t
     expect(statusReads).toBe(2);
     expect(sealedBody).toBe(JSON.stringify(mediaRequest));
     expect(sealedKey).toBeTruthy();
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('direct selected Character images use CharacterDetail evidence and preserve changed receipts', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-character-media-'));
+  const plan = selectedPlan();
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const firstImage = 'https://lain.bgm.tv/pic/crt/l/46/52/11546_crt_FlzuU.jpg';
+  const changedImage = `${firstImage}?r=2`;
+  let characterReads = 0;
+  plan.entities.bangumi.push(
+    {
+      source: 'bangumi',
+      key: 'character:11546',
+      revision: null,
+      payload: { id: 11546, name: 'アルパカ', type: 1 },
+    },
+    {
+      source: 'bangumi',
+      key: 'character:99999',
+      revision: null,
+      payload: { id: 99999, name: 'unselected', type: 1, images: { large: 'https://lain.bgm.tv/unselected.jpg' } },
+    },
+  );
+  plan.characterAppearances = [{ subjectId: '101', characterId: 11546, sourceIndex: 0, roleCode: 1 }];
+  try {
+    const fetch = (async (input: RequestInfo | URL) => {
+      const endpoint = String(input);
+      if (endpoint === 'https://api.bgm.tv/v0/subjects/101')
+        return new Response(JSON.stringify(apiSubject), { status: 200, headers: { etag: '"subject-101"' } });
+      expect(endpoint).toBe('https://api.bgm.tv/v0/characters/11546');
+      characterReads += 1;
+      const image = characterReads === 1 ? firstImage : changedImage;
+      const images =
+        characterReads < 3
+          ? { large: image, medium: image, small: image, grid: image }
+          : { large: image, medium: image, small: image };
+      return new Response(
+        JSON.stringify({ id: 11546, name: 'アルパカ', type: 1, images }),
+        { status: 200, headers: { etag: `"character-11546-${characterReads}"` } },
+      );
+    }) as typeof globalThis.fetch;
+    const first = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
+    const firstReceipt = first.coverSources!.find((source) => source.externalId === 'character:11546')!;
+    expect(firstReceipt).toMatchObject({
+      endpoint: 'https://api.bgm.tv/v0/characters/11546',
+      sourceStatus: 'available',
+      sourceUrl: firstImage,
+    });
+    expect(first.entities.bangumi.find((row) => row.key === 'character:11546')?.payload).toMatchObject({
+      images: { large: firstImage },
+    });
+    expect(first.entities.bangumi.find((row) => row.key === 'character:99999')?.payload).not.toHaveProperty('images');
+
+    const changed = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
+    const changedReceipt = changed.coverSources!.find((source) => source.externalId === 'character:11546')!;
+    expect(changedReceipt).toMatchObject({ sourceStatus: 'available', sourceUrl: changedImage });
+    expect(journal.sealCoverSource(firstReceipt)).toEqual(firstReceipt);
+
+    const malformed = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
+    const malformedReceipt = malformed.coverSources!.find((source) => source.externalId === 'character:11546')!;
+    expect(malformedReceipt).toMatchObject({
+      endpoint: 'https://api.bgm.tv/v0/characters/11546',
+      sourceStatus: 'unavailable',
+      code: 'source-payload-invalid',
+      responseDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+    });
+    expect(malformed.entities.bangumi.find((row) => row.key === 'character:11546')?.payload).not.toHaveProperty(
+      'images',
+    );
+    expect(journal.coverSource('bangumi_cross_media', 'character:11546', firstReceipt.archiveDigest)).toEqual(
+      malformedReceipt,
+    );
+    expect(journal.sealCoverSource(changedReceipt)).toEqual(changedReceipt);
+    expect(characterReads).toBe(3);
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

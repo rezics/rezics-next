@@ -21,7 +21,12 @@ import {
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
 import { createSourceRegistration } from './source-registry.ts';
-import { converter_revision as entityRevision, mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
+import {
+  bangumiRecordUrl,
+  converter_revision as entityRevision,
+  crossMediaCoverDigest,
+  mapSourceEnumeration,
+} from '@rezics/conversion/cross-media-entities';
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
 import { subjectSlug } from '@rezics/definitions/slug';
 import { safeSourceUrl } from '../../../packages/conversion/src/support.ts';
@@ -97,8 +102,9 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         source_alias TEXT NOT NULL,
         external_id TEXT NOT NULL,
         archive_digest TEXT NOT NULL,
+        response_digest TEXT NOT NULL,
         source_json TEXT NOT NULL,
-        PRIMARY KEY(source_alias,external_id,archive_digest)
+        PRIMARY KEY(source_alias,external_id,archive_digest,response_digest)
       ) STRICT;
       CREATE TABLE IF NOT EXISTS showcase_action (
         action_key TEXT PRIMARY KEY,
@@ -109,6 +115,42 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         error_code TEXT
       ) STRICT;
     `);
+    const columns = this.#db.query<{ name: string; pk: number }, []>('PRAGMA table_info(showcase_cover_source)').all();
+    const primaryKey = columns
+      .filter((column) => column.pk > 0)
+      .sort((left, right) => left.pk - right.pk)
+      .map((column) => column.name)
+      .join(',');
+    if (primaryKey !== 'source_alias,external_id,archive_digest,response_digest') {
+      const previous = this.#db
+        .query<
+          { source_alias: string; external_id: string; archive_digest: string; source_json: string },
+          []
+        >('SELECT source_alias,external_id,archive_digest,source_json FROM showcase_cover_source')
+        .all();
+      this.#db.exec(`
+        BEGIN IMMEDIATE;
+        ALTER TABLE showcase_cover_source RENAME TO showcase_cover_source_previous;
+        CREATE TABLE showcase_cover_source (
+          source_alias TEXT NOT NULL,
+          external_id TEXT NOT NULL,
+          archive_digest TEXT NOT NULL,
+          response_digest TEXT NOT NULL,
+          source_json TEXT NOT NULL,
+          PRIMARY KEY(source_alias,external_id,archive_digest,response_digest)
+        ) STRICT;
+      `);
+      for (const row of previous) {
+        const source = JSON.parse(row.source_json) as { responseDigest?: unknown };
+        const responseDigest = typeof source.responseDigest === 'string' ? source.responseDigest : '';
+        this.#db
+          .query(
+            'INSERT INTO showcase_cover_source(source_alias,external_id,archive_digest,response_digest,source_json) VALUES(?,?,?,?,?)',
+          )
+          .run(row.source_alias, row.external_id, row.archive_digest, responseDigest, row.source_json);
+      }
+      this.#db.exec('DROP TABLE showcase_cover_source_previous; COMMIT;');
+    }
   }
 
   prepareCommand(command: BatchCommand): void {
@@ -282,42 +324,63 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
   coverSource(sourceAlias: string, externalId: string, archiveDigest: string): BangumiCoverSource | null {
     const row = this.#db
       .query<{ source_json: string }, [string, string, string]>(
-        'SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=?',
+        'SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=? ORDER BY rowid DESC LIMIT 1',
       )
       .get(sourceAlias, externalId, archiveDigest);
     return row ? (JSON.parse(row.source_json) as BangumiCoverSource) : null;
   }
 
   sealCoverSource(source: BangumiCoverSource): BangumiCoverSource {
+    const characterId = /^character:([1-9][0-9]*)$/u.exec(source.externalId)?.[1];
+    const workId = /^[1-9][0-9]*$/u.test(source.externalId) ? source.externalId : undefined;
+    const numericId = characterId ?? workId;
+    const expectedEndpoint = numericId
+      ? `https://api.bgm.tv/v0/${characterId ? 'characters' : 'subjects'}/${numericId}`
+      : undefined;
     if (
       source.sourceAlias !== 'bangumi_cross_media' ||
-      !/^[1-9][0-9]*$/u.test(source.externalId) ||
+      !numericId ||
       !/^[0-9a-f]{64}$/u.test(source.archiveDigest) ||
-      !['available', 'absent'].includes(source.sourceStatus) ||
-      source.endpoint !== `https://api.bgm.tv/v0/subjects/${source.externalId}` ||
+      !['available', 'absent', 'unavailable'].includes(source.sourceStatus) ||
+      source.endpoint !== expectedEndpoint ||
       !/^[0-9a-f]{64}$/u.test(source.responseDigest ?? '') ||
       (source.etag !== undefined && (source.etag.length > 256 || !/^[\x20-\x7e]*$/u.test(source.etag))) ||
       (source.sourceStatus === 'available' &&
-        (!source.sourceUrl || !/^https:\/\/lain\.bgm\.tv\//u.test(source.sourceUrl)))
+        (!source.sourceUrl || !/^https:\/\/lain\.bgm\.tv\//u.test(source.sourceUrl))) ||
+      (source.sourceStatus !== 'available' && source.sourceUrl !== undefined) ||
+      (source.sourceStatus === 'unavailable' &&
+        !['source-api-http', 'source-api-unavailable', 'source-payload-invalid'].includes(source.code ?? ''))
     )
       throw new TypeError('Invalid Bangumi cover source receipt');
     if (source.sourceStatus === 'available') safeSourceUrl(source.sourceUrl!, ['lain.bgm.tv']);
     const body = json(source);
-    const prior = this.coverSource(source.sourceAlias, source.externalId, source.archiveDigest);
+    const priorRow = this.#db
+      .query<{ source_json: string }, [string, string, string, string]>(
+        'SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=? AND response_digest=?',
+      )
+      .get(source.sourceAlias, source.externalId, source.archiveDigest, source.responseDigest!);
+    const prior = priorRow ? (JSON.parse(priorRow.source_json) as BangumiCoverSource) : null;
     if (prior) {
-      if (json(prior) !== body) throw new TypeError('Bangumi cover source changed under the same archive digest');
+      const previous = { ...prior };
+      const next = { ...source };
+      delete previous.etag;
+      delete next.etag;
+      if (json(previous) !== json(next))
+        throw new TypeError('Bangumi cover source changed under the same response digest');
       return prior;
     }
     this.#db
-      .query('INSERT INTO showcase_cover_source(source_alias,external_id,archive_digest,source_json) VALUES(?,?,?,?)')
-      .run(source.sourceAlias, source.externalId, source.archiveDigest, body);
+      .query(
+        'INSERT INTO showcase_cover_source(source_alias,external_id,archive_digest,response_digest,source_json) VALUES(?,?,?,?,?)',
+      )
+      .run(source.sourceAlias, source.externalId, source.archiveDigest, source.responseDigest!, body);
     return source;
   }
 
   personCareerSource(sourceAlias: string, externalId: string, archiveDigest: string): BangumiPersonCareerSource | null {
     const row = this.#db
       .query<{ source_json: string }, [string, string, string]>(
-        'SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=?',
+        'SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=? ORDER BY rowid DESC LIMIT 1',
       )
       .get(sourceAlias, externalId, archiveDigest);
     return row ? (JSON.parse(row.source_json) as BangumiPersonCareerSource) : null;
@@ -348,8 +411,10 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       return prior;
     }
     this.#db
-      .query('INSERT INTO showcase_cover_source(source_alias,external_id,archive_digest,source_json) VALUES(?,?,?,?)')
-      .run(source.sourceAlias, source.externalId, source.archiveDigest, body);
+      .query(
+        'INSERT INTO showcase_cover_source(source_alias,external_id,archive_digest,response_digest,source_json) VALUES(?,?,?,?,?)',
+      )
+      .run(source.sourceAlias, source.externalId, source.archiveDigest, source.responseDigest!, body);
     return source;
   }
 
@@ -534,10 +599,10 @@ function admittedCoverMedia(
 ): CrossMediaMediaOutcome | undefined {
   if (
     record.provider !== 'bangumi' ||
-    record.kind !== 'work' ||
+    (record.kind !== 'work' && record.kind !== 'character') ||
     assertion.property !== 'schema:image' ||
     !record.subjectId ||
-    record.sourceUri !== `https://bgm.tv/subject/${record.sourceKey}` ||
+    record.sourceUri !== bangumiRecordUrl(record.sourceKey) ||
     assertion.statement.value.type !== 'value'
   )
     return undefined;
@@ -548,10 +613,14 @@ function admittedCoverMedia(
     (item) => item.sourceAlias === record.sourceAlias && item.externalId === record.sourceKey,
   );
   const imageUrl = (
-    plan.records.bangumi.find((row) => row.key === record.sourceKey)?.payload as
+    [...plan.records.bangumi, ...plan.entities.bangumi].find((row) => row.key === record.sourceKey)?.payload as
       | { images?: { large?: unknown } }
       | undefined
   )?.images?.large;
+  const coverDigest =
+    record.kind === 'character' && typeof imageUrl === 'string'
+      ? crossMediaCoverDigest(record.semanticDigest, imageUrl)
+      : record.semanticDigest;
   if (
     !outcome ||
     !receipt ||
@@ -574,7 +643,7 @@ function admittedCoverMedia(
     assertion.source.source !== record.sourceAlias ||
     assertion.source.external_id !== record.sourceKey ||
     assertion.source.record_revision !== record.sourceRevision ||
-    assertion.source.digest !== record.semanticDigest ||
+    assertion.source.digest !== coverDigest ||
     assertion.source.converter_revision !== record.converterRevision ||
     assertion.source.field_group !== 'cover' ||
     assertion.statement.value.type !== 'value' ||
@@ -583,7 +652,7 @@ function admittedCoverMedia(
     outcome.provenance.external_id !== record.sourceKey ||
     outcome.provenance.record_revision !== record.sourceRevision ||
     outcome.provenance.converter_revision !== record.converterRevision ||
-    outcome.provenance.digest !== record.semanticDigest ||
+    outcome.provenance.digest !== coverDigest ||
     outcome.provenance.field_group !== 'cover' ||
     outcome.credit?.rightsHolder !== '(c) rights holder' ||
     outcome.credit.via.name !== 'Bangumi' ||

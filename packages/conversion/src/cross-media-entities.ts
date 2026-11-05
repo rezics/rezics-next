@@ -10,6 +10,7 @@ import {
   type BatchStatement,
   type FieldGroup,
 } from '@rezics/definitions/bulk';
+import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
 import {
@@ -24,6 +25,7 @@ import {
   latinLanguageTag,
   matchesReleasedStringValue,
   projectVndbReleaseMinimumAge,
+  safeSourceUrl,
   sourceDigest,
   sourceEnvelope,
   sourceWebsiteUrl,
@@ -38,13 +40,13 @@ import {
 } from './bangumi-character-measurements.ts';
 import { projectBangumiPersonBirthDate, type BangumiPersonBirthDate } from './bangumi-person-birth-date.ts';
 
-export const converter_revision = 'cross-media-entities@13';
+export const converter_revision = 'cross-media-entities@14';
 export const bangumiCharacterNameCommandLimit =
   2 +
   bangumiCharacterNameLimits.maxNameFacts +
   bangumiCharacterNameLimits.maxAlternateNameFacts +
   bangumiCharacterMeasurementLimits.maxQuantityFacts +
-  1;
+  2;
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
   maxClassificationAssociations: 64,
@@ -387,9 +389,14 @@ export type CrossMediaEntityConversion = ConvertedRecord<BatchCommand> & {
     recordUrl: string;
     summary?: { language: string; takedownEligible: true };
   };
-  coverAssets: readonly [];
-  mediaImportIntents: readonly [];
+  coverAssets: Omit<MediaImportRequest, 'containerId'>[];
+  mediaImportIntents: MediaImportRequest[];
 };
+
+/** Keep a changed Character image on the same source tuple with its own truthful cover digest. */
+export function crossMediaCoverDigest(recordDigest: string, sourceUrl: string): string {
+  return sourceDigest({ recordDigest, sourceUrl });
+}
 
 const fail = (pointer: string, code = 'invalid_record'): never => {
   throw new ConversionError(code, pointer);
@@ -1624,12 +1631,12 @@ function convert(
   const references = (): BatchReference[] => [
     { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url } }] },
   ];
-  const key = (field: string, group: FieldGroup) =>
+  const key = (field: string, group: FieldGroup, fieldDigest = digest) =>
     commandKey([
       sourceId,
       input.external_id,
       metadata.record_revision,
-      digest,
+      fieldDigest,
       revision,
       group,
       field,
@@ -1756,6 +1763,63 @@ function convert(
       ? projected.normalized.summary
       : undefined);
   const summaryPath = descriptionText === undefined ? '/summary' : '/description';
+  const coverAssets: Omit<MediaImportRequest, 'containerId'>[] = [];
+  const mediaImportIntents: MediaImportRequest[] = [];
+  if (kind === 'bangumi-character') {
+    const raw = object(input.record, '/record');
+    const imagesValue = own(raw, 'images', '/images');
+    const images = imagesValue === undefined || imagesValue === null ? null : object(imagesValue, '/images');
+    const large = images ? own(images, 'large', '/images/large') : undefined;
+    let sourceUrl: string | undefined;
+    if (typeof large === 'string') {
+      try {
+        sourceUrl = safeSourceUrl(large, ['lain.bgm.tv']);
+      } catch {
+        diagnostics.push({ pointer: '/images/large', code: 'invalid_image_source' });
+      }
+    } else if (large !== undefined) {
+      diagnostics.push({ pointer: '/images/large', code: 'invalid_image_source' });
+    }
+    if (sourceUrl) {
+      const coverDigest = crossMediaCoverDigest(digest, sourceUrl);
+      const recordReference: BatchReference = {
+        parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url } }],
+      };
+      const imageReference: BatchReference = {
+        parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: sourceUrl } }],
+      };
+      const coverProvenance = sourceEnvelope({ ...metadata, digest: coverDigest }, 'cover');
+      const asset: Omit<MediaImportRequest, 'containerId'> = {
+        sourceUrl,
+        credit: {
+          rightsHolder: '(c) rights holder',
+          via: { name: 'Bangumi', url },
+          license: 'LicenseRef-unknown',
+          obligations: [],
+        },
+        provenance: { ...coverProvenance, references: [recordReference, imageReference] },
+      };
+      coverAssets.push(asset);
+      if (context.subjectId !== undefined) {
+        const intent: MediaImportRequest = { containerId: context.subjectId, ...asset };
+        if (checkMediaImportRequest(intent).length) fail('/images/large', 'invalid_media_import_context');
+        mediaImportIntents.push(intent);
+        const mediaId = context.mediaIds?.[sourceUrl];
+        if (mediaId !== undefined)
+          proposals.push({
+            op: 'propose',
+            key: key(`cover:${mediaId}`, 'cover', coverDigest),
+            source: sourceEnvelope({ ...metadata, digest: coverDigest }, 'cover'),
+            subject: context.subjectId,
+            statement: {
+              property: { id: 'schema:image' },
+              value: { type: 'value', content: mediaId },
+              references: [recordReference, imageReference],
+            },
+          });
+      }
+    }
+  }
   if (context.subjectId === undefined) {
     proposals.push({
       op: 'create',
@@ -1815,8 +1879,8 @@ function convert(
     diagnostics,
     digest,
     normalizedRecord: projected.normalized,
-    coverAssets: [],
-    mediaImportIntents: [],
+    coverAssets,
+    mediaImportIntents,
     sourceMetadata: {
       recordUrl: url,
       ...(summaryText ? { summary: { language: 'und', takedownEligible: true as const } } : {}),
