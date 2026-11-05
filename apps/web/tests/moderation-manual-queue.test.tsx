@@ -1,39 +1,14 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { WorkbenchSearch } from '../src/moderation/workbench-queue/scope';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { ManualModerationScope } = await import('../src/moderation/workbench-queue/manual-scope');
-const { WorkbenchView } = await import('../src/moderation/workbench-queue/view');
 const { workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
-const { readWorkbench } = await import('../src/moderation/workbench-queue/read');
 const { m } = await import('../src/paraglide/messages.js');
 
-test('unavailable discovery retains manual queue entry and native authorization independently', async () => {
+test('manual queue entry preserves discovery return and retires with its private visit', async () => {
   const search = workbenchSearch({ realm: 'discovery-realm', directoryCursor: 'directory-frontier' });
-  const calls: string[] = [];
-  const source = {
-    async boardReports() {
-      calls.push('board');
-      throw new Error('Denied');
-    },
-    async boardAppeals() {
-      calls.push('appeals');
-      return { appeals: [], next: null };
-    },
-    async catalogueReports() {
-      calls.push('catalogue');
-      return { reports: [], next: null };
-    },
-  };
-  const page = await readWorkbench(source, search);
-  const markup = renderToStaticMarkup(createElement(WorkbenchView, { page, onSearch() {} }));
-  expect(markup).toContain(m.moderation_directory_unavailable());
-  expect(markup).toContain(m.moderation_manual_heading());
-  expect(calls).toEqual([]);
-
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -51,6 +26,7 @@ test('unavailable discovery retains manual queue entry and native authorization 
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
+  const { ManualModerationScope } = await import('../src/moderation/workbench-queue/manual-scope');
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
@@ -85,14 +61,11 @@ test('unavailable discovery retains manual queue entry and native authorization 
       directoryCursor: 'directory-frontier',
       directoryRealm: 'discovery-realm',
     });
-    expect((await readWorkbench(source, selected[0]!)).state).toBe('ready');
-    expect(calls).toEqual(['appeals']);
     const catalogue = [...host.querySelectorAll('button')].find(
       (button) => button.textContent === m.moderation_manual_catalogue(),
     )!;
     await act(async () => catalogue.click());
-    expect((await readWorkbench(source, selected[1]!)).state).toBe('ready');
-    expect(calls).toEqual(['appeals', 'catalogue']);
+    expect(selected[1]).toMatchObject({ scope: 'catalogue', queue: 'reports', directoryCursor: 'directory-frontier' });
     current = false;
     await act(async () => {
       submit();

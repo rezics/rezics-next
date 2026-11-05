@@ -43,7 +43,7 @@ test('appeal resolution receives the native problem envelope and matches the ack
     request_id: 'request',
   };
   let response = Response.json(problem, { status: 422 });
-  const client = createKernelClient('https://kernel.test', { fetcher: async () => response });
+  const client = createKernelClient('https://kernel.test', { fetch: async () => response });
   expect(await sendModerationAppealResolution(client, input, 'Bearer original')).toEqual({ state: 'conflict' });
   response = Response.json({ id: 'different-appeal' });
   await expect(sendModerationAppealResolution(client, input, 'Bearer original')).rejects.toThrow(
