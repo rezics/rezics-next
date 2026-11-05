@@ -10,9 +10,8 @@ import { m } from '../src/paraglide/messages.js';
 import { savedQueryReturnTo } from '../src/library/saved-query-management/return-to';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { captureCollectionCommand, captureCollectionDelete, captureCollectionUpdate } = await import(
-  '../src/library/collection-commands'
-);
+const { captureCollectionCommand, captureCollectionDelete, captureCollectionUpdate } =
+  await import('../src/library/collection-commands');
 const { SavedQueryManagementController } = await import('../src/library/saved-query-management/controller');
 
 let admissionOperations: string[] = [];
@@ -45,11 +44,17 @@ mock.module('@rezics/ui/shadcn/alert-dialog', () => ({
   AlertDialog: ({ open, onOpenChange, children }: DialogRoot) =>
     open ? <dialogOpenChange.Provider value={onOpenChange}>{children}</dialogOpenChange.Provider> : null,
   AlertDialogAction: ({ children, onClick, disabled }: DialogButton) => (
-    <button type="button" disabled={disabled} onClick={onClick}>{children}</button>
+    <button type="button" disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
   ),
   AlertDialogCancel: ({ children, disabled }: DialogButton) => {
     const onOpenChange = useContext(dialogOpenChange);
-    return <button type="button" disabled={disabled} onClick={() => onOpenChange(false)}>{children}</button>;
+    return (
+      <button type="button" disabled={disabled} onClick={() => onOpenChange(false)}>
+        {children}
+      </button>
+    );
   },
   AlertDialogContent: ({ children }: { children: ReactNode }) => <div data-slot="alert-dialog-content">{children}</div>,
   AlertDialogDescription: dialogPart,
@@ -363,11 +368,7 @@ test('mounted manager callbacks keep their originating controller state and port
 
     await clickButton(harness.browser.document, m.library_collection_delete(), host);
     expect(dialogContent(harness.browser.document).textContent).toContain('saved-query-1');
-    await clickButton(
-      harness.browser.document,
-      m.library_collection_cancel(),
-      dialogContent(harness.browser.document),
-    );
+    await clickButton(harness.browser.document, m.library_collection_cancel(), dialogContent(harness.browser.document));
     expect(host.textContent).toContain(m.library_saved_query_management_heading());
 
     await clickButton(harness.browser.document, m.library_collection_delete(), host);
