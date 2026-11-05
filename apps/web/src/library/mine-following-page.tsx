@@ -213,8 +213,7 @@ export function CurrentViewerMineFollowingPage({
   const unsettledRemovals = useRef(new Set<string>());
   const directKindMovement = useRef<FollowingDirectKindMovement | null>(null);
   const routeVisit = useRef({ key: address.key, id: 0 });
-  if (routeVisit.current.key !== address.key)
-    routeVisit.current = { key: address.key, id: routeVisit.current.id + 1 };
+  if (routeVisit.current.key !== address.key) routeVisit.current = { key: address.key, id: routeVisit.current.id + 1 };
   const addressVisit = routeVisit.current.id;
   const coordinate: FollowingWindow = { cursor: address.cursor, kind };
   const sourceIdentity = (value: MineFollowingRead): FollowingWindowIdentity => {
@@ -304,9 +303,10 @@ export function CurrentViewerMineFollowingPage({
       : navigation.current.staged
         ? acceptFollowingWindow(navigation.current, coordinate, addressVisit, candidate)
         : seedFollowingWindow(navigation.current, coordinate, addressVisit, candidate);
-    const admitted = directTarget && direct.keyboard && seeded.current
-      ? { ...seeded, current: { ...seeded.current, focusId: direct.id } }
-      : seeded;
+    const admitted =
+      directTarget && direct.keyboard && seeded.current
+        ? { ...seeded, current: { ...seeded.current, focusId: direct.id } }
+        : seeded;
     if (direct && sameFollowingWindow(coordinate, direct.target)) directKindMovement.current = null;
     if (admitted !== navigation.current) {
       navigation.current = admitted;
@@ -549,23 +549,24 @@ function MineFollowingPageState({
   useFollowingReturn(reading.returnCurrent, reading.suspend, onRefresh, reading.restoreFocus);
   const focusedMovement = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (
-      navigation?.focusId === undefined ||
-      focusedMovement.current === navigation.focusId ||
-      !origin.isCurrent()
-    )
+    if (navigation?.focusId === undefined || focusedMovement.current === navigation.focusId || !origin.isCurrent())
       return;
     focusedMovement.current = navigation.focusId;
     listHeading.current?.focus();
   }, [navigation?.focusId]);
   const restart = !addressRejected && (!!cursor || !!page.cursorReset || removed);
   const firstPageEmpty = !restart && !page.next;
-  const nextAddress = page.next === null ? null : personalDirectoryAddress(page.next, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
+  const nextAddress =
+    page.next === null ? null : personalDirectoryAddress(page.next, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
   const nextCursor = nextAddress?.valid ? nextAddress.cursor : null;
   const nextUnavailable = page.next !== null && !nextAddress?.valid;
   const navigationDisabled = !!navigation?.busy || !!navigation?.unsettledRemoval;
   const kindChangeDisabled = page.forbidden || navigationDisabled;
-  const navigate = (event: ReactMouseEvent<HTMLAnchorElement>, target: FollowingWindow, movement: FollowingMovement) => {
+  const navigate = (
+    event: ReactMouseEvent<HTMLAnchorElement>,
+    target: FollowingWindow,
+    movement: FollowingMovement,
+  ) => {
     if (
       !navigation ||
       event.defaultPrevented ||

@@ -49,7 +49,10 @@ const query = await import('../src/kernel/query');
 // This file installs its browser after server-reader imports have evaluated query defaults.
 Object.defineProperty(query.personalRead, 'enabled', { value: true });
 mock.module('@rezics/ui/menu', () => ({
-  Menu: ({ trigger, entries = [] }: {
+  Menu: ({
+    trigger,
+    entries = [],
+  }: {
     trigger: ReactElement<{ 'aria-label'?: string; children?: ReactNode; disabled?: boolean }>;
     entries?: { type: string; label?: string; onSelect?: () => void; disabled?: boolean }[];
   }) => {
@@ -402,8 +405,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
       call.resolve(result);
       await tick();
     });
-  const key = (subject: string, cursor: string | null) =>
-    mineFollowingQuery(subject, cursor, getLocale()).queryKey;
+  const key = (subject: string, cursor: string | null) => mineFollowingQuery(subject, cursor, getLocale()).queryKey;
   const refetchFor = (subject: string, cursor: string | null) =>
     act(async () => {
       void client.refetchQueries({ queryKey: key(subject, cursor) });

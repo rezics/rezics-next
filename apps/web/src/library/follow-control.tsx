@@ -176,10 +176,7 @@ function FollowControlState({
   const running = inFlight.current;
   if (
     running &&
-    (!ready ||
-      signedOut ||
-      !(running.input.following ? canFollow : canRemove) ||
-      !runningCurrent(running, isCurrent))
+    (!ready || signedOut || !(running.input.following ? canFollow : canRemove) || !runningCurrent(running, isCurrent))
   ) {
     inFlight.current = null;
     setPending(false);

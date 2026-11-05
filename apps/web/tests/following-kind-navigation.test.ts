@@ -194,9 +194,7 @@ test('window history bounds branches, retries exact addresses, and clears on Fir
     id: 13,
     keyboard: false,
   })!;
-  expect(acceptFollowingWindow(stagedFirst, { cursor: 'not-first', kind: 'subject' }, 99, identity)).toBe(
-    stagedFirst,
-  );
+  expect(acceptFollowingWindow(stagedFirst, { cursor: 'not-first', kind: 'subject' }, 99, identity)).toBe(stagedFirst);
   expect(stagedFirst.previous).toEqual(history.previous);
   identity = { ...identity, source: {} };
   history = acceptFollowingWindow(stagedFirst, first, 13, identity);

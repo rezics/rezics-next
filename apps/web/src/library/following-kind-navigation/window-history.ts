@@ -44,10 +44,7 @@ export function sameFollowingWindow(a: FollowingWindow, b: FollowingWindow): boo
 
 export function sameFollowingIdentity(a: FollowingIdentity, b: FollowingIdentity): boolean {
   return (
-    a.source === b.source &&
-    a.subject === b.subject &&
-    a.locale === b.locale &&
-    a.authorityEpoch === b.authorityEpoch
+    a.source === b.source && a.subject === b.subject && a.locale === b.locale && a.authorityEpoch === b.authorityEpoch
   );
 }
 
@@ -197,15 +194,13 @@ export function seedFollowingWindow(
   return { current: { ...identity, address, addressVisit }, previous: [], staged: null };
 }
 
-export function retireFollowingAuthority(history: FollowingWindowHistory, subject: string | null): FollowingWindowHistory {
+export function retireFollowingAuthority(
+  history: FollowingWindowHistory,
+  subject: string | null,
+): FollowingWindowHistory {
   const current = history.current;
   const staged = history.staged;
-  if (
-    !subject ||
-    (current && current.subject !== subject) ||
-    (staged && staged.subject !== subject)
-  )
+  if (!subject || (current && current.subject !== subject) || (staged && staged.subject !== subject))
     return emptyFollowingWindowHistory();
   return history;
 }
-
