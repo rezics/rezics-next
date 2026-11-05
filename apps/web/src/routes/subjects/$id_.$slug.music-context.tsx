@@ -30,7 +30,11 @@ function MusicContextRoute() {
   identityRef.current = identity;
   const navigate = Route.useNavigate();
   if (!address) return <p role="alert">{m.music_context_invalid_address({}, { locale: locale as never })}</p>;
-  const onAddressChange = ({ context: selectedContext, stream: selected, cursor: nextCursor }: MusicContextAddress & { stream: string }) => {
+  const onAddressChange = ({
+    context: selectedContext,
+    stream: selected,
+    cursor: nextCursor,
+  }: MusicContextAddress & { stream: string }) => {
     if (identityRef.current !== identity || selectedContext !== address.context) return;
     return void navigate({
       search: (previous) => ({

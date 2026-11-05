@@ -29,8 +29,7 @@ function serverFunction() {
       return chain;
     },
     handler(handler: (input: { data: unknown }) => unknown) {
-      return async (input: { data?: unknown } = {}) =>
-        handler({ data: validate ? validate(input.data) : input.data });
+      return async (input: { data?: unknown } = {}) => handler({ data: validate ? validate(input.data) : input.data });
     },
   };
   return chain;
@@ -152,15 +151,15 @@ const [
   { sessionQuery },
   { browserObservation },
 ] = await Promise.all([
-    import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))),
-    import('../src/features/catalogue/music-context-profile/session'),
-    import('../src/features/pages/subject-slots'),
-    import('react-dom/server'),
-    import('../src/features/catalogue/music-context-profile/navigation'),
-    import('../src/subject/candidates'),
-    import('../src/session/query'),
-    import('../src/session'),
-  ]);
+  import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))),
+  import('../src/features/catalogue/music-context-profile/session'),
+  import('../src/features/pages/subject-slots'),
+  import('react-dom/server'),
+  import('../src/features/catalogue/music-context-profile/navigation'),
+  import('../src/subject/candidates'),
+  import('../src/session/query'),
+  import('../src/session'),
+]);
 
 const window = new Window({ url: `https://site.test/en/subjects/${anchor}/harbor-stage/music-context`, width: 390 });
 const globals = {
@@ -341,7 +340,8 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     await render(route?.context);
     await until(
       () => subjectCalls.length === 1,
-      () => `session=${JSON.stringify(sessionObservation)}; action readers=${readerCalls.length}; view=${host.textContent}`,
+      () =>
+        `session=${JSON.stringify(sessionObservation)}; action readers=${readerCalls.length}; view=${host.textContent}`,
     );
     await render(contextB);
     await until(() => subjectCalls.length === 2);
@@ -410,14 +410,18 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     if (!targetLink) throw new Error('The admitted relation target was not rendered');
     const targetUrl = new URL(targetLink.href);
     expect(targetUrl.searchParams.get('context')).toBe(contextA);
-    expect(musicContextRouteSearch(Object.fromEntries(targetUrl.searchParams), 'en', {
-      subjectId: target,
-      pathname: targetUrl.pathname,
-    })?.context).toBe(contextA);
+    expect(
+      musicContextRouteSearch(Object.fromEntries(targetUrl.searchParams), 'en', {
+        subjectId: target,
+        pathname: targetUrl.pathname,
+      })?.context,
+    ).toBe(contextA);
 
     const streamSelect = host.querySelector<HTMLSelectElement>('#music-context-stream');
     if (!streamSelect) throw new Error('The admitted stream selector was not rendered');
-    const alternateStream = [...streamSelect.options].find((option) => option.value && option.value !== streamSelect.value);
+    const alternateStream = [...streamSelect.options].find(
+      (option) => option.value && option.value !== streamSelect.value,
+    );
     if (!alternateStream) throw new Error('The released fixture needs a second relation stream');
     await act(async () => {
       streamSelect.value = alternateStream.value;

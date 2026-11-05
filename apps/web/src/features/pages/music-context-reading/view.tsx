@@ -27,7 +27,9 @@ const fitsRetainedAddress = (value: string) =>
   new TextEncoder().encode(value).byteLength <= MUSIC_CONTEXT_ADDRESS_BYTE_CAP;
 
 export type MusicContextTransport = {
-  read: (input: Pick<MusicContextAddress, 'context' | 'stream' | 'cursor'> & { session?: string | undefined }) => Promise<MusicContextRead>;
+  read: (
+    input: Pick<MusicContextAddress, 'context' | 'stream' | 'cursor'> & { session?: string | undefined },
+  ) => Promise<MusicContextRead>;
 };
 type MusicContextReadingProps = {
   id: string;
@@ -77,12 +79,7 @@ function failureMessage(failure: MusicContextFailure, locale: string) {
   return m.music_context_unavailable({}, o);
 }
 
-function addressHref(
-  id: string,
-  label: string,
-  locale: string,
-  address: MusicContextAddress,
-): string | undefined {
+function addressHref(id: string, label: string, locale: string, address: MusicContextAddress): string | undefined {
   const base = catalogueEntries.musicContext({ id, label, locale }).href;
   return musicContextAddressHref(base, address, locale, id);
 }
@@ -94,12 +91,7 @@ function currentAddress(
   displayAddress: MusicContextAddress | undefined,
   requestedAddress: MusicContextAddress,
 ): string | undefined {
-  return addressHref(
-    id,
-    label,
-    locale,
-    displayAddress ? { ...requestedAddress, ...displayAddress } : requestedAddress,
-  );
+  return addressHref(id, label, locale, displayAddress ? { ...requestedAddress, ...displayAddress } : requestedAddress);
 }
 
 export function MusicContextReading(props: MusicContextReadingProps) {
@@ -339,7 +331,22 @@ function MusicContextReadingBound({
         }
       }
     },
-    [context, id, lifetime, locale, pageIndex, realm, returnTo, selectionEpoch, selectedContext, streamIntent, transport, via, writeDisplayed, writeProfile],
+    [
+      context,
+      id,
+      lifetime,
+      locale,
+      pageIndex,
+      realm,
+      returnTo,
+      selectionEpoch,
+      selectedContext,
+      streamIntent,
+      transport,
+      via,
+      writeDisplayed,
+      writeProfile,
+    ],
   );
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
@@ -437,10 +444,17 @@ function MusicContextReadingBound({
     stream: selectedStream,
     cursor: cursorIntent,
   });
-  const currentReturn = safeVia ??
-    (!realm && selectedContext === candidateContext ? safeReturn ?? subjectHref({ id, label: title }, locale).href : undefined);
+  const currentReturn =
+    safeVia ??
+    (!realm && selectedContext === candidateContext
+      ? (safeReturn ?? subjectHref({ id, label: title }, locale).href)
+      : undefined);
   const canCorrect =
-    routeAddressMatches && !!profile && profile.kind !== 'unsupported' && !realm && selectedContext === candidateContext;
+    routeAddressMatches &&
+    !!profile &&
+    profile.kind !== 'unsupported' &&
+    !realm &&
+    selectedContext === candidateContext;
   const correction = catalogueEntries.facts({ id, label: title, locale }).href;
   const correctionCandidate = visibleAddress
     ? `${correction}?${new URLSearchParams({ returnTo: visibleAddress })}`
@@ -575,14 +589,13 @@ function MusicContextReadingBound({
                       const href = exactMusicTarget
                         ? link.id === id || !visibleAddress
                           ? targetBase
-                          : exactTargetWithReturn ?? targetBase
+                          : (exactTargetWithReturn ?? targetBase)
                         : realm || !visibleAddress
                           ? target
                           : generalTargetFits
                             ? generalTargetWithReturn
                             : target;
-                      const needsExactNotice =
-                        !!realm || (selectedContext !== candidateContext && !link.targetKind);
+                      const needsExactNotice = !!realm || (selectedContext !== candidateContext && !link.targetKind);
                       const needsReturnNotice =
                         (exactMusicTarget && link.id !== id && !!visibleAddress && !exactTargetWithReturn) ||
                         (!exactMusicTarget && !realm && !!visibleAddress && !generalTargetFits);
@@ -684,13 +697,12 @@ function MusicContextReadingBound({
             )}
           </div>
 
-          {canCorrect && (
+          {canCorrect &&
             correctionHref && (
               <a className={linkClass} href={correctionHref}>
                 {m.music_context_correct({}, o)}
               </a>
-            )
-          )}
+            )}
         </div>
       )}
       {!profile && failure && failedAddress && (

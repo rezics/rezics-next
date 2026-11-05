@@ -105,11 +105,11 @@ function ReadingStory({
     state === 'realm'
       ? undefined
       : state === 'failed'
-      ? { ok: false, reason: 'unavailable' }
-      : successful(
-          state === 'removed' ? 'removed' : state === 'empty' ? 'empty' : 'populated',
-          state === 'selected' || state === 'unavailable-return' ? selectedContext : candidateContext,
-        );
+        ? { ok: false, reason: 'unavailable' }
+        : successful(
+            state === 'removed' ? 'removed' : state === 'empty' ? 'empty' : 'populated',
+            state === 'selected' || state === 'unavailable-return' ? selectedContext : candidateContext,
+          );
   const hasContext = state === 'selected' || state === 'unavailable-return';
   const hasRealm = state === 'realm';
   return (
@@ -120,9 +120,7 @@ function ReadingStory({
           locale={locale}
           {...(hasContext ? { context: selectedContext } : {})}
           {...(hasRealm ? { realm: selectedRealm } : {})}
-          {...(state === 'unavailable-return'
-            ? { returnTo: `/en/subjects/${anchor}/harbor-stage` }
-            : {})}
+          {...(state === 'unavailable-return' ? { returnTo: `/en/subjects/${anchor}/harbor-stage` } : {})}
           initial={initial}
           initialStream={state === 'removed' ? 'schema:removed' : 'schema:location'}
           transport={{

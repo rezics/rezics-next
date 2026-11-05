@@ -224,7 +224,9 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     ]);
     expect(host.textContent).toContain('Second page endpoint');
 
-    const previous = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Previous page'));
+    const previous = [...host.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Previous page'),
+    );
     if (!previous) throw new Error('The bounded Previous address was not available');
     await settle(() => previous.click());
     expect(calls.at(-1)).toEqual({ context: candidateContext, stream: 'schema:location', session: 'page-token' });

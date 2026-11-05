@@ -97,8 +97,7 @@ export function validatedMusicContextReturn(
     if (
       (selectedContext !== null && !uuid.test(selectedContext)) ||
       (selectedContext !== null && selectedContext !== expectedContext) ||
-      (expectedContext !== candidateContext &&
-        (identity.route !== 'quotations' && identity.route !== 'release')) ||
+      (expectedContext !== candidateContext && identity.route !== 'quotations' && identity.route !== 'release') ||
       (expectedContext !== candidateContext && selectedContext !== expectedContext) ||
       selectedRealm !== null
     )
@@ -149,7 +148,13 @@ export function musicContextRouteSearch(
     (stream !== undefined && !isMusicContextStream(stream)) ||
     (cursor !== undefined && (!isMusicContextCursor(cursor) || !stream)) ||
     (returnTo !== undefined &&
-      !validatedMusicContextReturn(returnTo, locale, options.subjectId, typeof context === 'string' ? context : undefined, typeof realm === 'string' ? realm : undefined)) ||
+      !validatedMusicContextReturn(
+        returnTo,
+        locale,
+        options.subjectId,
+        typeof context === 'string' ? context : undefined,
+        typeof realm === 'string' ? realm : undefined,
+      )) ||
     (via !== undefined && !musicContextVisit(via, locale)) ||
     (returnTo !== undefined && via !== undefined) ||
     (via !== undefined && realm !== undefined)
@@ -202,10 +207,12 @@ export function musicContextAddressHref(
   if (address.via !== undefined) target.searchParams.set('via', address.via);
   const retained = `${target.pathname}${target.search}`;
   const search = entriesOf(target);
-  return search && utf8Bytes(retained) <= MUSIC_CONTEXT_ADDRESS_BYTE_CAP && musicContextRouteSearch(search, locale, {
-    subjectId,
-    pathname: target.pathname,
-  })
+  return search &&
+    utf8Bytes(retained) <= MUSIC_CONTEXT_ADDRESS_BYTE_CAP &&
+    musicContextRouteSearch(search, locale, {
+      subjectId,
+      pathname: target.pathname,
+    })
     ? retained
     : undefined;
 }
@@ -220,10 +227,12 @@ export function musicContextTargetHref(
   const target = new URL(withSubjectVisitReturn(href, via, locale), 'https://rezics.invalid');
   const retained = `${target.pathname}${target.search}`;
   const search = entriesOf(target);
-  return search && utf8Bytes(retained) <= MUSIC_CONTEXT_ADDRESS_BYTE_CAP && musicContextRouteSearch(search, locale, {
-    subjectId,
-    pathname: target.pathname,
-  })
+  return search &&
+    utf8Bytes(retained) <= MUSIC_CONTEXT_ADDRESS_BYTE_CAP &&
+    musicContextRouteSearch(search, locale, {
+      subjectId,
+      pathname: target.pathname,
+    })
     ? retained
     : undefined;
 }
