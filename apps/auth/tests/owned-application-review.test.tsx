@@ -1,5 +1,6 @@
 import { mountedSuite } from './owned-application-review-fixture';
 import { expect, test } from 'bun:test';
+import { flushSync } from 'react-dom';
 import { OwnedApplicationReview } from '../src/owned-application-review-view';
 import { permissionDescription } from '../src/permission-description';
 import {
@@ -170,7 +171,7 @@ test('retirement synchronously removes private DOM; replacement and aborted life
   await expand();
   await click(m.auth_owned_copy());
   await tick(() => {
-    life.abort();
+    flushSync(() => life.abort());
     expect(text()).not.toContain('private-old');
     expect(host.querySelector('nav,[role="region"]')).toBeNull();
   });
@@ -224,7 +225,7 @@ test('source replacement clears expanded copy feedback; abort and unmount fence 
   expect(text()).not.toContain(m.auth_owned_copied());
   await click(m.auth_owned_reload());
   await tick(() => {
-    life.abort();
+    flushSync(() => life.abort());
     expect(host.querySelector('nav')).toBeNull();
   });
   await tick(() => delayed.resolve(ready('late-private')));

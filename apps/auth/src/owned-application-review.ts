@@ -1,5 +1,4 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { loadInventory, type InventoryPage } from './security-inventory';
 
 type Cursor = string | undefined;
@@ -123,14 +122,9 @@ export function useOwnedApplicationReview({
       history.current = [];
       publish(emptyState());
     }
-    // Parent retirement already commits synchronously. Preserve that boundary
-    // when independently mounted with the installed lifetime as well.
-    const retire = () => {
-      // Initial parent admission can retire during its own effect. There is no
-      // private observation or accepted cursor to flush in that case.
-      if (current.current.accepted) flushSync(clear);
-      else clear();
-    };
+    // Join the parent's installed synchronous retirement commit. A nested
+    // flush here would also run during the parent's React cleanup lifecycle.
+    const retire = clear;
     lifetime?.addEventListener('abort', retire, { once: true });
     if (heading.current?.parentElement?.contains(document.activeElement)) heading.current.focus();
     publish(emptyState());
