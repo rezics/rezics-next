@@ -7,13 +7,18 @@ import {
 } from '@rezics/auth';
 import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { HttpResponse, Persona, Release, SemanticDriver } from '../../../../specs/semantic-driver.ts';
 import { accessClock, accessActionCatalogue, createAccess } from '../../src/access/index.ts';
+import bootstrapRead from '../../src/access/bootstrap-governance-read.sql';
+import createGrant from '../../src/access/grant-create.sql';
+import { PLATFORM_RESOURCE } from '../../src/access/governance-reach.ts';
+import { runCommand, type CommandAuthorization } from '../../src/command/command.ts';
+import { deadlineFor } from '../../src/request/deadline.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
@@ -165,6 +170,83 @@ export function createSemanticDriver(
   );
   tracked.add(entry);
   return starting;
+}
+
+/** Global actions the fixture governor delegates: the driver's startup grants and the released fixture's space and
+ * Realm helpers. Each is held explicitly by the governor before its first HTTP delegation. */
+const governorGlobalActions = [
+  'subject:create',
+  'statement:propose',
+  'context:create',
+  'context:accept',
+  'context:adopt',
+  'subject:merge',
+  'definitions:publish',
+  'definitions:activate',
+  'space:create',
+  'realm:create',
+] as const;
+/** Gate groups that only the original capability binding delegates through the governor. */
+const governorGateActions = ['gate:definition_publication', 'gate:subject_identity'] as const;
+
+/** Writes the governor's explicit Global authority through the command executor: a receipt, the grant insert the
+ * grant command uses and an audit event. It runs after the governance marker and before any HTTP delegation. The
+ * later HTTP grants still pass ordinary Access checks against this row; no raw row write or caller-chosen authority.
+ */
+async function installGovernorGlobalGrants(pool: Pool, governorId: string, actions: readonly string[]): Promise<void> {
+  const value = { resource: PLATFORM_RESOURCE, subjectId: governorId, subjectRole: '' as const, actions: [...actions] };
+  const notBootstrapped = () => new Error('Fixture governor has no bootstrapped Global governance marker');
+  const authorization: CommandAuthorization = {
+    action: 'access:grant',
+    resource: PLATFORM_RESOURCE,
+    denied: notBootstrapped,
+    async authorize(tx) {
+      const current = await bootstrapRead.run(tx, {
+        route: PLATFORM_RESOURCE.route,
+        resource_id: PLATFORM_RESOURCE.id,
+      });
+      if (!current?.global || !current.bootstrapped || current.account_id !== governorId) throw notBootstrapped();
+      return 'execute';
+    },
+  };
+  const digest = createHash('sha256').update(JSON.stringify(value)).digest();
+  await runCommand(
+    pool,
+    {
+      partition: 0,
+      deadline: deadlineFor(10_000),
+      authorization,
+      receipt: {
+        actorAccountId: governorId,
+        kind: 'semantic.outcome-driver.governor-global-grants',
+        key: governorId,
+        digest,
+      },
+    },
+    async (tx, { transactionId }) => {
+      const rows = await createGrant.run(tx, {
+        route: PLATFORM_RESOURCE.route,
+        resource_id: PLATFORM_RESOURCE.id,
+        subject_kind: 'identity',
+        subject_id: governorId,
+        subject_role: '',
+        actions: [...actions],
+        valid: '(,)',
+        transaction_id: transactionId,
+      });
+      if (rows.length !== actions.length) throw new Error('Fixture governor grant did not write every action');
+      return {
+        value: { ...value, valid: '(,)' },
+        events: [
+          {
+            type: 'com.rezics.access.grant.create.v1',
+            subject: PLATFORM_RESOURCE.id,
+            data: { ...value, valid: '(,)' },
+          },
+        ],
+      };
+    },
+  );
 }
 
 async function startDriver(
@@ -530,6 +612,10 @@ async function startDriver(
         throw new Error(`Grant administration failed: ${response.status}: ${JSON.stringify(response.body)}`);
     }
 
+    await installGovernorGlobalGrants(pool, governor.accountId, [
+      ...governorGlobalActions,
+      ...(options.originalCapabilities ? governorGateActions : []),
+    ]);
     await grantAccount(accounts.editor, ['subject:create', 'statement:propose', 'context:create']);
     await grantAccount(accounts.acceptor, ['context:accept', 'context:adopt', 'subject:merge']);
     await grantAccount(accounts.steward, ['definitions:publish', 'definitions:activate']);
