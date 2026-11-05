@@ -48,6 +48,12 @@ const callerPickerClass =
 
 export type StoryArcProfileProps = StoryArcAddress & {
   locale: string;
+  /** Outer Subject visit intent; never passed to the native StoryArc address or writer. */
+  context?: string | undefined;
+  realm?: string | undefined;
+  definition?: string | undefined;
+  via?: string | undefined;
+  address?: string | undefined;
   session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   transport: StoryArcTransport;
   search: EntityPickerSearch;
@@ -61,6 +67,34 @@ export type StoryArcProfileProps = StoryArcAddress & {
 
 /** Composition of the ordinary creation, scalar and exact-slot relationship workspaces. */
 export const StoryArcProfile = catalogueEditor(StoryArcProfileWorkspace);
+
+export function StoryArcProfileContextNotice({
+  locale,
+  via,
+  globalChoiceHref,
+}: {
+  locale: string;
+  via?: string;
+  globalChoiceHref: string;
+}) {
+  const o = { locale: locale as never };
+  return (
+    <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
+      <h1 className="font-sans text-2xl font-semibold">{m.story_arc_title({}, o)}</h1>
+      <p role="status">{m.story_arc_context_unsupported({}, o)}</p>
+      <div className="flex flex-wrap gap-3">
+        {via && (
+          <a className={buttonVariants({ variant: 'outline', className: callerActionClass })} href={via}>
+            {m.story_arc_return_public({}, o)}
+          </a>
+        )}
+        <a className={buttonVariants({ variant: 'outline', className: callerActionClass })} href={globalChoiceHref}>
+          {m.story_arc_choose_global({}, o)}
+        </a>
+      </div>
+    </article>
+  );
+}
 
 function StoryArcProfileWorkspace(props: StoryArcProfileProps) {
   return (
@@ -87,6 +121,11 @@ function StoryArcProfileLive({
   id: initialId,
   work: initialWork,
   locale,
+  context,
+  realm,
+  definition,
+  via,
+  address: outerAddress,
   session,
   transport,
   search,
@@ -103,10 +142,6 @@ function StoryArcProfileLive({
   const [id, setId] = useState(initialId);
   const [work, setWork] = useState(initialWork);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
-  const selection = JSON.stringify([id, work]);
-  const [reloadAttempt, setReloadAttempt] = useState<{ selection: string; sequence: number }>();
-  const reloadSequence = useRef(0);
-  const reloading = reloadAttempt?.selection === selection;
   const queryKey = [...['story-arc-profile', id, work, locale, session], lifetime.generation];
   const query = useQuery({
     queryKey,
@@ -117,6 +152,11 @@ function StoryArcProfileLive({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  const observedDefinition = query.data?.ok ? query.data.release.digest : undefined;
+  const selection = JSON.stringify([id, work, locale, context, realm, definition, via, outerAddress, observedDefinition]);
+  const [reloadAttempt, setReloadAttempt] = useState<{ selection: string; sequence: number }>();
+  const reloadSequence = useRef(0);
+  const reloading = reloadAttempt?.selection === selection;
   const focusScope = JSON.stringify([selection, locale, session, lifetime.generation]);
   const recoveryFocus = useRef<
     | {
@@ -148,10 +188,14 @@ function StoryArcProfileLive({
   const arc = current?.arc;
   const label = pageText(arc?.subject.labels, locale);
   const href = arc ? subjectHref({ id: arc.subject.id, label: label.text }, locale).href : undefined;
-  const address = storyArcEntry({
+  const signInAddress = storyArcEntry({
     id: readable ? id : undefined,
     work: readable ? work : undefined,
     label: label.text,
+    context,
+    realm,
+    definition,
+    via,
     locale,
   }).href;
   const editable = session === 'signed-in' && readable;
@@ -255,6 +299,11 @@ function StoryArcProfileLive({
         }
       />
       <p className="text-muted-foreground">{id ? m.story_arc_intro({}, o) : m.story_arc_creation_help({}, o)}</p>
+      {via && (
+        <a className={`${callerTextActionClass} underline`} href={via}>
+          {m.story_arc_return_public({}, o)}
+        </a>
+      )}
       {(query.isPending || reloading) && <p role="status">{m.candidate_loading({}, o)}</p>}
       {!reloading && (query.isError || (query.data && !query.data.ok)) && (
         <div ref={failureBoundary} tabIndex={-1}>
@@ -294,7 +343,7 @@ function StoryArcProfileLive({
             {session === 'signed-out' && (
               <a
                 className={`${callerTextActionClass} underline`}
-                href={`/auth/sign-in?return_to=${encodeURIComponent(address)}`}
+                href={`/auth/sign-in?return_to=${encodeURIComponent(signInAddress)}`}
               >
                 {m.account_sign_in({}, o)}
               </a>

@@ -30,6 +30,7 @@ import { StoryArcOverview } from '../catalogue/story-arc-reader/entry';
 import { RecordingOverview } from '../catalogue/recording-reader/overview';
 import { recordingType } from '../catalogue/recording-reader/model';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
+import { storyArcPublicOrigin } from '../catalogue/story-arc-public-visit';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { LiteraryReaderEntry } from '../catalogue/literary-reader/entry';
@@ -808,7 +809,15 @@ export function SubjectPage({
               id={read.subject.id}
               label={subjectPageTitle(page, locale)}
               locale={locale}
+              context={page.context?.id ?? read.subject.context}
               realm={page.context?.population.kind === 'realm' ? page.context.population.id : undefined}
+              definition={page.catalogue?.digest}
+              via={storyArcPublicOrigin({
+                currentHref,
+                id: read.subject.id,
+                locale,
+                realm: page.context?.population.kind === 'realm' ? page.context.population.id : undefined,
+              })}
             />
           )}
           {read.subject.type === 'wd:Q95074' && (
