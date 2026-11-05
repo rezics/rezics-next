@@ -359,7 +359,7 @@ export class ManagedAccountsInventory {
       const next = result.page.organizations;
       this.publish({
         ...current,
-        account: current.account,
+        account: target.cursor === null ? current.account : result.page.account,
         organizations: {
           ...next,
           items: next.state === 'preparing' ? [] : pageItems(next.items, (item) => item.account.id),
@@ -372,7 +372,7 @@ export class ManagedAccountsInventory {
       const next = result.page.responsibilities;
       this.publish({
         ...current,
-        account: current.account,
+        account: target.cursor === null ? current.account : result.page.account,
         responsibilities: {
           ...next,
           items: pageItems(next.items, (item) => item.reservationId),
