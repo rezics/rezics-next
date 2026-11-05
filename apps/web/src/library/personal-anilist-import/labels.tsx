@@ -215,11 +215,7 @@ export function AniListLabelAdoption({
             ))}
           </ol>
           <p>{m.library_anilist_labels_collision()}</p>
-          <AniListAction
-            type="button"
-            disabled={busy || labels.invalidated || cancelled}
-            onClick={onConfirm}
-          >
+          <AniListAction type="button" disabled={busy || labels.invalidated || cancelled} onClick={onConfirm}>
             {m.library_anilist_labels_confirm()}
           </AniListAction>
           <AniListAction type="button" variant="outline" disabled={busy} onClick={onRead}>
