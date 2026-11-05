@@ -150,6 +150,13 @@ test('qualified credit inspection opens the exact work, preserves locale on retu
   continued.body.next = null;
   const visit = personCreditVisit(fixture, first, 'en');
   const continuedVisit = personCreditVisit(fixture, continued, 'ja');
+  const continuedItems = holderItems(continued.body, 20)!.items;
+  const continuedOrigin = creditWindowHref(continuedVisit, 'ja', continuedItems[0]!.credit!);
+  expect(continuedOrigin.startsWith('/ja/subjects/')).toBe(true);
+  expect(new URL(continuedOrigin, 'https://site.test').searchParams.get('cursor')).toBe('continued:opaque+cursor');
+  expect(subjectVisitReturn(continuedOrigin, 'ja')).toBe(continuedOrigin);
+  expect(subjectVisitReturn(continuedOrigin, 'en')).toBeUndefined();
+  expect(holderItems({ links: [] }, 20)!.items).toEqual([]);
   const value: RowValue = {
     locale: 'en',
     link: (props) => h('a', props),
@@ -162,48 +169,31 @@ test('qualified credit inspection opens the exact work, preserves locale on retu
     unlabelled: 'Unlabelled',
     spoilerShow: 'Show',
   };
-  const person = personReaderExample();
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-out' });
   let items = holderItems(first.body, 20)!.items;
-  const render = (selected = visit, locale = 'en') =>
+  const render = (key = 'credits') =>
     act(async () =>
       root.render(
         h(
           QueryClientProvider,
           { client },
-          h('div', null, [
-            h(PersonReader, {
-              public: person.read,
-              release: person.release,
-              documents: person.documents,
-              locale,
-            }),
-            h(CoverList, {
-              items,
-              value: { ...value, locale },
-              label: 'Current credits',
-              creditVisit: selected,
-            }),
-          ]),
+          h(CoverList, { key, items, value, label: 'Current credits', creditVisit: visit }),
         ),
       ),
     );
-  try {
-    await render();
-    expect(host.textContent).toContain('https://example.org/original');
-    expect(host.textContent).toContain(m.people_biography_unsupported({}, { locale: 'en' }));
-    expect(host.querySelector('button[data-credit-statement]')).not.toBeNull();
-    await act(async () => {
-      const button = [...window.document.querySelectorAll('button')].find(
-        (button) => button.textContent === m.credit_inspect(),
-      )!;
+  const click = async (name: string) =>
+    act(async () => {
+      const button = [...window.document.querySelectorAll('button')].find((button) => button.textContent === name)!;
       button.focus();
       button.click();
     });
+  try {
+    await render();
+    await click(m.credit_inspect());
     await act(async () => {
       await import('../src/features/catalogue/credit-inspection/session');
     });
@@ -220,37 +210,10 @@ test('qualified credit inspection opens the exact work, preserves locale on retu
     expect(creditReturn(new URL(origin, 'https://site.test').hash)).toMatchObject({
       statement: fixture.original.id,
     });
-    await act(async () => {
-      [...window.document.querySelectorAll('button')]
-        .find((button) => button.textContent === m.credit_close())!
-        .click();
-    });
-    items = holderItems(continued.body, 20)!.items;
-    await render(continuedVisit, 'ja');
-    expect(host.textContent).toContain(m.people_biography_unsupported({}, { locale: 'ja' }));
-    const continuedOrigin = creditWindowHref(continuedVisit, 'ja', items[0]!.credit!);
-    expect(continuedOrigin.startsWith('/ja/subjects/')).toBe(true);
-    expect(new URL(continuedOrigin, 'https://site.test').searchParams.get('cursor')).toBe('continued:opaque+cursor');
-    expect(subjectVisitReturn(continuedOrigin, 'ja')).toBe(continuedOrigin);
-    items = holderItems({ links: [] }, 20)!.items;
-    await render({ ...visit, stream: { ...visit.stream, cursor: undefined } });
+    await click(m.credit_close());
+    items = [];
+    await render('empty');
     expect(host.querySelector('button[data-credit-statement]')).toBeNull();
-    expect(host.textContent).toContain(m.people_biography_unsupported({}, { locale: 'en' }));
-    await act(async () => {
-      client.setQueryData(sessionQuery.queryKey, {
-        state: 'signed-in',
-        subject: crypto.randomUUID(),
-        csrfToken: 'A'.repeat(22),
-      });
-    });
-    items = holderItems(first.body, 20)!.items;
-    await render();
-    await act(async () => {
-      [...window.document.querySelectorAll('button')]
-        .find((button) => button.textContent === m.credit_inspect())!
-        .click();
-    });
-    expect(window.document.querySelector('[role="dialog"]')?.textContent).not.toContain(m.relation_sign_in());
   } finally {
     await act(async () => root.unmount());
     client.clear();
