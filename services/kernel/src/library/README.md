@@ -497,8 +497,11 @@ publication remains a separate producer and outcome; neither a first page nor a 
 Saved `source.kind` selects the population: `owner` uses Library facts, while `catalogue` includes matching
 catalogue Subjects without requiring curator facts. Omitted source retains owner compatibility; built-ins remain
 independent. Publication admits the stored expanded rule and accepted release, rather than reinterpreting it against
-current activation. Native saved admission carries population to the execution seam. The catalogue Source producer
-is not installed there yet, so that branch remains unavailable; owner capture and discovery listings cannot replace it.
+current activation. Native saved admission carries population to the execution seam. Catalogue selections use the
+installed read-only Search Scope with the saved release digest and exact native Collection Source identity; they do
+not substitute the owner Library membership probe. Search's complete bound Source observation is checked during
+preparation and currentness, alongside the publisher's own full Source comparison. A canonical catalogue Subject
+with no Library references has a one-original, zero-fact closure; owner-source empty groups remain unproved.
 
 The target is an active saved-dynamic Collection owned by the caller. Curated Collections, built-ins and another
 curator's private rules remain concealed. Current `collection:update`, expanded private leaf scopes/gates/Access,
@@ -513,13 +516,17 @@ without a write. No whole-source scan, result truncation, query count, Actor or 
 
 Preparation uses `bindOwnerFilterRead`, `CollectionSource`, complete native closure and scoped observations.
 One nine-axis plan sums binding, Source/scope/private authority, canonical deduplication, each
-positive/negative selected branch, pre-receipt reauthorization and output transaction. Each branch pays the native
-100-key group, full 32-label probe and accepted Members Source bound. Closure independently caps 100 references
-and 50 originals; every original pays disclosure even after deduplication. Empty selection still pays live Source,
-capture and command work. Three bounded attempts repeat the maximum operation. Compatibility translation refuses
-nonzero `engineRequests`; zero in the SQL-only declaration does not price an uninstalled catalogue route or establish
-receiving. Incorporation must derive reached catalogue costs from producer SQL/binds, escaped projections,
-currentness, disclosure and existing attempts, retaining all nine axes.
+positive/negative selected branch, pre-receipt reauthorization and output transaction. Owner branches retain the
+native 100-key group, full 32-label probe and accepted Members Source bound. Catalogue branches instead charge the
+installed Search evaluation bound. Search preparation reaches four engine requests (two initial generation/index
+reads and two currentness checks). Each read-only evaluation performs one index-currentness request; catalogue
+evidence is read from native SQL. The raw selections are evaluated separately, then the final deduplicated batch
+is evaluated once. Thus a nonempty catalogue selection of `n` raw IDs reserves `5 + n` `engineRequests`; empty
+selection reaches no Search scope and reserves zero. Its eight-axis Work receipts
+compose into the same `NativeCollectionWork` ledger, while `engineRequests` remain explicit in the nine-axis plan
+and never pass through `nativeWorkDimensions`. Closure independently caps 100 references and 50 originals; every
+original pays disclosure even after deduplication. Empty selection still pays live Source, capture and command work.
+Three bounded attempts repeat the maximum operation.
 
 The consumer transfers the plan through `NativeCollectionWork`. It holds the full
 actual-size output, activation, History/events, receipt, serialization and rollback price before verification,
@@ -530,11 +537,11 @@ unavailable. The final owning transaction compares the complete native header/ru
 and revalidates scope before receipt lookup. No foreign home is opened while the parent is held. Relevant changes
 roll back the entire command and leave the prior selected output active.
 
-Decision: reuse the selected publisher with saved population and accepted meaning; incorporate the catalogue
-producer at the existing binding, never through another adapter. One causal regression covers release changes,
-fresh publication and currently authorized exact replay. Catalogue membership/properties must affect fresh private B;
-last-complete public A changes only on explicit activation. Timeout retains the original uncertain intent and only
-its receipt confirms it. Selected IDs and explicit empty sets never prove whole-query exhaustion.
+Decision: receive catalogue membership from the installed read-only Search Scope, bound to saved pinned meaning and
+the complete native Collection Source observation; charge only its reached engine requests. The receiving journey
+covers saved/reopened rules, catalogue property changes, exact currently authorized replay and explicit activation;
+last-complete public A stays active until activation. Timeout retains the original uncertain intent and only its
+receipt confirms it. Selected IDs and explicit empty sets never prove whole-query exhaustion.
 
 One authorized Core command changes public visibility/header revision, calls begin/append/complete on the existing
 output hooks, and emits the ordinary Collection updated/listing events and receipt. Only COMPLETE advances the

@@ -236,6 +236,10 @@ test('genuine Members native scopes evaluate owner facts and continue ID/ordinal
               source: admitted.sourceIdentity,
               observation: admitted.observation,
             });
+            expect(prepared.basis.nativeCollection).toEqual({
+              source: admitted.sourceIdentity,
+              observation: admitted.observation,
+            });
             expect(prepared.basis.index).toBeUndefined();
             expect(prepared.basis.generation).toBeUndefined();
             const preparation = scope.work(prepared);

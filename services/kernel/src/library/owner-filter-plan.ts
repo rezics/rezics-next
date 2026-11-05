@@ -106,9 +106,10 @@ export async function readOwnerFilterCandidateClosure(
   subjectId: string,
   work: NativeCollectionWork,
   deferDisclosure = false,
+  includeCatalogueEvidence = true,
 ): Promise<Unavailable | Readonly<{ status: 'complete'; closure: OwnerFilterCandidateClosure }>> {
   return withNativeOwnerFilterSource(binding, work, () =>
-    readNativeOwnerFilterClosure(binding, source, subjectId, work, deferDisclosure),
+    readNativeOwnerFilterClosure(binding, source, subjectId, work, deferDisclosure, includeCatalogueEvidence),
   );
 }
 

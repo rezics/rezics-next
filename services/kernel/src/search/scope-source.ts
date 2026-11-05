@@ -122,6 +122,8 @@ export type ScopeBasis = Readonly<{
   query: string;
   profile: string;
   canonical: string;
+  /** Exact native Collection order binding retained even when catalogue evidence also needs an index. */
+  nativeCollection?: Readonly<{ source: NativeSourceIdentity; observation: CollectionSourceObservation }>;
 }> &
   (
     | Readonly<{ generation: number; index: string; nativeOwner?: never }>
@@ -336,6 +338,14 @@ export function createSearchScopeSource({
       (!value.collection ||
         !isDeepStrictEqual(value.basis.nativeOwner.source, value.collection.order.source) ||
         !isDeepStrictEqual(value.basis.nativeOwner.observation, value.collection.observation))
+    )
+      unavailable();
+    if (
+      (!!value.collection !== !!value.basis.nativeCollection) ||
+      (value.basis.nativeCollection &&
+        (!value.collection ||
+          !isDeepStrictEqual(value.basis.nativeCollection.source, value.collection.order.source) ||
+          !isDeepStrictEqual(value.basis.nativeCollection.observation, value.collection.observation)))
     )
       unavailable();
     if (value.collection) {
@@ -789,6 +799,10 @@ export function createSearchScopeSource({
             query,
             profile: native.observation.basis.digest,
             canonical: observationDigest(snapshot.observation),
+            nativeCollection: Object.freeze({
+              source: structuredClone(native.sourceIdentity),
+              observation: structuredClone(native.observation),
+            }),
             nativeOwner: Object.freeze({
               source: structuredClone(native.sourceIdentity),
               observation: structuredClone(native.observation),
@@ -1143,6 +1157,14 @@ export function createSearchScopeSource({
         canonical: publicObservation
           ? digest([observationDigest(observation), observationDigest(publicObservation)])
           : observationDigest(observation),
+        ...(collection
+          ? {
+              nativeCollection: Object.freeze({
+                source: structuredClone(collection.order.source!),
+                observation: structuredClone(collection.observation),
+              }),
+            }
+          : {}),
         ...(indexed
           ? { generation: indexed.generation, index: indexed.index }
           : {

@@ -541,8 +541,10 @@ arguments. `prepare(filter, {releaseDigest?, order?, allowance?, type?})`, `pref
 existing calls. `sourcePrefix` returns actual canonical Collection candidates; `ordinalPrefix` returns canonical
 subject/order locators with a native ordinal frontier. The exact requested/saved-expanded filter, immutable release,
 projection profile, full native source/sort, authenticated reader and full committed scoped observation bind each
-factory-local handle. Indexed plans also bind the real physical name/UUID/generation. A pure native owner Collection
-plan instead binds `nativeOwner:{source,observation}` and never discovers a public index or invents its generation.
+factory-local handle. Indexed plans also bind the real physical name/UUID/generation. When an indexed plan also
+uses a native Collection order, `nativeCollection:{source,observation}` separately retains its complete Source
+identity and observation. A pure native owner Collection plan also binds `nativeOwner:{source,observation}` and
+never discovers a public index or invents its generation.
 Mixed plans retain indexed authority and a separate actual public projection capture; every final scope comparison
 revalidates both captures. Native owner evidence delegates to Library's complete-original closure and current
 native points before using the shared Boolean interpreter, and is reread before settlement. A clone or a handle from another factory cannot execute.
