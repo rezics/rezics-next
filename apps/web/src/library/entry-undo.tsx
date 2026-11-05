@@ -1,4 +1,4 @@
-import { useContext, useState, type FormEventHandler } from 'react';
+import { useContext, useState, type FormEventHandler, type ReactNode } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
@@ -14,6 +14,19 @@ const entryActionClassName = cn(
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
 );
 
+// Document responses have already checked this operation against the native exposure response.
+function EntryOperation({
+  operation,
+  admitted,
+  children,
+}: {
+  operation: 'library_entry.delete' | 'library_entry.restore';
+  admitted?: boolean;
+  children: ReactNode;
+}) {
+  return admitted ? children : <Exposure operation={operation}>{children}</Exposure>;
+}
+
 function ContextFields({ locale, csrfToken, returnTo }: EntryFormContext) {
   return (
     <>
@@ -28,18 +41,20 @@ function ContextFields({ locale, csrfToken, returnTo }: EntryFormContext) {
 export function EntryUndoForm({
   undo,
   retry = false,
+  admitted,
   onSubmit,
   disabled = false,
   ...context
 }: EntryFormContext & {
   undo: LibraryRestoreReceipt;
   retry?: boolean;
+  admitted?: boolean;
   onSubmit?: FormEventHandler<HTMLFormElement>;
   disabled?: boolean;
 }) {
   const [key] = useState(() => undo.idempotencyKey ?? crypto.randomUUID());
   return (
-    <Exposure operation="library_entry.restore">
+    <EntryOperation operation="library_entry.restore" admitted={admitted}>
       <form
         method="post"
         action="/library/entry"
@@ -60,7 +75,7 @@ export function EntryUndoForm({
           {retry ? m.library_entry_restore_retry_action() : m.editor_undo()}
         </button>
       </form>
-    </Exposure>
+    </EntryOperation>
   );
 }
 
@@ -70,6 +85,7 @@ export function EntryRemoveForm({
   incarnationId,
   idempotencyKey,
   credential,
+  admitted,
   disabled = false,
   ...context
 }: EntryFormContext & {
@@ -78,12 +94,13 @@ export function EntryRemoveForm({
   incarnationId?: string | null;
   idempotencyKey: string;
   credential?: string | undefined;
+  admitted?: boolean;
   disabled?: boolean;
 }) {
   const client = useContext(QueryClientContext);
   const session = client?.getQueryData<{ csrfToken: string | null }>(['session']);
   return (
-    <Exposure operation="library_entry.delete">
+    <EntryOperation operation="library_entry.delete" admitted={admitted}>
       <form method="post" action="/library/entry" className="my-2 min-w-0 max-w-full">
         <ContextFields {...context} csrfToken={context.csrfToken ?? session?.csrfToken ?? null} />
         <input type="hidden" name="intent" value="remove" />
@@ -96,7 +113,7 @@ export function EntryRemoveForm({
           {m.library_remove_from_library()}
         </button>
       </form>
-    </Exposure>
+    </EntryOperation>
   );
 }
 
@@ -165,6 +182,7 @@ export function EntryFormPage({
       {undo ? (
         <EntryUndoForm
           undo={undo}
+          admitted
           retry={!!restore && !restore.ok}
           locale={locale}
           csrfToken={csrfToken}
@@ -172,7 +190,7 @@ export function EntryFormPage({
         />
       ) : null}
       {retryRemove ? (
-        <EntryRemoveForm {...retryRemove} locale={locale} csrfToken={csrfToken} returnTo={returnTo} />
+        <EntryRemoveForm admitted {...retryRemove} locale={locale} csrfToken={csrfToken} returnTo={returnTo} />
       ) : null}
       {removed && !undo ? <p role="status">{m.library_removed()}</p> : null}
       {conflict ? <p role="status">{m.library_conflict()}</p> : null}
