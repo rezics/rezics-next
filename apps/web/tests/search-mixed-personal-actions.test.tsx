@@ -582,7 +582,7 @@ test('controlled native form preserves focus, draft and URL through rejection, w
   }
 });
 
-test.each(['restart', 'throw', 'unavailable', 'empty', 'denied'] as const)(
+test.each(['restart', 'throw', 'unavailable', 'empty', 'denied', 'ready'] as const)(
   'live mixed host settles %s, retries only the aggregate read, and retires late completion',
   async (outcome) => {
     const require = createRequire(import.meta.url);
@@ -777,18 +777,29 @@ test.each(['restart', 'throw', 'unavailable', 'empty', 'denied'] as const)(
         expect(reads).toBe(3);
         expect(writes).toHaveLength(2);
       }
+      const fresh = structuredClone(page);
+      if (fresh.viewerFacts?.state === 'current')
+        for (const row of fresh.viewerFacts.rows)
+          row.entry = { state: 'present', entryState: 'completed', revision: 8, incarnationId };
       const settlement: DiscoveryBoundPage =
-        outcome === 'empty'
-          ? { state: empty, capabilities: null }
-          : { state: { status: outcome === 'denied' ? 'denied' : 'restart' }, capabilities: null };
+        outcome === 'ready'
+          ? { state: { status: 'ready', page: fresh }, capabilities: bound.capabilities }
+          : outcome === 'empty'
+            ? { state: empty, capabilities: null }
+            : { state: { status: outcome === 'denied' ? 'denied' : 'restart' }, capabilities: null };
       await act(async () => refresh.resolve(settlement));
       expect(window.document.activeElement).toBe(
-        outcome === 'empty' ? host.querySelector('section') : host.querySelector('[data-discovery-restart]'),
+        outcome === 'ready'
+          ? host.querySelector('[data-discovery-personal-row] a')
+          : outcome === 'empty'
+            ? host.querySelector('section')
+            : host.querySelector('[data-discovery-restart]'),
       );
       expect(window.scrollY).toBe(210);
       expect(window.location.search).toBe('?q=title&sort=name&kind=book');
       expect(window.location.hash).toBe('#context');
-      expect(host.querySelectorAll('select')).toHaveLength(0);
+      expect(host.querySelectorAll('select')).toHaveLength(outcome === 'ready' ? 2 : 0);
+      if (outcome === 'ready') expect(host.querySelector('select')?.value).toBe('completed');
       refresh = deferred<DiscoveryBoundPage>();
       await act(async () =>
         root.render(
