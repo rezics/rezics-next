@@ -10,7 +10,10 @@ import {
   personIdentityForSource,
   selectPersonReviewPair,
 } from '../src/showcase-person-identity.ts';
-import { emptyCrossMediaPlan, seedCrossMedia, type CrossMediaPort } from '../src/cross-media-seed.ts';
+import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia, type CrossMediaPort } from '../src/cross-media-seed.ts';
+import { buildShowcaseManifest } from '../src/showcase-manifest.ts';
+import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
+import { createPublicBulkClient } from '../src/public-bulk-client.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -84,9 +87,11 @@ test('seed review keeps admitted source bytes and original bindings across canon
     },
   };
   const directory = await mkdtemp(join(tmpdir(), 'person-review-handoff-'));
+  const journal = new ShowcaseJournal(join(directory, 'journal.sqlite'));
+  const captured = captureShowcaseCommands(port, journal);
   try {
     const path = join(directory, 'state.sqlite');
-    const first = await seedCrossMedia(plan, path, port, { origin: 'https://fixture.test' });
+    const first = await seedCrossMedia(plan, path, captured, { origin: 'https://fixture.test' });
     const pair = first.personReview!.pair;
     expect(pair.state).toBe('selected');
     if (pair.state !== 'selected') throw new Error('Expected selected source records');
@@ -96,6 +101,13 @@ test('seed review keeps admitted source bytes and original bindings across canon
     ]);
     expect(pair.sources.map((entry) => entry.record)).toEqual([plan.entities.bangumi[0]!, plan.entities.vndb[0]!]);
     expect(first.personIdentities.map((entry) => entry.currentSubjectId)).toEqual([currentPersonId, currentPersonId]);
+    const manifest = buildShowcaseManifest({ plan, readings: first.readings,
+      acknowledgements: journal.acknowledgedCommands(), aliases: crossMediaAliases });
+    for (const record of manifest.records) {
+      expect(record.subjectId).toBe(original.get(record.sourceKey));
+      expect(record.assertions.length).toBeGreaterThan(0);
+    }
+    expect(manifest.records).toHaveLength(2);
     for (const entry of pair.sources) {
       const identifier = commands.find(
         (command) =>
@@ -106,7 +118,7 @@ test('seed review keeps admitted source bytes and original bindings across canon
       expect(identifier?.source).toMatchObject({ digest: entry.digest, converter_revision: entry.converterRevision });
     }
     const sealed = JSON.stringify(commands);
-    const reopened = await seedCrossMedia(plan, path, port, { origin: 'https://fixture.test' });
+    const reopened = await seedCrossMedia(plan, path, captured, { origin: 'https://fixture.test' });
     expect(reopened.personReview).toEqual(first.personReview);
     expect(JSON.stringify(commands)).toBe(sealed);
     expect(selectPersonReviewPair(first.personReviewSources!, { bangumi: 'person:1917', vndb: 's224' })).toEqual({
@@ -117,8 +129,36 @@ test('seed review keeps admitted source bytes and original bindings across canon
     plan.entities.bangumi[0]!.payload.name = 'Changed name';
     expect(pair.sources[0].record.payload.name).toBe('麻枝准');
   } finally {
+    journal.close();
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('review and public reads follow native canonical redirects without changing source bindings or origins', async () => {
+  const { createImportTransport } = await import('../src/import-client.ts');
+  const original = '00000000-0000-4000-8000-000000000008';
+  const seen: Request[] = [];
+  const native = read({ id: currentPersonId, type: 'schema:Person', statements: {} });
+  let cyclic = false;
+  const upstream = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    seen.push(request);
+    return new URL(request.url).pathname.endsWith(original)
+      ? Response.json({ redirect: { from: original, to: cyclic ? original : currentPersonId } },
+          { status: 308, headers: { location: 'https://foreign.test/private' } })
+      : Response.json(native);
+  }) as typeof fetch;
+  const publicClient = createPublicBulkClient({ origin: 'https://kernel.test', fetch: upstream });
+  expect(await publicClient.readSubject(original)).toEqual(native);
+  const transport = createImportTransport({ origin: 'https://kernel.test', tokenProvider: async () => 'reviewer',
+    fetch: upstream, maxAttempts: 1 });
+  expect(await transport.readReviewedSubject(original)).toEqual(native);
+  expect(seen.every((request) => new URL(request.url).origin === 'https://kernel.test')).toBe(true);
+  expect(seen.slice(0, 2).every((request) => !request.headers.has('authorization'))).toBe(true);
+  expect(seen.slice(2).every((request) => request.headers.get('authorization') === 'Bearer reviewer')).toBe(true);
+  cyclic = true;
+  await expect(publicClient.readSubject(original)).rejects.toThrow('Cyclic public subject redirect');
+  await expect(transport.readReviewedSubject(original)).rejects.toThrow('Cyclic reviewed subject redirect');
 });
 
 function read(subject: unknown): ReviewedSubjectRead {
@@ -199,6 +239,19 @@ test('only exact source key forms on Person records participate in reviewed iden
   expect(personIdentityForSource('bangumi', 'person:8', 'schema:Organization')).toBeUndefined();
   expect(personIdentityForSource('bangumi', 'person:8\n', 'schema:Person')).toBeUndefined();
   expect(personIdentityForSource('vndb', 's7\n', 'schema:Person')).toBeUndefined();
+});
+
+test('current identity ignores deprecated identifiers but retains conflicting non-value evidence', () => {
+  const identity = personIdentityForSource('vndb', 's224', 'schema:Person')!;
+  const subject = { id: currentPersonId, type: 'schema:Person', statements: {
+    'wdt:P3180': [
+      { rank: 'normal', value: { type: 'value', content: 's224' } },
+      { rank: 'deprecated', value: { type: 'value', content: 's7' } },
+    ],
+  } };
+  expect(observePersonIdentity(identity, read(subject)).state).toBe('current');
+  subject.statements['wdt:P3180'].push({ rank: 'normal', value: { type: 'someValue', content: '' } });
+  expect(observePersonIdentity(identity, read(subject)).state).toBe('conflicting');
 });
 
 test('Jun Maeda discovery retains the exact source records until a reviewer confirms the human bridge', () => {

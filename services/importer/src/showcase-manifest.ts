@@ -292,7 +292,7 @@ function graphEdgeCitationsMatch(edge: CrossMediaPlan['edges'][number], actual: 
 function currentSubject(reading: CrossMediaReading | undefined): { id: string; type: string } | null {
   const subject = reading?.subject.subject as { id?: unknown; type?: unknown } | undefined;
   return typeof subject?.id === 'string' && typeof subject.type === 'string'
-    ? { id: subject.id, type: subject.type }
+    ? { id: reading?.boundSubjectId ?? subject.id, type: subject.type }
     : null;
 }
 

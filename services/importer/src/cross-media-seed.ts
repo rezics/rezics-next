@@ -2074,6 +2074,8 @@ export type CrossMediaPort = Pick<
 > &
   Partial<Pick<ReturnType<typeof createImportTransport>, 'requestMedia' | 'mediaStatus'>>;
 export type CrossMediaReading = {
+  /** Original claim target; independent public reads may return its canonical Person. */
+  boundSubjectId?: string;
   source: Provider;
   externalId: string;
   subject: ReviewedSubjectRead;
@@ -2846,6 +2848,7 @@ export async function seedCrossMedia(
         }
         personIdentities.push({ ...observation, boundSubjectId: claim.subject });
         readings.push({
+          boundSubjectId: claim.subject,
           source: provider,
           externalId: record.key,
           subject: subjectRead,
