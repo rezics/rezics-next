@@ -14,12 +14,14 @@ import {
 } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
 import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
+import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
 import {
   captureShowcaseCommands,
   publishShowcase,
   ShowcaseJournal,
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
+import { prepareShowcaseTags } from '../src/showcase-tags.ts';
 import { seedShowcaseVndbReleases } from '../src/showcase-vndb-releases.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
@@ -37,6 +39,27 @@ test('selected dump candidates publish only by exact intent and resume a refused
       statements: Record<string, unknown[]>;
     }
   >();
+  const tagSchemeId = '00000000-0000-4000-8000-000000000041';
+  const tagConceptId = '00000000-0000-4000-8000-000000000042';
+  const tagSchemeUri = vndbPublicTagScheme('cont');
+  const tagConceptUri = vndbPublicTagConceptUri('cont', 'g105');
+  subjects.set(tagSchemeId, {
+    id: tagSchemeId,
+    type: 'skos:ConceptScheme',
+    sourceExternalId: 'vocabulary:vndb.tag.cont',
+    labels: { en: 'cont' },
+    statements: { 'schema:url': [{ value: { type: 'value', content: tagSchemeUri } }] },
+  });
+  subjects.set(tagConceptId, {
+    id: tagConceptId,
+    type: 'skos:Concept',
+    sourceExternalId: 'vocabulary:vndb.tag.cont:g105',
+    labels: { und: 'Reviewed tag' },
+    statements: {
+      'schema:url': [{ value: { type: 'value', content: tagConceptUri } }],
+      'skos:inScheme': [{ value: { type: 'value', content: tagSchemeId } }],
+    },
+  });
   const bySource = new Map<string, string>();
   const candidates = new Map<
     string,
@@ -70,6 +93,10 @@ test('selected dump candidates publish only by exact intent and resume a refused
         yield { id: 'v2', olang: 'ja', alias: null };
         yield { id: 'v3', olang: 'ja', alias: null };
       }
+      if (provider === 'vndb' && table === 'tags')
+        yield { id: 'g105', cat: 'cont', defaultspoil: 0, searchable: true, applicable: true };
+      if (provider === 'vndb' && table === 'tags_vn')
+        yield { tag: 'g105', vid: 'v2', uid: null, vote: 3, spoiler: 0, ignore: false, lie: false };
       if (provider === 'vndb' && table === 'entry_meta') {
         yield { id: 'v1', revision: '1', lastmod: '2026-10-25 00:00:00+00' };
         yield { id: 'v2', revision: '1', lastmod: '2026-10-25 00:00:00+00' };
@@ -171,13 +198,31 @@ test('selected dump candidates publish only by exact intent and resume a refused
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
   try {
+    const preparedTags = await prepareShowcaseTags({
+      tables,
+      selectedVids: ['v2'],
+      port,
+      known: {
+        schemes: [{ category: 'cont', id: tagSchemeId }],
+        concepts: [{ category: 'cont', code: 'g105', id: tagConceptId }],
+      },
+      fetch: async () =>
+        Response.json({
+          more: false,
+          results: [{ id: 'v2', tags: [{ id: 'g105', rating: 4.5, spoiler: 0, lie: false }] }],
+        }),
+    });
     const result = await seedShowcaseVndbReleases({
       tables,
       plan,
       path: join(directory, 'import.sqlite'),
       port: captureShowcaseCommands(port, journal),
       destination: { origin: 'https://fixture.test' },
-      extras: { providers: ['bangumi', 'vndb'], mediaDeadlineMs: 0 },
+      extras: {
+        providers: ['bangumi', 'vndb'],
+        mediaDeadlineMs: 0,
+        vocabularyAdmissions: [preparedTags.vocabularyAdmission],
+      },
     });
     expect(result.gaps).toEqual([]);
     expect(result.unresolved).toEqual([]);
@@ -259,26 +304,80 @@ test('selected dump candidates publish only by exact intent and resume a refused
         return Response.json(read(id));
       }) as typeof fetch,
     });
-    const first = await publishShowcase({ plan, result, aliases: crossMediaAliases, journal, review, publicClient });
+    const tagOptions = {
+      tagWeightObservations: preparedTags.tagWeightObservations,
+      tagWeightRefreshes: preparedTags.tagWeightRefreshes,
+    };
+    const first = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
     expect(first.status).toBe('incomplete');
     const acknowledged = journal.acknowledgedCommands().filter((entry) => entry.candidateId);
     expect(acknowledged.length).toBeGreaterThan(0);
     expect(accepted.size).toBe(0);
+    const membership = acknowledged.find((entry) =>
+      entry.command.op === 'propose' &&
+      entry.command.statement.property.id === 'schema:genre' &&
+      !entry.command.statement.qualifiers?.some((term) => term.property.id === 'rezics:sourceTagWeightMetric'),
+    );
+    expect(membership?.command.op).toBe('propose');
+    if (!membership || membership.command.op !== 'propose') throw new Error('Missing selected tag membership');
+    expect(membership.command.statement.references?.flatMap((reference) => reference.parts).map((part) => part.value))
+      .toContainEqual({ type: 'value', content: 'https://vndb.org/v2.1#/tags_vn/v2/g105/tag' });
+    const membershipCandidateId = membership.candidateId!;
+    const firstMembershipActions = accepted.has(membershipCandidateId);
+    expect(firstMembershipActions).toBe(false);
 
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     refuseAcceptance = false;
     unavailableReviewSubjects.add(vndbTargetId);
-    const withheld = await publishShowcase({ plan, result, aliases: crossMediaAliases, journal, review, publicClient });
+    subjects.get(tagConceptId)!.statements['skos:inScheme'] = [
+      { value: { type: 'value', content: '00000000-0000-4000-8000-000000000043' } },
+    ];
+    const withheld = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
     expect(withheld.status).toBe('incomplete');
     const withheldSource = withheld.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'r1');
     expect(withheldSource?.assertions.some((assertion) => assertion.property === 'schema:name')).toBe(true);
     expect(withheldSource?.assertions.some((assertion) => assertion.property === 'schema:exampleOfWork')).toBe(false);
+    const withheldTagWork = withheld.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'v2');
+    expect(withheldTagWork?.assertions.some((assertion) => assertion.property === 'schema:genre')).toBe(false);
+    expect(withheld.omissions).toContainEqual({
+      provider: 'vndb',
+      sourceKey: 'v2',
+      code: 'vocabulary-binding-missing',
+    });
+    expect(accepted.has(membershipCandidateId)).toBe(false);
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     unavailableReviewSubjects.delete(vndbTargetId);
+    subjects.get(tagConceptId)!.statements['skos:inScheme'] = [
+      { value: { type: 'value', content: tagSchemeId } },
+    ];
     publicReadIds.clear();
-    const resumed = await publishShowcase({ plan, result, aliases: crossMediaAliases, journal, review, publicClient });
+    const resumed = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
     expect(resumed.omissions).toEqual([]);
     expect(resumed.status).toBe('published');
     expect(resumed.published.map((record) => record.subjectId).sort()).toEqual([...workIds].sort());
@@ -300,6 +399,10 @@ test('selected dump candidates publish only by exact intent and resume a refused
     expect(resumed.published.some((record) => record.subjectId === vndbTargetId)).toBe(true);
     expect(publicReadIds.has(vndbSourceId)).toBe(true);
     expect(publicReadIds.has(vndbTargetId)).toBe(true);
+    const tagWorkId = result.readings.find((reading) => reading.source === 'vndb' && reading.externalId === 'v2')!
+      .subject.subject!.id!;
+    expect(publicReadIds.has(tagWorkId)).toBe(true);
+    expect(subjects.get(tagWorkId)!.statements['schema:genre']).toContainEqual(membership.command.statement);
     const manifestRelation = resumed.manifest.records
       .find((record) => record.provider === 'vndb' && record.sourceKey === 'r1')
       ?.assertions.find((assertion) => assertion.property === 'schema:exampleOfWork');
