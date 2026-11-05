@@ -1064,7 +1064,7 @@ async function bindPreparationRead(
   const admission = await admitSavedCollectionMemberQuery(
     deps,
     input.actor,
-    { filter, sort: 'id', releaseDigest: input.definition.release.digest },
+    { filter, sort: 'id', source: { kind: 'owner' }, releaseDigest: input.definition.release.digest },
     {},
     input.deadline,
   );
