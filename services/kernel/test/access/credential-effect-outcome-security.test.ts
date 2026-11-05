@@ -88,7 +88,7 @@ test('password replacement retains exact unknown command identity through delibe
     ...operation,
     reference: approved.reference,
   });
-  const refusal = await json(retry, 401);
+  const refusal = await json(retry, 403);
   const recovered = classifyPasswordChangeReply(
     { ...attempt, uncertain: true },
     {
