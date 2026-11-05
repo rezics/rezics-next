@@ -1272,3 +1272,30 @@ test('a local stack container needs a worker whose brief lists native or browser
   expect(await workerLocalContainerError({ REZICS_WALK_STACK_DIR: dir }, repository)).toBeNull();
   expect(() => walkStackNames('not a name')).toThrow('GOAL_TASK_ID cannot name a walk stack');
 });
+
+test("a walk worker's own checks still place on a check host, as any other worker's do", async () => {
+  const fixture = walkFixture();
+  const hosts = join(fixture.dir, 'hosts.json');
+  writeFileSync(
+    hosts,
+    JSON.stringify({
+      hosts: [
+        { name: 'a', performance: true, address: 'ops@a.test', identity: '/keys/a', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 2 },
+      ],
+    }),
+  );
+  const directory = workspace();
+  for (const extra of [{}, { GOAL_ACCEPTANCE_REQUIRES: 'native' }]) {
+    const placed: string[][] = [];
+    const code = await runOnCheckHost(
+      { label: 'the run', root: directory, cwd: directory, command: ['true'] },
+      { ...fixture.env, KERNEL_CHECK_REMOTE: hosts, GOAL_TASK_ID: 'worker', ...extra },
+      async (options) => {
+        placed.push(options.allowedHosts);
+        return 0;
+      },
+    );
+    expect(code, JSON.stringify(extra)).toBe(0);
+    expect(placed, JSON.stringify(extra)).toEqual([['a']]);
+  }
+});
