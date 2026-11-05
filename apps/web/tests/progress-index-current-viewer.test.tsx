@@ -539,9 +539,23 @@ test('an ordinary denied progress list renders permission on the initial page an
   listOutcome = 'forbidden';
   const direct = await readProgressIndex({ data: { subjectId: id(1) } });
   const initial = await readCurrentViewerProgressIndex({ data: { subjectId: id(1) } });
-  expect(direct).toMatchObject({ signedIn: true, viewerState: 'forbidden', selectedSubject: null, sessions: [], next: null });
-  expect(initial).toMatchObject({ viewer: 'A', page: { signedIn: true, viewerState: 'forbidden', selectedSubject: null, sessions: [], next: null } });
-  expect([initial.page.emptyKind, initial.page.progressChoices, naming, releases]).toEqual([undefined, undefined, 0, 0]);
+  expect(direct).toMatchObject({
+    signedIn: true,
+    viewerState: 'forbidden',
+    selectedSubject: null,
+    sessions: [],
+    next: null,
+  });
+  expect(initial).toMatchObject({
+    viewer: 'A',
+    page: { signedIn: true, viewerState: 'forbidden', selectedSubject: null, sessions: [], next: null },
+  });
+  expect([initial.page.emptyKind, initial.page.progressChoices, naming, releases]).toEqual([
+    undefined,
+    undefined,
+    0,
+    0,
+  ]);
   const refresh = await readCurrentViewerProgressIndex({ data: { subjectId: id(1) } });
   expect(refresh.requested).toEqual(initial.requested);
   const html = [await renderCurrentViewerHtml(initial), await renderCurrentViewerHtml(refresh)];
