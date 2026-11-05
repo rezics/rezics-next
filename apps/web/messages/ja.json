@@ -5144,6 +5144,8 @@
   "creator_sales_empty": "販売記録はまだありません",
   "creator_sales_empty_hint": "記録された購入のみを表示します。会計情報と外部支払いの記録はロイヤリティ明細で別途確認できます。",
   "creator_sales_pagination": "販売履歴のページ",
+  "creator_sales_previous": "前の売上",
+  "creator_sales_retry": "このページを再試行",
   "creator_sales_next": "以前の販売",
   "game_profile_title": "ゲーム・ビジュアルノベル作品の編集",
   "game_profile_credits": "制作者とクレジット",

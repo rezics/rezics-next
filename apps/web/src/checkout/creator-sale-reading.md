@@ -81,3 +81,16 @@ are supported, with no extra search or fragment. Browser page suspension invalid
 On same-document return, the original admitted source and exact order must still exist at the original address.
 A full reload, replaced observation, different account, locale/address or visit discards the capture and requires
 reselection. No private identity is persisted in storage, history state, query parameters or public destinations.
+
+## Sales window coordinates
+
+Decision: the mounted current reader keeps at most eight admitted predecessor cursors, the current coordinate and
+one staged target outside the address-bound origin workspace. Only intentional same-visit route paging transfers
+these coordinates to the next origin; replacement source, viewer, credential, locale, authority or disposal discards
+them. No page bodies, review state or departure captures enter this path. A direct later URL has no predecessor.
+Each deliberate Previous, Next or cursor-free Restart uses one existing route read. The route result seeds the
+current reader, avoiding a second read. Only exact ready admission commits the staged push, pop or reset; failure
+keeps the exact target for Retry. Stale remains a separate deliberate Restart. Modified clicks keep canonical
+anchors and do not transfer the mounted path. Refresh reads the exact current cursor and retires selection and
+coordinate history on replacement, even for an equal response. Focus follows only an eligible initiating keyboard
+movement; focus changes, failed admission, replacement and disposal cancel that handoff.

@@ -5141,6 +5141,8 @@
   "creator_sales_empty": "아직 판매 기록이 없습니다",
   "creator_sales_empty_hint": "기록된 구매만 표시됩니다. 회계 정보와 외부 지급 기록은 로열티 명세서에서 별도로 제공합니다.",
   "creator_sales_pagination": "판매 내역 페이지",
+  "creator_sales_previous": "이전 판매",
+  "creator_sales_retry": "이 페이지 다시 시도",
   "creator_sales_next": "이전 판매",
   "game_profile_title": "게임 및 비주얼 노벨 작품 편집",
   "game_profile_credits": "제작자와 크레딧",

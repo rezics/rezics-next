@@ -1,3 +1,5 @@
+import type { MouseEvent } from 'react';
+import type { SalesCoordinate, SalesMovement } from './creator-sales-windows';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
@@ -18,6 +20,7 @@ export function CreatorSalesPage({
   isCurrent,
   refresh,
   refreshing = false,
+  windows,
 }: {
   page: CreatorSalesData;
   locale: string;
@@ -26,9 +29,20 @@ export function CreatorSalesPage({
   isCurrent?: (() => boolean) | undefined;
   refresh?: (() => void) | undefined;
   refreshing?: boolean | undefined;
+  windows?: {
+    previous: { cursor: SalesCoordinate } | undefined;
+    staged: { movement: SalesMovement; cursor: SalesCoordinate } | undefined;
+    move: (movement: SalesMovement, cursor: SalesCoordinate, keyboard: boolean, element: HTMLElement) => void;
+    retry: () => void;
+  } | undefined;
 }) {
   const reading = useCreatorSaleReading(page, locale, cursor, source, isCurrent);
   const href = creatorSalesHref(locale, cursor);
+  const paging = (movement: SalesMovement, target: SalesCoordinate) => (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!windows || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    windows.move(movement, target, event.detail === 0, event.currentTarget);
+  };
   const notice =
     page.kind === 'denied'
       ? m.creator_sales_denied()
@@ -91,12 +105,18 @@ export function CreatorSalesPage({
           role={page.kind === 'loading' ? 'status' : 'alert'}
         >
           <p>{notice}</p>
-          {page.kind !== 'loading' && (
+          {page.kind !== 'loading' && windows?.staged && page.kind !== 'stale' ? (
+            <Button variant="outline" className="min-h-11 min-w-11" onClick={windows.retry}>
+              {m.creator_sales_retry()}
+            </Button>
+          ) : page.kind !== 'loading' && (
             <Button
               variant="outline"
               className="min-h-11"
               nativeButton={false}
-              render={<a href={page.kind === 'stale' || page.kind === 'error' ? creatorSalesHref(locale) : href} />}
+              render={<a href={page.kind === 'stale' || page.kind === 'error' ? creatorSalesHref(locale) : href}
+                onClick={paging(page.kind === 'stale' || page.kind === 'error' ? 'restart' : 'next',
+                  page.kind === 'stale' || page.kind === 'error' ? undefined : cursor)} />}
             >
               {page.kind === 'stale' || page.kind === 'error' ? m.creator_sales_restart() : m.statements_retry()}
             </Button>
@@ -175,12 +195,19 @@ export function CreatorSalesPage({
             />
           )}
           <nav aria-label={m.creator_sales_pagination()} className="flex flex-wrap gap-3">
+            {windows?.previous && (
+              <Button variant="outline" className="min-h-11 min-w-11" nativeButton={false}
+                render={<a href={creatorSalesHref(locale, windows.previous.cursor)}
+                  onClick={paging('previous', windows.previous.cursor)} />}>
+                {m.creator_sales_previous()}
+              </Button>
+            )}
             {cursor && (
               <Button
                 variant="outline"
                 className="min-h-11"
                 nativeButton={false}
-                render={<a href={creatorSalesHref(locale)} />}
+                render={<a href={creatorSalesHref(locale)} onClick={paging('restart', undefined)} />}
               >
                 {m.creator_sales_restart()}
               </Button>
@@ -190,7 +217,7 @@ export function CreatorSalesPage({
                 variant="outline"
                 className="min-h-11"
                 nativeButton={false}
-                render={<a href={creatorSalesHref(locale, page.next)} />}
+                render={<a href={creatorSalesHref(locale, page.next)} onClick={paging('next', page.next)} />}
               >
                 {m.creator_sales_next()}
               </Button>

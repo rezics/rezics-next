@@ -5141,6 +5141,8 @@
   "creator_sales_empty": "Noch keine Verkäufe erfasst",
   "creator_sales_empty_hint": "Hier erscheinen nur erfasste Käufe. Honorarabrechnungen enthalten gesonderte Buchhaltungsdaten und externe Zahlungsbelege.",
   "creator_sales_pagination": "Seiten des Verkaufsverlaufs",
+  "creator_sales_previous": "Vorherige Verkäufe",
+  "creator_sales_retry": "Dieses Fenster erneut versuchen",
   "creator_sales_next": "Ältere Verkäufe",
   "game_profile_title": "Spiel- und Visual-Novel-Werke bearbeiten",
   "game_profile_credits": "Urheber und Mitwirkende",

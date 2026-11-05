@@ -5141,6 +5141,8 @@
   "creator_sales_empty": "Aún no hay ventas registradas",
   "creator_sales_empty_hint": "Aquí solo aparecen las compras registradas. Los estados de regalías ofrecen por separado los datos contables y los pagos externos.",
   "creator_sales_pagination": "Páginas del historial de ventas",
+  "creator_sales_previous": "Ventas anteriores",
+  "creator_sales_retry": "Reintentar esta página",
   "creator_sales_next": "Ventas anteriores",
   "game_profile_title": "Editar juegos y novelas visuales",
   "game_profile_credits": "Creadores y créditos",
