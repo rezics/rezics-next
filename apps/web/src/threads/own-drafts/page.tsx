@@ -1,6 +1,7 @@
 import { documentText } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import type { FocusEvent as ReactFocusEvent, KeyboardEvent, MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { subjectHref } from '../../subject/subject-href';
@@ -12,25 +13,30 @@ import {
   admittedOwnDraftAction,
   documentForInspection,
   indexOwnDraftPage,
+  isOwnDraftCursor,
+  moveOwnDraftCoordinates,
   ownDraftIdentityKey,
-  ownDraftRequestKey,
   readSelectedOwnDraft,
+  type OwnDraftCoordinate,
   type OwnDraftEntry,
   type OwnDraftCommands,
   type OwnDraftIdentity,
   type OwnDraftIndex,
   type OwnDraftLocalWritingReader,
   type OwnDraftLocale,
+  type OwnDraftMovement,
   type OwnDraftPageData,
   type OwnDraftReadback,
   type OwnDraftReader,
   type OwnDraftSelection,
 } from './model';
 
+type PageOperation = Readonly<{ id: number; target: OwnDraftCoordinate; movement: OwnDraftMovement }>;
 type PageState =
-  | { requestKey: string; state: 'loading' }
-  | { requestKey: string; state: 'unavailable' | 'denied' | 'concealed' | 'stale' }
-  | { requestKey: string; state: 'ready' | 'preparing'; page: OwnDraftPageData; index: OwnDraftIndex };
+  | null
+  | { state: 'loading' }
+  | { state: 'unavailable' | 'denied' | 'concealed' | 'stale'; target: OwnDraftCoordinate; movement: OwnDraftMovement }
+  | { state: 'ready' | 'preparing'; coordinate: OwnDraftCoordinate; page: OwnDraftPageData; index: OwnDraftIndex };
 
 type SelectionState =
   | { identityKey: string; entry: OwnDraftEntry; state: 'loading' }
@@ -58,6 +64,12 @@ type CommandFeedback = {
   postId: string;
   state: 'acknowledged' | 'reading' | 'readback';
   readback?: OwnDraftReadback;
+};
+type FocusHandoff = {
+  operationId: number;
+  origin: Element | null;
+  cancelled: boolean;
+  listener: (event: FocusEvent) => void;
 };
 
 const control = 'min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
@@ -196,21 +208,25 @@ function BoundOwnDraftsPage({
   const inventoryHeading = useRef<HTMLHeadingElement>(null);
   const recoveryFocus = useRef<string | null>(null);
   const returnFocus = useRef<{ key: string; id: string } | null>(null);
-  const [cursor, setCursor] = useState<{ key: string; value: string | null }>({ key: identityKey, value: null });
-  const currentCursor = cursor.key === identityKey ? cursor.value : null;
-  const requestKey = ownDraftRequestKey(identityKey, currentCursor);
-  const [retry, setRetry] = useState(0);
+  const [coordinates, setCoordinates] = useState<readonly OwnDraftCoordinate[]>([null]);
+  const coordinatesRef = useRef<readonly OwnDraftCoordinate[]>([null]);
   const [pageState, setPageState] = useState<PageState | null>(null);
+  const [operation, setOperation] = useState<PageOperation | null>(null);
+  const operationRef = useRef<PageOperation | null>(null);
+  const operationSequence = useRef(0);
+  const initialReadStarted = useRef(false);
+  const focusHandoff = useRef<FocusHandoff | null>(null);
+  const keyboardActivation = useRef<Element | null>(null);
   const [selectionState, setSelectionState] = useState<SelectionState | null>(null);
   const [localWritingState, setLocalWritingState] = useState<LocalWritingState>(null);
   const [editingSource, setEditingSource] = useState<'server' | 'browser' | null>(null);
   const [eraseState, setEraseState] = useState<EraseState | null>(null);
   const [commandFeedback, setCommandFeedback] = useState<CommandFeedback | null>(null);
   const erasePending = useRef(false);
-  const page = active && pageState?.requestKey === requestKey ? pageState : null;
+  const page = active ? pageState : null;
   const selection = active && page && selectionState?.identityKey === identityKey ? selectionState : null;
-  const admission = useRef({ active, reader, localWritingReader, commands, requestKey });
-  admission.current = { active, reader, localWritingReader, commands, requestKey };
+  const admission = useRef({ active, reader, localWritingReader, commands });
+  admission.current = { active, reader, localWritingReader, commands };
   const retired = useRef(false);
   // Command authority follows the private reader boundary, never its inventory cursor.
   const commandCurrent = () =>
@@ -220,9 +236,162 @@ function BoundOwnDraftsPage({
     admission.current.reader === reader &&
     admission.current.localWritingReader === localWritingReader &&
     admission.current.commands === commands;
-  const current = () => commandCurrent() && admission.current.requestKey === requestKey;
+  const current = () => commandCurrent();
   const nativeEpoch = useRef<{ identityKey: string; value: number | null }>({ identityKey, value: null });
   if (nativeEpoch.current.identityKey !== identityKey) nativeEpoch.current = { identityKey, value: null };
+
+  const clearFocusHandoff = (operationId: number, focus = false) => {
+    const handoff = focusHandoff.current;
+    if (!handoff || handoff.operationId !== operationId) return;
+    document.removeEventListener('focusin', handoff.listener, true);
+    focusHandoff.current = null;
+    if (
+      focus &&
+      !handoff.cancelled &&
+      operationRef.current?.id === operationId &&
+      commandCurrent()
+    )
+      inventoryHeading.current?.focus();
+  };
+
+  const beginPageRead = (target: OwnDraftCoordinate, movement: OwnDraftMovement, keyboard = false) => {
+    if (operationRef.current || !commandCurrent()) return false;
+    if (target !== null && !isOwnDraftCursor(target)) return false;
+    const nextOperation: PageOperation = { id: ++operationSequence.current, target, movement };
+    operationRef.current = nextOperation;
+    if (keyboard) {
+      const handoff: FocusHandoff = {
+        operationId: nextOperation.id,
+        origin: document.activeElement,
+        cancelled: false,
+        listener: () => undefined,
+      };
+      handoff.listener = (event) => {
+        if (focusHandoff.current === handoff && event.target !== handoff.origin && event.target !== document.body)
+          handoff.cancelled = true;
+      };
+      focusHandoff.current = handoff;
+      document.addEventListener('focusin', handoff.listener, true);
+    }
+    selectionController.current?.abort();
+    localWritingController.current?.abort();
+    selectionGeneration.current++;
+    returnFocus.current = null;
+    setSelectionState(null);
+    setLocalWritingState(null);
+    setEditingSource(null);
+    setPageState({ state: 'loading' });
+    setOperation(nextOperation);
+    return true;
+  };
+
+  const movementKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') keyboardActivation.current = event.currentTarget;
+  };
+  const movementBlur = (event: ReactFocusEvent<HTMLButtonElement>) => {
+    if (keyboardActivation.current === event.currentTarget) keyboardActivation.current = null;
+  };
+  const keyboardClick = (event: MouseEvent<HTMLButtonElement>) => {
+    const keyboard = keyboardActivation.current === event.currentTarget;
+    keyboardActivation.current = null;
+    return keyboard;
+  };
+  const movementHandlers = (move: (keyboard: boolean) => void) => ({
+    onKeyDown: movementKeyDown,
+    onBlur: movementBlur,
+    onClick: (event: MouseEvent<HTMLButtonElement>) => move(keyboardClick(event)),
+  });
+  const retainedCoordinate = () => coordinatesRef.current[coordinatesRef.current.length - 1] ?? null;
+  const unavailableCurrentPage = () =>
+    setPageState({ state: 'unavailable', target: retainedCoordinate(), movement: 'refresh' });
+
+  useEffect(() => {
+    if (!active || initialReadStarted.current) return;
+    initialReadStarted.current = true;
+    beginPageRead(null, 'initial');
+  }, [active]);
+
+  useEffect(() => {
+    if (!active || !operation) return;
+    const controller = new AbortController();
+    listController.current?.abort();
+    listController.current = controller;
+    const ownsRequest = () => operationRef.current === operation && !controller.signal.aborted;
+    const admitsReader = () => ownsRequest() && commandCurrent();
+    const finish = () => {
+      if (ownsRequest()) setOperation((previous) => (previous?.id === operation.id ? null : previous));
+    };
+    const fail = (state: 'unavailable' | 'denied' | 'concealed' | 'stale') => {
+      setPageState({ state, target: operation.target, movement: operation.movement });
+      clearFocusHandoff(operation.id);
+    };
+    const read = async () => {
+      if (!admitsReader()) return;
+      let result: Awaited<ReturnType<OwnDraftReader['list']>>;
+      try {
+        result = await reader.list(
+          { accountId: identity.accountId, ...(operation.target === null ? {} : { cursor: operation.target }) },
+          controller.signal,
+        );
+      } catch {
+        if (admitsReader()) fail('unavailable');
+        return;
+      }
+      if (!admitsReader()) return;
+      if (typeof result === 'string') {
+        if (result === 'denied') retireCommands();
+        fail(result);
+        return;
+      }
+      if (
+        result.viewer.accountId !== identity.accountId ||
+        (identity.authnEpoch !== 0 && result.viewer.authnEpoch !== identity.authnEpoch) ||
+        (nativeEpoch.current.value !== null && result.viewer.authnEpoch !== nativeEpoch.current.value)
+      ) {
+        retireCommands();
+        selectionGeneration.current++;
+        returnFocus.current = null;
+        setSelectionState(null);
+        setLocalWritingState(null);
+        setEditingSource(null);
+        fail('denied');
+        return;
+      }
+      let index: OwnDraftIndex;
+      try {
+        index = indexOwnDraftPage(result);
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          ![
+            'Native own-draft page exceeded its 20-row bound',
+            'Native own-draft page repeated a post identity',
+          ].includes(error.message)
+        )
+          throw error;
+        fail('unavailable');
+        return;
+      }
+      if (result.next !== null && !isOwnDraftCursor(result.next)) {
+        fail('stale');
+        return;
+      }
+      if (!admitsReader()) return;
+      nativeEpoch.current = { identityKey, value: result.viewer.authnEpoch };
+      const admittedCoordinates = moveOwnDraftCoordinates(coordinatesRef.current, operation.movement, operation.target);
+      coordinatesRef.current = admittedCoordinates;
+      setCoordinates(admittedCoordinates);
+      setPageState({ state: result.state, coordinate: operation.target, page: result, index });
+      clearFocusHandoff(operation.id, true);
+    };
+    void read().finally(finish);
+    return () => {
+      controller.abort();
+      if (listController.current === controller) listController.current = null;
+      clearFocusHandoff(operation.id);
+      if (operationRef.current === operation) operationRef.current = null;
+    };
+  }, [active, identity.accountId, identity.authnEpoch, identityKey, operation, reader]);
 
   useLayoutEffect(() => {
     admission.current.active = active;
@@ -241,69 +410,22 @@ function BoundOwnDraftsPage({
   }, [active]);
 
   useEffect(() => {
-    if (!active) {
-      listController.current?.abort();
-      selectionController.current?.abort();
-      localWritingController.current?.abort();
-      commandController.current?.abort();
-      eraseController.current?.abort();
-      erasePending.current = false;
-      selectionGeneration.current++;
-      returnFocus.current = null;
-      setPageState(null);
-      setSelectionState(null);
-      setLocalWritingState(null);
-      setEditingSource(null);
-      setEraseState(null);
-      setCommandFeedback(null);
-      return;
-    }
-    const controller = new AbortController();
+    if (active) return;
     listController.current?.abort();
     selectionController.current?.abort();
     localWritingController.current?.abort();
+    commandController.current?.abort();
+    eraseController.current?.abort();
+    erasePending.current = false;
     selectionGeneration.current++;
-    listController.current = controller;
-    setPageState({ requestKey, state: 'loading' });
+    returnFocus.current = null;
+    setPageState(null);
     setSelectionState(null);
     setLocalWritingState(null);
     setEditingSource(null);
-    clearResolvedErase();
-    void reader
-      .list(
-        { accountId: identity.accountId, ...(currentCursor === null ? {} : { cursor: currentCursor }) },
-        controller.signal,
-      )
-      .then((result) => {
-        if (controller.signal.aborted || !current() || identityRef.current !== identityKey) return;
-        if (typeof result === 'string') {
-          if (result === 'denied') retireCommands();
-          setPageState({ requestKey, state: result });
-          return;
-        }
-        if (
-          result.viewer.accountId !== identity.accountId ||
-          (identity.authnEpoch !== 0 && result.viewer.authnEpoch !== identity.authnEpoch) ||
-          (nativeEpoch.current.value !== null && result.viewer.authnEpoch !== nativeEpoch.current.value)
-        ) {
-          retireCommands();
-          selectionGeneration.current++;
-          returnFocus.current = null;
-          setSelectionState(null);
-          setLocalWritingState(null);
-          setEditingSource(null);
-          setPageState({ requestKey, state: 'denied' });
-          return;
-        }
-        nativeEpoch.current = { identityKey, value: result.viewer.authnEpoch };
-        setPageState({ requestKey, state: result.state, page: result, index: indexOwnDraftPage(result) });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted && current() && identityRef.current === identityKey)
-          setPageState({ requestKey, state: 'unavailable' });
-      });
-    return () => controller.abort();
-  }, [active, currentCursor, identity.accountId, identity.authnEpoch, identityKey, reader, requestKey, retry]);
+    setEraseState(null);
+    setCommandFeedback(null);
+  }, [active]);
 
   const readySelection = selection?.state === 'ready' ? selection : null;
   const editorAdmission = useRef({ selection: readySelection?.selection, source: editingSource });
@@ -364,6 +486,7 @@ function BoundOwnDraftsPage({
 
   const retireCommands = () => {
     retired.current = true;
+    returnFocus.current = null;
     selectionController.current?.abort();
     localWritingController.current?.abort();
     commandController.current?.abort();
@@ -393,7 +516,8 @@ function BoundOwnDraftsPage({
   }, [selectedId]);
 
   const open = (entry: OwnDraftEntry) => {
-    if (!admittedOwnDraftAction(entry, identity.accountId, 'resume')) return;
+    if (operationRef.current || !commandCurrent() || !admittedOwnDraftAction(entry, identity.accountId, 'resume'))
+      return;
     listController.current?.abort();
     selectionController.current?.abort();
     localWritingController.current?.abort();
@@ -417,14 +541,14 @@ function BoundOwnDraftsPage({
           if (result === 'denied') {
             retireCommands();
             setSelectionState(null);
-            setPageState({ requestKey, state: 'denied' });
+            setPageState({ state: 'denied', target: retainedCoordinate(), movement: 'refresh' });
             return;
           }
           if (result === 'unavailable') {
             setSelectionState({ identityKey, entry, state: 'unavailable' });
           } else {
             // A changed or concealed head retires its metadata and action advice as well as its bytes.
-            setPageState({ requestKey, state: 'unavailable' });
+            unavailableCurrentPage();
             setSelectionState({ identityKey, state: result === 'stale' ? 'stale' : 'concealed' });
           }
           return;
@@ -456,36 +580,25 @@ function BoundOwnDraftsPage({
     if (selection?.state === 'unavailable') open(selection.entry);
   };
 
-  const continuePage = () => {
-    if (!page || (page.state !== 'ready' && page.state !== 'preparing')) return;
-    if (page.page.next === null) return;
-    selectionController.current?.abort();
-    localWritingController.current?.abort();
-    selectionGeneration.current++;
-    setSelectionState(null);
-    setLocalWritingState(null);
-    setEditingSource(null);
-    leaveCommandPresentation();
-    setCursor({ key: identityKey, value: page.page.next });
+  const continuePage = (keyboard = false) => {
+    if (!page || (page.state !== 'ready' && page.state !== 'preparing') || !isOwnDraftCursor(page.page.next)) return;
+    beginPageRead(page.page.next, 'next', keyboard);
   };
 
-  const restart = () => {
-    selectionController.current?.abort();
-    localWritingController.current?.abort();
-    selectionGeneration.current++;
-    setSelectionState(null);
-    setLocalWritingState(null);
-    setEditingSource(null);
-    leaveCommandPresentation();
-    setCursor({ key: identityKey, value: null });
-    setRetry((value) => value + 1);
+  const previousPage = (keyboard = false) => {
+    if (!page || (page.state !== 'ready' && page.state !== 'preparing') || coordinates.length < 2) return;
+    beginPageRead(coordinates[coordinates.length - 2]!, 'previous', keyboard);
   };
 
-  const retryPage = () => setRetry((value) => value + 1);
+  const restart = (keyboard = false) => beginPageRead(null, 'first', keyboard);
+
+  const retryPage = (keyboard = false) => {
+    if (page?.state === 'unavailable') beginPageRead(page.target, page.movement, keyboard);
+  };
 
   const retireRevision = () => {
     closeSelection();
-    setPageState({ requestKey, state: 'unavailable' });
+    unavailableCurrentPage();
     setSelectionState({ identityKey, state: 'stale' });
     setCommandFeedback(null);
   };
@@ -515,7 +628,7 @@ function BoundOwnDraftsPage({
     setSelectionState(null);
     setLocalWritingState(null);
     setEraseState(null);
-    setPageState({ requestKey, state: 'unavailable' });
+    if (!operationRef.current) unavailableCurrentPage();
     setCommandFeedback({ action, postId: entry.id, state: 'acknowledged' });
   };
 
@@ -600,7 +713,6 @@ function BoundOwnDraftsPage({
           recoveryFocus.current = `${controlId}-command-result`;
         if (result.ok) {
           recoveryFocus.current = `${controlId}-command-result`;
-          listController.current?.abort();
           selectionController.current?.abort();
           localWritingController.current?.abort();
           selectionGeneration.current++;
@@ -608,7 +720,7 @@ function BoundOwnDraftsPage({
           setLocalWritingState(null);
           setEditingSource(null);
           setEraseState(null);
-          setPageState({ requestKey: admission.current.requestKey, state: 'unavailable' });
+          if (!operationRef.current) unavailableCurrentPage();
           setCommandFeedback({ action: 'erase', postId: intent.postId, state: 'acknowledged' });
         } else if (result.reason === 'unavailable') {
           setEraseState({ state: 'uncertain', intent });
@@ -659,8 +771,8 @@ function BoundOwnDraftsPage({
                 ? m.own_drafts_command_conflict({}, { locale })
                 : m.thread_delete_failure({}, { locale })}
             </p>
-            {eraseState.reason === 'conflict' ? (
-              <Button type="button" variant="outline" className={control} onClick={restart}>
+            {eraseState.reason === 'conflict' && editingSource === null ? (
+              <Button type="button" variant="outline" className={control} {...movementHandlers(restart)}>
                 {m.own_drafts_restart({}, { locale })}
               </Button>
             ) : null}
@@ -738,7 +850,7 @@ function BoundOwnDraftsPage({
         {selection.state === 'stale' ? (
           <div className="space-y-2" role="status">
             <p>{m.own_drafts_stale_selection({}, { locale })}</p>
-            <Button type="button" className={control} onClick={restart}>
+            <Button type="button" className={control} {...movementHandlers(restart)}>
               {m.own_drafts_restart({}, { locale })}
             </Button>
           </div>
@@ -949,7 +1061,7 @@ function BoundOwnDraftsPage({
       {page?.state === 'stale' ? (
         <div role="alert" className="space-y-2">
           <p>{m.own_drafts_restart_required({}, { locale })}</p>
-          <Button type="button" className={control} onClick={restart}>
+          <Button type="button" className={control} {...movementHandlers(restart)}>
             {m.own_drafts_restart({}, { locale })}
           </Button>
         </div>
@@ -959,10 +1071,10 @@ function BoundOwnDraftsPage({
         <div className="space-y-2" role="alert">
           <p>{m.own_drafts_unavailable({}, { locale })}</p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" className={control} onClick={retryPage}>
+            <Button type="button" className={control} {...movementHandlers(retryPage)}>
               {m.own_drafts_retry({}, { locale })}
             </Button>
-            <Button type="button" variant="outline" className={control} onClick={restart}>
+            <Button type="button" variant="outline" className={control} {...movementHandlers(restart)}>
               {m.own_drafts_restart({}, { locale })}
             </Button>
           </div>
@@ -1018,11 +1130,21 @@ function BoundOwnDraftsPage({
               ))}
             </ol>
           ) : null}
-          {page.page.next !== null ? (
-            <Button type="button" variant="outline" className={control} onClick={continuePage}>
-              {m.own_drafts_continue({}, { locale })}
+          <div className="flex flex-wrap gap-2">
+            {coordinates.length > 1 ? (
+              <Button type="button" variant="outline" className={control} {...movementHandlers(previousPage)}>
+                {m.own_drafts_previous({}, { locale })}
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" className={control} {...movementHandlers(restart)}>
+              {m.own_drafts_restart({}, { locale })}
             </Button>
-          ) : null}
+            {isOwnDraftCursor(page.page.next) ? (
+              <Button type="button" variant="outline" className={control} {...movementHandlers(continuePage)}>
+                {m.own_drafts_continue({}, { locale })}
+              </Button>
+            ) : null}
+          </div>
         </>
       ) : null}
     </main>

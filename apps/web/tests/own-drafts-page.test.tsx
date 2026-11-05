@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   admittedOwnDraftAction,
   indexOwnDraftPage,
+  isOwnDraftCursor,
   ownDraftIdentityKey,
   ownDraftRequestKey,
   type OwnDraftIdentity,
@@ -70,6 +71,13 @@ test('binds the in-memory page address to account, credentials, locale, source a
   expect(ownDraftIdentityKey({ ...identity, callerEpoch: 'caller-2' })).not.toBe(key);
   expect(ownDraftIdentityKey({ ...identity, accountId: 'other-account' })).not.toBe(key);
   expect(ownDraftIdentityKey({ ...identity, locale: 'ja' })).not.toBe(key);
+});
+
+test('keeps the native opaque cursor length bound in JavaScript code units', () => {
+  expect(isOwnDraftCursor(' ')).toBe(true);
+  expect(isOwnDraftCursor('x'.repeat(32768))).toBe(true);
+  expect(isOwnDraftCursor('')).toBe(false);
+  expect(isOwnDraftCursor('x'.repeat(32769))).toBe(false);
 });
 
 test('signed-in account navigation opens the exact localized private drafts destination', async () => {
