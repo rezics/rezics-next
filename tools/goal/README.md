@@ -2228,6 +2228,8 @@ their state and readiness. Missing or malformed dependencies have state `unknown
 and integration-commit policy used to release held work. The same `status` object includes `trains`: each main and dev
 lane with `state` `running`, `stopped` or `missing`, and for a recorded owner the captured `codeVersion` of the
 `tools/goal` tree that process loaded. That field is not the current `main` ref and is not the settings revision.
+Decision: status builds an invocation-local projection from its selected task cohort and one incident-history read,
+reusing current attempt, retry intent and probe task state reads only within that response.
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
 

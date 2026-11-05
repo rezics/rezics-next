@@ -17,6 +17,8 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   const previousManager = process.env.GOAL_MANAGER;
   const output: string[] = [];
   let mutations = 0;
+  const reads = { tasks: 0, task: 0, attempt: 0, retryIntent: 0, incidentHistory: 0 };
+  const statusReads: typeof reads[] = [];
   const mutate = () => {
     mutations++;
   };
@@ -40,18 +42,32 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   );
   const all = [held, task('healthy', 'ready'), task('bad-after', 'held', 'invalid'), task('bad-id', 'held', [null])];
   const db = {
-    query: (sql: string) => ({
-      all: () => [],
-      get: () => (sql.includes('manager_sessions') ? { id: 'operator' } : null),
-      run: mutate,
-    }),
+    query: (sql: string) => {
+      if (sql === 'SELECT sequence, body FROM worker_events WHERE kind=? ORDER BY sequence') reads.incidentHistory++;
+      return {
+        all: () => [],
+        get: () => (sql.includes('manager_sessions') ? { id: 'operator' } : null),
+        run: mutate,
+      };
+    },
     close() {},
   } as unknown as Runtime['db'];
   const store = {
     db,
-    tasks: () => all,
-    task: () => held,
-    attempt: () => ({}),
+    tasks: () => {
+      reads.tasks++;
+      return all;
+    },
+    task: (id: string) => {
+      reads.task++;
+      if (id !== 'held') throw new Error(`unknown task: ${id}`);
+      return held;
+    },
+    attempt: (ref: { taskId: string }) => {
+      reads.attempt++;
+      if (ref.taskId === 'missing-attempt') throw new Error('unknown attempt');
+      return {};
+    },
     dependency(id: string) {
       if (id === 'missing') return undefined;
       if (id === 'malformed') throw new Error('malformed dependency');
@@ -63,7 +79,10 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
         task_commit: id === 'cross-visible' ? 'refs/heads/dev' : id === 'cross-unrecorded' ? undefined : '0'.repeat(40),
       };
     },
-    retryIntent: () => ({ status: 'pending' }),
+    retryIntent: () => {
+      reads.retryIntent++;
+      return { status: 'pending' };
+    },
     attempts: () => [],
     records: () => [],
   } as unknown as WorkerStore;
@@ -85,8 +104,13 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   process.env.GOAL_MANAGER = 'operator';
   console.log = (...values: unknown[]) => output.push(values.join(' '));
   try {
-    for (const args of [['status'], ['status', 'held'], ['attempts'], ['attempts', '--json'], ['report']])
+    for (const args of [['status'], ['status', 'held'], ['attempts'], ['attempts', '--json'], ['report']]) {
       expect(await run(args, () => runtime)).toBe(0);
+      if (args[0] === 'status') {
+        statusReads.push({ ...reads });
+        Object.assign(reads, { tasks: 0, task: 0, attempt: 0, retryIntent: 0, incidentHistory: 0 });
+      }
+    }
   } finally {
     console.log = previousLog;
     if (previousManager === undefined) delete process.env.GOAL_MANAGER;
@@ -114,6 +138,26 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   expect(status.tasks.map(({ id }: Task) => id)).toEqual(all.map(({ id }) => id));
   for (const malformed of status.tasks.slice(2))
     expect(malformed.dependencies).toMatchObject([{ state: 'unknown', ready: false }]);
+  expect(statusReads).toEqual([
+    { tasks: 1, task: 0, attempt: 4, retryIntent: 4, incidentHistory: 1 },
+    { tasks: 0, task: 1, attempt: 1, retryIntent: 1, incidentHistory: 1 },
+  ]);
+  Object.assign(reads, { tasks: 0, task: 0, attempt: 0, retryIntent: 0, incidentHistory: 0 });
+  await expect(
+    runWorkerCommand('status', ['missing'], {
+      settings,
+      store: store as unknown as WorkerStore,
+      tasks,
+      print() {},
+    }),
+  ).rejects.toThrow('unknown task: missing');
+  expect(reads).toEqual({ tasks: 0, task: 1, attempt: 0, retryIntent: 0, incidentHistory: 0 });
+  all.push(task('missing-attempt', 'ready'));
+  Object.assign(reads, { tasks: 0, task: 0, attempt: 0, retryIntent: 0, incidentHistory: 0 });
+  await expect(
+    runWorkerCommand('status', [], { settings, store: store as unknown as WorkerStore, tasks, print() {} }),
+  ).rejects.toThrow('unknown attempt');
+  expect(reads).toEqual({ tasks: 1, task: 0, attempt: 5, retryIntent: 4, incidentHistory: 0 });
   expect(mutations).toBe(0);
 });
 
