@@ -80,6 +80,11 @@ registry advertises `collectionDirectory`. Without that native capability it ret
 enumeration. The identity-ordered `source.page` remains the indexing frontier and never becomes a result-ordering
 authority.
 
+The service derives `context.collectionQuery` from this admitted selection, preserving unset versus explicit
+mixed/owner kind, canonical curator/Subject operands and native recency/popularity names. Ordinary discovery
+clears directory operands. The delivered native source exposes only identity seek; it does not yet supply the
+sorted-seek and whole-query observations needed to enable this capability. Card readiness alone cannot enable it.
+
 ## Cost Touches / Bound / Growth check
 
 - Source reads touch one native owner snapshot and at most 100 full keys. Query operands add at most two

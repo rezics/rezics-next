@@ -35,6 +35,7 @@ not a producer, and a resource point read does not establish search enumeration.
 ## Second-scope producer boundaries
 
 Decision: Search owns the public Collection directory request, indexed predicates and ordering, continuation, and mounted consumer. Commerce remains authoritative for Collection disclosure, curator identity, current membership and selected public output, and native recency and follow-count popularity. The directory extends the existing mixed discovery path rather than adding a parallel listing authority.
+Decision: derive native `collectionQuery` operands from the admitted directory selection for each read; card-reader readiness does not advertise directory capability until native sorted seek and whole-query currentness are delivered. Keep the existing capability gate while that Commerce prerequisite is absent; identity-source pages cannot be sorted independently into correct recent/popular pages.
 
 The [second-scope plan](research/search-second-scope-plan.md) sequences implementation; it adds no native
 readiness or grant. The public Collection directory is a narrow named extension of the existing `collection`

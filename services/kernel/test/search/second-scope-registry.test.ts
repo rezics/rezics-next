@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Release } from '@rezics/definitions';
 import release from '../../../../packages/definitions/release/rezics.json';
 import type { PublicCollectionDiscoverySummary } from '../../src/library/index.ts';
+import { collectionDiscoveryQuery } from '../../src/search/collection-discovery.ts';
 import { hydrateOwnerDiscoveryHits, type DiscoveryOwnerCandidate } from '../../src/search/discovery-hydration.ts';
 import {
   createDiscoveryRegistry,
@@ -37,7 +38,7 @@ function collectionCard(currentId: string): PublicCollectionDiscoverySummary {
     destination: `/collections/${currentId}`,
     visibility: 'public' as const,
     revision: 1,
-    sourceGeneration: 'generation-1',
+    sourceGeneration: '1',
     membershipKind: 'dynamic' as const,
     outputGeneration: 'generation-1',
   };
@@ -78,7 +79,17 @@ const options: DiscoveryRegistryOptions = {
                     summary: null,
                     revision: '1',
                     sourcePosition: '1',
+                    queryObservation: 'a'.repeat(64),
                     card: collectionCard(currentId),
+                    operands: {
+                      id: currentId,
+                      presentationKind: { kind: 'mixed' },
+                      curator: { state: 'unavailable', reason: 'deidentified' },
+                      subjectMembership: null,
+                      popularity: null,
+                      recency: [null, route, currentId],
+                      eligible: { presentationKind: null, curator: null, subject: null },
+                    },
                   },
                 ] as const,
             ),
@@ -155,6 +166,23 @@ const candidates: DiscoveryOwnerCandidate[] = keys.map((key) => ({
   revision: '1',
   ...(key.kind === 'review' ? { sourceVersion: 'source-v1' } : {}),
 }));
+
+test('directory selections supply exact native filter and order operands', () => {
+  expect(collectionDiscoveryQuery({ order: 'recent' })).toEqual({ order: 'recency', popularity: false });
+  expect(
+    collectionDiscoveryQuery({ presentationKind: 'mixed', curator: authorId, subject: subjectId, order: 'popular' }),
+  ).toEqual({
+    presentationKind: { kind: 'mixed' },
+    curatorAccountId: authorId,
+    subjectId,
+    popularity: true,
+    order: 'popularity',
+  });
+  expect(collectionDiscoveryQuery({ presentationKind: 'schema:Book', order: 'recent' }).presentationKind).toEqual({
+    kind: 'owner',
+    id: 'schema:Book',
+  });
+});
 
 test('ready owner adapters preserve canonical identity and current text/kind metadata', async () => {
   const hydrated = await hydrateOwnerDiscoveryHits(registry, candidates, {} as DiscoveryReadContext);

@@ -4,7 +4,7 @@ import type { FilterRelease } from '@rezics/filter';
 import { ProblemError } from '../http/problem.ts';
 import { compileText, type TextNode } from './text.ts';
 import { boundMatchEvidencePage, compileMatchEvidence } from './match-evidence.ts';
-import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
+import { collectionDiscoveryQuery, CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
 import type { SpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -310,7 +310,11 @@ function executeDiscoverySearch(
   const execute: DiscoverySearch = async (principal, request, context) => {
     const { registry, release, digest } = await config.resolve(request);
     const admitted = admitDiscoveryRequest(request, registry, release);
-    context = { ...context, ...(admitted.text === undefined ? {} : { textQuery: admitted.text }) };
+    context = {
+      ...context,
+      collectionQuery: admitted.collectionDirectory ? collectionDiscoveryQuery(admitted.collectionDirectory) : undefined,
+      ...(admitted.text === undefined ? {} : { textQuery: admitted.text }),
+    };
     // The visible Collection directory is accepted only when its native owner has registered the
     // current listing predicates and ordering. Missing Commerce operands mean preparation, never an
     // unfiltered or index-hint-only response.
