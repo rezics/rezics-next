@@ -123,6 +123,7 @@ async function browser() {
     'DocumentFragment',
     'HTMLInputElement',
     'getComputedStyle',
+    'scrollTo',
     'requestAnimationFrame',
     'cancelAnimationFrame',
     'IS_REACT_ACT_ENVIRONMENT',
