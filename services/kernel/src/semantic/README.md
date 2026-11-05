@@ -749,6 +749,10 @@ Only actual admission returns `202 {operation: {id}}` with `Location: /v1/subjec
 Current-authority replay finds that same operation. The existing GET poll pending/completed DTOs and concealed
 unknown/denied behavior remain; a redirect/revision alone cannot complete it. Suspension follows the [native bearer contract](identity-epoch-contract.md#ordinary-http-asynchronous-identity-operation).
 
+Decision: the identity admission store asks the caller for an authorization per native partition it runs a command on
+(`authorizationFor`), because an admission's home and the redirected Subject's partition can differ. The poll prepares each
+subject's disclosure check outside the read transaction that consumes it.
+
 Verification/reversal retain their successful subject/component DTO and same receipt. The SAME Accounts workflow
 uses bounded admission/delivery steps, bounded indexed native publication probes and durable sleep OUTSIDE a step,
 before approval/page/finish/pending-clear. No worker is held through an outage. Busy/capacity/handoff retries the
