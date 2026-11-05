@@ -18,24 +18,67 @@ function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
 }
 
+function sameOmittedKinds(left: Kinds['omitted'], right: Kinds['omitted']) {
+  const signature = (value: Kinds['omitted']) =>
+    JSON.stringify(
+      (value ?? []).map(({ id, state }) => ({ id, state })).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    );
+  return signature(left) === signature(right);
+}
+
+function retryableRecovery(state: SearchRecoveryState | undefined) {
+  return state === undefined || ['unavailable', 'index-not-ready', 'source-not-ready'].includes(state.status);
+}
+
+function refusalState(state: DiscoveryKindsState, recovery?: SearchRecoveryState): SearchRecoveryState {
+  if (recovery) return recovery;
+  switch (state.status) {
+    case 'closed':
+      return { status: 'closed' };
+    case 'denied':
+      return { status: 'denied' };
+    case 'restart':
+      return { status: 'restart' };
+    case 'invalid':
+    case 'unsupported':
+      return { status: 'invalid' };
+    default:
+      return { status: 'unavailable' };
+  }
+}
+
 /** Registry pages are explicit bounded reads; rows and initial count evidence remain in place. */
 export function DiscoveryKinds({
   initial,
+  checkpoint,
   selected,
   locale,
   hydrated,
   load,
+  onRefresh,
+  onRefreshFocus,
+  onRefusalFocus,
+  onRefusal,
 }: {
   initial: Kinds;
+  checkpoint: string;
   selected: string[];
   locale: string;
   hydrated: boolean;
   load: (cursor: string, signal: AbortSignal) => Promise<DiscoveryKindsState & { recovery?: SearchRecoveryState }>;
+  /** Re-read the complete currently executed Search request through its existing reader owner. */
+  onRefresh?: (() => void) | undefined;
+  onRefreshFocus?: ((source: HTMLButtonElement) => void) | undefined;
+  onRefusalFocus?: ((source: HTMLButtonElement) => void) | undefined;
+  onRefusal?: ((state: SearchRecoveryState) => void) | undefined;
 }) {
   const [continuation, setContinuation] = useState<Kinds>();
   const [chosen, setChosen] = useState(() => new Set(selected));
   const [stopped, setStopped] = useState(false);
   const [refused, setRefused] = useState(false);
+  const [needsRefresh, setNeedsRefresh] = useState(false);
+  const [refreshPending, setRefreshPending] = useState(false);
+  const [retryable, setRetryable] = useState(false);
   const [continuations] = useState(() => new KindContinuationLedger(initial.values.map((kind) => kind.id)));
   const [status, setStatus] = useState<DiscoveryKindsState['status']>();
   const [recovery, setRecovery] = useState<SearchRecoveryState>();
@@ -43,6 +86,7 @@ export function DiscoveryKinds({
   const pending = useRef<AbortController | undefined>(undefined);
   const moreButton = useRef<HTMLButtonElement>(null);
   const restartButton = useRef<HTMLButtonElement>(null);
+  const refreshButton = useRef<HTMLButtonElement>(null);
   const recoveryRegion = useRef<HTMLElement>(null);
   const focusAction = useRef<
     | {
@@ -88,12 +132,19 @@ export function DiscoveryKinds({
     if (action.moved) return;
     const target = action.source.isConnected
       ? action.source
-      : (moreButton.current ?? restartButton.current ?? recoveryRegion.current);
+      : (moreButton.current ?? refreshButton.current ?? restartButton.current ?? recoveryRegion.current);
     if (target?.isConnected) target.focus();
   });
-  const values = refused ? [] : [...initial.values, ...(continuation?.values ?? [])];
+  const values = refused || needsRefresh ? [] : [...initial.values, ...(continuation?.values ?? [])];
   const next = continuation ? continuation.next : initial.next;
-  const restartable = !refused && (stopped || continuations.limited || next === null);
+  const restartable = !refused && !needsRefresh && (stopped || continuations.limited || next === null);
+  const canRetryCursor =
+    !refused &&
+    !needsRefresh &&
+    !!next &&
+    retryableRecovery(recovery) &&
+    (status === 'preparing' || status === 'not-ready' || (status === 'unavailable' && retryable));
+
   function restart(source: HTMLButtonElement) {
     const action = beginFocusAction(source);
     continuations.restart();
@@ -101,21 +152,39 @@ export function DiscoveryKinds({
     setStopped(false);
     setStatus(undefined);
     setRecovery(undefined);
+    setRetryable(false);
     if (action) action.complete = true;
   }
+
+  function refreshDirectory(source: HTMLButtonElement) {
+    if (!onRefresh || waiting || refreshPending || pending.current || refused) return;
+    onRefreshFocus?.(source);
+    setRefreshPending(true);
+    setStatus('loading');
+    setRecovery(undefined);
+    setRetryable(false);
+    onRefresh();
+  }
+
   async function more(source: HTMLButtonElement) {
-    if (!next || pending.current || waiting || stopped || continuations.limited || refused) return;
+    if (!next || pending.current || waiting || stopped || continuations.limited || refused || needsRefresh) return;
     const action = beginFocusAction(source);
     const controller = new AbortController();
     pending.current = controller;
     setStatus('loading');
     setRecovery(undefined);
+    setRetryable(false);
     try {
       const result = await load(next, controller.signal);
       if (controller.signal.aborted) return;
       setRecovery(result.recovery);
       if (result.status === 'ready') {
-        if (
+        if (result.asOf !== checkpoint || !sameOmittedKinds(initial.omitted, result.kinds.omitted)) {
+          setContinuation(undefined);
+          setNeedsRefresh(true);
+          setStatus('restart');
+          setRecovery({ status: 'restart' });
+        } else if (
           !continuations.accept(
             next,
             result.kinds.values.map((kind) => kind.id),
@@ -124,20 +193,44 @@ export function DiscoveryKinds({
         ) {
           setStopped(true);
           setStatus(undefined);
+          setRecovery(undefined);
         } else {
           setContinuation(result.kinds);
           setStatus(undefined);
+          setRecovery(undefined);
         }
+      } else if (
+        result.status === 'restart' ||
+        result.recovery?.status === 'restart' ||
+        result.recovery?.status === 'invalid-cursor'
+      ) {
+        setContinuation(undefined);
+        setNeedsRefresh(true);
+        setStatus(result.status);
+      } else if (
+        ['session', 'closed', 'denied', 'invalid'].includes(result.recovery?.status ?? '') ||
+        result.status === 'closed' ||
+        result.status === 'denied' ||
+        result.status === 'invalid' ||
+        result.status === 'unsupported' ||
+        (result.status === 'unavailable' && result.retryable !== true) ||
+        !retryableRecovery(result.recovery)
+      ) {
+        setContinuation(undefined);
+        setRefused(true);
+        setStatus(result.status);
+        onRefusalFocus?.(source);
+        onRefusal?.(refusalState(result, result.recovery));
       } else {
-        // Only transport outages retain an accepted directory for an exact-cursor retry.
-        const retryable =
-          result.status === 'unavailable' && (!result.recovery || result.recovery.status === 'unavailable');
-        setRefused(!retryable);
-        if (!retryable) setContinuation(undefined);
+        setRetryable(result.status === 'unavailable' && result.retryable === true);
         setStatus(result.status);
       }
     } catch (error) {
-      if (!controller.signal.aborted) setStatus('unavailable');
+      if (controller.signal.aborted) return;
+      if (!(error instanceof TypeError)) throw error;
+      setRecovery({ status: 'unavailable' });
+      setRetryable(true);
+      setStatus('unavailable');
     } finally {
       if (pending.current === controller) pending.current = undefined;
       if (action) {
@@ -146,7 +239,21 @@ export function DiscoveryKinds({
       }
     }
   }
+
   const options = messageOptions(locale);
+  const directoryMessage = needsRefresh
+    ? m.result_kind_refresh_required({}, options)
+    : recovery && ['session', 'closed', 'denied'].includes(recovery.status)
+      ? searchRecoveryMessage(recovery, locale)
+      : status === 'preparing' || status === 'not-ready'
+        ? m.result_kind_preparing({}, options)
+        : status === 'unavailable' && (!recovery || recovery.status === 'unavailable')
+          ? m.result_kind_unavailable({}, options)
+          : recovery
+            ? searchRecoveryMessage(recovery, locale)
+            : status
+              ? discoveryMessage(status, locale)
+              : undefined;
   return (
     <section ref={recoveryRegion} className="space-y-3" aria-label={m.search_result_kinds({}, options)} tabIndex={-1}>
       <h2 className="font-medium">{m.search_result_kinds({}, options)}</h2>
@@ -200,8 +307,11 @@ export function DiscoveryKinds({
         </ul>
       </details>
       {status && (
-        <p role={status === 'loading' ? 'status' : 'alert'} className="text-sm text-muted-foreground">
-          {recovery ? searchRecoveryMessage(recovery, locale) : discoveryMessage(status, locale)}
+        <p
+          role={status === 'loading' || status === 'preparing' || status === 'not-ready' ? 'status' : 'alert'}
+          className="text-sm text-muted-foreground"
+        >
+          {directoryMessage}
         </p>
       )}
       {waiting && <p className="text-sm text-muted-foreground">{m.search_recovery_wait({}, options)}</p>}
@@ -225,7 +335,29 @@ export function DiscoveryKinds({
           </Button>
         </>
       )}
-      {next && !restartable && !refused && (
+      {needsRefresh && onRefresh && (
+        <Button
+          ref={refreshButton}
+          type="button"
+          variant="outline"
+          disabled={!hydrated || refreshPending || waiting}
+          onClick={(event) => refreshDirectory(event.currentTarget)}
+        >
+          {m.result_kind_refresh({}, options)}
+        </Button>
+      )}
+      {canRetryCursor && (
+        <Button
+          ref={moreButton}
+          type="button"
+          variant="outline"
+          disabled={!hydrated || status === 'loading' || waiting}
+          onClick={(event) => void more(event.currentTarget)}
+        >
+          {m.result_kind_retry({}, options)}
+        </Button>
+      )}
+      {next && !restartable && !refused && !needsRefresh && !canRetryCursor && (
         <Button
           ref={moreButton}
           type="button"

@@ -133,16 +133,19 @@ test('kind continuation recovery text follows each instance locale through the s
         <form onSubmit={(event) => event.preventDefault()}>
           <DiscoveryKinds
             initial={kinds()}
+            checkpoint="checkpoint"
             selected={[]}
             locale="en"
             hydrated
             load={async () => ({
               status: 'unavailable',
+              retryable: true,
               recovery: { status: 'unavailable', retryAt: Date.now() + 60_000 },
             })}
           />
           <DiscoveryKinds
             initial={kinds()}
+            checkpoint="checkpoint"
             selected={[]}
             locale="zh-Hans"
             hydrated
@@ -156,10 +159,10 @@ test('kind continuation recovery text follows each instance locale through the s
       for (const button of [...host.querySelectorAll('button')].filter((value) => more.includes(value.textContent!)))
         button.click();
     });
-    expect(host.textContent).toContain(m.search_reader_results_unavailable({}, options.en));
+    expect(host.textContent).toContain(m.result_kind_unavailable({}, options.en));
     expect(host.textContent).toContain(m.search_recovery_wait({}, options.en));
     expect(host.textContent).toContain(m.search_recovery_session({}, options['zh-Hans']));
-    expect(host.textContent).not.toContain(m.search_reader_results_unavailable());
+    expect(host.textContent).not.toContain(m.result_kind_unavailable());
     expect(host.textContent).not.toContain(m.search_recovery_session());
     expect(getLocale()).toBe('ja');
   } finally {

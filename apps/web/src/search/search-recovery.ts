@@ -61,7 +61,13 @@ export function searchRecoveryFromResponse(
           : response.status === 422
             ? 'invalid'
             : response.status === 400
-              ? problem?.errors?.some(({ pointer }) => pointer === '/cursor' || pointer.startsWith('/cursor/')) ||
+              ? problem?.errors?.some(
+                  ({ pointer }) =>
+                    pointer === '/cursor' ||
+                    pointer.startsWith('/cursor/') ||
+                    pointer === '/kindPage/cursor' ||
+                    pointer.startsWith('/kindPage/cursor/'),
+                ) ||
                 (cursor !== undefined && !problem?.errors?.length)
                 ? 'invalid-cursor'
                 : 'invalid'

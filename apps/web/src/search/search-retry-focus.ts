@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect as useBrowserLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect as useBrowserLayoutEffect, useRef, useState } from 'react';
 
 const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useBrowserLayoutEffect;
 
@@ -6,10 +6,16 @@ export type SearchRetryOwner = {
   scope: string;
   locale: string;
   session: string | null;
+  reader?: string | undefined;
 };
 
 export function searchRetryOwnerCurrent(pending: SearchRetryOwner, current: SearchRetryOwner): boolean {
-  return pending.scope === current.scope && pending.locale === current.locale && pending.session === current.session;
+  return (
+    pending.scope === current.scope &&
+    pending.locale === current.locale &&
+    pending.session === current.session &&
+    pending.reader === current.reader
+  );
 }
 
 type PendingRetryFocus = {
@@ -46,6 +52,7 @@ export function searchRetryFocusTarget({
 }
 
 export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean) {
+  const [generation, setGeneration] = useState(0);
   const regionRef = useRef<HTMLElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
   const pending = useRef<(PendingRetryFocus & { document: Document; onFocusIn: (event: FocusEvent) => void }) | null>(
@@ -78,17 +85,17 @@ export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean)
     });
     clear();
     target?.focus();
-  }, [current.scope, current.locale, current.session, settled]);
+  }, [current.scope, current.locale, current.session, current.reader, settled, generation]);
 
   return {
     regionRef,
     retryRef,
-    captureRetryFocus(source: HTMLButtonElement) {
+    captureRetryFocus(source: HTMLButtonElement, settleCurrent = false) {
       if (source.ownerDocument.activeElement !== source) return;
       clear();
       const document = source.ownerDocument;
       const request = {
-        owner: { scope: current.scope, locale: current.locale, session: current.session },
+        owner: { scope: current.scope, locale: current.locale, session: current.session, reader: current.reader },
         source,
         moved: false,
         document,
@@ -100,6 +107,7 @@ export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean)
       };
       document.addEventListener('focusin', request.onFocusIn, true);
       pending.current = request;
+      if (settleCurrent) setGeneration((value) => value + 1);
     },
   };
 }

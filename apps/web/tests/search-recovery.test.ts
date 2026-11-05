@@ -70,6 +70,16 @@ test('actual SDK failures preserve the submitted query and distinguish admission
       { url: 'http://kernel.local/v1/subjects:search', body: request, credential: 'Bearer original-session' },
     ]);
   }
+  expect(
+    searchRecoveryFromResponse(
+      {
+        status: 400,
+        error: { code: 'invalid_request', errors: [{ pointer: '/kindPage/cursor' }] },
+      },
+      Date.now(),
+      'opaque-kind-cursor',
+    ).status,
+  ).toBe('invalid-cursor');
 });
 
 test('restart removes only continuation, while readiness retry transports the original opaque cursor and all predicates', () => {

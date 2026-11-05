@@ -175,6 +175,7 @@ test('a settled retry restores only the same owner while the reader stayed', () 
   expect(searchRetryFocusTarget(args)).toBe(retryButton);
   expect(searchRetryFocusTarget({ ...args, current: { ...owner, locale: 'zh-Hans' } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, current: { ...owner, session: 'two' } })).toBeNull();
+  expect(searchRetryFocusTarget({ ...args, current: { ...owner, reader: 'replacement-reader' } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, pending: { ...pending, moved: true } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, active: results })).toBeNull();
   retryButton.remove();

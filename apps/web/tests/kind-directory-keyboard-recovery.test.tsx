@@ -43,6 +43,7 @@ function ready(page: number, next: string | null) {
       })),
       next,
     },
+    asOf: 'checkpoint',
   };
 }
 
@@ -58,6 +59,7 @@ async function show(load: Props['load']) {
         <DiscoveryKinds
           key="query"
           initial={ready(0, 'cursor-1').kinds}
+          checkpoint="checkpoint"
           selected={[]}
           locale="en"
           hydrated

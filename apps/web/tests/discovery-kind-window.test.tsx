@@ -30,12 +30,17 @@ function kind(id: string) {
   return { id, labels: { en: id }, icon: 'book', count: { kind: id, value: 123, exact: true } };
 }
 
-function ready(ids: string[], next: string | null) {
-  return { status: 'ready' as const, kinds: { values: ids.map(kind), next } };
+function ready(ids: string[], next: string | null, asOf = 'checkpoint') {
+  return { status: 'ready' as const, kinds: { values: ids.map(kind), next }, asOf };
 }
 
-function props(initial: Props['initial'], selected: string[], load: Props['load']): Props {
-  return { initial, selected, locale: 'en', hydrated: true, load };
+function props(
+  initial: Props['initial'],
+  selected: string[],
+  load: Props['load'],
+  extra: Partial<Pick<Props, 'checkpoint' | 'onRefresh' | 'onRefusal'>> = {},
+): Props {
+  return { initial, checkpoint: 'checkpoint', selected, locale: 'en', hydrated: true, load, ...extra };
 }
 
 async function show(identity: string, value: Props) {
@@ -120,7 +125,7 @@ test('pending reads and transport retries retain the window, cursor and native c
         return new Promise((resolve) => {
           settle = resolve;
         });
-      if (calls.length === 3) throw new Error('transport');
+      if (calls.length === 3) throw new TypeError('transport');
       return ready(ids(2), null);
     }),
   );
@@ -133,8 +138,10 @@ test('pending reads and transport retries retain the window, cursor and native c
   expect(more().disabled).toBe(true);
   expect(visible()).toEqual([...ids(0), ...ids(1)]);
   expect(submitted()).toEqual(['schema:1-0']);
-  await act(async () => settle({ status: 'unavailable', recovery: { status: 'unavailable' } }));
-  await click();
+  await act(async () => settle({ status: 'unavailable', retryable: true, recovery: { status: 'unavailable' } }));
+  expect(more()).toBeUndefined();
+  await click('Retry this result type page');
+  await click('Retry this result type page');
   expect(visible()).toEqual([...ids(0), ...ids(1)]);
   await click();
   expect(calls).toEqual(['opaque+/=', 'exact-next', 'exact-next', 'exact-next']);
@@ -166,8 +173,8 @@ test('cycles and duplicate or empty progress stop explicit paging and permit ret
   }
 });
 
-test('native refusals hide accepted options and a changed query aborts obsolete reads', async () => {
-  for (const status of ['denied', 'closed', 'restart', 'session', 'source-not-ready'] as const) {
+test('denial and closure hide accepted options; a changed query aborts obsolete reads', async () => {
+  for (const status of ['denied', 'closed', 'session'] as const) {
     await show(
       status,
       props(ready(ids(0), 'a').kinds, ['schema:0-0'], async () => ({ status: 'unavailable', recovery: { status } })),
@@ -197,4 +204,113 @@ test('native refusals hide accepted options and a changed query aborts obsolete 
   expect(visible()).toEqual(ids(9));
   await click();
   expect(visible()).toEqual([...ids(9), ...ids(10)]);
+});
+
+test('preparation retries the exact cursor after Retry-After, while changed checkpoint coverage asks Search to refresh', async () => {
+  const calls: string[] = [];
+  await show(
+    'preparing',
+    props(ready(ids(0), 'opaque-cursor').kinds, ['selected-outside-window'], async (cursor) => {
+      calls.push(cursor);
+      return calls.length === 1
+        ? { status: 'preparing', recovery: { status: 'source-not-ready', retryAt: Date.now() + 60_000 } }
+        : ready(ids(1), 'next');
+    }),
+  );
+  await click();
+  const retry = [...host.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Retry this result type page',
+  )!;
+  expect(retry.disabled).toBe(true);
+  expect(host.textContent).toContain('Additional result types are being prepared.');
+
+  const preparedCalls: string[] = [];
+  await show(
+    'preparation-retry',
+    props(ready(ids(0), 'preparing-cursor').kinds, [], async (cursor) => {
+      preparedCalls.push(cursor);
+      return preparedCalls.length === 1
+        ? { status: 'preparing', recovery: { status: 'source-not-ready' } }
+        : ready(ids(1), null);
+    }),
+  );
+  await click();
+  await click('Retry this result type page');
+  expect(preparedCalls).toEqual(['preparing-cursor', 'preparing-cursor']);
+  expect(visible()).toEqual([...ids(0), ...ids(1)]);
+
+  let refreshes = 0;
+  await show(
+    'expired-checkpoint',
+    props(
+      ready(ids(0), 'cursor').kinds,
+      ['selected-outside-window'],
+      async () => ready(ids(4), 'new-cursor', 'checkpoint-2'),
+      {
+        onRefresh: () => refreshes++,
+      },
+    ),
+  );
+  await click();
+  expect(visible()).toEqual([]);
+  expect(host.textContent).toContain('The result type directory changed. Refresh it to continue.');
+  expect(hiddenKinds()).toEqual(['selected-outside-window']);
+  expect(host.textContent).not.toContain('123');
+  await click('Refresh result types');
+  expect(calls).toEqual(['opaque-cursor']);
+  expect(refreshes).toBe(1);
+});
+
+test('a native cursor restart requests the current first directory through Search', async () => {
+  let loads = 0;
+  let refreshes = 0;
+  await show(
+    'native-restart',
+    props(
+      ready(ids(0), 'expired-cursor').kinds,
+      [],
+      async () => {
+        loads++;
+        return { status: 'restart', recovery: { status: 'restart' } };
+      },
+      {
+        onRefresh: () => refreshes++,
+      },
+    ),
+  );
+  await click();
+  expect(visible()).toEqual([]);
+  await click('Refresh result types');
+  expect(loads).toBe(1);
+  expect(refreshes).toBe(1);
+});
+
+test('changed omitted-kind coverage drops old options and deliberately re-reads Search', async () => {
+  let refreshes = 0;
+  const initial = {
+    ...ready(ids(0), 'cursor').kinds,
+    omitted: [{ id: 'source:a', labels: { en: 'A' }, state: 'preparing' as const }],
+  };
+  await show(
+    'omitted-coverage',
+    props(
+      initial,
+      ['schema:0-0', 'retained'],
+      async () => ({
+        ...ready(ids(1), 'next'),
+        kinds: {
+          ...ready(ids(1), 'next').kinds,
+          omitted: [{ id: 'source:a', labels: { en: 'A' }, state: 'unavailable' as const }],
+        },
+      }),
+      {
+        onRefresh: () => refreshes++,
+      },
+    ),
+  );
+  await click();
+  expect(visible()).toEqual([]);
+  expect(hiddenKinds()).toEqual(['retained', 'schema:0-0']);
+  await click('Refresh result types');
+  expect(refreshes).toBe(1);
 });
