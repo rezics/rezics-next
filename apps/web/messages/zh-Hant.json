@@ -10815,5 +10815,8 @@
   "realm_question_window_first": "第一個視窗",
   "realm_question_window_sparse": "此視窗沒有項目。可繼續查看下一個視窗。",
   "realm_question_window_terminal": "已到結果結尾。可返回先前的視窗。",
-  "realm_question_history_empty": "目前尚無標題歷史。"
+  "realm_question_history_empty": "目前尚無標題歷史。",
+  "library_window_previous": "上一頁",
+  "library_window_first": "首頁",
+  "library_window_retry": "重試此頁"
 }

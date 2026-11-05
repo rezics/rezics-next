@@ -10716,5 +10716,8 @@
   "realm_question_window_first": "Erstes Fenster",
   "realm_question_window_sparse": "Keine Einträge in diesem Fenster. Weiter zum nächsten Fenster.",
   "realm_question_window_terminal": "Ende der Ergebnisse. Kehren Sie zu einem früheren Fenster zurück.",
-  "realm_question_history_empty": "Es gibt noch keinen Beschriftungsverlauf."
+  "realm_question_history_empty": "Es gibt noch keinen Beschriftungsverlauf.",
+  "library_window_previous": "Zurück",
+  "library_window_first": "Anfang",
+  "library_window_retry": "Genau dieses Fenster erneut laden"
 }

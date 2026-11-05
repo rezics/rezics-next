@@ -10728,5 +10728,8 @@
   "realm_question_window_first": "第一个窗口",
   "realm_question_window_sparse": "此窗口没有条目。可继续查看下一个窗口。",
   "realm_question_window_terminal": "已到结果结尾。可返回先前的窗口。",
-  "realm_question_history_empty": "目前尚无标题历史。"
+  "realm_question_history_empty": "目前尚无标题历史。",
+  "library_window_previous": "上一页",
+  "library_window_first": "首页",
+  "library_window_retry": "重试此页"
 }

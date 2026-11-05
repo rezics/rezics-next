@@ -3,6 +3,7 @@ import { useRouter } from '@tanstack/react-router';
 import { operationIsAdmitted } from '../kernel/exposure';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalLibraryAddress, type PersonalLibraryAddress } from './personal-library-server';
+import type { EntriesWindowNavigation } from './entries-window-navigation';
 import { validateShelfSearch } from './shelf-params';
 
 type Operation = Parameters<typeof operationIsAdmitted>[0];
@@ -36,10 +37,11 @@ export type ShelfOrigin = {
 export const PersonalShelfOrigin = createContext<ShelfOrigin | null>(null);
 
 /** Local to the personal Shelf: observe replacements at the cache/navigation boundary, before React commits. */
-export function usePersonalShelfObservation(address: PersonalLibraryAddress) {
+export function usePersonalShelfObservation(address: PersonalLibraryAddress, windows?: EntriesWindowNavigation) {
   const { store } = useLibraryWorkspaceAdmission(operations);
   const router = useRouter();
   const observation = useMemo(() => {
+    let boundAddress = address;
     let bound = JSON.stringify(address);
     let actual = bound;
     let locale = address.locale;
@@ -56,6 +58,7 @@ export function usePersonalShelfObservation(address: PersonalLibraryAddress) {
       const scoped = store.read();
       const subject = scoped.subject;
       const admitted = scoped.allowed;
+      windows?.bind(JSON.stringify([subject, scoped.viewer, scoped.episodes[0], scoped.episodes[1], scoped.dispatch[0], scoped.dispatch[1]]), boundAddress);
       // A nonempty token rotation belongs to the same viewer; loss and subsequent restoration does not.
       const actor = JSON.stringify([subject, scoped.viewer, actual]);
       if (
@@ -86,6 +89,7 @@ export function usePersonalShelfObservation(address: PersonalLibraryAddress) {
       read,
       server: () => server,
       bind: (next: PersonalLibraryAddress) => {
+        boundAddress = next;
         const key = JSON.stringify(next);
         if (key === bound) return;
         bound = key;
@@ -117,6 +121,7 @@ export function usePersonalShelfObservation(address: PersonalLibraryAddress) {
           const parts = url.pathname.replace(/\/$/, '').split('/').filter(Boolean);
           const shelf = parts.at(-1) === 'library' && parts.length <= 2;
           const input = validateShelfSearch(Object.fromEntries(url.searchParams));
+          if (!shelf || input.label) windows?.leave();
           actual =
             shelf && !input.label
               ? JSON.stringify(personalLibraryAddress(input, parts.length === 2 ? parts[0]! : locale))
@@ -130,7 +135,7 @@ export function usePersonalShelfObservation(address: PersonalLibraryAddress) {
         };
       },
     };
-  }, [store, router]);
+  }, [store, router, windows]);
   observation.bind(address);
   const value = useSyncExternalStore(observation.subscribe, observation.read, observation.server);
   return { observation, value };

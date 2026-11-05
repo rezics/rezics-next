@@ -7,6 +7,7 @@ import { SessionUnavailablePrompt } from '../session/private-page';
 import type { ShelfPreferenceSnapshot } from '../settings/shelf-preferences-current';
 import type { ShelfPreferences } from '../settings/preferences';
 import { resolveShelfPresentation, type ShelfPresentationResolution } from './shelf-preferences';
+import { EntriesWindowNavigation } from './entries-window-navigation';
 import { PersonalLibraryCurrent } from './personal-library-current';
 import { CurrentLabelShelf } from './label-shelf-current';
 import type { PersonalLibraryCurrentRead } from './personal-library-server';
@@ -170,7 +171,10 @@ export function LibraryPresentationBoundary({
   readLabel: LabelReader;
   renderCurrent?: (model: { shelf: ShelfPreferences; presentation: ShelfPresentationResolution }) => ReactNode;
 }) {
+  const windows = useRef(new EntriesWindowNavigation()).current;
+  useEffect(() => () => windows.leave(), [windows]);
   const unavailable = isLibrarySessionUnavailable(data);
+  if (unavailable || 'addressRecovery' in data || !('page' in data)) windows.leave();
   const snapshot = 'shelfSnapshot' in data ? data.shelfSnapshot : undefined;
   return (
     <LibraryShelfPreferenceBoundary {...(snapshot ? { snapshot } : {})} unavailable={unavailable}>
@@ -200,6 +204,7 @@ export function LibraryPresentationBoundary({
           renderCurrent({ shelf, presentation })
         ) : (
           <PersonalLibraryCurrent
+            windows={windows}
             initial={data}
             search={presentation.search}
             locale={locale}

@@ -121,7 +121,16 @@ supplied address or its filters/display resets pending edits in place, preservin
 
 The existing route reads one preference snapshot, then prepares shelf, Continue and navigation reads independently
 and accepts only matching viewer/credential origins. Chronological shelf reads request one FULL page of 20 entries;
-invalid/stale cursors permit one first-page retry. Next and restart replace that page. Continue retains six subjects,
+invalid/stale cursors permit one first-page retry. Decision: deliberate tracked-entry navigation retains at most eight admitted predecessor coordinates, current and
+one staged target in the named-route/QueryClient visit, never previous page DTOs. Previous consumes one predecessor;
+First clears only cursor. Exhausted retention and fresh later entry offer First without inventing Previous. Source
+identity is locale, Type, state, order and direction; display-only changes preserve the path. Only the exact successful
+current Entry read commits movement, including empty terminal and sparse nonterminal windows. Failure retains the
+exact target for explicit retry without truncating accepted predecessors. Native stale-cursor reset admits first
+instead. Viewer/credential/admission replacement, departure and disposal release coordinates and pending focus.
+Keyboard navigation may focus the admitted tracked heading unless failure or intervening focus/input cancels it.
+Links retain ordinary GET and browser history meaning; no chain replay or automatic movement is added.
+Next, Previous and First replace that page. Continue retains six subjects,
 navigation requests eight pins and one existing owner-collection page, and opening the type chooser reads one bounded
 type page. Score selection adds zero requests and retains zero score rows/cursors in the rendered result. There is no
 per-row score fetch, browser aggregation or local page sort. The shelf address bounds each opaque cursor to 2048

@@ -10810,5 +10810,8 @@
   "realm_question_window_first": "最初の一覧",
   "realm_question_window_sparse": "この一覧に項目はありません。次の一覧に進めます。",
   "realm_question_window_terminal": "結果の末尾です。前の一覧に戻れます。",
-  "realm_question_history_empty": "見出しの履歴はまだありません。"
+  "realm_question_history_empty": "見出しの履歴はまだありません。",
+  "library_window_previous": "前へ",
+  "library_window_first": "最初へ",
+  "library_window_retry": "この表示範囲を再試行"
 }

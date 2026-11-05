@@ -10937,5 +10937,8 @@
   "person_review_admitted": "Identity review admitted. Publication and the current combined credits still require independent verification.",
   "person_review_uncertain": "The outcome is uncertain. Retry the exact original review before starting another identity decision.",
   "person_identity_unconfirmed": "The current page does not establish both exact Bangumi and VNDB Person identifiers. Credit rows alone do not confirm cross-source identity.",
-  "person_identity_conflicting": "The current Person has conflicting provider identifiers. Its credit rows do not resolve that conflict."
+  "person_identity_conflicting": "The current Person has conflicting provider identifiers. Its credit rows do not resolve that conflict.",
+  "library_window_previous": "Previous",
+  "library_window_first": "First",
+  "library_window_retry": "Retry this exact window"
 }

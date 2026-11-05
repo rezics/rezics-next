@@ -10716,5 +10716,8 @@
   "realm_question_window_first": "Primera ventana",
   "realm_question_window_sparse": "No hay entradas en esta ventana. Continúa a la siguiente.",
   "realm_question_window_terminal": "Fin de los resultados. Vuelve a una ventana anterior.",
-  "realm_question_history_empty": "Todavía no hay historial de títulos."
+  "realm_question_history_empty": "Todavía no hay historial de títulos.",
+  "library_window_previous": "Anterior",
+  "library_window_first": "Primera",
+  "library_window_retry": "Reintentar esta ventana exacta"
 }

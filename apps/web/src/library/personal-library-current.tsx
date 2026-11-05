@@ -1,4 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useNavigate, useRouter } from '@tanstack/react-router';
+import { EntriesWindowNavigation, entriesWindowHref, type EntriesWindowControls } from './entries-window-navigation';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from '../session/query';
 import { useOperation } from '../kernel/exposure';
@@ -34,7 +37,9 @@ export function PersonalLibraryCurrent({
   locale,
   display,
   presentation,
+  windows: suppliedWindows,
 }: {
+  windows?: EntriesWindowNavigation;
   initial: PersonalLibraryCurrentRead;
   search: ShelfSearch;
   locale: string;
@@ -54,8 +59,11 @@ export function PersonalLibraryCurrent({
   useOperation('library_label.list');
   useOperation('library_continue.list');
   useOperation('library_label.assign');
+  const [localWindows] = useState(() => new EntriesWindowNavigation());
+  const windows = suppliedWindows ?? localWindows;
   const address = personalLibraryAddress(search, locale);
-  const { observation, value } = usePersonalShelfObservation(address);
+  const { observation, value } = usePersonalShelfObservation(address, windows);
+  useEffect(() => () => { if (!suppliedWindows) windows.leave(); }, [windows, suppliedWindows]);
   const browser = useRef(hydrated);
   browser.current = hydrated;
   const subject = hydrated ? value.subject : initial.sessionSubject;
@@ -141,6 +149,7 @@ export function PersonalLibraryCurrent({
     <ShelfSummaryAcknowledgement.Provider value={summary.acknowledge}>
       <PersonalLibraryRead
         summary={summary}
+        windows={windows}
         key={scope.generation}
         subject={subject}
         address={address}
@@ -160,6 +169,7 @@ export function PersonalLibraryCurrent({
 }
 
 function PersonalLibraryRead({
+  windows,
   summary,
   subject,
   address,
@@ -174,6 +184,7 @@ function PersonalLibraryRead({
   collectionsAdmitted,
   mutationLease,
 }: {
+  windows: EntriesWindowNavigation;
   summary: ShelfSummaryPresentation;
   subject: string;
   address: PersonalLibraryAddress;
@@ -188,6 +199,10 @@ function PersonalLibraryRead({
   collectionsAdmitted: boolean;
   mutationLease: ShelfMutationLease;
 }) {
+  const navigate = useNavigate();
+  const router = useRouter();
+  const windowHref = (cursor: string | null) => entriesWindowHref(router.latestLocation.publicHref, cursor);
+  const [, redraw] = useState(0);
   const client = useQueryClient();
   const [lifetime] = useState(() => crypto.randomUUID());
   const queryKey = ['personal-library-current', subject, address, lifetime];
@@ -403,6 +418,45 @@ function PersonalLibraryRead({
         : ({ state: 'unavailable' } as const);
     };
   }, [origin, accepted, continueCurrent]);
+  const entriesAccepted = !!accepted && regionCurrent(accepted, 'entries') && accepted.value.page.signedIn && !accepted.value.page.readState;
+  const reset = !!accepted?.value.page.signedIn && !!accepted.value.page.cursorReset;
+  useLayoutEffect(() => {
+    if (!entriesAccepted || !isCurrent()) {
+      if (query.isError || (accepted && !entriesAccepted)) windows.failed();
+      return;
+    }
+    windows.admit(address.cursor, reset);
+    redraw((value) => value + 1);
+    if (windows.takeFocus(reset ? null : address.cursor))
+      document.getElementById('tracked-entries-heading')?.focus();
+  }, [accepted, entriesAccepted, reset, isCurrent, windows]);
+  useEffect(() => {
+    const cancel = () => windows.cancelFocus();
+    document.addEventListener('pointerdown', cancel);
+    document.addEventListener('keydown', cancel);
+    document.addEventListener('focusin', cancel);
+    return () => {
+      document.removeEventListener('pointerdown', cancel);
+      document.removeEventListener('keydown', cancel);
+      document.removeEventListener('focusin', cancel);
+    };
+  }, [windows]);
+  const move: EntriesWindowControls['move'] = (kind, cursor, keyboard) => {
+    if (!isCurrent() || !regionAdmitted('entries') || !windows.stage(kind, cursor, keyboard)) return;
+    redraw((value) => value + 1);
+    void navigate({
+      href: windowHref(cursor),
+    });
+  };
+  const retry = () => {
+    if (!origin.capture('library_entry.list', 'progress_session.list')() || query.isFetching) return;
+    windows.cancelFocus();
+    void query.refetch();
+  };
+  const retryControl = (
+    <button type="button" className={`${buttonVariants({ variant: 'outline' })} min-h-11 min-w-11`}
+      disabled={query.isFetching} onClick={retry}>{m.library_window_retry()}</button>
+  );
   if (!accepted)
     return (
       <div className="flex flex-col items-start gap-3">
@@ -414,6 +468,7 @@ function PersonalLibraryRead({
         <p role={query.isError || query.data ? 'alert' : 'status'}>
           {query.isError || query.data ? m.error_message() : m.library_sort_preparing()}
         </p>
+        {query.isError || query.data ? retryControl : null}
         {query.isError || query.data ? (
           <EntriesFirstPage locale={address.locale} view={presentation?.intent ?? input} />
         ) : null}
@@ -424,6 +479,9 @@ function PersonalLibraryRead({
       <PersonalShelfOrigin.Provider value={pageOrigin}>
         <PersonalLibraryPage
           key={readGeneration}
+          windowControls={{ href: windowHref, previous: windows.previous, first: !reset && address.cursor !== null,
+            busy: query.isFetching || !!windows.pending, move }}
+          windowRetry={!entriesAccepted ? retryControl : undefined}
           summary={summary}
           page={accepted.value.page}
           entriesAdmitted={regionAdmitted('entries')}

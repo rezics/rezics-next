@@ -10716,5 +10716,8 @@
   "realm_question_window_first": "Première fenêtre",
   "realm_question_window_sparse": "Aucune entrée dans cette fenêtre. Passez à la suivante.",
   "realm_question_window_terminal": "Fin des résultats. Revenez à une fenêtre précédente.",
-  "realm_question_history_empty": "Aucun historique des libellés pour le moment."
+  "realm_question_history_empty": "Aucun historique des libellés pour le moment.",
+  "library_window_previous": "Précédente",
+  "library_window_first": "Première",
+  "library_window_retry": "Réessayer cette fenêtre exacte"
 }
