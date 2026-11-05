@@ -22,7 +22,11 @@ import { accessCommandAuthorization, type Access, type AccountActor, type Actor 
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { receiptKeysFor } from '../command/receipt-key.ts';
-import { currentCommandWorkAssociation } from '../command/work-context.ts';
+import {
+  currentCommandWorkAssociation,
+  currentLibraryOperationAccounting,
+  withLibraryOperationAccounting,
+} from '../command/work-context.ts';
 import {
   consumeSessionWork,
   sessionCommandPlan,
@@ -37,10 +41,38 @@ export const WORK_STEP_DEADLINE_MS = 5_000;
 
 /** Bind a closed Library SQL declaration to the caller's existing accounting frame. */
 export function runLibraryBoundedStep<T>(operation: string, bound: Bound, dispatch: () => Promise<T>): Promise<T> {
+  if (currentLibraryOperationAccounting()) return dispatch();
   const association = currentCommandWorkAssociation();
   if (!association) return dispatch();
   const { engineRequests: _engineRequests, ...work } = bound;
   return association.run(operation, work, dispatch);
+}
+
+/** Reserve one complete Library operation, then run its leaves on the same caller-owned resources. */
+export async function runLibraryBoundedOperation<T>(
+  operation: string,
+  bound: Bound,
+  dispatch: () => Promise<T>,
+): Promise<T> {
+  if (currentLibraryOperationAccounting()) return dispatch();
+  const association = currentCommandWorkAssociation();
+  // The existing native association accepts eight axes; engineRequests stays in the full operation declaration.
+  const { engineRequests: _engineRequests, ...work } = bound;
+  const reservation = association?.reserve(operation, work);
+  let settled = false;
+  const settle = () => {
+    if (settled) return;
+    settled = true;
+    reservation?.settle();
+  };
+  try {
+    const result = await withLibraryOperationAccounting(operation, dispatch);
+    settle();
+    return result;
+  } catch (error) {
+    settle();
+    throw error;
+  }
 }
 
 /** Shared deadline policy for native Library work steps outside actor commands. */
@@ -58,6 +90,8 @@ export type OwnAccountCommand = {
   input: unknown;
   /** Local cost owners may bind this execution to their existing descriptor. */
   execution?: LibraryCommandExecutionBinding;
+  /** Complete static operation cost, separate from a custom caller execution wrapper. */
+  executionPlan?: LibraryCommandExecutionPlan;
   sessionOperation?: SessionOperationKind;
   sessionPreparation?: boolean;
   deadline?: number;
@@ -69,16 +103,27 @@ export type TrustedAccountCommand = {
   input: unknown;
   /** Local cost owners may bind this execution to their existing descriptor. */
   execution?: LibraryCommandExecutionBinding;
+  /** Complete static operation cost, separate from a custom caller execution wrapper. */
+  executionPlan?: LibraryCommandExecutionPlan;
 };
 
 /** Wrap an existing Library command without changing its identity, authorization,
  * deadline, attempts, transaction, or result handling. This is a local cost
  * binding seam, not another admission or funding protocol.
  */
-export type LibraryCommandExecutionBinding = <T>(dispatch: () => Promise<T>) => Promise<T>;
+export type LibraryCommandExecutionPlan = Readonly<{ operation: string; total: Bound }>;
+export type LibraryCommandExecutionBinding = <T>(
+  dispatch: () => Promise<T>,
+  plan?: LibraryCommandExecutionPlan,
+) => Promise<T>;
 
-export function runLibraryCommand<T>(dispatch: () => Promise<T>, bind?: LibraryCommandExecutionBinding): Promise<T> {
-  return bind ? bind(dispatch) : dispatch();
+export function runLibraryCommand<T>(
+  dispatch: () => Promise<T>,
+  bind?: LibraryCommandExecutionBinding,
+  plan?: LibraryCommandExecutionPlan,
+): Promise<T> {
+  const execute = () => (bind ? bind(dispatch, plan) : dispatch());
+  return plan ? runLibraryBoundedOperation(plan.operation, plan.total, execute) : execute();
 }
 
 export class LibraryNotFoundError extends Error {
@@ -206,9 +251,11 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
           throw error;
         }
         const accessWork = currentCommandWorkAssociation()?.access;
-        const current = accessWork
-          ? await readAccount(tx, route, owner.accountId, accessWork)
-          : await readAccountCommandState(tx, route, owner.accountId);
+        const current = request.executionPlan
+          ? await readAccountCommandState(tx, route, owner.accountId)
+          : accessWork
+            ? await readAccount(tx, route, owner.accountId, accessWork)
+            : await readAccountCommandState(tx, route, owner.accountId);
         if (
           !current ||
           current.kind !== 'actor' ||
@@ -255,7 +302,11 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
           },
         ),
       );
-    return runLibraryCommand(() => (plan ? withSessionCommandPlan(plan, execute) : execute()), request.execution);
+    return runLibraryCommand(
+      () => (plan ? withSessionCommandPlan(plan, execute) : execute()),
+      request.execution,
+      request.executionPlan,
+    );
   }
 
   async function ownAccount<T>(
@@ -368,6 +419,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
           },
         ),
       request.execution,
+      request.executionPlan,
     );
   }
 

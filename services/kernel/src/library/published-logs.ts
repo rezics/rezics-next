@@ -1,6 +1,6 @@
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { readAccount } from '../access/account-data.ts';
+import { readAccountCommandState } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { authoritativeTimeValue, type CommandOutcome, type AuthoritativeTime } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
@@ -11,9 +11,16 @@ import type { Access, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute, sameAccountRoute } from './command-support.ts';
+import {
+  createLibraryCommandRunner,
+  LibraryNotFoundError,
+  requireRoute,
+  runLibraryBoundedOperation,
+  sameAccountRoute,
+} from './command-support.ts';
 import type { ProgressState } from './progress.ts';
 import { readSession } from './progress-store.ts';
+import { receiptKeysFor } from '../command/receipt-key.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import {
   deletePublishedLog,
@@ -24,6 +31,13 @@ import {
   restorePublishedLog,
   type PublishedLogRecord,
 } from './published-log-store.ts';
+import {
+  publishedLogPageReadOperationPlan,
+  publishedLogPointReadOperationPlan,
+  publishedLogPublishOperationPlan,
+  publishedLogRestoreOperationPlan,
+  publishedLogRetractOperationPlan,
+} from './published-log-bounds.ts';
 
 const UPDATED = 'com.rezics.library.published_log.updated.v1';
 const DELETED = 'com.rezics.library.published_log.deleted.v1';
@@ -134,6 +148,16 @@ export function createPublishedLogCommands(config: Dependencies) {
           kind: 'published_log.create',
           requestKey,
           input: { sessionId, note },
+          executionPlan: {
+            operation: 'published-log.publish',
+            total: publishedLogPublishOperationPlan({
+              accountId,
+              sessionId,
+              note,
+              requestKey,
+              receiptKeyCount: receiptKeysFor(pool).keys.size + 1,
+            }).total,
+          },
           async prepare(attempt) {
             try {
               const route = sameAccountRoute(accountId, sessionId);
@@ -190,6 +214,16 @@ export function createPublishedLogCommands(config: Dependencies) {
           requestKey,
           // Preserve pre-CAS receipt identity so exact old authorized acknowledgements remain replayable.
           input: revision === undefined ? { logId } : { logId, revision },
+          executionPlan: {
+            operation: 'published-log.retract',
+            total: publishedLogRetractOperationPlan({
+              accountId,
+              logId,
+              requestKey,
+              ...(revision === undefined ? {} : { revision }),
+              receiptKeyCount: receiptKeysFor(pool).keys.size + 1,
+            }).total,
+          },
         },
         async (tx, command) => {
           const route = sameAccountRoute(accountId, logId);
@@ -240,6 +274,17 @@ export function createPublishedLogCommands(config: Dependencies) {
           kind: 'published_log.restore',
           requestKey,
           input: { logId, deletionId, revision },
+          executionPlan: {
+            operation: 'published-log.restore',
+            total: publishedLogRestoreOperationPlan({
+              accountId,
+              logId,
+              deletionId,
+              revision,
+              requestKey,
+              receiptKeyCount: receiptKeysFor(pool).keys.size + 1,
+            }).total,
+          },
           async prepare(attempt) {
             try {
               return { row: await prepareLog(actor, logId, attempt.time) };
@@ -276,29 +321,32 @@ export function createPublishedLogCommands(config: Dependencies) {
     logId: string,
   ): Promise<{ publishedLog: PublishedLog | PublishedLogTombstone; revision?: number }> {
     const route = requireRoute(logId);
-    // Release the owner checkout before native original and terminal subject checkouts.
-    const result = await withConnection(pool, async (client) => {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const row = await readStoredLog(client, route, logId);
-        if (!row) throw new LibraryNotFoundError();
-        const owner = row.accountId ? await readAccount(client, route, row.accountId) : null;
-        await client.query('COMMIT');
-        return { row, owner };
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
+    const operation = publishedLogPointReadOperationPlan({ route, logId });
+    return runLibraryBoundedOperation(operation.kind, operation.total, async () => {
+      // Release the owner checkout before native original and terminal subject checkouts.
+      const result = await withConnection(pool, async (client) => {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        try {
+          const row = await readStoredLog(client, route, logId);
+          if (!row) throw new LibraryNotFoundError();
+          const owner = row.accountId ? await readAccountCommandState(client, route, row.accountId) : null;
+          await client.query('COMMIT');
+          return { row, owner };
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      });
+      const { row, owner } = result;
+      if (row.deleted || !owner || owner.state !== 'active' || owner.fenced)
+        return { publishedLog: { id: logId, deleted: true } };
+      const value = view(row);
+      await source(viewer, value.subjectId);
+      return {
+        publishedLog: value,
+        ...(viewer.kind === 'account' && viewer.accountId === row.accountId ? { revision: row.revision } : {}),
+      };
     });
-    const { row, owner } = result;
-    if (row.deleted || !owner || owner.state !== 'active' || owner.fenced)
-      return { publishedLog: { id: logId, deleted: true } };
-    const value = view(row);
-    await source(viewer, value.subjectId);
-    return {
-      publishedLog: value,
-      ...(viewer.kind === 'account' && viewer.accountId === row.accountId ? { revision: row.revision } : {}),
-    };
   }
   async function readOne(viewer: Actor, logId: string) {
     return (await readWithRevision(viewer, logId)).publishedLog;
@@ -307,59 +355,67 @@ export function createPublishedLogCommands(config: Dependencies) {
     const route = requireRoute(page.accountId),
       size = page.limit ?? 20;
     if (!Number.isInteger(size) || size < 1 || size > 100) throw new ProblemError('invalid_request');
-    const binding: CursorBinding = { operation: LIST, parameters: { accountId: page.accountId } };
-    const result = await withConnection(pool, async (client) => {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const partition = await readPartition(client, partitionOf(route));
-        const owner = await readAccount(client, route, page.accountId);
-        let after: { publishedAt: string; logId: string } | null = null;
-        if (page.cursor !== undefined) {
-          const cursor = decodeCursor(tokens, binding, page.cursor);
-          const publishedAt = cursor.ok ? cursor.after[0] : undefined,
-            logId = cursor.ok ? cursor.after[1] : undefined;
-          if (
-            !cursor.ok ||
-            cursor.after.length !== 2 ||
-            typeof publishedAt !== 'string' ||
-            !Number.isFinite(Date.parse(publishedAt)) ||
-            typeof logId !== 'string' ||
-            routeOf(logId) !== route
-          )
-            throw new ProblemError('invalid_cursor');
-          if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
-          after = { publishedAt, logId };
-        }
-        const rows =
-          owner?.state === 'active' && !owner.fenced
-            ? await pagePublishedLogs(client, route, page.accountId, { after, limit: size + 1 })
-            : [];
-        await client.query('COMMIT');
-        return { partition, rows };
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
+    const operation = publishedLogPageReadOperationPlan({
+      route,
+      accountId: page.accountId,
+      limit: size,
+      hasCursor: page.cursor !== undefined,
     });
-    const shown = result.rows.slice(0, size),
-      publishedLogs: PublishedLog[] = [];
-    for (const row of shown) {
-      try {
-        const value = view(row);
-        await source(viewer, value.subjectId);
-        publishedLogs.push(value);
-      } catch (error) {
-        if (!(error instanceof LibraryNotFoundError)) throw error;
+    return runLibraryBoundedOperation(operation.kind, operation.total, async () => {
+      const binding: CursorBinding = { operation: LIST, parameters: { accountId: page.accountId } };
+      const result = await withConnection(pool, async (client) => {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        try {
+          const partition = await readPartition(client, partitionOf(route));
+          const owner = await readAccountCommandState(client, route, page.accountId);
+          let after: { publishedAt: string; logId: string } | null = null;
+          if (page.cursor !== undefined) {
+            const cursor = decodeCursor(tokens, binding, page.cursor);
+            const publishedAt = cursor.ok ? cursor.after[0] : undefined,
+              logId = cursor.ok ? cursor.after[1] : undefined;
+            if (
+              !cursor.ok ||
+              cursor.after.length !== 2 ||
+              typeof publishedAt !== 'string' ||
+              !Number.isFinite(Date.parse(publishedAt)) ||
+              typeof logId !== 'string' ||
+              routeOf(logId) !== route
+            )
+              throw new ProblemError('invalid_cursor');
+            if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
+            after = { publishedAt, logId };
+          }
+          const rows =
+            owner?.state === 'active' && !owner.fenced
+              ? await pagePublishedLogs(client, route, page.accountId, { after, limit: size + 1 })
+              : [];
+          await client.query('COMMIT');
+          return { partition, rows };
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      });
+      const shown = result.rows.slice(0, size),
+        publishedLogs: PublishedLog[] = [];
+      for (const row of shown) {
+        try {
+          const value = view(row);
+          await source(viewer, value.subjectId);
+          publishedLogs.push(value);
+        } catch (error) {
+          if (!(error instanceof LibraryNotFoundError)) throw error;
+        }
       }
-    }
-    const last = shown.at(-1);
-    return {
-      publishedLogs,
-      next:
-        result.rows.length > size && last && result.partition
-          ? encodeCursor(tokens, binding, { epoch: result.partition.epoch, after: [last.publishedAt!, last.id] })
-          : null,
-    };
+      const last = shown.at(-1);
+      return {
+        publishedLogs,
+        next:
+          result.rows.length > size && last && result.partition
+            ? encodeCursor(tokens, binding, { epoch: result.partition.epoch, after: [last.publishedAt!, last.id] })
+            : null,
+      };
+    });
   }
   return { publishLog, retractLog, restoreLog, readWithRevision, readPublishedLog: readOne, listPublishedLogs: list };
 }
