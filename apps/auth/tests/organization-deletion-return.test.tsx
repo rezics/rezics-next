@@ -97,7 +97,7 @@ test('dispatched history survives BFCache and failed review; late acknowledgemen
   await flush(() => page.host.querySelector<HTMLButtonElement>('#organization-delete-return-review')!.click());
   expect(reads).toBe(3);
   expect(page.host.textContent).toContain('Auth confirmed the organization deletion request');
-  expect(page.host.textContent).toContain(m.auth_organization_delete_recovery_unavailable());
+  expect(page.host.textContent).toContain(m.auth_account_operation_unavailable());
   expect(page.calls).toHaveLength(2);
 
   current = ready(replacementHuman, 'current-name');

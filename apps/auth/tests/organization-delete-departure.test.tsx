@@ -288,7 +288,11 @@ test('step-up navigation bypasses the departure warning and keeps its continuati
       fill(page.input, '@first');
       send(page.host);
     });
-    await flush(() => page.calls[0]!.resolve(Response.json({ error: 'step_up_required' }, { status: 401 })));
+    await flush(() =>
+      page.calls[0]!.resolve(
+        Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
+      ),
+    );
     expect(assign).toHaveBeenCalledTimes(1);
     expect(readOrganizationDeleteStepUp().kind).toBe('pending');
     expect(page.unload()).toBe(false);

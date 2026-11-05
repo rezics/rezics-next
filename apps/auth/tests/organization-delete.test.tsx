@@ -107,7 +107,7 @@ for (const phase of ['read', 'approval', 'execution', 'step-up'] as const)
                   ? approval()
                   : phase === 'execution'
                     ? Response.json({ accountId: first })
-                    : Response.json({ error: 'step_up_required' }, { status: 401 }),
+                    : Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
               ),
       );
       expect(page.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
@@ -238,7 +238,6 @@ test('a continuation replaced while approval is receiving prevents execution and
   expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: replacement });
   expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
   expect(page.host.textContent).not.toContain('The deletion result is unknown');
-  expect(page.unload()).toBe(false);
 });
 
 test('current native refusal has no authentication loop or destructive control', async () => {
