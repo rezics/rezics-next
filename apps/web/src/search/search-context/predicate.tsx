@@ -17,6 +17,14 @@ export function rangeDescription(
   }
   const end = (value: unknown) => (typeof value === 'object' ? JSON.stringify(value) : String(value));
   const unit = unitText?.(range.unit) ?? range.unit;
+  if (unit === undefined) {
+    return [
+      range.gte === undefined ? '' : `≥ ${end(range.gte)}`,
+      range.lte === undefined ? '' : `≤ ${end(range.lte)}`,
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
   return (
     <>
       {range.gte !== undefined && <span>≥ {end(range.gte)}</span>}
