@@ -16,6 +16,7 @@ import { subjectTabs } from '../src/features/pages/views';
 import { subjectPageMessages, viewTabLabels } from '../src/features/pages/route-support';
 import { subjectHref } from '../src/subject/subject-href';
 import { screenProfileFixture } from '../src/kernel/fake/catalogue-screen-profile';
+import recordedSubject from '../src/kernel/recorded/subject.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const [
@@ -50,9 +51,16 @@ test('screen overview uses its released reader label and description instead of 
 
 test('The default Subject reader does not describe admitted incoming editions as title-only and reports temporary dependency failure honestly with safe read recovery', async () => {
   // The recorded native default composition, with the same owner leaves as the ordinary route.
+  const page = structuredClone(recordedPage) as unknown as SubjectPageData;
+  const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
+  const subjectKey = Object.entries(plan.reads).find(
+    ([, read]) => read.kind === 'subject' && read.id === page.subject,
+  )?.[0];
+  if (!subjectKey) throw new Error('Expected the composition Subject read.');
+  (page.reads[subjectKey]!.body as { summary?: unknown }).summary = structuredClone(recordedSubject.summary);
   const recorded = await loadSubjectPage(
     createKernelClient('https://kernel.invalid', {
-      fetch: createRecordedKernelFetch({ 'subject-page': recordedPage }),
+      fetch: createRecordedKernelFetch({ 'subject-page': page as never }),
     }),
     recordedPage.subject,
   );
