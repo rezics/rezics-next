@@ -319,7 +319,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     await act(async () => { retry.focus(); await user.keyboard('{Enter}'); });
     await settle();
     expect(sourceRequests.at(-1)).toMatchObject({ statement: second.id, document: content.document });
-    expect(window.document.activeElement).toBe(host.querySelector('[data-slot="view-heading"] h1'));
+    expect(window.document.activeElement === host.querySelector('[data-slot="view-heading"] h1'), window.document.activeElement?.outerHTML).toBe(true);
     await click([...host.querySelectorAll('a')].find((link) => link.textContent === m.subject_synopsis_return())!);
     expect((host.querySelector('select') as HTMLSelectElement).value).toBe(second.id);
     expect(window.document.activeElement?.id).toBe('subject-summary-evidence');
