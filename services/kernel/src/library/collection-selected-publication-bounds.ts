@@ -15,17 +15,6 @@ export const COLLECTION_SELECTED_PUBLICATION_LIMIT = 100;
 export const COLLECTION_SELECTED_PUBLICATION_ATTEMPTS = WORK_EXECUTION_ATTEMPT_BOUND;
 
 const cost = (values: Omit<Bound, 'engineRequests'>): Bound => declareBound({ ...values, engineRequests: 0 });
-const zeroCost = cost({
-  candidateKeys: 0,
-  nativeRows: 0,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 0,
-  witnessKeys: 0,
-  statements: 0,
-  bytes: 0,
-});
-const engineCost = (engineRequests: number): Bound => declareBound({ ...zeroCost, engineRequests });
 
 function maximumBounds(...values: readonly Bound[]): Bound {
   const axes = Object.keys(values[0]!) as (keyof Bound)[];
@@ -263,10 +252,6 @@ export type CollectionSelectedPublicationPlan = Readonly<{
     sourceMembership: Bound;
     closureAndOwnerFacts: Bound;
     ownerFilterMatch: Bound;
-    searchScopePreparationWork: Bound;
-    searchScopeSelectionEvaluationWork: Bound;
-    searchScopeFinalEvaluationWork: Bound;
-    searchScopeEngineRequests: Bound;
     scopeCurrentness: Bound;
     sourcePreparation: Bound;
     canonicalDeduplication: Bound;
@@ -283,90 +268,31 @@ export type CollectionSelectedPublicationPlan = Readonly<{
     rollback: Bound;
     retries: Bound;
   }>;
-  nativePerAttempt: Bound;
   perAttempt: Bound;
   ceiling: Bound;
   bindingWork: WorkDimensions;
 }>;
 
 /** The complete original closure is bounded separately from the raw selection branch count. */
-export function collectionSelectedPublicationPlan(
-  selectionCount: number,
-  source: 'owner' | 'catalogue' = 'owner',
-): CollectionSelectedPublicationPlan {
+export function collectionSelectedPublicationPlan(selectionCount: number): CollectionSelectedPublicationPlan {
   if (
     !Number.isSafeInteger(selectionCount) ||
     selectionCount < 0 ||
     selectionCount > COLLECTION_SELECTED_PUBLICATION_LIMIT
   )
     throw new RangeError('Invalid selected publication count');
-  const catalogue = source === 'catalogue';
-  // Search scope preparation makes two initial index requests and rechecks the index twice;
-  // each read-only evaluation performs one index-currentness request. Catalogue evidence is native SQL.
-  const searchScopePreparationWork = catalogue && selectionCount > 0 ? MEMBERS_PREPARATION_SOURCE_COST : zeroCost;
-  const searchScopeSelectionEvaluationWork = catalogue && selectionCount > 0 ? MEMBERS_PREPARATION_SOURCE_COST : zeroCost;
-  const searchScopeFinalEvaluationWork = catalogue && selectionCount > 0 ? MEMBERS_PREPARATION_SOURCE_COST : zeroCost;
-  const searchScopeEngineRequests = catalogue
-    ? sumBounds(
-        engineCost(selectionCount > 0 ? 4 : 0),
-        engineCost(selectionCount),
-        engineCost(selectionCount > 0 ? 1 : 0),
-      )
-    : zeroCost;
-  const maxSearchScopeEngineRequests = catalogue
-    ? sumBounds(engineCost(4), engineCost(COLLECTION_SELECTED_PUBLICATION_LIMIT), engineCost(1))
-    : zeroCost;
-  const plannedSourceMembership = catalogue ? zeroCost : sourceMembership;
-  const plannedPositiveMembership = catalogue
-    ? sumBounds(
-        repeatBound(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT),
-        closureAndOwnerFacts,
-        searchScopeSelectionEvaluationWork,
-      )
-    : positiveMembership;
-  const plannedNegativeMembership = catalogue ? searchScopeSelectionEvaluationWork : negativeMembership;
-  const maxCataloguePositiveMembership = catalogue
-    ? sumBounds(
-        repeatBound(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT),
-        closureAndOwnerFacts,
-        MEMBERS_PREPARATION_SOURCE_COST,
-      )
-    : positiveMembership;
-  const maxCatalogueNegativeMembership = catalogue ? MEMBERS_PREPARATION_SOURCE_COST : negativeMembership;
-  const maxSelectedBranch = catalogue
-    ? sumBounds(
-        COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST,
-        maximumBounds(maxCataloguePositiveMembership, maxCatalogueNegativeMembership),
-      )
-    : selectedBranch;
-  const plannedPreparationFixed =
-    catalogue && selectionCount > 0
-      ? sumBounds(preparationFixed, searchScopePreparationWork, searchScopeFinalEvaluationWork)
-      : preparationFixed;
-  const plannedOwnerFilterMatch = catalogue ? zeroCost : ownerFilterMatch;
-  const plannedOwnerFilterReauthorization = sumBounds(
-    MEMBERS_PREPARATION_SOURCE_COST,
-    privateAuthority,
-    searchScopeFinalEvaluationWork,
-  );
-  const plannedSelectedBranch = sumBounds(
-    COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST,
-    maximumBounds(plannedPositiveMembership, plannedNegativeMembership),
-  );
-  const branches = repeatBound(plannedSelectedBranch, selectionCount);
+  const branches = repeatBound(selectedBranch, selectionCount);
   const canonicalDeduplication = canonicalDeduplicationFor(selectionCount);
-  const preparation = sumBounds(plannedPreparationFixed, canonicalDeduplication, branches);
+  const preparation = sumBounds(preparationFixed, canonicalDeduplication, branches);
   const nativeTransaction = nativeTransactionFor(selectionCount);
-  const nativePerAttempt = sumBounds(binder, preparation, preReceipt, nativeTransaction);
-  const perAttempt = sumBounds(nativePerAttempt, searchScopeEngineRequests);
+  const perAttempt = sumBounds(binder, preparation, preReceipt, nativeTransaction);
   const maxAttempt = sumBounds(
     binder,
-    plannedPreparationFixed,
+    preparationFixed,
     canonicalDeduplicationFor(COLLECTION_SELECTED_PUBLICATION_LIMIT),
-    repeatBound(maxSelectedBranch, COLLECTION_SELECTED_PUBLICATION_LIMIT),
+    repeatBound(selectedBranch, COLLECTION_SELECTED_PUBLICATION_LIMIT),
     preReceipt,
     nativeTransactionFor(COLLECTION_SELECTED_PUBLICATION_LIMIT),
-    maxSearchScopeEngineRequests,
   );
   const ceiling = repeatBound(maxAttempt, COLLECTION_SELECTED_PUBLICATION_ATTEMPTS);
   if (!withinCeiling(perAttempt, ceiling)) throw new TypeError('Selected publication exceeds its native ceiling');
@@ -375,20 +301,16 @@ export function collectionSelectedPublicationPlan(
     terms: Object.freeze({
       binding: binder,
       selectedBranches: branches,
-      selectedBranch: plannedSelectedBranch,
-      positiveMembership: plannedPositiveMembership,
-      negativeMembership: plannedNegativeMembership,
-      sourceMembership: plannedSourceMembership,
+      selectedBranch,
+      positiveMembership,
+      negativeMembership,
+      sourceMembership,
       closureAndOwnerFacts,
-      ownerFilterMatch: plannedOwnerFilterMatch,
-      searchScopePreparationWork,
-      searchScopeSelectionEvaluationWork,
-      searchScopeFinalEvaluationWork,
-      searchScopeEngineRequests,
+      ownerFilterMatch,
       scopeCurrentness,
       sourcePreparation: sourcePrepare,
       canonicalDeduplication,
-      ownerFilterReauthorization: plannedOwnerFilterReauthorization,
+      ownerFilterReauthorization: sumBounds(MEMBERS_PREPARATION_SOURCE_COST, privateAuthority),
       preparation,
       preReceipt,
       compareHeaderRule,
@@ -401,7 +323,6 @@ export function collectionSelectedPublicationPlan(
       rollback,
       retries: ceiling,
     }),
-    nativePerAttempt,
     perAttempt,
     ceiling,
     bindingWork: nativeWorkDimensions(binder),

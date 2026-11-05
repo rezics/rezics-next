@@ -7,15 +7,6 @@ This leaf owns Library operation bounds and caller custody. Operation-specific S
 
 Decision: saved catalogue rules page through the registered Search scope using their pinned release; owner rules keep the private Library Source path.
 
-For selected catalogue publication, Search preparation costs four reached engine requests: two initial
-generation/index reads and two currentness checks. Each read-only evaluation performs one index-currentness request;
-catalogue evidence is read from native SQL. Raw selections are evaluated individually, followed by one evaluation
-of the final canonical batch, so a nonempty `n`-ID catalogue selection reserves `5 + n` engine requests. Empty
-selection reaches no Search scope and reserves zero. Search's eight-axis work receipt composes into the existing
-Library ledger; engine requests stay explicit in the nine-axis plan and cannot be translated as zero by the native
-eight-axis adapter. The [selected-set owner contract](README.md#explicit-selected-set-publication) defines the
-receiving, closure and replay behavior.
-
 Decision: keep each native repair page at 128 raw original occurrences, independently of Source's 100-key ceiling; charge the failed edit, separately authorized begin, each outbox/DBOS continuation, and deliberate retry as separate stages.
 
 Decision: preserve the existing Collection actor command, exact 720-hour Undo and purge key, ten-minute maintenance

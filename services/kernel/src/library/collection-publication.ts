@@ -1,7 +1,6 @@
 /** One explicit selection, admitted by the existing Source and owner-filter engines. */
 import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
@@ -25,8 +24,6 @@ import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { SearchService } from '../search/service-scope.ts';
-import type { PreparedSearchScope, ScopeNativeBudget } from '../search/scope-source.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import {
   authorizeCollectionRule,
@@ -36,7 +33,7 @@ import {
 } from './collection-rules.ts';
 import { readCollection } from './collection-store.ts';
 import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
-import { createCollectionSource, type WorkAllowance, type WorkDimensions } from './collection-source.ts';
+import { createCollectionSource, type WorkDimensions } from './collection-source.ts';
 import {
   appendCollectionSourceOutput,
   beginCollectionSourceOutput,
@@ -67,14 +64,7 @@ import {
 import { resolveSubject, SubjectIdentityUnavailableError } from './subject-anchor.ts';
 import { OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './owner-filter-native-closure.ts';
 
-type Dependencies = {
-  pool: Pool;
-  access: Access;
-  tokens: KeyRing;
-  routeKey: Uint8Array;
-  search?: SearchService;
-  clock?: KernelClock;
-};
+type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 export type CollectionPublicationInput = Readonly<{ revision: number; subjectIds: readonly string[] }>;
 export type CollectionPublication = Readonly<{ generation: string; state: 'complete'; itemCount: number }>;
 type Client = Pick<PoolClient, 'query'>;
@@ -168,48 +158,6 @@ async function currentScope(
     throw unavailable();
 }
 
-type CatalogueSearchScope = ReturnType<typeof import('../search/service-scope.ts').createSearchScopeForService>;
-
-function searchNativeBudget(allowance: WorkAllowance): ScopeNativeBudget {
-  const remaining = allowance.remaining;
-  return {
-    points: remaining.nativePoints,
-    witnesses: remaining.witnessKeys,
-    rows: remaining.nativeRows,
-    bytes: remaining.bytes,
-    emptySeeks: remaining.emptySeeks,
-  };
-}
-
-async function evaluateCatalogueSelection(
-  search: CatalogueSearchScope,
-  prepared: PreparedSearchScope,
-  subjectIds: readonly string[],
-  work: NativeCollectionWork,
-  ceiling: CollectionSelectedPublicationPlan['terms']['searchScopeSelectionEvaluationWork'],
-) {
-  const result = await work.compose(
-    async (allowance) => {
-      const evaluated = await search.evaluate(prepared, subjectIds, {
-        rawKeys: subjectIds.length,
-        native: searchNativeBudget(allowance),
-        progress: null,
-        allowance,
-      });
-      return { result: evaluated, work: search.work(evaluated) };
-    },
-    nativeWorkDimensions(ceiling),
-  );
-  if (
-    !isDeepStrictEqual(result.result.basis, prepared.basis) ||
-    result.result.progress !== null ||
-    result.result.values.length !== subjectIds.length ||
-    result.result.values.some((value) => value === 'not_proven')
-  )
-    throw unavailable();
-  return result.result.values;
-}
-
 type Prepared = {
   header: Header;
   rule: SavedCollectionRule;
@@ -234,6 +182,7 @@ async function prepareSelection(
   raw: readonly string[],
   attempt: CommandAttempt,
   deadline: number,
+  plan: CollectionSelectedPublicationPlan,
 ): Promise<Prepared> {
   const saved = await withConnection(deps.pool, async (connection) => {
     const client = deadlineClient(connection, deadline);
@@ -253,10 +202,9 @@ async function prepareSelection(
   });
   const admission = await admitSavedCollectionMemberQuery(deps, actor, saved.rule, {}, deadline);
   if (!admission.filter || admission.releaseDigest !== saved.rule.releaseDigest) throw unavailable();
-  const plan = collectionSelectedPublicationPlan(raw.length, admission.source);
   const checks = await prepareCollectionRuleAuthority(deps, actor, admission.filter, attempt, deadline);
   const bound = await bindOwnerFilterRead(deps, actor, collectionId, admission, deadline, attempt, undefined, {
-    total: nativeWorkDimensions(plan.nativePerAttempt),
+    total: nativeWorkDimensions(plan.perAttempt),
     binding: plan.bindingWork,
   });
   if (bound.status !== 'bound') throw unavailable();
@@ -292,43 +240,6 @@ async function prepareSelection(
         );
         if (!sameSource(workingSource, prepared.source.observation)) throw unavailable();
         await currentScope(deps, binding, work, plan.terms.scopeCurrentness);
-        let catalogueSearch:
-          | Readonly<{ search: CatalogueSearchScope; prepared: PreparedSearchScope }>
-          | undefined;
-        if (admission.source === 'catalogue' && raw.length > 0) {
-          if (!deps.search || !deps.routeKey) throw unavailable();
-          const sourceIdentity = binding.scope.key.source;
-          if (sourceIdentity.kind !== 'library') throw unavailable();
-          const { createSearchScopeForService } = await import('../search/service-scope.ts');
-          const search = createSearchScopeForService(deps.search, {
-            access: deps.access,
-            actor,
-            routeKey: deps.routeKey,
-            nativeT: binding.input.at,
-            deadline,
-          });
-          const scoped = await work.compose(
-            async (allowance) => {
-              const result = await search.prepare(admission.filter!, {
-                releaseDigest: admission.releaseDigest!,
-                order: { kind: 'id', source: sourceIdentity.identity },
-                readOnly: true,
-                allowance,
-              });
-              return { result, work: search.work(result) };
-            },
-            nativeWorkDimensions(plan.terms.searchScopePreparationWork),
-          );
-          if (scoped.result.basis.release !== admission.releaseDigest) throw unavailable();
-          const boundSearchSource = scoped.result.basis.nativeCollection;
-          if (
-            !boundSearchSource ||
-            !isDeepStrictEqual(boundSearchSource.source, sourceIdentity.identity) ||
-            !isDeepStrictEqual(boundSearchSource.observation, workingSource)
-          )
-            throw unavailable();
-          catalogueSearch = { search, prepared: scoped.result };
-        }
         async function resolveCurrent(originalId: string) {
           // Raw selections AND every complete-original fact reference pay original/terminal disclosure.
           // Source membership may return after one positive alias; it does not authorize the remaining closure.
@@ -356,46 +267,26 @@ async function prepareSelection(
             nativeWorkAllowance(plan.terms.selectedBranch, reservationId),
             async () => {
               const resolved = await resolveCurrent(originalId);
-              if (admission.source === 'catalogue') {
-                if (!catalogueSearch) throw new TypeError('Catalogue Search scope was not prepared');
-                const [membership] = await evaluateCatalogueSelection(
-                  catalogueSearch.search,
-                  catalogueSearch.prepared,
-                  [resolved.subjectId],
-                  work,
-                  plan.terms.searchScopeSelectionEvaluationWork,
-                );
-                if (!membership) throw new ProblemError('not_found');
-              } else {
-                const membership = await work.compose(
-                  (allowance) =>
-                    source.containsSubject({
-                      ...binding.input,
-                      source: prepared.source,
-                      allowance,
-                      subjectId: resolved.subjectId,
-                    }),
-                  nativeWorkDimensions(plan.terms.positiveMembership),
-                );
-                if (
-                  !sameSource(prepared.source.observation, membership.observation) ||
-                  membership.result === 'not_proven'
-                )
-                  throw unavailable();
-                if (!membership.result) throw new ProblemError('not_found');
-              }
+              const membership = await work.compose(
+                (allowance) =>
+                  source.containsSubject({
+                    ...binding.input,
+                    source: prepared.source,
+                    allowance,
+                    subjectId: resolved.subjectId,
+                  }),
+                nativeWorkDimensions(plan.terms.positiveMembership),
+              );
+              if (
+                !sameSource(prepared.source.observation, membership.observation) ||
+                membership.result === 'not_proven'
+              )
+                throw unavailable();
+              if (!membership.result) throw new ProblemError('not_found');
               const closure = await withNativeCollectionWorkAllowance(
                 work,
                 nativeWorkAllowance(plan.terms.closureAndOwnerFacts, reservationId),
-                () =>
-                  readOwnerFilterCandidateClosure(
-                    binding,
-                    prepared.source,
-                    resolved.subjectId,
-                    work,
-                    true,
-                    admission.source !== 'catalogue',
-                  ),
+                () => readOwnerFilterCandidateClosure(binding, prepared.source, resolved.subjectId, work, true),
               );
               if (closure.status !== 'complete') throw unavailable();
               if (closure.closure.subjectId !== resolved.subjectId) throw unavailable();
@@ -408,29 +299,27 @@ async function prepareSelection(
                 if (terminal !== resolved.subjectId) throw unavailable();
                 disclosed.set(original.subjectId, terminal);
               }
-              if (admission.source === 'owner') {
-                const snapshot = work.reserve(nativeWorkDimensions(plan.terms.ownerFilterMatch));
-                snapshot.dispatch();
-                let match;
-                try {
-                  match = await withConnection(deps.pool, async (connection) => {
-                    const client = deadlineClient(connection, deadline);
-                    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-                    try {
-                      const result = await readOwnerFilterCandidate(client, admission, closure.closure, work);
-                      await client.query('COMMIT');
-                      return result;
-                    } catch (error) {
-                      await client.query('ROLLBACK');
-                      throw error;
-                    }
-                  });
-                } finally {
-                  snapshot.settle();
-                }
-                if (match === 'not_proven') throw unavailable();
-                if (!match) throw new ProblemError('not_found');
+              const snapshot = work.reserve(nativeWorkDimensions(plan.terms.ownerFilterMatch));
+              snapshot.dispatch();
+              let match;
+              try {
+                match = await withConnection(deps.pool, async (connection) => {
+                  const client = deadlineClient(connection, deadline);
+                  await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+                  try {
+                    const result = await readOwnerFilterCandidate(client, admission, closure.closure, work);
+                    await client.query('COMMIT');
+                    return result;
+                  } catch (error) {
+                    await client.query('ROLLBACK');
+                    throw error;
+                  }
+                });
+              } finally {
+                snapshot.settle();
               }
+              if (match === 'not_proven') throw unavailable();
+              if (!match) throw new ProblemError('not_found');
               return resolved.subjectId;
             },
           );
@@ -441,24 +330,12 @@ async function prepareSelection(
           nativeWorkDimensions(plan.terms.sourcePreparation),
         );
         if (!sameSource(prepared.source.observation, final.source.observation)) throw conflict();
-        await currentScope(deps, binding, work, plan.terms.scopeCurrentness);
         await withNativeCollectionWorkAllowance(
           work,
           nativeWorkAllowance(plan.terms.ownerFilterReauthorization, reservationId),
-          async () => {
-            await revalidateNativeOwnerFilter(binding, work);
-            if (catalogueSearch) {
-              const matches = await evaluateCatalogueSelection(
-                catalogueSearch.search,
-                catalogueSearch.prepared,
-                [...new Set(verified)].sort(),
-                work,
-                plan.terms.searchScopeFinalEvaluationWork,
-              );
-              if (matches.some((match) => match !== true)) throw new ProblemError('not_found');
-            }
-          },
+          () => revalidateNativeOwnerFilter(binding, work),
         );
+        await currentScope(deps, binding, work, plan.terms.scopeCurrentness);
         return [...new Set(verified)].sort();
       },
     );
@@ -499,6 +376,7 @@ export function createCollectionPublications(deps: Dependencies) {
       const identity = principalCommandIdentity(actor);
       const kind = 'library.collection.publish-selected';
       const generation = randomUUID();
+      const plan = collectionSelectedPublicationPlan(input.subjectIds.length);
       return runCommand(
         deps.pool,
         {
@@ -519,7 +397,7 @@ export function createCollectionPublications(deps: Dependencies) {
               const proof = await native.prepare!(attempt);
               attempts.set(
                 attempt.time,
-                await prepareSelection(deps, actor, route, collectionId, input.subjectIds, attempt, deadline),
+                await prepareSelection(deps, actor, route, collectionId, input.subjectIds, attempt, deadline, plan),
               );
               return proof;
             },
