@@ -4,6 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
+import { m } from '../src/paraglide/messages.js';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -49,6 +50,7 @@ let refuseNextApply = false;
 let approvalLifetimeMs = 60_000;
 const acceptedApplyKeys = new Set<string>();
 let beforeSessions: (() => Promise<void>) | undefined;
+let removalReply: { path: '/sessions/revoke' | '/passkeys/remove'; status: number; body: string; clearCookie: boolean } | null = null;
 
 // Copied from apps/auth/tests/recovery.test.ts's fake Auth HTTP server.
 const fake = Bun.serve({
@@ -151,6 +153,13 @@ const fake = Bun.serve({
     if (url.pathname === '/sessions/revoke' && request.method === 'POST') {
       const body = JSON.parse(call.body) as { session_id: string };
       revoked.add(body.session_id);
+      if (removalReply?.path === url.pathname) {
+        const reply = removalReply;
+        removalReply = null;
+        if (reply.clearCookie)
+          headers.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+        return new Response(reply.body, { status: reply.status, headers });
+      }
       if (body.session_id === 'current-session')
         headers.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
       return Response.json({}, { headers });
@@ -189,7 +198,11 @@ function site(): Promise<string> {
         cwd: app,
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, AUTH_ORIGIN: fake.url.origin },
+        env: {
+          ...process.env,
+          AUTH_ORIGIN: fake.url.origin,
+          AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue',
+        },
       });
       let startError: Error | undefined;
       child.on('error', (error) => {
@@ -420,7 +433,7 @@ test(
       expect(authCalls('/credential-effects/stage')).toHaveLength(0);
 
       stepUpRequired = false;
-      await page.goto(`${origin}/security`, { waitUntil: 'networkidle' });
+      await page.goto(`${origin}/security`, { waitUntil: 'domcontentloaded' });
       expect(await page.getByRole('heading', { name: 'Account security' }).count()).toBe(1);
       expect(await page.getByLabel('New password', { exact: true }).inputValue()).toBe('');
     } finally {
@@ -611,6 +624,44 @@ test(
       );
       expect(new URL(page.url()).pathname).toBe('/login');
     } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'an unreadable removal acknowledgement keeps unknown history and forwards the native clearing cookie',
+  async () => {
+    signedOut = false;
+    stepUpRequired = false;
+    calls.length = 0;
+    revoked.clear();
+    removalReply = {
+      path: '/sessions/revoke',
+      status: 200,
+      body: '{"session_id":',
+      clearCookie: true,
+    };
+    const { page, origin } = await open();
+    try {
+      const current = page.getByRole('listitem').filter({ hasText: 'This device' });
+      await current.waitFor({ state: 'visible' });
+      await current.getByRole('button', { name: 'Sign out Unknown device', exact: true }).click();
+      await page.getByRole('heading', { name: 'Review session sign-out', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Confirm session sign-out', exact: true }).click();
+
+      await page.getByText(m.auth_security_target_return_unknown(), { exact: true }).waitFor();
+      expect(await page.getByText(m.auth_security_sign_in_required(), { exact: true }).count()).toBe(1);
+      expect(await page.getByText('Firefox on Linux', { exact: false }).count()).toBe(0);
+      expect(await page.context().cookies(origin)).not.toContainEqual(
+        expect.objectContaining({ name: 'auth_session', value: session }),
+      );
+      expect(authCalls('/session')).toHaveLength(1);
+      expect(authCalls('/sessions/revoke')).toHaveLength(1);
+      expect(postBody('/sessions/revoke')).toEqual({ session_id: 'current-session' });
+    } finally {
+      removalReply = null;
       await page.context().close();
     }
   },

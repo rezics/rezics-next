@@ -638,6 +638,21 @@ session cannot replay the removal or advance the floor again. Removing
 the last interactive credential (password or passkey) is refused with 409 and
 `effect_status: "not_applied"`. A person can have at most 32 passkeys; another installation is 409.
 
+Decision: Security consumers require the exact command envelope with its status; the generic passkey 409 response
+does not disclose whether the refusal was last-credential protection or a stale selected effect.
+
+`POST /sessions/revoke` returns exactly `{}` on 200, clears the current session's cookies when that exact current
+session is selected, and returns `{ error: "authentication_denied" }` for unknown/foreign targets (404). A 409
+stale review adds `code: "stale_review"`. `POST /passkeys/remove` returns exactly `{ success: true }` on 200;
+step-up returns 401 `{ error: "step_up_required", effect_status: "not_applied" }`, and other passkey refusals return
+`{ error: "credential_effect_denied", effect_status: "not_applied" }` with the native status. The attempt wrapper
+returns 429 `{ error: "authentication_denied" }` before the removal handler. The closed response DTOs and exact
+UTF-8 maxima are `securityActionResponseByteBudgets.session = max(utf8('{}'), utf8('{"error":"authentication_denied"}'),
+utf8('{"error":"authentication_denied","code":"stale_review"}'))` and
+`.passkey = max(utf8('{"success":true}'), utf8('{"error":"step_up_required","effect_status":"not_applied"}'),
+utf8('{"error":"credential_effect_denied","effect_status":"not_applied"}'),
+utf8('{"error":"authentication_denied"}'))`. These command envelopes do not depend on catalogue size.
+
 Every own-human credential stage, approval and application requires `auth_time`
 within the last 600 seconds, read from the native session row with cookie caching
 and refresh disabled. This includes `/credential-effects/approve`, password
@@ -1758,7 +1773,10 @@ linear bounds.
   immutability preserves the guard through concurrent tuple rechecks; key reuse
   between statements is checked again. Concurrent disappearance remains a
   successful no-op after the initial owned lookup. Self-session cookie clearing
-  stays local. Neither key operation admits an owner-history index predicate.
+  stays local and returns the native clearing `Set-Cookie` alongside the exact
+  empty success body. Unknown/foreign targets return the same fixed denial body
+  without cookies or deletion. Neither key operation admits an owner-history
+  index predicate.
 - Bound: fixed examined rows/statements/connections/output and O(L) indexed blocks,
   including all native nested work. At most one target is deleted; the mutation
   and its owner guard each examine at most one session row. No owner history or

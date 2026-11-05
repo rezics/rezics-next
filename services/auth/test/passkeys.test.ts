@@ -387,7 +387,7 @@ test('removing passkeys consumes a credential effect and floor receipt, and refu
     expect(signin.status).toBe(200);
     const removed = await f.request('/passkeys/remove', { id: second.passkey.id }, cookies(signin));
     expect(removed.status).toBe(409);
-    expect(await removed.json()).toMatchObject({ effect_status: 'not_applied' });
+    expect(await removed.json()).toEqual({ error: 'credential_effect_denied', effect_status: 'not_applied' });
     expect((await f.pool.query('SELECT id FROM passkey WHERE "userId"=$1', [person])).rows).toEqual([
       { id: second.passkey.id },
     ]);
