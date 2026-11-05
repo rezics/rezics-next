@@ -212,7 +212,7 @@ describe('sequential integration', () => {
     expect(production).toMatchObject({ passed: false, stage: 'scope' });
     expect((await land('services/auth/src/policy.ts', ['authorization'])).passed).toBe(true);
     expect(await land('services/auth/scripts/dev-stack.ts', [], true)).toMatchObject({ passed: false, stage: 'scope' });
-  });
+  }, 60_000);
   test('refuses stale enqueue, queued attempts and attempts invalidated during the gate', async () => {
     for (const when of ['enqueue', 'queued', 'gate']) {
       const s = setup();

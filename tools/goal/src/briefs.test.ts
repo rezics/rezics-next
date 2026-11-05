@@ -39,7 +39,7 @@ test('authorization risk excludes local auth scripts while preserving production
   expect(parseBrief(production.replace('riskAreas: []', 'riskAreas: [authorization]'), ownership).riskAreas).toEqual([
     'authorization',
   ]);
-  expect(() => parseBrief(markdown.replace('paths: [result.txt]', 'paths: [services/**]'), ownership)).toThrow(
+  expect(() => parseBrief(markdown.replace('paths: [result.txt]', 'paths: [services/**]'), authOnly)).toThrow(
     'authorization',
   );
 
