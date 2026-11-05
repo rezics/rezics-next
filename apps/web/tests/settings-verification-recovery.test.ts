@@ -312,7 +312,8 @@ test('an unacknowledged lookalike stays uncertain and retired readers cannot pub
   expect(controller.snapshot()).toMatchObject({ readStatus: 'success', phase: 'uncertain', current: empty });
   expect(controller.snapshot().attempt).toBe(original);
   await capturedRetry();
-  expect(sent).toEqual([originalInput, originalInput]);
+  expect(sent).toEqual([originalInput, originalInput, originalInput]);
+  expect(sent[2]).toBe(sent[0]);
   const late = controller.reload();
   const retired = controller.snapshot();
   controller.deactivate();
