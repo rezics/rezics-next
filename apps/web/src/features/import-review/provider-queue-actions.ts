@@ -1,5 +1,7 @@
 import {
   personReviewPairInput,
+  personPublicationInput,
+  readPersonPublication,
   personReviewCommandInput,
   readPersonComparison,
   mergePersonComparison,
@@ -216,6 +218,16 @@ export const mergeProviderPersonsAction = createServerFn({ method: 'POST', stric
     const prepared = await preparedProviderReader(true);
     const result = prepared.authorization
       ? await mergePersonComparison(kernelClient(), prepared.authorization, data, prepared.request.signal)
+      : { ok: false as const, reason: 'denied' as const };
+    return { reader: prepared.reader, result };
+  });
+
+export const readPersonPublicationAction = createServerFn({ method: 'POST', strict: false })
+  .validator(personPublicationInput)
+  .handler(async ({ data }) => {
+    const prepared = await preparedProviderReader();
+    const result = prepared.authorization
+      ? await readPersonPublication(kernelClient(), prepared.authorization, data, prepared.request.signal)
       : { ok: false as const, reason: 'denied' as const };
     return { reader: prepared.reader, result };
   });
