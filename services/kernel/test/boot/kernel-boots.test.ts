@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { withThrowawayDatabase } from '../../scripts/derived.ts';
+import { ordinaryCollectionPagePlan } from '../../src/library/ordinary-read-bounds.ts';
 
 setDefaultTimeout(600_000);
 
@@ -114,6 +115,11 @@ async function startKernelWorker(databaseUrl: string) {
 }
 
 const OPERATION_ID = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
+
+test('ordinary Collection bounds load with their existing source limits', () => {
+  const plan = ordinaryCollectionPagePlan(100);
+  expect([plan.prefixGroupLimit, plan.driverCount, plan.aliasLimit]).toEqual([100, 6, 100]);
+});
 
 /** Exercise the actual local Auth composition, including native bindings and client registration. */
 async function startPersonaSeed(databaseUrl: string) {

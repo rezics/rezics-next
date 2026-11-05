@@ -1,8 +1,11 @@
 /** Static cost declarations for one ordinary Collection members page. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
-import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-store.ts';
-import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './collection-source-work-native.ts';
-import { COLLECTION_SOURCE_DRIVER_COUNT, type WorkDimensions } from './collection-source.ts';
+import {
+  CANONICAL_SOURCE_RAW_KEY_LIMIT,
+  COLLECTION_SOURCE_DRIVER_COUNT,
+  COLLECTION_SOURCE_WORK_GROUP_LIMIT,
+} from './canonical-source-limits.ts';
+import type { WorkDimensions } from './collection-source.ts';
 
 export const ORDINARY_COLLECTION_PAGE_LIMIT = 100;
 export const ORDINARY_COLLECTION_PREFIX_ROUNDS = 3;

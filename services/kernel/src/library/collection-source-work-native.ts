@@ -9,6 +9,8 @@ import { ProblemError } from '../http/problem.ts';
 import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
 import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
+import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
+export { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 import { nativeSourceFence, type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
 import { readNativeCollectionMetadataForWork, type NativeCollectionMetadata } from './collection-source-native.ts';
 import type { CollectionSourceObservation, WorkDimensions, WorkReceipt } from './collection-source.ts';
@@ -53,9 +55,6 @@ const pointBound = (rows: number, bytes: number) =>
     statements: 1,
     bytes,
   });
-
-/** The indexed canonical group page's fixed LIMIT. Selected Source reads cannot raise it. */
-export const COLLECTION_SOURCE_WORK_GROUP_LIMIT = 100;
 
 const metadataBound = bounded({
   candidateKeys: 0,

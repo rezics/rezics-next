@@ -2,8 +2,8 @@
 import type { Pool } from 'pg';
 
 import type { ListingStamp } from './listing-freshness-contract.ts';
-
-export const CANONICAL_SOURCE_RAW_KEY_LIMIT = 100;
+import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
+export { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 
 /**
  * Reserved by the caller BEFORE dispatch; raw keys hard <=CANONICAL_SOURCE_RAW_KEY_LIMIT, shared Zone aggregate <=256 including final use.
