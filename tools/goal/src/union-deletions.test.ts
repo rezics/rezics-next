@@ -116,7 +116,13 @@ test('a merge-stage Markdown union with task-deleted lines reaches the resolver 
         expect(data.files[0].conflictHunks).toContain('old permission');
         expect(data.files[0].conflictHunks).toContain('new permission');
         expect(data.files[0].conflictHunks).toContain('dev note');
-        return [process.execPath, ['-e', `require('node:fs').writeFileSync('README.md', ${JSON.stringify(resolved)})`]];
+        return [
+          process.execPath,
+          [
+            '-e',
+            `let prompt='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>prompt+=chunk);process.stdin.on('end',()=>require('node:fs').writeFileSync('README.md',${JSON.stringify(resolved)}));`,
+          ],
+        ];
       },
     };
     await withAgentAdapter(adapter, async () => {

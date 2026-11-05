@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { agentAdapter, withAgentAdapter } from './agents.ts';
@@ -6,6 +7,9 @@ import { MergeTrain } from './merge-train.ts';
 import { git } from './merge.ts';
 import { TrainResolver } from './train-resolver.ts';
 import { integrationHarness } from './test-support.ts';
+import { lifecycleMetrics } from './lifecycle-metrics.ts';
+import { formatLifecycleMetrics } from './report.ts';
+import { codexAdapter } from './agents/codex.ts';
 
 const file = 'packages/fixture/value.ts';
 const base = 'export const value = "base";\n';
@@ -65,6 +69,7 @@ function resolverAdapter(
       ...agentAdapter('codex'),
       start(options: Parameters<ReturnType<typeof agentAdapter>['start']>[0]): [string, string[]] {
         calls++;
+        expect(options.promptViaStdin).toBe(true);
         const data = JSON.parse(options.prompt.split('\nDATA:\n')[1]!);
         expect(data.sourceContract).toContain('goal: fixture');
         expect(data.conflict.conflictFiles).toContain(expectedFile);
@@ -80,21 +85,26 @@ function resolverAdapter(
           );
         inspectPrompt?.(options.prompt, data);
         started?.();
+        const promptBytes = Buffer.byteLength(options.prompt);
+        const promptHash = createHash('sha256').update(options.prompt).digest('hex');
+        const delivery = `const crypto=require('node:crypto');let prompt='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>prompt+=chunk);process.stdin.on('end',()=>{if(Buffer.byteLength(prompt)!==${promptBytes}||crypto.createHash('sha256').update(prompt).digest('hex')!==${JSON.stringify(promptHash)})process.exit(3);${writeDirectly ? '' : `require('node:fs').writeFileSync(${JSON.stringify(expectedFile)},${JSON.stringify(write)})`}});`;
+        const args = ['-e', `${waitForMarker(marker)}${delivery}`];
+        expect(args.join('\0')).not.toContain(options.prompt);
         if (writeDirectly) {
           writeFileSync(join(options.worktree, expectedFile), write);
-          return [process.execPath, ['-e', 'process.exit(0)']];
+          return [process.execPath, args];
         }
-        const wait = marker
-          ? `const fs=require('node:fs');const until=Date.now()+30000;while(!fs.existsSync(${JSON.stringify(marker)})){if(Date.now()>until)process.exit(2);Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);}`
-          : '';
-        return [
-          process.execPath,
-          ['-e', `${wait}require('node:fs').writeFileSync(${JSON.stringify(expectedFile)},${JSON.stringify(write)})`],
-        ];
+        return [process.execPath, args];
       },
     },
     calls: () => calls,
   };
+}
+
+function waitForMarker(marker?: string): string {
+  return marker
+    ? `const fs=require('node:fs');const until=Date.now()+30000;while(!fs.existsSync(${JSON.stringify(marker)})){if(Date.now()>until)process.exit(2);Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);}`
+    : '';
 }
 
 test('a code conflict uses the dev resolver and lands without starting another worker attempt', async () => {
@@ -113,12 +123,42 @@ test('a code conflict uses the dev resolver and lands without starting another w
     expect(readFileSync(outcome.logPath, 'utf8')).toContain('Dev landing conflict method=resolver');
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
     expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
+    expect(h.store.events(task.id, 1).some((event) => event.kind === 'dev-conflict-landed')).toBe(true);
   } finally {
     h.dispose();
   }
 }, 30_000);
 
-test('the resolver releases the train lock, then retries at the front when dev moves during resolution', async () => {
+test('a resolution replays cleanly onto an unrelated new dev head without another resolver session', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.devLandingChecks = false;
+    const task = await startConflict(h);
+    const marker = join(h.settings.stateDirectory, 'release-dev-resolver');
+    let releaseStarted!: () => void;
+    const started = new Promise<void>((resolve) => (releaseStarted = resolve));
+    const mocked = resolverAdapter(resolved, releaseStarted, marker);
+    const resolving = withAgentAdapter(mocked.adapter, () => train(h).run());
+    await started;
+
+    const devOnly = 'packages/fixture/dev-only.ts';
+    h.advanceDev(devOnly, 'export const devOnly = true;\n');
+    writeFileSync(marker, 'continue');
+    await resolving;
+    await h.job.drain();
+
+    const outcome = h.outcomes.find((item) => item.taskId === task.id)!;
+    expect(mocked.calls()).toBe(1);
+    expect(outcome).toMatchObject({ passed: true, conflictResolution: { method: 'resolver', attempts: 1 } });
+    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
+    expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
+    expect(git(h.root, 'show', `dev:${devOnly}`)).toBe('export const devOnly = true;');
+  } finally {
+    h.dispose();
+  }
+}, 45_000);
+
+test('a resolution that conflicts with a moved dev head runs the resolver again on that head', async () => {
   const h = integrationHarness();
   try {
     h.settings.integration.devLandingChecks = false;
@@ -149,8 +189,43 @@ test('the resolver releases the train lock, then retries at the front when dev m
     await h.job.drain();
 
     const outcome = h.outcomes.find((item) => item.taskId === task.id)!;
-    expect(mocked.calls()).toBe(2);
     expect(outcome).toMatchObject({ passed: true, conflictResolution: { method: 'resolver', attempts: 2 } });
+    expect(mocked.calls()).toBe(2);
+    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
+    expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
+  } finally {
+    h.dispose();
+  }
+}, 45_000);
+
+test('a 300 KB resolver prompt is delivered over stdin and the resolution lands', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.devLandingChecks = false;
+    const task = await startConflict(h);
+    h.store.updateTask({ taskId: task.id, attempt: 1 }, (current) => {
+      current.brief.markdown += `\n${'x'.repeat(300 * 1024)}`;
+    });
+    const mocked = resolverAdapter(resolved, undefined, undefined, [dev], file, (prompt) => {
+      expect(Buffer.byteLength(prompt)).toBeGreaterThanOrEqual(300 * 1024);
+      const [, codexArgs] = codexAdapter.start({
+        profile: { cli: 'codex', model: 'gpt-6.1-sol', effort: 'high', poolClass: 'codex' },
+        pool: h.settings.pools.find((pool) => pool.cli === 'codex')!,
+        worktree: task.worktree,
+        prompt,
+        promptViaStdin: true,
+        resolver: true,
+        codex: h.settings.codex,
+      });
+      expect(codexArgs.at(-1)).toBe('-');
+      expect(codexArgs.join('\0')).not.toContain(prompt);
+    });
+    await withAgentAdapter(mocked.adapter, () => train(h).run());
+    await h.job.drain();
+
+    const outcome = h.outcomes.find((item) => item.taskId === task.id)!;
+    expect(mocked.calls()).toBe(1);
+    expect(outcome).toMatchObject({ passed: true, conflictResolution: { method: 'resolver', attempts: 1 } });
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
     expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
   } finally {
@@ -263,7 +338,7 @@ test('long compiler evidence reaches repair with first and last lines and the fu
         expect(options.prompt).toContain(logPath);
         expect(options.prompt).not.toContain('compiler detail 10000');
         writeFileSync(join(options.worktree, file), 'repaired source\n');
-        return [process.execPath, ['-e', 'process.exit(0)']];
+        return [process.execPath, ['-e', "process.stdin.resume();process.stdin.on('end',()=>process.exit(0))"]];
       },
     };
     const repaired = await withAgentAdapter(adapter, () =>
@@ -284,7 +359,7 @@ test('a failed resolver returns the conflict to the same worker attempt session'
     const adapter = {
       ...agentAdapter('codex'),
       start(): [string, string[]] {
-        return [process.execPath, ['-e', 'process.exit(1)']];
+        return [process.execPath, ['-e', "process.stdin.resume();process.stdin.on('end',()=>process.exit(1))"]];
       },
     };
     await withAgentAdapter(adapter, () => train(h).run());
@@ -295,6 +370,11 @@ test('a failed resolver returns the conflict to the same worker attempt session'
     expect(outcome.rebaseConflict?.paths).toEqual([file]);
     expect(h.store.task(task.id).currentAttempt).toBe(2);
     expect(h.store.attempt({ taskId: task.id, attempt: 2 }).escalation).toBe('rebase-conflict');
+    const returned = h.store.events(task.id, 1).find((event) => event.kind === 'dev-conflict-returned');
+    expect(JSON.parse(returned!.body).reason).toContain('Train resolver exited with 1');
+    expect(formatLifecycleMetrics(lifecycleMetrics(h.store.db, Date.now())).join('\n')).toContain(
+      'Dev resolver conflicts in trailing hour: 0 resolved and landed; 1 returned to worker (reasons: 1 × Error: Train resolver exited with 1); 0 still in progress',
+    );
   } finally {
     h.dispose();
   }

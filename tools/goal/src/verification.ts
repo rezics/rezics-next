@@ -1,4 +1,5 @@
 import { defaultPolicy } from './policy.ts';
+import { parseBunTestCommand, parseEnvironmentPrefix } from './command-shape.ts';
 import type { ProofMetadata } from './types.ts';
 
 /** CP reservation identity; mapped exactly to the delivered native token wire field. */
@@ -279,27 +280,14 @@ export function proofFingerprint(brief: Pick<Brief, 'goal' | 'manager' | 'kind' 
 function same(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
-/** Keep env and wrapper argv as provenance; never normalize an invocation for the native producer. */
-function commandOffset(argv: string[]): number {
-  let index = 0;
-  if (argv[index] === 'env') {
-    index++;
-    while (index < argv.length) {
-      if (argv[index] === '-u' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(argv[index + 1] ?? '')) index += 2;
-      else if (/^[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9_./:-]*$/.test(argv[index] ?? '')) index++;
-      else break;
-    }
-  }
-  return index;
-}
 function wholeWorkspaceCommand(argv: string[]): boolean {
-  const command = argv.slice(commandOffset(argv));
+  const command = parseEnvironmentPrefix(argv).command;
   return ['services/kernel', 'services/auth'].some((cwd) => same(command, ['bun', 'run', '--cwd', cwd, 'check']));
 }
 const explicitFile = /^[A-Za-z0-9_./-]+\.[cm]?[jt]sx?$/;
 /** Explicit service helpers and tests form one ordered file list, starting at the FIRST input. */
 function fileCommand(argv: string[]): { prefix: string[]; files: string[] } | undefined {
-  const offset = commandOffset(argv);
+  const offset = parseEnvironmentPrefix(argv).offset;
   let index = offset;
   // This exact retained prefix can be registered, but the delivered native port cannot execute it safely.
   if (same(argv.slice(index, index + 6), ['bun', 'scripts/worker-check.ts', '--local', '--', 'bun', 'test']))
@@ -311,12 +299,18 @@ function fileCommand(argv: string[]): { prefix: string[]; files: string[] } | un
   )
     index += 5;
   else {
-    if (argv[index++] !== 'bun') return;
-    if (argv[index] === '--cwd' && argv[index + 1]) index += 2;
-    else if (argv[index]?.startsWith('--cwd=')) index++;
-    if (argv[index++] !== 'test') return;
-    // Supported Bun test options remain part of the identical raw prefix, including their values.
-    while (argv[index] === '--timeout' && /^\d+$/.test(argv[index + 1] ?? '')) index += 2;
+    const parsed = parseBunTestCommand(argv, index);
+    if (!parsed) return;
+    index = parsed.argumentsStart;
+    let sawOperand = false;
+    for (const argument of parsed.arguments) {
+      if (!sawOperand && argument.kind === 'option' && argument.flag === '--timeout' && /^\d+$/.test(argument.value)) {
+        index = argument.index + argument.raw.length;
+        continue;
+      }
+      sawOperand = true;
+      if (argument.kind !== 'operand') return;
+    }
   }
   const files = argv.slice(index);
   if (!files.length || !files.every((word) => explicitFile.test(word))) return;
@@ -477,7 +471,7 @@ export function registeredProof(brief: Partial<Brief>, authorization?: ProofAuth
 export function ordinaryProofCommand(argv: string[]): { invocation: string[]; recordedArgv: string[] } {
   if (!originalCommandHasInputs(argv))
     throw new Error('proof cannot execute a broad root, gate or nested wrapper campaign');
-  const offset = commandOffset(argv);
+  const offset = parseEnvironmentPrefix(argv).offset;
   const wrapped = same(argv.slice(offset, offset + 4), ['bun', 'scripts/worker-check.ts', '--local', '--']);
   return {
     invocation: wrapped ? [...argv] : ['bun', 'scripts/worker-check.ts', '--', ...argv],

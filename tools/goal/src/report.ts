@@ -233,6 +233,7 @@ export function formatLifecycleMetrics(metrics: LifecycleMetrics): string[] {
   const conflicts = metrics.conflicts;
   const outcomes = conflicts?.recordedOutcomes;
   const created = conflicts?.createdAttempts;
+  const devOutcomes = conflicts?.devResolverOutcomes;
   const coverage = (value: { available: boolean; complete: boolean } | undefined) =>
     !value?.available
       ? 'unavailable'
@@ -240,6 +241,19 @@ export function formatLifecycleMetrics(metrics: LifecycleMetrics): string[] {
         ? 'complete recorded window'
         : 'truncated recorded window (lower bounds)';
   const observedTiming = outcomes?.observationToLandedMs;
+  const returnReasons = devOutcomes?.returnedToWorker.reasons;
+  const reasonLabel = (value: string) =>
+    value
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 160);
+  const returnReasonSummary = returnReasons?.length
+    ? `${returnReasons
+        .slice(0, 3)
+        .map(({ reason, count }) => `${count} × ${reasonLabel(reason)}`)
+        .join('; ')}${returnReasons.length > 3 ? `; ${returnReasons.length - 3} more reasons omitted` : ''}`
+    : 'none recorded';
   return [
     `Launches in trailing hour: ${attempts.total}; tasks with launches: ${attempts.taskCount}; mean per task: ${attempts.meanPerTask?.toFixed(2) ?? 'unknown'}.`,
     ...attempts.perTask.map(
@@ -251,6 +265,9 @@ export function formatLifecycleMetrics(metrics: LifecycleMetrics): string[] {
     `Quarantines: current ${quarantines.currentCount ?? 'unknown'}; recent new ${quarantines.recentNewCount ?? 'unknown'}; causes ${quarantines.currentByCause ? JSON.stringify(quarantines.currentByCause) : 'unknown'}.`,
     `Owner-landing capability: unavailable; ${conflicts?.reason ?? 'This historical snapshot did not record conflict metrics.'}`,
     `Conflicts in trailing hour: ${outcomes?.observedCount ?? 'unknown'} observed; ${outcomes?.unclassifiedCount ?? 'unknown'} unclassified rebase outcomes; total unknown; ${coverage(outcomes)}.`,
+    devOutcomes?.available
+      ? `Dev resolver conflicts in trailing hour: ${devOutcomes.resolvedAndLanded ?? 'unknown'} resolved and landed; ${devOutcomes.returnedToWorker.count ?? 'unknown'} returned to worker (reasons: ${returnReasonSummary}); ${devOutcomes.inProgress ?? 'unknown'} still in progress; ${coverage(devOutcomes)}.`
+      : 'Dev resolver conflicts in trailing hour: unknown (flow outcome history unavailable).',
     'Conflict-to-landed duration: unknown; open conflict count/oldest age: unknown; resolution owner/rerere/replay: unknown.',
     `Trailing-hour outcome observations to landed${outcomes?.available && !outcomes.complete ? ' (sample)' : ''}: ${observedTiming?.count ?? 'unknown'} timed; p50 ${age(observedTiming?.p50Ms ?? null)}; p90 ${age(observedTiming?.p90Ms ?? null)}; unlanded ${outcomes?.unlandedCount ?? 'unknown'}; oldest observation age ${age(outcomes?.oldestUnlandedObservationAgeMs ?? null)}; unknown timing ${outcomes?.unknownTimingCount ?? 'unknown'}.`,
     `Conflict-created attempts in trailing hour: ${created?.observedCount ?? 'unknown'} observed; ${created?.unknownCauseCount ?? 'unknown'} unknown causes; total unknown; ${coverage(created)}.`,

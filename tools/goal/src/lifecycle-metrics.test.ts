@@ -9,6 +9,7 @@ import { SqliteLandingQueue } from './land.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import { WorkerStore } from './store.ts';
 import { harness } from './test-support.ts';
+import { formatLifecycleMetrics } from './report.ts';
 
 const root = join(process.cwd(), '.temp', `lifecycle-metrics-${crypto.randomUUID()}`);
 mkdirSync(root, { recursive: true });
@@ -238,6 +239,59 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
   });
 });
 
+test('pending queue waits stay identical as settled event history grows', () => {
+  const { db } = database('pending-history.sqlite');
+  const now = Date.UTC(2026, 9, 30, 12, 0);
+  const at = (offsetMs: number) => stamp(now, offsetMs);
+  insertTask(db, 'pending', 1, 'running');
+
+  const insertEvent = db.query('INSERT INTO flow_events(task_id, attempt, stage, action, at) VALUES (?, ?, ?, ?, ?)');
+  // Insertion order differs from event time; the latest transition is the five-minute-old request.
+  insertEvent.run('pending', 1, 'check', 'requested', at(-5 * 60_000));
+  insertEvent.run('pending', 1, 'check', 'acquired', at(-15 * 60_000));
+  insertEvent.run('pending', 1, 'check', 'requested', at(-25 * 60_000));
+
+  const expected = [
+    {
+      taskId: 'pending',
+      attempt: 1,
+      kind: 'queue' as const,
+      stage: 'check',
+      enteredAt: at(-5 * 60_000),
+      ageMs: 5 * 60_000,
+    },
+  ];
+  const before = lifecycleMetrics(db, now).waiting.queues;
+  expect(before).toEqual(expected);
+
+  const insertTaskRow = db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
+  const insertSettledEvent = db.query(
+    'INSERT INTO flow_events(task_id, attempt, stage, action, at) VALUES (?, ?, ?, ?, ?)',
+  );
+  db.transaction(() => {
+    for (let i = 0; i < 3_000; i++) {
+      const id = `settled-${i}`;
+      insertTaskRow.run(
+        id,
+        i + 2,
+        1,
+        JSON.stringify({
+          id,
+          sequence: i + 2,
+          currentAttempt: 1,
+          state: 'integrated',
+          createdAt: '2026-10-01T00:00:00.000Z',
+          brief: { goal: 'fixture', manager: 'fixture', after: [] },
+        }),
+      );
+      insertSettledEvent.run(id, 1, 'check', 'requested', at(-40 * 60_000));
+      insertSettledEvent.run(id, 1, 'check', 'acquired', at(-39 * 60_000));
+    }
+  }).immediate();
+
+  expect(lifecycleMetrics(db, now).waiting.queues).toEqual(before);
+});
+
 test('orphaned landings require an undelivered queue record for the current task and attempt, without request events', () => {
   const { db } = database('orphan-identity.sqlite');
   const now = Date.UTC(2026, 9, 30, 12, 0);
@@ -272,8 +326,23 @@ test('Live-sized settled history does not require decoding all task/attempt JSON
   const { db, path, store } = database('history.sqlite');
   const insertTaskRow = db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
   const insertAttemptRow = db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)');
+  const insertSettledEvent = db.query(
+    'INSERT INTO worker_events(task_id, attempt, kind, at, body) VALUES (?, ?, ?, ?, ?)',
+  );
+  const insertSettledFlow = db.query(
+    'INSERT INTO flow_events(task_id, attempt, stage, action, at) VALUES (?, ?, ?, ?, ?)',
+  );
   const taskPayload = 't'.repeat(7_500);
   const attemptPayload = 'a'.repeat(8_000);
+  const now = new Date('2026-10-30T12:05:00.000Z');
+  const conflictBaseline = lifecycleMetrics(db, now).conflicts;
+  const settledAt = '2026-10-29T12:00:00.000Z';
+  const settledConflict = JSON.stringify({
+    passed: false,
+    stage: 'rebase',
+    rebaseConflict: { targetHead: 'a'.repeat(40), workerCommit: 'b'.repeat(40), paths: ['source.ts'] },
+  });
+  const settledBaseline = JSON.stringify({ workerCommit: 'b'.repeat(40), controllerHead: 'c'.repeat(40) });
   db.transaction(() => {
     for (let i = 0; i < 3_000; i++) {
       const id = `settled-${i}`;
@@ -291,6 +360,9 @@ test('Live-sized settled history does not require decoding all task/attempt JSON
           payload: taskPayload,
         }),
       );
+      insertSettledEvent.run(id, 1, 'gate-outcome', settledAt, settledConflict);
+      insertSettledEvent.run(id, 2, 'worker-source-baseline', settledAt, settledBaseline);
+      insertSettledFlow.run(id, 2, 'integration', 'integrated', settledAt);
       for (let attempt = 1; attempt <= 1; attempt++)
         insertAttemptRow.run(
           id,
@@ -310,8 +382,8 @@ test('Live-sized settled history does not require decoding all task/attempt JSON
   }).immediate();
 
   store.resetDecodedRows();
-  const now = new Date('2026-10-30T12:05:00.000Z');
   const metrics = lifecycleMetrics(db, now);
+  expect(metrics.conflicts).toEqual(conflictBaseline);
   expect(flowReport(readFlow(db), readFlowTasks(db), now.getTime()).tasks).toHaveLength(3_000);
   expect(store.decodedRows()).toEqual({ tasks: 0, attempts: 0 });
   expect(store.decodedBytes()).toEqual({ tasks: 0, attempts: 0 });
@@ -453,6 +525,58 @@ test('Hourly report measures conflict count, conflict-to-landed time and attempt
   expect(lifecycleMetrics(db, now).conflicts).toEqual(metrics.conflicts);
   expect(emitHourlyLifecycleMetrics(db, lifecycleMetrics(db, now), now)).toBe(false);
   expect(readHourlyLifecycleMetrics(db, now)?.metrics.conflicts).toEqual(metrics.conflicts);
+});
+
+test('flow metrics classify dev resolver conflicts by landed, returned with reason and in-progress outcomes', () => {
+  const { db } = database('dev-resolver-outcomes.sqlite');
+  const now = Date.UTC(2026, 9, 30, 12);
+  const at = (minutes: number) => stamp(now, minutes * 60_000);
+  const started = (taskId: string, sourceCommit: string) =>
+    recordFlow(db, {
+      taskId,
+      attempt: 1,
+      stage: 'landing',
+      action: 'dev-conflict',
+      at: at(-10),
+      detail: JSON.stringify({ sourceCommit, targetHead: 'd'.repeat(40), paths: ['source.ts'] }),
+    });
+  started('landed-dev-conflict', 'a'.repeat(40));
+  recordFlow(db, {
+    taskId: 'landed-dev-conflict',
+    attempt: 1,
+    stage: 'landing',
+    action: 'dev-conflict-landed',
+    at: at(-1),
+    detail: JSON.stringify({ sourceCommit: 'a'.repeat(40), commit: 'b'.repeat(40) }),
+  });
+  started('returned-dev-conflict', 'c'.repeat(40));
+  recordFlow(db, {
+    taskId: 'returned-dev-conflict',
+    attempt: 1,
+    stage: 'landing',
+    action: 'dev-conflict-returned',
+    at: at(-2),
+    detail: JSON.stringify({
+      sourceCommit: 'c'.repeat(40),
+      reason: 'Train resolver attempt bound reached (2)',
+    }),
+  });
+  started('active-dev-conflict', 'e'.repeat(40));
+
+  const metrics = lifecycleMetrics(db, now);
+  expect(metrics.conflicts.devResolverOutcomes).toEqual({
+    available: true,
+    complete: true,
+    resolvedAndLanded: 1,
+    returnedToWorker: {
+      count: 1,
+      reasons: [{ reason: 'Train resolver attempt bound reached (2)', count: 1 }],
+    },
+    inProgress: 1,
+  });
+  expect(formatLifecycleMetrics(metrics).join('\n')).toContain(
+    'Dev resolver conflicts in trailing hour: 1 resolved and landed; 1 returned to worker (reasons: 1 × Train resolver attempt bound reached (2)); 1 still in progress; complete recorded window.',
+  );
 });
 
 test('missing conflict sources and historical snapshots remain unavailable instead of acquiring zero counters', () => {
