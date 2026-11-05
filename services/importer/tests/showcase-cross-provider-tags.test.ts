@@ -5,13 +5,19 @@ import type { CrossMediaTables } from '../src/cross-media-seed.ts';
 
 function tables(parents: string[], categories: Record<string, string>): CrossMediaTables {
   const records: Record<string, Record<string, unknown>[]> = {
-    'tags_vn': [{ tag: 'g1', vid: 'v2002', vote: '3', spoiler: '1', ignore: 'f', lie: 'f' }],
-    tags: parseAuthoredVndbCopy('tags',
+    tags_vn: [{ tag: 'g1', vid: 'v2002', vote: '3', spoiler: '1', ignore: 'f', lie: 'f' }],
+    tags: parseAuthoredVndbCopy(
+      'tags',
       'id\tcat\tdefaultspoil\tsearchable\tapplicable\tname\talias\tdescription',
-      Object.entries(categories).map(([id, cat]) => `${id}\t${cat}\t0\tt\tt\tSame label\t\\N\t\\N`)),
+      Object.entries(categories).map(([id, cat]) => `${id}\t${cat}\t0\tt\tt\tSame label\t\\N\t\\N`),
+    ),
     tags_parents: parseAuthoredVndbCopy('tags_parents', 'id\tparent\tmain', parents),
   };
-  return { async *rows(provider, table) { if (provider === 'vndb') yield* records[table] ?? []; } };
+  return {
+    async *rows(provider, table) {
+      if (provider === 'vndb') yield* records[table] ?? [];
+    },
+  };
 }
 
 // These are imported-row controls, not native hierarchy or shared-binding acceptance.
@@ -28,7 +34,7 @@ test('selected parent evidence preserves exact source keys and preferred-parent 
   ]);
   // Source evidence alone never enables native parent writes.
   expect(first.gaps.some((gap) => gap.reason.includes('not admitted for native writes'))).toBe(true);
-  expect([...await Array.fromAsync(first.tables.rows('vndb', 'tags_parents'))]).toEqual([]);
+  expect([...(await Array.fromAsync(first.tables.rows('vndb', 'tags_parents')))]).toEqual([]);
 });
 
 test('a missing ancestor, category crossing or cycle withholds dependent parent evidence despite matching labels', async () => {
@@ -46,10 +52,13 @@ test('a missing ancestor, category crossing or cycle withholds dependent parent 
 
 test('parent closure stays bounded and excludes ancestry beyond the retained dictionary', async () => {
   const ids = Array.from({ length: 10 }, (_, i) => `g${i + 1}`);
-  const result = await projectShowcaseTagTables(tables(
-    ids.slice(0, -1).map((id, i) => `${id}\t${ids[i + 1]}\tt`),
-    Object.fromEntries(ids.map((id) => [id, 'cont'])),
-  ), ['v2002']);
+  const result = await projectShowcaseTagTables(
+    tables(
+      ids.slice(0, -1).map((id, i) => `${id}\t${ids[i + 1]}\tt`),
+      Object.fromEntries(ids.map((id) => [id, 'cont'])),
+    ),
+    ['v2002'],
+  );
   expect(result.dictionary.size).toBe(9);
   expect(result.sourceParents).toEqual([]);
   expect(result.gaps.some((gap) => gap.reason.includes('Missing source tag parent'))).toBe(true);

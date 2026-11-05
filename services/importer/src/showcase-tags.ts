@@ -358,8 +358,11 @@ export async function projectShowcaseTagTables(
         category: dictionary.get(id)!.category,
         path: `/tags_parents/${id}/${parent}`,
       });
-      gap('tags_parents', { id, parent },
-        'Parent tag relationship is not admitted for native writes; taxonomy closure keeps the dictionary record only');
+      gap(
+        'tags_parents',
+        { id, parent },
+        'Parent tag relationship is not admitted for native writes; taxonomy closure keeps the dictionary record only',
+      );
     }
   }
   sourceParents.sort((left, right) => left.path.localeCompare(right.path));
