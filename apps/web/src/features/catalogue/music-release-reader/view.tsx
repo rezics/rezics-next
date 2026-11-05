@@ -5,15 +5,15 @@ import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { contextHref } from '../../pages/context-navigation';
 import { correctionProposalAvailability } from '../statement-editor';
-import type { CandidateViewerActions, NativeOperationAvailability, ViewerActionComponent } from '../../../subject/candidates';
+import type {
+  CandidateViewerActions,
+  NativeOperationAvailability,
+  ViewerActionComponent,
+} from '../../../subject/candidates';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { linkClass, linkColor } from '../../pages/shared';
 import { MusicReleaseFacts, MusicReleaseOccurrenceFacts, MusicReleaseSlot } from './facts';
-import {
-  musicReleaseRoute,
-  type MusicReleaseFocus,
-  type MusicReleaseReturn,
-} from './navigation';
+import { musicReleaseRoute, type MusicReleaseFocus, type MusicReleaseReturn } from './navigation';
 import {
   acceptMusicReleaseAddress,
   musicReleaseFirstAddress,
@@ -223,9 +223,7 @@ export function MusicReleaseReader(props: Props) {
           key={reading.key}
           {...props}
           // An example initial body belongs only to the original observation, never a recovered source.
-          initial={
-            allowInitial.current && route.address.expectedRevision === undefined ? props.initial : undefined
-          }
+          initial={allowInitial.current && route.address.expectedRevision === undefined ? props.initial : undefined}
           startingAddress={route.address}
           returnFocus={route.focus}
           correction={correctionAdvice(props.source, props.context)}
@@ -303,10 +301,7 @@ export function MusicReleaseWindow({
   const [busy, setBusy] = useState(!initial);
   const initialReturn = initial?.ok
     ? initial.rows.find(
-        (row) =>
-          row.summary &&
-          row.holder === returnLocator?.holder &&
-          row.statementId === returnLocator?.statementId,
+        (row) => row.summary && row.holder === returnLocator?.holder && row.statementId === returnLocator?.statementId,
       )
     : undefined;
   const [selectedKey, setSelectedKey] = useState<string | null>(
@@ -397,10 +392,7 @@ export function MusicReleaseWindow({
       setPage(result);
       if (address.expectedRevision !== undefined && returnLocator) {
         const returned = result.rows.find(
-          (row) =>
-            row.summary &&
-            row.holder === returnLocator.holder &&
-            row.statementId === returnLocator.statementId,
+          (row) => row.summary && row.holder === returnLocator.holder && row.statementId === returnLocator.statementId,
         );
         if (returned) {
           const key = musicReleaseOccurrenceKey(returned);
@@ -574,7 +566,10 @@ export function MusicReleaseWindow({
                           }}
                         >
                           {m.music_release_inspect({}, o)}
-                          <span className="sr-only">{' · '}{summary.label?.value || m.work_parts_unresolved({}, o)}</span>
+                          <span className="sr-only">
+                            {' · '}
+                            {summary.label?.value || m.work_parts_unresolved({}, o)}
+                          </span>
                         </button>
                         {chosen && selected ? (
                           <section
@@ -612,7 +607,10 @@ export function MusicReleaseWindow({
                               page={page}
                               locale={locale}
                               realm={realm}
-                              current={currentReturn(page, { holder: selected.holder, statementId: selected.statementId })}
+                              current={currentReturn(page, {
+                                holder: selected.holder,
+                                statementId: selected.statementId,
+                              })}
                               correction={correction}
                               onNavigate={returnFocus}
                             />

@@ -93,9 +93,6 @@ export function musicReleaseLinkHref(href: string, current: MusicReleaseReturn):
 }
 
 /** Target links retain the selected Context and return through the existing Subject visit contract. */
-export function musicReleaseTargetHref(
-  target: { id: string; label: string },
-  current: MusicReleaseReturn,
-): string {
+export function musicReleaseTargetHref(target: { id: string; label: string }, current: MusicReleaseReturn): string {
   return musicReleaseLinkHref(subjectHref(target, current.locale).href, current);
 }

@@ -14,12 +14,23 @@ criticalPath: false
 after: []
 waiting: []
 acceptance:
-  command: [bun, scripts/worker-check.ts, --local, --, bun, test, apps/web/tests/music-release-reader-view.test.tsx, apps/web/tests/music-release-reader.test.ts, apps/web/tests/music-release-visit.test.tsx]
+  command:
+    [
+      bun,
+      scripts/worker-check.ts,
+      --local,
+      --,
+      bun,
+      test,
+      apps/web/tests/music-release-reader-view.test.tsx,
+      apps/web/tests/music-release-reader.test.ts,
+      apps/web/tests/music-release-visit.test.tsx,
+    ]
   placement: default
   tests:
     - "Choose and read two actual MusicMediums through their released release-membership and inspect each medium's recording/disc order."
   failing: true
-estimate: {lines: 720, files: 7}
+estimate: { lines: 720, files: 7 }
 ---
 
 Finish the part of the album-edition visit that requires actual MusicMedium identities. The retained Definition currently

@@ -84,58 +84,65 @@ export function MusicReleaseFacts({
                     const date = fact.kind === 'date' ? musicReleaseDate(statement, page.digest, locale) : undefined;
                     return (
                       <details key={statement.id} className="rounded-lg border border-border p-3">
-                        <summary className={`${action} cursor-pointer`}>{m.music_release_inspect_statement({}, o)}</summary>
+                        <summary className={`${action} cursor-pointer`}>
+                          {m.music_release_inspect_statement({}, o)}
+                        </summary>
                         <div className="space-y-2 pt-3">
-                        {date ? (
-                          <p data-date-kind={date.kind}>
-                            {date.kind === 'tba'
-                              ? m.release_fidelity_date_tba({}, o)
-                              : date.kind === 'none'
-                                ? m.release_fidelity_date_none({}, o)
-                                : date.kind === 'unknown'
-                                  ? m.subject_value_unknown({}, o)
-                                  : date.text}
-                          </p>
-                        ) : statement.property.data_type === 'wikibase-item' &&
-                          statement.value.type === 'value' &&
-                          typeof statement.value.content === 'string' &&
-                          !Object.values(page.public.related[statement.value.content]?.labels ?? {}).some(Boolean) ? (
-                          <p>{m.work_parts_unresolved({}, o)}</p>
-                        ) : (
-                          <CandidateValue snak={statement} related={page.public.related} locale={locale} link={Link} />
-                        )}
-                        {historicalStatement(statement, page.digest) ? (
-                          <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
-                        ) : null}
-                        <details className="rounded-lg border border-border p-3">
-                          <summary className={`${action} cursor-pointer`}>{m.sources_citations({}, o)}</summary>
-                          {[statement.qualifiers, ...statement.references.map((reference) => reference.parts)].map(
-                            (parts, group) => (
-                              <dl key={group} className="my-3 space-y-2">
-                                {parts.map((snak, index) => (
-                                  <div key={index}>
-                                    <dt lang={page.labels[snak.property.id]?.lang ?? undefined}>
-                                      {page.labels[snak.property.id]?.text || m.work_parts_unresolved({}, o)}
-                                    </dt>
-                                    <dd>{evidenceValue(snak)}</dd>
-                                  </div>
-                                ))}
-                              </dl>
-                            ),
+                          {date ? (
+                            <p data-date-kind={date.kind}>
+                              {date.kind === 'tba'
+                                ? m.release_fidelity_date_tba({}, o)
+                                : date.kind === 'none'
+                                  ? m.release_fidelity_date_none({}, o)
+                                  : date.kind === 'unknown'
+                                    ? m.subject_value_unknown({}, o)
+                                    : date.text}
+                            </p>
+                          ) : statement.property.data_type === 'wikibase-item' &&
+                            statement.value.type === 'value' &&
+                            typeof statement.value.content === 'string' &&
+                            !Object.values(page.public.related[statement.value.content]?.labels ?? {}).some(Boolean) ? (
+                            <p>{m.work_parts_unresolved({}, o)}</p>
+                          ) : (
+                            <CandidateValue
+                              snak={statement}
+                              related={page.public.related}
+                              locale={locale}
+                              link={Link}
+                            />
                           )}
-                          <p className="text-sm">
-                            {statement.id} · {statement.rank} · {statement.rezics.release}
-                          </p>
-                          <ValueExplanationEntry
-                            id={page.identity.id}
-                            title={page.identity.label.text}
-                            statement={statement.id}
-                            property={statement.property.id}
-                            context={current.address.context}
-                            locale={locale}
-                            returnTo={returnTo}
-                          />
-                        </details>
+                          {historicalStatement(statement, page.digest) ? (
+                            <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
+                          ) : null}
+                          <details className="rounded-lg border border-border p-3">
+                            <summary className={`${action} cursor-pointer`}>{m.sources_citations({}, o)}</summary>
+                            {[statement.qualifiers, ...statement.references.map((reference) => reference.parts)].map(
+                              (parts, group) => (
+                                <dl key={group} className="my-3 space-y-2">
+                                  {parts.map((snak, index) => (
+                                    <div key={index}>
+                                      <dt lang={page.labels[snak.property.id]?.lang ?? undefined}>
+                                        {page.labels[snak.property.id]?.text || m.work_parts_unresolved({}, o)}
+                                      </dt>
+                                      <dd>{evidenceValue(snak)}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              ),
+                            )}
+                            <p className="text-sm">
+                              {statement.id} · {statement.rank} · {statement.rezics.release}
+                            </p>
+                            <ValueExplanationEntry
+                              id={page.identity.id}
+                              title={page.identity.label.text}
+                              statement={statement.id}
+                              property={statement.property.id}
+                              context={current.address.context}
+                              locale={locale}
+                              returnTo={returnTo}
+                            />
+                          </details>
                         </div>
                       </details>
                     );
@@ -385,7 +392,7 @@ export function MusicReleaseOccurrenceFacts({
           </section>
           <ValueExplanationEntry
             id={row.holder}
-            title={row.holder === page.identity.id ? page.identity.label.text : summary?.label?.value ?? ''}
+            title={row.holder === page.identity.id ? page.identity.label.text : (summary?.label?.value ?? '')}
             statement={row.statementId}
             property={statement.property.id}
             context={current.address.context}

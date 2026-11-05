@@ -335,9 +335,7 @@ export async function readMusicRelease(
       ([property, descriptor]) =>
         admittedProperty(release, current.data.subject.type, property) &&
         descriptor.relation &&
-        descriptor.targets?.some(
-          (target) => !!release.types[target] && isA(release, target, 'rezics:MusicMedium'),
-        ),
+        descriptor.targets?.some((target) => !!release.types[target] && isA(release, target, 'rezics:MusicMedium')),
     );
     const unreleasedGrains = admitted
       ? !release.types['rezics:MusicMedium']
@@ -454,14 +452,7 @@ export async function readMusicRelease(
     }
     const types = Object.fromEntries(
       rows.flatMap((row) =>
-        row.summary
-          ? [
-              [
-                row.summary.type,
-                pickText(release.types[row.summary.type]?.labels ?? {}, locale),
-              ],
-            ]
-          : [],
+        row.summary ? [[row.summary.type, pickText(release.types[row.summary.type]?.labels ?? {}, locale)]] : [],
       ),
     );
     return {

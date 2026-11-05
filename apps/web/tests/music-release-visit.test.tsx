@@ -3,7 +3,12 @@ import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
-import { musicReleaseExample, musicAddress, recordingId, releaseId } from '../src/features/catalogue/music-release-reader/examples';
+import {
+  musicReleaseExample,
+  musicAddress,
+  recordingId,
+  releaseId,
+} from '../src/features/catalogue/music-release-reader/examples';
 import type { MusicReleaseAddress } from '../src/features/catalogue/music-release-reader/model';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));

@@ -667,13 +667,16 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
           (musicStream !== null && (!musicStream || musicStream.length > 256)) ||
           (musicStream !== null && /[\u0000-\u001f\u007f]/u.test(musicStream)) ||
           (musicCursor !== null &&
-            (!musicStream || !musicCursor || musicCursor.length > 4096 || /[\u0000-\u001f\u007f]/u.test(musicCursor))) ||
+            (!musicStream ||
+              !musicCursor ||
+              musicCursor.length > 4096 ||
+              /[\u0000-\u001f\u007f]/u.test(musicCursor))) ||
           !musicRevision ||
           !/^\d{1,16}$/u.test(musicRevision) ||
           !Number.isSafeInteger(Number(musicRevision)) ||
           !musicDigest ||
           !boundedToken(musicDigest, 128) ||
-          ((musicHolder === null) !== (musicStatement === null)) ||
+          (musicHolder === null) !== (musicStatement === null) ||
           (musicHolder !== null && !new RegExp(`^${uuid}$`, 'i').test(musicHolder)) ||
           (musicStatement !== null && !new RegExp(`^${uuid}$`, 'i').test(musicStatement)))) ||
       (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||

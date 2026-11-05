@@ -92,11 +92,7 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
         'lead vocals',
       ),
       [albumId]: summary(albumId, 'schema:MusicAlbum', 'Harbour sessions'),
-      '00000000-0000-4000-8000-00000000b305': summary(
-        '00000000-0000-4000-8000-00000000b305',
-        'schema:Place',
-        'Japan',
-      ),
+      '00000000-0000-4000-8000-00000000b305': summary('00000000-0000-4000-8000-00000000b305', 'schema:Place', 'Japan'),
     },
   };
   const assertion = (n: number, property: string, target: string, position: string): Statement => ({
@@ -141,8 +137,7 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
               statement: assertion(6, 'schema:track', recordingId, '1'),
               target: recordingId,
               external: null,
-              summary:
-                scenario === 'concealed' ? null : summary(recordingId, 'schema:MusicRecording', 'Harbour'),
+              summary: scenario === 'concealed' ? null : summary(recordingId, 'schema:MusicRecording', 'Harbour'),
               related: {
                 '00000000-0000-4000-8000-00000000b309': summary(
                   '00000000-0000-4000-8000-00000000b309',
