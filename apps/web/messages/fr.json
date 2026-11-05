@@ -6569,6 +6569,8 @@
   "library_progress_history_reader_units_page_empty": "Aucune unité terminée sur cette page.",
   "library_dynamic_page_reader_empty": "Aucun élément sur cette page.",
   "library_dynamic_page_reader_first_page": "Première page des éléments",
+  "library_dynamic_page_reader_previous": "Page précédente des éléments",
+  "library_dynamic_page_reader_continue": "Continuer vers la page suivante",
   "space_setup_details_heading": "En savoir plus sur la configuration",
   "space_setup_details_name_unavailable": "Nom indisponible",
   "moderation_controls_details_summary": "Filtres sélectionnés : {status} ; {kind} ; {order}.",

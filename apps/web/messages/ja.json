@@ -6572,6 +6572,8 @@
   "library_progress_history_reader_units_page_empty": "このページに完了した単位はありません。",
   "library_dynamic_page_reader_empty": "このページには項目がありません。",
   "library_dynamic_page_reader_first_page": "項目の最初のページ",
+  "library_dynamic_page_reader_previous": "前の項目ページ",
+  "library_dynamic_page_reader_continue": "次のページへ進む",
   "space_setup_details_heading": "セットアップについて",
   "space_setup_details_name_unavailable": "名前を取得できません",
   "moderation_controls_details_summary": "選択中の絞り込み：{status}、{kind}、{order}。",

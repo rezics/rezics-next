@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import type { DynamicMembersResult } from '../src/library/collection-load';
 import type { DynamicCollectionPage as Page } from '../src/library/dynamic-collection';
+import { savedQueryResultsAddress } from '../src/library/saved-query-results';
 import { m } from '../src/paraglide/messages.js';
 
 // UNRUN: actual page and shared feedback/member components; native, browser and Storybook
@@ -94,7 +95,12 @@ async function mount(locale: Parameters<typeof setLocale>[0] = 'en') {
   return {
     host,
     read,
-    async render(data: Page, search?: Search, reader?: (id: string, cursor?: string) => Promise<DynamicMembersResult>) {
+    async render(
+      data: Page,
+      search?: Search,
+      reader?: (id: string, cursor?: string) => Promise<DynamicMembersResult>,
+      options: Pick<Parameters<typeof DynamicCollectionPage>[0], 'windowNavigation' | 'layout' | 'returnTo'> = {},
+    ) {
       await act(async () => {
         root.render(
           <QueryClientProvider client={client}>
@@ -103,6 +109,7 @@ async function mount(locale: Parameters<typeof setLocale>[0] = 'en') {
                 page={data}
                 {...(search ? { search } : {})}
                 {...(reader ? { readMembers: reader } : !data.preparing ? { readMembers: read } : {})}
+                {...options}
               />
             </RouterContextProvider>
           </QueryClientProvider>,
@@ -236,6 +243,78 @@ test('First members page removes only cursor from the admitted protocol; Next ca
       `/fr/collections/${encodeURIComponent(data.id)}`,
     );
     expect(h.read).not.toHaveBeenCalled();
+  } finally {
+    await h.close();
+  }
+});
+
+test('Saved-query windows expose exact Previous, First and Continue addresses and keep terminal empty pages reversible', async () => {
+  const h = await mount('fr');
+  const navigations: Array<{ from: string | undefined; target: string | undefined; movement: string }> = [];
+  const windowNavigation: NonNullable<Parameters<typeof DynamicCollectionPage>[0]['windowNavigation']> = {
+    view: (current) => ({
+      current: current.cursor,
+      isCurrent: true,
+      previous: 'previous/+==',
+      hasPrevious: true,
+      pendingTarget: false,
+      failedTarget: false,
+    }),
+    move: (current, target, movement) => {
+      navigations.push({ from: current.cursor, target, movement });
+      return true;
+    },
+    admit: () => ({ changed: false }),
+    fail: () => false,
+    retireReplacement: () => undefined,
+  };
+  const search: Search = { type: 'schema:Book', 'f.schema:keywords': ['concept-b', 'concept-a'] };
+  const returnTo = '/fr/library/collections?cursor=directory%2B%2F%3D%3D';
+  const saved = page({
+    builtinKind: undefined,
+    cursor,
+    next,
+    members: [subject('book/二', 'Livre')],
+  });
+  try {
+    await h.render(saved, search, undefined, { windowNavigation, layout: 'grid', returnTo });
+    const nav = memberNavigation(h.host)!;
+    const previous = link(nav, m.library_dynamic_page_reader_previous());
+    const first = link(nav, m.library_dynamic_page_reader_first_page());
+    const more = link(nav, m.library_dynamic_page_reader_continue());
+    expect(previous.getAttribute('href')).toBe(
+      savedQueryResultsAddress('fr', saved.id, 'previous/+==', search, { layout: 'grid', returnTo }),
+    );
+    expect(first.getAttribute('href')).toBe(
+      savedQueryResultsAddress('fr', saved.id, undefined, search, { layout: 'grid', returnTo }),
+    );
+    expect(more.getAttribute('href')).toBe(
+      savedQueryResultsAddress('fr', saved.id, next, search, { layout: 'grid', returnTo }),
+    );
+    expect(nav.className).toContain('flex-wrap');
+    for (const anchor of [previous, first, more]) {
+      expect(anchor.className).toContain('min-h-11');
+      expect(anchor.className).toContain('break-words');
+      anchor.click();
+    }
+    expect(navigations).toEqual([
+      { from: cursor, target: 'previous/+==', movement: 'previous' },
+      { from: cursor, target: undefined, movement: 'first' },
+      { from: cursor, target: next, movement: 'continue' },
+    ]);
+    expect(h.host.querySelector('[data-collection-members] a')?.getAttribute('href')).toBe('/fr/subjects/book%2F%E4%BA%8C/livre');
+    expect(h.read).not.toHaveBeenCalled();
+
+    await h.render(page({ builtinKind: undefined, cursor: 'terminal', members: [], next: null }), search, undefined, {
+      windowNavigation,
+      layout: 'grid',
+      returnTo,
+    });
+    const terminal = memberNavigation(h.host)!;
+    expect(h.host.textContent).toContain(m.library_dynamic_page_reader_empty());
+    expect(link(terminal, m.library_dynamic_page_reader_previous())).toBeDefined();
+    expect(link(terminal, m.library_dynamic_page_reader_first_page())).toBeDefined();
+    expect(terminal.textContent).not.toContain(m.library_dynamic_page_reader_continue());
   } finally {
     await h.close();
   }

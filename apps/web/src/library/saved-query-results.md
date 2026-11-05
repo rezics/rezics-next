@@ -37,6 +37,7 @@ complete permitted set. Management owns metadata/delete; Commerce owns execution
 and lifecycle. Bind `collections({id}).$publishSelected.post` when generated; an absent runtime stays unavailable.
 
 Decision: reuse the installed Dynamic Collection reader and members GET; do not fork a second members runtime.
+Decision: keep result traversal in an in-memory QueryClient visit with eight admitted predecessor cursors, the current cursor and at most one staged destination; commit a move only after its exact composed page is ready.
 Decision: previously published membership is inspectable only from a verified complete `publishSelected` response in
 the current owner lifetime, or from an exact complete `publication` object on the Collection DTO when Commerce adds
 it. Absence is unavailable, never an empty public set.
@@ -63,6 +64,22 @@ unsupported-filter, stale-cursor, denied and platform-closed outcomes replace th
 results retire the prior shell and its controls. Thrown reads clear former members and remain explicitly retryable.
 The route keeps prepared authentication and exact request provenance, including the opaque cursor and original
 filter address. Native cursor rejection alone deliberately restarts the first page.
+
+Within one eligible Router/QueryClient visit, Continue stages the native next cursor and Previous stages the most
+recent admitted predecessor. First stages the cursorless page while keeping the supported filter/sort address. The
+destination commits only after its current composed result is admitted, including a genuine empty page; preparing,
+unavailable, rejected-filter and anonymous-loader results cannot commit a private move. Failed targets remain staged
+for explicit retry. Native stale-cursor recovery retires the old predecessors and starts a new first-page path.
+Public and session readings, current admission, locale, Collection definition revision, filter release and disclosure
+scope the coordinates. A direct later cursor has no inferred predecessor; full document returns start without saved
+history.
+
+The finite Web retention is at most eight predecessor cursors plus current and one staged target: ten cursor strings
+at most, each bounded by the route's 4096-character limit (40,960 characters total). The current composed members
+reader requests at most 100 rows and replaces its one displayed page. Each destination uses the existing composed
+Collection read; an exact-target Retry repeats that destination read. If the result is preparing, existing member
+recovery permits at most three automatic reads followed by one explicit reload per cycle. These are coordinate and
+one-page bounds, not a response-byte claim. No count, prefetch, refill or page-chain replay is added.
 
 A production retry consumes the public composed page reader, replacing definition-bound filter controls, admitted
 predicate, release identity, row presentation and resource actions together. Every replacement retires old bulk and

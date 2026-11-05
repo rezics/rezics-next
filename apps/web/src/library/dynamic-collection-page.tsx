@@ -2,7 +2,7 @@ import { Cover } from '@rezics/ui/cover';
 import { coverSrc } from '../media/cover-src';
 import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
 import { CollectionFilteredStatus } from './bulk-filtered-status-view';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -30,6 +30,25 @@ import type { ManagedSavedQuery } from './saved-query-management/controller';
 import type { QueryKey } from '@tanstack/react-query';
 import type { RulePage } from './collection-rule-read';
 import { DynamicRuleResultsReview } from './dynamic-rule-review';
+import type {
+  ResultsCursor,
+  ResultsWindowFocusHandoff,
+  ResultsWindowMove,
+  ResultsWindowView,
+} from './saved-query-results-windows';
+
+type DynamicResultsWindowNavigation = {
+  view: (page: DynamicCollectionPageData) => ResultsWindowView;
+  move: (
+    page: DynamicCollectionPageData,
+    target: ResultsCursor,
+    movement: ResultsWindowMove,
+    source?: HTMLElement,
+  ) => boolean;
+  admit: (page: DynamicCollectionPageData) => { changed: boolean; focus?: ResultsWindowFocusHandoff };
+  fail: (page: DynamicCollectionPageData) => boolean;
+  retireReplacement: (next: DynamicCollectionPageData) => void;
+};
 
 type DynamicCollectionPageProps = {
   page: DynamicCollectionPageData;
@@ -41,6 +60,7 @@ type DynamicCollectionPageProps = {
   layout?: 'grid' | 'list' | undefined;
   viewerId?: string | null;
   readRule?: ((id: string) => Promise<RulePage>) | undefined;
+  windowNavigation?: DynamicResultsWindowNavigation | undefined;
 };
 
 export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
@@ -58,8 +78,11 @@ export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
     origin: navigation.pinsOrigin,
   });
   // A newly observed loader object starts a page before any of its children render, even at the same URL.
-  if (source.page !== props.page || source.identity !== identity)
+  if (source.page !== props.page || source.identity !== identity) {
+    if (source.page !== props.page && source.identity === identity)
+      props.windowNavigation?.retireReplacement(props.page);
     setSource({ page: props.page, identity, lifetime: source.lifetime + 1 });
+  }
   return (
     <DynamicCollectionPageLifetime
       key={source.lifetime}
@@ -100,7 +123,9 @@ function DynamicCollectionPageLifetime({
   const [explicitRetry, setExplicitRetry] = useState(false);
   const retryButton = useRef<HTMLButtonElement>(null);
   const resultNotice = useRef<HTMLParagraphElement>(null);
+  const resultsHeading = useRef<HTMLHeadingElement>(null);
   const focusResult = useRef(false);
+  const [windowObservation, setWindowObservation] = useState(0);
   const ruleRead = useOperation('collection.get');
   const ruleUpdate = useOperation('collection.update');
   // The route's reader closes over the originating filter; callback churn must not retarget a timer.
@@ -202,6 +227,40 @@ function DynamicCollectionPageLifetime({
   const incompleteFilter = (current.filterIgnored?.length ?? 0) > 0;
   const membersReady = !current.preparing && !current.unavailable && !current.filterStatus && !incompleteFilter;
   const laterPage = current.cursor !== undefined;
+  const windows = props.windowNavigation?.view(current);
+  useLayoutEffect(() => {
+    if (!props.windowNavigation) return;
+    if (membersReady) {
+      const admitted = props.windowNavigation.admit(current);
+      if (admitted.changed) setWindowObservation((value) => value + 1);
+      if (admitted.focus?.keyboard && admitted.focus.eligible()) resultsHeading.current?.focus();
+    } else if (
+      current.unavailable ||
+      current.filterStatus === 'unsupported' ||
+      current.filterStatus === 'failed' ||
+      incompleteFilter
+    ) {
+      if (props.windowNavigation.fail(current)) setWindowObservation((value) => value + 1);
+    }
+  }, [current, membersReady, incompleteFilter, props.windowNavigation, windowObservation]);
+  function activateWindow(
+    event: MouseEvent<HTMLAnchorElement>,
+    target: ResultsCursor,
+    movement: ResultsWindowMove,
+  ) {
+    if (
+      !props.windowNavigation ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    if (props.windowNavigation.move(current, target, movement, event.detail === 0 ? event.currentTarget : undefined))
+      event.preventDefault();
+  }
   async function copyLink(href: string) {
     if (!active.current) return;
     setCopyFailure(false);
@@ -242,7 +301,7 @@ function DynamicCollectionPageLifetime({
                   decorative
                 />
               </div>
-              <PageHeading>{current.title}</PageHeading>
+              <PageHeading ref={resultsHeading} tabIndex={-1}>{current.title}</PageHeading>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <PinControlView control={pinActions} />
@@ -449,11 +508,24 @@ function DynamicCollectionPageLifetime({
             </button>
           </div>
         ) : null}
-        {membersReady && (laterPage || current.next) ? (
+        {membersReady && (laterPage || current.next || windows?.hasPrevious) ? (
           <nav aria-label={m.library_collection_members()} className="flex min-w-0 flex-wrap gap-2">
+            {windows?.hasPrevious ? (
+              <a
+                href={savedQueryResultsAddress(locale, current.id, windows.previous, search, {
+                  layout,
+                  returnTo,
+                })}
+                onClick={(event) => activateWindow(event, windows.previous, 'previous')}
+                className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                {m.library_dynamic_page_reader_previous()}
+              </a>
+            ) : null}
             {laterPage ? (
               <a
                 href={firstPageHref}
+                onClick={(event) => activateWindow(event, undefined, 'first')}
                 className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 {m.library_dynamic_page_reader_first_page()}
@@ -462,9 +534,10 @@ function DynamicCollectionPageLifetime({
             {current.next ? (
               <a
                 href={savedQueryResultsAddress(locale, current.id, current.next, search, { layout, returnTo })}
+                onClick={(event) => activateWindow(event, current.next!, 'continue')}
                 className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
               >
-                {m.library_collection_more()}
+                {saved ? m.library_dynamic_page_reader_continue() : m.library_collection_more()}
               </a>
             ) : null}
           </nav>
