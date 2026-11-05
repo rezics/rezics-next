@@ -325,8 +325,23 @@ test('Live-sized settled history does not require decoding all task/attempt JSON
   const { db, path, store } = database('history.sqlite');
   const insertTaskRow = db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
   const insertAttemptRow = db.query('INSERT INTO worker_attempts(task_id, attempt, body) VALUES (?, ?, ?)');
+  const insertSettledEvent = db.query(
+    'INSERT INTO worker_events(task_id, attempt, kind, at, body) VALUES (?, ?, ?, ?, ?)',
+  );
+  const insertSettledFlow = db.query(
+    'INSERT INTO flow_events(task_id, attempt, stage, action, at) VALUES (?, ?, ?, ?, ?)',
+  );
   const taskPayload = 't'.repeat(7_500);
   const attemptPayload = 'a'.repeat(8_000);
+  const now = new Date('2026-10-30T12:05:00.000Z');
+  const conflictBaseline = lifecycleMetrics(db, now).conflicts;
+  const settledAt = '2026-10-29T12:00:00.000Z';
+  const settledConflict = JSON.stringify({
+    passed: false,
+    stage: 'rebase',
+    rebaseConflict: { targetHead: 'a'.repeat(40), workerCommit: 'b'.repeat(40), paths: ['source.ts'] },
+  });
+  const settledBaseline = JSON.stringify({ workerCommit: 'b'.repeat(40), controllerHead: 'c'.repeat(40) });
   db.transaction(() => {
     for (let i = 0; i < 3_000; i++) {
       const id = `settled-${i}`;
@@ -344,6 +359,9 @@ test('Live-sized settled history does not require decoding all task/attempt JSON
           payload: taskPayload,
         }),
       );
+      insertSettledEvent.run(id, 1, 'gate-outcome', settledAt, settledConflict);
+      insertSettledEvent.run(id, 2, 'worker-source-baseline', settledAt, settledBaseline);
+      insertSettledFlow.run(id, 2, 'integration', 'integrated', settledAt);
       for (let attempt = 1; attempt <= 1; attempt++)
         insertAttemptRow.run(
           id,
@@ -363,8 +381,8 @@ test('Live-sized settled history does not require decoding all task/attempt JSON
   }).immediate();
 
   store.resetDecodedRows();
-  const now = new Date('2026-10-30T12:05:00.000Z');
   const metrics = lifecycleMetrics(db, now);
+  expect(metrics.conflicts).toEqual(conflictBaseline);
   expect(flowReport(readFlow(db), readFlowTasks(db), now.getTime()).tasks).toHaveLength(3_000);
   expect(store.decodedRows()).toEqual({ tasks: 0, attempts: 0 });
   expect(store.decodedBytes()).toEqual({ tasks: 0, attempts: 0 });

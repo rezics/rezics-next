@@ -475,47 +475,101 @@ function conflictMetrics(db: Database, start: string, end: string, limit: number
   // These reader-owned indexes are installed only when the optional source exists, not by a cross-module migration.
   // Window reads must not repeatedly parse settled event/attempt history on host sweeps.
   db.exec('CREATE INDEX IF NOT EXISTS lifecycle_metrics_event_window ON worker_events(kind, at, sequence)');
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS lifecycle_metrics_event_identity ON worker_events(task_id, attempt, kind, sequence)',
+  );
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS lifecycle_metrics_flow_integration ON flow_events(task_id, stage, action, at, attempt)',
+  );
 
-  // The sink accepts one outcome per task/attempt/stage. Re-delivery cannot move it into another hour or add a count.
-  // LIMIT bounds returned evidence even in a busy hour; incomplete counts are explicitly lower bounds.
+  const hasAttempts = hasColumns(db, 'worker_attempts', ['task_id', 'attempt', 'body']);
+  if (hasAttempts)
+    db.exec(`CREATE INDEX IF NOT EXISTS lifecycle_metrics_attempt_window
+      ON worker_attempts(json_extract(body, '$.startedAt'), task_id, attempt)`);
+
+  // Each source cohort is capped independently. Indexed identity seeks retain first-outcome attribution and
+  // project integration/baseline evidence in this one read instead of issuing lookups per returned row.
   // One extra row detects truncation without claiming the returned sample is complete.
+  const attemptProjection = hasAttempts
+    ? `,
+    attempt_window AS MATERIALIZED (
+      SELECT task_id, attempt, json_extract(body, '$.startedAt') AS started_at
+      FROM worker_attempts INDEXED BY lifecycle_metrics_attempt_window
+      WHERE json_extract(body, '$.startedAt') >= ? AND json_extract(body, '$.startedAt') <= ?
+      ORDER BY json_extract(body, '$.startedAt'), task_id, attempt LIMIT ?
+    ),
+    baseline_window AS (
+      SELECT a.task_id, a.attempt, a.started_at, e.sequence, e.body,
+             ROW_NUMBER() OVER (PARTITION BY a.task_id, a.attempt ORDER BY e.sequence) AS position
+      FROM attempt_window AS a
+      LEFT JOIN worker_events AS e INDEXED BY lifecycle_metrics_event_identity
+        ON e.task_id=a.task_id AND e.attempt=a.attempt AND e.kind='worker-source-baseline'
+          AND e.at >= a.started_at AND e.at <= ?
+    ),
+    attempt_projection AS (
+      SELECT 'attempt' AS source, task_id, attempt, started_at AS event_at,
+             NULL AS body, NULL AS related_at, body AS related_body
+      FROM baseline_window WHERE position=1
+    )`
+    : '';
+  const attemptUnion = hasAttempts ? 'UNION ALL SELECT * FROM attempt_projection' : '';
   const rows = db
     .query(`
-    SELECT e.task_id, e.attempt, e.at, e.body FROM worker_events AS e
-    WHERE e.kind='gate-outcome' AND e.at >= ? AND e.at <= ?
-      AND json_extract(CASE WHEN json_valid(e.body) THEN e.body ELSE '{}' END, '$.stage')='rebase'
-      AND NOT EXISTS (
-        SELECT 1 FROM worker_events AS previous
+    WITH outcome_window AS MATERIALIZED (
+      SELECT e.sequence, e.task_id, e.attempt, e.at, e.body
+      FROM worker_events AS e INDEXED BY lifecycle_metrics_event_window
+      WHERE e.kind='gate-outcome' AND e.at >= ? AND e.at <= ?
+        AND json_extract(CASE WHEN json_valid(e.body) THEN e.body ELSE '{}' END, '$.stage')='rebase'
+    ),
+    outcomes AS MATERIALIZED (
+      SELECT e.sequence, e.task_id, e.attempt, e.at, e.body
+      FROM outcome_window AS e
+      WHERE NOT EXISTS (
+        SELECT 1 FROM worker_events AS previous INDEXED BY lifecycle_metrics_event_identity
         WHERE previous.task_id=e.task_id AND previous.attempt=e.attempt
           AND previous.kind='gate-outcome' AND previous.sequence < e.sequence
           AND json_extract(CASE WHEN json_valid(previous.body) THEN previous.body ELSE '{}' END, '$.stage')='rebase'
       )
-    ORDER BY e.at, e.sequence LIMIT ?
+      ORDER BY e.at, e.sequence LIMIT ?
+    ),
+    outcome_projection AS (
+      SELECT 'outcome' AS source, o.task_id, o.attempt, o.at AS event_at, o.body,
+             MIN(f.at) AS related_at, NULL AS related_body
+      FROM outcomes AS o
+      LEFT JOIN flow_events AS f INDEXED BY lifecycle_metrics_flow_integration
+        ON f.task_id=o.task_id AND f.attempt >= o.attempt
+          AND f.stage='integration' AND f.action='integrated' AND f.at >= o.at AND f.at <= ?
+      GROUP BY o.sequence
+    )${attemptProjection}
+    SELECT * FROM outcome_projection ${attemptUnion}
   `)
-    .all(start, end, limit + 1) as { task_id: string; attempt: number; at: string; body: string }[];
+    .all(...(hasAttempts ? [start, end, limit + 1, end, start, end, limit + 1, end] : [start, end, limit + 1, end])) as {
+    source: 'outcome' | 'attempt';
+    task_id: string;
+    attempt: number;
+    event_at: string;
+    body: string | null;
+    related_at: string | null;
+    related_body: string | null;
+  }[];
+  const outcomes = rows.filter((row) => row.source === 'outcome');
   const durations: number[] = [];
   const openAges: number[] = [];
   let observedCount = 0;
   let unclassifiedCount = 0;
   let unknownTimingCount = 0;
   let unlandedCount = 0;
-  for (const row of rows.slice(0, limit)) {
-    const body = objectBody(row.body);
+  for (const row of outcomes.slice(0, limit)) {
+    const body = objectBody(row.body!);
     if (body.passed !== false || body.refusal || !completeRebaseConflictContext(body.rebaseConflict)) {
       unclassifiedCount++;
       continue;
     }
     observedCount++;
-    const landed = db
-      .query(`
-      SELECT MIN(at) AS at FROM flow_events
-      WHERE task_id=? AND attempt >= ? AND stage='integration' AND action='integrated' AND at >= ? AND at <= ?
-    `)
-      .get(row.task_id, row.attempt, row.at, end) as { at: string | null };
-    if (landed.at === null) unlandedCount++;
-    const elapsed = Date.parse(landed.at ?? end) - Date.parse(row.at);
+    if (row.related_at === null) unlandedCount++;
+    const elapsed = Date.parse(row.related_at ?? end) - Date.parse(row.event_at);
     // These are observation-clock durations, not the unsupported conflict-occurrence clock above.
-    if (Number.isFinite(elapsed) && elapsed >= 0) (landed.at === null ? openAges : durations).push(elapsed);
+    if (Number.isFinite(elapsed) && elapsed >= 0) (row.related_at === null ? openAges : durations).push(elapsed);
     else unknownTimingCount++;
   }
   durations.sort((a, b) => a - b);
@@ -523,7 +577,7 @@ function conflictMetrics(db: Database, start: string, end: string, limit: number
     durations.length ? durations[Math.ceil(durations.length * fraction) - 1]! : null;
   result.recordedOutcomes = {
     available: true,
-    complete: rows.length <= limit,
+    complete: outcomes.length <= limit,
     observedCount,
     unclassifiedCount,
     unknownTimingCount,
@@ -532,28 +586,14 @@ function conflictMetrics(db: Database, start: string, end: string, limit: number
     oldestUnlandedObservationAgeMs: openAges.length && openAges.length === unlandedCount ? Math.max(...openAges) : null,
   };
 
-  if (!hasColumns(db, 'worker_attempts', ['task_id', 'attempt', 'body'])) return result;
-  db.exec(`CREATE INDEX IF NOT EXISTS lifecycle_metrics_attempt_window
-    ON worker_attempts(json_extract(body, '$.startedAt'), task_id, attempt)`);
-  const attempts = db
-    .query(`
-    SELECT task_id, attempt, json_extract(body, '$.startedAt') AS started_at FROM worker_attempts
-    WHERE json_extract(body, '$.startedAt') >= ? AND json_extract(body, '$.startedAt') <= ?
-    ORDER BY json_extract(body, '$.startedAt'), task_id, attempt LIMIT ?
-  `)
-    .all(start, end, limit + 1) as { task_id: string; attempt: number; started_at: string }[];
+  if (!hasAttempts) return result;
+  const attempts = rows.filter((row) => row.source === 'attempt');
   let createdCount = 0;
   let unknownCauseCount = 0;
   for (const attempt of attempts.slice(0, limit)) {
     // Attempt.escalation is mutable: the attempt that encountered a conflict is also marked rebase-conflict.
     // Only the new retry receives worker-source-baseline, from the rebase-conflict branch in Tasks.retryTask.
-    const baseline = db
-      .query(`
-      SELECT body FROM worker_events WHERE task_id=? AND attempt=? AND kind='worker-source-baseline' AND at >= ? AND at <= ?
-      ORDER BY sequence LIMIT 1
-    `)
-      .get(attempt.task_id, attempt.attempt, attempt.started_at, end) as { body: string } | null;
-    if (baseline && completeWorkerSourceBaseline(objectBody(baseline.body))) {
+    if (attempt.related_body !== null && completeWorkerSourceBaseline(objectBody(attempt.related_body))) {
       createdCount++;
       continue;
     }
