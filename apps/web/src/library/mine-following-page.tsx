@@ -208,6 +208,7 @@ export function CurrentViewerMineFollowingPage({
   const [, setNavigationRevision] = useState(0);
   const navigation = useRef<FollowingWindowHistory>(emptyFollowingWindowHistory());
   const sourceTokens = useRef(new WeakMap<object, object>()).current;
+  const authorityEpoch = origin.epoch(0)!;
   const nextMovementId = useRef(0);
   const unsettledRemovals = useRef(new Set<string>());
   const directKindMovement = useRef<FollowingDirectKindMovement | null>(null);
@@ -222,7 +223,7 @@ export function CurrentViewerMineFollowingPage({
       source = {};
       sourceTokens.set(value, source);
     }
-    return { source, subject: value.subject!, locale, authorityEpoch: origin.epoch(0) };
+    return { source, subject: value.subject!, locale, authorityEpoch };
   };
   const candidate =
     !addressInvalid &&
@@ -238,14 +239,14 @@ export function CurrentViewerMineFollowingPage({
     currentNavigation = emptyFollowingWindowHistory();
     unsettledRemovals.current.clear();
   } else {
-    currentNavigation = reconcileFollowingAuthority(currentNavigation, origin.subject, locale, origin.epoch(0));
+    currentNavigation = reconcileFollowingAuthority(currentNavigation, origin.subject, locale, authorityEpoch);
     let direct = directKindMovement.current;
     if (
       addressInvalid ||
       read.data?.page.kindUnavailable ||
       read.data?.page.addressInvalid ||
       (direct &&
-        (direct.subject !== origin.subject || direct.locale !== locale || direct.authorityEpoch !== origin.epoch(0)))
+        (direct.subject !== origin.subject || direct.locale !== locale || direct.authorityEpoch !== authorityEpoch))
     ) {
       direct = null;
     } else if (direct) {
@@ -331,7 +332,7 @@ export function CurrentViewerMineFollowingPage({
         keyboard,
         subject: origin.subject,
         locale,
-        authorityEpoch: origin.epoch(0),
+        authorityEpoch,
       };
       setNavigationRevision((revision) => revision + 1);
       return true;
@@ -705,7 +706,7 @@ function MineFollowingPageState({
                         disabled={!!status}
                         idempotencyKey={follow.idempotencyKey}
                         menuTitle={m.library_follow_more_actions({ title: title.text })}
-                        onRemovalUnsettledChange={navigation?.removalChanged}
+                        {...(navigation ? { onRemovalUnsettledChange: navigation.removalChanged } : {})}
                         onReview={onReview ? () => onReview(follow.targetId) : undefined}
                         onRemoved={() => {
                           if (!origin.isCurrent()) return;
