@@ -1,8 +1,9 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { installManagedModuleMocks } from './fixtures/managed-module-mocks';
 
 // Paraglide reads the locale from the document URL only when a window exists before its runtime loads.
 const { Window } = await import(
@@ -23,8 +24,15 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+// Each file owns its globals while its tests run; test files load together in one process.
+const install = () => {
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+};
+install();
+// The shared module mocks load before the settings modules, so no cached import keeps a different environment.
+installManagedModuleMocks();
+beforeAll(install);
 const { failure, issuerPage, loadDetail, loadInventory, readCursors } = await import('../src/accounts/management/data');
 const { AccountManagementPage } = await import('../src/accounts/management/pages');
 const { inventoryExample, detailExample, organization, human, automation } = await import(

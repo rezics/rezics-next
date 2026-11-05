@@ -1,4 +1,4 @@
-import { expect, mock, spyOn, test } from 'bun:test';
+import { beforeAll, expect, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -10,19 +10,28 @@ import type {
   DetailSection,
   ManagementDetail,
 } from '../src/settings/managed-account-detail-read';
+import { installManagedModuleMocks } from './fixtures/managed-module-mocks';
 
-// The settings modules reach server-only imports; the mock must be installed before they load.
-mock.module('cloudflare:workers', () => ({ env: {} }));
-const { ManagedAccountDetailCard } = await import('../src/settings/managed-account-detail');
-const {
-  ManagedAccountReader,
-  detailFailure,
-  loadManagedAccountDetail,
-  managedAccountTarget,
-  managedAccountsBackHref,
-} = await import('../src/settings/managed-account-detail-read');
-const { m } = await import('../src/paraglide/messages.js');
-const { AnonymousSessionContext } = await import('../src/session/query');
+// The settings modules reach server-only imports; the mocks must be installed before they load. The shared react-start
+// shim keeps isomorphic session selection the same in every focused file that loads these modules.
+// Module mocks are process-wide: each file re-registers its own before its tests, after other files have loaded.
+const installMocks = () => installManagedModuleMocks();
+beforeAll(installMocks);
+let ManagedAccountDetailCard: (typeof import('../src/settings/managed-account-detail'))['ManagedAccountDetailCard'];
+let ManagedAccountReader: (typeof import('../src/settings/managed-account-detail-read'))['ManagedAccountReader'];
+let detailFailure: (typeof import('../src/settings/managed-account-detail-read'))['detailFailure'];
+let loadManagedAccountDetail: (typeof import('../src/settings/managed-account-detail-read'))['loadManagedAccountDetail'];
+let managedAccountTarget: (typeof import('../src/settings/managed-account-detail-read'))['managedAccountTarget'];
+let managedAccountsBackHref: (typeof import('../src/settings/managed-account-detail-read'))['managedAccountsBackHref'];
+let m: (typeof import('../src/paraglide/messages.js'))['m'];
+let AnonymousSessionContext: (typeof import('../src/session/query'))['AnonymousSessionContext'];
+beforeAll(async () => {
+  installMocks();
+  ({ ManagedAccountDetailCard } = await import('../src/settings/managed-account-detail'));
+  ({ ManagedAccountReader, detailFailure, loadManagedAccountDetail, managedAccountTarget, managedAccountsBackHref } = await import('../src/settings/managed-account-detail-read'));
+  ({ m } = await import('../src/paraglide/messages.js'));
+  ({ AnonymousSessionContext } = await import('../src/session/query'));
+});
 
 const viewerId = '019a0000-0000-7000-8000-000000000001';
 const accountId = '019a0000-0000-7000-8000-000000000002';
