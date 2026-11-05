@@ -924,3 +924,28 @@ test('a native section restart clears only its predecessors; replacement retires
     await h.close();
   }
 });
+
+test('equal route replacement retires a staged read and its predecessor coordinates', async () => {
+  const h = await mount(detail(), false, viewer(), true);
+  try {
+    const changes = () => within(h.body.getByRole('region', { name: m.library_progress_changes(), exact: true }));
+    await act(async () =>
+      userEvent.setup({ document }).click(changes().getByRole('link', { name: m.library_progress_more() })),
+    );
+    const late = h.reads.at(-1)!;
+    await act(async () =>
+      h.router.navigate({
+        to: '/library/progress/$id',
+        params: { id: address.id },
+        search: h.router.state.location.search,
+        replace: true,
+      }),
+    );
+    await settle(() => late.work.resolve(detail('A', late.data)));
+    expect(h.host.textContent).not.toContain('A:history');
+    await h.resolveRead(detail('A', h.reads.at(-1)!.data));
+    expect(changes().queryByRole('link', { name: m.library_window_previous() })).toBeNull();
+  } finally {
+    await h.close();
+  }
+});
