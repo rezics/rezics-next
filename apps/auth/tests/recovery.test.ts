@@ -33,6 +33,7 @@ type Call = {
 const calls: Call[] = [];
 let startStatus: 200 | 400 | 429 | 503 = 200;
 let completeStatus: 200 | 400 | 401 | 429 | 503 = 200;
+let completeBodyOverride: string | undefined;
 let signInStatus: 200 | 401 | 429 | 503 = 200;
 
 // Copied from apps/auth/tests/login.test.ts's fake Auth and reduced to the browser HTTP contract.
@@ -91,7 +92,8 @@ const fake = Bun.serve({
     }
 
     if (url.pathname === '/recovery/complete' && request.method === 'POST') {
-      if (completeStatus === 200) return Response.json({ success: true }, { headers });
+      if (completeStatus === 200)
+        return new Response(completeBodyOverride ?? '{"success":true}', { status: 200, headers });
       if (completeStatus === 429) headers.set('retry-after', String(retryAfter));
       const code =
         completeStatus === 400
@@ -444,6 +446,50 @@ test(
       expect(document).not.toContain(token);
       expect(document).not.toContain(encodeURIComponent(token));
     } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'malformed completion acknowledgements retain exact unknown input through refusal until native success',
+  async () => {
+    completeStatus = 200;
+    completeBodyOverride = '{"success":true,"extra":true}';
+    calls.length = 0;
+    const { page, origin } = await open(
+      `/recovery#account_id=${encodeURIComponent(accountId)}&token=${encodeURIComponent(token)}`,
+    );
+    const expected = { account_id: accountId, token, new_password: newPassword };
+    const retry = page.getByRole('button', { name: 'Retry original submission', exact: true });
+    try {
+      await sendComplete(page);
+      expect(page.url()).toBe(`${origin}/recovery`);
+      expect(await page.getByRole('alert').innerText()).toMatch(/unknown|may have changed/i);
+      expect(await page.evaluate(() => sessionStorage.getItem('auth.recovery.complete'))).toBeNull();
+      expect(recoveryCalls('complete')).toHaveLength(1);
+
+      completeStatus = 401;
+      completeBodyOverride = undefined;
+      await Promise.all([
+        page.waitForResponse((response) => new URL(response.url()).pathname === '/recovery/complete'),
+        retry.click(),
+      ]);
+      expect(await page.getByRole('alert').innerText()).toMatch(/unknown|may have changed/i);
+      expect(recoveryCalls('complete')).toHaveLength(2);
+
+      completeStatus = 200;
+      completeBodyOverride = '{"success":true}';
+      await Promise.all([
+        page.waitForResponse((response) => new URL(response.url()).pathname === '/recovery/complete'),
+        retry.click(),
+      ]);
+      await page.waitForURL(`${origin}/login`);
+      expect(recoveryCalls('complete')).toHaveLength(3);
+      expect(recoveryCalls('complete').map((call) => JSON.parse(call.body))).toEqual([expected, expected, expected]);
+    } finally {
+      completeBodyOverride = undefined;
       await page.context().close();
     }
   },

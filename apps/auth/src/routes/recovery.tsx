@@ -15,10 +15,17 @@ import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from '
 import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
-import { authPost, failureMessage, RECOVERY_COMPLETE_NOTICE_KEY } from '../api';
+import { failureMessage, RECOVERY_COMPLETE_NOTICE_KEY } from '../api';
 import { ErrorAlert } from '../alert';
 import { RecoveryAttempt, useRecoveryAttempt } from '../recovery-attempt';
-import { definitiveRecoveryRefusal, recoveryFailure, recoverySubmission, type RecoverySubmission } from '../recovery';
+import {
+  completeRecovery,
+  definitiveRecoveryRefusal,
+  recoveryFailure,
+  recoverySubmission,
+  startRecovery,
+  type RecoverySubmission,
+} from '../recovery';
 import { useRecoveryPage } from '../recovery-page';
 import { hasRecoveryHistory, unresolvedRecoveryHistory } from '../recovery-return';
 import { RecoveryHistory, RecoveryReturnView } from '../recovery-return-view';
@@ -204,7 +211,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     setPending(true);
     setNotice('');
     setMessage('');
-    const result = await authPost('/recovery/start', { email: email.trim() });
+    const result = await startRecovery({ email: email.trim() });
     if (!finish()) return;
     settle(result);
     // An unavailable acknowledgement may still have sent mail. A later refusal
@@ -221,7 +228,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
       return;
     }
     setMessage(
-      uncertain ? m.auth_recovery_start_unknown() : failureMessage(result.status, result.code, result.retryAfter),
+      uncertain ? m.auth_recovery_start_unknown() : recoveryFailure(result, 'start'),
     );
   }
 
@@ -251,7 +258,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     unresolved.current = true;
     setPending(true);
     setMessage('');
-    const result = await authPost('/recovery/complete', original);
+    const result = await completeRecovery(original);
     if (!finish()) return;
     settle(result);
     unsent.current = false;
