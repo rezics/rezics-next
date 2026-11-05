@@ -433,6 +433,8 @@ Importer prepares source records and candidate commands through its bounded APIs
 
 Decision: reviewed Person merges remain bound to the generated asynchronous admission contract. A paired original-identity read only prepares explicit confirmation; HTTP 202 admission starts separate publication and current public readback. A synchronous HTTP 200 merge result or an application-side reread cannot stand in for that boundary, so dependent credits stay withheld until current identity and independent reads establish publication.
 
+Generate and bind the producer's read, query, merge and error types together when its asynchronous admission and independent publication routes are available. Until then, retain the original source bindings and sealed records; do not simulate the missing admission with a local response type or treat a synchronous merge as publication.
+
 ## Selected source acquisition and publication
 
 Development dump acquisition fixes VNDB to the November 4 archive, SHA-256 and TIMESTAMP documented in
