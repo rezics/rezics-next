@@ -2019,7 +2019,7 @@ export function createVndbImport(config: Config) {
           id: score.question.id,
           revision: score.question.revision,
           grain: score.question.grain,
-          meaning: score.question.meaning!,
+          meaning: score.question.meaning ?? score.question.label,
           scale: {
             min: score.question.scale.min,
             max: score.question.scale.max,

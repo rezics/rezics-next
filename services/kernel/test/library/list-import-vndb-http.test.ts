@@ -457,12 +457,17 @@ test('VNDB score review admits the released standard question when meaning is nu
   await f.pool.query('UPDATE rating.question SET meaning=NULL WHERE id=$1', [STANDARD_QUESTION_ID]);
   try {
     const { uploadId } = await c.importUpload(xml(vn(`v${Date.now()}9`, '<vote>7.5</vote>')));
-    expect(await c.scoreReview(uploadId, 15)).toMatchObject({
+    const chosen = await c.scoreReview(uploadId, 15);
+    expect(chosen).toMatchObject({
       status: 'reviewed',
       units: 15,
       question: { meaning: null },
       nativeAdmission: 'conditional',
     });
+    expect(
+      (await c.send('POST', `${base}/${uploadId}:apply`, { rows: [{ ordinal: 0, scoreReviewId: chosen.reviewId }] }))
+        .outcomes[0],
+    ).toMatchObject({ status: 'applied', currentVote: { state: 'set', units: 15 } });
   } finally {
     await f.pool.query('UPDATE rating.question SET meaning=$2 WHERE id=$1', [STANDARD_QUESTION_ID, prior]);
   }
