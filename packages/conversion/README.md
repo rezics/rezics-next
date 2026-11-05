@@ -762,12 +762,22 @@ or double-index exactness.
 
 ## Covers, candidate identity, and trust boundaries
 
+`cross-media-entities@12` also maps admitted Bangumi Person and Organization
+images through the existing cover intent. The importer supplies only a
+validated `PersonDetail.images.large` URL for the exact `person:<id>` record;
+the converter preserves the record's archive-selected native type and omits
+Organization `wdt:P6298` as before.
+
 Bangumi and Open Library return `coverAssets` as deferred source assets without
 a `containerId` when there is no bound subject. Once `subjectId` is known,
 `mediaImportIntents` contain complete validated requests with that container.
 An actual available media UUID can then be supplied in `context.mediaIds`, keyed
 by the exact `sourceUrl`, to receive a `schema:image` proposal. The converter
 never publishes a source hotlink, downloads bytes, or relays an image.
+
+For selected Bangumi people and organizations, only a nonempty
+`PersonDetail.images.large` URL is importable; missing, null, or blank `large`
+is absent, with no fallback size or image redirect.
 
 Each cover request has structured `rightsHolder`, `via`, and
 `LicenseRef-unknown` credit plus cover-group source provenance and references.

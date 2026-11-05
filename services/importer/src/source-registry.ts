@@ -317,8 +317,8 @@ export function createSourceRegistration(
           const base: ImportConversion<SourceAssets> = {
             ...entity,
             normalized: entity.normalizedRecord,
-            coverAssets: [],
-            mediaImportIntents: [],
+            coverAssets: [...entity.coverAssets],
+            mediaImportIntents: [...entity.mediaImportIntents],
           };
           if (!context.sourceVocabulary) return base;
           const vocabulary = sourceVocabularyResult(entity, source, sourceKind, context.sourceVocabulary, context);

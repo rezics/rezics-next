@@ -324,6 +324,8 @@ export type CrossMediaPlan = {
   characterAppearances?: BangumiCharacterAppearance[];
   /** Actual selected type-4 Game appearances, kept separate from anime. */
   gameCharacterAppearances?: BangumiCharacterAppearance[];
+  /** Exact Bangumi person identities admitted by the finite selected-family people cap. */
+  creatorImageKeys?: readonly string[];
   gaps: CrossMediaGap[];
   relationScope: string[];
   relationSnapshotDigest: string;
@@ -336,6 +338,8 @@ export type CrossMediaPlan = {
   /** Exact API receipts for careers and PersonDetail dates read from selected Bangumi Person records. */
   personCareerSources?: readonly BangumiPersonCareerSource[];
   personSources?: readonly BangumiPersonCareerSource[];
+  /** Exact API receipts for selected creator images acquired from PersonDetail. */
+  creatorImageSources?: readonly BangumiCoverSource[];
 };
 const VNDB_EXPECTED_HEADERS: Readonly<Record<string, string>> = {
   chars:
@@ -1847,6 +1851,10 @@ export async function planCrossMediaSeed(
       );
       if (provider === 'bangumi') plan.credits = plan.credits.filter((row) => !omitted.has(row.person));
     }
+    plan.creatorImageKeys = plan.entities.bangumi
+      .filter((row) => /^person:[1-9][0-9]*$/u.test(row.key))
+      .map((row) => row.key);
+    ensure(plan.creatorImageKeys.length <= SHOWCASE_PEOPLE_PER_PROVIDER, 'Selected Bangumi people limit exceeded');
     for (const id of selection.bangumi)
       ensure(
         [...plan.records.bangumi, ...plan.entities.bangumi].some((row) => row.key === String(id)),
@@ -2154,8 +2162,9 @@ export type CrossMediaSeedExtras = {
   }) => Promise<BangumiCreditVocabularyResolution>;
 };
 
-function bangumiSourceIdentity(key: string): { property: string; value: string } | undefined {
-  if (key.startsWith('person:')) return { property: 'wdt:P6298', value: key.slice('person:'.length) };
+function bangumiSourceIdentity(key: string, nativeType?: string): { property: string; value: string } | undefined {
+  if (key.startsWith('person:'))
+    return nativeType === 'schema:Organization' ? undefined : { property: 'wdt:P6298', value: key.slice('person:'.length) };
   if (key.startsWith('character:')) return { property: 'wdt:P6296', value: key.slice('character:'.length) };
   if (key.startsWith('episode:')) return { property: 'schema:url', value: bangumiRecordUrl(key) };
   if (/^[1-9][0-9]*$/u.test(key)) return { property: 'wdt:P5732', value: key };
@@ -2296,7 +2305,7 @@ export async function seedCrossMedia(
         const claim = importer.session.bindings.claim({ source: alias, external_id: key });
         if (
           !outcome ||
-          (outcome.status !== 'pending' && outcome.status !== 'fenced') ||
+          !['pending', 'fenced', 'refused', 'unknown'].includes(outcome.status) ||
           claim?.state !== 'bound' ||
           outcome.containerId !== claim.subject ||
           store.key(alias, key, active.run).resolved ||
@@ -2352,12 +2361,12 @@ export async function seedCrossMedia(
       });
       importerOptions.mediaResolver = {
         async resolve(input) {
-          const source = plan.coverSources?.find(
+          const source = [...(plan.coverSources ?? []), ...(plan.creatorImageSources ?? [])].find(
             (item) => item.sourceAlias === input.owner.source && item.externalId === input.owner.external_id,
           );
           ensure(
             source?.sourceStatus === 'available' && source.sourceUrl,
-            'Media intent has no admitted Bangumi cover source',
+            'Media intent has no admitted Bangumi image source',
           );
           ensure(input.mediaImportIntents.length === 1, 'Unexpected Bangumi showcase media asset count');
           const intent = input.mediaImportIntents[0]!;
@@ -2398,14 +2407,33 @@ export async function seedCrossMedia(
               ),
             'Bangumi cover intent does not match its admitted source evidence',
           );
-          const resolution = await resolver.resolve({
-            owner: input.owner,
-            containerId: input.subject,
-            mediaImportIntents: input.mediaImportIntents,
-            signal: input.signal,
-            ...(input.deferPending === undefined ? {} : { deferPending: input.deferPending }),
-          });
           const recordKey = `${source.sourceAlias}\0${source.externalId}`;
+          let resolution: Awaited<ReturnType<typeof resolver.resolve>>;
+          try {
+            resolution = await resolver.resolve({
+              owner: input.owner,
+              containerId: input.subject,
+              mediaImportIntents: input.mediaImportIntents,
+              signal: input.signal,
+              ...(input.deferPending === undefined ? {} : { deferPending: input.deferPending }),
+            });
+          } catch (error) {
+            if (!(error instanceof ImportTransportError)) throw error;
+            const refused =
+              error.status !== undefined &&
+              error.status >= 400 &&
+              error.status < 500 &&
+              error.status !== 408 &&
+              error.status !== 409 &&
+              error.status !== 429;
+            mediaAttempts.set(recordKey, {
+              ...source,
+              status: refused ? 'refused' : 'unknown',
+              containerId: input.subject,
+              code: refused ? 'media-import-refused' : 'media-import-unknown',
+            });
+            return { status: 'pending' };
+          }
           if (resolution.outcome === 'fenced') {
             mediaAttempts.set(recordKey, { ...source, status: 'fenced', containerId: input.subject });
             return { status: 'pending' };
@@ -2581,14 +2609,15 @@ export async function seedCrossMedia(
               statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[]>;
             }
           | undefined;
-        const identity = bangumiSourceIdentity(record.key);
         const expectedType = nativeTypes.get(`${sourceAlias}\u0000${record.key}`);
+        const identity = bangumiSourceIdentity(record.key, expectedType);
         const matches =
-          identity !== undefined &&
-          (subject?.statements?.[identity.property]?.some(
-            (statement) => statement.value?.type === 'value' && statement.value.content === identity.value,
-          ) ??
-            false);
+          identity === undefined
+            ? record.key.startsWith('person:') && expectedType === 'schema:Organization'
+            : (subject?.statements?.[identity.property]?.some(
+                (statement) => statement.value?.type === 'value' && statement.value.content === identity.value,
+              ) ??
+              false);
         if (subject?.id !== claim.subject || subject.type !== expectedType || !matches) {
           if (identity)
             sourceIdentityGaps.push({
@@ -2757,7 +2786,7 @@ export async function seedCrossMedia(
           })
         : undefined;
     const mediaOutcomes: CrossMediaMediaOutcome[] = [];
-    for (const source of plan.coverSources ?? []) {
+    for (const source of [...(plan.coverSources ?? []), ...(plan.creatorImageSources ?? [])]) {
       const owner = { source: source.sourceAlias, external_id: source.externalId };
       const prior = mediaAttempts.get(`${source.sourceAlias}\0${source.externalId}`);
       const claim = importer.session.bindings.claim(owner);
