@@ -205,6 +205,7 @@ function reviewResult(selectedOccurrences = 2): RecoveryReview {
 function outcomesPage(
   state: 'partial' | 'complete' | 'cancelled' = 'partial',
   next: string | null = null,
+  empty = false,
 ): RecoveryOutcomesPage {
   return {
     ...status(state, {
@@ -214,7 +215,7 @@ function outcomesPage(
     }),
     next,
     collection: { id: receivingCollectionId, visibility: 'private' },
-    outcomes: [
+    outcomes: empty ? [] : [
       {
         sourceOccurrenceId: occurrenceOne,
         sourceSubjectId: subjectId,
@@ -619,7 +620,7 @@ test('mounted recovery navigates independent native windows, revises selection, 
     return {
       kind: 'ok',
       value: query.cursor
-        ? outcomesPage(resultState)
+        ? outcomesPage(resultState, null, resultState === 'complete')
         : outcomesPage(resultState, 'results-2'),
     };
   };
