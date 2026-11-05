@@ -70,7 +70,7 @@ export function originalContributionReference(
 
 /** Post watch belongs to the containing thread; other commands keep the selected native target. */
 export function contributionCommandTarget(reference: ContributionReference, operation: ContributionOperation) {
-  if (reference.type === 'content.post' && operation === 'watch')
+  if (reference.type === 'content.post' && (operation === 'watch' || operation === 'reply'))
     return { type: 'content.thread' as const, id: reference.threadId, revisionId: reference.threadRevisionId };
   return { type: reference.type, id: reference.id, revisionId: reference.sourceRevisionId };
 }
