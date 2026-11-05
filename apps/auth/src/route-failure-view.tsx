@@ -48,6 +48,7 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
     };
     const unsubscribe = router.history.subscribe(() => {
       retire();
+      resetOwner.current = null;
       publish(null);
     });
     const hide = () => {

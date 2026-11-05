@@ -89,6 +89,8 @@ test('missing pages keep the document shell, focus recovery, use fixed exits and
       const heading = page.host.querySelector('h1');
       expect(heading?.textContent).toBe(m.auth_route_missing_title());
       expect(heading?.getAttribute('tabindex')).toBe('-1');
+      expect(document.documentElement.textContent).toContain(m.auth_route_failure_read_only());
+      expect(document.documentElement.textContent).toContain(m.auth_route_missing_body());
       expect(document.documentElement.getAttribute('lang')).toBe(locale);
       expect(page.host.querySelector('a[href="/login"]')?.textContent).toBe(m.auth_route_failure_exit_login());
       expect(page.host.querySelector('a[href="/security"]')?.textContent).toBe(m.auth_route_failure_exit_security());
@@ -150,6 +152,8 @@ test('a render failure can recover without invoking a command', async () => {
     await act(async () => page.host.querySelector('button')!.click());
     await act(async () => waitForText(page.host, 'Trigger render failure'));
     expect(page.host.querySelector('.auth-route-failure')).toBeNull();
+    await act(async () => page.host.querySelector('button')!.click());
+    expect(page.host.querySelector('h1')?.textContent).toBe(m.auth_route_failure_title());
   } finally {
     await page.close();
   }

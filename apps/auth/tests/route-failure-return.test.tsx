@@ -171,7 +171,7 @@ test('cached return retires the pending read; a late completion cannot reset or 
     });
     expect(f.completions).toHaveLength(1);
     expect(f.reads()).toBe(2);
-    expect(document.querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(document.querySelectorAll('.auth-route-failure [role="status"]')).toHaveLength(1);
     await act(async () => transition('pagehide'));
     enabled();
     await act(async () => transition('pageshow'));
