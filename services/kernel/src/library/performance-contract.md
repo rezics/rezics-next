@@ -350,36 +350,43 @@ rollback and response serialization still need composition at their existing own
 to own execution and replay. Read-only history cannot repair an Entry; no-op and exact receipt replay cannot append a
 transition. Retention and the public history/page limits are unchanged.
 
-### Copy SQL leaves
+### Complete private Copy operations
 
-Decision: Commerce keeps the copy journey in its existing command and inventory owners; immutable operation declarations derive complete finite nine-axis costs from actual SQL, serialized binds, schema widths and current ceilings, then bind through existing native roots.
+Decision: keep empty updates as ordinary revision/event writes; bind immutable Copy plans at the existing command,
+read and inventory owners, preserving one original deadline and current Source/profile meaning through retries.
 
-`copy-operation-bounds.ts` binds exact compiled statements to their original operands at the existing EntryStore and
-copy-inventory execution owners. The declaration keeps SQL text, serialized bind bytes and projected result bytes
-separate, with a fixed zero for engine requests on these SQL-only leaves. Profile pin Type/Profile IDs use the
-immutable Definitions release byte ceiling and JSON's six-byte escape maximum; copy text fields use the existing
-HTTP and database limits. No result row count reprices a dispatched statement.
+`copy-operation-bounds.ts` composes all nine axes with `@rezics/bounds`. SQL leaves retain compiled SQL, detached
+original operands and escaped schema projections. Text uses the admitted 64/200/1000-character limits, timestamps
+and revisions their native widths, and pinned Type/Profile identifiers the immutable Definitions release ceiling.
+Logical result rows, examined candidates, negative seeks, points, statements and bytes remain distinct. SQL and
+Source observations invoke no Search engine; the explicit eight-axis native bridge retains that zero in the plan.
 
-Each filtered page plan selects the same one of nine SQL statements used by `pageCopies`. Its route/account,
-optional subject/kind/status predicates and `(created_at, copy_id)` frontier match the existing full-key indexes.
-The maximum page remains 100. Because the page helper clamps its own limit to 100, the maximum list branch retains
-the separate one-row sentinel query; its candidate and output work is charged as its own plan. Inventory options
-use the actual recursive kind/status query and its 65-value limit per dimension. The 65th raw value still makes an
-oversized facet unavailable. Both page observations, each raw option and the sentinel are physical work even when
-their visible result is filtered, suppressed or unchanged.
+Each existing command attempt consumes its declaration before useful preparation and the tracked write transaction.
+Its original runner, owner, client, admission, deadline and retry policy remain in charge. Current account/action/group
+admission uses Access's accounting port, including the group exposure observation on the original attempt time.
+The command envelope includes owner floor/share, time, partition, receipt candidates (including the transitional raw
+key), Shelf, input/response serialization, History basis/outbox, and commit or rollback. Deadline-bounded recovery
+probes and every dispatched retry remain charged. Native frame/connection owners retain single drain/release custody.
 
-The same leaf plans bind copy insert/read/update/delete, detail presentation reads, and the retained source/read,
-locked retention read and exact restore CAS. Restore preparation now requires the currently resolved subject to
-remain the retained row's original subject; a redirect cannot restore that exact row under a replacement source.
-The existing revision, deletion ID, expiry, profile pin, account route, owner authorization, command receipt,
-Shelf, History, loan/archive, and retention-worker owners keep their current semantics.
+Create and update compare independently collected original/current Source anchors and accepted profile pins before
+fresh mutation; preparation errors remain deferred until an authorized receipt miss. Empty patches still advance
+the exact revision and emit `copy.updated`. Delete retains the locked revision and open-loan evidence. Restore reads
+the retained original row, original accepted pins and current original subject, then performs the exact deletion,
+revision and expiry CAS. Replacement subjects, copies, Entry incarnations and later deletion episodes do not replace
+that evidence. Current authorization precedes exact original receipt replay; no declaration grants authority.
 
-These declarations cover the actual Library SQL leaves and their output projections. The enclosing command and
-observation composition still needs to sum account/action/group admission, original/current Source and profile
-reads, partition/floor/epoch checks, transaction and receipt paths, triggers, Shelf/History effects, and response
-serialization from their current owners. That completion is tracked in
-[the continuation brief](../../../../.temp/continuation/copy-operation-composition.md); this leaf set does not claim
-a complete end-to-end copy operation bound.
+Point/detail roots compose owner transactions, migration fences, two current detail observations, original/current
+Source reads, up to four distinct retained releases and mounted response projections. Optional current presentation
+keeps its existing unavailable/retired behavior. Inventory keeps both raw filtered observations and epoch/cursor
+comparison, all nine indexed variants, the raw createdAt/copyId frontier, and no hidden-page refill. The 100-row
+maximum uses a separate one-row sentinel; options read at most 65 candidates for 64 values per dimension. Empty,
+withheld and discarded rows remain charged. Only the actual distinct-release loop coalesces option release reads.
+
+Native suites retain maximum filtered-page continuation, sparse/current-profile withholding, exact Undo, replacement
+and expiry assertions. Added causal checks cover source/profile change during preparation, the ordinary empty update
+and lost-delete-ack replay. These declarations are not native evidence; integration retains the named Copy, five
+Search and root acceptance with `acceptance.failing=true`. Entry lifecycle, imports, loans/archive and scheduled
+retention retain their existing owners; this composition introduces no scheduler or public edge.
 
 ## Progress
 

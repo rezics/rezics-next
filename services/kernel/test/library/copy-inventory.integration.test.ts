@@ -109,7 +109,7 @@ test('native filters select past unrelated pages, bind cursors, and keep tuple o
   );
   expect(new Set(matching.map((copy) => copy.createdAt)).size).toBe(1);
 
-  const filtered = await commands.listCopies(owner, {
+  const filtered = await commands.listCopiesWithObservation(owner, {
     subjectId: target,
     kind: 'physical',
     status: 'ordered',

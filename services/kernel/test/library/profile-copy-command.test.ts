@@ -225,6 +225,43 @@ test('native holdings accept declared data kind status pairs pin fresh facts and
   }
 });
 
+test('copy commands retain one deadline and compare source and profile before a fresh mutation', async () => {
+  const { deriveAccess } = await import('../../src/access/derived-access.ts');
+  for (const operation of ['create', 'update'] as const) {
+    for (const change of ['profile', 'source'] as const) {
+      await native.activate(originalDigest);
+      const subjectId = await native.createSubject('game');
+      const originalCopy = await commands.createCopy(owner.actor, input(subjectId), entryKey());
+      const before = ownerFacts(await inspect());
+      const deadlines: number[] = [];
+      let observations = 0;
+      const access = deriveAccess(native.access, {
+        async prepare(actor, action, resource, context) {
+          if (action === 'subject:read') {
+            deadlines.push(context.deadline);
+            // One Source observation prepares original, terminal and current Type disclosure.
+            if (++observations === 4) {
+              if (change === 'profile') await native.activate(replacementDigest);
+              else expect((await native.send('steward', 'POST', `/v1/subjects/${subjectId}:hide`, {
+                reason: 'Source changed during copy preparation',
+              })).status).toBe(200);
+            }
+          }
+          return native.access.prepare?.(actor, action, resource, context);
+        },
+      });
+      const changed = createCopyCommands({ pool: native.pool, access, tokens: native.tokens });
+      const request = operation === 'create'
+        ? changed.createCopy(owner.actor, input(subjectId), entryKey())
+        : changed.updateCopy(owner.actor, originalCopy.value.id, { revision: 1, location: 'Desk' }, entryKey());
+      await expect(request).rejects.toMatchObject({ code: 'semantic_not_ready' });
+      expect(observations).toBeGreaterThanOrEqual(4);
+      expect(new Set(deadlines).size).toBe(1);
+      expect(ownerFacts(await inspect())).toEqual(before);
+    }
+  }
+});
+
 test('well formed absent pairs and old status names are unsupported capability data without effects', async () => {
   const subjectId = await native.createSubject('game');
   for (const pair of [
