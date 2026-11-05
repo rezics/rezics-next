@@ -1,63 +1,63 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { observeReactionSession } from '../../threads/thread-reactions';
-import { browserObservation } from '../../session';
+import { browserObservation, type BrowserObservationSnapshot } from '../../session';
 
-/** Observe the existing owners without starting a session, exposure or per-card request. */
+const noSubscribe = () => () => {};
+const unknownSnapshot = (): BrowserObservationSnapshot => ({ state: 'unknown' });
+
+/** Consume the shared browser authority without preparing another request. */
 function observeCommunityEnvironment(client: QueryClient | undefined) {
-  const session = observeReactionSession(client);
-  let exposureRevision = 0;
-  const exposure = () => {
-    const state = client?.getQueryState(['exposure', 'viewer']);
-    return JSON.stringify([state?.status, state?.dataUpdateCount, state?.errorUpdateCount]);
-  };
-  let previous = exposure();
-  const snapshot = () => {
-    const next = exposure();
-    if (next !== previous) {
-      previous = next;
-      exposureRevision++;
-    }
-    return `${session.snapshot()}:${exposureRevision}`;
-  };
+  const observation = client ? browserObservation(client) : undefined;
   return {
-    session,
-    snapshot,
-    serverSnapshot: () => '0:0',
-    subscribe(notify: () => void) {
-      let active = true;
-      const observation = client && browserObservation(client);
-      const publish = () => {
-        if (active) notify();
-      };
-      const stopSession = session.subscribe(notify);
-      const stopExposure = observation?.subscribeCache((event) => {
-        if (
-          event.query.queryKey.length !== 2 ||
-          event.query.queryKey[0] !== 'exposure' ||
-          event.query.queryKey[1] !== 'viewer'
-        )
-          return;
-        if (
-          event.type !== 'added' &&
-          event.type !== 'removed' &&
-          !(event.type === 'updated' && (event.action.type === 'success' || event.action.type === 'error'))
-        )
-          return;
-        previous = exposure();
-        exposureRevision++;
-        observation.publish(publish);
-      });
-      return () => {
-        active = false;
-        stopSession();
-        stopExposure?.();
-      };
+    observation,
+    snapshot: () => {
+      const current = observation?.getSnapshot() ?? unknownSnapshot();
+      return JSON.stringify([
+        current.state,
+        current.state === 'signed-in' ? current.observation.subject : null,
+        current.state === 'signed-in' ? current.observation.id : null,
+      ]);
     },
+    serverSnapshot: () => 'unknown',
+    subscribe: observation?.subscribe ?? noSubscribe,
   };
 }
 
-/** A retained native observation cannot be rebound to replacement browser credentials or disclosure. */
+type CommunityReadingBinding = {
+  source: object | string;
+  descriptor: string;
+  reader: string | null;
+  environment: ReturnType<typeof observeCommunityEnvironment>;
+  generation: number;
+  retired: boolean;
+  privateRetired: boolean;
+  observation?: { subject: string; id: number };
+};
+
+function initialBinding(
+  input: { source: object | string; descriptor: string; reader: string | null },
+  environment: ReturnType<typeof observeCommunityEnvironment>,
+): CommunityReadingBinding {
+  const observed = environment.observation?.getSnapshot() ?? unknownSnapshot();
+  const matched =
+    input.reader !== null &&
+    observed.state === 'signed-in' &&
+    observed.observation.subject === input.reader;
+  const settledMismatch =
+    input.reader !== null &&
+    (observed.state === 'signed-out' ||
+      (observed.state === 'signed-in' && observed.observation.subject !== input.reader));
+  return {
+    ...input,
+    environment,
+    generation: 0,
+    retired: false,
+    privateRetired: settledMismatch,
+    ...(matched && observed.state === 'signed-in' ? { observation: observed.observation } : {}),
+  };
+}
+
+/** Public bodies survive session preparation; private actions bind once to the matching browser observation. */
 export function useSubjectCommunityReading(input: {
   source: object | string;
   descriptor: string;
@@ -65,28 +65,45 @@ export function useSubjectCommunityReading(input: {
 }) {
   const client = useContext(QueryClientContext);
   const environment = useMemo(() => observeCommunityEnvironment(client), [client]);
-  const revision = useSyncExternalStore(environment.subscribe, environment.snapshot, environment.serverSnapshot);
-  const session = environment.session.read();
-  const readerReady =
-    !client ||
-    input.reader === null ||
-    (environment.session.healthy() &&
-      session?.state === 'signed-in' &&
-      session.subject === input.reader &&
-      Boolean(session.csrfToken));
-  const [binding, setBinding] = useState({ ...input, environment, revision, retired: !readerReady, generation: 0 });
+  useSyncExternalStore(environment.subscribe, environment.snapshot, environment.serverSnapshot);
+  const observation = environment.observation?.getSnapshot() ?? unknownSnapshot();
+  const [binding, setBinding] = useState(() => initialBinding(input, environment));
+
   if (binding.source !== input.source) {
-    setBinding({ ...input, environment, revision, retired: !readerReady, generation: binding.generation + 1 });
+    setBinding({ ...initialBinding(input, environment), generation: binding.generation + 1 });
   } else if (
     !binding.retired &&
-    (!readerReady ||
+    (binding.descriptor !== input.descriptor ||
       binding.reader !== input.reader ||
-      binding.descriptor !== input.descriptor ||
-      binding.environment !== environment ||
-      binding.revision !== revision)
+      binding.environment !== environment)
   ) {
     setBinding({ ...binding, retired: true, generation: binding.generation + 1 });
+  } else if (!binding.retired && input.reader !== null) {
+    if (binding.observation) {
+      if (
+        observation.state !== 'signed-in' ||
+        observation.observation.id !== binding.observation.id ||
+        observation.observation.subject !== binding.observation.subject
+      )
+        setBinding({ ...binding, privateRetired: true, generation: binding.generation + 1 });
+    } else if (
+      observation.state === 'signed-out' ||
+      (observation.state === 'signed-in' && observation.observation.subject !== input.reader)
+    ) {
+      setBinding({ ...binding, privateRetired: true, generation: binding.generation + 1 });
+    } else if (
+      !binding.privateRetired &&
+      observation.state === 'signed-in' &&
+      observation.observation.subject === input.reader
+    ) {
+      setBinding({
+        ...binding,
+        observation: observation.observation,
+        generation: binding.generation + 1,
+      });
+    }
   }
+
   const current = useRef(binding);
   current.current = binding;
   const mounted = useRef(false);
@@ -96,11 +113,27 @@ export function useSubjectCommunityReading(input: {
       mounted.current = false;
     };
   }, []);
+
+  const isBoundCurrent = () => {
+    if (!mounted.current || current.current !== binding || binding.retired) return false;
+    return true;
+  };
+  const privateActionsCurrent = () => {
+    if (!isBoundCurrent() || binding.reader === null || binding.privateRetired) return false;
+    const now = environment.observation?.getSnapshot() ?? unknownSnapshot();
+    return (
+      binding.observation !== undefined &&
+      now.state === 'signed-in' &&
+      now.observation.id === binding.observation.id &&
+      now.observation.subject === binding.reader
+    );
+  };
+
   return {
     available: !binding.retired,
     key: String(binding.generation),
-    isCurrent: () =>
-      mounted.current && current.current === binding && !binding.retired && environment.snapshot() === binding.revision,
+    isCurrent: isBoundCurrent,
+    privateActionsCurrent,
   };
 }
 
@@ -117,6 +150,15 @@ export function useSubjectCommunityLifetime(input: {
   credentialEpoch?: string | null;
   exposure?: string;
 }) {
+  const client = useContext(QueryClientContext);
+  const observationStore = client ? browserObservation(client) : undefined;
+  const observed = useSyncExternalStore(
+    observationStore?.subscribe ?? noSubscribe,
+    observationStore?.getSnapshot ?? unknownSnapshot,
+    observationStore?.getServerSnapshot ?? unknownSnapshot,
+  );
+  const observationId =
+    observed.state === 'signed-in' && observed.observation.subject === input.reader ? observed.observation.id : null;
   const identity = JSON.stringify([
     input.subjectId,
     input.contextId,
@@ -128,6 +170,7 @@ export function useSubjectCommunityLifetime(input: {
     input.locale,
     input.credentialEpoch,
     input.exposure,
+    observationId,
   ]);
   const visit = useRef({ identity, generation: 0, active: false });
   if (visit.current.identity !== identity) {
@@ -144,6 +187,16 @@ export function useSubjectCommunityLifetime(input: {
   return {
     key: JSON.stringify([identity, owned.generation]),
     reader: input.reader,
-    isCurrent: () => input.ready && visit.current === owned && owned.active,
+    isCurrent: () => {
+      if (!input.ready || visit.current !== owned || !owned.active) return false;
+      if (input.reader === null || !observationStore) return true;
+      const now = observationStore.getSnapshot();
+      return (
+        observationId !== null &&
+        now.state === 'signed-in' &&
+        now.observation.id === observationId &&
+        now.observation.subject === input.reader
+      );
+    },
   };
 }

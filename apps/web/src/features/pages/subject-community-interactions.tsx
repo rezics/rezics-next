@@ -1,7 +1,8 @@
 import { QueryClientContext } from '@tanstack/react-query';
-import { useContext, useMemo } from 'react';
+import { useContext, useMemo, useSyncExternalStore } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { normalizeSessionObservation } from '../../session/browser-state';
+import { browserObservation } from '../../session';
 import { SignInPrompt } from '../../threads/write-prompts';
 import { ThreadReactions, type ThreadReactionsProps } from '../../threads/thread-reactions';
 import { ThreadWatch, type ThreadWatchProps } from '../../threads/thread-watch';
@@ -42,11 +43,25 @@ export function SubjectCommunityInteractions({
   verification?: VerificationConfig;
 }) {
   const client = useContext(QueryClientContext);
+  const observationStore = client ? browserObservation(client) : undefined;
+  const observation = useSyncExternalStore(
+    observationStore?.subscribe ?? (() => () => {}),
+    observationStore?.getSnapshot ?? (() => ({ state: 'unknown' as const })),
+    observationStore?.getServerSnapshot ?? (() => ({ state: 'unknown' as const })),
+  );
   const sessionState = client?.getQueryState(['session']);
   const session = normalizeSessionObservation(client?.getQueryData(['session']));
   const sessionKnown = !client || sessionState?.status === 'success';
   const sessionMatches =
-    !client || (sessionKnown && reader !== null && session.state === 'signed-in' && session.subject === reader);
+    Boolean(
+      client &&
+        sessionKnown &&
+        reader !== null &&
+        session.state === 'signed-in' &&
+        session.subject === reader &&
+        observation.state === 'signed-in' &&
+        observation.observation.subject === reader,
+    );
   const advice = thread.actions;
   const watchAdvice = advice?.watch;
   const currentWatch = watchAdvice?.state === 'current' ? watchAdvice : null;
@@ -72,6 +87,10 @@ export function SubjectCommunityInteractions({
     targetId: thread.id,
     ready: canReact || canWatch || canShowWatchAdvice,
     locale,
+    credentialEpoch:
+      observation.state === 'signed-in' && observation.observation.subject === reader
+        ? String(observation.observation.id)
+        : null,
   });
   const readAuthority = useMemo(() => Object.freeze({}), [lifetime.key]);
   const options = { locale: locale as never };

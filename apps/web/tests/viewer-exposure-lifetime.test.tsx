@@ -143,11 +143,12 @@ test('viewer exposure retires each mounted reader observation without leaking or
     SESSIONS: {
       idFromName: (id: string) => id,
       get: (id: string) => ({
-        credentialIfFresh: async () => {
+        credential: async () => {
           credentialReads++;
           const credential = credentials.get(id);
           return credential ? { status: 'active', ...credential } : { status: 'absent' };
         },
+        credentialIfFresh: async () => ({ status: 'unavailable' as const }),
         signedIn: async () => {
           const credential = credentials.get(id);
           return credential

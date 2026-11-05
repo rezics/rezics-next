@@ -483,6 +483,74 @@ test('community visits retire on replacement and unmount without reviving a prev
   expect(unmounted.isCurrent()).toBe(false);
 });
 
+test('community body survives initial session preparation while private advice waits for its matching observation', async () => {
+  const { SubjectCommunityContext, SubjectCommunityRegion } = await import(
+    '../src/features/pages/subject-community-view'
+  );
+  const id = '01a17a3b-0884-721b-91ef-d7ffd7bb58e4';
+  const region = {
+    state: 'ready' as const,
+    threads: [
+      {
+        id,
+        title: 'Public review',
+        authorId: 'author',
+        boardId: 'board',
+        createdAt: '2026-11-02T00:00:00.000Z',
+        summary: 'Visible public body',
+        licence: 'MIT',
+        reactions: { like: 2 },
+        viewerReaction: 'like' as const,
+        actions: { reply: 'available' as const, reaction: 'available' as const, watch: null, overflow: false },
+      },
+    ],
+    next: null,
+    context: { subjectId: 'subject', subjectLabel: 'Subject', place: { kind: 'global' as const, id: 'global' } },
+    reactionsAsOf: { epoch: 1, position: '5' },
+  };
+  const community = {
+    regions: { review: region },
+    authors: {},
+    now: '2026-11-02T00:00:00.000Z',
+    reader: 'reader-one',
+    contextId: 'context-one',
+    sourceKey: 'native-source',
+  };
+  client.removeQueries({ queryKey: ['session'], exact: true });
+  const view = () => (
+    <QueryClientProvider client={client}>
+      <SubjectCommunityContext.Provider value={community}>
+        <SubjectCommunityRegion
+          id="reviews"
+          kind="review"
+          region={region}
+          authors={{}}
+          now={community.now}
+          subject={{ id: 'subject', label: 'Subject' }}
+          locale="en"
+          href="/en/subjects/subject/reviews"
+        />
+      </SubjectCommunityContext.Provider>
+    </QueryClientProvider>
+  );
+  await act(async () => root.render(view()));
+  expect(host.textContent).toContain('Visible public body');
+  expect(host.querySelector('[data-slot="community-actions"]')).toBeNull();
+
+  await act(async () => {
+    client.setQueryData(['session'], reader('reader-one'));
+    await tick();
+  });
+  expect(host.querySelector('[data-slot="community-actions"]')).not.toBeNull();
+
+  await act(async () => {
+    client.setQueryData(['session'], reader('reader-two'));
+    await tick();
+  });
+  expect(host.textContent).toContain('Visible public body');
+  expect(host.querySelector('[data-slot="community-actions"]')).toBeNull();
+});
+
 test('a failed or sparse region preserves its original frontier and expiry offers only deliberate restart', async () => {
   const { composedCommunityRegion } = await import('../src/features/pages/subject-community');
   const { communityRegionLinks } = await import('../src/features/pages/subject-community-navigation');

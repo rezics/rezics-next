@@ -27,6 +27,7 @@ import {
   startPopulationProgress,
 } from './rating-population-progress';
 import { admitPopulationEnvelope } from './population-envelope-admission';
+import { browserObservation } from '../../session';
 
 type Session = ReturnType<typeof useSession>;
 export type PopulationTransport = (input: PopulationInput, signal?: AbortSignal) => Promise<PopulationEnvelope>;
@@ -45,11 +46,7 @@ class PopulationRegistry {
   private leases = new Map<string, PopulationLease>();
   private versions = new Map<string, number>();
   private sourceData = new WeakMap<QueryCacheNotifyEvent['query'], unknown>();
-  private sessionQuery: QueryCacheNotifyEvent['query'] | undefined;
-  private sessionData: unknown;
   constructor(readonly client: QueryClient) {
-    this.sessionQuery = client.getQueryCache().find({ queryKey: ['session'], exact: true });
-    this.sessionData = this.sessionQuery?.state.data;
     client.getQueryCache().subscribe((event) => this.observe(event));
   }
   subscribe = (listener: () => void) => {
@@ -79,30 +76,13 @@ class PopulationRegistry {
     // Observer results are announced before the cache success event. They are not replacements.
     if (event.type !== 'added' && event.type !== 'removed' && event.type !== 'updated') return;
     const { query } = event;
-    if (query.queryKey.length === 1 && query.queryKey[0] === 'session') {
-      const currentQuery = this.client.getQueryCache().find({ queryKey: ['session'], exact: true });
-      const changed = currentQuery !== this.sessionQuery || currentQuery?.state.data !== this.sessionData;
-      this.sessionQuery = currentQuery;
-      this.sessionData = currentQuery?.state.data;
-      if (
-        changed ||
-        event.type === 'added' ||
-        event.type === 'removed' ||
-        (event.type === 'updated' && event.action.type === 'success')
-      ) {
-        // Equal success, Query replacement and A→B→A each advance; fetch/error/observer notifications do not.
-        this.epoch++;
-        this.notify();
-      }
-      return;
-    }
     if (query.queryKey[0] === 'subject-rating' && query.queryKey[3] === 'question') {
+      const previous = this.sourceData.get(query);
       const replaced = this.dataReplaced(query);
       if (
-        replaced ||
-        event.type === 'added' ||
         event.type === 'removed' ||
-        (event.type === 'updated' && event.action.type === 'success')
+        (replaced && previous !== undefined) ||
+        (replaced && event.type === 'updated' && event.action.type === 'success' && event.action.manual)
       ) {
         this.epoch++;
         this.notify();
@@ -162,6 +142,12 @@ export function useRatingPopulations(
 ) {
   const client = useQueryClient();
   const registry = useMemo(() => registryFor(client), [client]);
+  const observationStore = useMemo(() => browserObservation(client), [client]);
+  const observation = useSyncExternalStore(
+    observationStore.subscribe,
+    observationStore.getSnapshot,
+    observationStore.getServerSnapshot,
+  );
   registry.rememberQuestion(input.subjectId, input.locale);
   useSyncExternalStore(registry.subscribe, registry.snapshot, registry.serverSnapshot);
   const cached = client.getQueryData<Session>(['session']);
@@ -169,10 +155,13 @@ export function useRatingPopulations(
     input.session.state === 'signed-in' &&
     cached?.state === 'signed-in' &&
     cached.subject === input.session.subject &&
-    cached.csrfToken === input.session.csrfToken
+    cached.csrfToken === input.session.csrfToken &&
+    observation.state === 'signed-in' &&
+    observation.observation.subject === cached.subject
       ? (cached.subject ?? null)
       : null;
-  const anonymous = input.session.state === 'signed-out' && cached?.state === 'signed-out';
+  const anonymous =
+    input.session.state === 'signed-out' && cached?.state === 'signed-out' && observation.state === 'signed-out';
   const enabled = input.enabled !== false && (anonymous || reader !== null);
   const signature = JSON.stringify([
     registry.id,
@@ -183,6 +172,8 @@ export function useRatingPopulations(
     input.locale,
     reader,
     anonymous,
+    observation.state,
+    observation.state === 'signed-in' ? observation.observation.id : null,
     enabled,
   ]);
   const desired = useRef({ signature, read });
@@ -195,6 +186,11 @@ export function useRatingPopulations(
     }
     let live = true;
     const epoch = registry.epoch;
+    const observationIdentity = JSON.stringify([
+      observation.state,
+      observation.state === 'signed-in' ? observation.observation.subject : null,
+      observation.state === 'signed-in' ? observation.observation.id : null,
+    ]);
     const lease: PopulationLease = {
       key: JSON.stringify([registry.id, ++serial, input.subjectId, input.question, reader]),
       isCurrent: () =>
@@ -202,6 +198,15 @@ export function useRatingPopulations(
         registry.epoch === epoch &&
         desired.current.signature === signature &&
         desired.current.read === read &&
+        JSON.stringify([
+          observationStore.getSnapshot().state,
+          observationStore.getSnapshot().state === 'signed-in'
+            ? observationStore.getSnapshot().observation.subject
+            : null,
+          observationStore.getSnapshot().state === 'signed-in'
+            ? observationStore.getSnapshot().observation.id
+            : null,
+        ]) === observationIdentity &&
         (anonymous
           ? client.getQueryData<Session>(['session'])?.state === 'signed-out'
           : client.getQueryData<Session>(['session'])?.state === 'signed-in' &&
@@ -216,7 +221,7 @@ export function useRatingPopulations(
       lease.retire();
       registry.remove(lease);
     };
-  }, [registry, signature, enabled, reader, anonymous, read, client, input.subjectId, input.question]);
+  }, [registry, signature, enabled, reader, anonymous, observation, observationStore, read, client, input.subjectId, input.question]);
   const lease = owner?.signature === signature ? owner.lease : undefined;
   return { lease, reader, registry, client };
 }

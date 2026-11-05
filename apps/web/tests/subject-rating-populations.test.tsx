@@ -533,7 +533,13 @@ test('question/Global distribution and imported source survive headline failure;
 
 test('terminal empty ready population directory settles once without replacing its accepted observer', async () => {
   nativePopulations = [];
+  cache.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
   await paint();
+  expect(paths('/ratings/populations')).toHaveLength(0);
+  await act(async () => {
+    cache.setQueryData(sessionQuery.queryKey, session());
+    await tick();
+  });
   await until(() => host.textContent!.includes(m.rating_population_empty_page()));
   const reads = paths('/ratings/populations').length;
   await act(async () => {
