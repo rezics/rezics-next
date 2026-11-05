@@ -306,11 +306,6 @@
         },
         {
           "rule": "rule 4",
-          "file": "packages/definitions/src/index.ts",
-          "edge": "value import \"node:crypto\" #1 => external"
-        },
-        {
-          "rule": "rule 4",
           "file": "packages/definitions/src/pattern-safety.ts",
           "edge": "value import \"node:fs\" #1 => external"
         },
@@ -11549,11 +11544,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/feed-contract.ts",
-          "edge": "value import \"../library/continue-routes.ts\" #1 => services/kernel/src/library/continue-routes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/feed-contract.ts",
           "edge": "value import \"../semantic/http/summaries.ts\" #1 => services/kernel/src/semantic/http/summaries.ts"
         },
         {
@@ -15423,83 +15413,8 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-activity.ts",
-          "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-activity.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-activity.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-activity.ts",
-          "edge": "value import \"./feed-snapshot.ts\" #1 => services/kernel/src/content/feed-snapshot.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/content/feed-contract.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-contract.ts",
-          "edge": "value import \"../library/continue-routes.ts\" #1 => services/kernel/src/library/continue-routes.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-snapshot.ts",
-          "edge": "value import \"../access/authenticate.ts\" #1 => services/kernel/src/access/authenticate.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-snapshot.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-space.ts",
-          "edge": "value import \"../community/space.ts\" #1 => services/kernel/src/community/space.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-space.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-space.ts",
-          "edge": "value import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-space.ts",
-          "edge": "value import \"./feed-activity.ts\" #1 => services/kernel/src/content/feed-activity.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-space.ts",
-          "edge": "value import \"./reads.ts\" #1 => services/kernel/src/content/reads.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-subject-scope.ts",
-          "edge": "value import \"../access/authenticate.ts\" #1 => services/kernel/src/access/authenticate.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-subject-scope.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/content/feed-subject-scope.ts",
-          "edge": "value import \"./feed-space.ts\" #1 => services/kernel/src/content/feed-space.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -18431,11 +18346,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/continue-routes.ts",
           "edge": "value import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/continue-routes.ts",
-          "edge": "value import \"../semantic/http/summaries.ts\" #1 => services/kernel/src/semantic/http/summaries.ts"
         },
         {
           "rule": "rule 2",
@@ -24979,141 +24889,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/library/consumption-statistics.ts",
-          "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/consumption-statistics.ts",
-          "edge": "value import \"../access/authenticate.ts\" #1 => services/kernel/src/access/authenticate.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/consumption-statistics.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/consumption-statistics.ts",
-          "edge": "value import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"../search/scope-execution.ts\" #1 => services/kernel/src/search/scope-execution.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"../semantic/summaries.ts\" #1 => services/kernel/src/semantic/summaries.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"./builtin-runtime-query.ts\" #1 => services/kernel/src/library/builtin-runtime-query.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"./continue-source.ts\" #1 => services/kernel/src/library/continue-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"./owner-index-continue.ts\" #1 => services/kernel/src/library/owner-index-continue.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"./subject-anchor.ts\" #1 => services/kernel/src/library/subject-anchor.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-reads.ts",
-          "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-reads.ts",
-          "edge": "value import \"../access/authenticate.ts\" #1 => services/kernel/src/access/authenticate.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-reads.ts",
-          "edge": "value import \"../content/feed-subject-scope.ts\" #1 => services/kernel/src/content/feed-subject-scope.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-reads.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-reads.ts",
-          "edge": "value import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-reads.ts",
-          "edge": "value import \"./continue-query.ts\" #1 => services/kernel/src/library/continue-query.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-routes.ts",
-          "edge": "value import \"../access/gates/admission.ts\" #1 => services/kernel/src/access/gates/admission.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-routes.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-routes.ts",
-          "edge": "value import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-routes.ts",
-          "edge": "value import \"./continue-reads.ts\" #1 => services/kernel/src/library/continue-reads.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-routes.ts",
-          "edge": "value import \"./progress-routes.ts\" #1 => services/kernel/src/library/progress-routes.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-source.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-source.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-source.ts",
-          "edge": "value import \"./owner-index.ts\" #1 => services/kernel/src/library/owner-index.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/continue-source.ts",
-          "edge": "value import \"./shelf-active.ts\" #1 => services/kernel/src/library/shelf-active.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/library/copy-archive-format.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
         },
@@ -26129,21 +25904,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-discovery-presentation.ts",
-          "edge": "value import \"../access/authenticate.ts\" #1 => services/kernel/src/access/authenticate.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-discovery-presentation.ts",
-          "edge": "value import \"./command-support.ts\" #1 => services/kernel/src/library/command-support.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-discovery-presentation.ts",
-          "edge": "value import \"./progress-presentation.ts\" #1 => services/kernel/src/library/progress-presentation.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/library/progress-presentation.ts",
           "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
         },
@@ -26159,128 +25919,8 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"../http/request.ts\" #1 => services/kernel/src/http/request.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"../semantic/current-subject-summaries.ts\" #1 => services/kernel/src/semantic/current-subject-summaries.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"./command-support.ts\" #1 => services/kernel/src/library/command-support.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"./consumption-statistics.ts\" #1 => services/kernel/src/library/consumption-statistics.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"./episode-progress.ts\" #1 => services/kernel/src/library/episode-progress.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"./progress-discovery-presentation.ts\" #1 => services/kernel/src/library/progress-discovery-presentation.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"./published-logs.ts\" #1 => services/kernel/src/library/published-logs.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"./reported-year-summary.ts\" #1 => services/kernel/src/library/reported-year-summary.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"./sessions.ts\" #1 => services/kernel/src/library/sessions.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/progress-routes.ts",
-          "edge": "value import \"./views.ts\" #1 => services/kernel/src/library/views.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/library/progress-store.ts",
           "edge": "value import \"./profile-source.ts\" #1 => services/kernel/src/library/profile-source.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/published-logs.ts",
-          "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/published-logs.ts",
-          "edge": "value import \"../access/grant-commands.ts\" #1 => services/kernel/src/access/grant-commands.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/published-logs.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/published-logs.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/published-logs.ts",
-          "edge": "value import \"./command-support.ts\" #1 => services/kernel/src/library/command-support.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/published-logs.ts",
-          "edge": "value import \"./progress-store.ts\" #1 => services/kernel/src/library/progress-store.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/published-logs.ts",
-          "edge": "value import \"./subject-anchor.ts\" #1 => services/kernel/src/library/subject-anchor.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/reported-year-summary.ts",
-          "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/reported-year-summary.ts",
-          "edge": "value import \"../access/authenticate.ts\" #1 => services/kernel/src/access/authenticate.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/reported-year-summary.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/reported-year-summary.ts",
-          "edge": "value import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -26346,11 +25986,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/library/sessions.ts",
           "edge": "value import \"./shelf-counter-owner.ts\" #1 => services/kernel/src/library/shelf-counter-owner.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/shelf-active.ts",
-          "edge": "value import \"./shelf-contract.ts\" #1 => services/kernel/src/library/shelf-contract.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -26736,76 +26371,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/library/viewer-facts.ts",
           "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"../access/authenticate.ts\" #1 => services/kernel/src/access/authenticate.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"../access/public-eligibility.ts\" #1 => services/kernel/src/access/public-eligibility.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"../community/space.ts\" #1 => services/kernel/src/community/space.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"../http/problem.ts\" #1 => services/kernel/src/http/problem.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"../semantic/eligibility.ts\" #1 => services/kernel/src/semantic/eligibility.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"../semantic/merges.ts\" #1 => services/kernel/src/semantic/merges.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"../semantic/subject.ts\" #1 => services/kernel/src/semantic/subject.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"./builtin-runtime.ts\" #1 => services/kernel/src/library/builtin-runtime.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"./collection-list-facts.ts\" #1 => services/kernel/src/library/collection-list-facts.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"./collection-reads.ts\" #1 => services/kernel/src/library/collection-reads.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/library/views.ts",
-          "edge": "value import \"./command-support.ts\" #1 => services/kernel/src/library/command-support.ts (value-import cycle)"
         }
       ]
     },
@@ -31184,11 +30749,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/account-erasure-source.ts",
           "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/character-person.ts",
-          "edge": "value import \"../semantic/released-relation-direction.ts\" #1 => services/kernel/src/semantic/released-relation-direction.ts"
         },
         {
           "rule": "rule 2",
@@ -39123,11 +38683,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/account-agents.ts",
-          "edge": "value import \"./subject.ts\" #1 => services/kernel/src/semantic/subject.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "services/kernel/src/semantic/account-erasure-source.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
         },
@@ -41732,11 +41287,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/accounts/public-profile/contributions/row.tsx",
-          "edge": "value import \"../../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/public-profile/contributions/row.tsx",
           "edge": "value import \"../../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
@@ -41938,11 +41488,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/feed/card-attribution.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/feed/card-attribution.tsx",
           "edge": "value import \"../../threads/exact-revision-href\" #1 => apps/web/src/threads/exact-revision-href.ts"
         },
         {
@@ -41959,11 +41504,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/feed/card-presentation.tsx",
           "edge": "type import \"../pages/home-feed-read\" #1 => apps/web/src/features/pages/home-feed-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/feed/card-presentation.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -42679,11 +42219,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/checkout/entitlements-page.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/checkout/entitlements-page.tsx",
           "edge": "value import \"../shell/page-heading\" #1 => apps/web/src/shell/page-heading.tsx"
         },
         {
@@ -42855,11 +42390,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/checkout/subject-cover.tsx",
           "edge": "value import \"../features/pages/shared\" #1 => apps/web/src/features/pages/shared.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/checkout/subject-cover.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -47625,11 +47155,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/threads/$id_.$slug.tsx",
-          "edge": "value import \"../../threads/board-reading\" #1 => apps/web/src/threads/board-reading.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/threads/$id_.$slug.tsx",
           "edge": "value import \"../../threads/byline\" #1 => apps/web/src/threads/byline.tsx"
         },
         {
@@ -48557,16 +48082,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/ratings/own-votes/current-origin.tsx",
           "edge": "value import \"../../kernel/query\" #1 => apps/web/src/kernel/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/ratings/own-votes/current-origin.tsx",
-          "edge": "value import \"../../reader/current-origin\" #1 => apps/web/src/reader/current-origin.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/ratings/own-votes/current-origin.tsx",
-          "edge": "value import \"../../reader/workspace-admission\" #1 => apps/web/src/reader/workspace-admission.tsx"
         },
         {
           "rule": "rule 2",
@@ -49708,22 +49223,12 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/library/collection-add-members.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/collection-add-members.tsx",
           "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
         },
         {
           "rule": "rule 2",
           "file": "apps/web/src/library/collection-add-members.tsx",
           "edge": "value import \"../threads/content-subject-search\" #1 => apps/web/src/threads/content-subject-search.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/collection-browser.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -49934,11 +49439,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/library/collection-page.tsx",
           "edge": "value import \"../features/pages/shared\" #1 => apps/web/src/features/pages/shared.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/collection-page.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -50308,11 +49808,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/library/continue.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/continue.tsx",
           "edge": "value import \"../media/summary\" #1 => apps/web/src/media/summary.ts"
         },
         {
@@ -50428,11 +49923,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/library/copy-edition-picker.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/copy-edition-picker.tsx",
           "edge": "value import \"../search/typeahead\" #1 => apps/web/src/search/typeahead.tsx"
         },
         {
@@ -50474,11 +49964,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/library/copy-reading-context/view.tsx",
           "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/dynamic-collection-page.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -50727,11 +50212,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/library/history-current-origin.tsx",
-          "edge": "value import \"../reader/current-origin\" #1 => apps/web/src/reader/current-origin.tsx"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/library/independent-measures/editor.tsx",
           "edge": "value import \"../../kernel/exposure\" #1 => apps/web/src/kernel/exposure.ts"
         },
@@ -50854,11 +50334,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/library/labels-read.ts",
           "edge": "value import \"../session/state\" #1 => apps/web/src/session/state.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/library-workspace-admission.tsx",
-          "edge": "value import \"../reader/workspace-admission\" #1 => apps/web/src/reader/workspace-admission.tsx"
         },
         {
           "rule": "rule 2",
@@ -51613,11 +51088,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/library/progress-picker.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/progress-picker.tsx",
           "edge": "value import \"../media/summary\" #1 => apps/web/src/media/summary.ts"
         },
         {
@@ -51993,11 +51463,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/library/shelf-view.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/shelf-view.tsx",
           "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
         },
         {
@@ -52029,16 +51494,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/library/showcase-collection/discovery-card.tsx",
           "edge": "type import \"../../search/discovery\" #1 => apps/web/src/search/discovery.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/showcase-collection/discovery-card.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/showcase-collection/edit-review.tsx",
-          "edge": "value import \"../../features/pages/shared\" #1 => apps/web/src/features/pages/shared.tsx"
         },
         {
           "rule": "rule 2",
@@ -52129,11 +51584,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/library/subject-row.tsx",
           "edge": "value import \"../features/pages/shared\" #1 => apps/web/src/features/pages/shared.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/subject-row.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -52315,16 +51765,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/inbox/inbox-entry-state.tsx",
           "edge": "value import \"../threads/write-prompts\" #1 => apps/web/src/threads/write-prompts.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-notice-detail.tsx",
-          "edge": "value import \"../threads/initials\" #1 => apps/web/src/threads/initials.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-page.tsx",
-          "edge": "value import \"../threads/initials\" #1 => apps/web/src/threads/initials.ts"
         },
         {
           "rule": "rule 2",
@@ -52629,17 +52069,7 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/settings/profile-avatar.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/profile-avatar.tsx",
           "edge": "value import \"../threads/upload\" #1 => apps/web/src/threads/upload.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/profile-preview.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -52655,11 +52085,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/settings/profile-write.ts",
           "edge": "value import \"../kernel/platform-closed\" #1 => apps/web/src/kernel/platform-closed.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/profile.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -52900,11 +52325,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/account.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/account.tsx",
           "edge": "value import \"../../session/observation\" #1 => apps/web/src/session/observation.ts"
         },
         {
@@ -52956,11 +52376,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/agent-page.ts",
           "edge": "type import \"../../media/share-card\" #1 => apps/web/src/media/share-card.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/agent-page.ts",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -53085,11 +52500,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/cover-list.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/cover-list.tsx",
           "edge": "value import \"../../media/summary\" #1 => apps/web/src/media/summary.ts"
         },
         {
@@ -53195,22 +52605,12 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/data.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/data.tsx",
           "edge": "value import \"../../media/summary\" #1 => apps/web/src/media/summary.ts"
         },
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/data.tsx",
           "edge": "value import \"../../subject/language\" #1 => apps/web/src/subject/language.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/data.tsx",
-          "edge": "value import \"../../subject/quantity-presentation\" #1 => apps/web/src/subject/quantity-presentation.ts"
         },
         {
           "rule": "rule 2",
@@ -53530,11 +52930,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/overview.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/overview.tsx",
           "edge": "value import \"../../media/summary\" #1 => apps/web/src/media/summary.ts"
         },
         {
@@ -53665,11 +53060,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/producer-history.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/producer-history.tsx",
           "edge": "value import \"../../subject/candidate-lifetime\" #1 => apps/web/src/subject/candidate-lifetime.tsx"
         },
         {
@@ -53706,11 +53096,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/qualified-relations.ts",
           "edge": "type import \"../../subject/types\" #1 => apps/web/src/subject/types.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/qualified-relations.ts",
-          "edge": "value import \"../../subject/quantity-presentation\" #1 => apps/web/src/subject/quantity-presentation.ts"
         },
         {
           "rule": "rule 2",
@@ -54005,11 +53390,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/source-concept-view.tsx",
-          "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/source-concept-view.tsx",
           "edge": "value import \"../catalogue/catalogue-entry\" #1 => apps/web/src/features/catalogue/catalogue-entry.ts"
         },
         {
@@ -54245,11 +53625,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/subject-frame.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/subject-frame.tsx",
           "edge": "value import \"../../media/summary\" #1 => apps/web/src/media/summary.ts"
         },
         {
@@ -54391,11 +53766,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/subject-head.ts",
           "edge": "type import \"../../media/share-card\" #1 => apps/web/src/media/share-card.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/subject-head.ts",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -54626,11 +53996,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/subject-relations-preview.ts",
           "edge": "type import \"../count\" #1 => apps/web/src/features/count.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/subject-slots.tsx",
-          "edge": "type import \"../../subject/types\" #1 => apps/web/src/subject/types.ts"
         },
         {
           "rule": "rule 2",
@@ -55020,11 +54385,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/pages/values.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/pages/values.tsx",
           "edge": "value import \"../../subject/language\" #1 => apps/web/src/subject/language.ts"
         },
         {
@@ -55190,17 +54550,7 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/search/discovery-public-rows.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/search/discovery-public-rows.tsx",
           "edge": "value import \"../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/search/discovery-results.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -55216,11 +54566,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/search/header-search/header-search.tsx",
           "edge": "type import \"../../session/browser-state\" #1 => apps/web/src/session/browser-state.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/search/header-search/header-search.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -55320,11 +54665,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/search/recent.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/search/recent.tsx",
           "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
         },
         {
@@ -55371,11 +54711,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/search/release-search-query.ts",
           "edge": "value import \"../subject/definitions\" #1 => apps/web/src/subject/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/search/results.tsx",
-          "edge": "value import \"../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -55476,11 +54811,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/search/space-entry/commands.ts",
           "edge": "type import \"../../session/expected-reader\" #1 => apps/web/src/session/expected-reader.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/search/space-entry/presentation.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -55964,11 +55294,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "apps/web/src/features/pages/subject.tsx",
-          "edge": "value import \"./subject-slots\" #1 => apps/web/src/features/pages/subject-slots.tsx (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "apps/web/src/features/pages/type-list.tsx",
           "edge": "value import \"./cover-list\" #1 => apps/web/src/features/pages/cover-list.tsx (value-import cycle)"
         },
@@ -56013,11 +55338,6 @@
       "owner": "semantic",
       "reason": "pre-boundary code",
       "violations": [
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/addon-base-workspace.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/addon-base-workspace.tsx",
@@ -56101,11 +55421,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/addon-profile-view.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/addon-profile-view.tsx",
           "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
@@ -56137,11 +55452,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/album-profile-actions.ts",
           "edge": "value import \"../../subject/candidate-admission\" #1 => apps/web/src/subject/candidate-admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/album-profile-create.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -56596,11 +55906,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/character-profile-classification.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/character-profile-classification.tsx",
           "edge": "value import \"../../subject/candidate-review\" #1 => apps/web/src/subject/candidate-review.tsx"
         },
         {
@@ -56617,11 +55922,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/character-profile-classification.tsx",
           "edge": "value import \"../pages/data\" #1 => apps/web/src/features/pages/data.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/character-profile-create.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -56667,11 +55967,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/character-profile-view.tsx",
           "edge": "type import \"../../subject/relation-candidates\" #1 => apps/web/src/subject/relation-candidates.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/character-profile-view.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -57225,16 +56520,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/credit-inspection/model.ts",
-          "edge": "value import \"../../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/credit-inspection/model.ts",
-          "edge": "value import \"../../pages/shared\" #1 => apps/web/src/features/pages/shared.tsx"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/credit-inspection/session.tsx",
           "edge": "type import \"../../../subject/relation-candidates\" #1 => apps/web/src/subject/relation-candidates.ts"
         },
@@ -57481,11 +56766,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/game-profile-fields.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/game-profile-fields.tsx",
           "edge": "value import \"../../subject/candidate-review\" #1 => apps/web/src/subject/candidate-review.tsx"
         },
         {
@@ -57571,22 +56851,12 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/game-reader/view.tsx",
-          "edge": "type import \"../../pages/shared\" #1 => apps/web/src/features/pages/shared.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/game-reader/view.tsx",
           "edge": "value import \"../../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/game-reader/view.tsx",
           "edge": "value import \"../../pages/context-navigation\" #1 => apps/web/src/features/pages/context-navigation.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/game-reader/view.tsx",
-          "edge": "value import \"../../pages/data\" #1 => apps/web/src/features/pages/data.tsx"
         },
         {
           "rule": "rule 2",
@@ -57602,16 +56872,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/game-reader/view.tsx",
           "edge": "value import \"../../pages/values\" #1 => apps/web/src/features/pages/values.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/generic-create-facts-view.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/generic-create-facts-view.tsx",
-          "edge": "value import \"../../subject/quantity-presentation\" #1 => apps/web/src/subject/quantity-presentation.ts"
         },
         {
           "rule": "rule 2",
@@ -57771,11 +57031,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/literary-reader/entry.tsx",
-          "edge": "value import \"../../../session/observation\" #1 => apps/web/src/session/observation.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/literary-reader/entry.tsx",
           "edge": "value import \"../../../subject/reader\" #1 => apps/web/src/subject/reader.ts"
         },
         {
@@ -57922,11 +57177,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/manga-profile-corrections.tsx",
           "edge": "value import \"../pages/data\" #1 => apps/web/src/features/pages/data.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/manga-profile-field.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -58306,11 +57556,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/music-release-reader/view.tsx",
-          "edge": "value import \"../../pages/data\" #1 => apps/web/src/features/pages/data.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/music-release-reader/view.tsx",
           "edge": "value import \"../../pages/shared\" #1 => apps/web/src/features/pages/shared.tsx"
         },
         {
@@ -58325,33 +57570,13 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/organization-reader/overview.tsx",
-          "edge": "type import \"../../pages/shared\" #1 => apps/web/src/features/pages/shared.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/organization-reader/overview.tsx",
-          "edge": "value import \"../../pages/subject-community-lifetime\" #1 => apps/web/src/features/pages/subject-community-lifetime.tsx"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/organization-reader/view.tsx",
           "edge": "value import \"../../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/organization-reader/view.tsx",
-          "edge": "value import \"../../pages/data\" #1 => apps/web/src/features/pages/data.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/organization-reader/view.tsx",
           "edge": "value import \"../../pages/shared\" #1 => apps/web/src/features/pages/shared.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/organization-reader/view.tsx",
-          "edge": "value import \"../../pages/subject-community-lifetime\" #1 => apps/web/src/features/pages/subject-community-lifetime.tsx"
         },
         {
           "rule": "rule 2",
@@ -58381,11 +57606,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/people-biography/items.tsx",
-          "edge": "value import \"../../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/people-biography/items.tsx",
           "edge": "value import \"../../../subject/candidate-review\" #1 => apps/web/src/subject/candidate-review.tsx"
         },
         {
@@ -58406,22 +57626,7 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/people-facts/visit.tsx",
-          "edge": "value import \"../../../session/observation\" #1 => apps/web/src/session/observation.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/people-facts/visit.tsx",
           "edge": "value import \"../../pages/subject-community-lifetime\" #1 => apps/web/src/features/pages/subject-community-lifetime.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/people-names/entry.tsx",
-          "edge": "value import \"../../../session/observation\" #1 => apps/web/src/session/observation.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/people-names/entry.tsx",
-          "edge": "value import \"../../../subject/candidate-lifetime\" #1 => apps/web/src/subject/candidate-lifetime.tsx"
         },
         {
           "rule": "rule 2",
@@ -58625,11 +57830,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/publication-editor-facts.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/publication-editor-form.tsx",
           "edge": "value import \"../../shell/page-heading\" #1 => apps/web/src/shell/page-heading.tsx"
         },
@@ -58756,11 +57956,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/recipe-editor-view.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/recipe-editor-view.tsx",
           "edge": "value import \"../../shell/page-heading\" #1 => apps/web/src/shell/page-heading.tsx"
         },
         {
@@ -58802,11 +57997,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/recording-reader/review/navigation.ts",
           "edge": "value import \"../../../pages/subject-visit-navigation\" #1 => apps/web/src/features/pages/subject-visit-navigation.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/recording-reader/review/release.ts",
-          "edge": "value import \"../../../../session/observation\" #1 => apps/web/src/session/observation.ts"
         },
         {
           "rule": "rule 2",
@@ -58912,11 +58102,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/relation-editor-session.tsx",
           "edge": "value import \"../../threads/composer\" #1 => apps/web/src/threads/composer.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/relation-editor.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -59102,11 +58287,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/screen-profile-actions.ts",
           "edge": "value import \"../../subject/candidate-admission\" #1 => apps/web/src/subject/candidate-admission.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/screen-profile-fields.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -59306,11 +58486,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/statement-editor-view.tsx",
-          "edge": "value import \"../../subject/quantity-presentation\" #1 => apps/web/src/subject/quantity-presentation.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/statement-editor-view.tsx",
           "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
@@ -59332,11 +58507,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/statement-editor.ts",
           "edge": "value import \"../../subject/candidates\" #1 => apps/web/src/subject/candidates.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/statement-editor.ts",
-          "edge": "value import \"../../subject/quantity-presentation\" #1 => apps/web/src/subject/quantity-presentation.ts"
         },
         {
           "rule": "rule 2",
@@ -59406,11 +58576,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/story-arc-profile-view.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/story-arc-profile-view.tsx",
           "edge": "value import \"../../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
         },
         {
@@ -59471,11 +58636,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/story-arc-reader/view.tsx",
-          "edge": "value import \"../../pages/subject-community-lifetime\" #1 => apps/web/src/features/pages/subject-community-lifetime.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/story-arc-reader/view.tsx",
           "edge": "value import \"../../pages/values\" #1 => apps/web/src/features/pages/values.tsx"
         },
         {
@@ -59492,11 +58652,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/subject-artwork/read.ts",
           "edge": "value import \"../../../threads/document-media\" #1 => apps/web/src/threads/document-media.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/subject-artwork/session.tsx",
-          "edge": "value import \"../../../session/observation\" #1 => apps/web/src/session/observation.ts"
         },
         {
           "rule": "rule 2",
@@ -59587,11 +58742,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/subject-changes-session.tsx",
           "edge": "value import \"../../session/browser-state\" #1 => apps/web/src/session/browser-state.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/subject-changes-session.tsx",
-          "edge": "value import \"../../session/observation\" #1 => apps/web/src/session/observation.ts"
         },
         {
           "rule": "rule 2",
@@ -59985,11 +59135,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/work-names/entry.tsx",
-          "edge": "value import \"../../../session/observation\" #1 => apps/web/src/session/observation.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/work-names/model.ts",
           "edge": "type import \"../../../subject/types\" #1 => apps/web/src/subject/types.ts"
         },
@@ -60037,11 +59182,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/features/catalogue/work-parts-page.tsx",
           "edge": "type import \"../../subject/relation-candidates\" #1 => apps/web/src/subject/relation-candidates.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/features/catalogue/work-parts-page.tsx",
-          "edge": "value import \"../../media/cover-src\" #1 => apps/web/src/media/cover-src.ts"
         },
         {
           "rule": "rule 2",
@@ -60610,11 +59750,6 @@
         },
         {
           "rule": "rule 3",
-          "file": "apps/web/src/features/catalogue/game-reader/view.tsx",
-          "edge": "value import \"../../pages/data\" #1 => apps/web/src/features/pages/data.tsx (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
           "file": "apps/web/src/features/catalogue/literary-reader/entry.tsx",
           "edge": "value import \"../../pages/overview\" #1 => apps/web/src/features/pages/overview.tsx (value-import cycle)"
         },
@@ -60686,22 +59821,12 @@
         {
           "rule": "rule 3",
           "file": "apps/web/src/features/catalogue/music-release-reader/view.tsx",
-          "edge": "value import \"../../pages/data\" #1 => apps/web/src/features/pages/data.tsx (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "apps/web/src/features/catalogue/music-release-reader/view.tsx",
           "edge": "value import \"./facts\" #1 => apps/web/src/features/catalogue/music-release-reader/facts.tsx (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "apps/web/src/features/catalogue/organization-reader/overview.tsx",
           "edge": "value import \"./view\" #1 => apps/web/src/features/catalogue/organization-reader/view.tsx (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "apps/web/src/features/catalogue/organization-reader/view.tsx",
-          "edge": "value import \"../../pages/data\" #1 => apps/web/src/features/pages/data.tsx (value-import cycle)"
         },
         {
           "rule": "rule 3",

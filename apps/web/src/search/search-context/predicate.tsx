@@ -4,7 +4,11 @@ import { calendarPrecision } from '../condition-calendar';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 
-export function rangeDescription(range: FilterRange, locale = 'en'): string {
+export function rangeDescription(
+  range: FilterRange,
+  locale = 'en',
+  unitText?: (unit: string | undefined) => string | undefined,
+): ReactNode {
   const options = { locale: locales.find((item) => item === locale) ?? 'en' };
   if (range.type === 'time') {
     const endpoint = (value: string | undefined) =>
@@ -12,13 +16,19 @@ export function rangeDescription(range: FilterRange, locale = 'en'): string {
     return `${m.condition_range_calendar_mode({}, options)}: ≥ ${endpoint(range.gte)}; ≤ ${endpoint(range.lte)}. ${m.condition_calendar_overlap({}, options)}`;
   }
   const end = (value: unknown) => (typeof value === 'object' ? JSON.stringify(value) : String(value));
-  return [
-    range.gte === undefined ? '' : `≥ ${end(range.gte)}`,
-    range.lte === undefined ? '' : `≤ ${end(range.lte)}`,
-    range.unit ?? '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const unit = range.type === 'time' ? undefined : (unitText?.(range.unit) ?? range.unit);
+  return (
+    <>
+      {range.gte !== undefined && <span>≥ {end(range.gte)}</span>}
+      {range.lte !== undefined && <span>{range.gte !== undefined ? ' ' : ''}≤ {end(range.lte)}</span>}
+      {unit !== undefined && (
+        <span title={range.type === 'time' ? undefined : range.unit} data-unit-id={range.type === 'time' ? undefined : range.unit}>
+          {range.gte !== undefined || range.lte !== undefined ? ' ' : ''}
+          {unit}
+        </span>
+      )}
+    </>
+  );
 }
 
 function relationDescription(property: ReactNode, values: ReactNode, locale: string): ReactNode {
@@ -44,12 +54,14 @@ export function PredicateDescription({
   value,
   locale,
   label,
+  unitText,
   saved,
   previewNodes,
 }: {
   value: DiscoveryFilterDocument;
   locale: string;
   label: (id: string) => ReactNode;
+  unitText?: ((property: string, unit: string | undefined) => string | undefined) | undefined;
   saved?: ((id: string) => ReactNode) | undefined;
   previewNodes?: ReadonlySet<DiscoveryFilterDocument> | undefined;
 }) {
@@ -76,6 +88,7 @@ export function PredicateDescription({
               value={node}
               locale={locale}
               label={label}
+              unitText={unitText}
               saved={saved}
               previewNodes={previewNodes}
             />
@@ -117,8 +130,11 @@ export function PredicateDescription({
     return (
       <>
         {label(statement.property)}:{' '}
-        {'in' in statement ? terms(statement.in) : rangeDescription(statement.range, locale)}
+        {'in' in statement
+          ? terms(statement.in)
+          : rangeDescription(statement.range, locale, (unit) => unitText?.(statement.property, unit))}
         {inverseDescription ? <p>{inverseDescription}</p> : null}
+        {'inverse' in statement && statement.inverse && !('in' in statement) ? ' ←' : null}
         {'in' in statement && statement.concept
           ? ` (${m.condition_concept_predicate(
               {

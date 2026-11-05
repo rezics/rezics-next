@@ -10426,5 +10426,15 @@
   "recipe_visit_global": "별도의 전역 레시피 편집기 열기",
   "recipe_visit_context_global": "컨텍스트: 전역",
   "recipe_visit_context_selected": "컨텍스트: 선택한 읽기",
-  "recipe_visit_occurrence_missing": "요청한 진술이 현재 읽기에 공개되지 않거나 소속 주제가 변경되었습니다. 아래에서 현재 진술을 선택하세요."
+  "recipe_visit_occurrence_missing": "요청한 진술이 현재 읽기에 공개되지 않거나 소속 주제가 변경되었습니다. 아래에서 현재 진술을 선택하세요.",
+  "search_quantity_range_help": "두 경계는 경계와 같은 값을 포함합니다. 한쪽을 열어 두려면 해당 끝을 비워 두세요.",
+  "search_quantity_unitless_count": "단위 없는 개수 (1)",
+  "search_quantity_unit_marker": "선언된 {unit} 표식(물리 단위가 아님)",
+  "search_quantity_unit_not_admitted": "이 속성에서 허용되지 않음: {unit}",
+  "search_quantity_unit_label_unavailable": "표시 이름을 사용할 수 없음: {unit}",
+  "search_quantity_unit_missing": "단위가 없습니다. 공개된 단위를 선택하세요",
+  "search_quantity_unit_change_title": "단위 의미를 바꿀까요?",
+  "search_quantity_unit_change_message": "입력한 크기는 그대로 유지되지만 {from} 대신 {to}를 의미하게 됩니다. 단위를 바꾸려면 확인하세요.",
+  "search_quantity_unit_change_confirm": "단위 바꾸기",
+  "search_quantity_unit_change_cancel": "현재 단위 유지"
 }

@@ -10426,5 +10426,15 @@
   "recipe_visit_global": "Einen separaten globalen Rezepteditor öffnen",
   "recipe_visit_context_global": "Kontext: global",
   "recipe_visit_context_selected": "Kontext: gewählte Ansicht",
-  "recipe_visit_occurrence_missing": "Die angeforderte Aussage wird in dieser Ansicht nicht mehr offengelegt oder gehört nun zu einem anderen Thema. Wählen Sie unten eine aktuelle Aussage."
+  "recipe_visit_occurrence_missing": "Die angeforderte Aussage wird in dieser Ansicht nicht mehr offengelegt oder gehört nun zu einem anderen Thema. Wählen Sie unten eine aktuelle Aussage.",
+  "search_quantity_range_help": "Beide Grenzen schließen gleiche Werte ein. Lassen Sie ein Ende leer, um diese Seite offen zu lassen.",
+  "search_quantity_unitless_count": "Einheitslose Anzahl (1)",
+  "search_quantity_unit_marker": "Deklarierter Marker {unit}; keine physische Einheit",
+  "search_quantity_unit_not_admitted": "Für diese Eigenschaft nicht zugelassen: {unit}",
+  "search_quantity_unit_label_unavailable": "Anzeigename nicht verfügbar: {unit}",
+  "search_quantity_unit_missing": "Einheit fehlt; wählen Sie eine veröffentlichte Einheit",
+  "search_quantity_unit_change_title": "Bedeutung der Einheit ersetzen?",
+  "search_quantity_unit_change_message": "Die eingegebenen Werte bleiben gleich, bedeuten aber künftig {to} statt {from}. Bestätigen Sie, um die Einheit zu ersetzen.",
+  "search_quantity_unit_change_confirm": "Einheit ersetzen",
+  "search_quantity_unit_change_cancel": "Aktuelle Einheit behalten"
 }

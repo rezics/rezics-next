@@ -10426,5 +10426,15 @@
   "recipe_visit_global": "Ouvrir un éditeur de recette global distinct",
   "recipe_visit_context_global": "Contexte : global",
   "recipe_visit_context_selected": "Contexte : lecture sélectionnée",
-  "recipe_visit_occurrence_missing": "L’assertion demandée n’est plus divulguée dans cette lecture, ou son sujet a changé. Choisissez une assertion actuelle ci-dessous."
+  "recipe_visit_occurrence_missing": "L’assertion demandée n’est plus divulguée dans cette lecture, ou son sujet a changé. Choisissez une assertion actuelle ci-dessous.",
+  "search_quantity_range_help": "Les deux bornes incluent les valeurs égales. Laissez une extrémité vide pour garder ce côté ouvert.",
+  "search_quantity_unitless_count": "Compte sans unité (1)",
+  "search_quantity_unit_marker": "Marqueur {unit} déclaré ; ce n’est pas une unité physique",
+  "search_quantity_unit_not_admitted": "Non admise pour cette propriété : {unit}",
+  "search_quantity_unit_label_unavailable": "Nom d’affichage indisponible : {unit}",
+  "search_quantity_unit_missing": "Unité manquante ; choisissez une unité publiée",
+  "search_quantity_unit_change_title": "Remplacer le sens de l’unité ?",
+  "search_quantity_unit_change_message": "Les valeurs saisies resteront identiques, mais signifieront {to} au lieu de {from}. Confirmez pour remplacer l’unité.",
+  "search_quantity_unit_change_confirm": "Remplacer l’unité",
+  "search_quantity_unit_change_cancel": "Garder l’unité actuelle"
 }

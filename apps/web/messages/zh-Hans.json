@@ -10433,5 +10433,15 @@
   "recipe_visit_global": "另外打开全局食谱编辑器",
   "recipe_visit_context_global": "上下文：全局",
   "recipe_visit_context_selected": "上下文：选定的阅读",
-  "recipe_visit_occurrence_missing": "请求的陈述已不在此阅读中公开，或其所属主题已变更。请在下方选择当前的陈述。"
+  "recipe_visit_occurrence_missing": "请求的陈述已不在此阅读中公开，或其所属主题已变更。请在下方选择当前的陈述。",
+  "search_quantity_range_help": "两个边界都包含相等的值。留空一端可保持该侧开放。",
+  "search_quantity_unitless_count": "无单位计数 (1)",
+  "search_quantity_unit_marker": "已声明的 {unit} 标记；不是物理单位",
+  "search_quantity_unit_not_admitted": "此属性不允许使用：{unit}",
+  "search_quantity_unit_label_unavailable": "显示名称不可用：{unit}",
+  "search_quantity_unit_missing": "缺少单位；请选择已发布的单位",
+  "search_quantity_unit_change_title": "替换单位含义？",
+  "search_quantity_unit_change_message": "已输入的数值会保持不变，但含义会从 {from} 改为 {to}。确认后替换单位。",
+  "search_quantity_unit_change_confirm": "替换单位",
+  "search_quantity_unit_change_cancel": "保留当前单位"
 }

@@ -10613,5 +10613,15 @@
   "recipe_visit_global": "Open a separate Global recipe editor",
   "recipe_visit_context_global": "Context: Global",
   "recipe_visit_context_selected": "Context: selected reading",
-  "recipe_visit_occurrence_missing": "The requested assertion is no longer disclosed in this reading, or its holder changed. Choose a current assertion below."
+  "recipe_visit_occurrence_missing": "The requested assertion is no longer disclosed in this reading, or its holder changed. Choose a current assertion below.",
+  "search_quantity_range_help": "Both bounds include equal values. Leave either end empty to keep that side open.",
+  "search_quantity_unitless_count": "Unitless count (1)",
+  "search_quantity_unit_marker": "Declared {unit} marker; not a physical unit",
+  "search_quantity_unit_not_admitted": "Not admitted for this property: {unit}",
+  "search_quantity_unit_label_unavailable": "Display name unavailable: {unit}",
+  "search_quantity_unit_missing": "Unit missing; choose a released unit",
+  "search_quantity_unit_change_title": "Replace the unit meaning?",
+  "search_quantity_unit_change_message": "The entered magnitudes will stay the same, but they will mean {to} instead of {from}. Confirm to replace the unit.",
+  "search_quantity_unit_change_confirm": "Replace unit",
+  "search_quantity_unit_change_cancel": "Keep current unit"
 }

@@ -21,6 +21,7 @@ import { ConditionPresetName } from './condition-preset';
 import { ConditionRangeInput } from './condition-range-input';
 import { ConditionCalendarRangeEditor } from './condition-calendar-range';
 import { ConditionRangeMode } from './condition-range-mode';
+import { quantityUnitChangeNeedsConfirmation, searchQuantityUnitText } from './condition-quantity';
 import { ConditionLanguages } from './condition-languages';
 import { ConditionSavedFilter, editSavedFilterTree, type SavedFilterEditMode } from './condition-saved-filter';
 import {
@@ -68,10 +69,17 @@ import {
 type Choice = { value: string; labels: Record<string, string> };
 type MessageOptions = { locale: (typeof locales)[number] };
 type PendingPropertyChange =
-  | { kind: 'statement'; property: string }
-  | { kind: 'qualifier'; index: number; property: string };
+  | { kind: 'statement'; property: string; identity: string }
+  | { kind: 'qualifier'; index: number; property: string; identity: string };
+type PendingUnitChange = {
+  from: string | undefined;
+  to: string | undefined;
+  identity: string;
+  magnitudes: readonly string[];
+};
 type EditorContext = {
   metadata: ConditionMetadata;
+  identity: string;
   locale: string;
   options: MessageOptions;
   disabled: boolean;
@@ -304,6 +312,7 @@ export function ConditionEditor({
   const context: EditorContext | undefined = metadata
     ? {
         metadata,
+        identity: focusOwner,
         locale,
         options,
         disabled,
@@ -588,14 +597,56 @@ function NodeEditor({
     : m.refinement_choose_property({}, options);
   const direction = statementValue ? conditionDirection(statementValue) : 'direct';
   const range = 'statement' in value && 'range' in value.statement ? value.statement.range : undefined;
+  const unitMessages = {
+    missing: () => m.search_quantity_unit_missing({}, context.options),
+    unitless: () => m.search_quantity_unitless_count({}, context.options),
+    marker: (unit: string) => m.search_quantity_unit_marker({ unit }, context.options),
+    notAdmitted: (unit: string) => m.search_quantity_unit_not_admitted({ unit }, context.options),
+    unavailable: (unit: string) => m.search_quantity_unit_label_unavailable({ unit }, context.options),
+  };
+  const unitText = (unit: string | undefined, admitted: readonly string[] = definition?.units ?? []) =>
+    searchQuantityUnitText(unit, admitted, context.locale, unitMessages);
+  const rangeMagnitudes = (['gte', 'lte'] as const).map(
+    (bound) => draft.ranges[bound].current?.raw ?? range?.[bound]?.toString() ?? '',
+  );
+  const rangeMagnitudeIdentity = JSON.stringify(rangeMagnitudes);
   const [pendingPropertyChange, setPendingPropertyChange] = useState<PendingPropertyChange>();
   const propertyChangeDialog = useRef<HTMLDialogElement>(null);
   const propertyChangeId = useId();
+  const [pendingUnitChange, setPendingUnitChange] = useState<PendingUnitChange>();
+  const unitChangeDialog = useRef<HTMLDialogElement>(null);
+  const unitChangeId = useId();
   useEffect(() => {
-    if (pendingPropertyChange && propertyChangeDialog.current && !propertyChangeDialog.current.open) {
+    if (
+      pendingPropertyChange?.identity === context.identity &&
+      propertyChangeDialog.current &&
+      !propertyChangeDialog.current.open
+    ) {
       propertyChangeDialog.current.showModal();
     }
-  }, [pendingPropertyChange]);
+  }, [context.identity, pendingPropertyChange]);
+  useEffect(() => {
+    if (
+      pendingUnitChange?.identity === context.identity &&
+      unitChangeDialog.current &&
+      !unitChangeDialog.current.open
+    ) {
+      unitChangeDialog.current.showModal();
+    }
+  }, [context.identity, pendingUnitChange]);
+  useEffect(() => {
+    if (
+      pendingUnitChange &&
+      (context.disabled ||
+        pendingUnitChange.identity !== context.identity ||
+        range?.unit !== pendingUnitChange.from ||
+        JSON.stringify(pendingUnitChange.magnitudes) !== rangeMagnitudeIdentity)
+    ) {
+      setPendingUnitChange(undefined);
+    }
+    if (pendingPropertyChange && (context.disabled || pendingPropertyChange.identity !== context.identity))
+      setPendingPropertyChange(undefined);
+  }, [context.disabled, context.identity, pendingPropertyChange, pendingUnitChange, range?.unit, rangeMagnitudeIdentity]);
   const properties = facetProperties(context.metadata, Object.keys(context.metadata.types));
   const fieldChoices = (ids: readonly string[], selected: string) => {
     const choices = ids.map((id) => ({
@@ -618,17 +669,23 @@ function NodeEditor({
   const selectStatementProperty = (nextProperty: string) => {
     const transition = changeStatementProperty(value, nextProperty, context.metadata.properties);
     setPendingPropertyChange(undefined);
-    if (transition.requiresConfirmation) setPendingPropertyChange({ kind: 'statement', property: nextProperty });
+    setPendingUnitChange(undefined);
+    if (transition.requiresConfirmation)
+      setPendingPropertyChange({ kind: 'statement', property: nextProperty, identity: context.identity });
     else onChange(transition.next);
   };
   const selectQualifierProperty = (index: number, nextProperty: string) => {
     const transition = changeQualifierProperty(value, index, nextProperty, context.metadata.properties);
     setPendingPropertyChange(undefined);
-    if (transition.requiresConfirmation) setPendingPropertyChange({ kind: 'qualifier', index, property: nextProperty });
+    if (transition.requiresConfirmation)
+      setPendingPropertyChange({ kind: 'qualifier', index, property: nextProperty, identity: context.identity });
     else onChange(transition.next);
   };
   const resolvePendingPropertyChange = (confirmed: boolean) => {
-    if (!pendingPropertyChange) return;
+    if (!pendingPropertyChange || pendingPropertyChange.identity !== context.identity) {
+      setPendingPropertyChange(undefined);
+      return;
+    }
     const transition =
       pendingPropertyChange.kind === 'statement'
         ? changeStatementProperty(value, pendingPropertyChange.property, context.metadata.properties)
@@ -640,6 +697,25 @@ function NodeEditor({
           );
     onChange(resolveConditionPropertyChange(transition, confirmed));
     setPendingPropertyChange(undefined);
+    setPendingUnitChange(undefined);
+  };
+  const replaceRangeUnit = (unit: string | undefined) => {
+    if (!range || range.type === 'time') return;
+    const next = { ...range };
+    if (unit === undefined) delete next.unit;
+    else next.unit = unit;
+    replaceStatement({ range: next });
+  };
+  const resolvePendingUnitChange = (confirmed: boolean) => {
+    if (!pendingUnitChange) return;
+    if (
+      confirmed &&
+      pendingUnitChange.identity === context.identity &&
+      range?.unit === pendingUnitChange.from &&
+      JSON.stringify(pendingUnitChange.magnitudes) === rangeMagnitudeIdentity
+    )
+      replaceRangeUnit(pendingUnitChange.to);
+    setPendingUnitChange(undefined);
   };
   const remove = () => {
     if (context.editTree(path, { type: 'remove' }))
@@ -893,24 +969,39 @@ function NodeEditor({
                       label={label}
                     >
                       {(props) => (
-                        <ConditionRangeInput
-                          {...props}
-                          draft={draft.ranges[bound]}
-                          datatype={definition?.datatype === 'time' ? 'time' : 'quantity'}
-                          locale={context.locale}
-                          label={label}
-                          value={range[bound]}
-                          onValue={(number) => {
-                            const next = { ...range };
-                            if (number === undefined) delete next[bound];
-                            else next[bound] = number;
-                            replaceStatement({ range: next });
-                          }}
-                        />
+                        <div className="flex min-w-0 items-center gap-2">
+                          <ConditionRangeInput
+                            {...props}
+                            draft={draft.ranges[bound]}
+                            datatype={definition?.datatype === 'time' ? 'time' : 'quantity'}
+                            locale={context.locale}
+                            label={label}
+                            value={range[bound]}
+                            onValue={(number) => {
+                              const next = { ...range };
+                              if (number === undefined) delete next[bound];
+                              else next[bound] = number;
+                              replaceStatement({ range: next });
+                            }}
+                          />
+                          {definition?.datatype === 'quantity' && (
+                            <span
+                              className="shrink-0 text-sm text-muted-foreground"
+                              title={range.unit}
+                              data-unit-id={range.unit}
+                            >
+                              {unitText(range.unit, definition.units ?? [])}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </EditorField>
                   );
                 })
+              )}
+              {definition?.datatype === 'quantity' && range.type !== 'time' && (
+                <p className="text-sm text-muted-foreground">{m.search_quantity_range_help({}, options)}</p>
+              )}
               )}
               {definition?.datatype === 'time' && range.type !== 'time' && (
                 <p className="text-sm text-muted-foreground">{m.refinement_year_hint({}, options)}</p>
@@ -926,19 +1017,28 @@ function NodeEditor({
                       {...props}
                       value={range.unit ?? ''}
                       onChange={(event) => {
-                        const next = { ...range };
-                        if (event.currentTarget.value) next.unit = event.currentTarget.value;
-                        else delete next.unit;
-                        replaceStatement({ range: next });
+                        const nextUnit = event.currentTarget.value || undefined;
+                        if (quantityUnitChangeNeedsConfirmation(range.unit, nextUnit, rangeMagnitudes)) {
+                          setPendingUnitChange({
+                            from: range.unit,
+                            to: nextUnit,
+                            identity: context.identity,
+                            magnitudes: rangeMagnitudes,
+                          });
+                        } else replaceRangeUnit(nextUnit);
                       }}
                     >
-                      <NativeSelectOption value="">{m.condition_choose_value({}, options)}</NativeSelectOption>
+                      <NativeSelectOption value="">
+                        {unitText(undefined, definition?.units ?? [])}
+                      </NativeSelectOption>
                       {range.unit && !definition?.units?.includes(range.unit) && (
-                        <NativeSelectOption value={range.unit}>{range.unit}</NativeSelectOption>
+                        <NativeSelectOption value={range.unit} title={range.unit}>
+                          {unitText(range.unit, definition?.units ?? [])}
+                        </NativeSelectOption>
                       )}
                       {definition?.units?.map((unit) => (
-                        <NativeSelectOption key={unit} value={unit}>
-                          {unit}
+                        <NativeSelectOption key={unit} value={unit} title={unit}>
+                          {unitText(unit, definition.units ?? [])}
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
@@ -1079,7 +1179,7 @@ function NodeEditor({
       {'owner' in value && !extensionLeaf && (
         <p className="text-sm text-muted-foreground">{m.condition_retained({}, options)}</p>
       )}
-      {pendingPropertyChange && (
+      {pendingPropertyChange?.identity === context.identity && (
         <dialog
           ref={propertyChangeDialog}
           role="alertdialog"
@@ -1112,6 +1212,46 @@ function NodeEditor({
             </Button>
             <Button type="button" onClick={() => resolvePendingPropertyChange(true)}>
               {m.condition_property_change_confirm({}, options)}
+            </Button>
+          </div>
+        </dialog>
+      )}
+      {pendingUnitChange?.identity === context.identity && (
+        <dialog
+          ref={unitChangeDialog}
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={`${unitChangeId}-title`}
+          aria-describedby={`${unitChangeId}-description`}
+          className="max-w-lg rounded-lg border border-border bg-background p-4 text-foreground shadow-xl backdrop:bg-black/50"
+          onCancel={(event) => {
+            event.preventDefault();
+            resolvePendingUnitChange(false);
+          }}
+        >
+          <h2 id={`${unitChangeId}-title`} className="font-semibold">
+            {m.search_quantity_unit_change_title({}, options)}
+          </h2>
+          <p id={`${unitChangeId}-description`} className="mt-2 text-sm text-muted-foreground">
+            {m.search_quantity_unit_change_message(
+              {
+                from: unitText(pendingUnitChange.from, definition?.units ?? []),
+                to: unitText(pendingUnitChange.to, definition?.units ?? []),
+              },
+              options,
+            )}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            <code title={pendingUnitChange.from}>{pendingUnitChange.from ?? ''}</code>
+            {' → '}
+            <code title={pendingUnitChange.to}>{pendingUnitChange.to ?? ''}</code>
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="outline" autoFocus onClick={() => resolvePendingUnitChange(false)}>
+              {m.search_quantity_unit_change_cancel({}, options)}
+            </Button>
+            <Button type="button" onClick={() => resolvePendingUnitChange(true)}>
+              {m.search_quantity_unit_change_confirm({}, options)}
             </Button>
           </div>
         </dialog>
