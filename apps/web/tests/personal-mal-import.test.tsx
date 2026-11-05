@@ -264,10 +264,10 @@ async function clickWithin(container: Element, label: string) {
 async function clickControlWithin(container: Element, labelText: string) {
   const label = [...container.querySelectorAll('label')].find((item) => item.textContent?.trim() === labelText);
   expect(label).toBeDefined();
-  const input = label!.querySelector('input');
-  expect(input).toBeDefined();
+  const control = label!.querySelector('input') ?? document.getElementById(label!.htmlFor);
+  expect(control).toBeDefined();
   await act(async () => {
-    (input as HTMLInputElement).click();
+    (control as HTMLElement).click();
     await Promise.resolve();
   });
   await settle();
@@ -452,7 +452,7 @@ test('explicit unmatched target, status selection, confirmation and partial resu
   await click(m.library_mal_upload());
   expect(previewXml[0]).toContain('myanimelist');
   expect(host.textContent).toContain('Private manga');
-  expect(host.textContent).toContain(m.library_mal_score_none());
+  expect(host.textContent).toContain(m.library_mal_score_zero_source({ value: '0' }));
   expect(host.textContent).toContain(m.library_mal_chapters());
   expect(host.textContent).toContain(m.library_mal_volumes());
   expect(host.textContent).toContain(m.library_mal_not_vote());
@@ -625,7 +625,7 @@ test('keep stays the default and separates MAL zero from a real native zero thro
   );
   expect(host.textContent).toContain(
     m.library_mal_current_vote_label({
-      value: m.library_mal_vote_present({ units: 0, revision: 3, at: '2026-10-01T12:00:00.000Z' }),
+      value: m.library_mal_vote_present({ units: 0, revision: 4, at: '2026-11-05T12:00:00.000Z' }),
     }),
   );
   await clickLabel(m.library_import_source_privacy_confirm());

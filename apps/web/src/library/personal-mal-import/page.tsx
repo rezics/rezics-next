@@ -269,6 +269,19 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       }
     }
     acceptPage(response.page, cursor, switchToReview, preserveFields);
+    if (!lastResult.current) {
+      const outcomes = response.page.rows.flatMap((row) => (row.outcome ? [row.outcome] : []));
+      if (outcomes.length) {
+        const reopened: MalApplyPage = {
+          id: response.page.id,
+          outcomes,
+          remaining: [],
+          stopped: response.page.canceled,
+        };
+        lastResult.current = reopened;
+        setResult(reopened);
+      }
+    }
     return response.page;
   }
 
