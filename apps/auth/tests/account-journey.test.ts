@@ -246,10 +246,7 @@ test('matching signatures retain legacy native-valid keys while different signat
   const operation = { kind: 'organization' as const, handle: 'reading-group' };
   const signature = JSON.stringify(['actor', operation]);
   const legacyKey = 'old/native-key/é';
-  window.sessionStorage.setItem(
-    'rezics.account-operation.pending',
-    JSON.stringify({ signature, key: legacyKey }),
-  );
+  window.sessionStorage.setItem('rezics.account-operation.pending', JSON.stringify({ signature, key: legacyKey }));
   expect(operationKeyFor(operation, 'actor')).toEqual({ kind: 'ready', key: legacyKey });
 
   const differentActor = keyOf(operationKeyFor(operation, 'other-actor'));

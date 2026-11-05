@@ -67,11 +67,7 @@ function operationRecord(value: unknown): value is AccountOperation {
 }
 
 function operationSignature(operation: AccountOperation, actorAccountId?: string): string | null {
-  if (
-    (actorAccountId !== undefined && !accountId(actorAccountId)) ||
-    !operationRecord(operation)
-  )
-    return null;
+  if ((actorAccountId !== undefined && !accountId(actorAccountId)) || !operationRecord(operation)) return null;
   const actor = actorAccountId ?? (operation.kind === 'delete' ? operation.accountId : null);
   const canonicalOperation: AccountOperation =
     operation.kind === 'delete'
@@ -289,11 +285,7 @@ export function operationKeyFor(
   return allocateOperationKey(signature, stored.kind !== 'unavailable');
 }
 
-export function forgetOperationKey(
-  operation: AccountOperation,
-  actorAccountId?: string,
-  expectedKey?: string,
-): void {
+export function forgetOperationKey(operation: AccountOperation, actorAccountId?: string, expectedKey?: string): void {
   const signature = operationSignature(operation, actorAccountId);
   if (!signature || (expectedKey !== undefined && !validOperationKey(expectedKey))) return;
   const stored = readStoredOperationKey();

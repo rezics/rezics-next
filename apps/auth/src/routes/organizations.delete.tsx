@@ -538,11 +538,7 @@ export function OrganizationDeleteContent({
       }
       key ??= continuation.value.operationKey;
     }
-    const keyResult = operationKeyFor(
-      { kind: 'delete', accountId: selected },
-      target.humanAccountId,
-      key,
-    );
+    const keyResult = operationKeyFor({ kind: 'delete', accountId: selected }, target.humanAccountId, key);
     if (keyResult.kind === 'refused') {
       setMessage(m.auth_account_operation_unavailable());
       return;
