@@ -444,7 +444,8 @@ export function createNativeCollectionDiscoveryAdapter(
                   !row ||
                   row.revision !== card.revision ||
                   row.membershipKind !== card.membershipKind ||
-                  (card.membershipKind === 'dynamic' && row.output.generation !== card.outputGeneration) ||
+                  (card.membershipKind === 'dynamic' &&
+                    (row.membershipKind !== 'dynamic' || row.output.generation !== card.outputGeneration)) ||
                   !nativeOperand ||
                   JSON.stringify(row.operands.presentationKind) !== JSON.stringify(nativeOperand.presentationKind) ||
                   JSON.stringify(row.operands.recency) !== JSON.stringify(nativeOperand.recency) ||

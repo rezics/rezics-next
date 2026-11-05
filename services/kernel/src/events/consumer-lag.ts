@@ -1,14 +1,18 @@
-import type { PoolClient } from 'pg';
-import readConsumerLagQuery from './read-consumer-lag.sql';
+import type { AccessClient } from '../request/access.ts';
 
 export type ConsumerLag = {
   oldestPendingAt: Date | null;
   observedAt: Date;
 };
 
-export async function readConsumerLag(client: PoolClient, consumer: string): Promise<ConsumerLag | null> {
-  // The SQL mapper returns a nullable row for this primary-key lookup.
-  const row = await readConsumerLagQuery.run(client, { consumer });
+export async function readConsumerLag(client: AccessClient, consumer: string): Promise<ConsumerLag | null> {
+  // Query-only deadline clients carry the same single-row native observation as a pool client.
+  const row = (
+    await client.query<{ oldest_pending_at: string | null; observed_at: string }>(
+      `SELECT oldest_pending_at, observed_at FROM core.consumer_lag WHERE consumer=$1`,
+      [consumer],
+    )
+  ).rows[0];
   return row
     ? {
         oldestPendingAt: row.oldest_pending_at === null ? null : new Date(row.oldest_pending_at),
