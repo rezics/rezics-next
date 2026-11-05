@@ -1,4 +1,9 @@
-import { AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES, securityResponseLimits, type SessionProof } from '@rezics/auth-contract';
+import {
+  AUTH_MANAGEMENT_CLIENT_ID,
+  AUTH_MANAGEMENT_SCOPES,
+  securityResponseLimits,
+  type SessionProof,
+} from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
 

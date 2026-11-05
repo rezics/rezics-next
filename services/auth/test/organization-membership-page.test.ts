@@ -73,17 +73,26 @@ test('maximum escaped native roster is bounded, with opaque viewer identity and 
   const viewer = '\0'.repeat(1024);
   const items = Array.from({ length: 20 }, (_, n) => {
     const id = `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-    return { accountId: id, account: { id, kind: 'organization', handle: '\0'.repeat(256), displayName: '\0'.repeat(256) },
-      role: 'member', actions: { changeRole: 'unavailable', remove: 'unavailable' } };
+    return {
+      accountId: id,
+      account: { id, kind: 'organization', handle: '\0'.repeat(256), displayName: '\0'.repeat(256) },
+      role: 'member',
+      actions: { changeRole: 'unavailable', remove: 'unavailable' },
+    };
   });
-  const body = { organizationId, viewer: { accountId: viewer, role: 'member', leave: 'unavailable' },
-    members: { state: 'ready', items, next: '\0'.repeat(4096) } };
-  expect(new TextEncoder().encode(JSON.stringify(organizationMembershipPage(body, organizationId, viewer))).length)
-    .toBe(membershipResponseBytes.roster);
+  const body = {
+    organizationId,
+    viewer: { accountId: viewer, role: 'member', leave: 'unavailable' },
+    members: { state: 'ready', items, next: '\0'.repeat(4096) },
+  };
+  expect(
+    new TextEncoder().encode(JSON.stringify(organizationMembershipPage(body, organizationId, viewer))).length,
+  ).toBe(membershipResponseBytes.roster);
   for (const bad of [
     { ...body, viewer: { ...body.viewer, accountId: viewer + 'x' } },
     { ...body, members: { ...body.members, items: [items[0], items[0]] } },
     { ...body, members: { ...body.members, items: [{ ...items[0], accountId: 'opaque' }] } },
     { ...body, members: { ...body.members, items: [{ ...items[0], role: 'admin' }] } },
-  ]) expect(() => organizationMembershipPage(bad, organizationId, bad.viewer.accountId)).toThrow();
+  ])
+    expect(() => organizationMembershipPage(bad, organizationId, bad.viewer.accountId)).toThrow();
 });

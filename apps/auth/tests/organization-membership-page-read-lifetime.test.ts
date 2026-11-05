@@ -59,7 +59,11 @@ test('production browser membership read bounds ignored cancellation and preserv
 });
 
 test('installed roster phases and selected receiving bound native streams before parsing without retries', async () => {
-  const child = Bun.spawn([process.execPath, '-e', `
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      '-e',
+      `
     import { expect, mock } from 'bun:test';
     let request;
     mock.module('@tanstack/react-start', () => ({ createServerOnlyFn: fn => fn, createServerFn: () => {
@@ -109,7 +113,10 @@ test('installed roster phases and selected receiving bound native streams before
     const pending = loadSelectedMembership(org, account, caller.signal);
     await new Promise(resolve => setTimeout(resolve, 0)); caller.abort();
     expect(await pending).toEqual({ kind: 'unavailable' }); expect(calls).toHaveLength(1);
-  `], { cwd: `${import.meta.dir}/../../..`, stdout: 'pipe', stderr: 'pipe' });
+  `,
+    ],
+    { cwd: `${import.meta.dir}/../../..`, stdout: 'pipe', stderr: 'pipe' },
+  );
   const [out, err] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
   expect(await child.exited, out + err).toBe(0);
 });

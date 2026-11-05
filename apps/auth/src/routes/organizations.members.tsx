@@ -542,7 +542,11 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setPage({ kind: 'denied' });
         return;
       }
-      const currentMember = await loadSelectedMembership(organizationId, expected.operation.memberAccountId, readSignal);
+      const currentMember = await loadSelectedMembership(
+        organizationId,
+        expected.operation.memberAccountId,
+        readSignal,
+      );
       if (!isActive()) return;
       if (currentMember.kind !== 'ready') {
         installPage(currentMember);
