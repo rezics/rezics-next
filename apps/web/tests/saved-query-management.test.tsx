@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
+import { createRequire } from 'node:module';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { CollectionWriteResult } from '../src/library/collection-edit';
@@ -84,7 +85,6 @@ async function installBrowser() {
     'HTMLInputElement',
     'HTMLTextAreaElement',
     'Node',
-    'Event',
     'IS_REACT_ACT_ENVIRONMENT',
   ];
   const globals = new Map<string, PropertyDescriptor | undefined>();
@@ -97,7 +97,6 @@ async function installBrowser() {
     browser.HTMLInputElement,
     browser.HTMLTextAreaElement,
     browser.Node,
-    browser.Event,
     true,
   ];
   keys.forEach((key, index) => {
@@ -132,16 +131,6 @@ function dialogContent(document: Document): HTMLElement {
   const content = document.querySelector<HTMLElement>('[data-slot="alert-dialog-content"]');
   if (!content) throw new Error('Expected an open management dialog');
   return content;
-}
-
-function setField(field: HTMLInputElement | HTMLTextAreaElement, value: string) {
-  act(() => {
-    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), 'value')?.set;
-    if (!setter) throw new Error('Expected a native text field');
-    setter.call(field, value);
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-    field.dispatchEvent(new Event('change', { bubbles: true }));
-  });
 }
 
 function makeController({
@@ -299,6 +288,9 @@ test('mounted manager callbacks keep their originating controller state and port
         />,
       ),
     );
+    const require = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
+    const { default: userEvent } = await import(require.resolve('@testing-library/user-event'));
+    const user = userEvent.setup({ document: harness.browser.document });
     await clickButton(harness.browser.document, m.library_saved_query_manage(), host);
     expect(reads).toBe(1);
     expect(metadata[0]).toMatchObject({ id: 'saved-query-1', revision: 7, title: 'Current title' });
@@ -306,8 +298,10 @@ test('mounted manager callbacks keep their originating controller state and port
     const title = host.querySelector<HTMLInputElement>('input');
     const description = host.querySelector<HTMLTextAreaElement>('textarea');
     if (!title || !description) throw new Error('Expected the mounted metadata editor');
-    setField(title, 'Draft title');
-    setField(description, 'Draft description');
+    await user.clear(title);
+    await user.type(title, 'Draft title');
+    await user.clear(description);
+    await user.type(description, 'Draft description');
     await settle();
     expect(title.value).toBe('Draft title');
     expect(description.value).toBe('Draft description');
@@ -328,7 +322,8 @@ test('mounted manager callbacks keep their originating controller state and port
     expect(reads).toBe(2);
     const reopenedTitle = host.querySelector<HTMLInputElement>('input');
     if (!reopenedTitle) throw new Error('Expected the reopened metadata editor');
-    setField(reopenedTitle, 'Unsaved title');
+    await user.clear(reopenedTitle);
+    await user.type(reopenedTitle, 'Unsaved title');
     await settle();
     await clickButton(harness.browser.document, m.library_collection_save(), host);
     expect(host.textContent).toContain(m.library_saved_query_management_refused());
