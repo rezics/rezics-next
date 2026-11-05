@@ -30,11 +30,7 @@ import {
   taskLintWarnings,
   type BacklogDispatchResult,
 } from './backlog-shared.ts';
-import {
-  deliverResearchCompletions,
-  dispatchResearchClaim,
-  recoverResearchClaims,
-} from './backlog-research.ts';
+import { deliverResearchCompletions, dispatchResearchClaim, recoverResearchClaims } from './backlog-research.ts';
 
 export { backlogDirectory };
 
@@ -448,8 +444,7 @@ async function dispatchReady(
   for (const goal of goals) {
     const research = await recoverResearchClaims(runtime, goal, available);
     for (const entry of research.dispatched) dispatched.push({ goal, ...entry });
-    for (const completion of research.completed)
-      recordGoalDispatch(runtime, completion.goal, completion.writtenMs);
+    for (const completion of research.completed) recordGoalDispatch(runtime, completion.goal, completion.writtenMs);
     available -= research.started;
     const recovered = recoverClaims(runtime, goal);
     for (const entry of recovered.dispatched) dispatched.push({ goal, ...entry });

@@ -207,8 +207,12 @@ test('research claim recovery keeps its group identity across a partial budget a
   expect(groupIds).toEqual([group.id, group.id]);
   expect(f.dispatched).toHaveLength(1);
   expect(second.dispatched.map((entry) => entry.taskId)).toEqual([task.id]);
-  expect(JSON.parse((f.db.query('SELECT dispatch_failures FROM research_groups').get() as { dispatch_failures: string }).dispatch_failures))
-    .toEqual({ 'claude-opus-5-5': 'Error: dispatch failed before task creation' });
+  expect(
+    JSON.parse(
+      (f.db.query('SELECT dispatch_failures FROM research_groups').get() as { dispatch_failures: string })
+        .dispatch_failures,
+    ),
+  ).toEqual({ 'claude-opus-5-5': 'Error: dispatch failed before task creation' });
   const completions = f.events.filter((event) => event.kind === 'research-complete');
   expect(completions).toHaveLength(1);
   expect(completions[0]!.summary).toContain('failed researchers: claude-opus-5-5');

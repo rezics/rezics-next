@@ -325,4 +325,3 @@ export function deliverResearchCompletions(runtime: BacklogResearchRuntime, now:
   }
   return notified;
 }
-
