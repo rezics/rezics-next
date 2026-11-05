@@ -88,6 +88,18 @@ test('The actual named-label Library renders private FULL assignments and remove
       server: <T extends (...args: never[]) => unknown>(handler: T) =>
         Object.assign(handler, { client: () => handler }),
     }),
+    createServerFn: () => {
+      let validate = (value: unknown) => value;
+      const serverFn = {
+        validator: (validator: (value: unknown) => unknown) => {
+          validate = validator;
+          return serverFn;
+        },
+        handler: (handler: (input: { data: unknown }) => unknown) =>
+          async (input: { data?: unknown } = {}) => handler({ data: validate(input.data) }),
+      };
+      return serverFn;
+    },
   }));
   const cacheHeaders: string[] = [];
   mock.module('@tanstack/react-start/server', () => ({
