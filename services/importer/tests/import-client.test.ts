@@ -20,57 +20,142 @@ const generatedMutationClosure: [
 ] = [true, true, true, true];
 
 const subjectId = '00000000-0000-4000-8000-000000000101';
-test('bulk transport retries only explicitly retryable unavailable members with their original commands', async () => {
-  const commands = [1, 2, 3].map((n) => ({
-    op: 'create' as const,
-    key: `fixture:${n}:create`,
-    source: {
-      source: 'fixture',
-      external_id: String(n),
-      record_revision: '1',
-      converter_revision: 'fixture@1',
-      digest: 'a'.repeat(64),
-      field_group: 'facts' as const,
-    },
-    subject: { type: 'schema:Book', labels: { en: 'Book' } },
-  }));
-  const requests: unknown[] = [];
+const commands = [1, 2, 3, 4].map((n) => ({
+  op: 'create' as const,
+  key: `fixture:${n}:create`,
+  source: {
+    source: 'fixture',
+    external_id: String(n),
+    record_revision: '1',
+    converter_revision: 'fixture@1',
+    digest: 'a'.repeat(64),
+    field_group: 'facts' as const,
+  },
+  subject: { type: 'schema:Book', labels: { en: 'Book' } },
+}));
+for (const status of [429, 503]) {
+  test(`bulk transport retries only explicit ${status} overloads with original commands`, async () => {
+    const requests: unknown[] = [];
+    const transport = createImportTransport({
+      origin: 'https://api.importer.test',
+      tokenProvider: async () => 'test-token',
+      maxAttempts: 1,
+      sleep: async () => {},
+      fetch: (async (request: Request) => {
+        const body = (await request.json()) as { commands: typeof commands };
+        requests.push(body);
+        return Response.json({
+          results: body.commands.map((command) =>
+            command.key === commands[2]!.key
+              ? {
+                  key: command.key,
+                  status: 403,
+                  problem: {
+                    type: 'about:blank',
+                    title: 'Forbidden',
+                    status: 403,
+                    code: 'forbidden',
+                    retryable: false,
+                  },
+                }
+              : command.key === commands[1]!.key && requests.length === 1
+                ? {
+                    key: command.key,
+                    status,
+                    problem: {
+                      type: 'about:blank',
+                      title: 'Overloaded',
+                      status,
+                      code: 'overloaded',
+                      retryable: true,
+                    },
+                  }
+                : command.key === commands[3]!.key
+                  ? {
+                      key: command.key,
+                      status,
+                      problem: { type: 'about:blank', title: 'Refused', status, retryable: false },
+                    }
+                  : { key: command.key, status: 201, value: { id: subjectId, revision: 1 } },
+          ),
+        });
+      }) as typeof fetch,
+    });
+    const result = await transport.batch({ commands });
+    expect(requests).toEqual([{ commands }, { commands: [commands[1]] }]);
+    expect(result.results.map((r) => r.status)).toEqual([201, 201, 403, status]);
+  });
+}
+
+for (const [options, expectedSends] of [
+  [{}, 3],
+  [{ maxWaitMs: 0 }, 1],
+  [{ maxTotalWaitMs: 100 }, 2],
+  [{ deadlineMs: 100 }, 1],
+] as const) {
+  test(`member overload retry bounds retain the last responses: ${JSON.stringify(options)}`, async () => {
+    let sends = 0;
+    let clock = 0;
+    const transport = createImportTransport({
+      origin: 'https://api.importer.test',
+      tokenProvider: async () => 'test-token',
+      ...options,
+      now: () => clock,
+      sleep: async (ms) => {
+        clock += ms;
+      },
+      fetch: (async () => {
+        sends++;
+        return Response.json({
+          results: [
+            {
+              key: commands[0]!.key,
+              status: 429,
+              problem: { type: 'about:blank', title: 'Overloaded', status: 429, retryable: true },
+            },
+          ],
+        });
+      }) as typeof fetch,
+    });
+    const result = await transport.batch({ commands: [commands[0]!] });
+    expect(sends).toBe(expectedSends);
+    expect(result.results[0]!.status).toBe(429);
+  });
+}
+
+test('one batch deadline cancels a pending member retry and releases its timer', async () => {
+  let expire!: () => void;
+  let clears = 0;
+  let sends = 0;
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'test-token',
-    maxAttempts: 1,
-    sleep: async () => {},
-    fetch: (async (request: Request) => {
-      const body = (await request.json()) as { commands: typeof commands };
-      requests.push(body);
+    importFetch: (async () => {
+      sends++;
       return Response.json({
-        results: body.commands.map((command) =>
-          command.key === commands[2]!.key
-            ? {
-                key: command.key,
-                status: 403,
-                problem: { type: 'about:blank', title: 'Forbidden', status: 403, code: 'forbidden', retryable: false },
-              }
-            : command.key === commands[1]!.key && requests.length === 1
-              ? {
-                  key: command.key,
-                  status: 503,
-                  problem: {
-                    type: 'about:blank',
-                    title: 'Overloaded',
-                    status: 503,
-                    code: 'overloaded',
-                    retryable: true,
-                  },
-                }
-              : { key: command.key, status: 201, value: { id: subjectId, revision: 1 } },
-        ),
+        results: [
+          {
+            key: commands[0]!.key,
+            status: 503,
+            problem: { type: 'about:blank', title: 'Overloaded', status: 503, retryable: true },
+          },
+        ],
       });
     }) as typeof fetch,
+    schedule: (callback) => {
+      expire = callback;
+      return () => {
+        clears++;
+      };
+    },
+    sleep: () => {
+      expire();
+      return new Promise(() => {});
+    },
   });
-  const result = await transport.batch({ commands });
-  expect(requests).toEqual([{ commands }, { commands: [commands[1]] }]);
-  expect(result.results.map((r) => r.status)).toEqual([201, 201, 403]);
+  await expect(transport.batch({ commands: [commands[0]!] })).rejects.toThrow('Import batch deadline exceeded');
+  expect(sends).toBe(1);
+  expect(clears).toBe(1);
 });
 const association: ClassificationAssociation = {
   subjectId,

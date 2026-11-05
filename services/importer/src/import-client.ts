@@ -31,6 +31,9 @@ import {
   createImportFetch,
   importRetryState,
   MAX_IMPORT_BODY_BYTES,
+  MAX_IMPORT_DEADLINE_MS,
+  MAX_IMPORT_WAIT_MS,
+  MAX_IMPORT_TOTAL_WAIT_MS,
   type ImportHttpOptions,
   type ImportRetryState,
 } from './import-fetch.ts';
@@ -328,6 +331,10 @@ export function createImportTransport(options: ImportTransportOptions) {
   const pollDelayMs = setting(options.pollDelayMs, 1000, 1000);
   ensure((pollAttempts - 1) * pollDelayMs <= 4000);
   setting(options.maxAttempts, 3, 5, 1);
+  const deadlineMs = setting(options.deadlineMs, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_DEADLINE_MS, 1);
+  const maxWaitMs = setting(options.maxWaitMs, MAX_IMPORT_WAIT_MS, MAX_IMPORT_WAIT_MS);
+  const maxTotalWaitMs = setting(options.maxTotalWaitMs, MAX_IMPORT_TOTAL_WAIT_MS, MAX_IMPORT_TOTAL_WAIT_MS);
+  const now = options.now ?? Date.now;
   const bodyLimit = Math.min(BODY_BYTES, setting(options.maxBodyBytes, BODY_BYTES, MAX_IMPORT_BODY_BYTES));
   // Validate even when a preconstructed client is supplied; no credential hook runs here.
   const origin = new URL(options.origin);
@@ -369,23 +376,60 @@ export function createImportTransport(options: ImportTransportOptions) {
   async function sendBatch(body: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
     const results: BatchWriteResult['results'] = [];
     let indices = body.commands.map((_, index) => index);
-    for (let attempt = 0; ; attempt++) {
-      const request = { commands: indices.map((index) => body.commands[index]!) };
-      const reply = await response(() => client.subjects.$batchWrite.post(request, fetchOptions(signal)), 200, signal);
-      ensure(checkResult(reply.body).length === 0);
-      const result = reply.body as BatchWriteResult;
-      ensure(result.results.length === request.commands.length);
-      result.results.forEach((item, index) => {
-        ensure(item.key === request.commands[index]!.key);
-        results[indices[index]!] = item;
-      });
-      indices = indices.filter((index) => {
-        const item = results[index]!;
-        return item.status === 503 && 'problem' in item && (item.problem as { retryable?: unknown }).retryable === true;
-      });
-      if (!indices.length || attempt >= 2) return { results };
-      // Retain actual successful receipts; retry only refused members, with unchanged keys and bodies.
-      await wait(100 * 2 ** attempt, signal, options.sleep);
+    const controller = new AbortController();
+    const aborted = () => controller.abort(signal?.reason);
+    signal?.throwIfAborted();
+    signal?.addEventListener('abort', aborted, { once: true });
+    const deadline = now() + deadlineMs;
+    let clearDeadline: (() => void) | undefined;
+    let scheduledWait = 0;
+    try {
+      const expire = () => controller.abort(new DOMException('Import batch deadline exceeded', 'TimeoutError'));
+      clearDeadline = options.schedule
+        ? options.schedule(expire, deadlineMs)
+        : (() => {
+            const timer = setTimeout(expire, deadlineMs);
+            return () => clearTimeout(timer);
+          })();
+      for (let attempt = 0; ; attempt++) {
+        const request = { commands: indices.map((index) => body.commands[index]!) };
+        const reply = await response(
+          () => client.subjects.$batchWrite.post(request, fetchOptions(controller.signal)),
+          200,
+          controller.signal,
+        );
+        ensure(checkResult(reply.body).length === 0);
+        const result = reply.body as BatchWriteResult;
+        ensure(result.results.length === request.commands.length);
+        result.results.forEach((item, index) => {
+          ensure(item.key === request.commands[index]!.key);
+          results[indices[index]!] = item;
+        });
+        indices = indices.filter((index) => {
+          const item = results[index]!;
+          return (
+            (item.status === 503 || item.status === 429) &&
+            'problem' in item &&
+            (item.problem as { retryable?: unknown }).retryable === true
+          );
+        });
+        const delay = 100 * 2 ** attempt;
+        if (
+          !indices.length ||
+          attempt >= 2 ||
+          delay > maxWaitMs ||
+          delay > maxTotalWaitMs - scheduledWait ||
+          now() + delay >= deadline
+        )
+          return { results };
+        // Retain successful receipts; retry only explicit overloads with unchanged keys and bodies.
+        scheduledWait += delay;
+        await wait(delay, controller.signal, options.sleep);
+        if (now() >= deadline) return { results };
+      }
+    } finally {
+      clearDeadline?.();
+      signal?.removeEventListener('abort', aborted);
     }
   }
   async function setSourceRecordMetadata(

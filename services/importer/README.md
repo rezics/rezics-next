@@ -124,6 +124,8 @@ Active and paused records total at most K; K defaults to 16 and is capped at 64.
 
 ### Logical write retry admission
 
+Explicit retryable bulk member 429 and 503 responses share at most three member attempts, retaining successful responses and permanent refusals. Member waits obey the configured per-wait and total-wait ceilings, and all member requests share one batch deadline; the HTTP attempt ceiling remains independent.
+
 At most K live records and eight transport invocations per logical write, independent of input size and history.
 
 ### Imports erasure disposition
