@@ -2,35 +2,31 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { locales } from '../src/paraglide/runtime.js';
-import { readDiscoveryMutationPage, type DiscoveryState } from '../src/search/discovery';
-import {
-  createDiscoveryCommandRegistry,
-  createDiscoveryPersonalPage,
-  type DiscoveryPersonalObservation,
-} from '../src/search/discovery-personal-state';
-import {
-  changeDiscoveryEntry,
-  discoveryEntryInput,
-  type DiscoveryEntryCapability,
-} from '../src/search/discovery-personal-actions';
-import { DiscoveryPersonalControls, DiscoveryScoreControls } from '../src/search/discovery-personal-controls';
-import { changeDiscoveryVote } from '../src/search/discovery-personal-actions';
 
-import { discoveryExposureKey, discoveryMetadataFetch } from '../src/search/discovery-personal-capabilities';
+import type { DiscoveryState } from '../src/search/discovery';
+import type { DiscoveryPersonalObservation } from '../src/search/discovery-personal-state';
+import type { DiscoveryEntryCapability } from '../src/search/discovery-personal-actions';
 
-import { QUESTION } from '../src/features/pages/subject-ratings';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { sessionQuery } from '../src/session/query';
-import { viewerExposureQuery } from '../src/kernel/viewer-exposure';
-import { discoveryExample } from '../src/kernel/fake/search-discovery';
-import { discoveryKey } from '../src/search/discovery';
-import { DiscoveryResults } from '../src/search/discovery-results';
 
 import type { DiscoveryBoundPage } from '../src/search/discovery-personal-server';
 
 // Bun supplies the runtime binding; native transport assertions below use explicit ports.
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { locales } = await import('../src/paraglide/runtime.js');
+const { readDiscoveryMutationPage } = await import('../src/search/discovery');
+const { createDiscoveryCommandRegistry, createDiscoveryPersonalPage } =
+  await import('../src/search/discovery-personal-state');
+const { changeDiscoveryEntry, discoveryEntryInput } = await import('../src/search/discovery-personal-actions');
+const { DiscoveryPersonalControls, DiscoveryScoreControls } = await import('../src/search/discovery-personal-controls');
+const { changeDiscoveryVote } = await import('../src/search/discovery-personal-actions');
+const { discoveryExposureKey, discoveryMetadataFetch } = await import('../src/search/discovery-personal-capabilities');
+const { QUESTION } = await import('../src/features/pages/subject-ratings');
+const { sessionQuery } = await import('../src/session/query');
+const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+const { discoveryExample } = await import('../src/kernel/fake/search-discovery');
+const { discoveryKey } = await import('../src/search/discovery');
+const { DiscoveryResults } = await import('../src/search/discovery-results');
 const { useDiscoveryPersonalResults } = await import('../src/search/discovery-personal-host');
 const { readBoundDiscoveryPage } = await import('../src/search/discovery-personal-server');
 const { writeQuestionBoundRatingForCurrentReader } = await import('../src/features/pages/rating-actions');
