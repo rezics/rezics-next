@@ -69,6 +69,7 @@ type HistoryRequest = {
 };
 const reads: ReadRequest[] = [];
 const histories: HistoryRequest[] = [];
+const sends: unknown[] = [];
 mock.module('../src/session/query', () => ({ useSession: () => ({ state: 'signed-in', subject: viewer, csrfToken }) }));
 mock.module('../src/session/guard', () => ({ requireSignedIn: () => {} }));
 mock.module('../src/ratings/question-management/actions', () => ({
@@ -80,7 +81,10 @@ mock.module('../src/ratings/question-management/actions', () => ({
     new Promise<QuestionManagementRead>((resolve) => reads.push({ visit: data.visit, resolve })),
   readQuestionManagementHistory: ({ data }: { data: { questionId: string; cursor: string | null } }) =>
     new Promise<QuestionManagementHistoryRead>((resolve) => histories.push({ ...data, resolve })),
-  executeQuestionManagementIntent: async () => ({ kind: 'uncertain' }),
+  executeQuestionManagementIntent: async (input: unknown) => {
+    sends.push(input);
+    return { kind: 'uncertain' };
+  },
 }));
 const { Route } = await import('../src/routes/realms/$id_.questions');
 function button(host: ParentNode, text: string) {
@@ -260,6 +264,7 @@ test('actual Router three-window directory/history return, failed-target Retry, 
     await ui.click(ui.captions(), m.realm_question_history_more());
     await ui.admitHistory();
     expect(ui.captions().textContent).toContain(m.realm_question_window_terminal());
+    expect(window.document.activeElement?.id).toBe('realm-question-history-heading');
     await ui.click(ui.captions(), m.realm_question_window_previous());
     expect(histories.at(-1)?.cursor).toBe(historyCursors[1]);
     await ui.admitHistory();
@@ -275,6 +280,7 @@ test('actual Router three-window directory/history return, failed-target Retry, 
     await ui.admit();
     await ui.admitHistory();
     expect(ui.directory().textContent).toContain(m.realm_question_window_terminal());
+    expect(window.document.activeElement?.id).toBe('realm-question-directory-heading');
     await ui.click(ui.directory(), m.realm_question_window_previous());
     expect(reads.at(-1)?.visit.cursor).toBe(directoryCursors[1]);
     await ui.admit();
@@ -333,6 +339,45 @@ test('direct later visit has First but no invented Previous; Stay preserves draf
     await ui.admitHistory();
     expect(ui.host.querySelector('input')).toBeNull();
     expect(reads).toHaveLength(1);
+    // An equal source replacement while Leave is pending cannot commit the old target.
+    await ui.click(ui.host, m.realm_question_create());
+    const draft = ui.host.querySelector('textarea')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(draft, 'unfinished');
+      draft.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    await ui.click(ui.captions(), m.realm_question_history_more());
+    await act(async () => {
+      void ui.router.invalidate();
+    });
+    await until(() => reads.length > 1);
+    await ui.admit();
+    expect(histories.at(-1)?.cursor).toBeNull();
+    await ui.admitHistory();
+    expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+    // New selected identity retires both paths, including the selection-bound directory cursor.
+    await act(async () => {
+      void ui.router.navigate({ to: `/realms/${realmId}/questions`, search: { selectedQuestionId: viewer } } as never);
+    });
+    await until(() => reads.length > 2);
+    await ui.admit();
+    await ui.admitHistory();
+    expect(reads.at(-1)?.visit.cursor).toBeNull();
+    expect(histories.at(-1)?.questionId).toBe(viewer);
+    expect(ui.directory().textContent).not.toContain(m.realm_question_window_previous());
+    // Uncertain commands lock both pagers and retry the original operands and credentials.
+    await ui.click(ui.host, m.realm_question_caption_edit());
+    await ui.click(ui.host, m.realm_question_review_definition());
+    await ui.click(ui.host, m.realm_question_confirm_caption());
+    await until(() => sends.length === 1);
+    await ui.click(ui.captions(), m.realm_question_history_more());
+    expect(window.document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      m.library_my_ratings_departure_locked(),
+    );
+    await ui.click(window.document, m.library_my_ratings_stay());
+    await ui.click(ui.host, m.realm_question_retry_original());
+    await until(() => sends.length === 2);
+    expect(sends[1]).toEqual(sends[0]);
   } finally {
     await ui.close();
   }
