@@ -313,15 +313,16 @@ export async function registerCollectionRetention({ pool, client, clock }: WorkC
     // A segment has a fixed history bound, even for a very large retained graph.
     for (let n = 0; n < 32 && cursor.partition < PARTITIONS; n++) {
       if (current) {
-        const result = await withCollectionRetentionEngineRequest('removeStep', () => remove(current));
+        const pending = current;
+        const result = await withCollectionRetentionEngineRequest('removeStep', () => remove(pending));
         if (result.status === 'progress') continue;
         if (result.status === 'retained') break;
         cursor = {
           partition: cursor.partition,
           after: {
-            purgeAfter: current.purgeAfter,
-            route: current.route,
-            collectionId: current.collectionId,
+            purgeAfter: pending.purgeAfter,
+            route: pending.route,
+            collectionId: pending.collectionId,
           },
         };
         current = null;
