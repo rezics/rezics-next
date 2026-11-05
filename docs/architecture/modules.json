@@ -567,11 +567,24 @@
       "capabilities": ["curation-opening-read-transport"]
     },
     {
+      "id": "subject-page-read-lifetime",
+      "kind": "UI/transport library",
+      "owner": "search",
+      "paths": ["apps/web/src/features/pages/subject-page-read-lifetime/**"],
+      "publicEntries": ["apps/web/src/features/pages/subject-page-read-lifetime/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["subject-page-read-lifetime"]
+    },
+    {
       "id": "web-search",
       "kind": "UI/transport library",
       "owner": "search",
       "paths": ["apps/web/src/search/**", "apps/web/src/features/pages/**"],
-      "excludes": ["apps/web/src/search/personal-recovery/**", "apps/web/src/features/pages/curation-opening-read/**"],
+      "excludes": [
+        "apps/web/src/search/personal-recovery/**",
+        "apps/web/src/features/pages/curation-opening-read/**",
+        "apps/web/src/features/pages/subject-page-read-lifetime/**"
+      ],
       "publicEntries": [
         "apps/web/src/search/search.tsx",
         "apps/web/src/search/search-window/index.ts",
@@ -595,7 +608,8 @@
         "web-semantic",
         "search-text",
         "search-personal-recovery",
-        "curation-opening-read"
+        "curation-opening-read",
+        "subject-page-read-lifetime"
       ],
       "capabilities": ["search-pages"]
     },
