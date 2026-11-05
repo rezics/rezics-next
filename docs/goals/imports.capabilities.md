@@ -772,7 +772,7 @@ not additional check requests.
   same-title extras stay excluded; ISBN does not invent an edition; missing
   volumes and missing author-role bindings stay gaps. Refresh keeps the same
   book, volume and person identities. Decision: type 1 Book/BookSeries dispatch
-  uses the current `bangumi@14` converter, preserving Book names, TVAnime
+  uses the current `bangumi@15` converter, preserving Book names, TVAnime
   original-run, Game player-count and work evidence while adding TVAnime official
   websites. Decision: selected Book Girl
   records join the common showcase manifest; book review gaps stay in the seed
@@ -1296,8 +1296,8 @@ attribution and ShareAlike obligations. Actual type-1 PersonDetail integers
 `schema:birthDate` when they form a valid Gregorian date; partial, Organization
 and Character `生日` values stay omitted. Archive person rows lack those fields;
 selected-family reuses the existing Person career `GET /v0/persons/{id}` per selected id. Ordinary
-`person:<id>` JSON-lines (`career` array) use `cross-media-entities@15`;
-selected envelopes keep `cross-media-entities@15+bangumi@15`.
+`person:<id>` JSON-lines (`career` array) use `cross-media-entities@15` on
+`bangumi@15`; selected envelopes keep `cross-media-entities@15+bangumi@15`.
 Summary bytes affect the digest; the summary fence does not fence identity or
 birthDate. Empty summaries create no document.
 
@@ -1379,7 +1379,7 @@ emit two scalars or pad the infobox date. An end that cannot overlap the
 start withholds both run dates. Template `*` is an unknown episode total;
 explicit `0` is a stated zero.
 
-Current `bangumi@14`
+Current `bangumi@15`
 continues to convert pinned TVAnime `放送开始`, `播放结束` and `话数` through
 ordinary Bangumi registration and selected-family rows, preserving the
 `bangumi@9` player-count mapping and earlier name extraction. Native read is on
@@ -1405,7 +1405,7 @@ positive integer or inclusive range. A range stores its upper endpoint as
 count invents no minimum. Mode, platform, edition or condition text withholds
 the whole occurrence.
 
-Current `bangumi@14`
+Current `bangumi@15`
 continues to convert pinned Game `游玩人数` through ordinary Bangumi
 registration and selected-family rows, preserving the `bangumi@8` original-run
 mapping. Native read is on the acknowledged VideoGame.
@@ -1558,7 +1558,7 @@ Decision: accept parsed CharacterDetail name arrays beside the existing Crt gram
 
 Decision: see [Bangumi TVAnime work evidence](../../packages/conversion/README.md#bangumi-tv-anime-work-evidence).
 
-Ordinary conversion uses `bangumi@14`. The selected-family Bangumi caller uses
+Ordinary conversion uses `bangumi@15`. The selected-family Bangumi caller uses
 `cross-media-entities@15+bangumi@15` so source refresh replays the new mapping
 under an honest revision without revising the VNDB adapter. Only the exact
 TVAnime `链接` and `Copyright` fields are admitted. Descriptive destinations
@@ -1644,7 +1644,7 @@ The selected default Bangumi seed already elects character IDs through the selec
 ## Bangumi Game subject names
 
 Decision: scalar Game `中文名` supplies `zh`; scalar or single-level bullet `别名` stays `und`.
-Ordinary conversion uses `bangumi@14`; selected-family registration uses `cross-media-entities@15+bangumi@15`.
+Ordinary conversion uses `bangumi@15`; selected-family registration uses `cross-media-entities@15+bangumi@15`.
 
 The pinned `{{Infobox Game` grammar is distinct from TVAnime. Type 4 remains
 `schema:VideoGame`; admitted values become cited `schema:name` or
@@ -1669,7 +1669,7 @@ and cover rights keep their existing owners.
 ## Bangumi Game platforms and software engine
 
 Decision: Game-template `平台` and `游戏引擎` bind through current reviewed Concept reads keyed by the released property plus the exact source item; no infobox-field scheme URI is minted. Engine items with version, platform or edition text are withheld whole because `wdt:P408` admits no qualifiers. Platform language is preserved only as `schema:inLanguage` when the labelled source tag is an admitted BCP 47 tag.
-Decision: current `bangumi@14` includes Game environment, names, player count and source genres, TVAnime work evidence and book grain; selected envelopes use `cross-media-entities@15+bangumi@15`.
+Decision: current `bangumi@15` includes Game environment, names, player count and source genres, TVAnime work evidence and book grain; selected envelopes use `cross-media-entities@15+bangumi@15`.
 
 A selected type-4 Game keeps top-level `subject.platform` as the profile selector. Infobox platform and engine items become `schema:gamePlatform` and `wdt:P408` on that VideoGame after an independent current read of each configured Concept. Missing, concealed and wrong-source bindings remain distinct and withhold only the affected occurrence. Identity and sealed retry custody stay on the existing source fence. Names, dates, player count, staff, genre and websites retain their owners.
 
@@ -1684,7 +1684,7 @@ literal. Separators are not guessed; nested or continued values are withheld
 whole.
 
 Ordinary registration and the selected-family default caller use the exact
-type-4 Game field and the current `bangumi@14` converter. A genre proposal
+type-4 Game field and the current `bangumi@15` converter. A genre proposal
 requires a finite caller binding plus current public reads that confirm the
 configured Scheme is the pinned
 `https://rezics.com/schemes/bangumi/genres`, the Concept has the exact source

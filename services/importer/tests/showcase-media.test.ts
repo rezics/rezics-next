@@ -514,3 +514,120 @@ test('selected creator details distinguish source states and refresh without cha
     await rm(directory, { recursive: true, force: true });
   }
 });
+test('direct selected Character images use CharacterDetail evidence and preserve changed receipts', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-character-media-'));
+  const plan = selectedPlan();
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const firstImage = 'https://lain.bgm.tv/pic/crt/l/46/52/11546_crt_FlzuU.jpg';
+  const changedImage = `${firstImage}?r=2`;
+  let characterReads = 0;
+  plan.entities.bangumi.push(
+    {
+      source: 'bangumi',
+      key: 'character:11546',
+      revision: null,
+      payload: { id: 11546, name: 'アルパカ', type: 1 },
+    },
+    {
+      source: 'bangumi',
+      key: 'character:99999',
+      revision: null,
+      payload: { id: 99999, name: 'unselected', type: 1, images: { large: 'https://lain.bgm.tv/unselected.jpg' } },
+    },
+  );
+  plan.characterAppearances = [{ subjectId: '101', characterId: 11546, sourceIndex: 0, roleCode: 1 }];
+  const sealOutcome = (receipt: NonNullable<CrossMediaPlan['coverSources']>[number], digest: string) =>
+    journal.sealIntent({
+      version: 1,
+      digest,
+      records: [],
+      vocabulary: [],
+      media: [
+        {
+          sourceAlias: receipt.sourceAlias,
+          sourceKey: receipt.externalId,
+          sourceUri: receipt.endpoint,
+          sourceRevision: receipt.sourceRevision,
+          archiveDigest: receipt.archiveDigest,
+          ...(receipt.responseDigest ? { responseDigest: receipt.responseDigest } : {}),
+          ...(receipt.sourceUrl ? { sourceUrl: receipt.sourceUrl } : {}),
+          status: 'available',
+          containerId: null,
+        },
+      ],
+      tagWeightObservations: [],
+      tagWeightRefreshes: [],
+      omissions: [],
+    } as ShowcaseManifest);
+  try {
+    const fetch = (async (input: RequestInfo | URL) => {
+      const endpoint = String(input);
+      if (endpoint === 'https://api.bgm.tv/v0/subjects/101')
+        return new Response(JSON.stringify(apiSubject), { status: 200, headers: { etag: '"subject-101"' } });
+      expect(endpoint).toBe('https://api.bgm.tv/v0/characters/11546');
+      characterReads += 1;
+      const image = characterReads === 1 ? firstImage : changedImage;
+      const images =
+        characterReads < 3
+          ? { large: image, medium: image, small: image, grid: image }
+          : characterReads === 3
+            ? { large: image, medium: image, small: image }
+            : {
+                large: 'https://lain.bgm.tv/img/no_icon_subject.png',
+                medium: 'https://lain.bgm.tv/img/no_icon_subject.png',
+                small: 'https://lain.bgm.tv/img/no_icon_subject.png',
+                grid: 'https://lain.bgm.tv/img/no_icon_subject.png',
+              };
+      return new Response(
+        JSON.stringify({ id: 11546, name: 'アルパカ', type: 1, images }),
+        { status: 200, headers: { etag: `"character-11546-${characterReads}"` } },
+      );
+    }) as typeof globalThis.fetch;
+    const first = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
+    const firstReceipt = first.coverSources!.find((source) => source.externalId === 'character:11546')!;
+    expect(firstReceipt).toMatchObject({
+      endpoint: 'https://api.bgm.tv/v0/characters/11546',
+      sourceStatus: 'available',
+      sourceUrl: firstImage,
+    });
+    expect(first.entities.bangumi.find((row) => row.key === 'character:11546')?.payload).toMatchObject({
+      images: { large: firstImage },
+    });
+    expect(first.entities.bangumi.find((row) => row.key === 'character:99999')?.payload).not.toHaveProperty('images');
+
+    sealOutcome(firstReceipt, 'a'.repeat(64));
+    const changed = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
+    const changedReceipt = changed.coverSources!.find((source) => source.externalId === 'character:11546')!;
+    expect(changedReceipt).toMatchObject({ sourceStatus: 'available', sourceUrl: changedImage });
+    expect(journal.sealCoverSource(firstReceipt)).toEqual(firstReceipt);
+
+    sealOutcome(changedReceipt, 'b'.repeat(64));
+    const malformed = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
+    const malformedReceipt = malformed.coverSources!.find((source) => source.externalId === 'character:11546')!;
+    expect(malformedReceipt).toMatchObject({
+      endpoint: 'https://api.bgm.tv/v0/characters/11546',
+      sourceStatus: 'invalid',
+      code: 'source-payload-invalid',
+      responseDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+    });
+    expect(malformed.entities.bangumi.find((row) => row.key === 'character:11546')?.payload).not.toHaveProperty(
+      'images',
+    );
+    expect(journal.coverSource('bangumi_cross_media', 'character:11546', firstReceipt.archiveDigest)).toEqual(
+      malformedReceipt,
+    );
+    expect(journal.sealCoverSource(changedReceipt)).toEqual(changedReceipt);
+    sealOutcome(malformedReceipt, 'c'.repeat(64));
+    const placeholder = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
+    const placeholderReceipt = placeholder.coverSources!.find((source) => source.externalId === 'character:11546')!;
+    expect(placeholderReceipt).toMatchObject({ sourceStatus: 'absent', responseDigest: expect.any(String) });
+    expect(placeholderReceipt.sourceUrl).toBeUndefined();
+    expect(placeholder.entities.bangumi.find((row) => row.key === 'character:11546')?.payload).not.toHaveProperty(
+      'images',
+    );
+    expect(characterReads).toBe(4);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -25,6 +25,7 @@ import { createSourceRegistration } from './source-registry.ts';
 import {
   bangumiRecordUrl,
   converter_revision as entityRevision,
+  crossMediaCoverDigest,
   mapSourceEnumeration,
 } from '@rezics/conversion/cross-media-entities';
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
@@ -366,9 +367,12 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
 
   sealCoverSource(source: BangumiCoverSource): BangumiCoverSource {
     const person = /^person:([1-9][0-9]*)$/u.exec(source.externalId);
+    const character = /^character:([1-9][0-9]*)$/u.exec(source.externalId);
     const subject = /^[1-9][0-9]*$/u.test(source.externalId) ? source.externalId : undefined;
     const endpoint = person
       ? `https://api.bgm.tv/v0/persons/${person[1]}`
+      : character
+        ? `https://api.bgm.tv/v0/characters/${character[1]}`
       : subject
         ? `https://api.bgm.tv/v0/subjects/${subject}`
         : undefined;
@@ -376,12 +380,17 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       source.sourceAlias !== 'bangumi_cross_media' ||
       !endpoint ||
       !/^[0-9a-f]{64}$/u.test(source.archiveDigest) ||
-      !['available', 'absent', 'invalid'].includes(source.sourceStatus) ||
+      !['available', 'absent', 'unavailable', 'invalid'].includes(source.sourceStatus) ||
       source.endpoint !== endpoint ||
       !/^[0-9a-f]{64}$/u.test(source.responseDigest ?? '') ||
       (source.etag !== undefined && (source.etag.length > 256 || !/^[\x20-\x7e]*$/u.test(source.etag))) ||
       (source.sourceStatus === 'available' &&
-        (!source.sourceUrl || !/^https:\/\/lain\.bgm\.tv\//u.test(source.sourceUrl)))
+        (!source.sourceUrl || !/^https:\/\/lain\.bgm\.tv\//u.test(source.sourceUrl))) ||
+      (source.sourceStatus !== 'available' && source.sourceUrl !== undefined) ||
+      (source.sourceStatus === 'unavailable' &&
+        !['source-api-http', 'source-api-unavailable', 'source-payload-invalid', 'source-limit'].includes(
+          source.code ?? '',
+        ))
     )
       throw new TypeError('Invalid Bangumi cover source receipt');
     if (source.sourceStatus === 'available') safeSourceUrl(source.sourceUrl!, ['lain.bgm.tv']);
@@ -631,9 +640,10 @@ function admittedCoverMedia(
     (record.kind === 'person' || record.kind === 'organization') &&
     (record.nativeType === 'schema:Person' || record.nativeType === 'schema:Organization');
   const work = record.kind === 'work' && /^[1-9][0-9]*$/u.test(record.sourceKey);
+  const character = record.kind === 'character' && /^character:[1-9][0-9]*$/u.test(record.sourceKey);
   if (
     record.provider !== 'bangumi' ||
-    (!work && !creator) ||
+    (!work && !creator && !character) ||
     assertion.property !== 'schema:image' ||
     !record.subjectId ||
     record.sourceUri !== bangumiRecordUrl(record.sourceKey) ||
@@ -646,10 +656,12 @@ function admittedCoverMedia(
   const receipt = [...(plan.coverSources ?? []), ...(plan.creatorImageSources ?? [])].find(
     (item) => item.sourceAlias === record.sourceAlias && item.externalId === record.sourceKey,
   );
-  const imageRows = creator ? plan.entities.bangumi : plan.records.bangumi;
+  const imageRows = creator || character ? plan.entities.bangumi : plan.records.bangumi;
   const imageUrl = (
     imageRows.find((row) => row.key === record.sourceKey)?.payload as { images?: { large?: unknown } } | undefined
   )?.images?.large;
+  const coverDigest =
+    character && typeof imageUrl === 'string' ? crossMediaCoverDigest(record.semanticDigest, imageUrl) : record.semanticDigest;
   if (
     !outcome ||
     !receipt ||
@@ -672,7 +684,7 @@ function admittedCoverMedia(
     assertion.source.source !== record.sourceAlias ||
     assertion.source.external_id !== record.sourceKey ||
     assertion.source.record_revision !== record.sourceRevision ||
-    assertion.source.digest !== record.semanticDigest ||
+    assertion.source.digest !== coverDigest ||
     assertion.source.converter_revision !== record.converterRevision ||
     assertion.source.field_group !== 'cover' ||
     assertion.statement.value.type !== 'value' ||
@@ -681,7 +693,7 @@ function admittedCoverMedia(
     outcome.provenance.external_id !== record.sourceKey ||
     outcome.provenance.record_revision !== record.sourceRevision ||
     outcome.provenance.converter_revision !== record.converterRevision ||
-    outcome.provenance.digest !== record.semanticDigest ||
+    outcome.provenance.digest !== coverDigest ||
     outcome.provenance.field_group !== 'cover' ||
     outcome.credit?.rightsHolder !== '(c) rights holder' ||
     outcome.credit.via.name !== 'Bangumi' ||
