@@ -286,19 +286,25 @@ test('a disclosed later-page visit returns to its exact current window without s
     });
     await router.load();
   };
+  const waitForWatchHeading = async () => {
+    if (host.querySelector('h2')?.textContent === m.settings_watches_heading()) return;
+    await new Promise<void>((resolve) => {
+      const observer = new window.MutationObserver(() => {
+        if (host.querySelector('h2')?.textContent === m.settings_watches_heading()) {
+          observer.disconnect();
+          resolve();
+        }
+      });
+      observer.observe(host, { childList: true, characterData: true, subtree: true });
+    });
+  };
   const visitAndReturn = async (label: string) => {
     await act(async () => link(label).click());
     expect(host.textContent).toContain('Thread target');
     await act(async () => back());
-    expect({
-      path: router.state.location.pathname,
-      browserPath: window.location.pathname,
-      text: host.textContent,
-    }).toMatchObject({
-      path: '/settings',
-      browserPath: '/settings',
-      text: expect.stringContaining(m.settings_watches_heading()),
-    });
+    await waitForWatchHeading();
+    expect(router.state.location.pathname).toBe('/settings');
+    expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
   };
   try {
     await act(async () => {
@@ -329,15 +335,9 @@ test('a disclosed later-page visit returns to its exact current window without s
     await act(async () => button(m.settings_profile_leave()).click());
     expect(host.textContent).toContain('Thread target');
     await act(async () => back());
-    expect({
-      path: router.state.location.pathname,
-      browserPath: window.location.pathname,
-      text: host.textContent,
-    }).toMatchObject({
-      path: '/settings',
-      browserPath: '/settings',
-      text: expect.stringContaining(m.settings_watches_heading()),
-    });
+    await waitForWatchHeading();
+    expect(router.state.location.pathname).toBe('/settings');
+    expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
     expect((window.history.state as Record<string, unknown>).__rezicsSettingsWatchReturn).toBeUndefined();
 
     expect(host.textContent).toContain(m.settings_watches_returned());
