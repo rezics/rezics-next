@@ -210,7 +210,7 @@ test('admission owns conditions before native IO and rejects over-budget stateme
   mutable.selection.concept = child;
   mutable.qualifiers[0]!.in[0] = '2';
   expect(admitted.selection.concept).toBe(root);
-  expect(admitted.qualifiers?.[0]?.in).toEqual(['0']);
+  expect(admitted.qualifiers?.[0]).toEqual({ property: 'rezics:spoilerLevel', in: ['0'] });
   expect(() => conceptStatementRequest(0, request, null, 65)).toThrow('Invalid concept statement request');
   expect(() => conceptStatementRequest(1, request, null, 64)).toThrow('Invalid concept statement request');
 });

@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { admitFilter, parseFilter, type FilterDocument, type FilterRelease } from '@rezics/filter';
+import {
+  admitFilter,
+  parseFilter,
+  type FilterDocument,
+  type FilterRelease,
+  type NumericFilterRange,
+} from '@rezics/filter';
 import { compileFilter } from '../../src/search/filter.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
 
@@ -140,14 +146,17 @@ function matches(filter: FilterDocument, type: string | undefined, facts: Fact[]
     if ('in' in statement) {
       if (fact.value === undefined || !statement.in.includes(fact.value)) return false;
     } else {
-      const range = statement.range;
+      // These fixtures contain numeric year/quantity bounds, not typed calendar endpoints.
+      const range = statement.range as NumericFilterRange;
       const value = range.unit === undefined ? fact.year : fact.amount;
       if (value === undefined || (range.unit !== undefined && range.unit !== fact.unit)) return false;
       if (range.gte !== undefined && value < range.gte) return false;
       if (range.lte !== undefined && value > range.lte) return false;
     }
-    return (statement.qualifiers ?? []).every((qualifier) =>
-      qualifier.in.some((value) => fact.qualifiers.includes(`${qualifier.property}=${value}`)),
+    return (statement.qualifiers ?? []).every(
+      (qualifier) =>
+        // Fixture facts carry equality qualifier evidence only.
+        'in' in qualifier && qualifier.in.some((value) => fact.qualifiers.includes(`${qualifier.property}=${value}`)),
     );
   });
 }
