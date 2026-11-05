@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query';
+import { QueryObserver, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import * as v from 'valibot';
 import { isValidRealmDiscoveryPage, loadRealmDiscovery } from '../community/realm-discovery/source';
@@ -23,15 +23,17 @@ const input = v.strictObject({
 /** Existing server-function transport, delegating once to Content's original adapter. */
 export const readRealmDiscovery = createServerFn({ method: 'GET' })
   .validator((value: unknown) => v.parse(input, value))
-  .handler(async ({ data }): Promise<RealmDiscoveryPage> => {
+  .handler(async ({ data, signal }): Promise<RealmDiscoveryPage> => {
     try {
       const { kernelClient } = await import('../kernel/client');
       return await loadRealmDiscovery(kernelClient(data.locale), {
         sort: data.sort,
         limit: 20,
         ...(data.cursor !== undefined ? { cursor: data.cursor } : {}),
+        ...(signal !== undefined ? { signal } : {}),
       });
     } catch (error) {
+      if (signal?.aborted) throw error;
       return { kind: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
     }
   });
@@ -79,6 +81,40 @@ export function realmDiscoveryQueryOptions(
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     queryFn: ({ signal }) => read({ data: { locale, sort, ...(cursor !== undefined ? { cursor } : {}) }, signal }),
+  });
+}
+
+/** Read through one cache observer so leaving a visit cancels only when no other consumer owns the query. */
+export function readRealmDiscoveryQuery(
+  client: QueryClient,
+  locale: string,
+  sort: RealmDiscoverySort,
+  cursor: string | undefined,
+  read: RealmDiscoveryReader,
+  signal: AbortSignal,
+): Promise<RealmDiscoveryPage> {
+  signal.throwIfAborted();
+  const observer = new QueryObserver(client, {
+    ...realmDiscoveryQueryOptions(locale, sort, cursor, read),
+    enabled: false,
+  });
+  const unsubscribe = observer.subscribe(() => {});
+  let rejectAbort!: (reason: unknown) => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    rejectAbort = reject;
+  });
+  const onAbort = () => rejectAbort(signal.reason);
+  signal.addEventListener('abort', onAbort, { once: true });
+  if (signal.aborted) onAbort();
+  const request = observer
+    .refetch({ cancelRefetch: false, throwOnError: true })
+    .then((result) => {
+      if (result.status !== 'success') throw result.error;
+      return result.data;
+    });
+  return Promise.race([request, aborted]).finally(() => {
+    signal.removeEventListener('abort', onAbort);
+    unsubscribe();
   });
 }
 

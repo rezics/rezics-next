@@ -85,6 +85,28 @@ test('More replaces the visible page, preserves it while pending or failed, and 
   page.dispose();
 });
 
+test('disposing a Search or header visit aborts its active page read and suppresses the late page', async () => {
+  const response = deferred<Page>();
+  const snapshots: RealmDiscoveryState[] = [];
+  let requestSignal: AbortSignal | undefined;
+  const page = createSearchRealmDiscoveryPage(
+    async (_request, signal) => {
+      requestSignal = signal;
+      return response.promise;
+    },
+    'en',
+    (state) => snapshots.push(state),
+  );
+
+  const started = page.start();
+  expect(requestSignal).toBeInstanceOf(AbortSignal);
+  page.dispose();
+  expect(requestSignal?.aborted).toBe(true);
+  response.resolve(ready('departed page', null));
+  await started;
+  expect(snapshots).toEqual([{ kind: 'loading' }]);
+});
+
 test('a repeated cycle offers a visible restart and issues one fresh first-page request', async () => {
   const calls: SearchRealmDiscoveryRequest[] = [];
   const snapshots: { state: RealmDiscoveryState; pending: boolean; retry: boolean; restart: boolean }[] = [];

@@ -42,6 +42,7 @@ resource change retires old facet values and cursors and restarts in that scope 
 The query contract is [discovery-query](../../services/kernel/src/search/discovery-query.md), under the
 [universal search conditions](../search-conditions.md) authority.
 Header and Recent Realm browsing reuse the strict Search reader through the shared one-page controller; injected loaders keep their request shape and receive its AbortSignal as an optional second argument.
+Decision: each page visit carries its AbortSignal to the native GET; Search detaches its own QueryObserver so shared reads continue only while another mounted Search consumer owns them.
 Rating population pages retain the disclosed page when an opaque continuation exceeds the native 4096-character request limit, show the existing localized unavailable message, and offer a first-page restart without issuing the cursor.
 A focused Realm Retry or terminal More recovers onto a surviving current More/Retry of that owner or the named discovery region after the page commits; an unactivated load, a replaced locale/sort/reader/QueryClient owner, unmount, a superseded activation, a disposed progress controller, and a reader who has moved elsewhere do not transfer focus.
 A relation stream admits a native links or relations page only when its raw row count is within the composition descriptor limit; an over-limit continuation keeps the last admitted window for retry and does not use Retry-After metadata.

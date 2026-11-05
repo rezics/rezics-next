@@ -14,7 +14,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const anonymousReads: Array<ReturnType<typeof deferred<RealmDiscoveryPage>>> = [];
+const anonymousReads: Array<{ work: ReturnType<typeof deferred<RealmDiscoveryPage>>; signal?: AbortSignal }> = [];
 mock.module('@tanstack/react-start', () => ({
   ...start,
   createServerFn() {
@@ -23,9 +23,9 @@ mock.module('@tanstack/react-start', () => ({
         return chain;
       },
       handler() {
-        return async () => {
+        return async ({ signal }: { signal?: AbortSignal } = {}) => {
           const work = deferred<RealmDiscoveryPage>();
-          anonymousReads.push(work);
+          anonymousReads.push({ work, signal });
           return work.promise;
         };
       },
@@ -94,8 +94,12 @@ test('replacing an injected Realm reader at the same locale/sort hides its windo
   const cancelQueries = spyOn(client, 'cancelQueries');
   const first = deferred<RealmDiscoveryPage>();
   const second = deferred<RealmDiscoveryPage>();
-  const firstRead: RealmDiscoveryReader = async ({ data }) =>
-    data.cursor ? first.promise : ready('Old Realm', '01a1a000-0000-7000-8000-000000000002', 'next');
+  let replacedSignal: AbortSignal | undefined;
+  const firstRead: RealmDiscoveryReader = async ({ data, signal }) => {
+    if (!data.cursor) return ready('Old Realm', '01a1a000-0000-7000-8000-000000000002', 'next');
+    replacedSignal = signal;
+    return first.promise;
+  };
   const secondRead: RealmDiscoveryReader = async () => second.promise;
   const initial: RealmDiscoveryState = ready('Old Realm', '01a1a000-0000-7000-8000-000000000002', 'next');
   function Fixture({ showFirstAnonymous = true }: { showFirstAnonymous?: boolean }) {
@@ -134,10 +138,12 @@ test('replacing an injected Realm reader at the same locale/sort hides its windo
       (button) => button.textContent === m.realm_discovery_continue({}, { locale: 'en' }),
     )!;
     await act(async () => more.click());
+    expect(replacedSignal).toBeInstanceOf(AbortSignal);
     expect(host.textContent).toContain('Old Realm');
     await act(async () =>
       [...host.querySelectorAll('button')].find((button) => button.textContent === 'Replace reader')!.click(),
     );
+    expect(replacedSignal?.aborted).toBe(true);
     expect(host.textContent).not.toContain('Old Realm');
     await act(async () => first.resolve(ready('Late Realm', '01a1a000-0000-7000-8000-000000000003', null)));
     expect(host.textContent).not.toContain('Late Realm');
@@ -147,11 +153,11 @@ test('replacing an injected Realm reader at the same locale/sort hides its windo
     await act(async () => root.render(createElement(Fixture, { showFirstAnonymous: false })));
     expect(cancelQueries).not.toHaveBeenCalled();
     expect(host.querySelector('[data-consumer="second"]')!.textContent).not.toContain('Shared Realm');
-    expect(anonymousReads.length).toBeGreaterThan(0);
+    expect(anonymousReads).toHaveLength(1);
+    expect(anonymousReads[0]!.signal).toBeInstanceOf(AbortSignal);
+    expect(anonymousReads[0]!.signal?.aborted).toBe(false);
     await act(async () =>
-      anonymousReads.forEach((read) =>
-        read.resolve(ready('Shared Realm', '01a1a000-0000-7000-8000-000000000005', null)),
-      ),
+      anonymousReads[0]!.work.resolve(ready('Shared Realm', '01a1a000-0000-7000-8000-000000000005', null)),
     );
     expect(host.querySelector('[data-consumer="second"]')!.textContent).toContain('Shared Realm');
     expect(cancelQueries).not.toHaveBeenCalled();

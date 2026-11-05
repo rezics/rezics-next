@@ -72,15 +72,16 @@ export function isValidRealmDiscoveryPage(value: unknown): boolean {
 /** One native bounded page. The server owns anonymous disclosure, ranking windows and final source guards. */
 export async function loadRealmDiscovery(
   client: KernelClient,
-  input: Readonly<{ sort: RealmDiscoverySort; cursor?: string; limit?: number }>,
+  input: Readonly<{ sort: RealmDiscoverySort; cursor?: string; limit?: number; signal?: AbortSignal }>,
 ): Promise<Exclude<RealmDiscoveryState, { kind: 'loading' }>> {
-  const request = v.safeParse(query, input);
+  const { signal, ...requestInput } = input;
+  const request = v.safeParse(query, requestInput);
   if (!request.success) return { kind: 'unavailable' };
   try {
     const { sort, cursor, limit } = request.output;
     const result = await client.realms.discovery.get({
       query: { sort, ...(cursor === undefined ? {} : { cursor }), ...(limit === undefined ? {} : { limit }) },
-      fetch: { cache: 'no-store' },
+      fetch: { cache: 'no-store', ...(signal === undefined ? {} : { signal }) },
     });
     if (result.error)
       return { kind: isPlatformClosedProblem(result.status, result.error.value) ? 'closed' : 'unavailable' };
@@ -89,6 +90,7 @@ export async function loadRealmDiscovery(
       return { kind: 'unavailable' };
     return { kind: 'ready', realms: parsed.output.realms, next: parsed.output.next };
   } catch (error) {
+    if (signal?.aborted) throw error;
     return { kind: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
   }
 }
