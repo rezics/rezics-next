@@ -41,7 +41,8 @@ retain local amount or clear choices by measure unit.
 - Library archive recovery has a separate [entry and private-label recovery visit](../../apps/web/src/library/archive-entry-recovery.md)
   that uses the installed generated original-text upload and exact `{items:[{ordinal,reviewRevision}]}` confirmation.
   Collection and progress recovery stay independent visits. A completed private export holds its local bytes for this
-  signed-in owner so those visits can reuse the original archive; another account cannot inherit them.
+  signed-in owner so those visits can reuse the original archive; another account cannot inherit them. Decision: recovery
+  uploads the consumer's installed version envelope, not the downloaded V4 bytes.
 - A Realm icon or banner retry keeps the original file only in that appearance caller and finishes the same
   reservation when its container is that Realm. Purpose stays the caller slot because the site media read omits it,
   and a rejected image drops the retry without saving appearance.
