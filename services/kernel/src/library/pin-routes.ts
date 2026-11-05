@@ -12,7 +12,9 @@ import { collectionReadView } from './collection-reads.ts';
 import { createPins } from './pins.ts';
 import { pinMountedAdmissionBound, pinWireResponseBound, runPinBoundedStep } from './pin-operation-bounds.ts';
 
-type PinListResult = Awaited<ReturnType<ReturnType<typeof createPins>['list']>>;
+type PinListResult = Omit<Awaited<ReturnType<ReturnType<typeof createPins>['list']>>, 'pins'> & {
+  pins: { collectionId: string; target: ReturnType<typeof collectionReadView> | null }[];
+};
 
 const closed = { additionalProperties: false } as const;
 const revision = t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
