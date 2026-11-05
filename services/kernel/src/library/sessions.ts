@@ -36,7 +36,7 @@ import type {
   ProgressSessionUpdate,
 } from './progress-model.ts';
 import * as store from './progress-store.ts';
-import { readLibraryProfileSource, readLibraryProfileSourceObservation } from './profile-source.ts';
+import { readLibraryProfileSourceObservation, sameLibraryProfileAnchor } from './profile-source.ts';
 import type { LibraryProfilePin } from './profile.ts';
 import {
   compatibleProgressUnits,
@@ -56,7 +56,6 @@ import {
   sessionShelfWork, sessionPresentationWork,
 } from './session-operation-bounds.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
-import { sameLibraryProfileAnchor } from './profile-source.ts';
 import { clearProgressValues, isProgressClear } from './progress-commands.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { parseProgressSessionJournalPatch } from './progress-journal.ts';
@@ -168,7 +167,9 @@ export function createSessionCommands(config: Dependencies) {
     if (!before) return;
     const after = await observeSource(deps, subjectId);
     if (!after || !sameLibraryProfileAnchor(before.anchor, after.anchor) ||
-      JSON.stringify(before.source) !== JSON.stringify(after.source)) throw new ProgressConflictError();
+      before.source.kind !== after.source.kind ||
+      (before.source.kind === 'supported' && after.source.kind === 'supported' &&
+        JSON.stringify(before.source.pin) !== JSON.stringify(after.source.pin))) throw new ProgressConflictError();
   }
   function observePartition(client: Client, partition: number) {
     return consumeSessionWork('partition', sessionPartitionWork(partition), () => readPartition(client, partition));
@@ -229,14 +230,20 @@ export function createSessionCommands(config: Dependencies) {
             const deps = { pool, access, actor: owner, at: attempt.time, deadline };
             const observation = await observeSource(deps, parsed.subjectId),
               source = observation?.source ?? null;
+            const versionObservation = parsed.versionSubjectId !== null && parsed.versionSubjectId !== parsed.subjectId
+              ? await observeSource(deps, parsed.versionSubjectId) : observation;
             const version =
               parsed.versionSubjectId === null
                 ? null
                 : parsed.versionSubjectId === parsed.subjectId
                   ? source
-                  : (await observeSource(deps, parsed.versionSubjectId))?.source ?? null;
+                  : versionObservation?.source ?? null;
             assertExpectedBinding(observation, expected);
-            return { source, version, observation };
+            // Finish foreign preparation before the owning command checks out its connection.
+            await verifyPreparedSource(deps, parsed.subjectId, observation);
+            if (parsed.versionSubjectId !== null && parsed.versionSubjectId !== parsed.subjectId)
+              await verifyPreparedSource(deps, parsed.versionSubjectId, versionObservation);
+            return { source, version };
           } catch (error) {
             return { error };
           }
@@ -245,7 +252,6 @@ export function createSessionCommands(config: Dependencies) {
       async (tx, command, prepared) => {
         if ('error' in prepared) throw prepared.error;
         const { source, version } = prepared;
-        await verifyPreparedSource({ pool, access, actor: owner, at: command.time, deadline }, parsed.subjectId, prepared.observation);
         if (!source || (parsed.versionSubjectId !== null && !version)) throw new LibraryNotFoundError();
         if (source.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
         const acceptedDescriptor = descriptor(source.profile, parsed);
@@ -323,9 +329,10 @@ export function createSessionCommands(config: Dependencies) {
               if (!source) throw new LibraryNotFoundError();
               // No new value is admitted. The original session identity and meaning stay intact,
               // including when the current profile no longer offers its unit.
-              return { original: null, source, pin: null, observation };
+              await verifyPreparedSource(sourceDeps, session.subjectId, observation);
+              return { original: null, source, pin: null };
             }
-            if (action !== 'record' || clearing) return { original: null, source: null, pin: null, observation: null };
+            if (action !== 'record' || clearing) return { original: null, source: null, pin: null };
             // Release the owner snapshot before any source or Global connection is acquired.
             const fact = await snapshot(owner, 'progress_session:update', (client) =>
               store.readSessionFact(client, route, sessionId));
@@ -339,7 +346,8 @@ export function createSessionCommands(config: Dependencies) {
               observation = await observeSource(sourceDeps, fact.session.subjectId),
               source = observation?.source ?? null;
             assertExpectedBinding(observation, expected);
-            return { original, source, pin: fact.pin, observation };
+            await verifyPreparedSource(sourceDeps, fact.session.subjectId, observation);
+            return { original, source, pin: fact.pin };
           } catch (error) {
             return { error };
           }
@@ -347,9 +355,6 @@ export function createSessionCommands(config: Dependencies) {
       },
       async (tx, command, prepared) => {
         if ('error' in prepared) throw prepared.error;
-        if (prepared.observation)
-          await verifyPreparedSource({ pool, access, actor: owner, at: command.time, deadline },
-            prepared.source!.requestedSubjectId ?? prepared.source!.subjectId, prepared.observation);
         const observed = await load(tx, owner, sessionId);
         const write = { client: tx, route, accountId: owner.accountId };
         // Every session writer orders the shared subject head before the session point lock.
@@ -477,7 +482,8 @@ export function createSessionCommands(config: Dependencies) {
         await client.query('COMMIT');
         return result;
       } catch (error) {
-        await client.query('ROLLBACK');
+        // Cleanup must drain the original connection even after its operation deadline.
+        await raw.query('ROLLBACK');
         throw error;
       }
     }));

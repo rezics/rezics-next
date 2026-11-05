@@ -113,7 +113,7 @@ changes an owner, manufactures execution evidence or grants another allowance.
 
 Decision: bind immutable original operands at the session store and existing command owner, preserve public
 journal identity, and use causal native journey assertions for repeated measures, preparation replacement,
-independent presentation failure and first/next pages. A source observation is checked again before fresh effects;
+independent presentation failure and first/next pages. A source observation, including an independent version source, is checked again at the end of preparation before the owner connection is acquired;
 a redirect, identity/profile replacement or hidden source cannot admit a value prepared against obsolete meaning.
 Preparation failures remain deferred until the fresh body, so an exact authorized replay remains independent of
 later source changes. A matching current value is never a receipt for an older command.
@@ -157,7 +157,7 @@ creating its durable continuation does not claim those pages have executed.
 
 Current presentation has independent original-release, current Source/profile, version-disclosure and final
 verification declarations. Rendering is charged before invocation, including failure after a completed command.
-Released owner snapshots surround the render and final source/epoch/fact comparison. The original command's
+Released owner snapshots surround the render and final source/epoch/fact comparison. Expired snapshot cleanup rolls back on the original raw connection before its single release. The original command's
 receipt remains replayable if rendering fails. Historic meaning never selects a replacement release. Discovery
 uses one bounded release batch and independently serializes all repeated measure presentations.
 

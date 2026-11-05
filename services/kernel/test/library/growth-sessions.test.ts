@@ -14,7 +14,7 @@ const firstRoute = 0x3a20;
 const rowsPerScale = 500;
 const repetitionsPerScale = 6;
 const recordedAt = '2026-10-26T12:00:00.000Z';
-const scopes = ['subject:read', 'progress_session:create', 'progress_session:update'];
+const scopes = ['subject:read', 'progress_session:create', 'progress_session:update', 'progress_session:read', 'progress_session:list'];
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(59)]]) };
 const key = () => randomUUID();
 
@@ -307,7 +307,7 @@ beforeAll(async () => {
   accounts = new Map();
   await bootstrapRelease(database.pool, bundledRelease);
   fixtures = [];
-  for (let index = 0; index < 4; index += 1) fixtures.push(await createFixture(firstRoute + index));
+  for (let index = 0; index < 5; index += 1) fixtures.push(await createFixture(firstRoute + index));
 });
 
 afterAll(async () => {
@@ -421,4 +421,44 @@ test('Session complete has constant rows and statements as sessions grow', async
 
 test('Session abandon has constant rows and statements as sessions grow', async () => {
   await transitionCheck('abandon', fixtures[3]!);
+});
+
+
+test('Session first and next subject owner unit and change pages retain bounded native work', async () => {
+  const fixture = fixtures[4]!;
+  const sessionId = routed('20000000', fixture.route, 1);
+  const report = await checkGrowth(database, {
+    name: 'session first and next pages',
+    scales: [1, 4, 16],
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (_db, scale, previous) => {
+      await grow(fixture, previous, scale);
+      const input = [fixture.route, sessionId, previous * rowsPerScale + 3, scale * rowsPerScale + 2, recordedAt];
+      await database.admin.query(`INSERT INTO library.progress_unit (route, session_id, unit_id, added_at)
+        SELECT $1, $2, 'page-' || lpad(n::text, 8, '0'), $5::timestamptz
+        FROM generate_series($3::int, $4::int) n`, input);
+      await database.admin.query(`INSERT INTO library.progress_change
+        (route, session_id, change_no, intent, recorded_at, transaction_id)
+        SELECT $1, $2, n, '{"add":["sparse"]}'::jsonb, $5::timestamptz, $2
+        FROM generate_series($3::int, $4::int) n`, input);
+    },
+    operation: async () => {
+      const subject = await fixture.commands.listSessions(fixture.actor, fixture.subjectId, { limit: 100 });
+      const subjectNext = await fixture.commands.listSessions(fixture.actor, fixture.subjectId,
+        { limit: 100, cursor: subject.next! });
+      expect(new Set([...subject.sessions, ...subjectNext.sessions].map((row) => row.id)).size).toBe(200);
+      const owner = await fixture.commands.listOwnerSessions(fixture.actor, {}, { limit: 50 });
+      const ownerNext = await fixture.commands.listOwnerSessions(fixture.actor, {}, { limit: 50, cursor: owner.next! });
+      expect(new Set([...owner.sessions, ...ownerNext.sessions].map((row) => row.session.id)).size).toBe(100);
+      const units = await fixture.commands.listUnits(fixture.actor, sessionId, { limit: 100 });
+      const unitsNext = await fixture.commands.listUnits(fixture.actor, sessionId, { limit: 100, cursor: units.next! });
+      expect(new Set([...units.units, ...unitsNext.units].map((row) => row.unitId)).size).toBe(200);
+      const changes = await fixture.commands.listChanges(fixture.actor, sessionId, { limit: 100 });
+      const changesNext = await fixture.commands.listChanges(fixture.actor, sessionId, { limit: 100, cursor: changes.next! });
+      expect(new Set([...changes.changes, ...changesNext.changes].map((row) => row.changeNo)).size).toBe(200);
+    },
+  });
+  expectConstantStatements(report);
+  expectNoLibraryScans(report);
+  reportSamples('Session first and next pages', report);
 });
