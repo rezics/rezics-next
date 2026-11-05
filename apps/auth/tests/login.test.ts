@@ -319,13 +319,14 @@ test(
         expect(signIns().length).toBe(1);
         submitted(signIns()[0]);
         if (status === 503) {
-          const uncertain = page.getByRole('status').filter({ hasText: /sign-in outcome could not be confirmed/i });
+          const choice = page.getByRole('region', { name: 'Sign in', exact: true });
+          const uncertain = choice.getByRole('status').filter({ hasText: /sign-in outcome could not be confirmed/i });
           await uncertain.waitFor({ state: 'visible' });
           await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'status');
           expect(await uncertain.evaluate((element) => element === document.activeElement)).toBe(true);
           expect(await alert.count()).toBe(0);
           expect(await page.getByLabel(/^password$/i).count()).toBe(0);
-          const review = page.getByRole('button', { name: 'Review current session', exact: true });
+          const review = choice.getByRole('button', { name: 'Review current session', exact: true });
           await review.waitFor({ state: 'visible' });
           await Promise.all([
             page.waitForResponse(
@@ -333,8 +334,8 @@ test(
             ),
             review.click(),
           ]);
-          await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
-          await page.getByText('The sign-in outcome could not be confirmed.', { exact: false }).waitFor({ state: 'visible' });
+          await choice.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
+          await choice.getByText('The sign-in outcome could not be confirmed.', { exact: false }).waitFor({ state: 'visible' });
           expect(await page.getByLabel(/^email$/i).inputValue()).toBe('');
           expect(await page.getByLabel(/^password$/i).inputValue()).toBe('');
           expect(await alert.count()).toBe(0);
