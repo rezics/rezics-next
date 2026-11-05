@@ -317,7 +317,16 @@ export function CurrentViewerProgressIndexPage({
     const state = client.getQueryState<CurrentViewerProgressIndex>(queryKey);
     return !origin.retired && origin.validate() && state?.status !== 'error' && matches(currentResult());
   });
-  const windowIdentity = JSON.stringify([viewer, scoped.viewer, listVersion, subjectId, state, mode, profileId, locale]);
+  const windowIdentity = JSON.stringify([
+    viewer,
+    scoped.viewer,
+    listVersion,
+    subjectId,
+    state,
+    mode,
+    profileId,
+    locale,
+  ]);
   const routeWindow = progressIndexWindowRouteState(location.state);
   const routeWindowBook = routeWindow
     ? client.getQueryData<ProgressIndexWindowState>(progressIndexWindowQueryKey(routeWindow.visit))
@@ -377,7 +386,8 @@ export function CurrentViewerProgressIndexPage({
   const [windowRevision, renderWindows] = useState(0);
   const focusedMove = useRef<string | null>(null);
   useLayoutEffect(() => {
-    if (oldVisit && oldVisit !== visit.visit) client.removeQueries({ queryKey: progressIndexWindowQueryKey(oldVisit), exact: true });
+    if (oldVisit && oldVisit !== visit.visit)
+      client.removeQueries({ queryKey: progressIndexWindowQueryKey(oldVisit), exact: true });
   }, [client, oldVisit, visit.visit]);
   useLayoutEffect(() => {
     const unsubscribe = router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
@@ -414,8 +424,7 @@ export function CurrentViewerProgressIndexPage({
     });
     return unsubscribe;
   }, [client, instance, router, visit.visit, windowIdentity, windowKey]);
-  const admittedCursor =
-    result?.page.admittedCursor === undefined ? cursor : result.page.admittedCursor;
+  const admittedCursor = result?.page.admittedCursor === undefined ? cursor : result.page.admittedCursor;
   const pageCanAdmitWindow =
     hydrated &&
     allowed &&
@@ -443,10 +452,8 @@ export function CurrentViewerProgressIndexPage({
           savedSearch.mode ?? null,
           savedSearch.profileId ?? null,
           savedSearch.cursor ?? null,
-        ]) ===
-          JSON.stringify([subjectId, state, mode, profileId, cursor]);
-      const useReturnedPath =
-        !result?.page.cursorRestarted && exactReturnAddress && saved?.current === admittedCursor;
+        ]) === JSON.stringify([subjectId, state, mode, profileId, cursor]);
+      const useReturnedPath = !result?.page.cursorRestarted && exactReturnAddress && saved?.current === admittedCursor;
       next = {
         identity: windowIdentity,
         predecessors: useReturnedPath ? [...saved.predecessors] : [],
@@ -465,7 +472,9 @@ export function CurrentViewerProgressIndexPage({
     if (next !== existing) {
       client.setQueryData(windowKey, next);
       renderWindows((value) => value + 1);
-      for (const queryEntry of client.getQueryCache().findAll({ queryKey: ['library', 'progress', 'current-viewer'] })) {
+      for (const queryEntry of client
+        .getQueryCache()
+        .findAll({ queryKey: ['library', 'progress', 'current-viewer'] })) {
         if (queryEntry.queryKey.at(-1) === instance && JSON.stringify(queryEntry.queryKey) !== JSON.stringify(queryKey))
           client.removeQueries({ queryKey: queryEntry.queryKey, exact: true });
       }
@@ -542,11 +551,14 @@ export function CurrentViewerProgressIndexPage({
       }
     });
   };
-  const retryWindowTarget = windows?.staged?.to === cursor ? () => {
-    if (!currentReadAllowed()) return;
-    readCursorOverride.current = cursor;
-    void query.refetch();
-  } : undefined;
+  const retryWindowTarget =
+    windows?.staged?.to === cursor
+      ? () => {
+          if (!currentReadAllowed()) return;
+          readCursorOverride.current = cursor;
+          void query.refetch();
+        }
+      : undefined;
   const windowActions: ProgressWindowActions = {
     ...(pageCanAdmitWindow && exactWindow?.predecessors.length
       ? { previous: (keyboard: boolean) => moveWindow('previous', exactWindow.predecessors.at(-1)!, keyboard) }
@@ -652,11 +664,14 @@ export function CurrentViewerProgressIndexPage({
         page={result!.page}
         cursor={admittedCursor}
         loading={query.isFetching}
-        retry={retryWindowTarget ?? (() => {
-          if (!currentReadAllowed()) return;
-          readCursorOverride.current = admittedCursor;
-          void query.refetch();
-        })}
+        retry={
+          retryWindowTarget ??
+          (() => {
+            if (!currentReadAllowed()) return;
+            readCursorOverride.current = admittedCursor;
+            void query.refetch();
+          })
+        }
         authority={authority}
         returnSelection={returnSelection}
         sourceReturnTo={sourceReturnTo}

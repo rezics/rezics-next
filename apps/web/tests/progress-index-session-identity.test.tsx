@@ -145,7 +145,11 @@ async function mount(sessions: Session[], returnSelection?: ProgressIndexReturnS
     root.render(
       <StrictMode>
         <RouterContextProvider router={router}>
-          <ProgressIndexPage page={page} cursor={returnSelection?.indexSearch?.cursor} returnSelection={returnSelection} />
+          <ProgressIndexPage
+            page={page}
+            cursor={returnSelection?.indexSearch?.cursor}
+            returnSelection={returnSelection}
+          />
         </RouterContextProvider>
       </StrictMode>,
     ),

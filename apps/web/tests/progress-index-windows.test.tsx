@@ -125,8 +125,9 @@ test('coordinate parsing enforces the native cursor boundary and eight-predecess
   ).toEqual({ current: null, predecessors: [null, 'opaque'] });
   expect(progressIndexWindowCoordinates({ current: null, predecessors: Array(9).fill(null) })).toBeUndefined();
   expect(progressIndexWindowCoordinates({ current: 'x'.repeat(4097), predecessors: [] })).toBeUndefined();
-  expect(progressIndexWindowRouteState({ progressIndexWindow: { visit: 'bad', move: id(1), from: null, to: null } }))
-    .toBeUndefined();
+  expect(
+    progressIndexWindowRouteState({ progressIndexWindow: { visit: 'bad', move: id(1), from: null, to: null } }),
+  ).toBeUndefined();
   expect(progressIndexWindowQueryKey(id(1))).toEqual(['library', 'progress', 'index-windows', id(1)]);
 });
 

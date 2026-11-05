@@ -73,7 +73,10 @@ export function progressIndexWindowSnapshot(
   return { predecessors: state.predecessors.slice(-PROGRESS_INDEX_WINDOW_PREDECESSORS), current: state.current };
 }
 
-export function startProgressIndexWindows(identity: string, current: ProgressIndexCoordinate): ProgressIndexWindowState {
+export function startProgressIndexWindows(
+  identity: string,
+  current: ProgressIndexCoordinate,
+): ProgressIndexWindowState {
   return { identity, predecessors: [], current };
 }
 
@@ -134,8 +137,7 @@ export function admitProgressIndexWindow(
       lastMovement: target.keyboard ? target.id : undefined,
     };
   }
-  if (state.current === undefined)
-    return { identity: input.identity, predecessors: [], current: input.admitted };
+  if (state.current === undefined) return { identity: input.identity, predecessors: [], current: input.admitted };
   return state;
 }
 

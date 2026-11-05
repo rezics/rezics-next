@@ -8,10 +8,7 @@ import {
   type ProgressIndexAddress,
 } from './progress-address';
 import type { ProgressIndex, ProgressMode } from './progress-reads';
-import {
-  progressIndexWindowCoordinates,
-  type ProgressIndexWindowCoordinates,
-} from './progress-index-windows';
+import { progressIndexWindowCoordinates, type ProgressIndexWindowCoordinates } from './progress-index-windows';
 
 export type ProgressStartDraft = {
   subjectId: string;
