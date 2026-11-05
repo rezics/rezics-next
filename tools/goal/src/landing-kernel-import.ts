@@ -351,11 +351,15 @@ export async function importLandingKernelCandidate(input: {
   if (!parsed) {
     const infrastructureError = `Kernel import driver exited ${driver?.status ?? 'without a status'} without a result`;
     appendFileSync(logPath, `Dev landing Kernel import unavailable: ${infrastructureError}\n`);
-    return result('unavailable', { setupMs: null, importMs: null, cleanupMs: null, elapsedMs: null }, {
-      output,
-      infrastructureError,
-      argv,
-    });
+    return result(
+      'unavailable',
+      { setupMs: null, importMs: null, cleanupMs: null, elapsedMs: null },
+      {
+        output,
+        infrastructureError,
+        argv,
+      },
+    );
   }
   appendFileSync(
     logPath,
@@ -364,21 +368,29 @@ export async function importLandingKernelCandidate(input: {
   if (parsed.outcome === 'passed') return result('passed', times, { output: parsed.output, argv: parsed.argv });
   if (parsed.outcome === 'unavailable') {
     appendFileSync(logPath, `Dev landing Kernel import unavailable: ${parsed.infrastructureError ?? 'unknown'}\n`);
-    return result('unavailable', { setupMs: null, importMs: null, cleanupMs: null, elapsedMs: null }, {
-      output: parsed.output,
-      infrastructureError: parsed.infrastructureError ?? 'unknown',
-      argv: parsed.argv,
-    });
+    return result(
+      'unavailable',
+      { setupMs: null, importMs: null, cleanupMs: null, elapsedMs: null },
+      {
+        output: parsed.output,
+        infrastructureError: parsed.infrastructureError ?? 'unknown',
+        argv: parsed.argv,
+      },
+    );
   }
   const diagnostic = parsed.diagnostic ?? diagnosticFrom(parsed.output);
   if (!diagnostic) {
     const infrastructureError = `Kernel import failed without a source diagnostic`;
     appendFileSync(logPath, `Dev landing Kernel import unavailable: ${infrastructureError}\n`);
-    return result('unavailable', { setupMs: null, importMs: null, cleanupMs: null, elapsedMs: null }, {
-      output: parsed.output,
-      infrastructureError,
-      argv: parsed.argv,
-    });
+    return result(
+      'unavailable',
+      { setupMs: null, importMs: null, cleanupMs: null, elapsedMs: null },
+      {
+        output: parsed.output,
+        infrastructureError,
+        argv: parsed.argv,
+      },
+    );
   }
   if (diagnostic.file && !isAbsolute(diagnostic.file)) diagnostic.file = resolve(cwd, diagnostic.file);
   const located: LandingKernelImportDiagnostic = { ...diagnostic, entry: parsed.entry ?? entries[0]! };

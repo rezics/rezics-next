@@ -810,7 +810,7 @@ test('a Kernel-source TDZ on a dev landing returns to the original session and p
     seedKernelImportFixture(
       h,
       "import { a } from './cycle-a.ts';\nexport const server = a;\n",
-      "export const worker = true;\n",
+      'export const worker = true;\n',
     );
     h.advanceDev('services/kernel/src/cycle-b.ts', "import { a } from './cycle-a.ts';\nexport const b = a + 1;\n");
     h.ensureDev();

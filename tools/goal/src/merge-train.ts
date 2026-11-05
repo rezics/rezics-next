@@ -2564,12 +2564,7 @@ export class MergeTrain {
             continue;
           }
           if (imported.outcome === 'diagnostic') {
-            const owner = kernelImportOwner(
-              prepared,
-              (member) => member.result.changedFiles,
-              trainTree,
-              imported,
-            );
+            const owner = kernelImportOwner(prepared, (member) => member.result.changedFiles, trainTree, imported);
             return returnRepair(
               owner,
               kernelImportHandoff(

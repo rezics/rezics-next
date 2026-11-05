@@ -147,7 +147,7 @@ test('interrupting the import removes owned driver files and keeps the diagnosti
       [
         "import { writeFileSync } from 'node:fs';",
         'export async function withThrowawayDatabase(work) {',
-        "  writeFileSync(process.env.KERNEL_IMPORT_READY!, String(process.pid));",
+        '  writeFileSync(process.env.KERNEL_IMPORT_READY!, String(process.pid));',
         '  await new Promise(() => {});',
         '  return work(process.env);',
         '}\n',
@@ -202,7 +202,7 @@ test('a real Reylo SQL mismatch against candidate migrations returns the first d
     );
     put(root, 'services/kernel/src/mismatch.sql', 'SELECT missing_query_key FROM semantic.subject;\n');
     put(root, 'services/kernel/src/server.ts', "import mismatch from './mismatch.sql';\nexport { mismatch };\n");
-    put(root, 'services/kernel/src/worker.ts', "export const worker = true;\n");
+    put(root, 'services/kernel/src/worker.ts', 'export const worker = true;\n');
     symlinkIfPresent(join(repository, 'node_modules'), join(root, 'node_modules'));
     symlinkIfPresent(join(repository, 'services/kernel/node_modules'), join(root, 'services/kernel/node_modules'));
     const result = await runImport(root, ['services/kernel/src/server.ts', 'services/kernel/src/mismatch.sql']);

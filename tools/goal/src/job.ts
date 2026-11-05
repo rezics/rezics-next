@@ -1931,7 +1931,9 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (
         outcome.devKernelImport &&
-        !store.events(outcome.taskId, outcome.attempt).some((event) => event.kind === 'dev-landing-kernel-import-recorded')
+        !store
+          .events(outcome.taskId, outcome.attempt)
+          .some((event) => event.kind === 'dev-landing-kernel-import-recorded')
       ) {
         store.event(outcome, 'dev-landing-kernel-import-recorded', outcome.devKernelImport);
         recordFlow(store.db, {
