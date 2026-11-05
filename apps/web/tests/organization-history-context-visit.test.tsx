@@ -154,9 +154,15 @@ test('a selected Context and exact dated Organization assertion survive target, 
     await render('initial', hidden, {});
     expect(host.querySelector('[role="region"]')).toBeNull();
     expect(host.textContent).toContain(m.organization_reader_changed());
-    const concealedRow = [...host.querySelectorAll('li')].find((row) => row.querySelector('button[aria-expanded="false"]'))!;
-    expect(concealedRow.querySelector('a')).toBeNull();
-    expect([...host.querySelectorAll('li')].some((row) => row !== concealedRow && row.querySelector(`a[href*="${parent}"]`))).toBe(true);
+    const concealedRow = [...host.querySelectorAll('li')].find((row) =>
+      [...row.querySelectorAll('button')].some((button) => button.textContent?.trim() === m.subject_spoiler_show()),
+    )!;
+    expect(concealedRow.querySelectorAll('a')).toHaveLength(0);
+    expect(
+      [...host.querySelectorAll('li')].some(
+        (row) => row !== concealedRow && row.querySelector(`a[href*="${parent}"]`),
+      ),
+    ).toBe(true);
     expect(window.document.activeElement).toBe(host.querySelector('h3'));
 
     const replaced = structuredClone(organization);
