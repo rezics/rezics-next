@@ -254,7 +254,10 @@ test('released group Continue, Previous, First and native open/back each read on
   await click('next');
   await finish(page(null));
   expect(link('next')).toBeNull();
-  expect(document.activeElement === host.querySelector('[data-release-group-results]')).toBe(true);
+  expect(
+    document.activeElement === host.querySelector('[data-release-group-results]'),
+    document.activeElement?.outerHTML.slice(0, 400),
+  ).toBe(true);
 });
 
 test('direct opaque and preparing addresses stay unnumbered; progress, failure, cycles and restart retain truthful actions', async () => {
