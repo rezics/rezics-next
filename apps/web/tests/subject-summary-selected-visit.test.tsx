@@ -428,6 +428,12 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     expect(host.textContent).toContain(m.subject_synopsis_global_only());
     expect(host.textContent).not.toContain('The exact second synopsis.');
 
+    const beforeOversized = sourceRequests.length;
+    await navigate(`${href}/sources?${new URLSearchParams({ via: selectedVia, extra: 'x'.repeat(2048) })}`);
+    expect(sourceRequests.length).toBe(beforeOversized);
+    expect(host.textContent).toContain(m.sources_unavailable());
+    expect(host.innerHTML).not.toContain(content.document);
+
     const encodedFragment = summaryReadingFragment({
       ...selection,
       documentId: '字'.repeat(128),

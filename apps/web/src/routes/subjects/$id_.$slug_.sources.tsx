@@ -15,6 +15,7 @@ import { canonicalRedirect, subjectHref } from '../../subject/subject-href';
 import { sourceObservationSelection } from '../../features/catalogue/source-observation/contract';
 import type { SourceObservationRequest } from '../../features/catalogue/source-observation/contract';
 import { inspectSubjectSourceObservation } from '../../features/catalogue/source-observation/action';
+import { SUMMARY_VISIT_ADDRESS_BYTE_CAP } from '../../features/pages/subject-summary-reading/visit';
 import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 
 const inspectSourceObservation = (request: SourceObservationRequest) =>
@@ -45,6 +46,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
   },
   loaderDeps: ({ search }) => ({ realm: search.realm, via: search.via }),
   loader: async ({ params, location, deps }) => {
+    if (deps.via && new TextEncoder().encode(location.href).byteLength > SUMMARY_VISIT_ADDRESS_BYTE_CAP)
+      throw new Error('Invalid synopsis visit');
     const reader = await subjectRequestReader({ data: { realm: deps.realm } });
     const result = await loadSubjectSources({
       data: { id: params.id, locale: getLocale(), realm: deps.realm, via: deps.via, reader },
@@ -99,12 +102,10 @@ function SourcesRoute() {
                   via: original.via,
                 },
                 headers: csrfHeaders(),
-              })
+              }).catch((): SourcesResult => ({ kind: 'unavailable' }))
             : result;
         if (live) setCurrent({ source: result, scope, result: refreshed });
-      })().catch(() => {
-        if (live) setCurrent({ source: result, scope, result: { kind: 'unavailable' } });
-      });
+      })();
     return () => {
       live = false;
     };

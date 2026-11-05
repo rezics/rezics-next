@@ -51,7 +51,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
   const unavailable = { kind: 'unavailable' } as const;
   const tick = () => new Promise((done) => setTimeout(done, 0));
   try {
-    for (const mode of 'empty failed denied error pointer unfocused moved moved-back tab blur canonical reader retired'.split(
+    for (const mode of 'empty failed denied error pointer unfocused moved moved-back tab blur canonical reader global-reader retired'.split(
       ' ',
     )) {
       reader = 'alice';
@@ -68,8 +68,8 @@ test('actual Sources retry returns focus locally and retires focus across reader
         getParentRoute: () => parent,
         path: '/$locale/subjects/$id/$slug/sources',
       } as never);
-      const realm = '00000000-0000-4000-8000-000000000301';
-      const suffix = `?realm=${realm}&intent=exact%20read#kept`;
+      const realm = mode === 'global-reader' ? undefined : '00000000-0000-4000-8000-000000000301';
+      const suffix = `?${realm ? `realm=${realm}&` : ''}intent=exact%20read#kept`;
       const router = routing.createRouter({
         routeTree: parent.addChildren([sources]),
         history: routing.createMemoryHistory({ initialEntries: [page.sourcesHref + suffix] }),
@@ -119,13 +119,20 @@ test('actual Sources retry returns focus locally and retires focus across reader
           mounted = false;
           outside.focus();
         }
-        if (mode === 'reader') {
+        if (mode === 'reader' || mode === 'global-reader') {
           reader = 'bob';
           read = async () => ready;
           await act(async () => {
             client.setQueryData(sessionQuery.queryKey, session());
             await tick();
           });
+          if (mode === 'global-reader') {
+            reader = 'alice';
+            await act(async () => {
+              client.setQueryData(sessionQuery.queryKey, session());
+              await tick();
+            });
+          }
         }
         const returned =
           mode === 'canonical'
