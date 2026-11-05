@@ -8,6 +8,8 @@ producer facts and format limits.
 
 Decision: Recovered annotations, source observations and occurrence assessments remain private; archived identity, visibility, revisions and audit times never authorize publication or select a current occurrence.
 
+Decision: Unselected fields preserve their current native values; only an explicit field-level `set` or `clear` changes a fact.
+
 ## Evidence and supported operations
 
 `decodeLibraryArchive(bytes)` accepts completed V1, V2 and V3 manifests using exact per-version section inventories
@@ -41,8 +43,8 @@ year/month/day precision and pass through the existing calendar-date parser. Ref
 and null cannot be set. Unsupported reflection evidence remains visible with `unsupported-field-value` or
 `invalid-journal-reflection`; no text is truncated. The native bounds are 2,000 Unicode characters, 4,096 UTF-8 bytes
 and a 16,384-byte escaped PATCH frame. Malformed Unicode reflection evidence is retained encoded for review, while
-other malformed archive strings remain rejected. Session creation, completion, repeat counters, state, progress,
-assessment and unit checklists are never replayed.
+other malformed archive strings remain rejected. Session creation, completion, repeat counters, state, progress and
+unit checklists are never replayed.
 
 Decision: native reflection text excludes malformed Unicode and U+0000, which the native text column cannot store;
 archive review retains that evidence and explicitly refuses its adoption. Archived assessment remains separate from
@@ -62,9 +64,9 @@ tokens pass through native bounds. Timestamp values retain their original string
 fractional precision and utc/offset/unknown zone; parsing never normalizes through a timezone or `Date`.
 
 Empty notes and invalid priorities are rejected by the installed native parsers. Journal dates retain year,
-year/month, or year/month/day precision and pass through the existing calendar-date parser. Reflection is evidence
-only; no archived reflection, Session creation, completion, repeat counter, state, progress, or unit checklist is
-replayed.
+year/month, or year/month/day precision and pass through the existing calendar-date parser. Selected archived
+reflection uses the journal PATCH rules above; no Session creation, completion, repeat counter, state, progress, or
+unit checklist is replayed.
 
 Entry application binds the current incarnation, Entry revision, annotation revision, canonical Subject anchor,
 profile pin, and selected field values. The native annotation command rechecks that binding and always records the
