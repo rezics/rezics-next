@@ -1330,6 +1330,42 @@ cleanup, before cross-home installation. Neither an arbitrary foreign checkout n
 The original guarded vote journey remains unavailable until its writer integrates this participant and Semantic's
 separate exact-epoch participant. This source factory is not generated client delivery or provider adoption.
 
+#### Native vote receipt reconciliation
+
+Decision: retain only the producer-prepared native key/digest and question/target disclosure context for an
+already-started provider command; receipt reconciliation repeats current authorization and disclosure without
+fresh review or effect admission. This linkage fits the existing provider owner's 24-hour window and retains no
+provider payload, scrubbed review, units or Library-local vote authority.
+
+`createVoteCommands({pool, access, clock?})` exports these internal native callables from `votes.ts`:
+
+- `preparePutVote(actor: Actor, input: PutVoteInput, idempotencyKey: string): PreparedPutVote` returns
+  `{input: PutVoteInput, receipt: PutVoteReceipt}`. Use `input` for `putVoteOutcome`; retain only `receipt` after
+  source scrubbing. The producer shares the writer's canonical normalization, including the complete frozen guard
+  and optional observation, and the native actor/principal digest basis with fixed kind `rating.vote.put`.
+- `PutVoteReceipt` is readonly `{requestKey: string, digest: string, questionId: string, targetId: string}`.
+  Question and requested target are the minimal context for current Rating disclosure. Keep this output together;
+  callers must not reconstruct the digest or substitute disclosure context. The original native acting identity
+  remains a separate authenticated operand, including its client and delegator basis.
+- `reconcilePutVote(actor: Actor, receipt: PutVoteReceipt): Promise<PutVoteOutcome | null>` uses the shared
+  `ownAccountReceiptOnly` runner with current Rating Access, account/scope and ordinary question/Subject disclosure
+  before lookup. A hit returns the original vote and native session component; a miss returns `null` with no fresh
+  body, vote, aggregate, event or receipt writes. A changed digest under the same identity/key keeps native
+  `IdempotencyConflictError` semantics. An unchanged write that recorded no receipt also reconciles as `null`.
+
+Reconciliation does not compare review staleness, current score, question business revision, scale or lifecycle,
+resample started reviews, or require guarded-effect participant admission. Receipt evidence is historical; current
+readback stays with `readOwnVote` or the counted reader. Current revoked authority and concealed question/Subject
+rules still apply before both hits and misses. No HTTP endpoint or generated client publication is involved.
+The existing provider receiver and retained guarded-effect continuation consume these source callables; supported
+positive guarded effects and four-provider current readback remain their existing producer/receiver work.
+
+Receipt reconciliation adds one exact native receipt seek after the existing one-question/one-target disclosure
+and current Access preparation. It retains those physical bounds and introduces no history or provider scan.
+`test/rating/vote-receipt-reconciliation.test.ts` covers stored digest/outcome identity, scrubbed linkage, misses,
+native conflicts, changed business evidence and current authorization/exposure. Broader acceptance remains with
+integration verification.
+
 #### Provider vote review Cost
 
 - **Touches:** One current account and disclosed question read, followed by the existing counted-reader preparation, one account-home snapshot, and finish confirmation for one requested Subject. Identity mappings and requested/canonical epochs use the reader's released bounded observations; the snapshot reads at most one counted row and two exact original/canonical slots.
