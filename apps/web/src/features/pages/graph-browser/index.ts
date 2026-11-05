@@ -86,20 +86,22 @@ export type GraphRead =
     };
 
 export type GraphBrowserTransport = {
-  read: (query: {
-    property?: string | readonly string[] | undefined;
-    direction?: string | undefined;
-    depth?: number | undefined;
-    node?: string | undefined;
-    edge?: string | undefined;
-    from?: string | undefined;
-    to?: string | undefined;
-    edgeProperty?: string | undefined;
-    expansion?: GraphTruncation | undefined;
-    session?: string | undefined;
-  }, signal: AbortSignal) => Promise<GraphRead>;
+  read: (
+    query: {
+      property?: string | readonly string[] | undefined;
+      direction?: string | undefined;
+      depth?: number | undefined;
+      node?: string | undefined;
+      edge?: string | undefined;
+      from?: string | undefined;
+      to?: string | undefined;
+      edgeProperty?: string | undefined;
+      expansion?: GraphTruncation | undefined;
+      session?: string | undefined;
+    },
+    signal: AbortSignal,
+  ) => Promise<GraphRead>;
 };
-
 
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type NativeGraph = Extract<NonNullable<Awaited<ReturnType<Endpoint['graph']['get']>>['data']>, { nodes: unknown[] }>;
@@ -493,7 +495,15 @@ export async function readSubjectGraphPage(
         ? requestedSelection
         : undefined;
     if (requestedSelection && !selected) return { ok: false, reason: 'stale' };
-    const inspected = await readDetail(client, release, locale, selected, headersOf(authorization, session), cost, signal);
+    const inspected = await readDetail(
+      client,
+      release,
+      locale,
+      selected,
+      headersOf(authorization, session),
+      cost,
+      signal,
+    );
     signal?.throwIfAborted();
     if (
       requestedSelection?.kind === 'edge' &&

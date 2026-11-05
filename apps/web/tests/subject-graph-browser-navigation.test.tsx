@@ -256,7 +256,8 @@ test('a failed selection offers an exact explicit retry', async () => {
   const calls: ReadInput[] = [];
   const signals: AbortSignal[] = [];
   const transport: GraphBrowserTransport = {
-    read: async (query) => {
+    read: async (query, signal) => {
+      signals.push(signal);
       calls.push({ ...query });
       return query.node === first && calls.filter((call) => call.node === first).length === 1
         ? { ok: false, reason: 'unavailable' }
@@ -376,83 +377,92 @@ test('companion and correction links return only exact public selection state an
   }
 });
 
-test.each(['success', 'denied'] as const)('anchor, locale, reader and transport replacement retire pending %s and session tokens', async (lateResult) => {
-  const ui = await mounted();
-  const late = deferred<GraphRead>();
-  const firstCalls: ReadInput[] = [];
-  const signals: AbortSignal[] = [];
-  const firstTransport: GraphBrowserTransport = {
-    read: (query, signal) => {
-      firstCalls.push({ ...query });
-      signals.push(signal);
-      return query.node && firstCalls.length === 1 ? late.promise : Promise.resolve(reading(query, { session: 'fresh-return-session' }));
-    },
-  };
-  const replacementCalls: ReadInput[] = [];
-  const replacement: GraphBrowserTransport = {
-    read: async (query) => {
-      replacementCalls.push({ ...query });
-      return reading(query, { session: 'replacement-session' });
-    },
-  };
-  const page = (source: {
-    id: string;
-    locale: string;
-    reader: string;
-    transport: GraphBrowserTransport;
-    initial?: GraphRead;
-  }) =>
-    h(ui.GraphBrowserPage, {
-      id: source.id,
-      locale: source.locale,
-      reader: source.reader,
-      property,
-      direction: 'both',
-      depth: 1,
-      initial: source.initial,
-      graphPath: `/en/subjects/${source.id}/anchor/graph`,
-      transport: source.transport,
-    });
-  try {
-    await ui.show(
-      page({ id: anchor, locale: 'en', reader: 'reader-one', transport: firstTransport, initial: reading() }),
-    );
-    await ui.click(ui.host.querySelector<HTMLButtonElement>(`button[data-graph-selection="node:${first}"]`));
-    await ui.show(page({ id: second, locale: 'en', reader: 'reader-one', transport: replacement }));
-    await ui.flush();
-    expect(signals[0]?.aborted).toBe(true);
-    expect(replacementCalls).toHaveLength(1);
-    expect(replacementCalls[0]?.session).toBeUndefined();
-    expect(ui.host.textContent).toContain('Anchor');
-
-    await ui.show(page({ id: second, locale: 'ja', reader: 'reader-one', transport: replacement }));
-    await ui.flush();
-    await ui.show(page({ id: second, locale: 'ja', reader: 'reader-two', transport: replacement }));
-    await ui.flush();
-    const thirdTransport: GraphBrowserTransport = {
-      read: async (query) => {
-        replacementCalls.push({ ...query });
-        return reading(query, { session: 'third-session' });
+test.each(['success', 'denied'] as const)(
+  'anchor, locale, reader and transport replacement retire pending %s and session tokens',
+  async (lateResult) => {
+    const ui = await mounted();
+    const late = deferred<GraphRead>();
+    const firstCalls: ReadInput[] = [];
+    const signals: AbortSignal[] = [];
+    const firstTransport: GraphBrowserTransport = {
+      read: (query, signal) => {
+        firstCalls.push({ ...query });
+        signals.push(signal);
+        return query.node && firstCalls.length === 1
+          ? late.promise
+          : Promise.resolve(reading(query, { session: 'fresh-return-session' }));
       },
     };
-    await ui.show(page({ id: second, locale: 'ja', reader: 'reader-two', transport: thirdTransport }));
-    await ui.flush();
-    await ui.show(page({ id: anchor, locale: 'en', reader: 'reader-one', transport: firstTransport }));
-    await ui.flush();
-    expect(firstCalls.at(-1)?.session).toBeUndefined();
-    await act(async () => {
-      late.resolve(lateResult === 'denied' ? { ok: false, reason: 'denied', clearPrivate: true } : reading({ property, direction: 'both', depth: 1, node: first }, { session: 'late-session' }));
-      await late.promise;
-    });
-    expect(ui.host.textContent).not.toContain('First selected');
-    await ui.click(ui.host.querySelector<HTMLButtonElement>(`button[data-graph-selection="node:${first}"]`));
-    await ui.flush();
-    expect(replacementCalls.length).toBeGreaterThanOrEqual(4);
-    expect(firstCalls.at(-1)?.session).toBe('fresh-return-session');
-    expect(ui.host.textContent).toContain('First selected');
-    await ui.show(null);
-    expect(signals.at(-1)?.aborted).toBe(true);
-  } finally {
-    await ui.close();
-  }
-});
+    const replacementCalls: ReadInput[] = [];
+    const replacement: GraphBrowserTransport = {
+      read: async (query) => {
+        replacementCalls.push({ ...query });
+        return reading(query, { session: 'replacement-session' });
+      },
+    };
+    const page = (source: {
+      id: string;
+      locale: string;
+      reader: string;
+      transport: GraphBrowserTransport;
+      initial?: GraphRead;
+    }) =>
+      h(ui.GraphBrowserPage, {
+        id: source.id,
+        locale: source.locale,
+        reader: source.reader,
+        property,
+        direction: 'both',
+        depth: 1,
+        initial: source.initial,
+        graphPath: `/en/subjects/${source.id}/anchor/graph`,
+        transport: source.transport,
+      });
+    try {
+      await ui.show(
+        page({ id: anchor, locale: 'en', reader: 'reader-one', transport: firstTransport, initial: reading() }),
+      );
+      await ui.click(ui.host.querySelector<HTMLButtonElement>(`button[data-graph-selection="node:${first}"]`));
+      await ui.show(page({ id: second, locale: 'en', reader: 'reader-one', transport: replacement }));
+      await ui.flush();
+      expect(signals[0]?.aborted).toBe(true);
+      expect(replacementCalls).toHaveLength(1);
+      expect(replacementCalls[0]?.session).toBeUndefined();
+      expect(ui.host.textContent).toContain('Anchor');
+
+      await ui.show(page({ id: second, locale: 'ja', reader: 'reader-one', transport: replacement }));
+      await ui.flush();
+      await ui.show(page({ id: second, locale: 'ja', reader: 'reader-two', transport: replacement }));
+      await ui.flush();
+      const thirdTransport: GraphBrowserTransport = {
+        read: async (query) => {
+          replacementCalls.push({ ...query });
+          return reading(query, { session: 'third-session' });
+        },
+      };
+      await ui.show(page({ id: second, locale: 'ja', reader: 'reader-two', transport: thirdTransport }));
+      await ui.flush();
+      await ui.show(page({ id: anchor, locale: 'en', reader: 'reader-one', transport: firstTransport }));
+      await ui.flush();
+      expect(firstCalls.at(-1)?.session).toBeUndefined();
+      await act(async () => {
+        late.resolve(
+          lateResult === 'denied'
+            ? { ok: false, reason: 'denied', clearPrivate: true }
+            : reading({ property, direction: 'both', depth: 1, node: first }, { session: 'late-session' }),
+        );
+        await late.promise;
+      });
+      expect(ui.host.textContent).not.toContain('First selected');
+      await ui.click(ui.host.querySelector<HTMLButtonElement>(`button[data-graph-selection="node:${first}"]`));
+      await ui.flush();
+      expect(replacementCalls.length).toBeGreaterThanOrEqual(4);
+      expect(firstCalls.at(-1)?.session).toBe('fresh-return-session');
+      expect(ui.host.textContent).toContain('First selected');
+      await ui.show(null);
+      expect(signals.at(-1)?.aborted).toBe(true);
+    } finally {
+      await ui.close();
+    }
+  },
+);

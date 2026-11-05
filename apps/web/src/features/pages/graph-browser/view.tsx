@@ -491,7 +491,8 @@ export function GraphBrowserPage({
     void (async () => {
       try {
         const result = await record.source.transport.read(record.query, controller.signal);
-        if (controller.signal.aborted || sequenceRef.current !== requestId || sourceRef.current !== record.source) return;
+        if (controller.signal.aborted || sequenceRef.current !== requestId || sourceRef.current !== record.source)
+          return;
         if (!result.ok) {
           if (result.clearPrivate || result.reason === 'denied') sessionRef.current = { source: record.source };
           publish({
@@ -524,7 +525,8 @@ export function GraphBrowserPage({
           localOnly: false,
         });
       } catch {
-        if (controller.signal.aborted || sequenceRef.current !== requestId || sourceRef.current !== record.source) return;
+        if (controller.signal.aborted || sequenceRef.current !== requestId || sourceRef.current !== record.source)
+          return;
         publish({
           ...pending,
           status: 'failure',

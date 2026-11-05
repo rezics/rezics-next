@@ -2397,21 +2397,20 @@ in the Concept read is separately capped at 65,536 bytes. The work-list composit
 separately budgeted Concept definition and hierarchy reads. Continuation is explicit and bounded; the visit does not
 read work details per result.
 
-The graph reader consumes `GET /v1/subjects/:id/graph`, `/links` and `/counts`. Native `graph.ts` admits depth 1 or 2,
-at most eight relation properties, and a **per-expansion** neighbour page of at most 25. The producer also stops
-edge exploration at 500 edges; Web never requests more than 25 neighbours per expansion and never crawls, auto-expands
-or hydrates every node. Truncated expansions continue through the matching bounded `/relations` or `/links` page.
-Incomplete is distinct from empty. Edge direction, inverse labels, qualifier/credit slots, cycles and repeated node
-identities are preserved; duplicate edges are not. Graph reachability does not authorize access or prove identity.
+The graph reader consumes native `/graph`, `/links` and `/counts`: depth 1 or 2, at most eight relation properties,
+25 neighbours **per expansion**, and a separate producer budget of 500 explored edges. Web never crawls, auto-expands
+or hydrates every node. Truncations continue through bounded `/relations` or `/links` pages; incomplete differs from
+empty. Preserve direction, inverse labels, qualifier/credit slots, cycles and node identities; deduplicate edges.
+Reachability neither authorizes access nor proves identity.
 
-A keyboard-selectable diagram has a readable table equivalent. Only public anchor, relation, direction, depth and
-selected node/edge identifiers belong in the route. Locale, session epoch, read refusal, anchor replacement and a
-source-page change retire obsolete nodes, continuations and pending results. Redirects, stale cursors, concealed
-endpoints and an unavailable graph never leak previous labels.
+The keyboard-selectable diagram has a readable table equivalent. Routes carry only public anchor, relation,
+direction, depth and selected node/edge identifiers. Locale, session epoch, read refusal, anchor or source replacement
+retires obsolete nodes, continuations and pending results. Redirects, stale cursors, concealed endpoints and unavailable
+graphs never leak previous labels.
 
-Decision: each graph read owns cancellation through the server request and every native stage; replacement or source
-retirement aborts it and prevents later stages, while result fences reject ignored aborts. Retry preserves the exact
-selection or expansion and revalidates native admission; session tokens belong only to the mounted source.
+Decision: each read owns cancellation through the server request and native stages. Replacement or source retirement
+aborts work and prevents later stages; result fences reject ignored aborts. Retry preserves the exact selection or
+expansion under fresh native admission. Session tokens belong only to the mounted source.
 
 Selecting a node issues at most two explicit native reads (the selected subject, and one quotation, concept or music
 companion page). Correction uses the existing facts, relation and authored-document editors and returns to the same
