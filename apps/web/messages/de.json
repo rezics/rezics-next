@@ -10610,5 +10610,7 @@
   "identifiers_origin_unavailable": "Die ausgewählte Realm-Lesung ist vorübergehend nicht verfügbar. Ihre Werte werden nicht angezeigt.",
   "character_visit_context": "Ausgewählter Kontext: {context}",
   "character_visit_unsupported": "Diese Character-Lesung ist verfügbar, aber Korrekturen und Vorschlagsprüfung unterstützen nur Global.",
-  "character_visit_global": "Eine separate Global-Character-Korrektur öffnen"
+  "character_visit_global": "Eine separate Global-Character-Korrektur öffnen",
+  "work_franchise_stream_absent": "Diese Beziehung wurde auf dieser Seite nicht angefordert. Beginnen Sie erneut, um sie zu lesen.",
+  "work_franchise_stream_historical": "Diese Beziehung ist noch nicht auf dem neuesten Stand. Diese Einträge zeigen keinen vollständigen aktuellen Stand."
 }

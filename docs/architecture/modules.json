@@ -539,7 +539,8 @@
         "apps/web/src/search/search.tsx",
         "apps/web/src/search/search-window/index.ts",
         "apps/web/src/search/release-window.ts",
-        "apps/web/src/search/language-preferences.tsx"
+        "apps/web/src/search/language-preferences.tsx",
+        "apps/web/src/features/pages/showcase-work/index.ts"
       ],
       "allowedDependencies": [
         "client",

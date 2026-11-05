@@ -169,6 +169,7 @@ export function workFranchiseGroups(
   id: string,
   windows: readonly ProfileRelationWindow[],
   definitions: Record<string, RelationDefinition>,
+  selected = false,
 ) {
   const groups = windows.map((window) => {
     const definition = Object.hasOwn(definitions, window.property) ? definitions[window.property] : undefined;
@@ -188,21 +189,26 @@ export function workFranchiseGroups(
       stream: `${window.direction === 'inverse' ? 'in' : 'out'}:${window.property}`,
       relations: relations ?? [],
       preview: [] as DirectedWorkRelation[],
-      state: !label
-        ? 'unsupported'
-        : !relations
-          ? 'unavailable'
-          : empty
-            ? 'empty'
-            : window.rows.length === 0 && (window.count?.value ?? 0) > 0
-              ? 'concealed'
-              : 'ready',
+      state:
+        window.status === undefined || window.status === 204
+          ? 'absent'
+          : !label
+            ? 'unsupported'
+            : !relations
+              ? 'unavailable'
+              : empty
+                ? 'empty'
+                : window.rows.length === 0 && (window.count?.value ?? 0) > 0
+                  ? 'concealed'
+                  : 'ready',
       unavailable: !!relations && relations.length < window.rows.length,
       more: !window.complete || !!window.next || !current,
     };
   });
-  let remaining: number = WORK_FRANCHISE_PREVIEW.total;
-  for (let row = 0; row < WORK_FRANCHISE_PREVIEW.perStream && remaining > 0; row++) {
+  const cap = selected ? (windows[0]?.limit ?? 0) : WORK_FRANCHISE_PREVIEW.total;
+  const perStream = selected ? cap : WORK_FRANCHISE_PREVIEW.perStream;
+  let remaining: number = cap;
+  for (let row = 0; row < perStream && remaining > 0; row++) {
     for (const group of groups) {
       const relation = group.relations[row];
       if (!relation || remaining === 0) continue;

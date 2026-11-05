@@ -237,6 +237,56 @@ browse/evidence focus; a replaced or no-longer-admitted reading offers an explic
 Decision: keep finite-view work-region grammar closed until Semantic exposes its actual grouped public component
 and native selected-region handoff; consume a return arriving on a retired reading before equal replacement.
 
+Decision: expose the existing overview and exact native region through `showcase-work/index.ts`; select only the requested node/property/direction/current cursor, and leave finite route grammar and outer composition with Web.
+
+### Public grouped reading
+
+`WorkFranchiseReading` is the supported component; the retained `WorkFranchiseOverview` placement uses that same
+function. `selectWorkFranchiseRegion(page, selection)` receives the acknowledged `SubjectPageData` from
+`loadSubjectPage` and `{node, property, direction, cursor?}`. It returns `{page, window, continuation}` for that exact
+native composition node, including unsuccessful windows; a missing or mismatched node/property/direction/cursor or
+borrowed continuation returns `undefined`. `window.rows` and original assertions retain their supplied identity and
+order. Identical targets remain distinct assertions. A shared read key does not transfer node continuation ownership.
+
+Web imports those exports plus `subjectBody` and `loadSubjectPage` from the public entry. For example, acquire
+`loadSubjectPage(client, subject, 'relations', locale, {realm, authorization, continuation: {node: 'sequels', cursor}})`;
+select `{node: 'sequels', property: 'wdt:P155', direction: 'forward', cursor}` on its `kind: 'page'` result. Mount
+`WorkFranchiseReading` with `page`, that `selection`, `reading: subjectBody(page)`, released `definitions`, `locale`,
+`readerSpoiler`, `link`, validated `returnTo`/`currentHref`, and `onContinue`. Keep the existing `OverviewContext`
+provider bound to that same page's Subject, selected Context/population, requested Realm/reader, release digest,
+reader preferences and installed value/evidence presentation. These typed internal projections are trusted;
+selection is not another authorization decision or a Subject reader.
+
+`onContinue` receives only this node's `{node,cursor: window.next}` while its existing return lease remains current.
+Web owns acquisition of the successor through `loadSubjectPage`, the acknowledged requested-reader binding and
+mounting its exact selection; no query field or independent Connections cursor substitutes for that native handoff.
+The component never fetches or prefetches. A source, release, selection or browser reader/credential observation
+replacement retires callbacks and disclosures; equal replacement consumes old focus intent and A/B/A cannot revive
+it. Missing selections show the current heading and restart. Independent drafts and unknown commands retain their
+owners. The route grammar stays closed until Web implements its own receiving composition.
+
+### Group bounds and states
+
+The overview retains twelve assertions total, at most three per stream, allocated round-robin. A selected region
+renders at most its actual admitted `window.limit` (the native paged relation cap is twelve, possibly lower), without
+multiplying limits across groups. Failed, refused, concealed, absent/unrequested (204), complete-empty, unsupported,
+not-caught-up and truncated streams keep separate presentations. A failed stream never erases an admitted sibling.
+The original holder, property, direction, assertion, release and revision stay with evidence. Spoiler gates cover the
+whole association and its evidence; selected continuation behind undisclosed associations has its own reveal gate.
+Reading grants neither editing nor inspection authority.
+
+Work is O(N + W + Q + R): N is the supplied composition's at most 256 nodes/16 distinct reads, W the admitted finite
+relation rows, Q their released bounded qualifier/reference parts and R the disclosed related batch. No target
+hydration, history expansion or engine change is added. For UTF-8 bytes, use the actual native envelope, not a row
+count or string length: B = bytes(JSON.stringify(page)). Its ceiling composes envelope framing/metadata, the at most
+65,536-byte composition, released catalogue projection (within the native 4 MiB release), and each distinct native
+leaf's own response bound. The Semantic link assertion contribution for a window of L admitted rows is
+`L × (273A + 257S + F)`, using the native sixteen qualifiers, sixteen references of sixteen parts, 256 related-ID
+budget, admitted Snak byte bound A, disclosed-summary bound S and fixed framing F. Aggregate 16-read/128-slot
+admission does not itself bound bytes or backend examined rows; the [native presentation contract](../../../../../services/kernel/src/presentation/README.md#cost)
+and [Semantic response bound](../../../../../services/kernel/src/semantic/README.md) retain those authorities.
+The component retains the supplied page, creates one selected-window array, and performs zero native reads.
+
 The overview keeps the current grouped relation renderer at its existing placement. Web composes its target,
 Connections and value-inspection addresses through `subjectVisitReturn`; the receiving route validates the same
 address it consumes. Realm survives on overview returns; Connections retains its own exact native cursor/history. Finite-view

@@ -50,6 +50,8 @@ export type ProfileRelationPage = {
 /** A relation node in the current composition, including its failed or withheld read state. */
 export type ProfileRelationWindow = ProfileRelationPage & {
   node: string;
+  /** Opaque current cursor of this node, distinct from its returned next cursor. */
+  cursor?: string;
   /** The exact native composition read bound, before any reader projection. */
   limit?: number;
   caughtUp?: boolean;
@@ -135,6 +137,7 @@ export function profileRelationWindows(
     pages.push({
       node: nodeId,
       limit: planned.limit,
+      ...(planned.cursor !== undefined ? { cursor: planned.cursor } : {}),
       ...(body && isRecord(body.freshness) && typeof body.freshness.caught_up === 'boolean'
         ? { caughtUp: body.freshness.caught_up }
         : {}),
