@@ -10,6 +10,7 @@ import {
   type BatchStatement,
   type FieldGroup,
 } from '@rezics/definitions/bulk';
+import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
 import {
@@ -26,6 +27,7 @@ import {
   projectVndbReleaseMinimumAge,
   sourceDigest,
   sourceEnvelope,
+  safeSourceUrl,
   sourceWebsiteUrl,
   textDocument,
   type ConversionContext,
@@ -387,8 +389,8 @@ export type CrossMediaEntityConversion = ConvertedRecord<BatchCommand> & {
     recordUrl: string;
     summary?: { language: string; takedownEligible: true };
   };
-  coverAssets: readonly [];
-  mediaImportIntents: readonly [];
+  coverAssets: readonly Omit<MediaImportRequest, 'containerId'>[];
+  mediaImportIntents: readonly MediaImportRequest[];
 };
 
 const fail = (pointer: string, code = 'invalid_record'): never => {
@@ -736,6 +738,22 @@ function personType(record: object): string {
   )
     fail('/type', 'unsupported_type');
   return mapping!.term!;
+}
+
+function bangumiPersonImageUrl(record: object): string | undefined {
+  const imagesValue = own(record, 'images', '/images');
+  if (imagesValue === undefined || imagesValue === null) return undefined;
+  const images = object(imagesValue, '/images');
+  const large = own(images, 'large', '/images/large');
+  if (typeof large !== 'string') return fail('/images/large', 'invalid_image_source');
+  if (!large.trim()) return undefined;
+  try {
+    const sourceUrl = safeSourceUrl(large, ['lain.bgm.tv']);
+    if (/\/no_icon_(?:person|subject)\./iu.test(new URL(sourceUrl).pathname)) return undefined;
+    return sourceUrl;
+  } catch {
+    return fail('/images/large', 'invalid_image_source');
+  }
 }
 
 function producerType(record: object): string {
@@ -1641,6 +1659,7 @@ function convert(
     sourceKind === 'bangumi'
       ? bangumiRecordUrl(input.external_id)
       : vndbRecordUrl(input.external_id, input.record_revision);
+  const creatorImageUrl = kind === 'bangumi-person' ? bangumiPersonImageUrl(input.record as object) : undefined;
   const references = (): BatchReference[] => [
     { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url } }] },
   ];
@@ -1822,6 +1841,45 @@ function convert(
       });
     }
   }
+  const coverAssets: Omit<MediaImportRequest, 'containerId'>[] = [];
+  const mediaImportIntents: MediaImportRequest[] = [];
+  if (creatorImageUrl) {
+    const imageReferences = [
+      ...references(),
+      {
+        parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: creatorImageUrl } }],
+      },
+    ];
+    const asset: Omit<MediaImportRequest, 'containerId'> = {
+      sourceUrl: creatorImageUrl,
+      credit: {
+        rightsHolder: '(c) rights holder',
+        via: { name: 'Bangumi', url },
+        license: 'LicenseRef-unknown',
+        obligations: [],
+      },
+      provenance: { ...envelope('cover'), field_group: 'cover', references: imageReferences },
+    };
+    coverAssets.push(asset);
+    if (context.subjectId !== undefined) {
+      const intent: MediaImportRequest = { containerId: context.subjectId, ...asset };
+      if (checkMediaImportRequest(intent).length) fail('/images/large', 'invalid_media_import_context');
+      mediaImportIntents.push(intent);
+      const mediaId = context.mediaIds?.[creatorImageUrl];
+      if (mediaId !== undefined)
+        proposals.push({
+          op: 'propose',
+          key: key(`cover:${mediaId}`, 'cover'),
+          source: envelope('cover'),
+          subject: context.subjectId,
+          statement: {
+            property: { id: 'schema:image' },
+            value: { type: 'value', content: mediaId },
+            references: imageReferences,
+          },
+        });
+    }
+  }
   if (proposals.length > (projected.maxCommands ?? vndbReleaseNameLimits.maxCommands))
     fail('', 'invalid_record_proposals');
   for (let offset = 0; offset < proposals.length; offset += BATCH_LIMIT)
@@ -1835,8 +1893,8 @@ function convert(
     diagnostics,
     digest,
     normalizedRecord: projected.normalized,
-    coverAssets: [],
-    mediaImportIntents: [],
+    coverAssets,
+    mediaImportIntents,
     sourceMetadata: {
       recordUrl: url,
       ...(summaryText ? { summary: { language: 'und', takedownEligible: true as const } } : {}),

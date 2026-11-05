@@ -1297,8 +1297,8 @@ attribution and ShareAlike obligations. Actual type-1 PersonDetail integers
 `schema:birthDate` when they form a valid Gregorian date; partial, Organization
 and Character `生日` values stay omitted. Archive person rows lack those fields;
 selected-family reuses the existing Person career `GET /v0/persons/{id}` per selected id. Ordinary
-`person:<id>` JSON-lines (`career` array) use `cross-media-entities@13` on
-`bangumi@14`; selected envelopes keep `cross-media-entities@13+bangumi@14`.
+`person:<id>` JSON-lines (`career` array) use `cross-media-entities@14` on
+`bangumi@14`; selected envelopes keep `cross-media-entities@14+bangumi@14`.
 Summary bytes affect the digest; the summary fence does not fence identity or
 birthDate. Empty summaries create no document.
 
@@ -1407,7 +1407,7 @@ without a native alternate-name statement.
 
 The production cross-media planner now streams the acquired `chars_names` and
 `chars_alias` COPY tables and joins only exact selected character IDs from
-`chars_vns`. `cross-media-entities@13` preserves localized `schema:name` facts,
+`chars_vns`. `cross-media-entities@14` preserves localized `schema:name` facts,
 unqualified Romanized alternate names and alias alternate names with their
 exact `rezics:spoilerLevel` qualifier. Invalid qualification withholds the
 whole alias. Qualified text does not enter bootstrap labels or aliases, and
@@ -1457,14 +1457,15 @@ Candidate acceptance and adoption remain independent actions.
 
 Decision: the built-in `task seed:dev` path explicitly publishes a sealed finite intent of current source and candidate digests; ordinary imports remain proposal-only.
 Decision: the dev seed reads only pinned `GET /v0/subjects/{id}` for selected Bangumi works, validates the subject identity and required image fields before using `images.large`, and seals the unchanged archive revision/digest with the response SHA-256 and optional ETag in the existing showcase journal.
+Decision: the dev seed reads selected Bangumi creators only through pinned `GET /v0/persons/{person_id}`; exact response `id` and archive-selected `type` must match before nonempty `PersonDetail.images.large` is admitted, with no alternate size or image redirect.
 
 Decision: the local seed stores finite reviewed-catalogue journal identities in the same importer state file, then validates native bindings on every run; a transient unavailable read preserves only the exact prior keyword candidate.
 
 The local task reuses Accounts' development persona and private seed wiring, then persists publication intent in a separate SQLite journal. The intent is bounded to selected dump records and exact acknowledged candidate UUIDs. Candidate acceptance and adoption use their separate current review APIs; adoption retains existing selections. Restart reuses sealed command/action bodies after unknown sends and keeps acknowledged source UUIDs after refused review actions. Current source identity and vocabulary bindings are checked before dependent facts, then a tokenless public reader verifies the selected facts. The Bangumi alias adapter composes the existing finite reviewed-catalogue candidates and preserves source-to-canonical mapping evidence without asserting identity. Unsupported or withdrawn genre bindings are addressable and do not block title, summary or identity facts. Removing the source tag retracts only the importer-owned keyword candidate. Selected Bangumi covers use the pinned subject API, validated `images.large` URL, unchanged archive revision/digest and a response SHA-256/optional ETag receipt. Pending media resumes from the same journal; only genuinely available media enters the independent cover candidate flow. Cover credit remains `(c) rights holder` via Bangumi with unknown image licence and cover-only use. Result entries include provider/native bindings and public reader paths from the bounded read set. They make no claim about search or indexing.
 
-- Touches: at most 768 source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 review candidates per page, 256 selected Bangumi covers, and 256 bounded omissions or genre diagnostics.
-- Bound: publication reads only selected records, four finite reviewed Bangumi vocabulary identities, their current bindings and exact subject/property pages. Cover lookup is sequential over at most 256 selected Bangumi works with a 1 MiB API response cap; only the validated image URL enters the existing media resolver, which uses the importer's exact record bindings, status recovery and current cover fence. There is no pending-candidate scan, unsupported-tag inference or change to ordinary importer publication.
-- Growth check: `services/importer/tests/showcase-media.test.ts` covers source validation, pending receipt and same-state recovery; `services/importer/tests/showcase-publication.test.ts` retains candidate journal coverage; `services/importer/tests/showcase-bangumi-genres.test.ts` covers exact source binding and recovery. `services/kernel/test/imports/showcase-media.test.ts` and `services/kernel/test/imports/showcase-bangumi-genres.test.ts` cover native publication paths but remain deferred to integration; no native pass or database growth series is claimed here.
+- Touches: at most 768 source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 review candidates per page, 256 selected Bangumi works, 64 selected Bangumi creators and 320 combined media outcomes.
+- Bound: publication reads only selected records, four finite reviewed Bangumi vocabulary identities, their current bindings and exact subject/property pages. Work and creator detail acquisition is sequential over at most 320 records, with 1 MiB per response and 1 MiB combined sealed evidence under existing pacing/deadline limits. Validated image URLs use the existing media resolver, exact importer bindings, status recovery, current cover fence and bounded public readback. There is no pending-candidate scan, unsupported-tag inference or change to ordinary importer publication.
+- Growth check: `services/importer/tests/showcase-media.test.ts` covers source validation, pending receipt, creator type admission, changed evidence and same-state recovery; `services/importer/tests/showcase-publication.test.ts` retains candidate journal coverage; `services/importer/tests/showcase-bangumi-genres.test.ts` covers exact source binding and recovery. `services/kernel/test/imports/showcase-media.test.ts` authors the common Person/Organization publication route; integration runs it with actual default selection and native media stack.
 
 ## Bangumi TVAnime official websites
 
@@ -1499,7 +1500,7 @@ unsupported values do not retract them.
 ## Bangumi character source names
 
 Selected default Bangumi character records retain their exact `infobox` payload
-through `planCrossMediaSeed` and the shared `cross-media-entities@13` converter.
+through `planCrossMediaSeed` and the shared `cross-media-entities@14` converter.
 The reviewed `Crt` grammar supplies cited `schema:name` facts from `name`,
 `name_cn` and `简体中文名`, plus cited `schema:alternateName` facts from its
 labelled `别名` rows. A malformed alias group is withheld as a whole; usable
@@ -1529,7 +1530,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
 Decision: see [Bangumi TVAnime work evidence](../../packages/conversion/README.md#bangumi-tv-anime-work-evidence).
 
 Ordinary conversion uses `bangumi@14`. The selected-family Bangumi caller uses
-`cross-media-entities@13+bangumi@14` so source refresh replays the new mapping
+`cross-media-entities@14+bangumi@14` so source refresh replays the new mapping
 under an honest revision without revising the VNDB adapter. Only the exact
 TVAnime `链接` and `Copyright` fields are admitted. Descriptive destinations
 retain their URL spelling and cite the Bangumi subject record; copyright
@@ -1605,7 +1606,7 @@ additional selected source key as an explicit omission.
 
 Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
 
-The selected default Bangumi seed already elects character IDs through the selected works' `subject-characters` rows and carries each exact `character` row into the common source registration. `cross-media-entities@13` reads the pinned Crt infobox for `身高`, `体重` and `血型`; the source scalar and indexed path enter deterministic source evidence. Only explicit released centimetres/metres and kilograms/grams become quantities. Blank and explicit unknown values remain unknown; unitless, ranged, approximate, fictional-unit, mixed-prose, duplicate and over-bound values remain unavailable field evidence. Blood type stays withheld because the repository has no Bangumi blood-type source vocabulary binding to current native Concepts. Character identity remains the selected `character:<id>` binding.
+The selected default Bangumi seed already elects character IDs through the selected works' `subject-characters` rows and carries each exact `character` row into the common source registration. `cross-media-entities@14` reads the pinned Crt infobox for `身高`, `体重` and `血型`; the source scalar and indexed path enter deterministic source evidence. Only explicit released centimetres/metres and kilograms/grams become quantities. Blank and explicit unknown values remain unknown; unitless, ranged, approximate, fictional-unit, mixed-prose, duplicate and over-bound values remain unavailable field evidence. Blood type stays withheld because the repository has no Bangumi blood-type source vocabulary binding to current native Concepts. Character identity remains the selected `character:<id>` binding.
 
 - Touches: one selected Character record, at most one released height and one weight fact, bounded source evidence, and sanitized field-path diagnostics. Existing names, kind, appearance and licensed summary handling remain on their current paths.
 - Bound: 65,536 UTF-8 source bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 quantity facts and 16 diagnostics. Unsupported or oversized values do not create partial quantities; the existing converter command ceiling and common publication manifest remain authoritative.
@@ -1614,7 +1615,7 @@ The selected default Bangumi seed already elects character IDs through the selec
 ## Bangumi Game subject names
 
 Decision: scalar Game `中文名` supplies `zh`; scalar or single-level bullet `别名` stays `und`.
-Ordinary conversion uses `bangumi@14`; selected-family registration uses `cross-media-entities@13+bangumi@14`.
+Ordinary conversion uses `bangumi@14`; selected-family registration uses `cross-media-entities@14+bangumi@14`.
 
 The pinned `{{Infobox Game` grammar is distinct from TVAnime. Type 4 remains
 `schema:VideoGame`; admitted values become cited `schema:name` or
@@ -1639,7 +1640,7 @@ and cover rights keep their existing owners.
 ## Bangumi Game platforms and software engine
 
 Decision: Game-template `平台` and `游戏引擎` bind through current reviewed Concept reads keyed by the released property plus the exact source item; no infobox-field scheme URI is minted. Engine items with version, platform or edition text are withheld whole because `wdt:P408` admits no qualifiers. Platform language is preserved only as `schema:inLanguage` when the labelled source tag is an admitted BCP 47 tag.
-Decision: current `bangumi@14` includes Game environment, names, player count and source genres, TVAnime work evidence and book grain; selected envelopes use `cross-media-entities@13+bangumi@14`.
+Decision: current `bangumi@14` includes Game environment, names, player count and source genres, TVAnime work evidence and book grain; selected envelopes use `cross-media-entities@14+bangumi@14`.
 
 A selected type-4 Game keeps top-level `subject.platform` as the profile selector. Infobox platform and engine items become `schema:gamePlatform` and `wdt:P408` on that VideoGame after an independent current read of each configured Concept. Missing, concealed and wrong-source bindings remain distinct and withhold only the affected occurrence. Identity and sealed retry custody stay on the existing source fence. Names, dates, player count, staff, genre and websites retain their owners.
 
@@ -1688,7 +1689,7 @@ Decision: preserve admitted URL bytes and withhold labelled destinations until a
 released source contract can preserve their platform, region or edition meaning.
 
 Ordinary conversion uses `bangumi@15`; selected-family registration uses the
-combined `cross-media-entities@13+bangumi@15` revision. Exact Game-template
+combined `cross-media-entities@14+bangumi@15` revision. Exact Game-template
 `website` and `链接` occurrences propose separate `schema:url` and `wdt:P973`
 facts with the Bangumi record citation. Unsafe, malformed and labelled values
 remain unavailable while independent valid facts proceed. The existing journal,

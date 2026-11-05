@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { sameStatementProvenance } from './statement-provenance.ts';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
-import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { bangumiRecordUrl, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
@@ -19,7 +19,7 @@ export const showcaseLimits = Object.freeze({
   vocabulary: 512,
   candidatesPerRecord: 128,
   reviewPage: 100,
-  omissions: 256,
+  omissions: 320,
 });
 const nativeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
@@ -114,8 +114,11 @@ export type ShowcaseOmission = Readonly<{
     | 'source-claim-withheld'
     | 'cover-source-absent'
     | 'cover-source-unavailable'
+    | 'cover-source-invalid'
     | 'cover-pending'
     | 'cover-rejected'
+    | 'cover-refused'
+    | 'cover-unknown'
     | 'cover-fenced'
     | 'cover-candidate-missing'
     | 'cover-not-public'
@@ -183,6 +186,7 @@ export function showcasePlanDigest(plan: CrossMediaPlan): string {
     })),
     relationSnapshotDigest: plan.relationSnapshotDigest,
     coverSources: plan.coverSources ?? [],
+    creatorImageSources: plan.creatorImageSources ?? [],
   });
 }
 
@@ -385,7 +389,7 @@ function currentTagWeight(
   );
 }
 
-/** Return media IDs only for an exact available cover receipt attached to this selected record. */
+/** Return media IDs only for exact available media evidence attached to this selected record. */
 export function showcaseMediaContext(input: {
   plan: CrossMediaPlan;
   outcomes: readonly CrossMediaMediaOutcome[];
@@ -399,7 +403,7 @@ export function showcaseMediaContext(input: {
   const outcome = input.outcomes.find(
     (candidate) => candidate.sourceAlias === input.alias && candidate.externalId === input.externalId,
   );
-  const receipt = input.plan.coverSources?.find(
+  const receipt = [...(input.plan.coverSources ?? []), ...(input.plan.creatorImageSources ?? [])].find(
     (candidate) => candidate.sourceAlias === input.alias && candidate.externalId === input.externalId,
   );
   const sourceUrl = (row?.payload as { images?: { large?: unknown } } | undefined)?.images?.large;
@@ -432,7 +436,7 @@ export function showcaseMediaContext(input: {
     outcome.provenance.converter_revision.length === 0 ||
     outcome.credit?.rightsHolder !== '(c) rights holder' ||
     outcome.credit.via.name !== 'Bangumi' ||
-    outcome.credit.via.url !== `https://bgm.tv/subject/${row.key}` ||
+    outcome.credit.via.url !== bangumiRecordUrl(row.key) ||
     outcome.credit.license !== 'LicenseRef-unknown'
   )
     return undefined;
@@ -681,23 +685,29 @@ export function buildShowcaseManifest(input: {
   }
 
   const media: ShowcaseMediaRecord[] = [];
-  for (const outcome of mediaOutcomes.slice(0, 256)) {
+  for (const outcome of mediaOutcomes.slice(0, 320)) {
     const record = records.find(
       (candidate) => candidate.sourceAlias === outcome.sourceAlias && candidate.sourceKey === outcome.externalId,
     );
     const cover = record?.assertions.find((assertion) => assertion.property === 'schema:image');
     let gap: string | undefined;
     if (outcome.status === 'absent') gap = 'cover-source-absent';
+    else if (outcome.status === 'invalid') gap = 'cover-source-invalid';
     else if (outcome.status === 'pending') gap = 'cover-pending';
     else if (outcome.status === 'rejected') gap = 'cover-rejected';
+    else if (outcome.status === 'refused') gap = 'cover-refused';
+    else if (outcome.status === 'unknown') gap = 'cover-unknown';
     else if (outcome.status === 'fenced') gap = 'cover-fenced';
     else if (outcome.status === 'unavailable') gap = outcome.code ?? 'cover-source-unavailable';
     else if (!cover) gap = 'cover-candidate-missing';
     if (gap) {
       const code: ShowcaseOmission['code'] =
         gap === 'cover-source-absent' ||
+        gap === 'cover-source-invalid' ||
         gap === 'cover-pending' ||
         gap === 'cover-rejected' ||
+        gap === 'cover-refused' ||
+        gap === 'cover-unknown' ||
         gap === 'cover-fenced' ||
         gap === 'cover-candidate-missing' ||
         gap === 'cover-not-public'
@@ -723,7 +733,7 @@ export function buildShowcaseManifest(input: {
       ...(gap ? { gap } : {}),
     });
   }
-  if (mediaOutcomes.length > 256)
+  if (mediaOutcomes.length > 320)
     omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'cover-source-unavailable' });
 
   const vocabulary: ShowcaseVocabularyRecord[] = [];
