@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
 import { importerScopes, localClientIds, localShowcaseClientRegistration } from '../scripts/dev-stack.ts';
 
@@ -7,7 +8,7 @@ test('local showcase uses a separate first-party client while the importer stays
   expect(registration).toEqual({
     clientId: localClientIds.showcase,
     firstParty: true,
-    scopes: [...DEVELOPMENT_SHOWCASE_SCOPES],
+    scopes: [...new Set([...DEVELOPMENT_SHOWCASE_SCOPES, ...developmentCollectionScopes])],
   });
   expect(localClientIds.showcase).not.toBe(localClientIds.importer);
   expect(importerScopes).not.toContain('board:create');
