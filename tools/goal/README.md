@@ -1348,6 +1348,7 @@ The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun in
 independent verifier runs them after integration; a failure is reported with the command and first failure and does
 not hold the landing train. Main promotion retains its task acceptance gates. Integration rebases onto the integration
 branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
+Decision: Each final dev candidate runs Bun's unbundled transpile over its changed executable TypeScript files before publication; compiler diagnostics return through the same worker session without a failed attempt outcome.
 Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
 (`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
 so `main` receives finished work while other In rows are still open.
