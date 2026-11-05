@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:47c241a4dafea05fc417e1a9881ff634951de64c2a5139551ab2a343d544d673",
+  "digest": "sha256:d7e378a79c42f9b7b0f846352903734f08d555ede7d21627c7cfc0af2a377f97",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -1630,7 +1630,6 @@
           "wdt:P3180",
           "wdt:P749"
         ],
-        "schemaOrgType": "https://schema.org/Organization",
         "listPresentation": { "keyFacts": [], "imageAspect": "portrait" },
         "descriptions": {
           "de": "Eine Organisation oder als Mitwirkende genannte Gruppe, etwa ein Verlag oder Studio.",
@@ -2029,6 +2028,202 @@
           "ko": "작품에서 가져온 인용문입니다. 화자, 표기된 창작자, 출처를 구분합니다.",
           "zh-Hans": "作品中的引文，说话者、具名创作者与出处分开保存。",
           "zh-Hant": "作品中的引文，說話者、具名創作者與出處分開保存。"
+        }
+      },
+      "schema:AdministrativeArea": {
+        "iri": "http://schema.org/AdministrativeArea",
+        "labels": {
+          "de": "Verwaltungsgebiet",
+          "en": "administrative area",
+          "es": "área administrativa",
+          "fr": "zone administrative",
+          "ja": "行政区域",
+          "ko": "행정 구역",
+          "zh-Hans": "行政区",
+          "zh-Hant": "行政區"
+        },
+        "mappings": [],
+        "bases": ["schema:Place", "schema:Thing"],
+        "properties": ["schema:containedInPlace", "schema:image", "schema:name", "schema:sameAs", "schema:url"],
+        "facets": [],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": [] },
+        "schemaOrgType": "https://schema.org/AdministrativeArea",
+        "descriptions": {
+          "de": "Ein benanntes Verwaltungsgebiet als Ort, getrennt von einem Veranstaltungsort darin.",
+          "en": "A named administrative region represented as a place, distinct from a venue within it.",
+          "es": "Una región administrativa con nombre representada como lugar, distinta de un recinto situado en ella.",
+          "fr": "Une région administrative nommée représentée comme un lieu, distincte d’un établissement qui s’y trouve.",
+          "ja": "場所として表す名称のある行政区域です。その区域内の会場とは別の対象です。",
+          "ko": "장소로 나타낸 이름 있는 행정 구역이며, 그 안의 공연장과는 별개입니다.",
+          "zh-Hans": "以地点表示的具名行政区域，与其中的活动场所分别识别。",
+          "zh-Hant": "以地點表示的具名行政區域，與其中的活動場所分別識別。"
+        }
+      },
+      "schema:Event": {
+        "iri": "http://schema.org/Event",
+        "labels": {
+          "de": "Ereignis",
+          "en": "event",
+          "es": "evento",
+          "fr": "événement",
+          "ja": "イベント",
+          "ko": "행사",
+          "zh-Hans": "活动",
+          "zh-Hant": "活動"
+        },
+        "mappings": [],
+        "bases": ["schema:Thing"],
+        "properties": [
+          "schema:endDate",
+          "schema:image",
+          "schema:location",
+          "schema:name",
+          "schema:sameAs",
+          "schema:startDate",
+          "schema:url"
+        ],
+        "facets": [],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": [] },
+        "schemaOrgType": "https://schema.org/Organization",
+        "descriptions": {
+          "de": "Ein zeitlich bestimmtes Ereignis mit eigener Identität, getrennt von Ort und Beteiligten.",
+          "en": "A bounded occurrence with its own identity, distinct from its venue and participants.",
+          "es": "Un acontecimiento delimitado con identidad propia, distinto de su lugar y sus participantes.",
+          "fr": "Un événement délimité doté de sa propre identité, distinct de son lieu et de ses participants.",
+          "ja": "独自の識別対象となる期間の定まった出来事です。場所や参加者とは別に記録します。",
+          "ko": "고유한 정체성을 가진 시간 범위가 정해진 사건으로, 장소 및 참여자와 구별됩니다.",
+          "zh-Hans": "具有自身身份和时间范围的事件，与地点及参与者分别识别。",
+          "zh-Hant": "具有自身身分與時間範圍的事件，與地點及參與者分別識別。"
+        }
+      },
+      "schema:Place": {
+        "iri": "http://schema.org/Place",
+        "labels": {
+          "de": "Ort",
+          "en": "place",
+          "es": "lugar",
+          "fr": "lieu",
+          "ja": "場所",
+          "ko": "장소",
+          "zh-Hans": "地点",
+          "zh-Hant": "地點"
+        },
+        "mappings": [],
+        "bases": ["schema:Thing"],
+        "properties": ["schema:containedInPlace", "schema:image", "schema:name", "schema:sameAs", "schema:url"],
+        "facets": [],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": [] },
+        "schemaOrgType": "https://schema.org/Place",
+        "descriptions": {
+          "de": "Ein bestimmter geografischer oder baulicher Ort, getrennt von den dort stattfindenden Ereignissen.",
+          "en": "A specific geographic or constructed place, distinct from events held there.",
+          "es": "Un lugar geográfico o construido concreto, distinto de los eventos que se celebran allí.",
+          "fr": "Un lieu géographique ou construit précis, distinct des événements qui s’y déroulent.",
+          "ja": "地理上または建造物として特定できる場所です。そこで行われるイベントとは別の対象です。",
+          "ko": "지리적 또는 건축물로 구분되는 구체적인 장소입니다. 그곳에서 열리는 행사와는 별개입니다.",
+          "zh-Hans": "可具体识别的地理地点或建成场所，与在那里举行的活动分别建档。",
+          "zh-Hant": "可具體識別的地理地點或建成場所，與在該處舉行的活動分別建檔。"
+        }
+      },
+      "wd:Q34379": {
+        "iri": "http://www.wikidata.org/entity/Q34379",
+        "labels": {
+          "de": "Musikinstrument",
+          "en": "musical instrument",
+          "es": "instrumento musical",
+          "fr": "instrument de musique",
+          "ja": "楽器",
+          "ko": "악기",
+          "zh-Hans": "乐器",
+          "zh-Hant": "樂器"
+        },
+        "mappings": ["wd:Q34379"],
+        "bases": ["schema:Thing"],
+        "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
+        "facets": [],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": [] },
+        "descriptions": {
+          "de": "Die Identität eines Musikinstruments, nicht eines einzelnen Instruments oder der Person, die es verwendet.",
+          "en": "A musical instrument identity, not a particular instrument instance or the person who uses it.",
+          "es": "La identidad de un instrumento musical, no la de un ejemplar concreto ni la persona que lo utiliza.",
+          "fr": "L’identité d’un instrument de musique, distincte d’un exemplaire précis et de la personne qui l’utilise.",
+          "ja": "楽器という種類の識別対象です。個々の楽器や使用する人そのものではありません。",
+          "ko": "악기 종류의 식별 대상입니다. 개별 악기나 그것을 사용하는 사람을 뜻하지 않습니다.",
+          "zh-Hans": "乐器这一类对象的身份，不代表某一件乐器或使用它的人。",
+          "zh-Hant": "樂器這一類對象的身分，不代表某一件樂器或使用它的人。"
+        }
+      },
+      "schema:MusicEvent": {
+        "iri": "http://schema.org/MusicEvent",
+        "labels": {
+          "de": "Musikveranstaltung",
+          "en": "music event",
+          "es": "evento musical",
+          "fr": "événement musical",
+          "ja": "音楽イベント",
+          "ko": "음악 행사",
+          "zh-Hans": "音乐活动",
+          "zh-Hant": "音樂活動"
+        },
+        "mappings": [],
+        "bases": ["schema:Event", "schema:Thing"],
+        "properties": [
+          "schema:endDate",
+          "schema:image",
+          "schema:location",
+          "schema:name",
+          "schema:performer",
+          "schema:sameAs",
+          "schema:startDate",
+          "schema:url"
+        ],
+        "facets": [],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": [] },
+        "schemaOrgType": "https://schema.org/MusicEvent",
+        "descriptions": {
+          "de": "Eine bestimmte Musikveranstaltung mit eigener Zeit und eigenem Ort, getrennt von Aufführung und Veranstaltungsort.",
+          "en": "An identified music event with its own time and place, distinct from a performance or venue.",
+          "es": "Un evento musical identificado con fecha y lugar propios, distinto de una actuación o un recinto.",
+          "fr": "Un événement musical identifié avec ses propres dates et lieu, distinct d’une représentation ou d’un lieu.",
+          "ja": "日時と場所を持つ特定の音楽イベントです。個々の公演や会場とは別の対象です。",
+          "ko": "날짜와 장소가 따로 있는 식별된 음악 행사입니다. 개별 공연이나 공연장과는 별개의 대상입니다.",
+          "zh-Hans": "具有自身时间和地点的特定音乐活动，与单次演出或场所分别识别。",
+          "zh-Hant": "具有自身時間與地點的特定音樂活動，與單次演出或場所分別識別。"
+        }
+      },
+      "schema:MusicVenue": {
+        "iri": "http://schema.org/MusicVenue",
+        "labels": {
+          "de": "Musikveranstaltungsort",
+          "en": "music venue",
+          "es": "recinto musical",
+          "fr": "lieu musical",
+          "ja": "音楽会場",
+          "ko": "음악 공연 장소",
+          "zh-Hans": "音乐场所",
+          "zh-Hant": "音樂場所"
+        },
+        "mappings": [],
+        "bases": ["schema:Place", "schema:Thing"],
+        "properties": ["schema:containedInPlace", "schema:image", "schema:name", "schema:sameAs", "schema:url"],
+        "facets": [],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": [] },
+        "schemaOrgType": "https://schema.org/MusicVenue",
+        "descriptions": {
+          "de": "Ein bestimmter Ort für Musikaufführungen, getrennt von der dort stattfindenden Musikveranstaltung.",
+          "en": "A specific place used for music performances, separate from the music event held there.",
+          "es": "Un lugar concreto donde se celebran actuaciones musicales, distinto del evento musical que acoge.",
+          "fr": "Un lieu précis destiné aux représentations musicales, distinct de l’événement qui s’y déroule.",
+          "ja": "音楽公演に使われる具体的な場所です。そこで開催される音楽イベントとは別の対象です。",
+          "ko": "음악 공연에 사용되는 구체적인 장소입니다. 그곳에서 열리는 음악 행사와는 별개의 대상입니다.",
+          "zh-Hans": "用于音乐演出的具体地点，与在此举办的音乐活动分别识别。",
+          "zh-Hant": "用於音樂演出的具體場所，與在此舉辦的音樂活動分別識別。"
         }
       }
     },
@@ -2552,7 +2747,7 @@
       "schema": "http://schema.org/",
       "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
-    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.8" },
+    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.9" },
     "generator": { "name": "@neverblink/linkml", "version": "0.17.2" },
     "properties": {
       "wdt:P31": {
@@ -4393,7 +4588,7 @@
           "additionalProperties": false
         },
         "labels": {
-          "de": "Endzeitpunkt",
+          "de": "Ende",
           "en": "end date",
           "es": "fecha de finalización",
           "fr": "date de fin",
@@ -4407,14 +4602,14 @@
         "qualifiers": [],
         "multivalued": false,
         "descriptions": {
-          "de": "Das Ende des ursprünglichen Ausstrahlungs- oder Veröffentlichungszeitraums mit der Datumsgenauigkeit der Quelle.",
-          "en": "The end of the original broadcast or release period, preserving the source's date precision.",
-          "es": "El final del período original de emisión o lanzamiento, conservando la precisión de la fuente.",
-          "fr": "La fin de la période originale de diffusion ou de publication, avec la précision de la source.",
-          "ja": "当初の放送期間や公開期間の終了日。出典の日付の精度を保ちます。",
-          "ko": "최초 방송 또는 공개 기간의 종료일입니다. 출처의 날짜 정밀도를 유지합니다.",
-          "zh-Hans": "最初播出或发行期间的结束日期，保留来源精度。",
-          "zh-Hant": "原始播出或發行期間的結束日期，維持來源的日期精度。"
+          "de": "Das angegebene Ende des Zeitraums dieses Subjekts, mit der Genauigkeit und dem Kalender der Quelle.",
+          "en": "The stated end of the subject's time span, preserving source precision and calendar.",
+          "es": "El final indicado del intervalo temporal del sujeto, conservando la precisión y el calendario de la fuente.",
+          "fr": "La fin déclarée de la période du sujet, en conservant la précision et le calendrier de la source.",
+          "ja": "対象期間の終了として情報源に示された日付です。精度と暦を保ちます。",
+          "ko": "대상의 기간이 끝난다고 출처에 기록된 시점이며, 출처의 정밀도와 달력을 유지합니다.",
+          "zh-Hans": "来源所述对象时间范围的终点，保留来源的精度和历法。",
+          "zh-Hant": "來源所述對象時間範圍的終點，保留來源的精度與曆法。"
         }
       },
       "schema:musicBy": {
@@ -5281,7 +5476,7 @@
           "additionalProperties": false
         },
         "labels": {
-          "de": "Startdatum",
+          "de": "Beginn",
           "en": "start date",
           "es": "fecha de inicio",
           "fr": "date de début",
@@ -5295,14 +5490,14 @@
         "qualifiers": [],
         "multivalued": false,
         "descriptions": {
-          "de": "Der Beginn des ursprünglichen Ausstrahlungs- oder Veröffentlichungszeitraums mit der Datumsgenauigkeit der Quelle.",
-          "en": "The start of the original broadcast or release period, preserving the source's date precision.",
-          "es": "El inicio del período original de emisión o lanzamiento, conservando la precisión de la fuente.",
-          "fr": "Le début de la période originale de diffusion ou de publication, avec la précision de la source.",
-          "ja": "当初の放送期間や公開期間の開始日。出典の日付の精度を保ちます。",
-          "ko": "최초 방송 또는 공개 기간의 시작일입니다. 출처의 날짜 정밀도를 유지합니다.",
-          "zh-Hans": "最初播出或发行期间的开始日期，保留来源精度。",
-          "zh-Hant": "原始播出或發行期間的開始日期，維持來源的日期精度。"
+          "de": "Der angegebene Beginn des Zeitraums dieses Subjekts, mit der Genauigkeit und dem Kalender der Quelle.",
+          "en": "The stated beginning of the subject's time span, preserving source precision and calendar.",
+          "es": "El comienzo indicado del intervalo temporal del sujeto, conservando la precisión y el calendario de la fuente.",
+          "fr": "Le début déclaré de la période du sujet, en conservant la précision et le calendrier de la source.",
+          "ja": "対象期間の開始として情報源に示された日付です。精度と暦を保ちます。",
+          "ko": "대상의 기간이 시작된다고 출처에 기록된 시점이며, 출처의 정밀도와 달력을 유지합니다.",
+          "zh-Hans": "来源所述对象时间范围的起点，保留来源的精度和历法。",
+          "zh-Hant": "來源所述對象時間範圍的起點，保留來源的精度與曆法。"
         }
       },
       "schema:wordCount": {
@@ -8081,6 +8276,145 @@
           "ko": "출처 태그 가중치의 척도와 의미를 정하는 유형화된 지표입니다.",
           "zh-Hans": "定义来源标签权重尺度和含义的类型化指标。",
           "zh-Hant": "定義來源標籤權重尺度與含義的型別化指標。"
+        }
+      },
+      "schema:containedInPlace": {
+        "iri": "http://schema.org/containedInPlace",
+        "labels": {
+          "de": "liegt innerhalb von",
+          "en": "contained in place",
+          "es": "contenido en el lugar",
+          "fr": "situé dans le lieu",
+          "ja": "所在場所",
+          "ko": "포함된 장소",
+          "zh-Hans": "所属地点",
+          "zh-Hant": "所屬地點"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "schema:containsPlace",
+          "inverseLabels": {
+            "de": "Enthält Orte",
+            "en": "Contains places",
+            "es": "Contiene lugares",
+            "fr": "Contient des lieux",
+            "ja": "含まれる場所",
+            "ko": "포함하는 장소",
+            "zh-Hans": "包含地点",
+            "zh-Hant": "包含地點"
+          }
+        },
+        "targets": ["schema:Place"],
+        "descriptions": {
+          "de": "Der unmittelbar übergeordnete Ort, etwa das Verwaltungsgebiet dieses Ortes.",
+          "en": "The immediate place containing this place, such as its administrative area.",
+          "es": "El lugar inmediato que contiene a este lugar, como su área administrativa.",
+          "fr": "Le lieu contenant immédiatement ce lieu, par exemple sa zone administrative.",
+          "ja": "この場所を直接含む場所です。行政区域などを記録します。",
+          "ko": "이 장소를 직접 포함하는 장소입니다. 예를 들어 행정 구역을 기록합니다.",
+          "zh-Hans": "直接包含此地点的上级地点，例如其所属行政区。",
+          "zh-Hant": "直接包含此地點的上級地點，例如其所屬行政區。"
+        }
+      },
+      "schema:location": {
+        "iri": "http://schema.org/location",
+        "labels": {
+          "de": "Ort",
+          "en": "location",
+          "es": "lugar",
+          "fr": "lieu",
+          "ja": "場所",
+          "ko": "장소",
+          "zh-Hans": "地点",
+          "zh-Hant": "地點"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": { "group": "association", "order": "name", "inverse": "none" },
+        "targets": ["schema:Place"],
+        "descriptions": {
+          "de": "Der Ort, an dem dieses Ereignis stattfindet; er ist weder das Ereignis noch eine einzelne Aufführung.",
+          "en": "The place where this event occurs; it does not identify the event or a performance occurrence.",
+          "es": "El lugar donde ocurre este evento; no identifica el evento ni una actuación concreta.",
+          "fr": "Le lieu où se déroule cet événement ; il n’identifie ni l’événement ni une représentation particulière.",
+          "ja": "このイベントが行われる場所です。イベントや個々の公演そのものを指すものではありません。",
+          "ko": "이 행사가 열리는 장소입니다. 행사 자체나 개별 공연을 뜻하지 않습니다.",
+          "zh-Hans": "此活动发生的地点；它不代表活动本身或某一场演出。",
+          "zh-Hant": "此活動發生的地點；它不代表活動本身或某一場演出。"
+        }
+      },
+      "wdt:P1303": {
+        "iri": "http://www.wikidata.org/prop/direct/P1303",
+        "labels": {
+          "de": "verwendetes Instrument",
+          "en": "instrument used",
+          "es": "instrumento utilizado",
+          "fr": "instrument utilisé",
+          "ja": "使用楽器",
+          "ko": "사용 악기",
+          "zh-Hans": "使用的乐器",
+          "zh-Hant": "使用的樂器"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "targets": ["wd:Q34379"],
+        "descriptions": {
+          "de": "Das Instrument, das die genannte auftretende Person in genau dieser Aussage verwendet; es wird dadurch nicht Teil ihrer Identität.",
+          "en": "The musical instrument used by the credited performer in this exact statement; it does not make the instrument part of the performer identity.",
+          "es": "Instrumento musical utilizado por el intérprete acreditado en esta afirmación; no pasa a formar parte de la identidad del intérprete.",
+          "fr": "Instrument utilisé par l’interprète crédité dans cette déclaration précise ; il ne fait pas partie de l’identité de l’interprète.",
+          "ja": "この声明で出演者が使用した楽器です。出演者の識別対象に楽器を含めるものではありません。",
+          "ko": "이 명세에서 크레딧을 받은 공연자가 사용한 악기입니다. 공연자의 정체성에 악기가 포함되는 것은 아닙니다.",
+          "zh-Hans": "署名表演者在这条具体陈述中使用的乐器；乐器不会因此成为表演者身份的一部分。",
+          "zh-Hant": "署名表演者在這筆具體陳述中使用的樂器；樂器不會因此成為表演者身分的一部分。"
+        }
+      },
+      "schema:performer": {
+        "iri": "http://schema.org/performer",
+        "labels": {
+          "de": "Mitwirkende",
+          "en": "performer",
+          "es": "intérprete",
+          "fr": "interprète",
+          "ja": "出演者",
+          "ko": "공연자",
+          "zh-Hans": "表演者",
+          "zh-Hant": "表演者"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["wdt:P1303", "wdt:P1932", "wdt:P3831"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "credit",
+          "order": "name",
+          "inverse": "none",
+          "filter": "wdt:P1303",
+          "slotKey": "wdt:P1303"
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "descriptions": {
+          "de": "Eine Person oder Organisation, die bei dieser Musikveranstaltung als auftretend genannt wird; Beleg und Quellen gehören zu genau dieser Aussage.",
+          "en": "A person or organization credited as performing at this music event; the credit and its references belong to this exact event statement.",
+          "es": "Persona u organización acreditada como intérprete en este evento musical; la atribución y sus fuentes pertenecen a esta afirmación exacta.",
+          "fr": "Personne ou organisation créditée comme interprète lors de cet événement musical ; le crédit et ses sources appartiennent à cette déclaration précise.",
+          "ja": "この音楽イベントの出演者として記録された人または組織です。クレジットと出典はこの声明に属します。",
+          "ko": "이 음악 행사의 공연자로 기재된 사람 또는 단체입니다. 크레딧과 출처는 이 명세에 귀속됩니다.",
+          "zh-Hans": "在此音乐活动中署名的表演者或组织；署名及其来源属于这条具体陈述。",
+          "zh-Hant": "在此音樂活動中署名的表演者或組織；署名及其來源屬於這筆具體陳述。"
         }
       }
     },
