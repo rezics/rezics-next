@@ -193,7 +193,6 @@ if (!process.env.RENAME_COST_CHILD) {
     expect((await nativeRenameSource.run(conflict.selected)).kind).toBe('step-up');
     expect(conflict.calls).toHaveLength(3);
     expect(conflict.selected.reference).toBeUndefined();
-    window.sessionStorage.clear();
     const readback = fixture();
     readback.state.acknowledged = true;
     readback.state.failReadback = true;
