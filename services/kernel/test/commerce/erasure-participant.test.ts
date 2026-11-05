@@ -29,6 +29,7 @@ import { createNativeEditionFixture, type NativeContentEdition } from './support
 import { inspectNativeRetainedOrder, prepareNativeRetainedOrder } from './support/order-retention-fixture.ts';
 import { until } from './support/work-fixture.ts';
 import { startWorkStripe } from './support/work-stripe.ts';
+import { seedGovernanceAuthority } from '../content/support/disclosure-fixtures.ts';
 
 setDefaultTimeout(120_000);
 const pool = createPool(process.env.DATABASE_URL!);
@@ -197,7 +198,8 @@ beforeAll(async () => {
   grants = createGrantCommands({ pool, access: kernel.testAccess, managementAction: 'access:grant' });
   const seller = personas.orgOwner;
   await bootstrapLocalShowcaseBoardCreation(pool, personas.staff.accountId);
-  await grant(seller, PLATFORM_RESOURCE, ['offer:create', 'board:create', 'subject:create']);
+  await seedGovernanceAuthority(pool, PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, seller.accountId, ['offer:create']);
+  await grant(seller, PLATFORM_RESOURCE, ['board:create', 'subject:create']);
   for (const group of ['purchases', 'selling'])
     await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
   const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) =>
