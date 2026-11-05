@@ -34,7 +34,7 @@ function fixture(finalStatus: 'current' | 'changed') {
   const provider: FacetDiscoveryProvider = {
     source: 'subjects-g1',
     generation: 1,
-    meaning: { digest, release, type: 'schema:Book' },
+    meaning: { digest, release, type: 'schema:Book' } as FacetDiscoveryProvider['meaning'],
     operations: {
       async captureFacet({ plan }: { plan: FacetNativePlan }) {
         captures.push(plan.property);
