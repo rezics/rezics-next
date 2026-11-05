@@ -195,8 +195,6 @@ test.serial(
         const page = await f.service.remove(actor, person.uploadId!);
         expect(page.removed).toBe(CLEANUP_CHILD_BUDGET);
         expect(page.complete).toBe(false);
-        const leftover = await f.knownApplyBytes(actor.accountId, person.uploadId!, remainingApply);
-        expect(leftover.ids).toEqual([]);
         return page;
       },
       {

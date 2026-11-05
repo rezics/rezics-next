@@ -179,7 +179,7 @@ Session/unit/History population is U.
   not in total owner history. Final page: C_child + C_root. 800 KiB is the application-command JSON maximum on an
   all-application child page, charged beside the root/probes/locks/wrapper, not instead of them.
 
-Decision: archive whole-caller checks use the public cost-folded capture and a post-drain boundary for read-only verification.
+Decision: archive whole-caller checks use the public cost-folded capture and a post-drain boundary for read-only verification. The crossing-table cleanup callback contains only owner removal and bounded result assertions; exact-ID absence stays in post-drain verification.
 
 Native64/512/4096 whole-caller statements, returned/affected rows and shared hit/read for apply, retry,
 rejection/rollback, `progressResult` and owner-remove cleanup remain unmeasured until each scale runs against the
