@@ -131,7 +131,7 @@ test('mounted installed route and session retain canonical origin, acquire fresh
   const loader = Route.options.loader;
   if (typeof loader !== 'function') throw new Error('Missing canonical Manga loader');
   const href = mangaPublicCorrectionHref(base, origin);
-  const load = (slug: string, search = new URL(href, window.location.origin).search) =>
+  const load = async (slug: string, search = new URL(href, window.location.origin).search) =>
     loader({ params: { id, slug }, location: { searchStr: search, hash: '' } } as never);
   try {
     const { MangaProfileEntry } = await import('../src/features/catalogue/manga-profile-entry');
