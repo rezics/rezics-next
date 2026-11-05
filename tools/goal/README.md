@@ -1547,7 +1547,10 @@ retry. Once cut, that candidate is frozen while its long gate runs, even as the 
 and does not bisect, because only fixes reach it. An
 infrastructure-only failure (process timeout, Docker setup/run failure, or SSH/rsync transport failure) reruns the
 failing workspace checks on the same candidate up to twice; each rerun is recorded in the promotion run. Assertion
-failures block immediately. A passing gate merges newer control-plane-only commits from main into the candidate,
+failures block immediately. Decision: verifier and promotion share transport/timeout recognition in
+`check-failure.ts`; promotion still excludes Bun per-test timeouts and treats Docker run failures as infrastructure,
+and the verifier still treats check-host transport, unavailable commands and truncated output as infrastructure.
+Retries and verdicts are unchanged. Shared classification fixtures pin those signatures through both callers. A passing gate merges newer control-plane-only commits from main into the candidate,
 then fast-forwards main when possible; other main history changes still need a fresh gate. The branch moves to the
 captured integration head, starting the next window. Deleting the branch starts a fresh preflight of the latest
 integration head.

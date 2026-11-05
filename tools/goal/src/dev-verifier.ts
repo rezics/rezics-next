@@ -13,6 +13,7 @@ import { gateRunner, git, type GateRunner } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { recordFlow } from './flow.ts';
 import type { Database } from 'bun:sqlite';
+import { isTransportTimeout } from './check-failure.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
 import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
@@ -191,13 +192,7 @@ function createChecks(
   return checks.map((check) => placeInWorkspace(check, tracked));
 }
 function infraFailure(output: string, timedOut: boolean): boolean {
-  return (
-    timedOut ||
-    CHECK_HOST_TRANSPORT.test(output) ||
-    /ETIMEDOUT|timed out|timeout while (?:starting|creating|setting up).*docker|(?:ssh|rsync).*?(?:exit(?:ed)? 255|code 255|status 255)/i.test(
-      output,
-    )
-  );
+  return timedOut || CHECK_HOST_TRANSPORT.test(output) || isTransportTimeout(output);
 }
 function unavailableFailure(output: string): boolean {
   return (
