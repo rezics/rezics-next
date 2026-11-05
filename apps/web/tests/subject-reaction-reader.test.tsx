@@ -64,7 +64,8 @@ let preparedReader = 'reader-one';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('../src/kernel/client', () => ({ kernelClient: () => ({}) }));
+const kernel = await import('../src/kernel/client');
+mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => ({}) }));
 mock.module('../src/report/content-actions', () => ({ PostActions: () => null }));
 mock.module('../src/library/follow-target-control', () => ({ FollowTargetControl: () => null }));
 mock.module('../src/features/pages/subject-reactions', () => ({

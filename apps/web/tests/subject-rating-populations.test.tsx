@@ -275,18 +275,8 @@ async function tick() {
 }
 async function until(predicate: () => boolean) {
   for (let index = 0; index < 40 && !predicate(); index++) await act(tick);
-  expect(
-    predicate(),
-    JSON.stringify({
-      text: host.textContent,
-      session: cache.getQueryData(sessionQuery.queryKey),
-      renderedSession,
-      queries: directoryQueries().map((query) => ({ key: query.queryKey, state: query.state })),
-      requests: requests.map((request) => request.url),
-    }),
-  ).toBe(true);
+  expect(predicate()).toBe(true);
 }
-let renderedSession: unknown;
 function PopulationOwner({
   id = subjectId,
   q = question,
@@ -297,7 +287,6 @@ function PopulationOwner({
   enabled?: boolean;
 }) {
   const { data } = useQuery({ ...sessionQuery, enabled: false });
-  renderedSession = data;
   return (
     <SubjectRatingPopulations
       subjectId={id}
@@ -368,6 +357,7 @@ beforeEach(() => {
   nativePopulations = ids.map((population) => ({ population, count: 1 }));
   directoryGate = aggregateGate = labelGate = undefined;
   cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  cache.setQueryDefaults(sessionQuery.queryKey, { gcTime: Infinity });
   cache.setQueryData(sessionQuery.queryKey, session());
   start.setStoryRequestContext({ visitor: 'Signed In', url: window.location.href });
   root = createRoot(host);
@@ -934,6 +924,7 @@ test('independent QueryClients serialize private responses separately and requir
   const originalJson = JSON.stringify(original.state.data);
   preparedReader = 'reader-two';
   extraCache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  extraCache.setQueryDefaults(sessionQuery.queryKey, { gcTime: Infinity });
   extraCache.setQueryData(sessionQuery.queryKey, session(preparedReader, null));
   await paint(subjectId, extraCache);
   await until(() => boxes().length === 20);
