@@ -9701,6 +9701,8 @@
   "subject_synopsis_choice": "제공된 줄거리 선택",
   "subject_synopsis_candidate": "후보 {number}",
   "subject_synopsis_evidence": "이 줄거리의 근거",
+  "subject_synopsis_sources_unsupported": "선택한 이 줄거리를 출처 페이지에서 그대로 여는 기능은 지원되지 않습니다. 일반 출처에는 이 항목의 현재 정보가 표시되며, 이 줄거리나 인용이 검증되었다는 뜻은 아닙니다.",
+  "subject_synopsis_general_sources": "일반 출처 보기",
   "subject_synopsis_none": "제공된 작품 줄거리가 없습니다.",
   "subject_synopsis_choices_unavailable": "줄거리 선택지를 사용할 수 없습니다.",
   "subject_synopsis_unavailable": "이 줄거리의 문서를 사용할 수 없습니다.",

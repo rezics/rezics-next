@@ -9701,6 +9701,8 @@
   "subject_synopsis_choice": "Eine bereitgestellte Zusammenfassung auswählen",
   "subject_synopsis_candidate": "Kandidat {number}",
   "subject_synopsis_evidence": "Belege zu dieser Zusammenfassung",
+  "subject_synopsis_sources_unsupported": "Diese genaue Zusammenfassung kann in den Quellen nicht geöffnet werden. Die allgemeinen Quellen zeigen die aktuellen Angaben zum Eintrag; sie bestätigen weder diese Zusammenfassung noch ihre Belege.",
+  "subject_synopsis_general_sources": "Allgemeine Quellen ansehen",
   "subject_synopsis_none": "Es ist keine bereitgestellte Werkzusammenfassung verfügbar.",
   "subject_synopsis_choices_unavailable": "Die Auswahl der Zusammenfassungen ist nicht verfügbar.",
   "subject_synopsis_unavailable": "Für diese Zusammenfassung ist kein Dokument verfügbar.",

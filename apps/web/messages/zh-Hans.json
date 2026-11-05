@@ -9701,6 +9701,8 @@
   "subject_synopsis_choice": "选择已提供的剧情简介",
   "subject_synopsis_candidate": "候选项 {number}",
   "subject_synopsis_evidence": "此剧情简介的证据",
+  "subject_synopsis_sources_unsupported": "暂不支持在来源页面打开所选的这篇简介。一般来源页面展示此条目的当前事实，并不表示这篇简介或其引用已获核实。",
+  "subject_synopsis_general_sources": "查看一般来源",
   "subject_synopsis_none": "没有可用的作品剧情简介。",
   "subject_synopsis_choices_unavailable": "无法使用剧情简介选项。",
   "subject_synopsis_unavailable": "此剧情简介没有可用的文档。",

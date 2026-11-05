@@ -9704,6 +9704,8 @@
   "subject_synopsis_choice": "提供されたあらすじを選択",
   "subject_synopsis_candidate": "候補 {number}",
   "subject_synopsis_evidence": "このあらすじの根拠",
+  "subject_synopsis_sources_unsupported": "このあらすじをそのまま出典ページで開くことはできません。全般の出典ページにはこの項目の現在の情報が表示されますが、このあらすじや引用が検証されたことを意味しません。",
+  "subject_synopsis_general_sources": "全般の出典を見る",
   "subject_synopsis_none": "作品のあらすじは提供されていません。",
   "subject_synopsis_choices_unavailable": "あらすじの選択肢を利用できません。",
   "subject_synopsis_unavailable": "このあらすじの文書は利用できません。",

@@ -9701,6 +9701,8 @@
   "subject_synopsis_choice": "Choisir un résumé fourni",
   "subject_synopsis_candidate": "Candidat {number}",
   "subject_synopsis_evidence": "Éléments de preuve pour ce résumé",
+  "subject_synopsis_sources_unsupported": "L’ouverture de ce synopsis précis dans Sources n’est pas prise en charge. Les sources générales présentent les données actuelles de la fiche ; elles ne vérifient ni ce synopsis ni ses citations.",
+  "subject_synopsis_general_sources": "Consulter les sources générales",
   "subject_synopsis_none": "Aucun résumé fourni de l’œuvre n’est disponible.",
   "subject_synopsis_choices_unavailable": "Le choix des résumés est indisponible.",
   "subject_synopsis_unavailable": "Aucun document n’est disponible pour ce résumé.",
