@@ -2,6 +2,7 @@
 goal: web
 manager: web
 ---
+
 # Complete the private Media return journey
 
 Owning guide: apps/web/src/media/own-inventory/README.md. Keep the original attempt contract's navigation,
@@ -13,6 +14,7 @@ The existing recovery test also attempts reentrant Next during confirmation and 
 while retaining original browsing, immutable sender/command retry and acknowledged refresh assertions.
 
 Remaining implementation:
+
 - Keep eight admitted preceding cursor coordinates, current, and one staged target in the mounted route/outer
   page. Workspace remounts on origin.viewKey, which includes cursor; it cannot own these coordinates.
 - Preserve shared address retirement. Each new address needs a current read, with loader/query coordination
