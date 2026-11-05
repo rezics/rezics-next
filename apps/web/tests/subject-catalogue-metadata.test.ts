@@ -14,17 +14,21 @@ const subject = {
   statements: {},
 } as unknown as Subject;
 
-test('exact released Subject metadata reaches work-tag admission and settles a valid empty reading', () => {
-  const catalogue = {
-    state: 'released' as const,
-    type: subject.type,
-    digest: bundledDigest,
-    definitions: { types: bundledRelease.types, properties: bundledRelease.properties },
-  };
-  const definitions = subjectCatalogueTagDefinitions(subject, catalogue);
-  expect(definitions).toBeDefined();
-  expect(readWorkTags(subject, {} as Related, definitions, 'en', 0)).toMatchObject({ state: 'ready', tags: [] });
-});
+test.each(['schema:VideoGame', 'wd:Q689445', 'schema:TVSeries'])(
+  'exact released %s metadata reaches work-tag admission and settles a valid empty reading',
+  (type) => {
+    const current = { ...subject, type };
+    const catalogue = {
+      state: 'released' as const,
+      type,
+      digest: bundledDigest,
+      definitions: { types: bundledRelease.types, properties: bundledRelease.properties },
+    };
+    const definitions = subjectCatalogueTagDefinitions(current, catalogue);
+    expect(definitions).toBeDefined();
+    expect(readWorkTags(current, {} as Related, definitions, 'en', 0)).toMatchObject({ state: 'ready', tags: [] });
+  },
+);
 
 test('missing, stale or mismatched page metadata does not open work-tag definitions', () => {
   const catalogue = {

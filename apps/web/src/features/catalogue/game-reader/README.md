@@ -14,6 +14,9 @@ qualifiers; navigation never depends on adding an incidental qualifier or relaxi
 Release-specific facts remain on that release's ordinary Subject and existing `/release` companion. Existing
 finite Relations and Credits views, generic facts and Game correction retain their owners.
 
+Decision: VN tag reading uses the Subject's exact pinned catalogue metadata, including its released Concept facets;
+it shares tag admission with VideoGame and TVSeries rather than inferring metadata from the game reader's active Release.
+
 Decision: exact destinations open in a new tab, preserving the source window; keyboard return restores its surviving
 opener, or the reader heading if the opener disappeared, without overriding moved focus.
 
