@@ -69,8 +69,7 @@ export function personBiographyReturnFragment(value: PersonBiographyReturn): str
     window: value.window,
     ...(value.assertion ? { assertion: value.assertion } : {}),
   });
-  const hash = `#person-biography?${params}`;
-  return personBiographyReturn(hash) ? hash : '#person-biography';
+  return `#person-biography?${params}`;
 }
 
 function validLiteraryHistory(value: string): boolean {
