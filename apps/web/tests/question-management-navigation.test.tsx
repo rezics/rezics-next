@@ -368,7 +368,7 @@ test('direct later visit has First but no invented Previous; Stay preserves draf
     // Uncertain commands lock both pagers and retry the original operands and credentials.
     await ui.click(ui.host, m.realm_question_caption_edit());
     await ui.click(ui.host, m.realm_question_review_definition());
-    await ui.click(ui.host, m.realm_question_confirm_caption());
+    await ui.click(ui.host, m.realm_question_caption_save());
     await until(() => sends.length === 1);
     await ui.click(ui.captions(), m.realm_question_history_more());
     expect(window.document.querySelector('[role="alertdialog"]')?.textContent).toContain(
