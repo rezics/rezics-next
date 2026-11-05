@@ -61,6 +61,17 @@ export const origins = {
   audience: 'https://api.rezics.test',
 };
 
+/** Every process in an isolated stack uses the same issuer identity, including its port. */
+export function developmentKernelBindings(selected: Pick<typeof origins, 'issuer' | 'audience' | 'kernel'> = origins) {
+  return {
+    AUTH_ISSUER: selected.issuer,
+    AUTH_AUDIENCE: selected.audience,
+    AUTH_JWKS_URL: `${selected.issuer}/.well-known/jwks.json`,
+    KERNEL_HOSTNAME: '127.0.0.1',
+    KERNEL_PORT: String(localPort(selected.kernel)),
+  };
+}
+
 export function authSecurityScopeConfiguration(siteActions?: Iterable<string>): string {
   return siteActions === undefined ? 'native-no-catalogue' : `catalogue:${securityScopeLimit(siteActions)}`;
 }
@@ -362,7 +373,13 @@ async function setup() {
   const keys = await developmentKeys();
   const contentBindings = developmentContentBindings(env);
   const kernelEnvFile = resolve(root, 'services/kernel/.env');
-  await privateFile(kernelEnvFile, updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), contentBindings));
+  await privateFile(
+    kernelEnvFile,
+    updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), {
+      ...contentBindings,
+      ...developmentKernelBindings(),
+    }),
+  );
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
   await privateFile(
     resolve(root, 'apps/web/.dev.vars'),
@@ -721,8 +738,7 @@ async function start() {
   const env = {
     ...process.env,
     ...(await kernelEnvironment()),
-    KERNEL_HOSTNAME: '127.0.0.1',
-    KERNEL_PORT: String(localPort(origins.kernel)),
+    ...developmentKernelBindings(),
   };
   const children = [
     ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
