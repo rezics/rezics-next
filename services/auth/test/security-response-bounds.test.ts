@@ -60,9 +60,7 @@ test('escaped native maxima fit field-derived budgets and projections discard ex
   expect(bytes(page)).toBeLessThanOrEqual(securityFixedResponseByteBudgets.securityPage);
   const projected = securityPasskey(key);
   expect(Object.keys(projected)).toEqual(['id', 'name', 'created_at', 'last_used_at']);
-  expect(bytes({ passkeys: Array(32).fill(projected) })).toBeLessThanOrEqual(
-    securityFixedResponseByteBudgets.passkeys,
-  );
+  expect(bytes({ passkeys: Array(32).fill(projected) })).toBeLessThanOrEqual(securityFixedResponseByteBudgets.passkeys);
   for (const value of ['\u0000', '\ud800', '😀', '"', '\\'])
     expect(bytes(value.repeat(128))).toBeLessThanOrEqual(securityJsonStringBytes(value.repeat(128).length));
 });
@@ -159,7 +157,11 @@ test('budget arithmetic refuses unsafe or nonfinite configuration rather than pr
 });
 
 test('public fixed endpoint budgets need no catalogue count and match every combined-helper formula', () => {
-  expect(Object.keys(securityFixedResponseByteBudgets).sort()).toEqual(['passkeys', 'registrationPage', 'securityPage']);
+  expect(Object.keys(securityFixedResponseByteBudgets).sort()).toEqual([
+    'passkeys',
+    'registrationPage',
+    'securityPage',
+  ]);
   for (const scopeLimit of [0, 1, 3, 1000, 1203]) {
     const { securityPage, passkeys, registrationPage } = securityResponseByteBudgets(scopeLimit);
     expect({ securityPage, passkeys, registrationPage }).toEqual(securityFixedResponseByteBudgets);

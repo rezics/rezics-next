@@ -293,7 +293,12 @@ test('fixed Security readers apply the public byte caps before parsing and retir
     expect(cancelled).toBe(cancelBefore + 1); expect(calls.length).toBe(deadlineBefore + 1);
     globalThis.setTimeout = timer; clearTimeout(held);
   `;
-  const child = Bun.spawn([process.execPath, '-e', script], { cwd: `${import.meta.dir}/../../..`, stdout: 'pipe', stderr: 'pipe' });
-  const output = await new Response(child.stdout).text(), error = await new Response(child.stderr).text();
+  const child = Bun.spawn([process.execPath, '-e', script], {
+    cwd: `${import.meta.dir}/../../..`,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const output = await new Response(child.stdout).text(),
+    error = await new Response(child.stderr).text();
   expect(await child.exited, output + error).toBe(0);
 });
