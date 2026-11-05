@@ -921,6 +921,20 @@ export function SubjectPage({
       return <Link {...props} href={contextHref(href, realm)} />;
     };
   }, [link, locale, literaryReturn, mangaReturn, realm, visitReturn]);
+  const factsContext = read ? (page.context?.id ?? read.subject.context) : undefined;
+  const factsRealm = page.context?.population.kind === 'realm' ? page.context.population.id : undefined;
+  const factsOrigin =
+    read && !page.account && factsContext
+      ? {
+          subject: read.subject.id,
+          context: factsContext,
+          ...(factsRealm ? { realm: factsRealm } : {}),
+          returnHref: contextHref(
+            subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale).href,
+            factsRealm,
+          ),
+        }
+      : undefined;
   const renderedActions =
     read && !page.account && !realm ? (
       <>
@@ -1011,7 +1025,12 @@ export function SubjectPage({
             <CharacterProfileEntry work={read.subject.id} locale={locale} />
           )}
           <AuthoredFieldEntry id={read.subject.id} title={subjectPageTitle(page, locale)} locale={locale} />
-          <SubjectFactsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+          <SubjectFactsEntry
+            id={read.subject.id}
+            label={subjectPageTitle(page, locale)}
+            locale={locale}
+            origin={factsOrigin}
+          />
           {(read.subject.type === 'schema:Book' || read.subject.type === 'schema:BookSeries') && (
             <LiteraryProfileEntry
               id={read.subject.id}

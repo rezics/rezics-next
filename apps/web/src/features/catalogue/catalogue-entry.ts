@@ -6,6 +6,7 @@ import type { Release } from '@rezics/definitions';
 import { isFileOrGroupType } from './catalogue-file-profile/model';
 import { addonPublicCorrectionHref, type AddonPublicOrigin } from './addon-public-visit';
 import { catalogueFileCorrectionHref } from './catalogue-file-reader/navigation';
+import { factsPublicCorrectionHref, type FactsPublicOrigin } from './facts-public-visit';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -60,10 +61,12 @@ export const catalogueEntries = {
     label: m.authored_title({}, options(locale)),
     href: `${subject({ id, label: title, locale })}/authored`,
   }),
-  facts: (address: Subject): CatalogueEntry => ({
+  facts: (address: Subject & { origin?: FactsPublicOrigin | undefined }): CatalogueEntry => ({
     group: 'edit',
     label: m.facts_title({}, options(address.locale)),
-    href: `${subject(address)}/edit`,
+    href: address.origin
+      ? factsPublicCorrectionHref(`${subject(address)}/edit`, address.id, address.locale, address.origin)
+      : `${subject(address)}/edit`,
   }),
   terms: (address: Subject): CatalogueEntry => ({
     group: 'edit',
