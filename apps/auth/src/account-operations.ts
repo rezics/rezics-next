@@ -111,14 +111,20 @@ function readStoredOperationKey(): StoredOperationKeyRead {
     Array.isArray(parsed) ||
     Object.keys(parsed).length !== 2 ||
     !Object.hasOwn(parsed, 'signature') ||
-    !Object.hasOwn(parsed, 'key') ||
-    typeof (parsed as Record<string, unknown>).signature !== 'string' ||
-    !validOperationKey((parsed as Record<string, unknown>).key) ||
-    !validSignature((parsed as Record<string, unknown>).signature) ||
-    JSON.stringify(parsed) !== raw
+    !Object.hasOwn(parsed, 'key')
   )
     return { kind: 'refused' };
-  return { kind: 'stored', value: parsed as StoredOperationKey };
+  const record = parsed as Record<string, unknown>;
+  const signature = record.signature;
+  const key = record.key;
+  if (
+    typeof signature !== 'string' ||
+    !validOperationKey(key) ||
+    !validSignature(signature) ||
+    JSON.stringify(record) !== raw
+  )
+    return { kind: 'refused' };
+  return { kind: 'stored', value: { signature, key } };
 }
 
 function memoryKey(signature: string): string | null {
