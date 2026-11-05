@@ -717,11 +717,12 @@ cost: PublicFilterCost}` so Search can resume the original tuple. This grants no
 The complete branch carries that `publication`, `definition: PublicFilterSourceDefinition`, original
 `covered: PrivacyReductionStart` and non-null joined `execution`, observed `observation`,
 `terminal: Readonly<{step: string; root: string}>`, `settlement: NativePublicFilterRepairSettlement` and
-`cost: PublicFilterCost`. The settlement type is Search's exact native type. The all-native-homes observation
-uses that original execution/start; it must have complete routing and no blocking or unacknowledged homes.
-Changed-since-start information remains intact and never authorizes disclosure of an old execution. Search
+`cost: PublicFilterCost`. The all-native-homes observation uses the original execution/start, complete routing
+and no pending, unresolved or unacknowledged homes. Decision: changed-since-start remains a disclosure fact;
+original verified repair plus current native ACK and independent settlement can complete maintenance.
+Changed information stays intact and never authorizes disclosure of an old execution. Search
 composes the callable through its existing writer fence and owns activation and reader-safe retirement.
-Native receiving, restart and growth acceptance remain required; typing is not that proof.
+Native receiving, restart and growth still need acceptance.
 
 ### Native Source metadata ownership
 
