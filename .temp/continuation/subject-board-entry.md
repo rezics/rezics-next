@@ -1,9 +1,16 @@
-# Goal content
+goal: content
+manager: content
+kind: implementation
+---
+# Finish the Subject Board entry visitor journey
 
-Finish the seeded Subject work-to-discussion journey after the official generated client publication installs the optional `board` query and closed `entry` response on the root-derived Subject threads callable. Consume the showcase's exact native Board/work association; retain the producer's `not_selected`, `concealed`, `unavailable`, `denied`, sign-in and allowed distinctions. From the original showcase work, open the supplied Board, use its current creation advice, sign in when needed, compose through the existing thread command, read the acknowledged thread, and return to the exact original overview/full-view region, cursor and Realm/node context. Do not infer a Board or add local DTOs, casts, reflection transport or declaration overlays.
+Resume the complete showcase work → supplied native Board → current creation advice → sign-in if needed → existing thread composer → acknowledged thread read → exact originating Subject region journey in this worktree.
 
-Preserve the current Web `currentHref`, independent list mounts, source/session currentness and return behavior. Add only the focused tests needed for the installed visitor journey and its advice states. The existing native producer and command writers remain authoritative.
+The current receiver cannot consume the required handoff without inventing a local contract:
 
-# Manager content
+- The installed root-derived `subjects({ id }).threads.get` callable does not expose optional query `board` or response `entry`; the service implementation already supports both. The official publisher owns installing the generated root types.
+- The current Subject thread composition read carries no supplied showcase Board association. Obtain that association from the existing Content local composition helper and forward it unchanged; never infer it from cards, labels, visibility, Realm membership or the first Board.
 
-Continue in this worktree when the official complete-input publication has landed. Confirm the installed `@rezics/client` root callable exposes both query and response fields before editing the receiver; the tracked declaration at this attempt's base does not. Do not substitute an unavailable-only UI or hand-edit generated declarations. Serialize shared edits with the active publisher owner, then run the Web focused test command for changed tests and `bun run --cwd apps/web typecheck`. Browser, native, root and growth acceptance remains with the controller/verifier after integration. The entry consumption decision is recorded in `apps/web/src/features/pages/subject-community-entry/README.md` and sent to Content through the Goal inbox.
+After those owner inputs land, finish the existing mounted consumer and preserve `not_selected`, `concealed`, `unavailable`, `denied`, `sign-in` and `allowed` advice; source/session/Realm revisions; exact request, duplicate occurrences and opaque cursor; independent mounts; and the full overview/view, node, cursor and Realm return address. Keep Web validators, cache observation/subscriptions and retiring leases. Use existing thread commands and retain their original uncertain credentials, key, body and revision. Do not repeat the delivered native/backend implementation, add another producer or generate/overlay local client types.
+
+Add only the focused visitor checks still needed, run the landing focused command and changed workspace typechecks, then leave native, browser, root and physical-growth acceptance to the controller after integration.
