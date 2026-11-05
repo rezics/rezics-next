@@ -1,5 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import * as start from '../.storybook/react-start';
 import { candidateContext } from '../src/subject/candidates';
 import { summaryReadingFragment } from '../src/features/pages/subject-visit-navigation';
@@ -115,7 +117,16 @@ test('one admitted original selection reaches the native seam, retaining languag
   for (const privateValue of [document, digest, 'observedRevision', 'observedRelease'])
     expect(serialized).not.toContain(privateValue);
   const { SubjectSourcesPage } = await import('../src/features/catalogue/subject-sources-page');
-  const markup = renderToStaticMarkup(<SubjectSourcesPage result={result} locale="en" />);
+  const root = createRootRoute({ component: () => <SubjectSourcesPage result={result} locale="en" /> });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  await router.load();
+  const client = new QueryClient();
+  const markup = renderToStaticMarkup(
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  client.clear();
   expect(markup).toContain('https://example.org/exact-support');
   expect(markup).toContain('source-statement');
   expect(markup).not.toContain('sources_metadata');

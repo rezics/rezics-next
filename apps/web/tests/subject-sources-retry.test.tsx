@@ -15,6 +15,9 @@ const calls: unknown[] = [];
 const queries = await import('../src/features/pages/subject-queries');
 mock.module('../src/features/pages/subject-queries', () => ({ ...queries, subjectRequestReader: async () => reader }));
 mock.module('../src/features/catalogue/subject-sources-actions', () => ({
+  readCurrentSubjectSources: async () => {
+    throw new Error('Unexpected hydrated Global read in a Realm visit');
+  },
   loadSubjectSources: async ({ data }: { data: unknown }) => {
     calls.push(data);
     return read();
