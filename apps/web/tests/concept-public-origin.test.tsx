@@ -169,37 +169,6 @@ test('production route admits public scope before the original session transport
     const observedHref = entry.getAttribute('href')!;
     const observed = await load(observedHref);
     expect(observed.publicVisit).toEqual({ kind: 'origin', origin });
-    await render(
-      <SourceConceptPublicSession
-        id={id}
-        locale="en"
-        pathname={routePath}
-        publicVisit={observed.publicVisit}
-      />,
-    );
-    await waitFor(() => expect(reads.length).toBeGreaterThan(0));
-    const signedOutReadCount = reads.length;
-    expect((reads[0] as { data: { id: string; expectedReader: string | null } }).data).toMatchObject({
-      id,
-      expectedReader: null,
-    });
-    expect(within(host).getByRole('link', { name: m.concept_public_origin_return() }).getAttribute('href')).toBe(
-      returnHref,
-    );
-    const signedInReader = '00000000-0000-4000-8000-00000000c103';
-    await act(async () =>
-      client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: signedInReader, csrfToken: 'first' }),
-    );
-    await waitFor(() =>
-      expect(
-        reads.some(
-          (request) =>
-            (request as { data: { expectedReader: string | null } }).data.expectedReader === signedInReader,
-        ),
-      ).toBe(true),
-    );
-    const publicReadCount = reads.length;
-
     const nonGlobalReturn = conceptPublicReturnHref(
       subjectHref({ id, label: 'Protagonist' }, 'en').href,
       id,
@@ -219,7 +188,7 @@ test('production route admits public scope before the original session transport
       />,
     );
     expect(host.textContent).toContain(m.concept_public_origin_context_unsupported());
-    expect(reads).toHaveLength(publicReadCount);
+    expect(reads).toHaveLength(0);
     const freshHref = within(host).getByRole('link', { name: m.concept_public_origin_global() }).getAttribute('href')!;
     const freshUrl = new URL(freshHref, window.location.origin);
     expect([...freshUrl.searchParams.keys()]).toEqual(['publicReturn']);
@@ -228,8 +197,28 @@ test('production route admits public scope before the original session transport
     await render(
       <SourceConceptPublicSession id={id} locale="en" pathname={routePath} publicVisit={fresh.publicVisit} />,
     );
-    await waitFor(() => expect(reads.length, 'fresh Global read').toBeGreaterThan(publicReadCount));
-    const freshReadCount = reads.length;
+    await waitFor(() => expect(reads.length, 'fresh Global read').toBeGreaterThan(0));
+    expect((reads[0] as { data: { id: string; expectedReader: string | null } }).data).toMatchObject({
+      id,
+      expectedReader: null,
+    });
+    expect(within(host).getByRole('link', { name: m.concept_public_origin_return() }).getAttribute('href')).toBe(
+      nonGlobalReturn,
+    );
+
+    const signedInReader = '00000000-0000-4000-8000-00000000c103';
+    await act(async () =>
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: signedInReader, csrfToken: 'first' }),
+    );
+    await waitFor(() =>
+      expect(
+        reads.some(
+          (request) =>
+            (request as { data: { expectedReader: string | null } }).data.expectedReader === signedInReader,
+        ),
+      ).toBe(true),
+    );
+    const signedInReadCount = reads.length;
 
     await render(
       <SourceConceptPublicSession
@@ -239,8 +228,11 @@ test('production route admits public scope before the original session transport
         publicVisit={observed.publicVisit}
       />,
     );
-    await waitFor(() => expect(reads.length, 'return to current public Concept').toBeGreaterThan(freshReadCount));
+    await waitFor(() => expect(reads.length, 'observed Global Concept read').toBeGreaterThan(signedInReadCount));
     const returnedReadCount = reads.length;
+    expect(within(host).getByRole('link', { name: m.concept_public_origin_return() }).getAttribute('href')).toBe(
+      returnHref,
+    );
     const realmReturn = conceptPublicReturnHref(
       subjectHref({ id, label: 'Protagonist' }, 'en').href,
       id,
