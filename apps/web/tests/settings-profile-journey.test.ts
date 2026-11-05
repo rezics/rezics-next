@@ -209,11 +209,11 @@ test('matching current reads retain the original command until retry acknowledge
     editor.snapshot().draft?.biography,
   ]).toEqual([1, 'Another writer', 'Avery', 'Later biography']);
   expect(editor.snapshot().attempt).toBe(original);
-  expect([editor.snapshot().phase, editor.snapshot().acknowledged, profileNeedsNavigationDecision(editor.snapshot())]).toEqual([
-    'uncertain',
-    false,
-    true,
-  ]);
+  expect([
+    editor.snapshot().phase,
+    editor.snapshot().acknowledged,
+    profileNeedsNavigationDecision(editor.snapshot()),
+  ]).toEqual(['uncertain', false, true]);
   await submit('views');
   await submit('profile');
   review();
@@ -248,13 +248,7 @@ test('matching current reads retain the original command until retry acknowledge
     editor.snapshot().draft?.displayName,
     editor.snapshot().draft?.biography,
     editor.snapshot().phase,
-  ]).toEqual([
-    null,
-    false,
-    'Avery',
-    'Later biography',
-    'review',
-  ]);
+  ]).toEqual([null, false, 'Avery', 'Later biography', 'review']);
 });
 
 test('An unavailable or handleless account is never shown as a fabricated empty editable profile', async () => {

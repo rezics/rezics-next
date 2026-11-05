@@ -359,11 +359,7 @@ export class ProfileEditor {
         draft: nextDraft,
         attempt: commandAcknowledged ? null : attempt,
         acknowledged: commandAcknowledged ? false : this.state.acknowledged,
-        phase: commandAcknowledged
-          ? hasDraftChanges || !confirmed
-            ? 'review'
-            : 'saved'
-          : 'uncertain',
+        phase: commandAcknowledged ? (hasDraftChanges || !confirmed ? 'review' : 'saved') : 'uncertain',
         failure: undefined,
         readAuthority: 'allowed',
         readStatus: undefined,
