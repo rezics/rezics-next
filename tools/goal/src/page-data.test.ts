@@ -6,6 +6,8 @@ import { spawnSync } from 'node:child_process';
 import { openDb } from './db.ts';
 import { flowReport, formatPageDataFlowRuns, readFlow } from './flow.ts';
 import { WorkerJob } from './job.ts';
+import { routePageDataRepair } from './config.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 import {
   duePageDataRun,
   latestSectionOwner,
@@ -15,6 +17,7 @@ import {
   PageDataStackError,
   runPageDataCycle,
   type PageDataSection,
+  type PageDataRepair,
   type SectionConfig,
 } from './page-data.ts';
 import type { Settings, Task } from './types.ts';
@@ -225,6 +228,44 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
     expect(evidence).toContain('Class: API (previously DATA)');
     expect(evidence).toContain('First error line: home anonymous feed API');
     expect(h.store.events(task.id, 2).some((event) => event.kind === 'page-data-repair')).toBe(true);
+  } finally {
+    await h.disposeAsync();
+  }
+});
+
+test('a non-resumable author task gets one Goal repair task for the cause', async () => {
+  const h = harness();
+  const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+  const inbox = new SqliteManagerInbox(h.store.db);
+  try {
+    const original = h.tasks.dispatch(h.briefFile);
+    const ref = { taskId: original.id, attempt: original.currentAttempt };
+    h.store.updateTask(ref, (current) => {
+      current.state = 'integrated';
+    });
+    const owner = h.store.task(original.id);
+    const repair: PageDataRepair = {
+      repairKey: 'b'.repeat(64),
+      head: 'integrated-head',
+      previousClass: 'UNAVAILABLE',
+      owner,
+      section: {
+        page: 'home',
+        persona: 'anonymous',
+        section: 'feed',
+        name: 'Feed',
+        class: 'API',
+        goal: owner.brief.goal,
+        files: ['apps/web/src/routes/index.tsx'],
+        firstErrorLine: 'home anonymous feed API',
+      },
+    };
+    expect(await routePageDataRepair(h.tasks, h.store, job, inbox, h.settings, repair)).toBe('dispatched');
+    expect(await routePageDataRepair(h.tasks, h.store, job, inbox, h.settings, repair)).toBe('dispatched');
+    const repairs = h.store.tasks().filter((task) => task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`));
+    expect(repairs).toHaveLength(1);
+    expect(repairs[0]?.brief.goal).toBe(owner.brief.goal);
+    expect(repairs[0]?.brief.markdown).toContain('Class: `API` (previously `UNAVAILABLE`)');
   } finally {
     await h.disposeAsync();
   }

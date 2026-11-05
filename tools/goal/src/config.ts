@@ -183,7 +183,7 @@ function pageDataRepairBrief(repair: PageDataRepair, goal: string, manager: stri
   )}\n---\n\n# Repair a seeded page-data defect\n\npage-data-repair-key: ${repair.repairKey}\n\nRepair section \`${repair.section.page}/${repair.section.persona}/${repair.section.section}\` in class \`${repair.section.class}\` (previously \`${repair.previousClass}\`).\n\nIntegrated dev head: \`${repair.head}\`. First error line: \`${repair.section.firstErrorLine ?? 'unavailable'}\`.\n`;
 }
 
-async function routePageDataRepair(
+export async function routePageDataRepair(
   tasks: WorkerTasks,
   store: WorkerStore,
   job: WorkerJob,
