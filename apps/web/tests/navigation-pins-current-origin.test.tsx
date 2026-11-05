@@ -455,10 +455,10 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     expect(new Headers(writes[6]!.input.headers).get('X-CSRF-Token')).toBe('rotated-csrf');
     await act(async () => writes[6]!.work.resolve({ ok: true, revision: 8 }));
 
-    await show();
     const loadedRead = pendingReads.length;
-    await refetch();
+    await show();
     const beforeRefusal = response('C', ['a', 'x', 'b', 'c']);
+    expect(pendingReads).toHaveLength(loadedRead + 1);
     await settle(loadedRead, beforeRefusal);
     expect(navigation.data.pins).toMatchObject({ state: 'loaded' });
     expect(host.querySelectorAll('[data-library-pin]').length).toBeGreaterThan(0);
