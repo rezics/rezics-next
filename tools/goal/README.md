@@ -1376,20 +1376,8 @@ The tracked repository gate is `bun tools/goal/scripts/gate.ts`. It runs `bun in
 independent verifier runs them after integration; a failure is reported with the command and first failure and does
 not hold the landing train. Main promotion retains its task acceptance gates. Integration rebases onto the integration
 branch, checks declared paths, formats changes and fast-forwards that branch without moving `main`.
-Decision: Each final dev candidate runs Bun's unbundled transpile over its changed executable TypeScript files before publication; compiler diagnostics return through the same worker session without a failed attempt outcome.
-The train compares the exact target base with the recomposed candidate after replay and formatting, and applies this check to
-direct, combined, resolver-replayed and untargeted control-plane dev landings. It passes existing `.ts`, `.tsx`, `.mts` and
-`.cts` files as argv-safe entry points to Bun `build --no-bundle`; deleted files, declarations and other extensions are
-skipped. A compiler error keeps its absolute log and first file/line diagnostic, then resumes the original worker session
-through the existing retry continuation. The repaired source follows normal landing preparation and must pass a fresh
-candidate transpile. Successful checks and nonterminal repairs appear in the existing flow report.
-
-This check establishes only that Bun can transpile each changed source entry. It does not validate imports or dependencies,
-import cycles, TypeScript types, application boot, native checks or acceptance. The root typecheck, optional boot check,
-independent verifier and main promotion retain their existing policies. The target cost is below one second for a typical
-landing; the observed disposable-fixture command cost is recorded with the `dev-landing-transpile` guard below.
-The measured fixture was 7ms for 7 changed paths, 4 executable TypeScript entries and 180 source bytes; this is one
-sample against the target, not a claim that all landings meet it.
+Decision: Each final composed dev candidate, including direct, batch, resolver-replayed and control-plane publication, runs these prepublication repairs against the exact target base after replay, formatting and any derived/schema commits, then returns the first diagnostic and retained log to the original worker session without a failed attempt: unbundled Bun transpile of changed executable `.ts`/`.tsx`/`.mts`/`.cts` files (`dev-landing-transpile`; deleted files, declarations and other extensions skipped); Kernel schema-dump regeneration when a migration changed (`dev-landing-schema`, before derived generators on the direct path); and, when any `services/kernel/src/` path changed, one candidate-scoped import of `services/kernel/src/server.ts` and `worker.ts` (`dev-landing-kernel-import`).
+The Kernel import uses real dynamic imports so `import.meta.main` is false, two fresh Bun processes so one entry's module cache cannot mask the other, and one migrated throwaway database from the candidate's `withThrowawayDatabase` seam with `DATABASE_URL` set before either graph loads. Unrelated paths skip it. A batch runs it once. A replayed candidate is imported again. First-error handback can end the phase; success must import both entries. It does not start HTTP or worker services, inherit a developer database URL, or replace transpile. Costs stay on the existing flow report: transpile counters unchanged, schema rows unchanged, Kernel import priced as setup/import/cleanup without double-counting batch members. Measured samples live on the matching guards. The root typecheck, optional boot check, independent verifier, page-data, walkthrough, native/browser, growth and money acceptance retain their owners.
 Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
 (`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
 so `main` receives finished work while other In rows are still open.
@@ -1665,7 +1653,11 @@ Decision: Keep the accepted worker source fixed across dev movement; retry compo
 
 Resolver prompts include conflict hunks with context, source contracts and instructions for reading each Git stage; long compiler output includes its first and last lines plus the full log path.
 
-After rebasing a single or batched landing, the train checks every path changed by that task against the current dev tree. If the task changed a path but the landing leaves that path's dev content unchanged, the train returns the task to its worker at the merge stage and names the path; a task diff already empty against dev is treated as already represented. Markdown and configured JSON message conflict resolution also stays with the worker when the resolved file keeps only dev's content and discards a worker change. A landing with no net tree change against dev is never reported as integrated on an existing commit.
+After rebasing a single or batched landing, a composed candidate that preserves the target version of one changed path still proceeds through checks and publication when it contains another effective change. Only a candidate with no net tree change against dev is treated as already represented; it is never reported as integrated on an existing commit when that result is inaccurate.
+
+Decision: Publish every nonempty composed candidate through the existing checks and expected-head transaction; reconcile a false integrated outcome from its original delivered landing provenance, preserving the old outcome as evidence before replaying the same attempt.
+
+`bun tools/goal/src/cli.ts recover false-integration <task> <attempt>` reopens only that current task's delivered single-landing result when its saved candidate is a nonempty descendant of the reported commit and the accepted source branch still matches. It preserves the prior request and outcome, clears only resolver replay state, and leaves the same queue entry for the ordinary train.
 
 Specification conflicts, tool failures and exhausted quota are attempt facts, parsed from a structured worker exit or
 native CLI failure, and stored on the attempt. A usage-limit refusal with a fresh reading that shows allowance left

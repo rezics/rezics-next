@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process';
+import { appendFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { matchesPath } from './briefs.ts';
 import { resolveImportConflicts } from './import-conflicts.ts';
 import { defaultPolicy } from './policy.ts';
@@ -144,4 +147,23 @@ export function resolveCandidateTextConflict(
   if (!/\.[cm]?[jt]sx?$/.test(path)) return undefined;
   const text = resolveImportConflicts(currentText);
   return text === undefined ? undefined : { ok: true, text, taskChangeDropped: false };
+}
+
+/**
+ * Derived generators need the workspace's dependencies (the pinned bun, dbmate for migrations), but a train worktree is
+ * created with nothing installed: every landing that regenerated derived files failed with ENOENT on
+ * node_modules/.bin/bun or services/kernel/node_modules/.bin/dbmate (2026-10-29). Install once before the first command.
+ */
+export function ensureDerivedDependencies(cwd: string, logPath: string, commands: Iterable<readonly string[]>): void {
+  // A lockfile regeneration is itself the install.
+  if ([...commands].every((command) => command[0] === 'bun' && command[1] === 'install')) return;
+  // Only a repository with a lockfile installs; fixtures and trees with dependencies already present do not.
+  if (!existsSync(join(cwd, 'bun.lock')) || existsSync(join(cwd, 'node_modules', '.bin'))) return;
+  const result = spawnSync('bun', ['install', '--frozen-lockfile'], { cwd, encoding: 'utf8' });
+  appendFileSync(
+    logPath,
+    `$ bun install --frozen-lockfile (cwd: ${cwd})\n${result.stdout ?? ''}${result.stderr ?? ''}`,
+  );
+  if (result.status !== 0)
+    throw new Error(`Failed to install dependencies for derived files: ${result.stderr || 'bun install failed'}`);
 }

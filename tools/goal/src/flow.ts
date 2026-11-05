@@ -488,23 +488,57 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     changedFiles: 0,
     typescriptFiles: 0,
   };
+  const kernelImport = {
+    successfulChecks: 0,
+    repairHandbacks: 0,
+    unavailable: 0,
+    measuredChecks: 0,
+    totalMs: 0,
+    setupMs: 0,
+    importMs: 0,
+    cleanupMs: 0,
+    changedFiles: 0,
+    kernelFiles: 0,
+    measuredSetup: 0,
+    measuredImport: 0,
+    measuredCleanup: 0,
+  };
   for (const event of ordered) {
-    if (event.stage !== 'landing' || event.action !== 'dev-transpile' || !event.detail) continue;
+    if (event.stage !== 'landing' || !event.detail) continue;
+    if (event.action !== 'dev-transpile' && event.action !== 'dev-kernel-import') continue;
     let detail: Record<string, unknown>;
     try {
       detail = JSON.parse(event.detail) as Record<string, unknown>;
     } catch {
       continue;
     }
-    if (detail.outcome === 'passed') transpile.successfulChecks++;
-    else if (detail.outcome === 'repair-handback') transpile.repairHandbacks++;
-    else if (detail.outcome === 'unavailable') transpile.unavailable++;
+    const target = event.action === 'dev-kernel-import' ? kernelImport : transpile;
+    if (detail.outcome === 'passed') target.successfulChecks++;
+    else if (detail.outcome === 'repair-handback') target.repairHandbacks++;
+    else if (detail.outcome === 'unavailable') target.unavailable++;
     if (typeof detail.elapsedMs === 'number' && Number.isFinite(detail.elapsedMs)) {
-      transpile.measuredChecks++;
-      transpile.totalMs += detail.elapsedMs;
+      target.measuredChecks++;
+      target.totalMs += detail.elapsedMs;
     }
-    if (typeof detail.changedFileCount === 'number') transpile.changedFiles += detail.changedFileCount;
-    if (typeof detail.typescriptFileCount === 'number') transpile.typescriptFiles += detail.typescriptFileCount;
+    if (event.action === 'dev-transpile') {
+      if (typeof detail.changedFileCount === 'number') transpile.changedFiles += detail.changedFileCount;
+      if (typeof detail.typescriptFileCount === 'number') transpile.typescriptFiles += detail.typescriptFileCount;
+    } else {
+      if (typeof detail.setupMs === 'number' && Number.isFinite(detail.setupMs)) {
+        kernelImport.measuredSetup++;
+        kernelImport.setupMs += detail.setupMs;
+      }
+      if (typeof detail.importMs === 'number' && Number.isFinite(detail.importMs)) {
+        kernelImport.measuredImport++;
+        kernelImport.importMs += detail.importMs;
+      }
+      if (typeof detail.cleanupMs === 'number' && Number.isFinite(detail.cleanupMs)) {
+        kernelImport.measuredCleanup++;
+        kernelImport.cleanupMs += detail.cleanupMs;
+      }
+      if (typeof detail.changedFileCount === 'number') kernelImport.changedFiles += detail.changedFileCount;
+      if (typeof detail.kernelFileCount === 'number') kernelImport.kernelFiles += detail.kernelFileCount;
+    }
   }
   const goals = [...new Set(tasks.map((t) => t.brief.goal))].map((goal) => {
     const members = tasks.filter((t) => t.brief.goal === goal);
@@ -564,6 +598,18 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     devTranspile: {
       ...transpile,
       totalMs: transpile.measuredChecks ? transpile.totalMs : null,
+    },
+    devKernelImport: {
+      successfulChecks: kernelImport.successfulChecks,
+      repairHandbacks: kernelImport.repairHandbacks,
+      unavailable: kernelImport.unavailable,
+      measuredChecks: kernelImport.measuredChecks,
+      totalMs: kernelImport.measuredChecks ? kernelImport.totalMs : null,
+      setupMs: kernelImport.measuredSetup ? kernelImport.setupMs : null,
+      importMs: kernelImport.measuredImport ? kernelImport.importMs : null,
+      cleanupMs: kernelImport.measuredCleanup ? kernelImport.cleanupMs : null,
+      changedFiles: kernelImport.changedFiles,
+      kernelFiles: kernelImport.kernelFiles,
     },
   };
 }
