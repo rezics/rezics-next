@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { managementOperationProfile } from '@rezics/auth-contract';
 import {
   clearPendingRenameReviewStepUp,
@@ -177,17 +177,12 @@ test('excess raw text never reaches JSON.parse; all refused bytes survive writes
   const selected = createRenameAttempt({ accountId, handle: null }, 'after')!;
   for (const raw of [' '.repeat(maxRaw + 1), '{', 'null', JSON.stringify({ ...selected, extra: true })]) {
     storage.set(renameKey, raw);
-    const parse = JSON.parse;
-    let parses = 0;
-    JSON.parse = (...args: Parameters<typeof JSON.parse>) => {
-      parses++;
-      return parse(...args);
-    };
+    const parse = spyOn(JSON, 'parse');
     try {
       expect(readRenameContinuationState()).toEqual({ kind: 'refused' });
-      if (raw.length > maxRaw) expect(parses).toBe(0);
+      if (raw.length > maxRaw) expect(parse).not.toHaveBeenCalled();
     } finally {
-      JSON.parse = parse;
+      parse.mockRestore();
     }
     expect(saveRenameContinuation(selected)).toBe(false);
     clearRenameContinuation();

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import {
@@ -314,13 +314,8 @@ for (const phase of ['mount', 'read', 'submit', 'edit', 'step-up'] as const)
     else if (phase !== 'read') saveRenameContinuation(selected);
     let runs = 0,
       navigations = 0,
-      reads = 0,
-      keys = 0;
-    const originalRandom = crypto.getRandomValues;
-    crypto.getRandomValues = ((array) => {
-      keys++;
-      return originalRandom.call(crypto, array);
-    }) as typeof crypto.getRandomValues;
+      reads = 0;
+    const keys = spyOn(crypto, 'getRandomValues');
     try {
       const host = await mount(
         source({
@@ -357,14 +352,14 @@ for (const phase of ['mount', 'read', 'submit', 'edit', 'step-up'] as const)
       expect(reads).toBe(2);
       expect(runs).toBe(phase === 'step-up' ? 1 : 0);
       expect(navigations).toBe(0);
-      expect(keys).toBe(0);
+      expect(keys).not.toHaveBeenCalled();
       expect(host.querySelector('form')).toBeNull();
       expect(host.textContent).toContain(m.auth_rename_unavailable());
       expect(host.textContent).not.toContain('private_');
       await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
       expect(window.sessionStorage.getItem(key)).toBe(raw);
     } finally {
-      crypto.getRandomValues = originalRandom;
+      keys.mockRestore();
     }
   });
 
