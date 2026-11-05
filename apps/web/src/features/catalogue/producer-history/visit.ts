@@ -44,10 +44,7 @@ function outerSearchFits(url: URL): boolean {
 }
 
 /** Validate a single public Organization return without retaining a nested trail or reader payload. */
-export function producerHistoryVisitReturn(
-  value: unknown,
-  address: ProducerHistoryAddress,
-): string | undefined {
+export function producerHistoryVisitReturn(value: unknown, address: ProducerHistoryAddress): string | undefined {
   if (typeof value !== 'string' || !withinLimit(value)) return;
   const accepted = subjectVisitReturn(value, address.locale);
   if (!accepted || !withinLimit(accepted)) return;
@@ -126,9 +123,7 @@ export function producerHistoryEntryVisit({
   const source = currentMatches ? current! : new URL(fallbackHref, origin);
   const selection = currentMatches ? organizationHistoryVisitReturn(source.hash) : undefined;
   const preserveSelection =
-    selection?.locale === locale &&
-    same(selection.context, context) &&
-    same(selection.realm ?? null, realm);
+    selection?.locale === locale && same(selection.context, context) && same(selection.realm ?? null, realm);
   const buildReturn = (keepSelection: boolean, useFallbackPath = false) => {
     const result = new URL(useFallbackPath ? fallbackHref : source.pathname, origin);
     if (context) result.searchParams.set('context', context);

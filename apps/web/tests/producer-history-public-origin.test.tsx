@@ -69,21 +69,14 @@ test('public Organization entry preserves Context and current return, refuses un
   const { act, createElement: h } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const {
-    createMemoryHistory,
-    createRootRouteWithContext,
-    createRoute,
-    createRouter,
-    Outlet,
-    RouterProvider,
-  } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRouteWithContext, createRoute, createRouter, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
   const { ProducerHistoryEntry } = await import('../src/features/catalogue/producer-history/entry');
   const { Route: ProducerRoute } = await import('../src/routes/subjects/$id_.$slug.producer');
   const { setLocale } = await import('../src/paraglide/runtime.js');
   const { browserObservation } = await import('../src/session/observation');
-  const { producerHistoryEntryVisit, producerHistoryVisitReturn } = await import(
-    '../src/features/catalogue/producer-history/visit'
-  );
+  const { producerHistoryEntryVisit, producerHistoryVisitReturn } =
+    await import('../src/features/catalogue/producer-history/visit');
   const messages = await import('../src/paraglide/messages.js');
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   queryClient.setQueryData(['session'], { state: 'signed-in', subject: 'origin-reader', csrfToken: 'csrf-origin' });
@@ -119,9 +112,7 @@ test('public Organization entry preserves Context and current return, refuses un
     head: () => ({}),
   } as never);
   const history = createMemoryHistory({
-    initialEntries: [
-      `/${locale}/subjects/${producerStudioId}/paper-lantern-studio?context=${globalContext}`,
-    ],
+    initialEntries: [`/${locale}/subjects/${producerStudioId}/paper-lantern-studio?context=${globalContext}`],
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([localeRoute.addChildren([OriginRoute, ProducerRoute])]),
@@ -147,9 +138,7 @@ test('public Organization entry preserves Context and current return, refuses un
   try {
     await act(async () => {
       await router.load();
-      root.render(
-        h(QueryClientProvider, { client: queryClient }, h(RouterProvider, { router })),
-      );
+      root.render(h(QueryClientProvider, { client: queryClient }, h(RouterProvider, { router })));
       await tick();
     });
 
@@ -172,9 +161,7 @@ test('public Organization entry preserves Context and current return, refuses un
     const pageReturn = link(messages.m.producer_history_back());
     expect(pageReturn.getAttribute('href')).toBe(admittedReturn);
 
-    await navigate(
-      `/${locale}/subjects/${producerStudioId}/paper-lantern-studio?context=${unsupportedContext}`,
-    );
+    await navigate(`/${locale}/subjects/${producerStudioId}/paper-lantern-studio?context=${unsupportedContext}`);
     const unsupportedEntry = link(messages.m.producer_history_title());
     const unsupportedHref = new URL(unsupportedEntry.getAttribute('href')!, 'https://site.test');
     expect(unsupportedHref.searchParams.get('context')).toBe(unsupportedContext);
@@ -208,7 +195,10 @@ test('public Organization entry preserves Context and current return, refuses un
     );
     expect(host.textContent).toContain(messages.m.producer_history_context_unavailable());
     expect(producerReads.length).toBe(3);
-    const realmGlobal = new URL(link(messages.m.producer_history_global_visit()).getAttribute('href')!, 'https://site.test');
+    const realmGlobal = new URL(
+      link(messages.m.producer_history_global_visit()).getAttribute('href')!,
+      'https://site.test',
+    );
     expect(realmGlobal.searchParams.has('context')).toBe(false);
     expect(realmGlobal.searchParams.has('realm')).toBe(false);
     expect(realmGlobal.searchParams.get('via')).toBe(realmReturn);

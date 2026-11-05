@@ -31,9 +31,7 @@ function ProducerHistoryRoute() {
   const { id } = Route.useParams();
   const { context, realm, via: requestedVia } = Route.useSearch();
   const locale = getLocale();
-  const via = requestedVia
-    ? producerHistoryVisitReturn(requestedVia, { id, locale, context, realm })
-    : undefined;
+  const via = requestedVia ? producerHistoryVisitReturn(requestedVia, { id, locale, context, realm }) : undefined;
   if (requestedVia && !via) throw notFound();
   return (
     <ProducerHistorySession

@@ -4,16 +4,14 @@ import { m } from '../../../paraglide/messages.js';
 import { catalogueEntries } from '../catalogue-entry';
 import { producerHistoryEntryVisit } from './visit';
 
-export function ProducerHistoryEntry(
-  address: {
-    id: string;
-    label?: string;
-    locale: string;
-    context: string;
-    realm?: string | undefined;
-    currentHref?: string | undefined;
-  },
-) {
+export function ProducerHistoryEntry(address: {
+  id: string;
+  label?: string;
+  locale: string;
+  context: string;
+  realm?: string | undefined;
+  currentHref?: string | undefined;
+}) {
   const entry = catalogueEntries.producerHistory(address);
   const visit = producerHistoryEntryVisit({
     href: entry.href,

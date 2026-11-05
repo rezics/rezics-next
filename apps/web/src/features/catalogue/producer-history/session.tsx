@@ -27,9 +27,7 @@ export function ProducerHistoryOriginChoice({
 }) {
   const overview = subjectHref({ id, label: '' }, locale).href;
   const global = catalogueEntries.producerHistory({ id, locale });
-  const globalHref = returnTo
-    ? withProducerHistoryReturn(global.href, returnTo, { id, locale })
-    : global.href;
+  const globalHref = returnTo ? withProducerHistoryReturn(global.href, returnTo, { id, locale }) : global.href;
   if (!globalHref) throw new Error('Expected the admitted Organization return to fit a Global producer visit');
   return (
     <section className="space-y-3" aria-label={m.producer_history_title()}>
