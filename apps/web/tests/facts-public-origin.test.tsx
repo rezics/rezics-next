@@ -204,6 +204,7 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     expect(
       visitValidator({ reviewProperty: 'schema:abstract', candidate: addonWorkId, context: addonWorkId, returnTo: 'queue' }),
     ).toMatchObject({ reviewProperty: 'schema:abstract', candidate: addonWorkId, context: addonWorkId, returnTo: 'queue' });
+    expect(visitValidator({ origin: 'untrusted-raw-origin' })).toMatchObject({ origin: 'untrusted-raw-origin' });
     const changesReview = visitValidator({
       reviewProperty: 'schema:abstract',
       candidate: addonWorkId,
@@ -238,6 +239,7 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     expect(fresh).toBeTruthy();
     expect(parseFactsPublicVisit(new URL(fresh!, 'https://site.test').search, addonProfileId, 'en', base).kind).toBe('fresh');
     await navigate(fresh!);
+    expect(router.state.location.searchStr).toBe(new URL(fresh!, 'https://site.test').search);
     await waitFor(() => expect(correctionReads.length).toBeGreaterThan(0));
     expect(host.textContent).toContain(m.facts_public_fresh_notice());
     expect(host.querySelector('input,select')).not.toBeNull();
