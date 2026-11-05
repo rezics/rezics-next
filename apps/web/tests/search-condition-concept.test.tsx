@@ -371,7 +371,7 @@ describe('Search Concept conditions', () => {
       const input = host.querySelector<HTMLInputElement>('input')!;
       expect(input.id).toBeTruthy();
       expect(host.querySelector(`label[for="${input.id}"]`)).toBeTruthy();
-      expect(host.ownerDocument.activeElement).toBe(input);
+      expect(host.ownerDocument.activeElement === input).toBe(true);
       await changeInput(host, 'drama');
       await settle(host);
       expect(queryReads).toBe(1);
@@ -381,7 +381,7 @@ describe('Search Concept conditions', () => {
       expect(queryReads).toBe(2);
       expect(input.value).toBe('drama');
       expect(host.querySelector('ul')?.id).toBeTruthy();
-      expect(host.ownerDocument.activeElement).toBe(host.querySelector('ul'));
+      expect(host.ownerDocument.activeElement === host.querySelector('ul')).toBe(true);
 
       const composingEnter = new (host.ownerDocument.defaultView!.KeyboardEvent)('keydown', {
         key: 'Enter',
@@ -409,7 +409,7 @@ describe('Search Concept conditions', () => {
       expect(referenceReads).toBe(2);
       expect(input.value).toBe('drama');
       expect(host.querySelector('button[aria-pressed="true"]')?.textContent).toContain(conceptId);
-      expect(host.ownerDocument.activeElement).toBe(scheme);
+      expect(host.ownerDocument.activeElement === scheme).toBe(true);
       expect(apply.disabled).toBe(true);
       expect(host.querySelector(`label[for="${scheme!.id}"]`)).toBeTruthy();
       expect(host.querySelector(`label[for="${match!.id}"]`)).toBeTruthy();
@@ -427,7 +427,7 @@ describe('Search Concept conditions', () => {
       });
       expect(parseFilter(applied!)).toEqual(applied);
       expect(submissions).toBe(0);
-      expect(host.ownerDocument.activeElement).toBe(controlButton(host, 'Edit Concept'));
+      expect(host.ownerDocument.activeElement === controlButton(host, 'Edit Concept')).toBe(true);
     });
   });
 
@@ -478,7 +478,7 @@ describe('Search Concept conditions', () => {
       );
       await settle(host);
       const [scheme] = Array.from(host.querySelectorAll('select'));
-      expect(host.ownerDocument.activeElement).toBe(scheme);
+      expect(host.ownerDocument.activeElement === scheme).toBe(true);
       await changeSelect(host, scheme!, schemeId);
       expect(controlButton(host, 'Apply Concept filter').disabled).toBe(false);
 
@@ -486,7 +486,7 @@ describe('Search Concept conditions', () => {
       await settle(host);
       expect(host.textContent).not.toContain('Concept labels are unavailable');
       expect(controlButton(host, 'Apply Concept filter').disabled).toBe(false);
-      expect(host.ownerDocument.activeElement).toBe(scheme);
+      expect(host.ownerDocument.activeElement === scheme).toBe(true);
       await clickButton(host, 'Apply Concept filter');
       expect(applied).toMatchObject({
         statement: { in: [conceptId], concept: { scheme: schemeId, includeChildren: true } },
