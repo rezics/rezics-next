@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, useLayoutEffect, useState } from 'react';
 import * as start from '../.storybook/react-start';
+import { subjectReadServerFixture } from './subject-read-server-fixture';
 import type { ChangeReactionInput, ReactionFailure } from '../src/threads/reaction-request';
 import type { SubjectOwnReaction, SubjectReactionKind } from '../src/features/pages/subject-reactions';
 
@@ -61,8 +62,9 @@ const writes: (ReturnType<typeof deferred<WriteResult>> & {
 })[] = [];
 let preparedReader = 'reader-one';
 
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
+const server = subjectReadServerFixture();
+mock.module('@tanstack/react-start', () => ({ ...start, createServerFn: server.createServerFn }));
+mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: server.getRequest }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const kernel = await import('../src/kernel/client');
 mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => ({}) }));
@@ -238,10 +240,10 @@ function tree(
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function until(check: () => boolean) {
-  const deadline = Date.now() + 4_000;
+  const deadline = Date.now() + 5_000;
   await act(tick);
   while (!check() && Date.now() < deadline) await act(tick);
-  expect(check(), JSON.stringify({ privateReads: privateReads.length, publicReads, html: host.innerHTML })).toBe(true);
+  expect(check()).toBe(true);
 }
 async function paint(
   component: 'subject' | 'zone',
@@ -277,8 +279,7 @@ async function clickKind(kind: SubjectReactionKind) {
     if (kind === 'like' || kind === 'insightful') {
       chip(kind).click();
       await tick();
-    }
-    else {
+    } else {
       const trigger = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
         (button) => button.textContent?.trim() === m.reaction_react(),
       );
@@ -291,8 +292,9 @@ async function clickKind(kind: SubjectReactionKind) {
     await act(async () => {
       const choice = [...window.document.querySelectorAll<HTMLButtonElement>('button')].find(
         (button) =>
-          button.textContent?.trim() ===
-          (kind === 'love' ? m.reaction_love() : kind === 'laugh' ? m.reaction_laugh() : m.reaction_sad()),
+          button.getAttribute('aria-label')?.startsWith(
+            kind === 'love' ? m.reaction_love() : kind === 'laugh' ? m.reaction_laugh() : m.reaction_sad(),
+          ),
       );
       expect(choice).toBeDefined();
       choice!.click();

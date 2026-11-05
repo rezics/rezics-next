@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'bun:test';
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { subjectReadServerFixture } from './subject-read-server-fixture';
 import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
@@ -11,9 +11,9 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-const requests = new AsyncLocalStorage<Request>();
+const server = subjectReadServerFixture();
 const calls: { signal: AbortSignal; path: string }[] = [];
-const serverSignals: AbortSignal[] = [];
+const serverSignals = server.signals;
 let preparation = Promise.resolve();
 let response = Promise.resolve();
 let ownReactionUnavailable = false;
@@ -37,29 +37,8 @@ mock.module('../src/session/request', () => ({
   sessionSubject: () => 'reader',
   viewerCredential: () => 'Bearer token',
 }));
-mock.module('@tanstack/react-start', () => ({
-  ...start,
-  createServerFn: () => {
-    let validate = (input: unknown) => input;
-    const chain = {
-      validator(next: typeof validate) {
-        validate = next;
-        return chain;
-      },
-      handler(handler: (input: { data: unknown }) => unknown) {
-        return (input: { data: unknown; signal: AbortSignal }) => {
-          const request = new Request('https://site.test/subject', {
-            signal: input.signal,
-          });
-          serverSignals.push(request.signal);
-          return requests.run(request, () => handler({ data: validate(input.data) }));
-        };
-      },
-    };
-    return chain;
-  },
-}));
-mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => requests.getStore()! }));
+mock.module('@tanstack/react-start', () => ({ ...start, createServerFn: server.createServerFn }));
+mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: server.getRequest }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const kernel = await import('../src/kernel/client');
 mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => native }));
