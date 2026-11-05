@@ -64,7 +64,7 @@ Book titles require schema:Book and exact {{Infobox animanga/Book}}; Novel, Mang
 
 Only type-4 {{Infobox Game}} supplies fields. Scalar 中文名→zh; scalar or single-level bullet 别名→und. Platforms/engines need exact current Concept bindings. Scalar 游戏类型 stays one exact, unsplit, untranslated literal; only the exact Concept in https://rezics.com/schemes/bangumi/genres after current public verification binds. Per Game: ≤16 genre occurrences/omissions; each literal ≤200 chars/1,024 UTF-8 bytes. Player count accepts only a complete positive integer/range. 发行日期 accepts one unqualified strict Gregorian YYYY, YYYY-MM or YYYY-MM-DD for schema:datePublished; type-4 top-level, qualified, duplicate, malformed and unsupported dates omit. Preserve precision and exact subject citation. Game website→schema:url; 链接→descriptive wdt:P973; keep exact URL bytes including query/fragment and keep the fields separate even when equal. Unsafe schemes, credentials, controls, labels and mixed structures omit independently. Shared parser: ≤64 fields/65,536 bytes; projection: ≤16 website/link candidates, each selected field ≤4,096 bytes, bounded omissions. Names, date, genres, environment, player count, websites and cast remain independent.
 
-The Game destination revision preserves the previously reviewed bangumi@14 source-genre and publication-date mappings within the actual current bangumi@15 export. This states the reviewed mapping history without assigning a new revision.
+Current bangumi@15 retains reviewed bangumi@14 Game source-genre and publication-date mappings; this is history, not a revision advance.
 
 ### Bangumi creator and voice credits
 
