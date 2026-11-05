@@ -246,8 +246,24 @@ export function ReporterHistoryPage({
       {result.state === 'retired' ? <p role="status">{m.reporter_history_denied()}</p> : null}
       {result.state === 'loaded' && result.page.state === 'ready' ? (
         <nav aria-label={m.reporter_history_heading()} className="flex flex-wrap gap-3">
-          {onPrevious ? <button type="button" className="min-h-11 rounded-md border px-4 font-medium" onClick={() => void onPrevious()}>{m.library_collections_previous()}</button> : null}
-          {onFirst ? <button type="button" className="min-h-11 rounded-md border px-4 font-medium" onClick={() => void onFirst()}>{m.library_collections_first_page()}</button> : null}
+          {onPrevious ? (
+            <button
+              type="button"
+              className="min-h-11 rounded-md border px-4 font-medium"
+              onClick={() => void onPrevious()}
+            >
+              {m.library_collections_previous()}
+            </button>
+          ) : null}
+          {onFirst ? (
+            <button
+              type="button"
+              className="min-h-11 rounded-md border px-4 font-medium"
+              onClick={() => void onFirst()}
+            >
+              {m.library_collections_first_page()}
+            </button>
+          ) : null}
         </nav>
       ) : null}
       {result.state === 'loaded' ? (

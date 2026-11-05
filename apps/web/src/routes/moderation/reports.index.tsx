@@ -58,8 +58,12 @@ function ReporterHistoryRoute() {
   if (coordinates.bind(router)) {
     router.subscribe('onBeforeNavigate', ({ toLocation }) => {
       if (!coordinates.isRouter(router)) return;
-      coordinates.navigating(toLocation.pathname, toLocation.pathname.replace(/\/$/, '') === '/moderation/reports'
-        ? reporterHistoryQuery(toLocation.search) : null);
+      coordinates.navigating(
+        toLocation.pathname,
+        toLocation.pathname.replace(/\/$/, '') === '/moderation/reports'
+          ? reporterHistoryQuery(toLocation.search)
+          : null,
+      );
     });
   }
   const navigationKey = location.state.__TSR_key ?? location.href;

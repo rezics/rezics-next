@@ -8,7 +8,12 @@ import {
 } from '../private-reader-lifetime';
 import { reporterHistoryQuery, type ReporterHistoryQuery } from './model';
 import type { ReporterHistoryResult } from './read';
-import { createHistoryCoordinates, routeHistoryCoordinates, type HistoryCoordinates, type Movement } from './coordinates';
+import {
+  createHistoryCoordinates,
+  routeHistoryCoordinates,
+  type HistoryCoordinates,
+  type Movement,
+} from './coordinates';
 
 export type ReporterHistoryRead = PrivateReaderRead & { result: ReporterHistoryResult };
 export type ReporterHistoryReader = (query: ReporterHistoryQuery) => Promise<ReporterHistoryRead>;
@@ -216,10 +221,16 @@ export function createReporterHistoryJourney(
       return snapshot().state === 'loaded' && target ? request(target, 'previous') : Promise.resolve();
     },
     hasPrevious: () => coordinates.previous() !== undefined,
-    first: () => snapshot().state === 'loaded'
-      ? request(query.reportId === undefined ? {} : { reportId: query.reportId }, 'first') : Promise.resolve(),
-    select: (reportId: string) => (snapshot().state === 'loaded'
-      ? reportId === query.reportId ? Promise.resolve() : request({ reportId }, 'selection') : Promise.resolve()),
+    first: () =>
+      snapshot().state === 'loaded'
+        ? request(query.reportId === undefined ? {} : { reportId: query.reportId }, 'first')
+        : Promise.resolve(),
+    select: (reportId: string) =>
+      snapshot().state === 'loaded'
+        ? reportId === query.reportId
+          ? Promise.resolve()
+          : request({ reportId }, 'selection')
+        : Promise.resolve(),
     // Restart is explicit and also drops the selected ID bound into the expired cursor.
     restart: () => (snapshot().state === 'expired' ? request({}, 'restart') : Promise.resolve()),
   };

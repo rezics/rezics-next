@@ -81,7 +81,8 @@ test('served operands, exact own status and recovery form one fresh private rout
           state: capturedMode,
           selectedReportId: capturedMode === 'ready' && query.reportId === id ? id : null,
           retry: { cursor: query.cursor ?? null },
-          nextCursor: capturedMode === 'preparing' || query.cursor === third ? null : query.cursor === cursor ? third : cursor,
+          nextCursor:
+            capturedMode === 'preparing' || query.cursor === third ? null : query.cursor === cursor ? third : cursor,
           viewer: { kind: 'reporter' },
           entries:
             capturedMode === 'preparing'

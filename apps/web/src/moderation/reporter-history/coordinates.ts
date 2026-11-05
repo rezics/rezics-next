@@ -20,14 +20,17 @@ export function createHistoryCoordinates() {
   };
   return {
     clear,
-    claim: (identity: symbol) => { owner = identity; },
-    retire: (identity: symbol) => { if (owner === identity) clear(); },
+    claim: (identity: symbol) => {
+      owner = identity;
+    },
+    retire: (identity: symbol) => {
+      if (owner === identity) clear();
+    },
     previous: () => predecessors.at(-1),
     stage(query: ReporterHistoryQuery, movement: Movement) {
       staged = { query: { ...query }, movement, id: Symbol() };
     },
-    capture: (query: ReporterHistoryQuery) =>
-      staged && sameCoordinate(staged.query, query) ? staged.id : undefined,
+    capture: (query: ReporterHistoryQuery) => (staged && sameCoordinate(staged.query, query) ? staged.id : undefined),
     acceptsAddress: (query: ReporterHistoryQuery) =>
       !!((staged && sameCoordinate(staged.query, query)) || (current && sameCoordinate(current, query))),
     admit(query: ReporterHistoryQuery, ticket?: symbol) {
@@ -67,7 +70,8 @@ function createRouteCoordinates(cache: QueryClient) {
   browser.subscribeCache((event) => {
     const next = browser.getSnapshot();
     const admission = event.query.queryKey[0] === 'exposure' && event.query.queryKey[1] === 'viewer';
-    const replaced = event.type === 'removed' ||
+    const replaced =
+      event.type === 'removed' ||
       (event.type === 'updated' && ['success', 'error', 'setState'].includes(event.action.type));
     if (next !== observation || (admission && replaced)) clear();
     observation = next;
@@ -75,7 +79,9 @@ function createRouteCoordinates(cache: QueryClient) {
   observation = browser.getSnapshot();
   return {
     ...coordinates,
-    cancelFocus: (cancel: () => void) => { cancelFocus = cancel; },
+    cancelFocus: (cancel: () => void) => {
+      cancelFocus = cancel;
+    },
     isRouter: (candidate: object) => router === candidate,
     clear,
     eligible(nextLocale: string, nextSource?: string) {
@@ -89,17 +95,32 @@ function createRouteCoordinates(cache: QueryClient) {
       router = nextRouter;
       return true;
     },
-    status(reportId: string) { status = reportId; },
+    status(reportId: string) {
+      status = reportId;
+    },
     navigating(path: string, query: ReporterHistoryQuery | null) {
-      if (status && path === `/moderation/reports/${status}`) { status = undefined; returning = true; return; }
-      if (path.replace(/\/$/, '') === '/moderation/reports' && query &&
-          (coordinates.capture(query) || (returning && coordinates.acceptsAddress(query)))) { returning = false; return; }
+      if (status && path === `/moderation/reports/${status}`) {
+        status = undefined;
+        returning = true;
+        return;
+      }
+      if (
+        path.replace(/\/$/, '') === '/moderation/reports' &&
+        query &&
+        (coordinates.capture(query) || (returning && coordinates.acceptsAddress(query)))
+      ) {
+        returning = false;
+        return;
+      }
       clear();
     },
   };
 }
 export function routeHistoryCoordinates(cache: QueryClient) {
   let visit = visits.get(cache);
-  if (!visit) { visit = createRouteCoordinates(cache); visits.set(cache, visit); }
+  if (!visit) {
+    visit = createRouteCoordinates(cache);
+    visits.set(cache, visit);
+  }
   return visit;
 }

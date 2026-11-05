@@ -149,7 +149,6 @@ navigation replacement retire the visit.
 
 Decision: a missing configured native origin remains unavailable, including development; never present fixture data as a delivered inventory.
 
-
 Decision: My reports retains up to eight admitted predecessor coordinates, current and one staged target per eligible
 Router/QueryClient visit. Coordinates contain only opaque cursor and report selection operands; there is no cursor
 length or response-byte bound. Previous rereads exact operands; First preserves selection, while changed selection
