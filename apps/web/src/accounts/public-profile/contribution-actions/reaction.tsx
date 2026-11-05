@@ -50,7 +50,7 @@ export function ContributionReaction({
   if (ready && !admitted) setAdmitted(true);
   const retaining = (ready || admitted) && isCurrent() && !!lease && lease.current();
   // The mounted aggregate may advance while the original native command is unresolved.
-  const [originalWatermark] = useState(watermark);
+  const [discardedVisit, setDiscardedVisit] = useState(0);
   return (
     <ContributionAdvicePresentation
       state={state === 'available' && !ready ? 'unavailable' : state}
@@ -61,6 +61,8 @@ export function ContributionReaction({
     >
       {retaining && reference && lease ? (
         <ThreadReactions
+          key={discardedVisit}
+          onDiscard={() => setDiscardedVisit((value) => value + 1)}
           target={{ kind, id: reference.id }}
           counts={counts}
           value={value}
@@ -77,7 +79,7 @@ export function ContributionReaction({
             reader,
             isCurrent: () => isCurrent() && lease.current(),
           }}
-          {...originalWatermark}
+          {...watermark}
           {...(refreshAdvice ? { onMutation: refreshAdvice } : {})}
           {...(preparedTransport ? { preparedTransport } : {})}
         />
