@@ -26,6 +26,7 @@ import {
   confirmAuthoredField,
 } from './authored-field-actions';
 import type { LiteraryCommand } from './literary-profile';
+import type { LiteraryCurrentVisit } from './literary-current-visit';
 
 function LiteraryAuthored({ id, locale }: { id: string; locale: string }) {
   const editorWork = useCatalogueLifetime('transport');
@@ -93,12 +94,12 @@ function LiteraryProfileSessionLive({
   id,
   locale,
   address,
-  expectedType,
+  visit,
 }: {
   id?: string | undefined;
   locale: string;
   address?: string | undefined;
-  expectedType?: string | undefined;
+  visit?: LiteraryCurrentVisit | undefined;
 }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
@@ -107,9 +108,19 @@ function LiteraryProfileSessionLive({
       id={id}
       locale={locale}
       address={address}
+      visit={visit}
       session={state}
       transport={{
-        load: () => loadLiteraryProfile({ data: expectedType && id ? { id, type: expectedType } : id }),
+        load: () => {
+          if (!id) return loadLiteraryProfile({ data: id });
+          return loadLiteraryProfile({
+            data: {
+              id,
+              ...(visit ? { type: visit.type, context: visit.context } : {}),
+              ...(editorWork.live() ? { expectedReader: editorWork.reader } : {}),
+            },
+          });
+        },
         eligibility: () => readCatalogueCreateEligibility(),
         submit: (command) =>
           createCatalogueLiteraryWork({
@@ -163,7 +174,7 @@ function LiteraryProfileVisit({
         id={id}
         locale={locale}
         address={address}
-        expectedType={visit.kind === 'visit' ? visit.visit.type : undefined}
+        visit={visit.kind === 'visit' ? visit.visit : undefined}
       />
     </LiteraryCurrentVisitAdmission>
   );

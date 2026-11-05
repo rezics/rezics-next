@@ -16,23 +16,39 @@ import type { CreateResult } from './create-subject';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const loadLiteraryProfile = createServerFn({ method: 'GET', strict: false })
-  .validator((input?: string | { id: string; type: string }) => {
+  .validator((input?: string | { id: string; type?: string; context?: string; expectedReader?: string }) => {
+    if (input !== undefined && typeof input !== 'string' && (!input || typeof input !== 'object' || Array.isArray(input)))
+      throw new Error('Invalid work admission');
     const id = typeof input === 'object' && input ? input.id : input;
     if (id !== undefined && (typeof id !== 'string' || !uuid.test(id))) throw new Error('Invalid work identity');
     if (
       typeof input === 'object' &&
       (!input ||
         !uuid.test(input.id) ||
-        Object.keys(input).some((key) => !['id', 'type'].includes(key)) ||
-        !isLiteraryType(input.type))
+        Object.keys(input).some((key) => !['id', 'type', 'context', 'expectedReader'].includes(key)) ||
+        (input.type !== undefined && !isLiteraryType(input.type)) ||
+        (input.context !== undefined && !uuid.test(input.context)) ||
+        (input.expectedReader !== undefined && !uuid.test(input.expectedReader)))
     )
-      throw new Error('Invalid work type');
+      throw new Error('Invalid work admission');
     return input;
   })
   .handler(async ({ data }): Promise<LiteraryRead> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const result = await readLiteraryProfile(kernelClient(), typeof data === 'object' ? data.id : data);
-    if (typeof data === 'object' && result.ok && result.current?.public.subject.type !== data.type)
+    const expectedReader = typeof data === 'object' ? data.expectedReader : undefined;
+    const authorization = expectedReader ? await candidateAuthorization(expectedReader) : undefined;
+    if (expectedReader && !authorization) return { ok: false, reason: 'denied' };
+    const result = await readLiteraryProfile(
+      kernelClient(),
+      typeof data === 'object' ? data.id : data,
+      authorization,
+    );
+    if (
+      typeof data === 'object' &&
+      result.ok &&
+      ((data.type !== undefined && result.current?.public.subject.type !== data.type) ||
+        (data.context !== undefined && result.current?.public.subject.context !== data.context))
+    )
       return { ok: false, reason: 'stale' };
     return result;
   });

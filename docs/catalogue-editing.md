@@ -967,8 +967,7 @@ Duplicate, unknown, unsupported or contradictory fields invalidate the whole des
 missing, refused and unavailable reads. Direct addresses retain ordinary Global correction and creation is unchanged.
 Fresh profile admission compares a supplied Type with the current native Type. The existing native correction,
 relation and authored read windows and related-summary caps are unchanged; the descriptor adds zero native reads.
-Exact authored assertion inspection and completed fresh public return/focus are not yet supplied by this admission
-slice. The retained address promises navigation intent only, never current assertion identity or completed receiving.
+Decision: Literary correction inspects one exact current authored statement by its native statement ID after an authenticated fresh FactsTransport read; PartValue keeps each value and evidence part subject to its existing disclosure controls, and reveal state retires on caller, Context, release, reader or evidence change. The single validated literaryReturn source is a navigation-only link whose Subject route performs fresh public admission; no previous reading, upstream locator, or release/reader URL intent is stored.
 
 The current work groups identity/original names, bibliography/declared quantities, creator/series/classification
 relations and admitted original text. Bibliography reuses the multi-field editor and its independent results and
