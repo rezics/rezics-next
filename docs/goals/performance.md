@@ -30,7 +30,8 @@ data. Wall-clock thresholds alone do not prove asymptotic behavior.
 
 The assigned website work covers signed-in account Settings, notices, preferences, section navigation, safety, and
 the assigned Profile/Watches journeys through the existing real typed Web shell. M1 is the signed-in Settings
-Profile/Watches path. Do not enlarge production exposure or native/browser admission.
+Profile/Watches path. Product owners retain policy, database schema and SQL semantics, Source contracts and admission
+authority. Do not enlarge production exposure or native/browser admission.
 
 ## Ownership
 
