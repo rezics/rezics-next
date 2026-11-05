@@ -52,9 +52,7 @@ export function selectTestFiles(cwd: string, argv: string[]): string[] {
   if (patterns.length) {
     files = files.filter((file) =>
       patterns.some((pattern) => {
-        const resolved = (
-          isAbsolute(pattern) ? relative(cwd, pattern) : pattern
-        ).replaceAll('\\', '/');
+        const resolved = (isAbsolute(pattern) ? relative(cwd, pattern) : pattern).replaceAll('\\', '/');
         return file === resolved || file.endsWith(`/${resolved}`) || file.includes(pattern);
       }),
     );
