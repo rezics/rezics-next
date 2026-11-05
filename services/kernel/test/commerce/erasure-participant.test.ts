@@ -68,18 +68,24 @@ async function accepted(persona: Persona, path: string, body: unknown) {
   return value;
 }
 async function grant(subject: Persona, resource: { route: number; id: string }, actions: string[]) {
-  const deadline = Date.now() + 30_000;
-  const actor = await kernel.testAccess.authenticate(personas.staff.bearer, { pool, deadline });
-  await grants.create(
-    { pool, actor, deadline },
-    {
-      resource,
-      subject: { kind: 'account', id: subject.accountId },
-      actions,
-      valid: '(,)',
-      key: Bun.randomUUIDv7(),
-    },
-  );
+  for (const action of actions) {
+    const deadline = Date.now() + 30_000;
+    const actor = await kernel.testAccess.authenticate(personas.staff.bearer, { pool, deadline });
+    try {
+      await grants.create(
+        { pool, actor, deadline },
+        {
+          resource,
+          subject: { kind: 'account', id: subject.accountId },
+          actions: [action],
+          valid: '(,)',
+          key: Bun.randomUUIDv7(),
+        },
+      );
+    } catch (error) {
+      throw new Error(`Native fixture grant denied for ${action}`, { cause: error });
+    }
+  }
 }
 async function erase(persona: Persona) {
   const barrier = await deletePersona({ version: 1, pool, auth }, persona);
