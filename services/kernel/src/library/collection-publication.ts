@@ -39,7 +39,7 @@ import {
 } from './collection-rules.ts';
 import { readCollection } from './collection-store.ts';
 import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
-import { createCollectionSource, type WorkDimensions } from './collection-source.ts';
+import { createCollectionSource, type WorkAllowance, type WorkDimensions } from './collection-source.ts';
 import {
   appendCollectionSourceOutput,
   beginCollectionSourceOutput,
