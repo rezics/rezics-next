@@ -899,7 +899,7 @@ test('seen failure envelopes bound diagnostics, preserve non-204 uncertainty, an
   const store = inboxViewerStore(client);
   const unsubscribe = store.subscribe(() => {});
   try {
-    client.setQueryData(['session'], { state: 'signed-in', subject: 'alice' });
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'alice-token' });
     const alice = store.snapshot()!;
     const late = deferred<import('../src/inbox/inbox-read').InboxSeenResult>();
     let sends = 0;
@@ -911,7 +911,7 @@ test('seen failure envelopes bound diagnostics, preserve non-204 uncertainty, an
     const pending = markInboxViewerSeen(client, alice, attempt, 'alice-token', send).catch(
       (error: Error) => error.name,
     );
-    client.setQueryData(['session'], { state: 'signed-in', subject: 'bob' });
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'bob', csrfToken: 'bob-token' });
     const bob = store.snapshot()!;
     client.setQueryData(unreadCountQueryFor(bob).queryKey, {
       signedIn: true,
