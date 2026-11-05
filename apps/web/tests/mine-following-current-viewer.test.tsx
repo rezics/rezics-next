@@ -401,6 +401,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
       await tick();
     });
     expect(writes).toHaveLength(0);
+    await refetchFor('A', null); // Token rotation enrolls a new observation; retry only after a current list read.
+    const refreshedA = loaded('A', null, 'A refreshed title');
+    refreshedA.page.follows[0]!.idempotencyKey = initial.page.follows[0]!.idempotencyKey;
+    await settle(reads.at(-1)!, refreshedA);
     await remove();
     expect(writes).toHaveLength(1);
     const aRead = reads[0]!;
@@ -414,9 +418,9 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).not.toContain('A private title');
     expect(host.textContent).not.toContain(m.library_follow_reason_library());
     expect(host.querySelector('a[href*="A-canonical"]')).toBeNull();
-    expect(reads).toHaveLength(2); // B progresses while both A operations remain pending.
+    expect(reads).toHaveLength(3); // B progresses while both A operations remain pending.
     const b = loaded('B', null, 'B current title');
-    await settle(reads[1]!, b);
+    await settle(reads[2]!, b);
     expect(host.textContent).toContain('B current title');
     await remove();
     const rejected = writes.at(-1)!;
