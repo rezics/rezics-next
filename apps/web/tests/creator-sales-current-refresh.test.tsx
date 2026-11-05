@@ -585,7 +585,7 @@ test('a delayed move superseded at the same cursor retires its path before a fre
       await router.invalidate({ filter: (match) => match.routeId === salesRouteId });
     });
     await tick();
-    const replaced = router.state.matches.find((match) => match.routeId === salesRouteId)!.loaderData as {
+    const replaced = router.state.matches.at(-1)!.loaderData as {
       initial: CreatorSalesCurrentRead;
       loadId: string;
     };

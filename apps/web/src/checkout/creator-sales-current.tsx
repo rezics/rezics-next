@@ -48,14 +48,23 @@ export async function navigateCreatorSales(
   started: (locationKey: string) => void,
 ): Promise<CreatorSalesRouteAdmission | undefined> {
   const expectedUrl = new URL(href, 'https://creator-sales.invalid');
-  const expectedHref = `${expectedUrl.pathname}${expectedUrl.search}${expectedUrl.hash}`;
+  const expectedSearch = [...expectedUrl.searchParams];
   let locationKey: string | undefined;
   let loaded: CreatorSalesRouteAdmission | undefined;
   const stopStart = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
     const target = new URL(toLocation.href, 'https://creator-sales.invalid');
+    const targetSearch = [...target.searchParams];
+    const sameSearch =
+      targetSearch.length === expectedSearch.length &&
+      targetSearch.every(
+        ([key, value], index) =>
+          key === expectedSearch[index]?.[0] && value === expectedSearch[index]?.[1],
+      );
     if (
       locationKey === undefined &&
-      `${target.pathname}${target.search}${target.hash}` === expectedHref
+      target.pathname.replace(/\/$/, '') === expectedUrl.pathname.replace(/\/$/, '') &&
+      target.hash === expectedUrl.hash &&
+      sameSearch
     ) {
       locationKey = toLocation.key;
       started(locationKey);
