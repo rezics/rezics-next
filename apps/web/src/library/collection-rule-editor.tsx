@@ -724,22 +724,23 @@ function RuleForm({
         ? 'saved'
         : 'draft';
   const savedMeaning: RuleMeaning | undefined = useMemo(
-    () =>
-      base.state === 'ready'
-        ? (base.accepted ?? {
-            state:
-              choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest
-                ? 'ready'
-                : 'unavailable',
-            digest: base.rule.releaseDigest,
-            ...(choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest
-              ? {
-                  metadata: choices.release.metadata,
-                  profiles: choices.release.profiles,
-                }
-              : { profiles: [] }),
-          })
-        : undefined,
+    () => {
+      if (base.state !== 'ready') return undefined;
+      const matchingRelease =
+        choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest;
+      return (
+        base.accepted ?? {
+          state: matchingRelease ? 'ready' : 'unavailable',
+          digest: base.rule.releaseDigest,
+          ...(matchingRelease
+            ? {
+                ...(choices.release.metadata ? { metadata: choices.release.metadata } : {}),
+                profiles: choices.release.profiles,
+              }
+            : { profiles: [] }),
+        }
+      );
+    },
     [base, choices],
   );
   const reviewUsesSavedMeaning = filterMatchesSaved && base.state === 'ready' && !savedId;

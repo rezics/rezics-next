@@ -22,7 +22,7 @@ export type DynamicRuleReviewProps = {
   filter: FilterDocument;
   stage: RuleReviewStage;
   current: RuleReviewRelease;
-  accepted?: RuleReviewRelease;
+  accepted?: RuleReviewRelease | undefined;
   choices: RuleChoices;
   profiles?: readonly LibraryProfile[];
   profileState?: RuleReviewRelease['state'];
