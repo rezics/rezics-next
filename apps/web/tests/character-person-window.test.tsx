@@ -39,11 +39,14 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://search.test/en/search/characters' });
+window.scrollTo = () => undefined;
 const globals = {
   window,
   document: window.document,
+  Element: window.Element,
   HTMLElement: window.HTMLElement,
   Node: window.Node,
+  scrollTo: window.scrollTo,
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
