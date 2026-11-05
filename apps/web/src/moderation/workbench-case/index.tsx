@@ -1,12 +1,21 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
-import { useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { csrfHeaders } from '../../threads/composer';
-import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { actionOnReport } from '../actions';
 import { createReportsBulkAction, type ReportsBulkAction } from '../reports-bulk-action';
 import type { PrivateReportPage, Report, ReportReadInput, ReportTargetValue } from '../reports-read';
@@ -15,8 +24,10 @@ import type { ReportQueueAction } from '../reports-view-action';
 import { ReportReviewCard } from '../reports-view-card';
 import { createPrivateReaderLifetime } from '../private-reader-lifetime';
 import type { ReportNavigation } from '../reports-page';
-import { reportReviewNavigationContext } from '../reports-bulk-controls';
+import { reportReviewDepartureMessages, reportReviewNavigationContext } from '../reports-bulk-controls';
 import { workbenchCaseFromPage, workbenchCaseQueueHref, type WorkbenchCaseSearch } from './read-model';
+import { getLocale } from '../../paraglide/runtime.js';
+import { workbenchQueueWindowHistory } from '../workbench-queue/window-history';
 
 const nativeReportAction: ReportQueueAction = (data) => actionOnReport({ data, headers: csrfHeaders() });
 
@@ -25,12 +36,13 @@ export type WorkbenchCasePageProps = {
   reportId: string;
   input: ReportReadInput;
   search?: WorkbenchCaseSearch;
-  navigation?: ReportNavigation;
+  navigation?: ReportNavigation & { visitId?: string };
   active?: boolean;
   onAction?: ReportQueueAction;
   onRefresh?: () => Promise<void>;
   onRetry?: () => void;
   onRestart?: () => void;
+  onReturnQueue?: (href: string) => void;
 };
 
 type WorkbenchVisit = ReturnType<typeof createVisit>;
@@ -100,6 +112,7 @@ function createVisit(original: WorkbenchCasePageProps, client: QueryClient | und
 export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
   const client = useContext(QueryClientContext);
   const browserClient = typeof window !== 'undefined' ? client : undefined;
+  const windowHistory = useMemo(() => (browserClient ? workbenchQueueWindowHistory(browserClient) : undefined), [browserClient]);
   const visit = useRef<WorkbenchVisit | null>(null);
   const previous = visit.current;
   if (!previous || previous.page.generation !== props.page.generation) {
@@ -116,16 +129,48 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
     !reportPageIsCurrent(props.page, props.input)
   )
     current.retire();
-  useSyncExternalStore(
+  const readerVersion = useSyncExternalStore(
     current.subscribe,
     () => current.owner?.snapshot() ?? Number(current.observe()),
     () => 0,
   );
 
+  useLayoutEffect(() => {
+    if (
+      current.isCurrent() &&
+      props.active !== false &&
+      props.search &&
+      current.owner?.available() !== false &&
+      reportPageIsCurrent(props.page, props.input)
+    ) {
+      windowHistory?.admitCase({
+        visitId: props.navigation?.visitId,
+        page: props.page,
+        search: props.search,
+        reportId: props.reportId,
+        locale: getLocale(),
+      });
+    }
+  }, [current, props.active, props.input, props.navigation?.visitId, props.page, props.reportId, props.search, readerVersion, windowHistory]);
+
+  function returnToQueue(source?: HTMLElement) {
+    if (!props.onReturnQueue) return;
+    if (props.search && current.isCurrent())
+      windowHistory?.beginCaseReturn({
+        visitId: props.navigation?.visitId,
+        page: props.page,
+        search: props.search,
+        reportId: props.reportId,
+        locale: getLocale(),
+        source,
+      });
+    props.onReturnQueue(queueHref);
+  }
+
   const retired = current.observe();
   const queueHref = localizeHref(workbenchCaseQueueHref(props.search ?? props.input));
   if (retired || (typeof window !== 'undefined' && !browserClient) || (current.owner && !current.owner.available()))
-    return <WorkbenchCaseStatus state="unavailable" queueHref={queueHref} />;
+    return <WorkbenchCaseStatus state="unavailable" queueHref={queueHref} onReturnQueue={props.onReturnQueue ? returnToQueue : undefined} />;
 
   const result = workbenchCaseFromPage(props.page, props.reportId);
   if (result.state !== 'ready')
@@ -135,6 +180,7 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
         queueHref={queueHref}
         {...(props.onRetry ? { onRetry: props.onRetry } : {})}
         {...(props.onRestart ? { onRestart: props.onRestart } : {})}
+        {...(props.onReturnQueue ? { onReturnQueue: returnToQueue } : {})}
       />
     );
 
@@ -156,6 +202,7 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
           }
         : {})}
       queueHref={queueHref}
+      {...(props.onReturnQueue ? { onReturnQueue: returnToQueue } : {})}
       isCurrent={currentPage.isCurrent}
       register={currentPage.register}
       onAction={async (command) => {
@@ -177,6 +224,7 @@ export function WorkbenchCaseDetail({
   currentState,
   destination = null,
   queueHref,
+  onReturnQueue,
   isCurrent,
   register,
   onAction,
@@ -190,6 +238,7 @@ export function WorkbenchCaseDetail({
   currentState?: 'available' | 'taken-down' | 'erased' | 'withheld' | 'unavailable';
   destination?: Readonly<{ boardId: string; threadId?: string; realmId?: string }> | null;
   queueHref: string;
+  onReturnQueue?: (source?: HTMLElement) => void;
   isCurrent: () => boolean;
   register: (controller: ReportsBulkAction) => () => void;
   onAction: ReportQueueAction;
@@ -209,9 +258,9 @@ export function WorkbenchCaseDetail({
   return (
     <AuthoringDepartureBoundary sessionBound={false} navigationContext={reportReviewNavigationContext}>
       <main className="mx-auto w-full max-w-5xl space-y-5 px-4 py-6 sm:px-8 sm:py-10">
-        <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={queueHref}>
+        <WorkbenchCaseReturnLink href={queueHref} onReturnQueue={onReturnQueue}>
           {m.moderation_workbench_history_return()}
-        </a>
+        </WorkbenchCaseReturnLink>
         <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
         {currentState && currentState !== 'available' ? (
           <p role="status" className="text-sm text-muted-foreground">
@@ -265,11 +314,13 @@ export function WorkbenchCaseStatus({
   queueHref,
   onRetry,
   onRestart,
+  onReturnQueue,
 }: {
   state: 'loading' | 'denied' | 'stale' | 'error' | 'unavailable' | 'empty';
   queueHref: string;
   onRetry?: () => void;
   onRestart?: () => void;
+  onReturnQueue?: (source?: HTMLElement) => void;
 }) {
   const message =
     state === 'loading'
@@ -285,9 +336,9 @@ export function WorkbenchCaseStatus({
               : m.moderation_target_unavailable();
   return (
     <main className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-8 sm:py-10">
-      <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={queueHref}>
+      <WorkbenchCaseReturnLink href={queueHref} onReturnQueue={onReturnQueue}>
         {m.moderation_workbench_history_return()}
-      </a>
+      </WorkbenchCaseReturnLink>
       <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
       <ContentItemFrame
         as="div"
@@ -308,5 +359,41 @@ export function WorkbenchCaseStatus({
         ) : null}
       </ContentItemFrame>
     </main>
+  );
+}
+
+function WorkbenchCaseReturnLink({
+  href,
+  onReturnQueue,
+  children,
+}: {
+  href: string;
+  onReturnQueue?: (source?: HTMLElement) => void;
+  children: ReactNode;
+}) {
+  const departure = useAuthoringDeparture(
+    false,
+    false,
+    `workbench-case-return:${href}`,
+    undefined,
+    undefined,
+    undefined,
+    reportReviewDepartureMessages(),
+    reportReviewNavigationContext,
+  );
+  return (
+    <a
+      className="inline-flex min-h-11 items-center underline underline-offset-4"
+      href={href}
+      onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+        if (!onReturnQueue || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+          return;
+        event.preventDefault();
+        const source = event.currentTarget;
+        departure.requestNavigation(() => onReturnQueue(source));
+      }}
+    >
+      {children}
+    </a>
   );
 }

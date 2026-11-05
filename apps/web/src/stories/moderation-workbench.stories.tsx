@@ -68,3 +68,38 @@ export const Recovery: Story = {
     await expect(args.onSearch).toHaveBeenCalled();
   },
 };
+
+const laterWindowSearch = workbenchSearch({
+  board: 'community',
+  queue: 'reports',
+  targetKind: 'post',
+  order: 'newest',
+  cursor: 'native-window-cursor',
+});
+
+export const LaterWindowCaseReturn: Story = {
+  args: {
+    page: {
+      ...emptyPage,
+      search: laterWindowSearch,
+      cases: [
+        {
+          kind: 'report',
+          id: '0192f3a0-6c1e-7b2a-9d4e-000000000901',
+          createdAt: '2026-11-01T10:00:00.000Z',
+          outcome: null,
+          reason: 'other',
+          evidence: null,
+          statement: null,
+          decisionId: null,
+          target: { kind: 'post', id: 'post-later-window' },
+        },
+      ],
+      next: 'native-next-window-cursor',
+    },
+    queueWindow: { previous: true, refresh: true, first: true },
+    onWindowMove: fn(),
+    onRefresh: fn(async () => {}),
+    onOpenCase: fn(),
+  },
+};

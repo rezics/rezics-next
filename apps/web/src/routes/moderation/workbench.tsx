@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useContext, useMemo } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { createFileRoute, useNavigate, useRouter, type ErrorComponentProps } from '@tanstack/react-router';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
@@ -15,6 +16,7 @@ import {
   type WorkbenchSearch,
 } from '../../moderation/workbench-queue';
 import { createWorkbenchLoader } from '../../moderation/workbench-queue/route-loader';
+import { workbenchQueueWindowHistory } from '../../moderation/workbench-queue/window-history';
 
 export const Route = createFileRoute('/moderation/workbench')({
   beforeLoad: requireSignedIn,
@@ -37,14 +39,26 @@ function WorkbenchRoute() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: '/moderation/workbench' });
   const router = useRouter();
+  const client = useContext(QueryClientContext);
+  const windowHistory = client ? workbenchQueueWindowHistory(client) : undefined;
+  const visitId = useMemo(() => crypto.randomUUID(), [page.navigationKey]);
   const navigation = useMemo(
     () => ({
+      visitId,
       isCurrent: () =>
         getLocale() === page.locale &&
         (router.state.location.state.__TSR_key ?? router.state.location.href) === page.navigationKey,
       subscribe: (retire: () => void) => {
         const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
-          if ((toLocation.state.__TSR_key ?? toLocation.href) !== page.navigationKey) retire();
+          if ((toLocation.state.__TSR_key ?? toLocation.href) !== page.navigationKey) {
+            windowHistory?.navigate(
+              visitId,
+              { pathname: toLocation.pathname, search: toLocation.search as Record<string, unknown> },
+              search,
+              page,
+            );
+            retire();
+          }
         });
         const reload = router.subscribe('onBeforeLoad', retire);
         return () => {
@@ -53,7 +67,7 @@ function WorkbenchRoute() {
         };
       },
     }),
-    [router, page.navigationKey, page.generation],
+    [router, page.navigationKey, page.generation, page.locale, page, search, visitId, windowHistory],
   );
   const onSearch = (next: WorkbenchSearch) => void navigate({ search: workbenchSearch(next) });
   return (
@@ -63,6 +77,7 @@ function WorkbenchRoute() {
       search={search}
       navigation={navigation}
       onSearch={onSearch}
+      onOpenCase={(_item, href) => void router.navigate({ to: href as never })}
       onRetry={() => void router.invalidate({ sync: true })}
       onRefresh={() => router.invalidate({ sync: true })}
     />

@@ -108,6 +108,12 @@ class WorkbenchReadFailure extends Error {
   }
 }
 
+function boundedQueueContinuation(cursor: string | null): string | null {
+  if (cursor !== null && (cursor.length === 0 || cursor.length > 4096))
+    throw new WorkbenchReadFailure('unavailable');
+  return cursor;
+}
+
 function listFailure(status: number, value: unknown): Exclude<WorkbenchReadState, 'ready'> {
   const code = value && typeof value === 'object' && 'code' in value ? value.code : undefined;
   if ((status === 400 && code === 'invalid_cursor') || (status === 409 && code === 'stale_cursor')) return 'stale';
@@ -285,7 +291,7 @@ function nativeSource(
       });
       if (result.error) throw new WorkbenchReadFailure(listFailure(result.status, result.error.value));
       if (!result.data) throw new WorkbenchReadFailure('unavailable');
-      return readModerationReports(
+      const page = await readModerationReports(
         {
           boardReports: async () => result.data,
           threadReports: async () => ({ reports: [], next: null }),
@@ -293,6 +299,7 @@ function nativeSource(
         },
         { boardId, status: selection.status, targetKind: selection.targetKind, order: selection.order },
       );
+      return { ...page, next: boundedQueueContinuation(page.next) };
     },
     async boardAppeals(boardId, cursor, inspect) {
       const page = await readModerationAppealPage(
@@ -339,7 +346,7 @@ function nativeSource(
               ]
             : [],
         ),
-        next: result.data.next,
+        next: boundedQueueContinuation(result.data.next),
       };
     },
   };
