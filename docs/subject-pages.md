@@ -232,6 +232,9 @@ and exact sources. An arc member can show only that work’s appearances explici
 released filtering is unsupported with the existing Details path. Spoiler qualification gates the complete row,
 including target navigation. Unavailable continuation is not an ending, and replaced authority retires old controls.
 
+Decision: an arc offers only its inverse membership stream for works; the `rezics:storyArc` slot it inherits from
+CreativeWork is not an arc-to-arc forward stream.
+
 Decision: public destinations open in a new tab to preserve the exact originating work/arc window and keyboard
 return; at most one member appearance window opens inline, with Back restoring its member control.
 
