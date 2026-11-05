@@ -2771,7 +2771,7 @@ Decision: a selected public Person origin remains bounded return intent; unsuppo
 
 The Person entry carries only the admitted Person ID, resolved Context, optional resolved Realm, locale, effective definition observation, reader incarnation and one validated same-locale public return address. The closed route descriptor has a combined 2,048-character and 2,048-byte UTF-8 query ceiling. A non-Global Context or Realm is explained before the editor or its read mounts; choosing Global drops selected assertion and reveal intent, then uses the existing Global profile read and advice. Legacy direct Global correction and Work credit creation remain on their existing paths. Return uses the public Subject reader and its current disclosure gates; no Context selector or Global fallback is added to that reader.
 
-Explicit return and browser Back/Forward use the original public address and its current Person reader. Return focuses the existing Person reader heading when no admitted field/assertion locator was supplied; this outer entry does not create one.
+Decision: the general public Person entry supplies no exact biography field/assertion locator, so return rereads its validated same-locale address and focuses only the current Person reader heading. Explicit return and browser Back/Forward use the existing public Subject reader and its disclosure gates.
 
 The mounted Person correction page presents biography documents, admitted occupations and languages, and released
 Organization affiliations together. Admission still requires the released Type and exact property. The shared
