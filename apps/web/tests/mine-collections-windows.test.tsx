@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, spyOn, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
@@ -131,37 +131,9 @@ test('the private Collections route retains admitted cursor coordinates across l
   const { browserObservation } = await import('../src/session/observation');
   const { sessionQuery } = await import('../src/session/query');
   const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
-  const originModule = await import('../src/library/pins-current');
-  const originEvidence: unknown[] = [];
-  const originalReadOrigin = originModule.useLibraryReadOrigin;
-  const originSpy = spyOn(originModule, 'useLibraryReadOrigin').mockImplementation((...args) => {
-    const origin = originalReadOrigin(...args);
-    return {
-      ...origin,
-      mounted: () => {
-        const value = origin.mounted();
-        originEvidence.push(['mounted', value]);
-        return value;
-      },
-      isCurrent: () => {
-        const value = origin.isCurrent();
-        originEvidence.push(['current', value]);
-        return value;
-      },
-      collectionsCurrent: () => {
-        const value = origin.collectionsCurrent();
-        originEvidence.push(['collections', value]);
-        return value;
-      },
-    };
-  });
   const { m } = await import('../src/paraglide/messages.js');
   const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
   const reads = await import('../src/library/mine-collections-route');
-  const movementSpy = spyOn(MineCollectionsWindowsVisit.prototype, 'beginMovement');
-  const observeSpy = spyOn(MineCollectionsWindowsVisit.prototype, 'observe');
-  const acceptSpy = spyOn(MineCollectionsWindowsVisit.prototype, 'accept');
-  const clickEvidence: unknown[] = [];
   const inputs: { cursor: string | null; layout: 'rows' | 'previews' }[] = [];
   let allowRetry = false;
   const reader = spyOn(reads, 'readMineCollectionsViewerPage').mockImplementation(async ({ data }) => {
@@ -252,36 +224,8 @@ test('the private Collections route retains admitted cursor coordinates across l
     expect(host.textContent).not.toContain(m.library_saved_queries_unavailable());
 
     const next = movementLink(m.library_collection_more());
-    next.addEventListener(
-      'click',
-      (event) =>
-        clickEvidence.push([
-          'target',
-          event.defaultPrevented,
-          (event as MouseEvent).button,
-          (event as MouseEvent).detail,
-          event.target === next,
-        ]),
-      true,
-    );
-    document.addEventListener('click', (event) => clickEvidence.push(['document', event.defaultPrevented]), true);
-    document.addEventListener('click', (event) => clickEvidence.push(['document-bubble', event.defaultPrevented]));
-    host.addEventListener('click', (event) => clickEvidence.push(['host-bubble', event.defaultPrevented]));
     next.focus();
     await click(next);
-    if ((router.state.location.search as Record<string, unknown>).cursor !== 'cursor-a')
-      throw new Error(
-        JSON.stringify({
-          href: next.href,
-          clickEvidence,
-          originEvidence,
-          location: router.state.location,
-          movementCalls: movementSpy.mock.calls.map(([, action, source, target]) => [action, source, target]),
-          movementResults: movementSpy.mock.results.map((result) => result.value),
-          observations: observeSpy.mock.calls.map((call) => call.slice(0, 3)),
-          admissions: acceptSpy.mock.calls,
-        }),
-      );
     expect((router.state.location.search as Record<string, unknown>).cursor).toBe('cursor-a');
     expect(host.querySelector('[data-collection-browse="rows"]')?.textContent).toContain('Collection sparse');
     expect(document.activeElement?.hasAttribute('data-collections-list-region')).toBe(true);
@@ -341,9 +285,5 @@ test('the private Collections route retains admitted cursor coordinates across l
     host.remove();
     canonical.remove();
     reader.mockRestore();
-    originSpy.mockRestore();
-    movementSpy.mockRestore();
-    observeSpy.mockRestore();
-    acceptSpy.mockRestore();
   }
 });
