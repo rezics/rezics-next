@@ -129,16 +129,18 @@ function ownerStore(client: QueryClient) {
     }
     return snapshot;
   }
+  function publishLater() {
+    if (publicationQueued) return;
+    publicationQueued = true;
+    queueMicrotask(() => {
+      publicationQueued = false;
+      listeners.forEach((notify) => notify());
+    });
+  }
   function changed() {
     const previous = snapshot;
     read();
-    if (snapshot !== previous && !publicationQueued) {
-      publicationQueued = true;
-      queueMicrotask(() => {
-        publicationQueued = false;
-        listeners.forEach((notify) => notify());
-      });
-    }
+    if (snapshot !== previous) publishLater();
   }
   return {
     read,
@@ -153,8 +155,10 @@ function ownerStore(client: QueryClient) {
       // even during a synchronous A-to-B-to-A before React has committed anything.
       const stopLifetime = exposure.subscribe(changed);
       const stopCache = client.getQueryCache().subscribe(changed);
-      // useSyncExternalStore re-reads after subscribing; publishing here would update React mid-render.
+      // Publish the mounted observation after this subscription stack, outside React's render phase.
+      const previous = snapshot;
       read();
+      if (snapshot !== previous) publishLater();
       return () => {
         listeners.delete(notify);
         stopCache();
