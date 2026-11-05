@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, spyOn, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -27,9 +27,8 @@ const read = mock(() => {
 const readCurrent = mock(() => {
   throw new Error('Unexpected current Labels read');
 });
-const labelsActionsModule = Bun.resolveSync('../src/library/labels-actions', import.meta.dir);
 const labelsReadRouteModule = Bun.resolveSync('../src/library/labels-read-route', import.meta.dir);
-mock.module(labelsActionsModule, () => ({
+mock.module('../src/library/labels-actions', () => ({
   manageLabel: (input: { data: LabelInput; headers: HeadersInit }) => {
     writes.push(structuredClone(input));
     return send(input.data);
@@ -39,11 +38,6 @@ mock.module(labelsActionsModule, () => ({
   },
 }));
 mock.module(labelsReadRouteModule, () => ({ readLabelsPage: read, readLabelsCurrent: readCurrent }));
-const actions = await import(labelsActionsModule);
-spyOn(actions, 'manageLabel').mockImplementation((input) => {
-  writes.push(structuredClone(input));
-  return send(input.data);
-});
 afterAll(() => mock.restore());
 
 const query = '  読書 %_ + & ?  ';

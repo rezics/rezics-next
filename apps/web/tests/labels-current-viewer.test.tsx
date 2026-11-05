@@ -127,6 +127,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const { Route } = await import('../src/routes/library/labels');
     const { LABELS_WINDOW_QUERY_KEY, labelsWindowOwner } = await import('../src/library/labels-window-navigation');
     const { libraryWorkspaceAdmission } = await import('../src/library/library-workspace-admission');
+    const { browserObservation } = await import('../src/session/observation');
     const { sessionQueryKey } = await import('../src/session/browser-state');
     const nativeCalls: Request[] = [];
     let failure: { status: number; code: string } | undefined;
@@ -290,6 +291,8 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       history: createMemoryHistory({ initialEntries: ['/en/library/labels'] }),
     });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const observation = browserObservation(queryClient);
+    const stopObservation = observation.subscribeCache(() => {});
     const host = document.createElement('div');
     document.body.append(host);
     let root: ReturnType<typeof createRoot> | undefined;
@@ -310,8 +313,13 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     ) => {
       menus.length = 0;
       await act(async () => {
-        queryClient.setQueryData(['session'], viewer);
-        queryClient.setQueryData(['exposure', 'viewer'], admitted);
+        queryClient.setQueryData(sessionQueryKey, viewer);
+        const current = observation.getSnapshot();
+        if (current.state === 'signed-in')
+          queryClient.setQueryData(
+            ['exposure', 'viewer', current.observation.subject, current.observation.id],
+            { subject: current.observation.subject, admitted },
+          );
         if (!root) {
           const html = renderToString(tree());
           expect(html).toContain('Private A');
@@ -644,6 +652,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(hydrationErrors).toEqual([]);
     } finally {
       if (root) await act(async () => root!.unmount());
+      stopObservation();
       queryClient.clear();
       host.remove();
       for (const restore of [menuRead, inputRead, dialogRead, toastRead, transport, write, loader, address])
