@@ -34,7 +34,7 @@ test('authorization risk excludes local auth scripts while preserving production
   const tooling = markdown.replace('paths: [result.txt]', 'paths: [services/auth/scripts/dev-stack.ts]');
   expect(parseBrief(tooling, ownership).riskAreas).toEqual([]);
 
-  const production = markdown.replace('paths: [result.txt]', 'paths: [services/auth/src/**]');
+  const production = markdown.replace('paths: [result.txt]', 'paths: [services/auth/src/policy.ts]');
   expect(() => parseBrief(production, ownership)).toThrow('authorization');
   expect(parseBrief(production.replace('riskAreas: []', 'riskAreas: [authorization]'), ownership).riskAreas).toEqual([
     'authorization',

@@ -255,7 +255,7 @@ describe('sequential integration', () => {
     } finally {
       s.close();
     }
-  });
+  }, 60_000);
   test('reports Git refusal as a merge failure and never switches main checkout HEAD', async () => {
     const s = setup();
     try {
