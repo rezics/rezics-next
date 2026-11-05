@@ -154,9 +154,7 @@ export async function readCharacterProfile(
   const context = address.context ?? candidateContext;
   const [active, character, work] = await Promise.all([
     client.definitions.active.get(),
-    address.id
-      ? client.subjects({ id: address.id }).get({ query: { context } })
-      : undefined,
+    address.id ? client.subjects({ id: address.id }).get({ query: { context } }) : undefined,
     // A Work is a separate address; it always uses the native default Global reading.
     address.work ? client.subjects({ id: address.work }).get() : undefined,
   ]);

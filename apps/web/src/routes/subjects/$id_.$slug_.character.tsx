@@ -47,12 +47,7 @@ const canonicalCharacter = createServerFn({ method: 'GET', strict: false })
       : await loadSubject(kernelClient(data.locale), data.id, data.locale as never);
     if (canonical.kind === 'missing') throw notFound();
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug)
-      throw redirect(
-        canonicalRedirect(
-          `${canonical.value.href}/character`,
-          data.search,
-        ),
-      );
+      throw redirect(canonicalRedirect(`${canonical.value.href}/character`, data.search));
     return { id: canonical.value.id, label: canonical.value.slug };
   });
 export const Route = createFileRoute('/subjects/$id_/$slug_/character')({

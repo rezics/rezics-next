@@ -11,9 +11,7 @@ export type CharacterCorrectionSearch = {
   classificationHandoff?: string;
 };
 
-export type CharacterCorrectionSearchResult =
-  | { ok: true; value: CharacterCorrectionSearch }
-  | { ok: false };
+export type CharacterCorrectionSearchResult = { ok: true; value: CharacterCorrectionSearch } | { ok: false };
 
 /** Parse only the independent address fields; classification custody stays with its existing parser. */
 export function parseCharacterCorrectionSearch(input: unknown): CharacterCorrectionSearchResult {

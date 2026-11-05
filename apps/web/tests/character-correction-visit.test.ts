@@ -37,9 +37,12 @@ test('Character correction address and native read retain exact Context and Real
   expect(parseCharacterCorrectionUrl(`?context=${contextA}&context=${realmA}&realm=${realmA}`).ok).toBe(false);
   expect(parseCharacterCorrectionUrl(`?realm=${realmA}`).ok).toBe(true);
   expect(characterUuid.test(characterProfileId)).toBe(true);
-  expect(
-    characterAddress({ id: characterProfileId, work: workId, context: contextA, realm: realmA }),
-  ).toEqual({ id: characterProfileId, work: workId, context: contextA, realm: realmA });
+  expect(characterAddress({ id: characterProfileId, work: workId, context: contextA, realm: realmA })).toEqual({
+    id: characterProfileId,
+    work: workId,
+    context: contextA,
+    realm: realmA,
+  });
 
   const entry = catalogueEntries.character({
     id: characterProfileId,
@@ -67,10 +70,12 @@ test('Character correction address and native read retain exact Context and Real
       };
     },
   } as unknown as KernelClient;
-  const read = await readCharacterProfile(
-    client,
-    { id: characterProfileId, work: workId, context: contextA, realm: realmA },
-  );
+  const read = await readCharacterProfile(client, {
+    id: characterProfileId,
+    work: workId,
+    context: contextA,
+    realm: realmA,
+  });
   expect(read.ok).toBe(true);
   if (!read.ok) throw new Error('Expected the selected Character reading');
   expect(read.context).toBe(contextA);
@@ -80,9 +85,27 @@ test('Character correction address and native read retain exact Context and Real
     { id: characterProfileId, context: contextA },
     { id: workId, context: undefined },
   ]);
-  expect(isCurrentCharacterRead(read, { isSuccess: true, isFetching: false }, { id: characterProfileId, work: workId, context: contextA, realm: realmA })).toBe(true);
-  expect(isCurrentCharacterRead(read, { isSuccess: true, isFetching: false }, { id: characterProfileId, work: workId, context: contextA, realm: realmB })).toBe(false);
-  expect(isCurrentCharacterRead(read, { isSuccess: true, isFetching: false }, { id: characterProfileId, work: workId, context: candidateContext, realm: realmA })).toBe(false);
+  expect(
+    isCurrentCharacterRead(
+      read,
+      { isSuccess: true, isFetching: false },
+      { id: characterProfileId, work: workId, context: contextA, realm: realmA },
+    ),
+  ).toBe(true);
+  expect(
+    isCurrentCharacterRead(
+      read,
+      { isSuccess: true, isFetching: false },
+      { id: characterProfileId, work: workId, context: contextA, realm: realmB },
+    ),
+  ).toBe(false);
+  expect(
+    isCurrentCharacterRead(
+      read,
+      { isSuccess: true, isFetching: false },
+      { id: characterProfileId, work: workId, context: candidateContext, realm: realmA },
+    ),
+  ).toBe(false);
 
   const globalHref = globalCharacterCorrectionHref({
     id: characterProfileId,
@@ -96,7 +119,9 @@ test('Character correction address and native read retain exact Context and Real
   expect(globalUrl.searchParams.get('realm')).toBeNull();
   expect(globalUrl.searchParams.get('work')).toBe(workId);
   expect(globalUrl.searchParams.get('classificationHandoff')).toBe(handoff);
-  expect(characterPublicReturnHref({ id: characterProfileId, label: 'The traveler', locale: 'en', context: contextA })).toBeUndefined();
+  expect(
+    characterPublicReturnHref({ id: characterProfileId, label: 'The traveler', locale: 'en', context: contextA }),
+  ).toBeUndefined();
   const publicReturn = characterPublicReturnHref({
     id: characterProfileId,
     label: 'The traveler',
