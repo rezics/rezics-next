@@ -497,7 +497,9 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).toContain(m.library_follow_removed());
     expect(host.textContent).toContain(m.library_following_page_empty());
     expect(host.querySelector('[data-slot="empty"] a')?.getAttribute('href')).toBe('/en/search');
-    const more = host.querySelector<HTMLAnchorElement>('nav a');
+    const more = [...host.querySelectorAll<HTMLAnchorElement>('nav a')].find(
+      (link) => link.textContent === m.library_collection_more(),
+    );
     expect(new URL(more!.href).searchParams.get('cursor')).toBe('bounded-more');
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null });
