@@ -5,6 +5,7 @@ import {
   type VisibilityAttempt,
   type CollectionPrivacyIO,
 } from '../src/settings/collection-privacy-recovery';
+import { managedReadTimeout } from '../src/settings/managed-read-deadline';
 import type { OwnedCollection } from '../src/settings/preferences';
 import type { CollectionPrivacyRead } from '../src/settings/collection-privacy-data';
 
@@ -26,6 +27,36 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+const flushPromiseJobs = async () => {
+  for (let index = 0; index < 8; index++) await Promise.resolve();
+};
+
+const withControlledTimeout = async (run: (expire: () => void, delay: () => number | undefined) => Promise<void>) => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  let callback: (() => void) | undefined;
+  let timeout: number | undefined;
+  globalThis.setTimeout = ((handler: Parameters<typeof setTimeout>[0], delay?: number) => {
+    timeout = delay;
+    callback = handler as unknown as () => void;
+    return 1 as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+  try {
+    await run(
+      () => {
+        const current = callback;
+        callback = undefined;
+        current?.();
+      },
+      () => timeout,
+    );
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+};
 
 test('A lost Collection visibility save retains the exact attempted revision/input/key and gives an honest retry or current readback without silently losing the chosen visibility', async () => {
   const commands: VisibilityAttempt[] = [];
@@ -287,10 +318,10 @@ test('explicit local abandonment releases the row without claiming the original 
   expect(editor.snapshot().desired).toBe('private');
 });
 
-test('definite conflict and refusal retain the choice until Reload deliberately adopts the current native row', async () => {
+test('definite conflict and refusal retain the choice until Use current discards it', async () => {
   for (const reason of ['conflict', 'forbidden', 'closed', 'invalid'] as const) {
     let readFails = true;
-    const current = row('unlisted', 12);
+    const current = { ...row('unlisted', 12), allowedVisibilityActions: ['private'] as const };
     const editor = new CollectionPrivacyEditor(initial, {
       save: async () => ({ ok: false, reason }),
       read: async () => (readFails ? { ok: false, reason: 'unavailable' } : { ok: true, value: current }),
@@ -299,6 +330,7 @@ test('definite conflict and refusal retain the choice until Reload deliberately 
     expect(editor.snapshot()).toMatchObject({
       current: initial,
       desired: 'public',
+      intent: 'public',
       attempt: null,
       phase: reason === 'conflict' ? 'conflict' : 'refused',
     });
@@ -306,7 +338,17 @@ test('definite conflict and refusal retain the choice until Reload deliberately 
     expect(editor.snapshot().desired).toBe('public');
     readFails = false;
     await editor.reload();
-    expect(editor.snapshot()).toMatchObject({ current, desired: 'unlisted', attempt: null, phase: 'idle' });
+    expect(editor.snapshot()).toMatchObject({
+      current,
+      desired: 'public',
+      intent: 'public',
+      attempt: null,
+      phase: 'review',
+    });
+    await editor.submit();
+    expect(editor.snapshot().attempt).toBeNull();
+    editor.useCurrent();
+    expect(editor.snapshot()).toMatchObject({ current, desired: 'unlisted', intent: undefined, phase: 'idle' });
   }
 });
 
@@ -579,4 +621,161 @@ test('separate privacy write custody permits current row reads without creating 
   expect(editor.needsListRestartProtection()).toBe(false);
   expect(reads).toBe(1);
   expect(saves).toBe(0);
+});
+
+test('a stalled Save stays uncertain, a replay receipt becomes read-only recovery, and a late read cannot replace a later window', async () => {
+  await withControlledTimeout(async (expire, delay) => {
+    const firstSave = deferred<Awaited<ReturnType<CollectionPrivacyIO['save']>>>();
+    const replayRead = deferred<CollectionPrivacyRead<OwnedCollection>>();
+    const recovered = row('unlisted', 9);
+    const late = row('private', 11);
+    const commands: VisibilityAttempt[] = [];
+    let reads = 0;
+    const editor = new CollectionPrivacyEditor(initial, {
+      save: async (input) => {
+        commands.push(input);
+        if (commands.length === 1) return firstSave.promise;
+        return { ok: true, collection: receipt };
+      },
+      read: async (id) => {
+        expect(id).toBe(initial.id);
+        reads++;
+        return reads === 1 ? replayRead.promise : { ok: true, value: recovered };
+      },
+    });
+    const saving = editor.edit('public');
+    await flushPromiseJobs();
+    expect(delay()).toBe(managedReadTimeout);
+    expire();
+    await saving;
+    const original = editor.snapshot().attempt!;
+    expect(original).toEqual({
+      collectionId: initial.id,
+      revision: 7,
+      visibility: 'public',
+      idempotencyKey: expect.any(String),
+    });
+    expect(editor.snapshot()).toMatchObject({
+      current: initial,
+      desired: 'public',
+      intent: 'public',
+      phase: 'uncertain',
+      attempt: original,
+      outcomeUnknown: true,
+    });
+    expect(reads).toBe(0);
+    firstSave.resolve({ ok: true, collection: receipt });
+    await flushPromiseJobs();
+    expect(editor.snapshot()).toMatchObject({ phase: 'uncertain', attempt: original, outcomeUnknown: true });
+    expect(reads).toBe(0);
+    expect(commands).toEqual([original]);
+
+    const retry = editor.retry();
+    await flushPromiseJobs();
+    expect(commands).toEqual([original, original]);
+    expect(commands[1]).toBe(original);
+    expect(delay()).toBe(managedReadTimeout);
+    expire();
+    await retry;
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'readback',
+      attempt: original,
+      receipt: { id: initial.id, revision: 8, visibility: 'public' },
+      outcomeUnknown: false,
+      desired: 'public',
+    });
+    expect(reads).toBe(1);
+
+    await editor.reload();
+    expect(editor.snapshot()).toMatchObject({
+      current: recovered,
+      desired: 'unlisted',
+      intent: undefined,
+      attempt: null,
+      receipt: null,
+      phase: 'saved',
+    });
+    replayRead.resolve({ ok: true, value: late });
+    await flushPromiseJobs();
+    expect(editor.snapshot()).toMatchObject({ current: recovered, desired: 'unlisted', attempt: null, phase: 'saved' });
+    expect(commands).toEqual([original, original]);
+    expect(reads).toBe(2);
+  });
+});
+
+test('a stalled page keeps its window and cursor, and a late page cannot replace a later request', async () => {
+  await withControlledTimeout(async (expire, delay) => {
+    const nextPage = deferred<CollectionPrivacyRead<{ collections: OwnedCollection[]; next: string | null }>>();
+    const restartPage = deferred<CollectionPrivacyRead<{ collections: OwnedCollection[]; next: string | null }>>();
+    const late = { ...row('public', 3), id: 'late-row', title: 'Late page' };
+    const fresh = { ...row('unlisted', 4), title: 'Current reading' };
+    const reads: (string | null)[] = [];
+    const pager = new CollectionPrivacyPager(async (cursor) => {
+      reads.push(cursor);
+      if (reads.length === 1) return { ok: true, value: { collections: [initial], next: 'exact-next-page' } };
+      if (reads.length === 2) return nextPage.promise;
+      return restartPage.promise;
+    });
+    await pager.load();
+    const loading = pager.load();
+    await flushPromiseJobs();
+    expect(delay()).toBe(managedReadTimeout);
+    expire();
+    await loading;
+    expect(pager.snapshot()).toMatchObject({
+      collections: [initial],
+      next: 'exact-next-page',
+      failure: 'unavailable',
+      loading: false,
+      restarting: false,
+    });
+    expect(pager.retryStartsAtFirstPage()).toBe(false);
+    const retry = pager.load();
+    await flushPromiseJobs();
+    expect(reads).toEqual([null, 'exact-next-page', 'exact-next-page']);
+    expire();
+    await retry;
+    expect(pager.snapshot()).toMatchObject({
+      collections: [initial],
+      next: 'exact-next-page',
+      failure: 'unavailable',
+      loading: false,
+    });
+    expect(pager.retryStartsAtFirstPage()).toBe(false);
+    nextPage.resolve({ ok: true, value: { collections: [late], next: 'stale' } });
+    await flushPromiseJobs();
+    expect(pager.snapshot().collections).toEqual([initial]);
+    const restart = pager.restart();
+    await flushPromiseJobs();
+    expect(reads).toEqual([null, 'exact-next-page', 'exact-next-page', null]);
+    expect(pager.snapshot()).toMatchObject({ loading: true, restarting: true });
+    expire();
+    await restart;
+    expect(pager.snapshot()).toMatchObject({
+      collections: [initial],
+      failure: 'unavailable',
+      loading: false,
+      restarting: false,
+    });
+    expect(pager.retryStartsAtFirstPage()).toBe(true);
+    restartPage.resolve({ ok: true, value: { collections: [fresh], next: null } });
+    await flushPromiseJobs();
+    expect(pager.snapshot().collections).toEqual([initial]);
+    const recovered = pager.restart();
+    restartPage.resolve({ ok: true, value: { collections: [fresh], next: null } });
+    await recovered;
+    expect(reads.at(-1)).toBeNull();
+    expect(pager.snapshot()).toMatchObject({ collections: [fresh], next: null, failure: null, loaded: true });
+  });
+});
+
+test('a clean current read adopts native visibility without opening review', async () => {
+  const current = row('unlisted', 12);
+  const editor = new CollectionPrivacyEditor(initial, {
+    save: async () => ({ ok: true, collection: receipt }),
+    read: async () => ({ ok: true, value: current }),
+  });
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({ current, desired: 'unlisted', intent: undefined, phase: 'idle' });
+  expect(editor.needsListRestartProtection()).toBe(false);
 });

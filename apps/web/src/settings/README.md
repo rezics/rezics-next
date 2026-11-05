@@ -6,6 +6,12 @@
 
 **Decision:** One mounted Collection privacy viewer keeps the longest Retry-After deadline for its list endpoint across cursors; Retry retains the failed request and Restart stays cursor-free, with expiry enabling deliberate recovery only. Row reads and commands keep independent deadlines.
 
+**Decision:** Collection privacy page reads, row Saves and current reads each use the existing ten-second managed deadline independently. A page timeout keeps the current window and exact failed cursor; Retry repeats that request and Restart stays cursor-free. A Save timeout leaves the immutable original uncertain without proving cancellation or commitment. A valid replay receipt permanently settles that original, and a timed-out current read stays read-only recovery. Late timed-out results cannot acknowledge, replace a later window, clear a successor loading flag, bypass unresolved-row protection or start follow-up IO.
+
+**Decision:** Deliberate Collection privacy drafts survive current reads, including preexisting review, conflict and refusal intent. Clean fields adopt native values. A validated receipt consumes the acknowledged original and keeps only later edits. Explicit Use current retires local intent; a denied read withdraws native advice without substituting a default visibility or converting an unknown command into cancellation.
+
+**Decision:** Collection privacy pins stalled Save and page deadlines, late-result isolation, retained drafts and receipt consumption in the existing focused tests. Conflict reload now reviews the kept choice; Use current discards it.
+
 **Decision:** Profile and public-view commands share one response-time admission deadline, separate from the current-read deadline; section changes, remounts and local edits cannot shorten it, and expiry only enables deliberate recovery.
 
 **Decision:** After a Profile command is acknowledged, a failed current read retains that fact and offers deliberate read recovery only; a successful read adopts newer native values and preserves only edits outside the command or made after it for review.
