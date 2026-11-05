@@ -82,10 +82,10 @@ function ReviewerJourney({
   const [movement, setMovement] = useState<ReviewMovement | null>(null);
   const historyRef = useRef<ReviewCoordinate[]>([]);
   const [history, setHistory] = useState<ReviewCoordinate[]>([]);
-  const [readVersion, setReadVersion] = useState(0);
   const [movementLoading, setMovementLoading] = useState(false);
   const [focusAfterRead, setFocusAfterRead] = useState<number | null>(null);
   const focusHandoff = useRef<FocusHandoff | null>(null);
+  const active = useRef(true);
   const queueRegion = useRef<HTMLDivElement>(null);
 
   const clearFocusHandoff = useCallback((id?: number) => {
@@ -113,26 +113,6 @@ function ReviewerJourney({
     },
     [clearFocusHandoff],
   );
-  const scheduleRead = useCallback(
-    (cursor: ReviewCoordinate, direction?: ReviewDirection, origin?: HTMLElement | null) => {
-      if (!isCurrentOwner()) return;
-      const id = ++requestId.current;
-      const nextMovement = direction ? { direction, source: request.current?.cursor } : undefined;
-      request.current = { id, cursor };
-      if (nextMovement) {
-        movementRef.current = nextMovement;
-        setMovement(nextMovement);
-        window.scrollTo(0, 0);
-      }
-      if (movementRef.current) setMovementLoading(true);
-      if (origin) beginFocusHandoff(id, origin);
-      else clearFocusHandoff();
-      setFocusAfterRead(null);
-      setReadVersion(id);
-    },
-    [beginFocusHandoff, clearFocusHandoff, isCurrentOwner],
-  );
-
   const query = useQuery({
     ...personalRead,
     retry: false,
@@ -153,45 +133,68 @@ function ReviewerJourney({
   const refetch = useRef(query.refetch);
   refetch.current = query.refetch;
 
-  useLayoutEffect(() => () => queryClient.removeQueries({ queryKey, exact: true }), [queryClient, queryKey]);
-
-  useEffect(() => {
-    if (!readVersion) return;
-    let active = true;
-    const requested = request.current;
-    if (!requested || requested.id !== readVersion || !isCurrentOwner()) return;
-    void refetch.current().then((result) => {
-      if (!active || request.current?.id !== requested.id || !isCurrentOwner()) return;
-      const admitted =
-        result.isSuccess && result.data?.viewerId === viewerId && result.data.page.state === 'ready';
-      if (!admitted) {
-        setMovementLoading(false);
-        clearFocusHandoff(requested.id);
-        return;
-      }
-
-      const pendingMovement = movementRef.current;
-      if (pendingMovement?.direction === 'next') {
-        historyRef.current = [...historyRef.current, pendingMovement.source].slice(-8);
-        setHistory(historyRef.current);
-      } else if (pendingMovement?.direction === 'previous') {
-        historyRef.current = historyRef.current.slice(0, -1);
-        setHistory(historyRef.current);
-      } else if (pendingMovement?.direction === 'first') {
-        historyRef.current = [];
-        setHistory([]);
-      }
-      movementRef.current = null;
-      setMovement(null);
-      setMovementLoading(false);
-      if (focusHandoff.current?.id === requested.id && !focusHandoff.current.canceled)
-        setFocusAfterRead(requested.id);
-      else clearFocusHandoff(requested.id);
-    });
+  useLayoutEffect(() => {
+    active.current = true;
     return () => {
-      active = false;
+      active.current = false;
+      clearFocusHandoff();
+      queryClient.removeQueries({ queryKey, exact: true });
     };
-  }, [clearFocusHandoff, isCurrentOwner, readVersion, viewerId]);
+  }, [clearFocusHandoff, queryClient, queryKey]);
+
+  const completeRead = useCallback(
+    (requested: { id: number; cursor: ReviewCoordinate }) => {
+      void refetch.current().then((result) => {
+        if (!active.current || request.current?.id !== requested.id || !isCurrentOwner()) return;
+        const admitted =
+          result.isSuccess && result.data?.viewerId === viewerId && result.data.page.state === 'ready';
+        if (!admitted) {
+          setMovementLoading(false);
+          clearFocusHandoff(requested.id);
+          return;
+        }
+
+        const pendingMovement = movementRef.current;
+        if (pendingMovement?.direction === 'next') {
+          historyRef.current = [...historyRef.current, pendingMovement.source].slice(-8);
+          setHistory(historyRef.current);
+        } else if (pendingMovement?.direction === 'previous') {
+          historyRef.current = historyRef.current.slice(0, -1);
+          setHistory(historyRef.current);
+        } else if (pendingMovement?.direction === 'first') {
+          historyRef.current = [];
+          setHistory([]);
+        }
+        movementRef.current = null;
+        setMovement(null);
+        setMovementLoading(false);
+        if (focusHandoff.current?.id === requested.id && !focusHandoff.current.canceled)
+          setFocusAfterRead(requested.id);
+        else clearFocusHandoff(requested.id);
+      });
+    },
+    [clearFocusHandoff, isCurrentOwner, viewerId],
+  );
+  const scheduleRead = useCallback(
+    (cursor: ReviewCoordinate, direction?: ReviewDirection, origin?: HTMLElement | null) => {
+      if (!isCurrentOwner()) return;
+      const id = ++requestId.current;
+      const requested = { id, cursor };
+      const nextMovement = direction ? { direction, source: request.current?.cursor } : undefined;
+      request.current = requested;
+      if (nextMovement) {
+        movementRef.current = nextMovement;
+        setMovement(nextMovement);
+        window.scrollTo(0, 0);
+      }
+      if (movementRef.current) setMovementLoading(true);
+      if (origin) beginFocusHandoff(id, origin);
+      else clearFocusHandoff();
+      setFocusAfterRead(null);
+      completeRead(requested);
+    },
+    [beginFocusHandoff, clearFocusHandoff, completeRead, isCurrentOwner],
+  );
 
   useEffect(() => {
     if (focusAfterRead === null) return;
