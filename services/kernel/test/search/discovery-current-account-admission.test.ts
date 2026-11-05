@@ -5,6 +5,7 @@ import { derivedId } from '../../src/route/route.ts';
 import { validateAccountSnapshot } from '../../src/search/account-discovery.ts';
 import { currentDiscoveryCandidates } from '../../src/search/discovery-current.ts';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
+import { parseText } from '../../src/search/text.ts';
 import {
   MAX_ACCOUNT_DISCOVERY_BATCH,
   type AccountDiscoverySummary,
@@ -59,6 +60,7 @@ function disclose(
   candidates: readonly DiscoveryEngineHit[],
   read: (ids: readonly string[]) => AccountSnapshot | Promise<AccountSnapshot>,
   hydrate: (ids: readonly string[]) => Promise<ReadonlyMap<string, AccountDiscoverySummary>> = noHydrate,
+  readContext: DiscoveryReadContext = context,
 ) {
   return currentDiscoveryCandidates(
     createDiscoveryRegistry({
@@ -85,7 +87,7 @@ function disclose(
     candidates,
     undefined,
     release,
-    context,
+    readContext,
   );
 }
 
@@ -146,6 +148,29 @@ test('valid current Account rows hydrate and omitted keys stay not-current while
     summary: { kind: 'account', value: summary },
   });
   await expect(disclose([hit(nativeId, '7', '13')], () => observed)).rejects.toBeInstanceOf(SearchUnavailableError);
+});
+
+test('an absent Subject text producer omits indexed Subject candidates while current Account results remain available', async () => {
+  const account = hit(nativeId);
+  const subject: DiscoveryEngineHit = {
+    key: { owner: 'semantic', kind: 'schema:Book', route, id: '018f0000-0000-7000-8000-00a000000003' },
+    index: 'test-discovery-g1',
+    sourcePosition: '12',
+    revision: '7',
+    matched: [],
+    sort: ['The Quiet Harbor', 'schema:Book', 'subject:018f0000-0000-7000-8000-00a000000003'],
+  };
+  const observed: AccountSnapshot = { partition, position: 12n, accounts: [row(nativeId)] };
+  const currentAccount = summaryOf(nativeId);
+
+  const passed = await disclose(
+    [subject, account],
+    () => observed,
+    async () => new Map([[nativeId, currentAccount]]),
+    { ...context, textQuery: parseText('mira') },
+  );
+
+  expect([...passed.keys()]).toEqual([account]);
 });
 
 test('positive current evidence with missing, foreign, changed or malformed hydration refuses the whole page', async () => {

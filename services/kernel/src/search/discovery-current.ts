@@ -251,7 +251,13 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       unavailable();
   }
   // One Subject row-kind read per partition/chunk, shared across every configured catalogue kind.
-  const semantic = candidates.filter((candidate) => candidate.key.owner === 'semantic');
+  // If the current text producer is absent, do not publish its indexed Subject candidates.
+  // Keep checking independent owners so a mixed public query can still return their current rows.
+  const semantic = candidates.filter(
+    (candidate) =>
+      candidate.key.owner === 'semantic' &&
+      (context.textQuery === undefined || context.currentTextMatches !== undefined),
+  );
   const snapshots = new Map<number, SubjectSnapshot>();
   const source = registry.entries.find((entry) => entry.owner === 'semantic')?.source;
   if (semantic.length && !source) unavailable();
@@ -316,8 +322,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
         ...(context.textQuery === undefined
           ? {}
           : {
-              currentText: (subject: IndexedSubject) =>
-                context.currentTextMatches!(subject, context.textQuery!),
+              currentText: (subject: IndexedSubject) => context.currentTextMatches!(subject, context.textQuery!),
             }),
         relationProperties: Object.keys(release.properties).filter((property) =>
           relationFacetProperty(release, property),

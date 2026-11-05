@@ -453,7 +453,8 @@ tuple fences. An index revision, prepared result or completed identity epoch is 
 Decision: ordinary Search and mixed Discovery re-evaluate stale text candidates against current native labels,
 aliases and descriptions; suggestions re-evaluate prefixes against current native labels and aliases, using the
 queried generation's analyzers. This supplements retained whole-query checks; facet aggregates retain their own
-complete native proof.
+complete native proof. If mixed Discovery has no current Subject-text producer, it omits unverified Subject
+candidates while continuing to serve independently current owner results.
 
 Query-level privacy-reduction invalidation and acknowledgement is required **in addition to candidate checks**.
 Local reductions invalidate public use in their authoritative transaction. Foreign source-fence, target, consent
