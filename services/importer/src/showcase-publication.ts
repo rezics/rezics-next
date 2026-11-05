@@ -313,6 +313,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         etag: record.etag ?? null,
         sourceUrl: record.sourceUrl ?? null,
         status: record.status,
+        mediaState: record.mediaState ?? null,
         containerId: record.containerId,
         mediaId: record.mediaId ?? null,
         credit: record.credit ?? null,

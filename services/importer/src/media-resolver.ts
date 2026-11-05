@@ -33,7 +33,12 @@ export type MediaResolution =
   | {
       outcome: 'resolved';
       mediaIds: Record<string, string>;
-      assets: { sourceUrl: string; key: string; outcome: 'available' | 'pending' | 'rejected' }[];
+      assets: {
+        sourceUrl: string;
+        key: string;
+        outcome: 'available' | 'pending' | 'rejected';
+        mediaState: MediaImportStatus['media']['state'];
+      }[];
     };
 
 export interface MediaResolver {
@@ -209,10 +214,11 @@ export function createMediaResolver(options: MediaResolverOptions): MediaResolve
           status = observation;
         }
         signal.throwIfAborted();
-        const state = status?.media.state;
+        const mediaState = status?.media.state ?? accepted.media.state;
+        const state = mediaState;
         const outcome = state === 'available' || state === 'rejected' ? state : 'pending';
         if (outcome === 'available') result.mediaIds[request.sourceUrl] = status!.media.id;
-        result.assets.push({ sourceUrl: request.sourceUrl, key, outcome });
+        result.assets.push({ sourceUrl: request.sourceUrl, key, outcome, mediaState });
       }
       return result;
     },

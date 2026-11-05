@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { SourceRecord } from '@rezics/conversion';
-import type { MediaImportRequest } from '@rezics/definitions/media-import';
+import type { MediaImportRequest, MediaImportStatus } from '@rezics/definitions/media-import';
 import { safeSourceUrl, sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createBoundedPublicGet, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_RESPONSE_BYTES } from './import-fetch.ts';
 import type { CrossMediaPlan } from './cross-media-seed.ts';
@@ -71,6 +71,7 @@ export type CrossMediaMediaOutcome = Omit<BangumiMediaSource, 'sourceStatus'> &
       | 'invalid'
       | 'refused'
       | 'unknown';
+    mediaState?: MediaImportStatus['media']['state'];
     containerId: string | null;
     mediaId?: string;
     mediaKey?: string;
@@ -411,15 +412,14 @@ export async function acquireBangumiCoverSources(
       continue;
     }
     const prior = options.journal?.coverSource('bangumi_cross_media', row.key, archiveDigest);
-    const lastStatus = creator ? options.journal?.latestMediaStatus?.('bangumi_cross_media', row.key) : null;
-    const refreshCreator =
-      creator &&
+    const lastStatus = options.journal?.latestMediaStatus?.('bangumi_cross_media', row.key);
+    const refreshSource =
       prior !== null &&
       prior !== undefined &&
       lastStatus !== null &&
       lastStatus !== undefined &&
       !['pending', 'unknown', 'fenced'].includes(lastStatus);
-    if (prior && !refreshCreator) {
+    if (prior && !refreshSource) {
       results.set(row.key, cachedSource(prior, row, endpoint));
       continue;
     }

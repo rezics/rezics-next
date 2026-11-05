@@ -15,7 +15,7 @@ import {
 import { acquireBangumiCoverSources } from '../src/showcase-media.ts';
 import { ImportTransportError } from '../src/import-client.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
-import type { ShowcaseManifest } from '../src/showcase-manifest.ts';
+import { buildShowcaseManifest, type ShowcaseManifest } from '../src/showcase-manifest.ts';
 import { createSelectedFamilySourceRegistration } from '../src/source-registry.ts';
 
 const sourceUrl = 'https://lain.bgm.tv/pic/cover/l/12/34/101.jpg';
@@ -129,7 +129,7 @@ test(
     let sourceReads = 0;
     let reservations = 0;
     let statusReads = 0;
-    let terminal: 'reserved' | 'available' = 'reserved';
+    let terminal: 'reserved' | 'uploaded' | 'available' = 'reserved';
     let sealedBody = '';
     let sealedKey = '';
     let mediaRequest: MediaImportRequest | undefined;
@@ -204,12 +204,12 @@ test(
           expect(id).toBe(mediaId);
           const request = mediaRequest!;
           const media: MediaImportStatus['media'] =
-            terminal === 'available'
+            terminal !== 'reserved'
               ? {
                   id,
                   containerId: subjectId,
                   purpose: 'cover',
-                  state: 'available',
+                  state: terminal,
                   byteCount: 32,
                   mediaType: 'image/png',
                   sha256: 'a'.repeat(64),
@@ -265,7 +265,12 @@ test(
           mediaDeadlineMs: 0,
         },
       );
-      expect(initial.mediaOutcomes[0]).toMatchObject({ status: 'pending', containerId: subjectId, sourceUrl });
+      expect(initial.mediaOutcomes[0]).toMatchObject({
+        status: 'pending',
+        mediaState: 'reserved',
+        containerId: subjectId,
+        sourceUrl,
+      });
       expect(mediaRequest).toMatchObject({ containerId: subjectId, sourceUrl });
       expect(mediaRequest!.provenance).toMatchObject({
         source: crossMediaAliases.bangumi,
@@ -274,6 +279,39 @@ test(
         field_group: 'cover',
       });
       expect(statusReads).toBe(1);
+
+      const pendingManifest = buildShowcaseManifest({
+        plan: firstPlan,
+        readings: initial.readings,
+        acknowledgements: [],
+        aliases: crossMediaAliases,
+        mediaOutcomes: initial.mediaOutcomes,
+      });
+      expect(pendingManifest.media[0]).toMatchObject({ status: 'pending', mediaState: 'reserved' });
+      journal.sealIntent(pendingManifest);
+      const pendingIntentDb = new Database(journalPath);
+      try {
+        const stored = pendingIntentDb
+          .query<{ intent_json: string }, [string]>(
+            'SELECT intent_json FROM showcase_intent WHERE intent_digest=?',
+          )
+          .get(pendingManifest.digest)!;
+        expect(JSON.parse(stored.intent_json).media[0]).toMatchObject({ status: 'pending', mediaState: 'reserved' });
+      } finally {
+        pendingIntentDb.close();
+      }
+
+      terminal = 'uploaded';
+      const uploading = await seedCrossMedia(
+        firstPlan,
+        statePath,
+        port,
+        { origin: 'https://fixture.test' },
+        { providers: ['bangumi'], mediaDeadlineMs: 0 },
+      );
+      expect(uploading.mediaOutcomes[0]).toMatchObject({ status: 'pending', mediaState: 'uploaded' });
+      expect(reservations).toBe(1);
+      expect(statusReads).toBe(2);
 
       terminal = 'available';
       const resumed = await seedCrossMedia(
@@ -286,9 +324,14 @@ test(
           mediaDeadlineMs: 0,
         },
       );
-      expect(resumed.mediaOutcomes[0]).toMatchObject({ status: 'available', containerId: subjectId, mediaId });
+      expect(resumed.mediaOutcomes[0]).toMatchObject({
+        status: 'available',
+        mediaState: 'available',
+        containerId: subjectId,
+        mediaId,
+      });
       expect(reservations).toBe(1);
-      expect(statusReads).toBe(2);
+      expect(statusReads).toBe(3);
       expect(sealedBody).toBe(JSON.stringify(mediaRequest));
       expect(sealedKey).toBeTruthy();
     } finally {
