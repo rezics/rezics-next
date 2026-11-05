@@ -84,7 +84,9 @@ export function listOpenToolIncidents(store: WorkerStore): ToolIncident[] {
 /** Invocation-local view used by status to share its incident history and probe task reads. */
 export function projectToolIncidentStatus(store: WorkerStore, tasks: readonly Task[]) {
   const states = currentStates(store);
-  const taskStates = new Map<string, string | undefined>(tasks.map((task) => [task.id, task.state]));
+  const taskStates = new Map<string, string | undefined>(
+    tasks.map((task): [string, string | undefined] => [task.id, task.state]),
+  );
   for (const { status, incident } of states.values()) {
     if (status !== 'open' || taskStates.has(incident.probe.taskId)) continue;
     try {
