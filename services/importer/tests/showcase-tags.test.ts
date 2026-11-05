@@ -941,7 +941,10 @@ test('selected rating evidence survives response loss and reopen before terminal
     expect(sealed.length).toBeGreaterThan(0);
     journal.close();
     journal = new ShowcaseJournal(journalPath);
-    const reopened = await importShowcaseTags(input());
+    const nextInput = input();
+    const captured = nextInput.port.batch;
+    nextInput.port.batch = async request => { try { return await captured(request); } catch (error) { console.error(error); throw error; } };
+    const reopened = await importShowcaseTags(nextInput);
     expect(fetches).toBe(1);
     expect(reopened.tagWeightObservations[0]?.responseDigest).toBe(sealed[0]!.command.source.digest);
     for (const row of sealed)
