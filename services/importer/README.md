@@ -2750,8 +2750,8 @@ Type-1 PersonDetail `birth_year`/`birth_mon`/`birth_day` integers become one
 cited day-precision `schema:birthDate`; partial, Organization and Character
 `生日` stay omitted. Archive person rows lack those fields: one shared GET
 `/v0/persons/{id}` per selected id (existing public GET, 65,536 bytes, 64 people)
-is sealed beside the archive digest. Decision: that GET is the existing Person
-career acquisition, not a second HTTP client. Failed acquisition withholds only the date.
+is sealed beside the archive digest. Decision: that GET is the shared Person
+career, image and date acquisition, not a second HTTP client. Failed acquisition withholds only the date.
 Ordinary dumps are JSON-lines; a `career` array keys `person:<id>` under
 `cross-media-entities@15`. Selected envelopes keep
 `cross-media-entities@15+bangumi@15`. `last_modified` is comment time, not a

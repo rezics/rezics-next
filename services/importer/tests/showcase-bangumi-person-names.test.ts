@@ -8,6 +8,7 @@ import { convertCrossMediaEntity } from '../../../packages/conversion/src/cross-
 import { developmentShowcaseSelection } from '../../../scripts/datasets/cross-media-seed.ts';
 import { emptyCrossMediaPlan } from '../src/cross-media-seed.ts';
 import { acquireBangumiPersonCareerSources } from '../src/showcase-bangumi-careers.ts';
+import { acquireBangumiCoverSources } from '../src/showcase-media.ts';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
 
 const evidence = JSON.parse(
@@ -50,6 +51,7 @@ test('the default selected Person shares one bounded PersonDetail response for c
     { source: 'bangumi', key: String(selection.rootSubject), kind: 'work', membership: 'family' },
     { source: 'bangumi', key: `person:${selection.person.id}`, kind: 'person', membership: 'referenced' },
   );
+  plan.creatorImageKeys = [`person:${selection.person.id}`];
   const requests: string[] = [];
   const fetch = (async (input: RequestInfo | URL) => {
     requests.push(String(input));
@@ -75,8 +77,17 @@ test('the default selected Person shares one bounded PersonDetail response for c
       responseDigest: selection.person.detailSha256,
       personChineseName: '美甘义人',
       careers: ['producer'],
+      personImageStatus: 'absent',
     });
     expect(acquired.personCareerSources?.[0]).not.toHaveProperty('etag');
+    const withImage = await acquireBangumiCoverSources(acquired, { journal, fetch, sleep: async () => {} });
+    expect(withImage.creatorImageSources?.[0]).toMatchObject({
+      externalId: `person:${selection.person.id}`,
+      endpoint: selection.person.detailUrl,
+      responseDigest: selection.person.detailSha256,
+      sourceStatus: 'absent',
+    });
+    expect(requests).toEqual([selection.person.detailUrl]);
 
     journal.close();
     const reopened = new ShowcaseJournal(journalPath);

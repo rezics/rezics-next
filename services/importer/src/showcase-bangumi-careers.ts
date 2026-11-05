@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { SourceRecord } from '@rezics/conversion';
 import { projectBangumiPersonName } from '@rezics/conversion/cross-media-entities';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import { safeSourceUrl, sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createBoundedPublicGet, MAX_IMPORT_DEADLINE_MS } from './import-fetch.ts';
 import type { CrossMediaPlan } from './cross-media-seed.ts';
 import type { BangumiPersonCareerSource } from './showcase-media.ts';
@@ -71,6 +71,27 @@ function admittedCareers(value: unknown): string[] | undefined {
   return [...new Set(value as string[])];
 }
 
+function personImage(value: unknown):
+  | { personImageStatus: 'available'; personImageUrl: string }
+  | { personImageStatus: 'absent' | 'invalid' } {
+  if (value === undefined || value === null) return { personImageStatus: 'absent' };
+  const images = object(value);
+  if (!images || ['large', 'medium', 'small', 'grid'].some((size) => typeof images[size] !== 'string'))
+    return { personImageStatus: 'invalid' };
+  const large = images.large as string;
+  if (!large.trim()) return { personImageStatus: 'absent' };
+  let sourceUrl: string;
+  try {
+    sourceUrl = safeSourceUrl(large, ['lain.bgm.tv']);
+  } catch (error) {
+    if (error instanceof TypeError) return { personImageStatus: 'invalid' };
+    throw error;
+  }
+  if (/\/no_icon_(?:person|subject)\./iu.test(new URL(sourceUrl).pathname))
+    return { personImageStatus: 'absent' };
+  return { personImageStatus: 'available', personImageUrl: sourceUrl };
+}
+
 function receipt(source: BangumiPersonCareerSource, row: SourceRecord): BangumiPersonCareerSource {
   const endpoint = `${origin}${pathPrefix}${row.key.slice('person:'.length)}`;
   if (
@@ -93,6 +114,10 @@ function receipt(source: BangumiPersonCareerSource, row: SourceRecord): BangumiP
         Buffer.byteLength(source.personChineseName, 'utf8') > 4096 ||
         [...source.personChineseName].length > 500 ||
         /\p{Cc}/u.test(source.personChineseName))) ||
+    (source.personImageStatus !== undefined &&
+      (!['available', 'absent', 'invalid'].includes(source.personImageStatus) ||
+        (source.personImageStatus === 'available' &&
+          (typeof source.personImageUrl !== 'string' || safeSourceUrl(source.personImageUrl, ['lain.bgm.tv']) !== source.personImageUrl)))) ||
     (source.personNameDiagnostics !== undefined &&
       (!Array.isArray(source.personNameDiagnostics) ||
         source.personNameDiagnostics.length > 16 ||
@@ -142,6 +167,7 @@ async function readCareers(
     const birth_year = integerOrNull(person.birth_year);
     const birth_mon = integerOrNull(person.birth_mon);
     const birth_day = integerOrNull(person.birth_day);
+    const image = personImage(person.images);
     const names = projectBangumiPersonName(
       person.name_cn,
       Object.hasOwn(person, 'name_cn'),
@@ -162,6 +188,7 @@ async function readCareers(
       ...(birth_day === undefined ? {} : { birth_day }),
       ...(names.chineseName === undefined ? {} : { personChineseName: names.chineseName }),
       ...(names.diagnostics.length ? { personNameDiagnostics: names.diagnostics } : {}),
+      ...image,
       responseDigest,
       ...(responseEtag ? { etag: responseEtag } : {}),
     };

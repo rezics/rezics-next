@@ -107,6 +107,15 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         source_json TEXT NOT NULL,
         UNIQUE(source_alias,external_id,archive_digest,response_digest)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS showcase_person_career_source (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_alias TEXT NOT NULL,
+        external_id TEXT NOT NULL,
+        archive_digest TEXT NOT NULL,
+        response_digest TEXT NOT NULL,
+        source_json TEXT NOT NULL,
+        UNIQUE(source_alias,external_id,archive_digest,response_digest)
+      ) STRICT;
       CREATE TABLE IF NOT EXISTS showcase_action (
         action_key TEXT PRIMARY KEY,
         body_digest TEXT NOT NULL,
@@ -330,7 +339,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
   coverSource(sourceAlias: string, externalId: string, archiveDigest: string): BangumiCoverSource | null {
     const row = this.#db
       .query<{ source_json: string }, [string, string, string]>(
-        "SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=? AND json_extract(source_json,'$.type')=1 ORDER BY id DESC LIMIT 1",
+        'SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=? ORDER BY id DESC LIMIT 1',
       )
       .get(sourceAlias, externalId, archiveDigest);
     return row ? (JSON.parse(row.source_json) as BangumiCoverSource) : null;
@@ -400,7 +409,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
   personCareerSource(sourceAlias: string, externalId: string, archiveDigest: string): BangumiPersonCareerSource | null {
     const row = this.#db
       .query<{ source_json: string }, [string, string, string]>(
-        'SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=? ORDER BY id DESC LIMIT 1',
+        'SELECT source_json FROM showcase_person_career_source WHERE source_alias=? AND external_id=? AND archive_digest=? ORDER BY id DESC LIMIT 1',
       )
       .get(sourceAlias, externalId, archiveDigest);
     return row ? (JSON.parse(row.source_json) as BangumiPersonCareerSource) : null;
@@ -448,9 +457,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       return prior;
     }
     this.#db
-      .query(
-        'INSERT INTO showcase_cover_source(source_alias,external_id,archive_digest,response_digest,source_json) VALUES(?,?,?,?,?)',
-      )
+      .query('INSERT INTO showcase_person_career_source(source_alias,external_id,archive_digest,response_digest,source_json) VALUES(?,?,?,?,?)')
       .run(source.sourceAlias, source.externalId, source.archiveDigest, source.responseDigest!, body);
     return source;
   }

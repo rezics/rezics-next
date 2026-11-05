@@ -1325,7 +1325,7 @@ Chinese fact. ETags and HTTP Last-Modified remain cache metadata, not wiki
 revisions, and the selected Chinese text enters the normalized converter digest.
 
 The finite default seed reuses its selected-person PersonDetail acquisition for
-career and Chinese-name evidence, bounded to 64 selected people per provider and
+career, creator-image and Chinese-name evidence, bounded to 64 selected people per provider and
 one response per selected id and acquisition attempt. Existing showcase review
 separately selects candidates and performs independent current reads on the
 acknowledged Person. Aliases, inferred languages and identity resolution remain

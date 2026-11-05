@@ -49,6 +49,8 @@ export type BangumiPersonCareerSource = Readonly<{
   birth_day?: number | null;
   personChineseName?: string;
   personNameDiagnostics?: readonly Readonly<{ pointer: string; code: string }>[];
+  personImageStatus?: 'available' | 'absent' | 'invalid';
+  personImageUrl?: string;
   responseDigest?: string;
   etag?: string;
   code?: 'source-api-http' | 'source-api-unavailable' | 'source-payload-invalid';
@@ -158,6 +160,25 @@ function cachedSource(source: BangumiMediaSource, row: SourceRecord, endpoint: s
     safeSourceUrl(source.sourceUrl, ['lain.bgm.tv']);
   }
   return source;
+}
+
+function sharedPersonImage(source: BangumiPersonCareerSource, row: SourceRecord, endpoint: string) {
+  const base = {
+    sourceAlias: source.sourceAlias,
+    externalId: source.externalId,
+    sourceRevision: row.revision ?? 'unversioned',
+    archiveDigest: sourceDigest(row.payload),
+    endpoint,
+    ...(source.responseDigest ? { responseDigest: source.responseDigest } : {}),
+    ...(source.etag ? { etag: source.etag } : {}),
+  };
+  if (source.sourceStatus === 'unavailable')
+    return { ...base, sourceStatus: 'unavailable' as const, ...(source.code ? { code: source.code } : {}) };
+  if (source.personImageStatus === 'available' && source.personImageUrl)
+    return { ...base, sourceStatus: 'available' as const, sourceUrl: source.personImageUrl };
+  if (source.personImageStatus === 'absent') return { ...base, sourceStatus: 'absent' as const };
+  if (source.personImageStatus === 'invalid')
+    return { ...base, sourceStatus: 'invalid' as const, code: 'source-payload-invalid' as const };
 }
 
 async function lookupCover(
@@ -380,6 +401,13 @@ export async function acquireBangumiCoverSources(
   for (const { row, creator } of tasks) {
     const endpoint = endpointFor(row.key);
     const archiveDigest = sourceDigest(row.payload);
+    const sharedCareerSource = creator ? plan.personCareerSources?.find((source) => source.externalId === row.key) : undefined;
+    const sharedImage = sharedCareerSource ? sharedPersonImage(sharedCareerSource, row, endpoint) : undefined;
+    if (sharedImage) {
+      if (sharedImage.sourceStatus !== 'unavailable') options.journal?.sealCoverSource(sharedImage);
+      results.set(row.key, sharedImage);
+      continue;
+    }
     const prior = options.journal?.coverSource('bangumi_cross_media', row.key, archiveDigest);
     const lastStatus = creator ? options.journal?.latestMediaStatus?.('bangumi_cross_media', row.key) : null;
     const refreshCreator =
