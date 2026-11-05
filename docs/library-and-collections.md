@@ -65,6 +65,10 @@ ordered and noted. Dynamic membership derives unique subjects from native facts 
 output. Canonical browsing may combine matching originals into one card but never rewrites curated occurrences.
 Presentation kind and client layout do not change membership or authorization.
 
+Decision: Public ranked Collection reads preserve the current complete publication's occurrence order and IDs; the
+description, covers and notes come from that same read, and row links return to the exact Collection address and
+occurrence fragment.
+
 Decision: public Collection discovery keeps canonical filters and cursors in its address and delegates matching,
 ordering and pagination to Search; Commerce supplies only current publicly disclosed Collection summaries.
 
