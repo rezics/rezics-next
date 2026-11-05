@@ -67,11 +67,8 @@ const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/ker
 const { sessionQuery } = await import('../src/session/query');
 
 const reads = await import('../src/checkout/creator-sales');
-const {
-  CreatorSalesCurrent,
-  creatorSalesLocationKey,
-  navigateCreatorSales,
-} = await import('../src/checkout/creator-sales-current');
+const { CreatorSalesCurrent, creatorSalesLocationKey, navigateCreatorSales } =
+  await import('../src/checkout/creator-sales-current');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
 const A = '019a2100-0000-7000-8000-000000000020';

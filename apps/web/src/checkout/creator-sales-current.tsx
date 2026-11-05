@@ -470,7 +470,9 @@ function CurrentSalesRead({
       <CreatorSalesPage page={{ kind: 'loading' }} locale={locale} {...(cursor === undefined ? {} : { cursor })} />
     );
   if (origin.isCurrent()) origin.workspace.read = value;
-  const page: CreatorSalesData = windows.navigationFailed ? { kind: 'unavailable' } : (value?.page ?? { kind: 'loading' });
+  const page: CreatorSalesData = windows.navigationFailed
+    ? { kind: 'unavailable' }
+    : (value?.page ?? { kind: 'loading' });
   return (
     <CreatorSalesPage
       page={page}
