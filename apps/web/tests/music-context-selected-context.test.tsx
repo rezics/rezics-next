@@ -150,6 +150,7 @@ const [
   { musicContextRouteSearch },
   { candidateContext },
   { sessionQuery },
+  { browserObservation },
 ] = await Promise.all([
     import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))),
     import('../src/features/catalogue/music-context-profile/session'),
@@ -158,6 +159,7 @@ const [
     import('../src/features/catalogue/music-context-profile/navigation'),
     import('../src/subject/candidates'),
     import('../src/session/query'),
+    import('../src/session'),
   ]);
 
 const window = new Window({ url: `https://site.test/en/subjects/${anchor}/harbor-stage/music-context`, width: 390 });
@@ -287,6 +289,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     queryClient.setQueryData(sessionQuery.queryKey, sessionObservation);
   };
   setCaller(callerA);
+  const stopObservation = browserObservation(queryClient).subscribe(() => {});
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
@@ -495,6 +498,7 @@ test('selected Context stays bound through the Subject entry, route, session, ac
     expect(new URL(freshGlobal.href).searchParams.has('realm')).toBe(false);
   } finally {
     await act(async () => root.unmount());
+    stopObservation();
     queryClient.clear();
     host.remove();
   }
