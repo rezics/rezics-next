@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
 import { completedUtcHour, renderHourlyEfficiencyReport, sendHourlyEfficiencyReport } from './efficiency-report.ts';
-import { recordFlow } from './flow.ts';
+import { recordFlow, type FlowEvent } from './flow.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { WorkerStore, workerRecordEndedAtExpression } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
@@ -108,6 +108,72 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
   } finally {
     db.close();
     empty.close();
+  }
+});
+
+test('hourly aggregation preserves interleaved waits and normalized landings as the bucket grows', async () => {
+  const h = fixture();
+  const bucket = '2026-10-31T01:00:00.000Z';
+  const at = (minute: number) => new Date(Date.parse(bucket) + minute * 60_000).toISOString();
+  const flow = (
+    taskId: string,
+    attempt: number,
+    stage: FlowEvent['stage'],
+    action: FlowEvent['action'],
+    minute: number,
+    detail?: string,
+  ) => recordFlow(h.db, { taskId, attempt, stage, action, at: at(minute), ...(detail ? { detail } : {}) });
+  try {
+    task(h.db, 'ordinary', 'integrated', 'search', 2);
+    task(h.db, 'urgent', 'integrated', 'control-plane');
+    task(h.db, 'ambiguous', 'integrated', 'search');
+    task(h.db, 'zeta', 'integrated', 'search');
+    task(h.db, 'alpha', 'integrated', 'content');
+    h.db.query("UPDATE worker_tasks SET body=json_set(body,'$.brief.urgent',true) WHERE id='urgent'").run();
+
+    flow('ordinary', 1, 'check', 'requested', 1);
+    flow('urgent', 1, 'check', 'requested', 2);
+    flow('ordinary', 1, 'check', 'acquired', 3);
+    flow('urgent', 1, 'check', 'released', 4);
+    flow('ordinary', 1, 'check', 'requested', 5);
+    flow('urgent', 1, 'check', 'requested', 6);
+    flow('ordinary', 1, 'check', 'requested', 8);
+    flow('urgent', 1, 'check', 'requested', 9);
+    flow('urgent', 1, 'check', 'acquired', 11);
+    flow('ordinary', 1, 'check', 'acquired', 12);
+    flow('ordinary', 1, 'check', 'requested', 14);
+    flow('ordinary', 1, 'check', 'released', 15);
+    flow('ordinary', 1, 'check', 'acquired', 18);
+    flow('ordinary', 1, 'worker', 'started', 20);
+    flow('ordinary', 1, 'worker', 'started', 21);
+    flow('ordinary', 1, 'worker', 'finished', 22);
+    flow('ordinary', 1, 'worker', 'finished', 23);
+    flow('ordinary', 2, 'worker', 'finished', 24);
+    flow('urgent', 1, 'worker', 'started', 25);
+    flow('urgent', 1, 'worker', 'started', 26);
+    flow('urgent', 1, 'worker', 'finished', 27);
+    flow('urgent', 1, 'worker', 'finished', 28);
+    flow('urgent', 1, 'integration', 'integrated', 1, JSON.stringify({ integrationTarget: 'main' }));
+    flow('ambiguous', 1, 'integration', 'integrated', 5, JSON.stringify({ integrationTarget: 'integration' }));
+    flow('zeta', 1, 'integration', 'integrated', 10, JSON.stringify({ integrationTarget: 'integration' }));
+    flow('alpha', 1, 'integration', 'integrated', 10, JSON.stringify({ integrationTarget: 'integration' }));
+    flow('ambiguous', 2, 'integration', 'integrated', 30, JSON.stringify({ integrationTarget: 'main' }));
+    for (let index = 0; index < 96; index++) flow('ordinary', 2, 'check', 'released', 40 + (index % 10));
+
+    const { readControlPolicy } = await import('./policy.ts');
+    const policy = readControlPolicy({ hourlyReport: { goalRows: 2, landingRows: 2 } });
+    const report = await renderHourlyEfficiencyReport(h.db, { bucket, policy });
+    expect(report).toContain('Landings in UTC hour: dev 2; stabilize 0; main 0; unknown 1 (each task counted once).');
+    expect(report).toContain('Landings by Goal: content 1, search 1; 1 more Goals omitted.');
+    expect(report).toContain(
+      'Landing identities: ambiguous#1 at 2026-10-31T01:05:00.000Z (unknown); alpha#1 at 2026-10-31T01:10:00.000Z (dev); 1 more omitted.',
+    );
+    expect(report).toContain('Urgent landings (excluded from throughput): urgent#1.');
+    expect(report).toContain('Worker starts / finishes in bucket: 2 starts (including resumes) / 2 finished attempts.');
+    expect(report).toContain('Urgent worker starts / finishes in bucket (excluded from throughput): 2 / 1.');
+    expect(report).toContain('Check-slot wait in bucket: 3 completed request/acquire pairs; p90 4m.');
+  } finally {
+    h.close();
   }
 });
 

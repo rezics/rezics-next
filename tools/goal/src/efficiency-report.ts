@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
-import { ensureFlow, type FlowEvent } from './flow.ts';
+import { ensureFlow } from './flow.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { listOpenToolIncidents } from './tool-incidents.ts';
@@ -58,12 +58,35 @@ type LandingRow = {
   task_id: string;
   attempt: number;
   at: string;
+  stage: string;
+  action: string;
   goal: string | null;
   urgent: number | null;
   target: string | null;
   paths: string | null;
   declared_paths: string | null;
   detail: string | null;
+};
+
+type LandingTarget = 'dev' | 'stabilize' | 'main' | 'unknown';
+
+type NormalizedLanding = {
+  task_id: string;
+  attempt: number;
+  at: string;
+  goal: string | null;
+  urgent: number | null;
+  target: LandingTarget;
+};
+
+type BucketSummary = {
+  starts: number;
+  finishes: number;
+  urgentStarts: number;
+  urgentFinishes: number;
+  checkWaitCount: number;
+  checkWaitP90: number | null;
+  landingLines: string[];
 };
 
 function hasTable(db: Database, name: string): boolean {
@@ -79,7 +102,7 @@ function clean(value: unknown, characters: number): string {
   );
 }
 
-function targetFor(row: LandingRow): 'dev' | 'stabilize' | 'main' | 'unknown' {
+function targetFor(row: LandingRow): LandingTarget {
   if (row.detail) {
     try {
       const detail: unknown = JSON.parse(row.detail);
@@ -116,75 +139,36 @@ function targetFor(row: LandingRow): 'dev' | 'stabilize' | 'main' | 'unknown' {
   }
 }
 
-function hourEvents(db: Database, bucket: UtcHour, available: boolean): FlowEvent[] {
-  if (!available) return [];
-  const rows = db
-    .query(
-      `SELECT task_id, attempt, stage, action, at, detail FROM flow_events INDEXED BY flow_events_at_window
-       WHERE at >= ? AND at < ? ORDER BY at, sequence`,
-    )
-    .all(bucket.start, bucket.end) as {
-    task_id: string;
-    attempt: number;
-    stage: string;
-    action: string;
-    at: string;
-    detail: string | null;
-  }[];
-  return rows.map((row) => ({
-    taskId: row.task_id,
+function normalizedLanding(row: LandingRow): NormalizedLanding {
+  return {
+    task_id: row.task_id,
     attempt: row.attempt,
-    stage: row.stage as FlowEvent['stage'],
-    action: row.action,
     at: row.at,
-    ...(row.detail === null ? {} : { detail: row.detail }),
-  }));
+    goal: row.goal,
+    urgent: row.urgent,
+    target: targetFor(row),
+  };
 }
 
-function landedSummary(db: Database, bucket: UtcHour, available: boolean, policy: ReportPolicy): string[] {
-  if (!available || !hasTable(db, 'worker_tasks'))
-    return [
-      'Landings: unknown (timestamped integration history unavailable).',
-      'Landing identities: unknown (timestamped integration history unavailable).',
-    ];
-  const landingJoin = hasTable(db, 'landing_queue')
-    ? 'LEFT JOIN landing_queue AS l ON l.task=e.task_id AND l.attempt=e.attempt'
-    : 'LEFT JOIN (SELECT NULL AS task, NULL AS attempt, NULL AS request) AS l ON l.task=e.task_id AND l.attempt=e.attempt';
-  const rows = db
-    .query(
-      `SELECT e.task_id, e.attempt, e.at,
-              json_extract(t.body, '$.brief.goal') AS goal,
-              json_extract(t.body, '$.brief.urgent') AS urgent,
-              json_extract(t.body, '$.brief.target') AS target,
-              json_extract(t.body, '$.brief.paths') AS paths,
-              json_extract(l.request, '$.declaredPaths') AS declared_paths,
-              e.detail
-       FROM flow_events AS e INDEXED BY flow_events_launch_window
-       LEFT JOIN worker_tasks AS t ON t.id = e.task_id
-       ${landingJoin}
-       WHERE e.stage='integration' AND e.action='integrated' AND e.at >= ? AND e.at < ?
-       ORDER BY e.at, e.sequence`,
-    )
-    .all(bucket.start, bucket.end) as LandingRow[];
-  const byTask = new Map<string, LandingRow>();
-  for (const row of rows) {
-    const previous = byTask.get(row.task_id);
-    if (!previous) byTask.set(row.task_id, row);
-    else if (targetFor(previous) !== targetFor(row) || previous.goal !== row.goal)
-      byTask.set(row.task_id, { ...previous, goal: null, target: 'ambiguous', paths: null });
-  }
-  const totals: Record<'dev' | 'stabilize' | 'main' | 'unknown', number> = {
-    dev: 0,
-    stabilize: 0,
-    main: 0,
-    unknown: 0,
-  };
+function landingLines(
+  rows: Map<string, NormalizedLanding>,
+  hasLanding: boolean,
+  urgentIdentities: string[],
+  policy: ReportPolicy,
+): string[] {
+  const totals: Record<LandingTarget, number> = { dev: 0, stabilize: 0, main: 0, unknown: 0 };
   const goals = new Map<string, number>();
-  for (const row of byTask.values()) {
+  const identities: string[] = [];
+  let landingCount = 0;
+  const ordered = [...rows.values()].sort((a, b) => a.at.localeCompare(b.at) || a.task_id.localeCompare(b.task_id));
+  for (const row of ordered) {
     if (row.urgent === 1) continue;
-    totals[targetFor(row)]++;
+    landingCount++;
+    totals[row.target]++;
     const goal = clean(row.goal, policy.fieldCharacters);
     goals.set(goal, (goals.get(goal) ?? 0) + 1);
+    if (identities.length < policy.landingRows)
+      identities.push(`${clean(row.task_id, policy.fieldCharacters)}#${row.attempt} at ${row.at} (${row.target})`);
   }
   const perGoal = [...goals]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -192,25 +176,100 @@ function landedSummary(db: Database, bucket: UtcHour, available: boolean, policy
     .map(([goal, count]) => `${goal} ${count}`)
     .join(', ');
   const omittedGoals = Math.max(0, goals.size - policy.goalRows);
-  const landings = [...byTask.values()]
-    .filter((row) => row.urgent !== 1)
-    .sort((a, b) => a.at.localeCompare(b.at) || a.task_id.localeCompare(b.task_id));
-  const landingIdentities = landings
-    .slice(0, policy.landingRows)
-    .map((row) => `${clean(row.task_id, policy.fieldCharacters)}#${row.attempt} at ${row.at} (${targetFor(row)})`)
-    .join('; ');
-  const omittedLandings = Math.max(0, landings.length - policy.landingRows);
+  const omittedLandings = Math.max(0, landingCount - identities.length);
   return [
     `Landings in UTC hour: dev ${totals.dev}; stabilize ${totals.stabilize}; main ${totals.main}; unknown ${totals.unknown} (each task counted once).`,
-    `Landings by Goal: ${perGoal || (rows.length ? 'unknown' : 'none recorded')}${omittedGoals ? `; ${omittedGoals} more Goals omitted` : ''}.`,
-    `Landing identities: ${landingIdentities || 'none recorded'}${omittedLandings ? `; ${omittedLandings} more omitted` : ''}.`,
-    `Urgent landings (excluded from throughput): ${
-      [...byTask.values()]
-        .filter((row) => row.urgent === 1)
-        .map((row) => `${clean(row.task_id, policy.fieldCharacters)}#${row.attempt}`)
-        .join('; ') || 'none recorded'
-    }.`,
+    `Landings by Goal: ${perGoal || (hasLanding ? 'unknown' : 'none recorded')}${omittedGoals ? `; ${omittedGoals} more Goals omitted` : ''}.`,
+    `Landing identities: ${identities.join('; ') || 'none recorded'}${omittedLandings ? `; ${omittedLandings} more omitted` : ''}.`,
+    `Urgent landings (excluded from throughput): ${urgentIdentities.join('; ') || 'none recorded'}.`,
   ];
+}
+
+function aggregateBucket(
+  db: Database,
+  bucket: UtcHour,
+  available: boolean,
+  tasksAvailable: boolean,
+  policy: ReportPolicy,
+): BucketSummary {
+  const summary: BucketSummary = {
+    starts: 0,
+    finishes: 0,
+    urgentStarts: 0,
+    urgentFinishes: 0,
+    checkWaitCount: 0,
+    checkWaitP90: null,
+    landingLines: [
+      'Landings: unknown (timestamped integration history unavailable).',
+      'Landing identities: unknown (timestamped integration history unavailable).',
+    ],
+  };
+  if (!available) return summary;
+
+  const taskJoin = tasksAvailable
+    ? 'LEFT JOIN worker_tasks AS t ON t.id=e.task_id'
+    : 'LEFT JOIN (SELECT NULL AS id, NULL AS body) AS t ON t.id=e.task_id';
+  const landingJoin = tasksAvailable && hasTable(db, 'landing_queue')
+    ? 'LEFT JOIN landing_queue AS l ON l.task=e.task_id AND l.attempt=e.attempt'
+    : 'LEFT JOIN (SELECT NULL AS task, NULL AS attempt, NULL AS request) AS l ON l.task=e.task_id AND l.attempt=e.attempt';
+  const rows = db
+    .query(
+      `SELECT e.task_id, e.attempt, e.stage, e.action, e.at, e.detail,
+              json_extract(t.body, '$.brief.goal') AS goal,
+              json_extract(t.body, '$.brief.urgent') AS urgent,
+              json_extract(t.body, '$.brief.target') AS target,
+              json_extract(t.body, '$.brief.paths') AS paths,
+              json_extract(l.request, '$.declaredPaths') AS declared_paths
+       FROM flow_events AS e INDEXED BY flow_events_at_window
+       ${taskJoin}
+       ${landingJoin}
+       WHERE e.at >= ? AND e.at < ?
+       ORDER BY e.at, e.sequence`,
+    )
+    .all(bucket.start, bucket.end) as LandingRow[];
+  const requestedChecks = new Map<string, number>();
+  const finished = new Set<string>();
+  const urgentFinished = new Set<string>();
+  const landings = new Map<string, NormalizedLanding>();
+  const urgentLandings: string[] = [];
+  const checkWaits: number[] = [];
+  let hasLanding = false;
+  for (const row of rows) {
+    const urgent = row.urgent === 1;
+    if (row.stage === 'worker' && row.action === 'started') {
+      if (urgent) summary.urgentStarts++;
+      else summary.starts++;
+    } else if (row.stage === 'worker' && row.action === 'finished') {
+      (urgent ? urgentFinished : finished).add(`${row.task_id}:${row.attempt}`);
+    } else if (row.stage === 'check') {
+      const key = `${row.task_id}:${row.attempt}`;
+      if (row.action === 'requested') requestedChecks.set(key, Date.parse(row.at));
+      else if (row.action === 'acquired') {
+        const requestedAt = requestedChecks.get(key);
+        const acquiredAt = Date.parse(row.at);
+        if (requestedAt !== undefined && Number.isFinite(requestedAt) && acquiredAt >= requestedAt)
+          checkWaits.push(acquiredAt - requestedAt);
+        requestedChecks.delete(key);
+      } else if (row.action === 'released') requestedChecks.delete(key);
+    } else if (tasksAvailable && row.stage === 'integration' && row.action === 'integrated') {
+      hasLanding = true;
+      const landing = normalizedLanding(row);
+      const previous = landings.get(row.task_id);
+      if (!previous) {
+        landings.set(row.task_id, landing);
+        if (landing.urgent === 1) urgentLandings.push(`${clean(row.task_id, policy.fieldCharacters)}#${row.attempt}`);
+      } else if (previous.target !== landing.target || previous.goal !== landing.goal) {
+        landings.set(row.task_id, { ...previous, goal: null, target: 'unknown' });
+      }
+    }
+  }
+  summary.finishes = finished.size;
+  summary.urgentFinishes = urgentFinished.size;
+  checkWaits.sort((a, b) => a - b);
+  summary.checkWaitCount = checkWaits.length;
+  summary.checkWaitP90 = checkWaits.length ? checkWaits[Math.ceil(0.9 * checkWaits.length) - 1]! : null;
+  if (tasksAvailable) summary.landingLines = landingLines(landings, hasLanding, urgentLandings, policy);
+  return summary;
 }
 
 function latestUsefulLanding(db: Database, end: string, available: boolean, policy: ReportPolicy): string {
@@ -466,45 +525,14 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
   const bucket = options.bucket ? parseUtcHour(options.bucket) : completedUtcHour(options.now);
   const flowAvailable = hasTable(db, 'flow_events');
   if (flowAvailable) ensureFlow(db);
-  const events = hourEvents(db, bucket, flowAvailable);
   const asOf = options.now ?? Date.now();
   const openWorkAvailable = hasTable(db, 'worker_tasks');
   const metrics = openWorkAvailable ? lifecycleMetrics(db, asOf, options.policy) : null;
-  const urgentIds = new Set(
-    openWorkAvailable
-      ? (
-          db.query("SELECT id FROM worker_tasks WHERE json_extract(body,'$.brief.urgent')=1").all() as { id: string }[]
-        ).map((row) => row.id)
-      : [],
-  );
-  const urgentEvents = events.filter((event) => urgentIds.has(event.taskId));
-  const ordinaryEvents = events.filter((event) => !urgentIds.has(event.taskId));
-  const starts = ordinaryEvents.filter((event) => event.stage === 'worker' && event.action === 'started').length;
-  const finishes = new Set(
-    ordinaryEvents
-      .filter((event) => event.stage === 'worker' && event.action === 'finished')
-      .map((event) => `${event.taskId}:${event.attempt}`),
-  ).size;
-  const requestedChecks = new Map<string, number>();
-  const checkWaits: number[] = [];
-  for (const event of events) {
-    if (event.stage !== 'check') continue;
-    const key = `${event.taskId}:${event.attempt}`;
-    if (event.action === 'requested') requestedChecks.set(key, Date.parse(event.at));
-    else if (event.action === 'acquired') {
-      const requestedAt = requestedChecks.get(key);
-      const acquiredAt = Date.parse(event.at);
-      if (requestedAt !== undefined && Number.isFinite(requestedAt) && acquiredAt >= requestedAt)
-        checkWaits.push(acquiredAt - requestedAt);
-      requestedChecks.delete(key);
-    } else if (event.action === 'released') requestedChecks.delete(key);
-  }
-  const sortedCheckWaits = [...checkWaits].sort((a, b) => a - b);
-  const checkWaitP90 = sortedCheckWaits.length ? sortedCheckWaits[Math.ceil(0.9 * sortedCheckWaits.length) - 1]! : null;
+  const bucketSummary = aggregateBucket(db, bucket, flowAvailable, openWorkAvailable, policy);
   const checkWaitLine = !flowAvailable
     ? 'Check-slot wait in bucket: unknown (flow history unavailable).'
-    : checkWaits.length
-      ? `Check-slot wait in bucket: ${checkWaits.length} completed request/acquire pairs; p90 ${checkWaitP90 === null ? 'unknown' : `${Math.round(checkWaitP90 / 60_000)}m`}.`
+    : bucketSummary.checkWaitCount
+      ? `Check-slot wait in bucket: ${bucketSummary.checkWaitCount} completed request/acquire pairs; p90 ${bucketSummary.checkWaitP90 === null ? 'unknown' : `${Math.round(bucketSummary.checkWaitP90 / 60_000)}m`}.`
       : 'Check-slot wait in bucket: unknown (no completed wait pair recorded).';
   const lifetimeLines = metrics ? formatLifecycleMetrics(metrics) : [];
   const launchTaskLines = lifetimeLines.filter((line) => line.startsWith('  '));
@@ -526,7 +554,7 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
         'Orphaned landings: unknown (current task state unavailable).',
         'Quarantines: unknown (current task state unavailable).',
       ];
-  const landed = landedSummary(db, bucket, flowAvailable, policy);
+  const landed = bucketSummary.landingLines;
   const incidents = sharedIncidentLine(db);
   const waitsAvailable = openWorkAvailable;
   const landingQueueAvailable = flowAvailable && openWorkAvailable && hasTable(db, 'landing_queue');
@@ -535,10 +563,10 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
     ...landed,
     latestUsefulLanding(db, bucket.end, flowAvailable, policy),
     flowAvailable
-      ? `Worker starts / finishes in bucket: ${starts} starts (including resumes) / ${finishes} finished attempts.`
+      ? `Worker starts / finishes in bucket: ${bucketSummary.starts} starts (including resumes) / ${bucketSummary.finishes} finished attempts.`
       : 'Worker starts / finishes in bucket: unknown (flow history unavailable).',
     flowAvailable && openWorkAvailable
-      ? `Urgent worker starts / finishes in bucket (excluded from throughput): ${urgentEvents.filter((e) => e.stage === 'worker' && e.action === 'started').length} / ${new Set(urgentEvents.filter((e) => e.stage === 'worker' && e.action === 'finished').map((e) => `${e.taskId}:${e.attempt}`)).size}.`
+      ? `Urgent worker starts / finishes in bucket (excluded from throughput): ${bucketSummary.urgentStarts} / ${bucketSummary.urgentFinishes}.`
       : 'Urgent worker starts / finishes in bucket: unknown (task or flow history unavailable).',
     workSummary(db, openWorkAvailable, policy),
     landingQueueAge(metrics, landingQueueAvailable),

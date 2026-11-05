@@ -38,6 +38,8 @@ Measure flow with `goal report --flow`. The manager host must alarm hourly again
 Handle a breached target the same day. Separate measured timestamps and durations from estimates; do not invent
 missing timing.
 
+Decision: The hourly report reads each UTC bucket once, normalizes landing targets during aggregation, and reports conflicting task attribution as unknown; lifecycle and other window policies remain unchanged.
+
 The control plane exists to cut the cost of each landed outcome, and agents are its resolvers. A problem an agent
 can fix where it appears goes to an agent at that point, and the pipeline continues. Such problems include a merge
 conflict, a stale base, a formatting or derived-file failure, and a brief that disagrees with the code. Ending an
