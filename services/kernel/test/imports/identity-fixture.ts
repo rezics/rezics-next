@@ -560,7 +560,11 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
         await Bun.sleep(1000);
         response = await send();
       }
-      if (![200, 201].includes(response.status)) throw new Error(`Public ${path} ${actions}: HTTP ${response.status}`);
+      if (![200, 201].includes(response.status)) {
+        // Bounded refusal excerpt: the problem code names the denied rule without any private grant value.
+        const detail = (await response.text()).slice(0, 512);
+        throw new Error(`Public ${path} ${actions}: HTTP ${response.status} ${detail}`);
+      }
       const body = (await response.json()) as { grant: GrantInput };
       if (path === '/v1/grants') grantLocators.push(body.grant);
     }
