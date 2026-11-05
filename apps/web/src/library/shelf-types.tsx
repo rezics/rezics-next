@@ -55,6 +55,7 @@ function OwnerShelfTypes({
   const heading = useRef<HTMLHeadingElement>(null);
   const focus = useRef(false);
   const opened = useRef(false);
+  const focusEpoch = useRef(0);
   useLayoutEffect(() => {
     if (focus.current && page?.state === 'loaded' && opened.current && isCurrent()) heading.current?.focus();
     focus.current = false;
@@ -72,6 +73,7 @@ function OwnerShelfTypes({
     const target = navigation.current.stage(movement, next);
     if (!target) return;
     const { cursor } = target;
+    const handoff = focusEpoch.current;
     const attempt = ++revision.current;
     const currentRequest = () => isCurrent() && revision.current === attempt;
     inFlight.current = true;
@@ -89,7 +91,7 @@ function OwnerShelfTypes({
       const admitted =
         matches && result.sessionSubject === subject && result.authorizationAgrees && result.page.state === 'loaded';
       navigation.current.settle(admitted);
-      focus.current = admitted && movement !== 'read';
+      focus.current = admitted && movement !== 'read' && handoff === focusEpoch.current;
       setPage(
         matches && result.sessionSubject === subject && result.authorizationAgrees
           ? result.page
@@ -114,6 +116,7 @@ function OwnerShelfTypes({
       open={open}
       onOpenChange={(value) => {
         if (isCurrent()) {
+          if (opened.current !== value) focusEpoch.current++;
           opened.current = value;
           if (!value) focus.current = false;
           setOpen(value);
