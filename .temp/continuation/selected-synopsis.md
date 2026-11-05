@@ -22,10 +22,26 @@ statement IDs for row keys/focus and retain unlabelled facts and zero-citation p
 selection should announce and focus current Sources heading/field. Keep direct visits and all other owners intact.
 
 Finish mounted traversal acceptance in apps/web/tests/subject-summary-selected-visit.test.tsx: actual Sources
-receiving and correction route traversal; current return reading, missing binding and spoiler withholding;
+receiving and complete correction states; missing binding and spoiler withholding;
 canonical route and signed-out redirects; reader/Context/session A/B/A and late Sources/advice/body/focus results.
 Retain original synopsis, authored, source retry and observation suites. Integration owns native disclosure,
 erasure/binding/growth checks and browser gates at 390/1440, light/dark, keyboard and all eight locales.
+
+The mounted authored traversal now passes through the focused runner (one test, 23 assertions): exact second
+assertion/body and no copied draft, fresh selected return and reading focus, Realm and duplicate-locator rejection
+before reads, changed digest with deliberate independent Global inspection, a retired late result, and composed
+UTF-8/encoding expansion beyond the existing address cap. This uses the existing native-shaped fixture/client;
+it is not an executed native or browser pass. The size fixture retains the 128-character inner token bound.
+
+Workspace typecheck was executed. The final compiler output has no diagnostics in changed product files, but is
+non-green on unchanged checkout/creator-offer-editor.tsx, community/realm-bans.ts, community/space-actions.ts,
+content-editions files and missing services/kernel SQL modules, among other untouched files. The host then ended:
+root typecheck infrastructure failure: check-host execution ended with status 75
+The original focused invocation also used an incorrect test path and changed source during its frozen run;
+supported reconciliation verified remote cleanup but could not restore output against changed retained source.
+Its descriptor remains /tmp/rezics-web-check-ss7Hsd/prepared-descriptor.json. Subsequent frozen focused runs
+completed normally. No shared process or service was stopped. Integration acceptance and existing broad suites
+were deferred under the launch instructions.
 
 Contract-named sources read: rezics-workflow skill, docs/development/README.md, agent-conduct.md,
 documentation.md, efficiency.md; architecture/scope sections; docs/subject-pages.md;
