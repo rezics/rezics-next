@@ -71,7 +71,10 @@ test('native denial, conflict, unavailable and lost responses retain their contr
     `https://kernel.test/v1/orders/${orderId}:reconcile`,
     `https://kernel.test/v1/orders/${orderId}:reconcile`,
   ]);
-  expect(requests.map((sent) => sent.headers.get('idempotency-key'))).toEqual([JSON.stringify(key), JSON.stringify(key)]);
+  expect(requests.map((sent) => sent.headers.get('idempotency-key'))).toEqual([
+    JSON.stringify(key),
+    JSON.stringify(key),
+  ]);
 });
 
 test('status reconciliation starts only on explicit action and retains its distinct key after a timeout', async () => {
