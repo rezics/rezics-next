@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { noEffect, runCommand } from '../../src/command/command.ts';
-import { classifyEvent, ZONE_HISTORY_EVENT_TYPES, ZONE_HISTORY_RECEIPT_KINDS } from '../../src/history/contracts.ts';
-import { decodeLocator, type HistoryArtifactType } from '../../src/history/locator.ts';
+import {
+  classifyEvent,
+  ZONE_HISTORY_EVENT_TYPES,
+  ZONE_HISTORY_RECEIPT_KINDS,
+  type HistoryArtifactType,
+} from '../../src/history/contracts.ts';
+import { decodeLocator } from '../../src/history/locator.ts';
 import { commandHistoryKind } from '../../src/history/record.ts';
 import { HistoryRegistry, type HistoryArtifact, type HistoryBarrier } from '../../src/history/registry.ts';
 import { registerZoneHistoryConsumers } from '../../src/history/zone-consumers.ts';
