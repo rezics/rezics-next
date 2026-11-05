@@ -33,3 +33,8 @@ test('SQL work bounds include the comment Reylo adds only at dispatch', async ()
     expect(Buffer.byteLength(` /*file='${encodeURIComponent(source)}'*/`)).toBeLessThan(SQL_COMMENT_BYTE_BOUND);
   }
 });
+
+test('the server SQL import graph loads against the migrated check database', async () => {
+  const { startServer } = await import('../src/server.ts');
+  expect(typeof startServer).toBe('function');
+}, 300_000);
