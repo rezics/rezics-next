@@ -18,7 +18,7 @@ test('admitted starts retain capacity throughout delayed preparation until runni
         id,
         sequence + 1,
         1,
-        '{}',
+        JSON.stringify({ id, currentAttempt: 1, state: 'running', brief: { goal: 'admission', manager: 'manager' } }),
       );
       db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)').run(
         id,
