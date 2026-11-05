@@ -104,7 +104,11 @@ export function NamesHandoff({
     if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
       host.current?.querySelector<HTMLElement>('summary')?.focus();
   });
-  const [restored, setRestored] = useState<{ window?: NamesWindow; focus?: NamesReturnFocus | 'section'; status: NamesReturnStatus }>({
+  const [restored, setRestored] = useState<{
+    window?: NamesWindow;
+    focus?: NamesReturnFocus | 'section';
+    status: NamesReturnStatus;
+  }>({
     status: 'none',
   });
   useEffect(() => {

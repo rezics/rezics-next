@@ -69,11 +69,7 @@ export function WorkNamesEntry({
   url.hash = '';
   url.searchParams.delete('via');
   const returnHref = namesReturnHref(`${url.pathname}${url.search}`, locale);
-  const sourceVisitHref = withSubjectVisitReturn(
-    `${url.pathname}/sources${url.search}`,
-    returnHref ?? '',
-    locale,
-  );
+  const sourceVisitHref = withSubjectVisitReturn(`${url.pathname}/sources${url.search}`, returnHref ?? '', locale);
   const binding = lifetime.caller
     ? JSON.stringify([
         subject.id,

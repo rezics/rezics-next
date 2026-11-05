@@ -82,12 +82,8 @@ export function PeopleNamesView({
           </span>
         </p>
       )}
-      {!retired && returnStatus === 'changed' && (
-        <p role="status">{m.work_names_return_changed({}, o)}</p>
-      )}
-      {!retired && returnStatus === 'restart' && (
-        <p role="status">{m.work_names_return_restart({}, o)}</p>
-      )}
+      {!retired && returnStatus === 'changed' && <p role="status">{m.work_names_return_changed({}, o)}</p>}
+      {!retired && returnStatus === 'restart' && <p role="status">{m.work_names_return_restart({}, o)}</p>}
       <details open={restored?.expanded ?? (returnStatus === 'changed' || returnStatus === 'restart')}>
         <summary ref={summary} className={control}>
           {kind === 'work' ? m.work_names_title({}, o) : m.people_names_open({}, o)}

@@ -21,30 +21,45 @@ import { work } from './work-title-variants.test';
 const realm = '00000000-0000-4000-8000-000000000777';
 const admitted = (revision = 1, variants = true) => {
   const value = { ...work(), type: 'schema:Book', context: 'global', revision, release: definitions.digest };
-  value.aliases = { ...value.aliases, en: variants ? Array.from({ length: 40 }, (_, i) => `Variant ${i}`) : ['Current name'] };
+  value.aliases = {
+    ...value.aliases,
+    en: variants ? Array.from({ length: 40 }, (_, i) => `Variant ${i}`) : ['Current name'],
+  };
   return value;
 };
 
 async function mounted(run: (host: HTMLDivElement, draw: (node: React.ReactNode) => Promise<void>) => Promise<void>) {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://rezics.invalid/' });
-  const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    HTMLAnchorElement: window.HTMLAnchorElement, Element: window.Element, Node: window.Node, scrollTo: () => {},
-    IS_REACT_ACT_ENVIRONMENT: true };
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLAnchorElement: window.HTMLAnchorElement,
+    Element: window.Element,
+    Node: window.Node,
+    scrollTo: () => {},
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
   const { createRoot } = await import('react-dom/client');
-  const host = document.createElement('div'), root = createRoot(host);
+  const host = document.createElement('div'),
+    root = createRoot(host);
   document.body.append(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'original' });
-  try { await run(host, (node) => act(async () => root.render(h(QueryClientProvider, { client }, node)))); }
-  finally {
+  try {
+    await run(host, (node) => act(async () => root.render(h(QueryClientProvider, { client }, node))));
+  } finally {
     await act(async () => root.unmount());
     client.clear();
-    for (const [key, descriptor] of previous) descriptor
-      ? Object.defineProperty(globalThis, key, descriptor)
-      : Reflect.deleteProperty(globalThis, key);
+    for (const [key, descriptor] of previous)
+      descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
     await window.happyDOM.close();
   }
 }
@@ -62,10 +77,17 @@ test('Sources returns to a fresh names reading and rejects stale or missing loca
       if (location.pathname.endsWith('/sources')) return h('p', {}, 'Sources unavailable');
       const Link = ({ href: target, children, ...props }: { href: string; children: React.ReactNode }) =>
         h('a', { ...props, href: contextHref(target, realm) }, children);
-      return h(WorkNamesEntry, { subject: current as never, source: current, locale: 'en', context: 'global',
-        release: definitions.release as never, releaseDigest: definitions.digest,
+      return h(WorkNamesEntry, {
+        subject: current as never,
+        source: current,
+        locale: 'en',
+        context: 'global',
+        release: definitions.release as never,
+        releaseDigest: definitions.digest,
         sourcesHref: `${href.split('?')[0]}/sources?realm=${realm}`,
-        termsAuthority: { viewer: 'signed-in', actions: { state: 'ready', actions: [] } }, link: Link });
+        termsAuthority: { viewer: 'signed-in', actions: { state: 'ready', actions: [] } },
+        link: Link,
+      });
     }
     await act(async () => router.load());
     await draw(h(RouterProvider, { router }));
@@ -77,7 +99,9 @@ test('Sources returns to a fresh names reading and rejects stale or missing loca
     });
     const group = host.querySelector<HTMLDetailsElement>('[data-name-language="en"]')!;
     group.open = true;
-    await act(async () => [...group.querySelectorAll('button')].find((button) => button.textContent === 'More names')!.click());
+    await act(async () =>
+      [...group.querySelectorAll('button')].find((button) => button.textContent === 'More names')!.click(),
+    );
     const sources = host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!;
     const newTab = new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, metaKey: true });
     await act(async () => sources.dispatchEvent(newTab));
@@ -96,7 +120,10 @@ test('Sources returns to a fresh names reading and rejects stale or missing loca
     expect(saved.window.query).toBe('Variant');
     expect(saved.window.groups.some((item) => item.page === 1 && item.open)).toBe(true);
     current = admitted();
-    await act(async () => { history.back(); await router.load(); });
+    await act(async () => {
+      history.back();
+      await router.load();
+    });
     await draw(h(RouterProvider, { router }));
     expect(host.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('Variant');
     expect(host.textContent).toContain('Variant 39');
@@ -107,7 +134,10 @@ test('Sources returns to a fresh names reading and rejects stale or missing loca
     const changedVia = new URLSearchParams(history.location.search).get('via')!;
     saved = namesReturn(Reflect.get(history.location.state, 'namesReturn'), 'en')!;
     current = admitted(2, false);
-    await act(async () => { history.push(changedVia, { namesReturn: saved }); await router.load(); });
+    await act(async () => {
+      history.push(changedVia, { namesReturn: saved });
+      await router.load();
+    });
     await draw(h(RouterProvider, { router }));
     expect(host.textContent).toContain('The names reading changed');
     expect(host.textContent).not.toContain('Variant 39');
