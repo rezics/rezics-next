@@ -464,7 +464,6 @@ export class ShelfPreferenceDraftRecovery {
     this.owner.canWrite() &&
     this.state.phase === 'uncertain' &&
     this.state.pending !== null &&
-    this.state.current &&
     this.owner.version() <= this.state.known.version &&
     ownerMayChangeShelf(this.state.advice) &&
     !this.state.readBusy &&
