@@ -90,8 +90,9 @@ beforeAll(async () => {
   const access = admittedAccess({
     actions: new Map<string, { anonymous: boolean; authority?: 'own-account' }>([
       ['subject:read', { anonymous: true }],
-      ...['progress_session:create', 'progress_session:update', 'progress_session:read', 'progress_session:list']
-        .map((action) => [action, { anonymous: false, authority: 'own-account' as const }] as const),
+      ...['progress_session:create', 'progress_session:update', 'progress_session:read', 'progress_session:list'].map(
+        (action) => [action, { anonymous: false, authority: 'own-account' as const }] as const,
+      ),
     ]),
   });
   const context = { pool: database.pool, deadline: Date.now() + 300_000 };

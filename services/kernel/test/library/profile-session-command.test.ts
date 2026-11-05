@@ -753,19 +753,30 @@ test('native current pair removal and hidden version summary preserve the origin
   });
 });
 
-
 test('native maximum measures repeat corrections and clear while an acknowledged receipt survives presentation failure', async () => {
   const subjectId = await native.createSubject('game');
   const units = ['page', 'seed-tray.v2', 'minute', 'no-total', 'percent', 'metre', 'gram', 'point'];
-  const input = { subjectId, mode: 'scalar_amount', unit: units[0]!, additionalMeasures: units.slice(1).map((unit) => ({
-    unit, ...(unit === 'seed-tray.v2' ? { total: '9' } : {}),
-  })) };
+  const input = {
+    subjectId,
+    mode: 'scalar_amount',
+    unit: units[0]!,
+    additionalMeasures: units.slice(1).map((unit) => ({
+      unit,
+      ...(unit === 'seed-tray.v2' ? { total: '9' } : {}),
+    })),
+  };
   const started = await commands.startSession(owner.actor, input, entryKey());
   let current = started.value;
   for (const amount of ['2', '3']) {
     for (const measureId of units) {
-      current = (await commands.recordProgress(owner.actor, current.id,
-        { revision: current.revision, measureId, amount }, entryKey())).value;
+      current = (
+        await commands.recordProgress(
+          owner.actor,
+          current.id,
+          { revision: current.revision, measureId, amount },
+          entryKey(),
+        )
+      ).value;
     }
   }
   expect(current.measures).toHaveLength(8);
@@ -773,18 +784,29 @@ test('native maximum measures repeat corrections and clear while an acknowledged
   const key = entryKey();
   const intent = { revision: current.revision, measureId: 'point', amount: '3' };
   const acknowledged = await commands.recordProgress(owner.actor, current.id, intent, key);
-  await expect(commands.readPresentedSession(owner.actor, current.id, async () => {
-    throw new Error('current presentation failed');
-  })).rejects.toThrow('current presentation failed');
-  await expect(commands.readPresentedSession(owner.actor, current.id, async () => {
-    await native.activate(replacement);
-    return 'rendered against the previous current profile';
-  })).rejects.toMatchObject({ code: 'semantic_not_ready' });
+  await expect(
+    commands.readPresentedSession(owner.actor, current.id, async () => {
+      throw new Error('current presentation failed');
+    }),
+  ).rejects.toThrow('current presentation failed');
+  await expect(
+    commands.readPresentedSession(owner.actor, current.id, async () => {
+      await native.activate(replacement);
+      return 'rendered against the previous current profile';
+    }),
+  ).rejects.toMatchObject({ code: 'semantic_not_ready' });
   await native.activate(digest);
-  const cleared = await commands.recordProgress(owner.actor, current.id,
-    { revision: acknowledged.value.revision, clear: true }, entryKey());
+  const cleared = await commands.recordProgress(
+    owner.actor,
+    current.id,
+    { revision: acknowledged.value.revision, clear: true },
+    entryKey(),
+  );
   expect(cleared.value.measures!.every((measure) => measure.amount === null)).toBe(true);
-  expect(await commands.recordProgress(owner.actor, current.id, intent, key)).toEqual({ ...acknowledged, replayed: true });
+  expect(await commands.recordProgress(owner.actor, current.id, intent, key)).toEqual({
+    ...acknowledged,
+    replayed: true,
+  });
   expect((await commands.readSession(owner.actor, current.id)).revision).toBe(cleared.value.revision);
 });
 
@@ -794,7 +816,7 @@ test('native source replacement during preparation cannot admit the original mea
   const query = native.pool.query;
   let replaced = false;
   native.pool.query = function (...args: unknown[]) {
-    const sql = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string })?.text ?? '';
+    const sql = typeof args[0] === 'string' ? args[0] : ((args[0] as { text?: string })?.text ?? '');
     const result = Reflect.apply(query, native.pool, args);
     if (!replaced && /definitions-active\.sql/.test(sql)) {
       replaced = true;
@@ -808,9 +830,13 @@ test('native source replacement during preparation cannot admit the original mea
   } as typeof query;
   try {
     await noEffects(async () => {
-      await expect(commands.startSession(owner.actor,
-        create(subjectId, 'scalar_amount', 'seed-tray.v2', { total: '5' }), entryKey()))
-        .rejects.toBeInstanceOf(ProgressConflictError);
+      await expect(
+        commands.startSession(
+          owner.actor,
+          create(subjectId, 'scalar_amount', 'seed-tray.v2', { total: '5' }),
+          entryKey(),
+        ),
+      ).rejects.toBeInstanceOf(ProgressConflictError);
     });
     expect(replaced).toBe(true);
   } finally {

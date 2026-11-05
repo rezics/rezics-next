@@ -89,8 +89,12 @@ export async function readLibraryProfileAnchor(
   if (actor.kind === 'account') {
     const accountRoute = routeOf(actor.accountId);
     if (accountRoute === null) return null;
-    const account = await readAccount(deadlineClient(pool, deadline), accountRoute, actor.accountId,
-      currentCommandWorkAssociation()?.access);
+    const account = await readAccount(
+      deadlineClient(pool, deadline),
+      accountRoute,
+      actor.accountId,
+      currentCommandWorkAssociation()?.access,
+    );
     if (
       !account ||
       account.kind !== 'actor' ||

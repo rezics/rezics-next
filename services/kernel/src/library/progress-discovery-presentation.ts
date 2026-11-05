@@ -7,7 +7,11 @@ import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { presentProgressSession } from './progress-presentation.ts';
 import type { ProgressDiscoveryFact } from './progress-store.ts';
 import type { ProgressPresentation, ProgressMeasurePresentation } from './progress-model.ts';
-import { sessionDiscoveryReleasesPlan, sessionPresentationWork, consumeSessionWork } from './session-operation-bounds.ts';
+import {
+  sessionDiscoveryReleasesPlan,
+  sessionPresentationWork,
+  consumeSessionWork,
+} from './session-operation-bounds.ts';
 
 export type ProgressDiscoveryPresentation = {
   presentation: ProgressPresentation;
@@ -37,22 +41,27 @@ export async function presentProgressDiscovery(
       }
     }
   }
-  return consumeSessionWork('discovery-presentation', sessionPresentationWork(8, facts.length), async () => new Map(
-    facts.map(({ session, profilePin }) => {
-      const snapshot = profilePin ? (snapshots.get(profilePin.releaseDigest) ?? null) : null;
-      const presentation = presentProgressSession({ session, pin: profilePin }, snapshot, null);
-      const measures = (session.measures ?? []).map((measure) => ({
-        unit: measure.unit,
-        presentation: presentProgressSession(
-          {
-            session: { ...session, unit: measure.unit, amount: measure.amount, total: measure.total },
-            pin: profilePin,
-          },
-          snapshot,
-          null,
-        ),
-      }));
-      return [session.id, { presentation, measures }];
-    }),
-  ));
+  return consumeSessionWork(
+    'discovery-presentation',
+    sessionPresentationWork(8, facts.length),
+    async () =>
+      new Map(
+        facts.map(({ session, profilePin }) => {
+          const snapshot = profilePin ? (snapshots.get(profilePin.releaseDigest) ?? null) : null;
+          const presentation = presentProgressSession({ session, pin: profilePin }, snapshot, null);
+          const measures = (session.measures ?? []).map((measure) => ({
+            unit: measure.unit,
+            presentation: presentProgressSession(
+              {
+                session: { ...session, unit: measure.unit, amount: measure.amount, total: measure.total },
+                pin: profilePin,
+              },
+              snapshot,
+              null,
+            ),
+          }));
+          return [session.id, { presentation, measures }];
+        }),
+      ),
+  );
 }
