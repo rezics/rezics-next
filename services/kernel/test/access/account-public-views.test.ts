@@ -141,13 +141,13 @@ test('view batches default unknown, malformed, fenced and non-active accounts to
   await expect(readPublicViews(pool, [...hundred, active.id])).rejects.toBeInstanceOf(RangeError);
 });
 
-test('public profiles normalize imported visibility choices and conceal stale fenced presentation', async () => {
+test('public profiles preserve independent visibility choices and conceal stale fenced presentation', async () => {
   const target = await account('actor', 0x4550);
   await pool.query(
     `UPDATE access.account SET public_views=$3::jsonb, biography='Stale biography',
        links='[{"label":"Private","url":"https://example.test/private"}]'::jsonb
      WHERE route=$1 AND account_id=$2`,
-    [0x4550, target.id, JSON.stringify({ posts: true, reviews: 'true', collections: null })],
+    [0x4550, target.id, JSON.stringify({ posts: true, reviews: false, collections: false, realms: false })],
   );
   expect((await readPublicAccountByHandle(pool, target.handle))[0]).toMatchObject({
     publicViews: { posts: true, reviews: false, collections: false, realms: false },
