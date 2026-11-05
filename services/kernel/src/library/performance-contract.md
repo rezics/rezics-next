@@ -56,3 +56,25 @@ separate axes. SQL-only terms can declare zero engine requests; nested native ca
 The ordinary session/unit/change limits remain default 20 and maximum 100; owner discovery remains maximum 50.
 Raw sentinels and discarded candidates consume work and retain their original keyset frontier. No declaration
 permits refill, account-history scans, cap increases or a second native admission.
+
+## Published snapshot reads and exact retention locators
+
+Decision: bind immutable SQL read declarations to the existing Published Log store and retention discovery,
+counting both public keyset streams before the outer limit; retain native command ownership and exact deletion
+identity. A causal addition to the existing native retention journey covers a stale scheduled episode after Undo.
+
+`published-log-bounds.ts` retains original serialized binds and compiled SQL for point, locked point, first/next
+public page and due discovery reads. Execution uses the caller's original client. The public partial index excludes
+deleted rows. A next page has two independently limited ranges; discarded candidates, the sentinel and repeated
+candidate/final projections count before response filtering. The due partial index excludes non-deletions and
+minimization tombstones; cutoff and the three-column locator bound its range. Empty probes count even when no
+row is returned. Schema widths determine escaped projections, including the 1000-character note, UUIDs, literal
+session states, int32 revision and timestamp text. These SQL leaves have no identity admission, witnesses or Search
+engine calls. Their declarations supply no authority or successful execution evidence.
+
+These read leaves do not yet constitute complete operation plans. Enclosing plans must add account/action/group
+preparation, source/version and currentness reads, command receipts, mutation triggers, History, transaction and
+connection controls, response serialization, retries and DBOS/outbox controls before native admission. Retention
+must price one bounded page/segment, retain the original cutoff and exact deletion locator through continuation,
+and include negative/racing candidates and cleanup. PAGE_BOUND and SEGMENT_BOUND remain 100; neither bounds future
+scheduled invocations. Undo never reads the private session or renews the original deletion's eligibility.

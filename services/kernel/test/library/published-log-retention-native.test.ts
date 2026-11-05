@@ -4,6 +4,7 @@ import { createPublishedLogRetentionRuntime } from './support/published-log-rete
 import { compileSessionProfile, sessionScopes } from './support/session-profile-fixture.ts';
 import { entryKey } from './support/profile-entry-fixture.ts';
 import {
+  purgeExpiredPublishedLog,
   PUBLISHED_LOG_RETENTION_SCHEDULE,
   PUBLISHED_LOG_RETENTION_SWEEP_WORKFLOW,
 } from '../../src/library/published-log-retention.ts';
@@ -127,6 +128,15 @@ test('native exact expiry purge keeps only permitted public structural identity 
   expect(publicList.status).toBe(200);
   expect((await publicList.json()).publishedLogs.map((log: { id: string }) => log.id)).not.toContain(first.id);
 
+  const originalDeletion = await row(first.id);
+  const originalLocator = {
+    route: routeOf(first.id)!,
+    logId: first.id,
+    accountId: owner.actor.accountId,
+    deletionId,
+    revision: deletedRevision,
+    restoreUntil: new Date(originalDeletion.restore_until).toISOString(),
+  };
   const restoreBody = { deletionId, revision: deletedRevision };
   const restored = await f.send(owner.bearer, 'POST', `/v1/publishedLogs/${first.id}:restore`, restoreBody, entryKey());
   expect(restored.status).toBe(200);
@@ -137,6 +147,23 @@ test('native exact expiry purge keeps only permitted public structural identity 
     startedAt: first.startedAt,
     publishedAt: first.publishedAt,
   });
+  // A resumed scheduled episode retains the original deletion identity. Its
+  // original cutoff can expire without granting authority over the restored log.
+  time = Date.parse(originalLocator.restoreUntil);
+  const staleEpisode = await purgeExpiredPublishedLog(
+    { pool: f.pool, clock: () => new Date(time) },
+    originalLocator,
+  );
+  expect(staleEpisode.value).toEqual({ purged: false });
+  expect(await row(first.id)).toMatchObject({
+    deleted: false,
+    revision: deletedRevision + 1,
+    account_id: owner.actor.accountId,
+    note: first.note,
+    deletion_id: null,
+    restore_until: null,
+  });
+  expect((await f.send('anonymous', 'GET', `/v1/publishedLogs/${first.id}`)).status).toBe(200);
   const retracted = await f.send(
     owner.bearer,
     'DELETE',
