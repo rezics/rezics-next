@@ -154,7 +154,7 @@ function journalPort(commands: BatchCommand[]) {
       id: string;
       type: string;
       labels: Record<string, string>;
-      statements: Record<string, { value: { content: unknown } }[]>;
+      statements: Record<string, { value: { type?: 'value'; content: unknown } }[]>;
     };
   };
   const subjects = new Map<string, Subject>();
@@ -181,7 +181,7 @@ function journalPort(commands: BatchCommand[]) {
             const value = command.statement.value;
             if (subject && value.type === 'value') {
               const rows = subject.subject.statements[command.statement.property.id] ?? [];
-              rows.push({ value: { content: value.content } });
+              rows.push({ value: { type: 'value', content: value.content } });
               subject.subject.statements[command.statement.property.id] = rows;
             }
             return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
