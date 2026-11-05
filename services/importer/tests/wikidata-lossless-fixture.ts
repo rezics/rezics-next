@@ -8,6 +8,14 @@ export const birth = {
   before: 2,
   after: 3,
 };
+export const zeroDate = {
+  time: '+2000-04-00T00:00:00Z',
+  timezone: 0,
+  before: 0,
+  after: 0,
+  precision: 10,
+  calendarmodel: gregorian,
+};
 export const height = {
   amount: '+9007199254740993.000000000000000001',
   lowerBound: '+9007199254740993.000000000000000000',
@@ -58,6 +66,7 @@ export function losslessRecord() {
       P570: [
         claim('P570', 'time', { time: '+2000-00-00T00:00:00Z', precision: 9, calendarmodel: gregorian }),
         claim('P570', 'time', { time: '+2000-02-00T00:00:00Z', precision: 10, calendarmodel: julian }),
+        claim('P570', 'time', zeroDate),
       ],
       P2048: [
         claim('P2048', 'quantity', height),

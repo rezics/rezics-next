@@ -771,12 +771,15 @@ upperBound. The serialized property has no exact flag. Use the
 exact-quantity validation, independent of property names or holder types.
 Ordinary quantity and default conversion semantics remain unchanged.
 
+Decision: `timezone`, `before` and `after` are presence-sensitive fields; retain
+each explicit value, including zero, and leave absent components absent.
+
 Wikidata `wikidata-6` composes the complete cited candidate using the actual
 bundled property and calls public `checkStatementInput` before emission, retaining
 final batch validation. The same native time value keeps signed 4–16 digit nonzero
 years, Gregorian/Julian calendar, precision 9/10/11 and optional safe timezone and
-nonnegative uncertainty, including explicit zero fields. Quantity amount, bounds and unit remain exact lexical
-strings; validation performs no Number coercion or calendar normalization.
+nonnegative uncertainty. Quantity amount, bounds and unit remain exact
+lexical strings; validation performs no Number coercion or calendar normalization.
 Unsupported or incomplete values withhold the entire statement with bounded
 source diagnostics. Somevalue/novalue remain distinct. Source projection keeps
 its existing field/byte limits; it does not evaluate unknown qualifier bodies.

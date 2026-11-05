@@ -1956,7 +1956,8 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 The ordinary JSONL registration uses the exported `wikidata-6` converter. It
 admits actual cited complete statements through public Definitions validation,
 then native writes recheck the bound holder and its current release. Signed partial
-Gregorian/Julian times retain timezone/uncertainty; quantities retain exact lexical
+Gregorian/Julian times retain each present `timezone`, `before` and `after` field,
+including zero, while absent fields stay absent; quantities retain exact lexical
 amount, bounds and unit. Unsupported neighbors and incomplete exact measurements
 are withheld whole. No importer credentials gain acceptance or adoption authority.
 
@@ -1967,10 +1968,11 @@ selection survive omission and refresh; current authorization and tuple fences
 still govern replay and disclosure.
 
 - Touches: one selected JSONL record, its bounded claims, qualifiers and selected
-  references, local staging/journal point reads and ordinary native batch calls.
+  references, local staging/journal point reads, and ordinary native batch calls.
 - Bound: 128 KiB record, 64 statements, 100 commands, 15 source references per
   claim and 16 snaks per group; local conversion is O(selected bytes). Native
-  calls retain existing batch, binding, receipt and fence bounds separately.
+  batch submissions, source-binding checks, receipt lookups and fence/replay checks
+  retain their existing route bounds separately from local conversion units.
 - Growth check: existing converter/importer/native growth suites remain authoritative;
   unrelated source and native population grows independently. Focused scenarios
   `tests/wikidata-lossless-source-completion.test.ts` and

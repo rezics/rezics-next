@@ -79,11 +79,12 @@ Owner documents state current rules and contracts only. They hold no dated headi
 sections, no receipts of past attempts, no task IDs and no `.temp/` paths. A brief cites owner documents as authority.
 It may link research only as background.
 
-Source-mapping contracts belong in the conversion module README. When a mapping
-also needs selected-record acquisition, current vocabulary publication or
-native reads, the importer README owns that path and its separate cost. The
-capability document owns the acceptance story; other owners link these contracts
-instead of repeating them.
+Source-mapping and value-fidelity contracts belong in the conversion module
+README. When a mapping also needs selected-record acquisition, native proposals,
+current vocabulary publication or independent native reads, the importer README
+owns that path and its separate cost. The capability document owns the acceptance
+story and evidence limits; other owners link these contracts instead of repeating
+them.
 
 ### Research
 

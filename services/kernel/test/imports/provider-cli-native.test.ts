@@ -422,6 +422,9 @@ test('Open Library account-key CLI imports refreshes reopens and safely stops th
             values: [
               {
                 time: '+1980-05-00T00:00:00Z',
+                timezone: 0,
+                before: 0,
+                after: 0,
                 precision: 10,
                 calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
               },
@@ -496,6 +499,9 @@ test('Wikidata account-key CLI imports refreshes reopens and safely stops the sy
             values: [
               {
                 time: '+2001-02-03T00:00:00Z',
+                timezone: 0,
+                before: 0,
+                after: 0,
                 precision: 11,
                 calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
               },
