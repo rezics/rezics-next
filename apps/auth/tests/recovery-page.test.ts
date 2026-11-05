@@ -29,7 +29,11 @@ for (const [key, value] of Object.entries(globals))
 const { createRoot } = await import('react-dom/client');
 function Advice({ stage }: { stage: RecoveryPageStage }) {
   const { state } = useRecoveryPage(stage);
-  return createElement('output', null, state.kind === 'ready' ? `${state.page.stage}:${state.page.viewer.kind}` : state.kind);
+  return createElement(
+    'output',
+    null,
+    state.kind === 'ready' ? `${state.page.stage}:${state.page.viewer.kind}` : state.kind,
+  );
 }
 afterAll(async () => {
   for (const [key, descriptor] of previous) {
@@ -58,7 +62,10 @@ test('page reads send only a stage, bound responses and keep outages explicitly 
     expect(encode(atLimit)).toHaveLength(4096);
     request.mockResolvedValueOnce(new Response(atLimit));
     expect((await loadRecoveryPage('step-up')).kind).toBe('ready');
-    for (const response of [new Response(`${atLimit} `), new Response(`${atLimit} `, { headers: { 'content-length': '1' } })]) {
+    for (const response of [
+      new Response(`${atLimit} `),
+      new Response(`${atLimit} `, { headers: { 'content-length': '1' } }),
+    ]) {
       request.mockResolvedValueOnce(response);
       expect(await loadRecoveryPage('step-up')).toEqual({ kind: 'unavailable' });
     }
@@ -73,7 +80,9 @@ test('page reads send only a stage, bound responses and keep outages explicitly 
     await Promise.resolve();
     caller.abort();
     expect(await pending).toEqual({ kind: 'unavailable' });
-    resolveLate(Response.json(recoveryPage('step-up', limits, { kind: 'signed-in', account_id: 'obsolete', email: null })));
+    resolveLate(
+      Response.json(recoveryPage('step-up', limits, { kind: 'signed-in', account_id: 'obsolete', email: null })),
+    );
     expect(await pending).toEqual({ kind: 'unavailable' });
   } finally {
     request.mockRestore();
