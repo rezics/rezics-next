@@ -287,6 +287,9 @@ A run already inside `/srv/rezics-check/runs/<id>` is considered remote only whe
 The caller's environment is not copied to the host; callers must pass required values in the command. A client renews each run’s `.alive` file every 60 seconds; the next host run stops a run whose file is older than 10 minutes before taking a slot. The slot holder also stops its run's systemd scope and slice and removes that run's labelled containers if its SSH input ends before the run writes `exit-status`. The slot and its processes therefore end together; the stale-file sweep remains a backstop. Every physical run has the estimate-derived host deadline described below, capped at two hours; `--max-ms <n>` can shorten it. A host lifetime timeout exits 124 with a durable infrastructure receipt; transport failure exits 75.
 
 Kept outputs require declared workspace-relative return paths; stack-heavy runs remain on a or b.
+A walk worker whose brief lists native or browser acceptance may run one bounded local stack through `dev-stack.ts walk`;
+its admission, names and teardown are in [local stack walk stacks](../docs/development/local-stack.md#walk-stacks). Its
+checks keep the placement above.
 Local/off markers such as `REZICS_STACK_REMOTE=off`, `REZICS_STACK_SLOT`, `KERNEL_CHECK_ON_REMOTE` and `REZICS_STACK_LEASE` do not change heavy-check placement.
 
 `KERNEL_CHECK_ON_REMOTE` and `REZICS_STACK_LEASE` do not decide shared stack placement.

@@ -205,6 +205,40 @@ needs the full stack. PostgreSQL and search ports can be changed with `KERNEL_DA
 container and volume names can be isolated with `KERNEL_DATABASE_CONTAINER`, `KERNEL_DATABASE_VOLUME`,
 `KERNEL_SEARCH_CONTAINER` and `KERNEL_SEARCH_VOLUME`. App and issuer ports above are fixed for local callbacks.
 
+## Walk stacks
+
+A walk-and-repair task runs the product on a seeded stack as each persona and repairs what it finds. Its worker starts
+one bounded stack with `walk` below when its brief lists `acceptance.requires` with `native` or `browser`; the control
+plane passes that list to the worker as `GOAL_ACCEPTANCE_REQUIRES`. Every other worker is still refused local stack
+containers, and its checks keep the remote placement in [scripts/README.md](../../scripts/README.md#check-hosts).
+
+```sh
+bun services/auth/scripts/dev-stack.ts walk -- <command...>
+```
+
+`walk` runs in this order:
+
+1. Waits for a walk slot. At most `REZICS_WALK_STACKS` stacks (default 6; an integer from 1 to 1000) run on the host
+   at once, counted across worktrees under the main checkout's `.temp/walk-stacks`. A further start waits in arrival
+   order and prints its position, `walk <task> waiting (<held>/<limit> held, <n> ahead)`. It is never refused.
+2. Names the stack's containers and volumes `rezics-walk-<task>-database` and `rezics-walk-<task>-search`, and gives
+   it its slot's loopback ports: `20000 + 10 × slot` plus 0 for Web, 1 for the Auth pages, 2 for native Auth, 3 for
+   Kernel, 4 for PostgreSQL and 5 for search.
+3. Runs `db up`, `search up` and `setup`, starts the processes `dev` starts, and waits until Web and the Auth pages
+   answer, for at most ten minutes. Its output goes to `.temp/walk/<task>/stack.log`.
+4. Runs `<command>` in the caller's directory with the stack's names, ports and origins. Persona and seed steps belong
+   inside `<command>`, for example `dev-stack.ts persona` followed by `task seed:dev`.
+5. Stops the processes, removes the stack's containers and volumes, and releases the slot when the command ends or the
+   attempt receives SIGHUP, SIGINT or SIGTERM. A stack left by a killed attempt is removed when the same task next
+   starts.
+
+A walk stack is admitted only while the slot lock its launch holds is held: the environment names the slot, but the
+name alone does not admit a container. Walk stacks do not change check placement; the worker's checks still run on
+hosts a and b.
+
+Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
+brief lists native or browser acceptance.
+
 ## Cross-media dump cache
 
 `seed:dev` fetches the pinned Bangumi Archive release and a VNDB dump, verifies them, extracts source tables and seeds
