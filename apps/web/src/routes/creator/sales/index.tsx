@@ -1,7 +1,11 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { CreatorSalesAddress } from '../../../checkout/creator-sales-address';
 import { CreatorSalesPage } from '../../../checkout/creator-sales-page';
-import { CreatorSalesCurrent, navigateCreatorSales } from '../../../checkout/creator-sales-current';
+import {
+  CreatorSalesCurrent,
+  creatorSalesLocationKey,
+  navigateCreatorSales,
+} from '../../../checkout/creator-sales-current';
 import { creatorSalesAddressLoad, creatorSalesSearch, readCreatorSalesCurrent } from '../../../checkout/creator-sales';
 import { requirePrivatePageAccess } from '../../../session/guard';
 import { loadPrivatePage } from '../../../session/private-page';
@@ -39,7 +43,7 @@ export const Route = createFileRoute('/creator/sales/')({
       <CreatorSalesCurrent
         initial={initial}
         loadId={loadId}
-        locationKey={router.state.location.key}
+        locationKey={creatorSalesLocationKey(router.state.location)}
         locale={locale}
         {...search}
         navigate={(href, started) => navigateCreatorSales(router, href, started)}

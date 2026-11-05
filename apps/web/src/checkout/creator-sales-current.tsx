@@ -27,6 +27,12 @@ export type CreatorSalesNavigate = (
   href: string,
   started: (locationKey: string) => void,
 ) => Promise<CreatorSalesRouteAdmission | undefined>;
+type RouterLocation = { href: string; state: unknown };
+
+export function creatorSalesLocationKey(location: RouterLocation): string {
+  return (location.state as { __TSR_key?: string }).__TSR_key ?? location.href;
+}
+
 type Windows = {
   coordinates: CreatorSalesWindows;
   source: object | undefined;
@@ -50,12 +56,12 @@ export async function navigateCreatorSales(
   let loaded: CreatorSalesRouteAdmission | undefined;
   const stopStart = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
     if (locationKey === undefined) {
-      locationKey = toLocation.key;
+      locationKey = creatorSalesLocationKey(toLocation);
       started(locationKey);
     }
   });
   const stopResolve = router.subscribe('onResolved', ({ toLocation }) => {
-    if (loaded || toLocation.key !== locationKey) return;
+    if (loaded || creatorSalesLocationKey(toLocation) !== locationKey) return;
     const data = router.state.matches.at(-1)?.loaderData as CreatorSalesRouteLoad | undefined;
     if (data) loaded = { locationKey, loadId: data.loadId };
   });
@@ -68,7 +74,7 @@ export async function navigateCreatorSales(
     stopStart();
     stopResolve();
   }
-  return router.state.location.key === locationKey ? loaded : undefined;
+  return creatorSalesLocationKey(router.state.location) === locationKey ? loaded : undefined;
 }
 
 function matches(value: unknown, subject: string, cursor: string | null): value is CreatorSalesCurrentRead {
@@ -358,12 +364,14 @@ function CurrentSalesRead({
   const activeStage = windows.coordinates.staged;
   useLayoutEffect(() => {
     if (value?.page.kind !== 'ready' && value?.page.kind !== 'loading') windows.focus = undefined;
+    const completed = windows.completed;
     if (
-      windows.completed?.attempt !== activeStage ||
+      !completed ||
+      completed.attempt !== activeStage ||
       !windows.admitting ||
       !activeStage ||
-      windows.completed.locationKey !== locationKey ||
-      windows.completed.loadId !== loadId ||
+      completed.locationKey !== locationKey ||
+      completed.loadId !== loadId ||
       activeStage.cursor !== cursor ||
       value?.page.kind !== 'ready' ||
       !sourceIsCurrent()
@@ -407,7 +415,7 @@ function CurrentSalesRead({
     windows.transferredLoadId = undefined;
     windows.navigationPending = true;
     windows.navigationFailed = false;
-    const attempt = windows.coordinates.staged;
+    const attempt = windows.coordinates.staged!;
     windows.focus = keyboard ? element : undefined;
     if (sourceIsCurrent()) {
       void navigate(creatorSalesHref(locale, target), (targetLocationKey) => {
