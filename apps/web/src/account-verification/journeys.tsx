@@ -179,10 +179,18 @@ function ReviewerJourney({
     movementRef.current = null;
     setMovement(null);
     setMovementLoading(false);
-    if (focusHandoff.current?.id === requested.id && !focusHandoff.current.canceled)
-      setFocusAfterRead(requested.id);
+    if (focusHandoff.current?.id === requested.id && !focusHandoff.current.canceled) setFocusAfterRead(requested.id);
     else clearFocusHandoff(requested.id);
-  }, [clearFocusHandoff, isCurrentOwner, query.data, query.isFetching, query.isPending, query.isSuccess, readId, viewerId]);
+  }, [
+    clearFocusHandoff,
+    isCurrentOwner,
+    query.data,
+    query.isFetching,
+    query.isPending,
+    query.isSuccess,
+    readId,
+    viewerId,
+  ]);
 
   const scheduleRead = useCallback(
     (cursor: ReviewCoordinate, direction?: ReviewDirection, origin?: HTMLElement | null) => {
@@ -226,8 +234,7 @@ function ReviewerJourney({
     [scheduleRead],
   );
   const next = useCallback(
-    (cursor: string, origin?: HTMLElement | null) =>
-      scheduleRead(cursor, 'next', origin),
+    (cursor: string, origin?: HTMLElement | null) => scheduleRead(cursor, 'next', origin),
     [scheduleRead],
   );
   const previous = useCallback(
@@ -237,10 +244,7 @@ function ReviewerJourney({
     },
     [scheduleRead],
   );
-  const first = useCallback(
-    (origin?: HTMLElement | null) => scheduleRead(undefined, 'first', origin),
-    [scheduleRead],
-  );
+  const first = useCallback((origin?: HTMLElement | null) => scheduleRead(undefined, 'first', origin), [scheduleRead]);
   let page: ReadState<ReviewPage> | { state: 'loading' };
   if (loading) page = { state: 'loading' };
   else if (!viewerId || (query.data && query.data.viewerId !== viewerId)) page = { state: 'denied' };

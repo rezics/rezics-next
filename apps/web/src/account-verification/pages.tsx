@@ -218,151 +218,156 @@ function ReviewPageViewContent({
             navigate(() => action(origin));
           };
           return (
-          <Frame title={m.av_review_title()}>
-            <p className="max-w-prose text-muted-foreground">{m.av_review_help()}</p>
-            {viewerId &&
-              page.state !== 'denied' &&
-              page.state !== 'preparing' &&
-              (operation.result || operation.attempt) && (
-                <div className="space-y-3">
-                  {command && (
-                    <div className="space-y-2 break-words">
-                      <p>
-                        {m.av_application()}: {command.targetId}
-                      </p>
-                      <p>
-                        {m.av_decision()}: {actionLabel(command.action)}
-                      </p>
-                      <p className="whitespace-pre-wrap">
-                        {m.av_reason()}: {command.reason}
-                      </p>
+            <Frame title={m.av_review_title()}>
+              <p className="max-w-prose text-muted-foreground">{m.av_review_help()}</p>
+              {viewerId &&
+                page.state !== 'denied' &&
+                page.state !== 'preparing' &&
+                (operation.result || operation.attempt) && (
+                  <div className="space-y-3">
+                    {command && (
+                      <div className="space-y-2 break-words">
+                        <p>
+                          {m.av_application()}: {command.targetId}
+                        </p>
+                        <p>
+                          {m.av_decision()}: {actionLabel(command.action)}
+                        </p>
+                        <p className="whitespace-pre-wrap">
+                          {m.av_reason()}: {command.reason}
+                        </p>
+                      </div>
+                    )}
+                    <OperationFeedback
+                      operation={operation}
+                      disabled={!canWrite || page.state !== 'ready' || !command || !actions.includes(command.action)}
+                    />
+                  </div>
+                )}
+              <div
+                ref={queueRegionRef}
+                role="region"
+                aria-label={m.av_review_title()}
+                aria-busy={page.state === 'loading'}
+                tabIndex={-1}
+                className="space-y-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-solid focus-visible:outline-ring"
+              >
+                {page.state !== 'ready' ? (
+                  <div className="space-y-3">
+                    <PageState
+                      state={page.state}
+                      retry={() => (retry ? retry(takeKeyboardOrigin()) : refresh())}
+                      retryButtonProps={keyboardProps}
+                    />
+                    {page.state !== 'loading' && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => move((origin) => first(origin))}
+                        {...keyboardProps}
+                      >
+                        {m.av_first_page()}
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-3">
+                      {canPrevious && previous && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => move((origin) => previous(origin))}
+                          {...keyboardProps}
+                        >
+                          {m.av_previous_page()}
+                        </Button>
+                      )}
+                      <Button type="button" variant="outline" onClick={refresh}>
+                        {m.av_refresh()}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => move((origin) => first(origin))}
+                        {...keyboardProps}
+                      >
+                        {m.av_first_page()}
+                      </Button>
                     </div>
-                  )}
-                  <OperationFeedback
-                    operation={operation}
-                    disabled={!canWrite || page.state !== 'ready' || !command || !actions.includes(command.action)}
-                  />
-                </div>
-              )}
-            <div
-              ref={queueRegionRef}
-              role="region"
-              aria-label={m.av_review_title()}
-              aria-busy={page.state === 'loading'}
-              tabIndex={-1}
-              className="space-y-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-solid focus-visible:outline-ring"
-            >
-              {page.state !== 'ready' ? (
-                <div className="space-y-3">
-                  <PageState
-                    state={page.state}
-                    retry={() => (retry ? retry(takeKeyboardOrigin()) : refresh())}
-                    retryButtonProps={keyboardProps}
-                  />
-                  {page.state !== 'loading' && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => move((origin) => first(origin))}
-                      {...keyboardProps}
-                    >
-                      {m.av_first_page()}
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-wrap gap-3">
-                    {canPrevious && previous && (
+                    {page.value.requests.length === 0 && (
+                      <p role="status" className="rounded-xl border border-border p-5">
+                        {m.av_empty()}
+                      </p>
+                    )}
+                    <div className="space-y-5">
+                      {page.value.requests.map(({ request, account, subject }) => (
+                        <Card key={request.id}>
+                          <CardHeader>
+                            <CardTitle>
+                              {account ? (
+                                <h2 className="text-xl">
+                                  <AccountReference account={account} />
+                                </h2>
+                              ) : (
+                                <AccountReference account={null} />
+                              )}
+                            </CardTitle>
+                            {subject ? (
+                              <VerificationLink
+                                className={linkClass}
+                                href={subjectHref({ id: subject.id, label: subject.name }, getLocale()).href}
+                              >
+                                {subject.name}
+                              </VerificationLink>
+                            ) : (
+                              <Tombstone shape="row" labels={{ unavailable: m.av_subject_unavailable() }} />
+                            )}
+                            <VerificationLink className={linkClass} href={verificationHref(request.accountId)}>
+                              {m.av_status_title()}
+                            </VerificationLink>
+                          </CardHeader>
+                          <CardContent className="space-y-5">
+                            <details className="space-y-4">
+                              <summary className="cursor-pointer py-2 font-medium text-primary">
+                                {m.av_evidence()}
+                              </summary>
+                              <Evidence request={request} />
+                              {request.state === 'pending' && actions.length > 0 && (
+                                <OperationForm
+                                  key={`${viewerId}:${request.id}:${actions.join(',')}`}
+                                  reconciled={
+                                    command?.targetId === request.id && operation.result?.state === 'accepted'
+                                  }
+                                  actions={actions}
+                                  targetId={request.id}
+                                  draft={command?.targetId === request.id ? command : null}
+                                  disabled={
+                                    disabled ||
+                                    (command?.targetId === request.id && operation.result?.state === 'accepted')
+                                  }
+                                  onSubmit={(input) => void operation.run(input)}
+                                />
+                              )}
+                            </details>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                    {page.value.next && (
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => move((origin) => previous(origin))}
+                        onClick={() => move((origin) => next(page.value.next!, origin))}
                         {...keyboardProps}
                       >
-                        {m.av_previous_page()}
+                        {m.av_next_page()}
                       </Button>
                     )}
-                    <Button type="button" variant="outline" onClick={refresh}>
-                      {m.av_refresh()}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => move((origin) => first(origin))}
-                      {...keyboardProps}
-                    >
-                      {m.av_first_page()}
-                    </Button>
-                  </div>
-                  {page.value.requests.length === 0 && (
-                    <p role="status" className="rounded-xl border border-border p-5">
-                      {m.av_empty()}
-                    </p>
-                  )}
-                  <div className="space-y-5">
-                    {page.value.requests.map(({ request, account, subject }) => (
-                    <Card key={request.id}>
-                      <CardHeader>
-                        <CardTitle>
-                          {account ? (
-                            <h2 className="text-xl">
-                              <AccountReference account={account} />
-                            </h2>
-                          ) : (
-                            <AccountReference account={null} />
-                          )}
-                        </CardTitle>
-                        {subject ? (
-                          <VerificationLink
-                            className={linkClass}
-                            href={subjectHref({ id: subject.id, label: subject.name }, getLocale()).href}
-                          >
-                            {subject.name}
-                          </VerificationLink>
-                        ) : (
-                          <Tombstone shape="row" labels={{ unavailable: m.av_subject_unavailable() }} />
-                        )}
-                        <VerificationLink className={linkClass} href={verificationHref(request.accountId)}>
-                          {m.av_status_title()}
-                        </VerificationLink>
-                      </CardHeader>
-                      <CardContent className="space-y-5">
-                        <details className="space-y-4">
-                          <summary className="cursor-pointer py-2 font-medium text-primary">{m.av_evidence()}</summary>
-                          <Evidence request={request} />
-                          {request.state === 'pending' && actions.length > 0 && (
-                            <OperationForm
-                              key={`${viewerId}:${request.id}:${actions.join(',')}`}
-                              reconciled={command?.targetId === request.id && operation.result?.state === 'accepted'}
-                              actions={actions}
-                              targetId={request.id}
-                              draft={command?.targetId === request.id ? command : null}
-                              disabled={
-                                disabled || (command?.targetId === request.id && operation.result?.state === 'accepted')
-                              }
-                              onSubmit={(input) => void operation.run(input)}
-                            />
-                          )}
-                        </details>
-                      </CardContent>
-                    </Card>
-                    ))}
-                  </div>
-                  {page.value.next && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => move((origin) => next(page.value.next!, origin))}
-                      {...keyboardProps}
-                    >
-                      {m.av_next_page()}
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-          </Frame>
+                  </>
+                )}
+              </div>
+            </Frame>
           );
         }}
       </ReviewContent>
