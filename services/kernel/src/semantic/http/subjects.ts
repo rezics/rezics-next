@@ -319,7 +319,7 @@ const readResponse = t.Object(
   {
     subject: ItemSchema,
     selectedSynopsis: t.Optional(t.Union([
-      t.Object({ kind: t.Literal('matched'), fact: StatementSchema, context: t.String(), release: t.String() }, { additionalProperties: false }),
+      t.Object({ kind: t.Literal('matched'), fact: t.Omit(StatementSchema, ['rezics']), context: t.String(), release: t.String() }, { additionalProperties: false }),
       ...(['changed', 'missing', 'unsupported', 'unavailable'] as const).map((kind) => t.Object({ kind: t.Literal(kind) }, { additionalProperties: false })),
     ])),
     reviewedIdentity: t.Optional(t.Union([ReviewedPersonEndpointSchema, t.Null()])),
