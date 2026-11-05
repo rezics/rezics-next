@@ -10,6 +10,12 @@ export function selectedReviewSubject(items: readonly { id: string }[]): string 
   return items[0]?.id ?? null;
 }
 
-export function reviewThreadHref(locale: string, boardId: string, subjectId: string, subjectTitle: string): string {
-  return `/${locale}/boards/${encodeURIComponent(boardId)}/new?subject=${encodeURIComponent(subjectId)}&subjectTitle=${encodeURIComponent(subjectTitle)}`;
+export function reviewThreadHref(
+  locale: string,
+  boardId: string,
+  subjectId: string,
+  subjectTitle: string,
+  returnTo?: string,
+): string {
+  return `/${locale}/boards/${encodeURIComponent(boardId)}/new?subject=${encodeURIComponent(subjectId)}&subjectTitle=${encodeURIComponent(subjectTitle)}${returnTo === undefined ? '' : `&returnTo=${encodeURIComponent(returnTo)}`}`;
 }

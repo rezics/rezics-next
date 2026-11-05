@@ -4282,10 +4282,11 @@ The opaque outer cursor binds the account, client, delegator, sorted scopes, aut
 head, Subject and Semantic source component, filter, order, page bound and destination policy version. Its inner
 Realm keyset cursor retains the Realm source epoch and raw Board frontier. Both cursors expire after fifteen minutes;
 an expired inner Realm generation is returned as a closed expired page for explicit restart. No Board advice is cached across pages.
-Decision: Preserve the local receiver until the controller publishes the admitted review-destinations route and its
-complete native dependencies in the actual `@rezics/client` output; then call that public method and derive page and
-preparation types from its result while retaining runtime validation of the untrusted response, native bindings and
-all page states. Missing installed typing does not authorize a replacement declaration or endpoint.
+Decision: Keep the current validated receiver until the controller publishes the admitted review-destinations route
+and its complete native dependencies in the actual `@rezics/client` output. Only then replace the local route/type
+mirror and call the installed method with response-derived page and preparation types, retaining runtime validation
+of untrusted responses, native bindings and all page states. An absent installed export never authorizes another
+route, declaration or generator.
 
 ### Cost: Review destination page and exact inspection
 

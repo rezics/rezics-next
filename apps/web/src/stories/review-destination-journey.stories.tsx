@@ -14,6 +14,7 @@ const longBoard = `مراجعات الرحلة ${'عنوان'.repeat(55)}`;
 const longRealm = `مكتبة القراء ${'RealmNameWithoutSpaces'.repeat(18)}`;
 const realm = { ...memberships.items[0]!, name: longRealm };
 const review = boards.items.find((board) => board.purpose === 'reviews')!;
+const returnTo = `/en/subjects/${subject.subject.id}/work/reviews`;
 const context = {
   subject: {
     id: subject.subject.id,
@@ -102,6 +103,7 @@ function Visits({ session = 'signed-in' }: { session?: 'signed-in' | 'signed-out
             subjectTitle={index === 0 ? subject.subject.labels.en : longBoard}
             locale={getLocale()}
             session={session}
+            returnTo={returnTo}
           />
         </section>
       ))}

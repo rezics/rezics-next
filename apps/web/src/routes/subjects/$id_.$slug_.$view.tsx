@@ -380,6 +380,7 @@ function SubjectViewRoute() {
                 subjectTitle={frame.title.text}
                 session={reviewSession}
                 locale={locale}
+                returnTo={currentHref}
               />
             ),
           }

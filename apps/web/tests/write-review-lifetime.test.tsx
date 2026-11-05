@@ -9,6 +9,8 @@ const readerB = '0192f3a0-6c1e-7b2a-9d4e-000000000102';
 const subjectA = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
 const subjectB = '0192f3a0-6c1e-7b2a-9d4e-000000000202';
 const realmA = '0192f3a0-6c1e-7b2a-9d4e-000000000301';
+const returnToA = `/en/subjects/${subjectA}/work/reviews?realm=${realmA}#subject-community-reviews`;
+const returnToB = `/zh-Hant/subjects/${subjectB}/work/reviews?realm=${realmA}#subject-community-reviews`;
 const boardA = '0192f3a0-6c1e-7b2a-9d4e-000000000401';
 const boardB = '0192f3a0-6c1e-7b2a-9d4e-000000000402';
 const boardC = '0192f3a0-6c1e-7b2a-9d4e-000000000403';
@@ -208,6 +210,7 @@ const { createRoot } = await import('react-dom/client');
 const { sessionQuery } = await import('../src/session/query');
 const { fingerprintReviewCsrf } = await import('../src/subject/write-review-lifetime');
 const { WriteReviewAction } = await import('../src/subject/write-review');
+const { reviewThreadHref } = await import('../src/threads/review-policy');
 const { readReviewDestination } = await import('../src/threads/review-destination/server');
 const { readMyRealmsPageForReview } = await import('../src/community/space-actions');
 const { m } = await import('../src/paraglide/messages.js');
@@ -255,7 +258,7 @@ async function createSurface(options: { strict?: boolean; session?: Session } = 
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  let target = { subjectId: subjectA, subjectTitle: 'Original title', locale: 'en' };
+  let target = { subjectId: subjectA, subjectTitle: 'Original title', locale: 'en', returnTo: returnToA };
   const action = () =>
     createElement(WriteReviewAction, {
       ...target,
@@ -267,8 +270,8 @@ async function createSurface(options: { strict?: boolean; session?: Session } = 
       { client },
       options.strict ? createElement(StrictMode, null, action()) : action(),
     );
-  const render = async (next?: typeof target) => {
-    if (next) target = next;
+  const render = async (next?: Partial<typeof target>) => {
+    if (next) target = { ...target, ...next };
     await act(async () => root.render(tree()));
   };
   const clickText = async (label: string) => {
@@ -404,7 +407,7 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   expect(navigations).toHaveLength(0);
   await surface.clickBoard('Single review board');
   await until(() => navigations.length === 1, 'the single-choice navigation');
-  expect(navigations).toEqual([`/en/boards/${boardA}/new?subject=${subjectA}&subjectTitle=Original%20title`]);
+  expect(navigations).toEqual([reviewThreadHref('en', boardA, subjectA, 'Original title', returnToA)]);
   expect(destinationCalls().at(-1)?.query).toContain(`boardId=${boardA}`);
 
   // Sparse destination pages continue only on explicit More with the exact original cursor.
@@ -535,7 +538,12 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   const targetBoardCount = destinationCalls().length;
   await surface.clickRealm('Realm 1');
   await until(() => destinationCalls().length > targetBoardCount, 'the pending old-target boards');
-  await surface.render({ subjectId: subjectB, subjectTitle: 'Changed title & name', locale: 'zh-Hant' });
+  await surface.render({
+    subjectId: subjectB,
+    subjectTitle: 'Changed title & name',
+    locale: 'zh-Hant',
+    returnTo: returnToB,
+  });
   const pagesAfterTargetChange = membershipCalls().length;
   await surface.clickWrite();
   await until(() => membershipCalls().length > pagesAfterTargetChange, 'the new-target membership read');
@@ -557,8 +565,48 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   await until(() => (surface.host.textContent ?? '').includes('Current target board'), 'the new target choices');
   await surface.clickBoard('Current target board');
   await until(() => navigations.length === 2, 'the replacement-target navigation');
-  expect(navigations[1]).toBe(
-    `/zh-Hant/boards/${boardB}/new?subject=${subjectB}&subjectTitle=Changed%20title%20%26%20name`,
+  expect(navigations[1]).toBe(reviewThreadHref('zh-Hant', boardB, subjectB, 'Changed title & name', returnToB));
+
+  // Replacing only the source address retires the pending visit and sends the current exact address
+  // through the same composer route after a fresh Realm and Board read.
+  const staleAddressGate = deferred<Response>();
+  const returnToReplacement = `/zh-Hant/subjects/${subjectB}/work/reviews?realm=${realmA}#subject-community-review-list`;
+  let addressRead = 0;
+  destinationRead = (realmId, subjectId, boardId) => {
+    if (boardId)
+      return destinationPage(realmId, subjectId, [destinationItem(boardId, 'Address-bound Board', subjectId)]);
+    return addressRead++ === 0
+      ? staleAddressGate.promise
+      : destinationPage(realmId, subjectId, [destinationItem(boardD, 'Address-bound Board', subjectId)]);
+  };
+  const pagesBeforeAddressChange = membershipCalls().length;
+  await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
+  await surface.clickWrite();
+  await until(() => membershipCalls().length > pagesBeforeAddressChange, 'the address-bound membership read');
+  const addressBoardsBefore = destinationCalls().length;
+  await surface.clickRealm('Realm 1');
+  await until(() => destinationCalls().length > addressBoardsBefore, 'the pending original-address lookup');
+  await surface.render({ returnTo: returnToReplacement });
+  const pagesAfterAddressChange = membershipCalls().length;
+  await surface.clickWrite();
+  await until(() => membershipCalls().length > pagesAfterAddressChange, 'the replacement-address membership read');
+  const replacementBoardsBefore = destinationCalls().length;
+  await surface.clickRealm('Realm 1');
+  await until(
+    () => (surface.host.textContent ?? '').includes('Address-bound Board'),
+    'the replacement-address Board choices',
+  );
+  staleAddressGate.resolve(
+    destinationPage(realmA, subjectB, [destinationItem(boardC, 'Stale address choice', subjectB)]),
+  );
+  await settle();
+  expect(navigations).toHaveLength(2);
+  expect(surface.host.textContent ?? '').not.toContain('Stale address choice');
+  expect(destinationCalls().length).toBeGreaterThan(replacementBoardsBefore);
+  await surface.clickBoard('Address-bound Board');
+  await until(() => navigations.length === 3, 'the address-replacement navigation');
+  expect(navigations[2]).toBe(
+    reviewThreadHref('zh-Hant', boardD, subjectB, 'Changed title & name', returnToReplacement),
   );
 
   // The chooser retains the original twenty-Realm window and reads destinations only for the

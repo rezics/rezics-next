@@ -197,6 +197,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
           board.native.boardId,
           board.native.subjectIds[0],
           ticket.visit.target.subjectTitle,
+          ticket.visit.target.returnTo,
         ),
       );
     } catch {
@@ -411,18 +412,20 @@ export function WriteReviewAction({
   subjectTitle,
   session,
   locale,
+  returnTo,
 }: {
   subjectId: string;
   subjectTitle: string;
   session: 'signed-in' | 'signed-out' | 'unavailable';
   locale: string;
+  returnTo?: string;
 }) {
-  const visit = useWriteReviewVisit({ subjectId, subjectTitle, locale, session });
+  const visit = useWriteReviewVisit({ subjectId, subjectTitle, locale, returnTo, session });
   if (session === 'signed-out')
     return (
       <SignInPrompt
         compact
-        returnTo={`/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subjectId)}/reviews`}
+        returnTo={returnTo ?? `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subjectId)}/reviews`}
         label={m.thread_review_sign_in()}
       />
     );

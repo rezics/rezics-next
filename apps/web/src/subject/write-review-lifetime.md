@@ -1,8 +1,10 @@
 # Write review preparation lifetime
 
-`WriteReviewAction` captures the browser's original QueryClient, session cache revision and subject destination
-before it starts the existing first-page My Realms read. A visit is ready only when that exact cache entry has a
-successful signed-in record with a subject. A missing CSRF token remains a valid read-only visit.
+`WriteReviewAction` captures the browser's original QueryClient, session cache revision, subject destination and
+exact Subject `publicHref` before it starts the existing first-page My Realms read. The address is part of visit
+identity and reaches the existing composer as its validated return target; it is never reconstructed from a title
+or slug. A visit is ready only when that exact cache entry has a successful signed-in record with a subject. A
+missing CSRF token remains a valid read-only visit.
 
 The private page and board-choice server boundaries each return reader provenance from the same prepared Request
 and credential used by their unchanged read. The membership boundary reuses `loadMyRealms` once and reads its
@@ -20,14 +22,16 @@ a microtask retires a final unmount while allowing StrictMode's synchronous effe
 visit without duplicating its read.
 
 The original 20 Realm page, review-board pagination and disclosure filters, route destinations, empty states,
-public component props and subject-route mount remain the existing interface. Realm and board discovery failures
-stay in the expanded entry and expose the existing localized “Try again” action, which begins a fresh reader-ticket
-read. No reads, cursors or credentials are added to the kernel boundary.
+public component props and subject-route mount remain the existing interface. A visit also binds subject, title,
+locale and the original address. Realm and board discovery failures stay in the expanded entry and expose the
+existing localized “Try again” action, which begins a fresh reader-ticket read. No reads, cursors or credentials are
+added to the kernel boundary.
 
 The connected regression is `apps/web/tests/write-review-lifetime.test.tsx`. It uses the actual QueryClient,
 component, session preparation, My Realms and board server boundaries; only the native transport and session store
-are controlled. The new regression is authored UNRUN, as required by the task execution policy. Native and broader
-browser acceptance remain integration obligations.
+are controlled. The original composer and native submission are exercised by
+`apps/web/tests/thread-creation-lifetime.test.tsx`. Native and broader browser acceptance remain integration
+obligations.
 
 ## Cost
 
