@@ -215,13 +215,21 @@ export function useReaderResponseOrigin(client: QueryClient, key: QueryKey, matc
     return {
       read,
       subscribe: (notify: () => void) => {
-        const stop = browserObservation(client).subscribeCache(() => {
+        const observation = browserObservation(client);
+        let mounted = true;
+        const publish = () => {
+          if (mounted) notify();
+        };
+        const stop = observation.subscribeCache(() => {
           const before = snapshot;
           read();
-          if (before !== snapshot) notify();
+          if (before !== snapshot) observation.publish(publish);
         });
         read();
-        return stop;
+        return () => {
+          mounted = false;
+          stop();
+        };
       },
     };
   }, [client, signature]);

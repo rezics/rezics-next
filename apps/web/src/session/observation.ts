@@ -23,10 +23,50 @@ class BrowserObservation {
   private lastQuery: unknown;
   private lastCount = 0;
   private cacheListeners = new Set<(event: BrowserCacheEvent) => void>();
+  private publications = new Set<() => void>();
+  private retiredExposures: BrowserReader[] = [];
+  private publicationQueued = false;
 
   constructor(private readonly client: QueryClient) {}
 
   getSnapshot = (): BrowserObservationSnapshot => this.snapshot;
+
+  /** Cache observers retire authority in-stack; React subscribers publish after that stack. */
+  publish = (notify: () => void): void => {
+    this.publications.add(notify);
+    this.queuePublication();
+  };
+
+  private queuePublication(): void {
+    if (this.publicationQueued) return;
+    this.publicationQueued = true;
+    queueMicrotask(() => {
+      // Keep the queue marked while removing queries: removal can itself produce cache events.
+      const retired = this.retiredExposures;
+      this.retiredExposures = [];
+      for (const observation of retired) {
+        this.client.removeQueries({
+          queryKey: ['exposure', 'viewer', observation.subject, observation.id],
+          exact: true,
+        });
+      }
+      const publications = this.publications;
+      this.publications = new Set();
+      this.publicationQueued = false;
+      for (const notify of publications) notify();
+      if (this.retiredExposures.length || this.publications.size) this.queuePublication();
+    });
+  }
+
+  /** The same lifetime, with cancellable, coalesced notification for useSyncExternalStore. */
+  subscribeSnapshot = (listener: () => void): (() => void) => {
+    const notify = () => listener();
+    const stop = this.subscribe(() => this.publish(notify));
+    return () => {
+      stop();
+      this.publications.delete(notify);
+    };
+  };
 
   /** All browser readers share this cache subscription; domain response identity stays local. */
   subscribeCache = (listener: (event: BrowserCacheEvent) => void): (() => void) => {
@@ -118,13 +158,15 @@ class BrowserObservation {
     if (same) return;
 
     this.snapshot = next;
-    if (previousObservation) {
-      this.client.removeQueries({
-        queryKey: ['exposure', 'viewer', previousObservation.subject, previousObservation.id],
-        exact: true,
-      });
-    }
+    this.retireExposure(previousObservation);
     this.listeners.forEach((notify) => notify());
+  }
+
+  private retireExposure(observation: BrowserReader | undefined): void {
+    if (!observation) return;
+    // Its key is already inadmissible. Physical eviction must not update a sibling in render.
+    this.retiredExposures.push(observation);
+    this.queuePublication();
   }
 
   private retireMountedIncarnation(): void {
@@ -136,12 +178,7 @@ class BrowserObservation {
     const previous = this.snapshot;
     const previousObservation = previous.state === 'signed-in' ? previous.observation : undefined;
     this.snapshot = { state: 'inactive' };
-    if (previousObservation) {
-      this.client.removeQueries({
-        queryKey: ['exposure', 'viewer', previousObservation.subject, previousObservation.id],
-        exact: true,
-      });
-    }
+    this.retireExposure(previousObservation);
   }
 }
 
