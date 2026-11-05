@@ -300,7 +300,7 @@ describe.skipIf(!process.env.DATABASE_URL)('existing native formula with Access 
       authnEpoch: 1,
     };
     const access = createAccess({
-      actions: new Map([[action, { anonymous: false }]]),
+      actions: new Map([[action, { anonymous: false, 'x-resource-types': ['test.work'] }]]),
       accountEvidence: (input) => (input === actor ? account : null),
     });
     const time = await withConnection(pool, (client) => mintReadTime(client));

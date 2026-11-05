@@ -4,6 +4,13 @@ Decision: use the existing account ten-second deadline for each native request, 
 twenty-five-second lookup/grant and thirty-five-second transfer BFF envelopes; only an explicit retry replays
 the original pending command. Each envelope includes the native phases plus five seconds for delivery.
 
+The mounted route keeps unresolved controllers under its QueryClient, resource and monotonic session revision.
+Return reattaches the original IO and reloads current disclosure without sending a command. Route IO captures
+the original CSRF header and checks the existing session observer before dispatch; caller replacement hides the
+old loader observations and starts a current read. Settled controllers are released. This implements the
+[Accounts decision](../../../../../docs/accounts.md#4-clients-consent-requests-and-permission) with the existing
+controller, session observer, CSRF check and native replay, without a new transport or persisted command format.
+
 Decision: permission search filters only the current native response, keeps the selected choice visible, and shows
 returned nondelegable roles disabled with their returned action expansion.
 
