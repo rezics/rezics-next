@@ -1579,14 +1579,14 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (prepared.status !== 'retained') return m.unavailable('observation_lost');
         work.queried = prepared.queried;
         encoded = await save(work, encoded, true, m);
-        if (publication) {
-          const closed = m.take(await custody.closeObservation(q, config.search, context));
-          if (closed.status !== 'closed') return m.unavailable('observation_lost');
-          owned.delete(q.snapshot.observation);
-        }
         owned.set(prepared.queried.snapshot.observation, prepared.queried);
       } finally {
         m.add((await custody.release(acquired.use, context)).cost);
+      }
+      if (publication) {
+        const closed = m.take(await custody.closeObservation(q, config.search, context));
+        if (closed.status !== 'closed') return m.unavailable('observation_lost');
+        owned.delete(q.snapshot.observation);
       }
     }
     const q = work.queried!;
