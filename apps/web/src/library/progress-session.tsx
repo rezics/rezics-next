@@ -16,8 +16,15 @@ import type { ReactNode } from 'react';
 import { RelativeTime } from './logs-progress';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Button } from '@rezics/ui/shadcn/button';
-import { isNotFound, Link } from '@tanstack/react-router';
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { isNotFound, Link, useLocation, useRouter } from '@tanstack/react-router';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import {
+  admitHistory,
+  historyPaths,
+  type HistoryPaths,
+  type HistorySection,
+  type HistoryTarget,
+} from './progress-history-windows/coordinates';
 import { Menu } from '@rezics/ui/menu';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Dialog, DialogContent, DialogTitle } from '@rezics/ui/shadcn/dialog';
@@ -122,6 +129,11 @@ export type ProgressDetailOrigin = {
   lifetime?: object | undefined;
 };
 const detailReads = detailOperations.slice(0, 4);
+type HistoryNavigation = {
+  paths: HistoryPaths;
+  stage: (target: HistoryTarget, address: ProgressDetailAddress, keyboard: boolean) => () => void;
+};
+const HistoryNavigationContext = createContext<HistoryNavigation | undefined>(undefined);
 
 /** The actual viewer observation owns the read; loader identity only rejects mismatches. */
 export function CurrentProgressDetail({
@@ -136,6 +148,54 @@ export function CurrentProgressDetail({
   const { client, browser, store, snapshot } = useReadingAuthority(detailOperations);
   const viewer = browser ? snapshot.viewer : loaded.viewer;
   const locale = getLocale();
+  const location = useLocation();
+  const historyScope = JSON.stringify([
+    viewer,
+    address.id,
+    address.logs,
+    locale,
+    detailReads.map((op) => snapshot.admissions.get(op)?.id),
+  ]);
+  type Visit = {
+    scope: string;
+    identity: object;
+    observation: object | undefined;
+    location: object;
+    address: ProgressDetailAddress;
+    paths: HistoryPaths;
+    staged?: { target: HistoryTarget; address: ProgressDetailAddress; keyboard: boolean; focus: Element | null };
+    admitted?: object;
+  };
+  const visitRef = useRef<Visit | null>(null);
+  let visit = visitRef.current;
+  const changedLocation = visit?.location !== location;
+  const carrying = visit?.staged && sameAddress(visit.staged.address, address);
+  if (
+    !visit ||
+    visit.scope !== historyScope ||
+    visit.identity !== snapshot.identity ||
+    visit.observation !== snapshot.observation ||
+    ((changedLocation || !sameAddress(visit.address, address)) && !carrying)
+  ) {
+    visit = {
+      scope: historyScope,
+      identity: snapshot.identity,
+      observation: snapshot.observation,
+      location,
+      address,
+      paths: historyPaths(),
+    };
+    visitRef.current = visit;
+  }
+  visit.location = location;
+  visit.address = address;
+  useLayoutEffect(() => {
+    const cancelFocus = () => {
+      if (visitRef.current?.staged) visitRef.current.staged.keyboard = false;
+    };
+    document.addEventListener('focusin', cancelFocus);
+    return () => document.removeEventListener('focusin', cancelFocus);
+  }, []);
   const custodySignature = JSON.stringify([
     browser ? snapshot.owner : viewer,
     address.id,
@@ -156,6 +216,7 @@ export function CurrentProgressDetail({
     address.logs,
     locale,
     readEpisode,
+    location.state.key,
   ]);
   const [instance] = useState(() => crypto.randomUUID());
   type Boundary = { signature: string; identity: object; active: boolean; epoch: number; seed?: ProgressDetail };
@@ -287,8 +348,16 @@ export function CurrentProgressDetail({
             enrolled.identity === boundary.identity &&
             store.current(enrolled, detailReads, true);
           if (!current()) return { signedIn: false, idempotencyKey: '' };
-          const fresh = await readDetail(address, current);
-          if (!current() || !matchingDetail(fresh, viewer, address)) return { signedIn: false, idempotencyKey: '' };
+          const accepted = client.getQueryData<ProgressDetail>(queryKey);
+          if (!matchingDetail(accepted, viewer, address)) return { signedIn: false, idempotencyKey: '' };
+          const admittedAddress = {
+            ...address,
+            changes: accepted.progress.changesCursor,
+            units: accepted.progress.unitsCursor,
+          };
+          const fresh = await readDetail(admittedAddress, current);
+          if (!current() || !matchingDetail(fresh, viewer, admittedAddress))
+            return { signedIn: false, idempotencyKey: '' };
           return fresh.progress;
         },
       },
@@ -304,6 +373,32 @@ export function CurrentProgressDetail({
   // A healthy same-viewer rotation pauses dispatch while its new scoped read is pending.
   // Keeping this already accepted read mounted preserves the existing publication editor.
   const healthyPause = browser && snapshot.healthyPause;
+  // Admission consumes actual returned cursors: a stale native cursor may have restarted.
+  const focus = useRef<{ visit: Visit; section: HistorySection; element: Element | null } | null>(null);
+  if (detail && originatingCurrent() && visit.admitted !== detail) {
+    const staged = visit.staged;
+    const target = staged && sameAddress(staged.address, address) ? staged.target : undefined;
+    if (visit.admitted && !target) visit.paths = historyPaths();
+    admitHistory(visit.paths, target, detail.progress.changesCursor, detail.progress.unitsCursor);
+    visit.admitted = detail;
+    if (target && staged?.keyboard) focus.current = { visit, section: target.section, element: staged.focus };
+    delete visit.staged;
+  }
+  function originatingCurrent() {
+    return originRef.current?.value.isCurrent();
+  }
+  useLayoutEffect(() => {
+    const pending = focus.current;
+    focus.current = null;
+    if (
+      pending &&
+      pending.visit === visitRef.current &&
+      originatingCurrent() &&
+      (document.activeElement === pending.element || !pending.element?.isConnected)
+    ) {
+      document.querySelector<HTMLElement>(`[data-progress-history-heading="${pending.section}"]`)?.focus();
+    }
+  });
   if (query.data?.state === 'invalid' && sameAddress(query.data.address, address) && isCurrent())
     return <ProgressAddressCorrection address={address} issue={query.data.issue} />;
   if (!viewer || (!allowed && !healthyPause) || !detail)
@@ -339,15 +434,28 @@ export function CurrentProgressDetail({
       ? returnContext
       : undefined;
   return (
-    <ProgressSessionPage
-      key={`${instance}:${boundary.epoch}`}
-      page={detail.progress}
-      logsCursor={address.logs}
-      originating={originating}
-      returnContext={currentReturnContext}
+    <HistoryNavigationContext.Provider
+      value={{
+        paths: visit.paths,
+        stage: (target, destination, keyboard) => {
+          const staged = { target, address: destination, keyboard, focus: document.activeElement };
+          visit.staged = staged;
+          return () => {
+            if (visit.staged === staged && !sameAddress(visit.address, destination)) delete visit.staged;
+          };
+        },
+      }}
     >
-      <ProgressLogs progress={detail.progress} logs={detail.logs} search={address} originating={originating} />
-    </ProgressSessionPage>
+      <ProgressSessionPage
+        key={`${instance}:${boundary.epoch}`}
+        page={detail.progress}
+        logsCursor={address.logs}
+        originating={originating}
+        returnContext={currentReturnContext}
+      >
+        <ProgressLogs progress={detail.progress} logs={detail.logs} search={address} originating={originating} />
+      </ProgressSessionPage>
+    </HistoryNavigationContext.Provider>
   );
 }
 
@@ -520,13 +628,17 @@ function ProgressHistoryLink({
   search,
   originating,
   children,
+  target,
 }: {
   operation: 'progress_session.changes' | 'progress_session.units';
   id: string;
   search: { changes?: string; units?: string; logs?: string };
   originating: ProgressDetailOrigin | undefined;
   children: ReactNode;
+  target?: HistoryTarget;
 }) {
+  const navigation = useContext(HistoryNavigationContext);
+  const router = useRouter();
   const admitted = exposure.useOperation(operation);
   const locale = getLocale();
   const guard = originating?.capture?.();
@@ -551,10 +663,39 @@ function ProgressHistoryLink({
     <Link
       to="/library/progress/$id"
       params={{ id }}
-      search={search}
+      search={(previous) => {
+        if (!target || !navigation) return search;
+        const next = { ...previous };
+        delete next[target.section];
+        return { ...next, ...(target.cursor === undefined ? {} : { [target.section]: target.cursor }) };
+      }}
+      state={(previous) => previous}
       preload={false}
       onClick={(event) => {
-        if (!current()) event.preventDefault();
+        if (!current()) {
+          event.preventDefault();
+          return;
+        }
+        if (
+          navigation &&
+          target &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.button === 0
+        ) {
+          event.preventDefault();
+          const previous = router.state.location.search;
+          const next = { ...previous };
+          delete next[target.section];
+          const search = { ...next, ...(target.cursor === undefined ? {} : { [target.section]: target.cursor }) };
+          const destination = { ...originating!.address, [target.section]: target.cursor };
+          const cancel = navigation.stage(target, destination, event.detail === 0);
+          void router
+            .navigate({ to: '/library/progress/$id', params: { id }, search, state: (previous) => previous })
+            .then(cancel);
+        }
       }}
       onAuxClick={(event) => {
         if (!current()) event.preventDefault();
@@ -563,6 +704,46 @@ function ProgressHistoryLink({
     >
       {children}
     </Link>
+  );
+}
+
+function ProgressHistoryControls({
+  section,
+  cursor,
+  next,
+  id,
+  originating,
+  search,
+}: {
+  section: HistorySection;
+  cursor: string | undefined;
+  next: string | null;
+  id: string;
+  originating: ProgressDetailOrigin | undefined;
+  search: { changes?: string; units?: string; logs?: string };
+}) {
+  const navigation = useContext(HistoryNavigationContext);
+  const path = navigation?.paths[section];
+  const link = (movement: HistoryTarget['movement'], at: string | undefined, label: string) => (
+    <ProgressHistoryLink
+      operation={section === 'changes' ? 'progress_session.changes' : 'progress_session.units'}
+      id={id}
+      originating={originating}
+      search={{ ...search, ...(at === undefined ? {} : { [section]: at }) }}
+      target={{ section, movement, cursor: at }}
+    >
+      {label}
+    </ProgressHistoryLink>
+  );
+  return (
+    <>
+      {originating?.address[section] && !cursor ? <p role="status">{m.library_progress_history_restarted()}</p> : null}
+      <div className="flex flex-wrap gap-3">
+        {path?.previous.length ? link('previous', path.previous.at(-1), m.library_window_previous()) : null}
+        {cursor ? link('first', undefined, m.library_collections_first_page()) : null}
+        {next ? link('more', next, m.library_progress_more()) : null}
+      </div>
+    </>
   );
 }
 
@@ -1647,11 +1828,11 @@ function SessionEditor({
         )
       ) : null}
       <section role="region" aria-labelledby={changesHeading} className="space-y-3">
-        <h2 id={changesHeading} className="text-xl font-semibold">
+        <h2 id={changesHeading} data-progress-history-heading="changes" tabIndex={-1} className="text-xl font-semibold">
           {m.library_progress_changes()}
         </h2>
         {session.changes.length ? (
-          <ol className="space-y-1">
+          <ol key={JSON.stringify([session.id, page.changesCursor])} className="space-y-1">
             {session.changes.map((change, occurrence) => (
               <ContentItem
                 key={change.id}
@@ -1673,35 +1854,17 @@ function SessionEditor({
               : m.library_progress_changes_empty()}
           </p>
         )}
-        <div className="flex flex-wrap gap-3">
-          {page.changesCursor ? (
-            <ProgressHistoryLink
-              operation="progress_session.changes"
-              id={session.id}
-              originating={originating}
-              search={{
-                ...(logsCursor ? { logs: logsCursor } : {}),
-                ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
-              }}
-            >
-              {m.library_collections_first_page()}
-            </ProgressHistoryLink>
-          ) : null}
-          {session.changesNext ? (
-            <ProgressHistoryLink
-              operation="progress_session.changes"
-              id={session.id}
-              originating={originating}
-              search={{
-                changes: session.changesNext,
-                ...(logsCursor ? { logs: logsCursor } : {}),
-                ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
-              }}
-            >
-              {m.library_progress_more()}
-            </ProgressHistoryLink>
-          ) : null}
-        </div>
+        <ProgressHistoryControls
+          section="changes"
+          cursor={page.changesCursor}
+          next={session.changesNext}
+          id={session.id}
+          originating={originating}
+          search={{
+            ...(logsCursor ? { logs: logsCursor } : {}),
+            ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
+          }}
+        />
       </section>
       <section
         role="region"
@@ -1709,7 +1872,7 @@ function SessionEditor({
         aria-describedby={session.mode === 'completed_units' ? structureHint : undefined}
         className="space-y-3"
       >
-        <h2 id={unitsHeading} className="text-xl font-semibold">
+        <h2 id={unitsHeading} data-progress-history-heading="units" tabIndex={-1} className="text-xl font-semibold">
           {m.library_progress_units()}
         </h2>
         {session.units.length ? (
@@ -1732,35 +1895,17 @@ function SessionEditor({
               : m.library_progress_units_empty()}
           </p>
         )}
-        <div className="flex flex-wrap gap-3">
-          {page.unitsCursor ? (
-            <ProgressHistoryLink
-              operation="progress_session.units"
-              id={session.id}
-              originating={originating}
-              search={{
-                ...(logsCursor ? { logs: logsCursor } : {}),
-                ...(page.changesCursor ? { changes: page.changesCursor } : {}),
-              }}
-            >
-              {m.library_collections_first_page()}
-            </ProgressHistoryLink>
-          ) : null}
-          {session.unitsNext ? (
-            <ProgressHistoryLink
-              operation="progress_session.units"
-              id={session.id}
-              originating={originating}
-              search={{
-                units: session.unitsNext,
-                ...(logsCursor ? { logs: logsCursor } : {}),
-                ...(page.changesCursor ? { changes: page.changesCursor } : {}),
-              }}
-            >
-              {m.library_progress_more()}
-            </ProgressHistoryLink>
-          ) : null}
-        </div>
+        <ProgressHistoryControls
+          section="units"
+          cursor={page.unitsCursor}
+          next={session.unitsNext}
+          id={session.id}
+          originating={originating}
+          search={{
+            ...(logsCursor ? { logs: logsCursor } : {}),
+            ...(page.changesCursor ? { changes: page.changesCursor } : {}),
+          }}
+        />
       </section>
       {children}
     </article>

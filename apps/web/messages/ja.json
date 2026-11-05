@@ -11116,5 +11116,6 @@
   "library_bangumi_score_source_unsupported": "未対応の証拠",
   "library_bangumi_score_title": "ネイティブ評価",
   "library_bangumi_score_units": "提供されたネイティブ質問の尺度による単位",
-  "library_bangumi_score_units_invalid": "提供されたネイティブ尺度の値を入力するか、保持を選択してください。"
+  "library_bangumi_score_units_invalid": "提供されたネイティブ尺度の値を入力するか、保持を選択してください。",
+  "library_progress_history_restarted": "履歴が変更されました。現在の最初のページを表示しています。"
 }

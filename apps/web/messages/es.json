@@ -11022,5 +11022,6 @@
   "library_bangumi_score_source_unsupported": "evidencia no compatible",
   "library_bangumi_score_title": "Puntuación nativa",
   "library_bangumi_score_units": "Unidades de la escala de la pregunta nativa proporcionada",
-  "library_bangumi_score_units_invalid": "Introduce un valor de la escala nativa proporcionada o elige Conservar."
+  "library_bangumi_score_units_invalid": "Introduce un valor de la escala nativa proporcionada o elige Conservar.",
+  "library_progress_history_restarted": "Este historial ha cambiado. Se muestra su primera página actual."
 }

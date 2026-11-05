@@ -1,4 +1,4 @@
-import { historyReturn, diaryReturnContext } from '../../library/private-diary/address';
+import { historyReturn } from '../../library/private-diary/address';
 import { progressSessionAddress, progressAddressIssue } from '../../library/progress-address';
 import { ProgressAddressCorrection } from '../../library/progress-address-correction';
 import { requireSignedIn } from '../../session/guard';
@@ -20,14 +20,16 @@ export const Route = createFileRoute('/library/progress/$id')({
   validateSearch: (search: Record<string, unknown>) => {
     const { id, ...positions } = progressSessionAddress(search);
     const history = historyReturn(search.history);
-    return { ...positions, ...(history ? { history: diaryReturnContext(history) } : {}) };
+    return { ...positions, ...(history ? { history: search.history as string } : {}) };
   },
-  loaderDeps: ({ search }) => ({ changes: search.changes, units: search.units, logs: search.logs }),
-  loader: ({ params, deps }) =>
+  // Same-session cursor navigation belongs to the mounted private reader. A fresh
+  // match still prepares its loader; cursor movement must not duplicate that read.
+  shouldReload: ({ cause }) => cause !== 'stay',
+  loader: ({ params, location }) =>
     readProgressDetail({
       data: {
         id: params.id,
-        ...deps,
+        ...progressSessionAddress({ ...location.search, id: params.id }),
       },
     }),
   staleTime: 0,
@@ -36,7 +38,6 @@ export const Route = createFileRoute('/library/progress/$id')({
   component: function ProgressSessionRoute() {
     const loaded = Route.useLoaderData();
     const { id } = Route.useParams();
-    const search = Route.useSearch();
     const requested = useLocation();
     // A retained match can outlive the requested address while its next loader is pending.
     const segment = requested.pathname.match(/\/library\/progress\/([^/]+)\/?$/)?.[1];
@@ -48,17 +49,14 @@ export const Route = createFileRoute('/library/progress/$id')({
     }
     const address = progressSessionAddress({ ...requested.search, id: requestedId });
     const issue = progressAddressIssue(address);
-    const pending =
-      requestedId !== id ||
-      (['changes', 'units', 'logs'] as const).some((key) => address[key] !== search[key]) ||
-      requested.search.history !== search.history;
+    const pending = requestedId !== id;
     if (issue || pending)
       return <ProgressAddressCorrection address={address} issue={issue} pending={!issue && pending} />;
     if (loaded.state === 'invalid') return <ProgressAddressCorrection address={address} issue={loaded.issue} />;
     return (
       <CurrentProgressDetail
         loaded={loaded}
-        address={{ id, ...search }}
+        address={address}
         returnContext={progressReturnContextFromLocationState(requested.state, id, getLocale())}
       />
     );

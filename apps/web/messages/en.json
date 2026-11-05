@@ -11284,5 +11284,6 @@
   "library_archive_progress_accepted": "Only acknowledged native effects are shown. Accepted Sessions survive cancellation and evidence removal. Session retirement is a separate action.",
   "library_archive_progress_no_result": "No current Session readback is available yet. Refresh the native result.",
   "library_archive_progress_readback": "Read current Session and exact units",
-  "library_archive_progress_remove": "Remove retained evidence (bounded steps)"
+  "library_archive_progress_remove": "Remove retained evidence (bounded steps)",
+  "library_progress_history_restarted": "This history changed. Showing its current first page."
 }

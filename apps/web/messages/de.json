@@ -11022,5 +11022,6 @@
   "library_bangumi_score_source_unsupported": "nicht unterstützter Beleg",
   "library_bangumi_score_title": "Native Bewertung",
   "library_bangumi_score_units": "Einheiten auf der Skala der angegebenen nativen Frage",
-  "library_bangumi_score_units_invalid": "Gib einen Wert auf der angegebenen nativen Skala ein oder wähle Beibehalten."
+  "library_bangumi_score_units_invalid": "Gib einen Wert auf der angegebenen nativen Skala ein oder wähle Beibehalten.",
+  "library_progress_history_restarted": "Dieser Verlauf hat sich geändert. Die aktuelle erste Seite wird angezeigt."
 }

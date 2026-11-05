@@ -11022,5 +11022,6 @@
   "library_bangumi_score_source_unsupported": "élément non pris en charge",
   "library_bangumi_score_title": "Note native",
   "library_bangumi_score_units": "Unités de l’échelle de la question native fournie",
-  "library_bangumi_score_units_invalid": "Saisissez une valeur de l’échelle native fournie ou choisissez Conserver."
+  "library_bangumi_score_units_invalid": "Saisissez une valeur de l’échelle native fournie ou choisissez Conserver.",
+  "library_progress_history_restarted": "Cet historique a changé. Sa première page actuelle est affichée."
 }
