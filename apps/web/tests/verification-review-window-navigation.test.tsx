@@ -148,7 +148,7 @@ test('review windows browse only admitted targets, retry exact failures, cap his
   const settleRead = async (index: number, result: ReviewRead) => {
     await act(async () => {
       reads[index]!.resolve(result);
-      await Promise.resolve();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     });
     await waitFor(() => expect(host.querySelector('[role="region"]')?.getAttribute('aria-busy')).toBe('false'));
     await waitFor(() => expect(queryClient.isFetching({ queryKey: ['account-verification', 'review'] })).toBe(0));
