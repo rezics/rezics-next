@@ -136,6 +136,19 @@ verification state alone do not establish the final public-page outcome.
 
 ### Managed-account detail presentation
 
+Standalone management feed navigation keeps up to eight admitted prior cursor coordinates plus the current
+coordinate per feed (each at most 4096 characters) only in the mounted locale/target/private-reader visit.
+Next, Previous and First each perform one existing native replacement read (at most 20 rows per feed); inventory
+also retains its one optional exposure read. There are no additional row reads, cached page bodies, page counts,
+prefetches or persistent history. Previous rereads the admitted predecessor; a direct cursor has none. First removes
+only the selected cursor. Refresh and failed movements leave admitted history unchanged; Retry rereads the exact
+failed address, including a failed cursor-free First. Reader/credential observation changes, sign-out, target,
+locale and disposal permanently retire coordinates, rows, pending work and focus handoffs. Router search navigation
+keeps this narrowly local visit alive; unavailable native navigation remains unavailable under its existing owner.
+Existing localized Previous/First labels are reused across all eight locales; keyboard admission focuses the selected
+feed only while the activating control retains the handoff. Original phone, recovery and Settings acceptance remains
+owned separately; focused window tests supplement it.
+
 Standalone management inventory and detail reads use a ten-second deadline through response decoding, composed with caller cancellation; optional exposure discovery uses two seconds and returns unknown on failure, preserving valid inventory and the existing localized unavailable/retry controls without granting permission.
 
 The native Settings directory supplies closed current-human viewer and allowed-navigation observations, with at
