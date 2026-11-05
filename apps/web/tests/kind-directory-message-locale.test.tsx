@@ -32,7 +32,11 @@ const regions = [
   ['en', 'zh-Hans'],
   ['zh-Hans', 'en'],
 ] as const;
-const options = { en: { locale: 'en' as const }, 'zh-Hans': { locale: 'zh-Hans' as const } };
+const options = {
+  en: { locale: 'en' as const },
+  'zh-Hans': { locale: 'zh-Hans' as const },
+  ja: { locale: 'ja' as const },
+};
 
 function directory(next: string | null): Props['initial'] {
   return {
@@ -120,7 +124,7 @@ test('type directory chrome follows each reader locale and keeps authored type l
     expect(both).toContain(m.discovery_count_unavailable({}, options['zh-Hans']));
     expect(both).toContain(m.result_kind_window_end({}, options.en));
     expect(both).toContain(m.result_kind_window_end({}, options['zh-Hans']));
-    expect(both).not.toContain(m.search_result_kinds());
+    expect(both).not.toContain(m.search_result_kinds({}, options.ja));
     expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });
@@ -157,8 +161,8 @@ test('type directory failure and continuation progress follow each instance loca
     });
     expect(host.textContent).toContain(m.result_kind_unavailable({}, options.en));
     expect(host.textContent).toContain(m.search_recovery_session({}, options['zh-Hans']));
-    expect(host.textContent).not.toContain(m.result_kind_unavailable());
-    expect(host.textContent).not.toContain(m.search_recovery_session());
+    expect(host.textContent).not.toContain(m.result_kind_unavailable({}, options.ja));
+    expect(host.textContent).not.toContain(m.search_recovery_session({}, options.ja));
 
     const stalled = async () => ({ status: 'ready' as const, kinds: { values: [], next: 'x' }, asOf: 'checkpoint' });
     await act(async () =>
@@ -179,7 +183,7 @@ test('type directory failure and continuation progress follow each instance loca
     expect(host.textContent).toContain(m.result_kind_window_progress({}, options['zh-Hans']));
     expect(host.textContent).toContain(m.result_kind_window_restart({}, options.en));
     expect(host.textContent).toContain(m.result_kind_window_restart({}, options['zh-Hans']));
-    expect(host.textContent).not.toContain(m.result_kind_window_progress());
+    expect(host.textContent).not.toContain(m.result_kind_window_progress({}, options.ja));
     expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });
@@ -212,7 +216,7 @@ test('preparation and its explicit retry use each directory locale', async () =>
       expect(host.textContent).toContain(m.result_kind_preparing({}, options[locale]));
       expect(host.textContent).toContain(m.result_kind_retry({}, options[locale]));
     }
-    expect(host.textContent).not.toContain(m.result_kind_preparing());
+    expect(host.textContent).not.toContain(m.result_kind_preparing({}, options.ja));
     expect(getLocale()).toBe('ja');
   } finally {
     setLocale(previous, { reload: false });

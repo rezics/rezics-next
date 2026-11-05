@@ -103,6 +103,12 @@ test('kind metadata continuation makes one bounded metadata-only call and distin
       text: body.text,
       languages: body.languages,
       filter: body.filter,
+      emptyRecoveryActions: [
+        { kind: 'edit-query' },
+        { kind: 'remove-kind', value: 'account' },
+        { kind: 'remove-kind', value: 'catalogue:Atlas' },
+        { kind: 'remove-facet', property: 'schema:genre', value: 'fiction' },
+      ],
       kindPage: { limit: 8, cursor: 'opaque-kind-page+/=' },
     },
   ]);

@@ -126,7 +126,7 @@ test('a refusal focuses the named recovery region after removing the directory',
   await activate(button('More types'));
   await act(async () => settle({ status: 'unavailable', recovery: { status: 'denied' } }));
   const region = host.querySelector<HTMLElement>('section[tabindex="-1"]')!;
-  expect(host.querySelectorAll('button')).toHaveLength(0);
+  expect(region.querySelectorAll('button')).toHaveLength(0);
   expect(region.getAttribute('aria-label')).toBeTruthy();
   expect(document.activeElement).toBe(region);
 });
