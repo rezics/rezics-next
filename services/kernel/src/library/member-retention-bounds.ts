@@ -1,5 +1,5 @@
 /** Retained-occurrence SQL declarations. Plans retain original operands and clients. */
-import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
+import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { PoolClient } from 'pg';
 import { runLibraryBoundedStep } from './command-support.ts';
 import { SELECTED_COST } from '../work/selected-runtime-cost.ts';
@@ -87,29 +87,9 @@ export async function memberRetentionControl(client: Client, sql: string): Promi
   }
 }
 
-/** Separate physical ceilings: pending homes consume probes but never consume due seeks. */
-export function memberRetentionPagePlan(purgeCommand: Bound) {
-  const controls = retentionCost({ statements: 3, bytes: size([
-    'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK',
-  ]) });
-  const observation = sumBounds(controls, memberRetentionPartitionPlan(4095).total);
-  const key = { partition_no: 4095, cutoff: timestamp, after_purge_after: timestamp, after_route: 65535,
-    after_collection_id: uuid, after_member_id: uuid, page_limit: 1 };
-  const attempt = sumBounds(repeatBound(observation, PARTITIONS), repeatBound(sumBounds(
-    controls, memberRetentionDuePlan(key).total, purgeCommand,
-  ), MEMBER_RETENTION_LIMITS.seeks), retentionCost({ bytes: size({ cursor: { partition: 4096, after: {
-    purgeAfter: timestamp, route: 65535, collectionId: uuid, memberId: uuid, deletionId: uuid,
-  } }, examined: 100, purged: 100, pending: 4096, probes: 4096 }) }));
-  return sumBounds(repeatBound(attempt, COMMAND_STEP_RETRIES.maxAttempts), SELECTED_COST.result);
-}
 export function memberRetentionContinuationPlan(input: unknown, options: unknown) {
   return sumBounds(SELECTED_COST.enqueue, retentionCost({ bytes: size([input, options]) }));
 }
-export function memberRetentionSegmentPlan(page: Bound, continuation: Bound) {
-  return sumBounds(repeatBound(page, MEMBER_RETENTION_LIMITS.pages),
-    repeatBound(continuation, COMMAND_STEP_RETRIES.maxAttempts));
-}
-
 /** The mounted adapter still owns encoding. Account for this sizing pass and its output encoding. */
 export function serializeMemberRetention<T>(name: string, value: T): Promise<T> {
   return consumeMemberRetention(name, retentionCost({ bytes: 2 * size(value) }), async () => value);
