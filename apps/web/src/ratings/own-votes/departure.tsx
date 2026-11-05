@@ -18,11 +18,13 @@ export function OwnVotesDeparture({
   locked,
   isCurrent,
   onLeave,
+  confirmMovement,
 }: {
   dirty: boolean;
   locked: boolean;
   isCurrent: () => boolean;
   onLeave?: () => void;
+  confirmMovement?: { current: (() => Promise<boolean>) | null };
 }) {
   const live = useRef<{
     dirty: boolean;
@@ -47,7 +49,6 @@ export function OwnVotesDeparture({
     const resolve = waiting.current;
     waiting.current = null;
     setOpen(false);
-    if (leave && live.current.isCurrent()) live.current.onLeave?.();
     resolve?.(leave);
   }
 
@@ -61,8 +62,20 @@ export function OwnVotesDeparture({
     });
   }
 
+  const decide = () => {
+    const originalAuthority = live.current.isCurrent;
+    return confirm().then((leave) => leave && originalAuthority() && live.current.isCurrent());
+  };
+  if (confirmMovement) confirmMovement.current = decide;
+
   useBlocker({
-    shouldBlockFn: () => (protectedNow() ? confirm().then((leave) => !leave) : false),
+    shouldBlockFn: () =>
+      protectedNow()
+        ? decide().then((leave) => {
+            if (leave) live.current.onLeave?.();
+            return !leave;
+          })
+        : false,
     enableBeforeUnload: dirty || locked,
   });
 

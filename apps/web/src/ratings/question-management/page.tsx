@@ -8,6 +8,7 @@ import {
   readQuestionManagementForViewer,
   readQuestionManagementHistory,
 } from './actions';
+import { QuestionManagementWindows, QuestionWindow } from './window-navigation';
 import { OwnVotesDeparture } from '../own-votes/departure';
 import {
   captureQuestionManagementIntent,
@@ -128,11 +129,50 @@ export function QuestionManagementInspection({
   );
 }
 
+function WindowReturn({
+  previous,
+  first,
+  disabled = false,
+}: {
+  previous?: (keyboard: boolean) => void;
+  first?: (keyboard: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-3">
+      {previous ? (
+        <button
+          type="button"
+          className="rounded-md border px-4 py-2"
+          disabled={disabled}
+          onClick={(event) => previous(event.detail === 0)}
+        >
+          {m.realm_question_window_previous()}
+        </button>
+      ) : null}
+      {first ? (
+        <button
+          type="button"
+          className="rounded-md border px-4 py-2"
+          disabled={disabled}
+          onClick={(event) => first(event.detail === 0)}
+        >
+          {m.realm_question_window_first()}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function QuestionManagementContent({
   page,
   address,
   onSelect,
   onNext,
+  onPrevious,
+  onFirst,
+  onDirectoryHeading,
+  navigationBusy = false,
   onSelectedHeading,
   onDirtyChange,
   onCreate,
@@ -142,6 +182,9 @@ export function QuestionManagementContent({
   commandStates = {},
   history,
   onMoreHistory,
+  onPreviousHistory,
+  onFirstHistory,
+  onHistoryHeading,
   onRetryHistory,
   onRestartHistory,
   requireFreshInspection = false,
@@ -149,7 +192,11 @@ export function QuestionManagementContent({
   page: QuestionManagementPageData;
   address: PageAddress;
   onSelect: (questionId: string) => void;
-  onNext: (cursor: string) => void;
+  onNext: (cursor: string, keyboard?: boolean) => void;
+  onPrevious?: (keyboard: boolean) => void;
+  onFirst?: (keyboard: boolean) => void;
+  onDirectoryHeading?: (node: HTMLHeadingElement | null) => void;
+  navigationBusy?: boolean;
   onSelectedHeading?: (node: HTMLHeadingElement | null) => void;
   onDirtyChange?: (dirty: boolean) => void;
   onCreate?: (body: QuestionDefinitionInput) => void;
@@ -158,7 +205,10 @@ export function QuestionManagementContent({
   onRetryOriginal?: (action: QuestionManagementAction) => void;
   commandStates?: Partial<Record<QuestionManagementAction, QuestionManagementActionState>>;
   history?: QuestionManagementHistoryRead;
-  onMoreHistory?: (cursor: string) => void;
+  onMoreHistory?: (cursor: string, keyboard?: boolean) => void;
+  onPreviousHistory?: (keyboard: boolean) => void;
+  onFirstHistory?: (keyboard: boolean) => void;
+  onHistoryHeading?: (node: HTMLHeadingElement | null) => void;
   onRetryHistory?: () => void;
   onRestartHistory?: () => void;
   requireFreshInspection?: boolean;
@@ -275,11 +325,22 @@ export function QuestionManagementContent({
       </header>
 
       <section className="space-y-4" aria-labelledby="realm-question-directory-heading">
-        <h2 id="realm-question-directory-heading" className="text-xl font-semibold">
+        <h2
+          ref={onDirectoryHeading}
+          tabIndex={-1}
+          id="realm-question-directory-heading"
+          className="text-xl font-semibold"
+        >
           {m.home_question_all()}
         </h2>
         {page.directory.ratingQuestions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{m.home_questions_empty()}</p>
+          <p className="text-sm text-muted-foreground">
+            {page.directory.next
+              ? m.realm_question_window_sparse()
+              : address.cursor !== null
+                ? m.realm_question_window_terminal()
+                : m.home_questions_empty()}
+          </p>
         ) : (
           <ul className="grid gap-2 sm:grid-cols-2">
             {page.directory.ratingQuestions.map((question) => (
@@ -306,8 +367,18 @@ export function QuestionManagementContent({
             ))}
           </ul>
         )}
+        <WindowReturn
+          {...(onPrevious ? { previous: onPrevious } : {})}
+          {...(onFirst ? { first: onFirst } : {})}
+          disabled={navigationBusy}
+        />
         {page.directory.next ? (
-          <button type="button" className="rounded-md border px-4 py-2" onClick={() => onNext(page.directory.next!)}>
+          <button
+            type="button"
+            className="rounded-md border px-4 py-2"
+            disabled={navigationBusy}
+            onClick={(event) => onNext(page.directory.next!, event.detail === 0)}
+          >
             {m.home_questions_next()}
           </button>
         ) : null}
@@ -508,12 +579,26 @@ export function QuestionManagementContent({
             {...(onSelectedHeading ? { onHeading: onSelectedHeading } : {})}
           />
           <section className="space-y-4 rounded-2xl border p-4 sm:p-6" aria-labelledby="realm-question-history-heading">
-            <h2 id="realm-question-history-heading" className="text-xl font-semibold">
+            <h2
+              ref={onHistoryHeading}
+              tabIndex={-1}
+              id="realm-question-history-heading"
+              className="text-xl font-semibold"
+            >
               {m.realm_question_caption_history()}
             </h2>
             {history?.state === 'loading' ? <p role="status">{m.home_questions_loading()}</p> : null}
             {history?.state === 'ready' ? (
               <>
+                {history.page.labels.length === 0 ? (
+                  <p role="status">
+                    {history.page.next
+                      ? m.realm_question_window_sparse()
+                      : history.cursor !== null
+                        ? m.realm_question_window_terminal()
+                        : m.realm_question_history_empty()}
+                  </p>
+                ) : null}
                 <ol className="space-y-3">
                   {history.page.labels.map((item) => (
                     <li key={item.labelRevision} className="rounded-xl border p-3">
@@ -530,12 +615,17 @@ export function QuestionManagementContent({
                     </li>
                   ))}
                 </ol>
+                <WindowReturn
+                  {...(onPreviousHistory ? { previous: onPreviousHistory } : {})}
+                  {...(onFirstHistory ? { first: onFirstHistory } : {})}
+                  disabled={navigationBusy || actionBusy}
+                />
                 {history.page.next ? (
                   <button
                     type="button"
                     className="rounded-md border px-4 py-2"
-                    disabled={actionBusy}
-                    onClick={() => onMoreHistory?.(history.page.next!)}
+                    disabled={navigationBusy || actionBusy}
+                    onClick={(event) => onMoreHistory?.(history.page.next!, event.detail === 0)}
                   >
                     {m.realm_question_history_more()}
                   </button>
@@ -708,6 +798,7 @@ export function QuestionManagementContent({
 
 export function QuestionManagementPage({
   initial,
+  windows: retainedWindows,
   address,
   locale,
   navigate,
@@ -723,9 +814,10 @@ export function QuestionManagementPage({
   acknowledgeFocus,
 }: {
   initial: QuestionManagementVisit;
+  windows?: QuestionManagementWindows;
   address: PageAddress | null;
   locale: string;
-  navigate: (search: { selectedQuestionId?: string; cursor?: string }) => void;
+  navigate: (search: { selectedQuestionId?: string; cursor?: string }) => void | Promise<unknown>;
   onSelectQuestion: (questionId: string) => void;
   sessionObservation: BrowserObservationSnapshot;
   isSessionObservationCurrent: () => boolean;
@@ -742,7 +834,23 @@ export function QuestionManagementPage({
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
   const [sessionCurrent, setSessionCurrent] = useState<boolean | null>(null);
-  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const localWindows = useRef<QuestionManagementWindows | null>(null);
+  if (
+    !retainedWindows &&
+    (localWindows.current?.source !== initial ||
+      localWindows.current?.observation !== sessionObservation ||
+      localWindows.current?.locale !== locale)
+  ) {
+    localWindows.current?.retire();
+    localWindows.current = new QuestionManagementWindows(initial, sessionObservation, locale);
+  }
+  const windows = retainedWindows ?? localWindows.current!;
+  const historyCursor = windows.history.requested;
+  const confirmMovement = useRef<(() => Promise<boolean>) | null>(null);
+  const movementPending = useRef(false);
+  const [navigationBusy, setNavigationBusy] = useState(false);
+  const directoryHeading = useRef<HTMLHeadingElement>(null);
+  const historyHeading = useRef<HTMLHeadingElement>(null);
   const [historyRetry, setHistoryRetry] = useState(0);
   const [history, setHistory] = useState<QuestionManagementHistoryRead | undefined>();
   const [intents, setIntents] = useState<Partial<Record<QuestionManagementAction, QuestionManagementIntent>>>({});
@@ -907,6 +1015,7 @@ export function QuestionManagementPage({
         }
         setRead(result);
         if (result.state === 'ready') {
+          windows.directory.accept(result.cursor);
           if (requiresFreshInspection) setRequiresFreshInspection(false);
           if (postAcknowledgementRead) {
             setDirty(false);
@@ -958,13 +1067,67 @@ export function QuestionManagementPage({
     if (isVisitCurrent())
       navigate(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {});
   };
-  const next = (cursor: string) => {
-    if (isVisitCurrent())
-      navigate({
-        ...(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {}),
-        cursor,
-      });
+  const focusMovement = (region: 'directory' | 'history', keyboard: boolean) => {
+    const epoch = captureFocusEpoch();
+    windows.focus = keyboard ? { region, eligible: () => captureFocusEpoch() === epoch } : null;
   };
+  const next = async (cursor: string | null, keyboard = false) => {
+    if (movementPending.current || !isVisitCurrent()) return;
+    movementPending.current = true;
+    setNavigationBusy(true);
+    focusMovement('directory', keyboard);
+    try {
+      await navigate({
+        ...(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {}),
+        ...(cursor === null ? {} : { cursor }),
+      });
+    } finally {
+      movementPending.current = false;
+      if (isVisitCurrent()) {
+        windows.focus = null;
+        setNavigationBusy(false);
+      }
+    }
+  };
+  const moveHistory = async (cursor: string | null, keyboard = false, restart = false) => {
+    const candidate = owner;
+    if (movementPending.current || history?.state === 'loading' || !isVisitCurrent(candidate)) return;
+    movementPending.current = true;
+    setNavigationBusy(true);
+    focusMovement('history', keyboard);
+    try {
+      const leave = await confirmMovement.current?.();
+      if (!leave || !isVisitCurrent(candidate)) {
+        windows.focus = null;
+        return;
+      }
+      if (restart) windows.history = new QuestionWindow(null);
+      if (!windows.history.stage(cursor)) return;
+      if (dirty) {
+        setDirty(false);
+        setInspectionKey((value) => value + 1);
+      }
+      setHistoryRetry((value) => value + 1);
+    } finally {
+      movementPending.current = false;
+      if (isVisitCurrent(candidate)) setNavigationBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    const ticket = windows.focus;
+    if (!ticket || !windows.active || !isVisitCurrent()) return;
+    if (!ticket.eligible()) {
+      windows.focus = null;
+      return;
+    }
+    const ready = ticket.region === 'directory' ? read?.state === 'ready' : history?.state === 'ready';
+    const heading = ticket.region === 'directory' ? directoryHeading.current : historyHeading.current;
+    if (ready && heading?.isConnected) {
+      windows.focus = null;
+      heading.focus();
+    }
+  }, [read, history, windows, owner]);
 
   const setActionState = (action: QuestionManagementAction, state: QuestionManagementActionState) =>
     setCommandStates((current) => ({ ...current, [action]: state }));
@@ -1078,7 +1241,7 @@ export function QuestionManagementPage({
       removeIntent(action);
       setActionState(action, 'idle');
       setPostAcknowledgementRead(true);
-      setHistoryCursor(null);
+      windows.history = new QuestionWindow(null);
       if (action === 'create' && result.questionId) {
         acknowledgeFocus(result.questionId, focusEpoch, 1);
         navigate({ selectedQuestionId: result.questionId });
@@ -1096,7 +1259,7 @@ export function QuestionManagementPage({
     setActionState(action, result.kind);
     if (result.kind === 'stale') {
       setRequiresFreshInspection(true);
-      setHistoryCursor(null);
+      windows.history = new QuestionWindow(null);
       setRetry((value) => value + 1);
     }
   };
@@ -1135,8 +1298,10 @@ export function QuestionManagementPage({
       signal: controller.signal,
     })
       .then((result) => {
-        if (!controller.signal.aborted && generation.current === historyGeneration && isVisitCurrent(candidate))
+        if (!controller.signal.aborted && generation.current === historyGeneration && isVisitCurrent(candidate)) {
+          if (result.state === 'ready') windows.history.accept(result.cursor);
           setHistory(result);
+        }
       })
       .catch(() => {
         if (!controller.signal.aborted && generation.current === historyGeneration && isVisitCurrent(candidate))
@@ -1208,7 +1373,18 @@ export function QuestionManagementPage({
         page={page}
         address={address}
         onSelect={select}
-        onNext={next}
+        onNext={(cursor, keyboard) => void next(cursor, keyboard)}
+        {...(windows.directory.previous !== undefined
+          ? { onPrevious: (keyboard: boolean) => void next(windows.directory.previous!, keyboard) }
+          : {})}
+        {...(address.cursor !== null ? { onFirst: (keyboard: boolean) => void next(null, keyboard) } : {})}
+        onDirectoryHeading={(node) => {
+          directoryHeading.current = node;
+        }}
+        onHistoryHeading={(node) => {
+          historyHeading.current = node;
+        }}
+        navigationBusy={navigationBusy}
         onSelectedHeading={(node) => {
           selectedHeading.current = node;
         }}
@@ -1219,15 +1395,17 @@ export function QuestionManagementPage({
         onRetryOriginal={retryOriginal}
         commandStates={commandStates}
         {...(history === undefined ? {} : { history })}
-        onMoreHistory={(cursor) => setHistoryCursor(cursor)}
+        onMoreHistory={(cursor, keyboard) => void moveHistory(cursor, keyboard)}
+        {...(windows.history.previous !== undefined
+          ? { onPreviousHistory: (keyboard: boolean) => void moveHistory(windows.history.previous!, keyboard) }
+          : {})}
+        {...(historyCursor !== null ? { onFirstHistory: (keyboard: boolean) => void moveHistory(null, keyboard) } : {})}
         onRetryHistory={() => setHistoryRetry((value) => value + 1)}
-        onRestartHistory={() => {
-          setHistoryCursor(null);
-          setHistoryRetry((value) => value + 1);
-        }}
+        onRestartHistory={() => void moveHistory(null, false, true)}
         requireFreshInspection={requiresFreshInspection || postAcknowledgementRead}
       />
       <OwnVotesDeparture
+        confirmMovement={confirmMovement}
         dirty={dirty && !postAcknowledgementRead}
         locked={Object.values(commandStates).some((state) => state === 'sending' || state === 'uncertain')}
         isCurrent={() => sessionCurrent === true && initial.state === 'preparing' && isVisitCurrent()}

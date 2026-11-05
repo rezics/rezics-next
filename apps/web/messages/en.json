@@ -10826,5 +10826,10 @@
   "identifiers_inspect_property": "Property",
   "identifiers_inspect_rank": "Rank",
   "identifiers_inspect_continue": "Continue the public read",
-  "identifiers_public_reload": "Refresh public reading"
+  "identifiers_public_reload": "Refresh public reading",
+  "realm_question_window_previous": "Previous window",
+  "realm_question_window_first": "First window",
+  "realm_question_window_sparse": "No entries in this window. Continue to the next window.",
+  "realm_question_window_terminal": "End of these results. Return to an earlier window.",
+  "realm_question_history_empty": "No caption history is available yet."
 }

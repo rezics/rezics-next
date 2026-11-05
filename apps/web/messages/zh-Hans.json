@@ -10636,5 +10636,10 @@
   "character_visit_unsupported": "此角色阅读可用，但更正和候选审核仅支持 Global。",
   "character_visit_global": "另开 Global 角色更正",
   "work_franchise_stream_absent": "此页面未请求此关系。请从头开始读取。",
-  "work_franchise_stream_historical": "此关系尚未同步最新变化。这些条目不代表完整的当前内容。"
+  "work_franchise_stream_historical": "此关系尚未同步最新变化。这些条目不代表完整的当前内容。",
+  "realm_question_window_previous": "上一个窗口",
+  "realm_question_window_first": "第一个窗口",
+  "realm_question_window_sparse": "此窗口没有条目。可继续查看下一个窗口。",
+  "realm_question_window_terminal": "已到结果结尾。可返回先前的窗口。",
+  "realm_question_history_empty": "目前尚无标题历史。"
 }
