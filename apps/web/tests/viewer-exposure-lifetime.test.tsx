@@ -39,9 +39,8 @@ mock.module('cloudflare:workers', () => ({
 }));
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { Exposure, operationIsAdmitted, prepareExposure, useOperation, viewerExposureLifetime } = await import(
-  '../src/kernel/exposure'
-);
+const { Exposure, operationIsAdmitted, prepareExposure, useOperation } = await import('../src/kernel/exposure');
+const { browserObservation } = await import('../src/session');
 const { sessionQuery } = await import('../src/session/query');
 
 const admitted = [
@@ -278,7 +277,7 @@ test('viewer exposure retires each mounted reader observation without leaking or
     console.log(
       'viewer admission trace',
       credentialReads,
-      viewerExposureLifetime(client).getSnapshot(),
+      browserObservation(client).getSnapshot(),
       client.getQueryCache().findAll({ queryKey: ['exposure'] }).map((query) => ({
         key: query.queryKey,
         status: query.state.status,
