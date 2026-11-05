@@ -58,8 +58,9 @@ export function feedRoutes(
       detail,
     }),
   );
+  const routePath = '/v1/feedItems';
   return app.get(
-    operation.path,
+    routePath,
     {
       ...operation.options,
       transform: ({ request, set }) => {

@@ -132,6 +132,7 @@ const typed = [
   'POST /v1/presentation/profiles/:digest/$activate',
   'POST /v1/presentation/profiles',
   'POST /v1/pages/$read',
+  'POST /v1/pages/$previewDraft',
   'POST /v1/accounts/:accountId/lifecycleReview',
   'POST /v1/accounts/:accountId/$suspend',
   'POST /v1/accounts/:accountId/$reinstate',

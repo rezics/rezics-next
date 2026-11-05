@@ -72,8 +72,9 @@ export function continueRoutes(
       detail,
     }),
   );
+  const routePath = '/v1/libraryContinue';
   return app.get(
-    operation.path,
+    routePath,
     {
       ...operation.options,
       transform: ({ request, set }) => {

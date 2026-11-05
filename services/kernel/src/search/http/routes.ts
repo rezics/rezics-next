@@ -42,6 +42,14 @@ const object = { additionalProperties: false } as const;
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const unavailable = problemSchema('index_not_ready', 'overloaded', 'deadline_exceeded');
 const resource = { route: 0, id: GLOBAL_CONTEXT };
+const subjectSearchResponse = t.Union([
+  searchResponse,
+  DiscoveryPageSchema,
+  releaseGroupsResponse,
+  releaseChildrenResponse,
+  QueryShareSchema,
+]);
+type SubjectSearchResponse = Static<typeof subjectSearchResponse>;
 
 export function searchRoutes<App>(
   app: App,
@@ -168,13 +176,7 @@ export function searchRoutes<App>(
           object,
         ),
         response: {
-          200: t.Union([
-            searchResponse,
-            DiscoveryPageSchema,
-            releaseGroupsResponse,
-            releaseChildrenResponse,
-            QueryShareSchema,
-          ]),
+          200: subjectSearchResponse,
           400: problemSchema('invalid_request'),
           401: unauthorized,
           403: problemSchema('forbidden'),
@@ -189,7 +191,7 @@ export function searchRoutes<App>(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ body, authorize, admission, job, actor, set }) => {
+      async ({ body, authorize, admission, job, actor, set }): Promise<SubjectSearchResponse> => {
         const { emptyRecoveryActions: _emptyRecoveryActions, ...nativeBody } = body;
         if (body.population !== undefined || body.representation === 'discovery-v1')
           set.headers['cache-control'] = 'private, no-store';
