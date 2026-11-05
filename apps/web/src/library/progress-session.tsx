@@ -482,10 +482,11 @@ export function CurrentProgressDetail({
             admitHistory(visit.paths, undefined, changes, units);
         },
         stage: (target, destination, keyboard) => {
+          const from = router.state.location;
           const staged = { target, address: destination, keyboard, focus: document.activeElement };
           visit.staged = staged;
           return () => {
-            if (visit.staged === staged && !sameAddress(visit.address, destination)) delete visit.staged;
+            if (visit.staged === staged && router.state.location === from) delete visit.staged;
           };
         },
       }}
