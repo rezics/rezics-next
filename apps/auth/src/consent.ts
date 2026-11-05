@@ -407,8 +407,7 @@ async function submitConsentDecision(
   const stopped = new Promise<ConsentDecisionSubmissionResult>((resolve) => {
     resolveStopped = resolve;
   });
-  const onAbort = () =>
-    resolveStopped(dispatched ? unknownConsentReply(503, null) : { kind: 'not-dispatched' });
+  const onAbort = () => resolveStopped(dispatched ? unknownConsentReply(503, null) : { kind: 'not-dispatched' });
   const onCallerAbort = () => controller.abort(caller.reason);
   controller.signal.addEventListener('abort', onAbort, { once: true });
   if (caller.aborted) onCallerAbort();
@@ -492,11 +491,7 @@ function isKnownConsentRefusal(status: number, error: ConsentDecisionErrorRespon
   // Generic request, origin, size and attempt-limit refusals happen before the
   // writer can begin a grant or reduction. Generic 401/404 may be returned
   // after native barrier progress, so keep those account markers unresolved.
-  return (
-    [400, 403, 413, 415, 429].includes(status) &&
-    error.error === 'authentication_denied' &&
-    !('code' in error)
-  );
+  return [400, 403, 413, 415, 429].includes(status) && error.error === 'authentication_denied' && !('code' in error);
 }
 
 function parseConsentDecisionError(status: number, value: unknown): ConsentDecisionErrorResponse | null {

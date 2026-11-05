@@ -164,10 +164,18 @@ test('reviewed Allow bounds actual response bytes and accepts UTF-8 split across
     }
     if (writes === 2) return Response.json({ code: 'stale_review' }, { status: 409 });
     const bytes = new Uint8Array(CONSENT_DECISION_MAX_RESPONSE_BYTES + 1).fill(0x20);
-    return new Response(new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }), {
-      status: 200,
-      headers: { 'content-length': '1' },
-    });
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'content-length': '1' },
+      },
+    );
   }) as typeof fetch;
   let state!: ConsentDecision;
   const visit = createConsentDecision(clientId, 'read', (value) => (state = value));
