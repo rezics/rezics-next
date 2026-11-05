@@ -242,8 +242,10 @@ one row is bounded by that row's retained bytes; it is not priced as one constan
 
 Matching performs one tuple-home partition observation and tuple seek returning at most two candidates. Each candidate
 repeats the full current Library profile/source observation and native Entry read. A selected target repeats those
-reads independently. Thus page composition reaches at most `3P` target observations, plus one question read and at
-most `P` current-own-vote reads. A metadata review/view reaches up to three target observations; each fresh metadata
+reads independently. Thus page composition reaches at most `3P` target observations, plus one initial question read
+and at most `P` complete counted question/own-vote reviews. Each score dispatch additionally prepares up to four
+target observations through its retained-row match, selected target and repeated current-target read, even for
+receipt replay. A metadata review/view reaches up to three target observations; each fresh metadata
 native dispatch prepares up to four more through its retained-row, match and target checks, in addition to the native
 personal command's canonical resolution. Both annotation and provenance dispatch pay that preparation independently.
 Date apply reaches up to three target observations to recover its retained intent, up to three more for fresh
