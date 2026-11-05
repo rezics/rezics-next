@@ -52,14 +52,18 @@ test('the development trait adapter reuses current reviewed Concepts only for it
   } as never);
   expect(request?.rows).toHaveLength(1);
   expect(request?.rows[0]).toMatchObject({ kind: 'character-trait', code: 'i23', spoiler: 0, lie: false });
-  await expect(
-    prepareShowcaseVndbTraits(
-      plan,
-      sourcePlan,
-      { ...port, readReviewedSubject: async () => ({ subject: {} }) } as never,
-      subjects,
-    ),
-  ).rejects.toThrow('not current');
+  expect(prepared.bindings.concepts.map((concept) => concept.code)).toEqual(['i23']);
+  plan.records.vndb.push(plan.entities.vndb.pop()!);
+  const fromRecords = await prepareShowcaseVndbTraits(plan, sourcePlan, port, subjects);
+  expect(fromRecords.traits).toEqual(prepared.traits);
+  const withdrawn = await prepareShowcaseVndbTraits(
+    plan,
+    sourcePlan,
+    { ...port, readReviewedSubject: async () => ({ subject: {} }) } as never,
+    subjects,
+  );
+  expect(withdrawn.bindings.concepts).toEqual([]);
+  expect(withdrawn.traits).toEqual(prepared.traits);
 });
 
 test('the development selector keeps its five exact works and only their direct cast and episodes', async () => {
