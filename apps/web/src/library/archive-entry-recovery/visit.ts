@@ -330,5 +330,136 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
       this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && !this.#cancelCheckpointed;
     if (this.#phase === 'reviewed' && this.#review?.revision === this.#selection.revision) {
       this.#original = this.#review.operand;
+      this.#originalSelection = this.#selection.choices.map((choice) => ({ ...choice }));
+    } else if (!retainsOriginal(this.#phase) && !reconcilingCancellation) {
+      throw new Error('fresh_review_required');
+    }
+    if (this.#original === null) throw new Error('fresh_review_required');
+    this.#abort('results');
+    this.#discardRead(this.#resultsPath);
+    if (!reconcilingCancellation) this.#phase = 'applying';
+    return Object.freeze({ request: this.#begin('apply'), operand: this.#original });
+  }
+
+  settleApply(
+    request: RecoveryRequest,
+    outcome: RecoveryApplyOutcome,
+    results?: RecoveryPage<Result, ResultContext>,
+  ): boolean {
+    if (!this.#accept('apply', request)) return false;
+    this.#abort('results');
+    this.#discardRead(this.#resultsPath);
+    const reconcilingCancellation = this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint;
+    let admitted: RecoveryPage<Result, ResultContext> | undefined;
+    try {
+      admitted = results === undefined ? undefined : ownRecoveryPage(results);
+    } catch {
+      // An unusable acknowledgement cannot release the original uncertain command identity.
+      if (!reconcilingCancellation) this.#phase = 'uncertain';
+      throw new Error('invalid_result_page');
+    }
+    if (reconcilingCancellation) {
+      // A partial page is not a receipt for the unresolved original command. In particular,
+      // recoverable responses must keep the exact review/key available for explicit replay.
+      if (admitted !== undefined && (outcome === 'complete' || outcome === 'failed')) this.#cancelCheckpointed = true;
+    } else this.#phase = outcome;
+    if (admitted !== undefined) {
       const selection =
         this.#originalSelection === null ? null : this.#originalSelection.map((choice) => ({ ...choice }));
+      const changed =
+        !samePage(this.#results, admitted) ||
+        (selection !== null && JSON.stringify(this.#resultSelection) !== JSON.stringify(selection));
+      this.#results = admitted;
+      if (selection !== null) this.#resultSelection = selection;
+      if (changed) this.#resetResultsPath(-1);
+    }
+    if (!reconcilingCancellation && !retainsOriginal(outcome)) {
+      this.#original = null;
+      this.#originalSelection = null;
+      this.#review = null;
+    }
+    // Stale admission keeps choices as context, but cannot confirm them again without fresh review.
+    return true;
+  }
+
+  startResults(after = -1, direction: RecoveryReadDirection = 'first'): RecoveryRequest {
+    this.#requireUpload();
+    const request = this.#begin('results');
+    this.#resultsPath.staged = { after, direction, failed: false };
+    return request;
+  }
+
+  admitResults(request: RecoveryRequest, results: RecoveryPage<Result, ResultContext>, checkpointed = false): boolean {
+    if (!this.#accept('results', request)) return false;
+    this.#results = ownRecoveryPage(results);
+    this.#admitRead(this.#resultsPath);
+    if (this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && checkpointed && !this.#pending.has('apply'))
+      this.#cancelCheckpointed = true;
+    return true;
+  }
+
+  failResults(request: RecoveryRequest): boolean {
+    if (!this.#accept('results', request)) return false;
+    this.#failRead(this.#resultsPath);
+    return true;
+  }
+
+  startCancel(): RecoveryRequest {
+    this.#requireUpload();
+    if (this.#phase === 'cancelling' || this.#phase === 'cancelled') throw new Error('cancel_pending');
+    this.#cancelNeedsCheckpoint = this.#phase === 'applying' || retainsOriginal(this.#phase);
+    this.#cancelCheckpointed = false;
+    if (this.#cancelNeedsCheckpoint) {
+      // The claimed command may already have committed; keep its request and replay identity alive.
+      this.#abort('page');
+      this.#abort('review');
+      this.#abort('results');
+      this.#discardRead(this.#pagePath);
+      this.#discardRead(this.#resultsPath);
+    } else {
+      this.#abortAll();
+      this.#discardRead(this.#pagePath);
+      this.#discardRead(this.#resultsPath);
+      this.#selection.clear();
+      this.#review = null;
+      this.#original = null;
+      this.#originalSelection = null;
+    }
+    this.#page = null;
+    this.#phase = 'cancelling';
+    // Native receipts already displayed stay visible; cancellation never rolls effects back.
+    return this.#begin('cancel');
+  }
+
+  admitCancel(request: RecoveryRequest): boolean {
+    if (this.#cancelNeedsCheckpoint && !this.#cancelCheckpointed) return false;
+    const resultSetMayHaveChanged = this.#cancelNeedsCheckpoint || this.#results !== null;
+    if (!this.#accept('cancel', request)) return false;
+    this.#phase = 'cancelled';
+    this.#selection.clear();
+    this.#review = null;
+    this.#original = null;
+    this.#originalSelection = null;
+    if (resultSetMayHaveChanged) this.#resetResultsPath(-1);
+    this.#cancelNeedsCheckpoint = false;
+    this.#cancelCheckpointed = false;
+    return true;
+  }
+
+  get state() {
+    if (!this.#live()) return null;
+    return Object.freeze({
+      upload: this.#upload,
+      page: this.#page,
+      pageNavigation: readerPathSnapshot(this.#pagePath),
+      choices: this.#selection.choices,
+      results: this.#results,
+      resultsNavigation: readerPathSnapshot(this.#resultsPath),
+      resultSelection: Object.freeze(
+        (this.#originalSelection ?? this.#resultSelection).map((choice) => Object.freeze({ ...choice })),
+      ),
+      phase: this.#phase,
+      review: this.#review?.operand ?? null,
+    });
+  }
+}
