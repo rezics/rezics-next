@@ -177,13 +177,14 @@ test('filter, reversed selections and one native truncated expansion keep only t
   const ui = await mounted();
   const firstRead = deferred<GraphRead>();
   const secondRead = deferred<GraphRead>();
+  const expansionRead = deferred<GraphRead>();
   const calls: ReadInput[] = [];
   const signals: AbortSignal[] = [];
   const transport: GraphBrowserTransport = {
     read: (query, signal) => {
       signals.push(signal);
       calls.push({ ...query });
-      if (query.expansion) return Promise.resolve(reading(query, { expanded: true, session: 'expanded-session' }));
+      if (query.expansion) return expansionRead.promise;
       if (query.property === otherProperty && !query.node && !query.edge) return Promise.resolve(reading(query));
       if (query.node === first) return firstRead.promise;
       if (query.node === second) return secondRead.promise;
@@ -246,6 +247,10 @@ test('filter, reversed selections and one native truncated expansion keep only t
     expect(expansion.node).toBe(second);
     expect(expansion.session).toBe('new-current-session');
     expect(ui.host.textContent).toContain('Second selected');
+    await ui.show(null);
+    expect(signals.at(-1)?.aborted).toBe(true);
+    await act(async () => expansionRead.resolve(reading(expansion, { expanded: true })));
+    expect(ui.host.textContent).toBe('');
   } finally {
     await ui.close();
   }
