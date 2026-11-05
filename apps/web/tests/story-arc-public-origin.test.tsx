@@ -102,7 +102,7 @@ test('the mounted Subject, canonical route, correction session and existing read
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: `https://site.test/en/subjects/${storyArcProfileId}/the-journey-arc/story-arc` });
+  const window = new Window({ url: `https://site.test/en/subjects/${storyArcProfileId}/the-journey-arc/story-arc`, width: 390 });
   const globalNames =
     'window document navigator HTMLElement HTMLButtonElement HTMLInputElement HTMLSelectElement HTMLFormElement Element Node Document DocumentFragment ShadowRoot MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame scrollTo matchMedia IS_REACT_ACT_ENVIRONMENT'.split(
       ' ',
