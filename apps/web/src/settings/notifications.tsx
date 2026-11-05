@@ -265,7 +265,12 @@ export function NotificationsCard({
                   <p className="text-sm text-muted-foreground">
                     {m.settings_notifications_retained_unavailable({
                       name: notificationName(kind),
-                      state: enabled ? m.settings_notifications_on() : m.settings_notifications_off(),
+                      state:
+                        enabled === null
+                          ? m.settings_notifications_restore()
+                          : enabled
+                            ? m.settings_notifications_on()
+                            : m.settings_notifications_off(),
                     })}
                   </p>
                   <Button
