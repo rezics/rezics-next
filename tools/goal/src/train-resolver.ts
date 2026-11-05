@@ -694,17 +694,12 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
         child!.once('error', reject);
         child!.once('close', resolve);
       });
+      // A verbose session is not a failed one: keep the newest output within the bound, where the usage and refusal
+      // records the controller reads are written. The timeout bounds the session itself.
       const collect = (chunk: Buffer) => {
-        if (Buffer.byteLength(output) + chunk.length > this.store.policy.trainResolver.outputBytes) {
-          if (!failure) {
-            failure = 'Train resolver exceeded its finite output budget';
-            void terminateProcessGroup(
-              identity,
-              this.tasks!.settings.terminationGraceMs,
-              this.tasks!.settings.policy?.process,
-            ).catch(() => {});
-          }
-        } else output += chunk.toString();
+        output += chunk.toString();
+        const limit = this.store.policy.trainResolver.outputBytes;
+        if (output.length > limit) output = output.slice(output.length - limit);
       };
       child!.stdout!.on('data', collect);
       child!.stderr!.on('data', collect);
@@ -727,7 +722,12 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
         throw new Error('Train resolver owning contract changed');
       for (const owner of contracts) {
         this.store.assertCurrent(owner);
-        if (this.store.task(owner.taskId).brief.markdown !== owner.brief)
+        // The resolver saw each target contract bounded to its first characters; compare the same bound.
+        if (
+          this.store
+            .task(owner.taskId)
+            .brief.markdown.slice(0, this.store.policy.trainResolver.sourceContractCharacters) !== owner.brief
+        )
           throw new Error('Train resolver target contract changed');
       }
       if (code === 127 || code === 126)

@@ -235,10 +235,14 @@ test('three distinct tasks with one normalized blocker open one incident and hol
       ),
       toolIncidents: [incident],
       tasks: expectedTasks,
+      trains: [
+        { lane: 'main', state: 'missing' },
+        { lane: 'dev', state: 'missing' },
+      ],
     };
     h.store.db
       .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-      .run(taskIds[0], 1, 'tool-blocker-incident-state', new Date().toISOString(), '{malformed');
+      .run(taskIds[0]!, 1, 'tool-blocker-incident-state', new Date().toISOString(), '{malformed');
     const cohortRead = spyOn(h.store, 'tasks');
     const taskRead = spyOn(h.store, 'task');
     const attemptRead = spyOn(h.store, 'attempt');
@@ -301,6 +305,7 @@ test('three distinct tasks with one normalized blocker open one incident and hol
     expect(JSON.parse(qualifiedOutput.at(-1)!)).toEqual({
       ...expectedTasks[0],
       toolIncidents: [incident],
+      trains: expected.trains,
     });
     expect(cohortRead).not.toHaveBeenCalled();
     expect(taskRead).toHaveBeenCalledTimes(1);
@@ -334,6 +339,7 @@ test('three distinct tasks with one normalized blocker open one incident and hol
       urgent: false,
       pendingRetry: { reason: 'start' },
       toolIncidents: [],
+      trains: expected.trains,
     });
     expect(taskStateRead).toHaveBeenCalledTimes(1);
     expect(
