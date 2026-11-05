@@ -199,7 +199,7 @@ test('review windows browse only admitted targets, retry exact failures, cap his
     expect(hasButton(m.av_previous_page())).toBe(false);
 
     for (let page = 1; page <= 10; page++) {
-      await click(button(m.av_next_page()));
+      await keyClick(button(m.av_next_page()));
       const { index, read } = await nextRead();
       expect(read.cursor).toBe(`cursor-${page}`);
       await settleRead(index, ready(reviewerA, `cursor-${page + 1}`));
