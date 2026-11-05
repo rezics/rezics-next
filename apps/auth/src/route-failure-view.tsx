@@ -18,7 +18,7 @@ import type { RouteRetryState } from './route-failure';
 type RecoveryKind = 'failure' | 'missing';
 type RecoveryState = RouteRetryState | 'interrupted';
 type RecoveryAttempt = { kind: RecoveryKind; state: RecoveryState | 'checking' };
-type ResetOwner = { reset?: () => void };
+type ResetOwner = { reset: (() => void) | undefined };
 type RecoveryContextValue = {
   attempt: RecoveryAttempt | null;
   retry(kind: RecoveryKind): void;
@@ -126,7 +126,7 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
     [publish, router],
   );
 
-  const presenting = attempt && attempt.state !== 'checking' ? attempt : null;
+  const presenting = attempt && attempt.state !== 'checking' ? { kind: attempt.kind, state: attempt.state } : null;
   return (
     <RecoveryContext.Provider value={{ attempt, retry, registerReset, reportRenderFailure }}>
       <div hidden={!!presenting}>{children}</div>
