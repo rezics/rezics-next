@@ -11105,5 +11105,6 @@
   "library_bangumi_label_use_existing": "使用“{name}”（修订版 {revision}）",
   "library_bangumi_label_use_new_name": "提议新建标签“{name}”",
   "library_bangumi_label_yes": "是",
-  "library_bangumi_label_mapping_changed_needs_review": "已更改所选映射。请重新审核后再确认。"
+  "library_bangumi_label_mapping_changed_needs_review": "已更改所选映射。请重新审核后再确认。",
+  "library_progress_history_restarted": "历史记录已更改。正在显示当前第一页。"
 }

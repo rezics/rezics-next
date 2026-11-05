@@ -11187,5 +11187,6 @@
   "library_bangumi_label_use_existing": "「{name}」を使用（リビジョン {revision}）",
   "library_bangumi_label_use_new_name": "新しいラベル「{name}」を提案",
   "library_bangumi_label_yes": "はい",
-  "library_bangumi_label_mapping_changed_needs_review": "選択した対応が変更されました。確定する前にもう一度確認してください。"
+  "library_bangumi_label_mapping_changed_needs_review": "選択した対応が変更されました。確定する前にもう一度確認してください。",
+  "library_progress_history_restarted": "履歴が変更されました。現在の最初のページを表示しています。"
 }

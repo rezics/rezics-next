@@ -11355,5 +11355,6 @@
   "library_bangumi_label_use_existing": "Use “{name}” (revision {revision})",
   "library_bangumi_label_use_new_name": "Propose new label “{name}”",
   "library_bangumi_label_yes": "yes",
-  "library_bangumi_label_mapping_changed_needs_review": "Your selected mappings changed. Review them again before confirming."
+  "library_bangumi_label_mapping_changed_needs_review": "Your selected mappings changed. Review them again before confirming.",
+  "library_progress_history_restarted": "This history changed. Showing its current first page."
 }

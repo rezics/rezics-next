@@ -11093,5 +11093,6 @@
   "library_bangumi_label_use_existing": "„{name}“ verwenden (Revision {revision})",
   "library_bangumi_label_use_new_name": "Neues Label „{name}“ vorschlagen",
   "library_bangumi_label_yes": "ja",
-  "library_bangumi_label_mapping_changed_needs_review": "Ihre ausgewählten Zuordnungen wurden geändert. Prüfen Sie sie erneut, bevor Sie bestätigen."
+  "library_bangumi_label_mapping_changed_needs_review": "Ihre ausgewählten Zuordnungen wurden geändert. Prüfen Sie sie erneut, bevor Sie bestätigen.",
+  "library_progress_history_restarted": "Dieser Verlauf hat sich geändert. Die aktuelle erste Seite wird angezeigt."
 }

@@ -11192,5 +11192,6 @@
   "library_bangumi_label_use_existing": "使用「{name}」（修訂版 {revision}）",
   "library_bangumi_label_use_new_name": "提議新增標籤「{name}」",
   "library_bangumi_label_yes": "是",
-  "library_bangumi_label_mapping_changed_needs_review": "已變更所選對應。請重新審核後再確認。"
+  "library_bangumi_label_mapping_changed_needs_review": "已變更所選對應。請重新審核後再確認。",
+  "library_progress_history_restarted": "歷史紀錄已變更。目前顯示最新的第一頁。"
 }

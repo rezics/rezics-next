@@ -11093,5 +11093,6 @@
   "library_bangumi_label_use_existing": "Utiliser « {name} » (révision {revision})",
   "library_bangumi_label_use_new_name": "Proposer le nouveau libellé « {name} »",
   "library_bangumi_label_yes": "oui",
-  "library_bangumi_label_mapping_changed_needs_review": "Vos correspondances choisies ont changé. Vérifiez-les de nouveau avant de confirmer."
+  "library_bangumi_label_mapping_changed_needs_review": "Vos correspondances choisies ont changé. Vérifiez-les de nouveau avant de confirmer.",
+  "library_progress_history_restarted": "Cet historique a changé. Sa première page actuelle est affichée."
 }

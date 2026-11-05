@@ -11093,5 +11093,6 @@
   "library_bangumi_label_use_existing": "Usar “{name}” (revisión {revision})",
   "library_bangumi_label_use_new_name": "Proponer la nueva etiqueta “{name}”",
   "library_bangumi_label_yes": "sí",
-  "library_bangumi_label_mapping_changed_needs_review": "Cambiaste las asignaciones elegidas. Vuelve a revisarlas antes de confirmarlas."
+  "library_bangumi_label_mapping_changed_needs_review": "Cambiaste las asignaciones elegidas. Vuelve a revisarlas antes de confirmarlas.",
+  "library_progress_history_restarted": "Este historial ha cambiado. Se muestra su primera página actual."
 }

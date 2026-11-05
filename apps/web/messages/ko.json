@@ -11093,5 +11093,6 @@
   "library_bangumi_label_use_existing": "“{name}” 사용 (리비전 {revision})",
   "library_bangumi_label_use_new_name": "새 라벨 “{name}” 제안",
   "library_bangumi_label_yes": "예",
-  "library_bangumi_label_mapping_changed_needs_review": "선택한 매핑이 변경되었습니다. 확정하기 전에 다시 검토하세요."
+  "library_bangumi_label_mapping_changed_needs_review": "선택한 매핑이 변경되었습니다. 확정하기 전에 다시 검토하세요.",
+  "library_progress_history_restarted": "기록이 변경되었습니다. 현재 첫 페이지를 표시합니다."
 }
