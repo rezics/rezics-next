@@ -23,6 +23,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     Node: window.Node,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -55,6 +56,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     };
   };
   const sessionEnv = {
+    PUBLIC_ORIGIN: 'https://site.test',
     KERNEL_ORIGIN: 'https://kernel.test',
     AUTH_ISSUER: 'https://auth.test',
     API_RESOURCE: 'https://kernel.test',
@@ -66,7 +68,7 @@ test('The actual named-label Library renders private FULL assignments and remove
   const parameters = new URLSearchParams({
     label: labelId,
     cursor: 'source-one',
-    layout: 'table',
+    layout: 'list',
     undoLabelId: labelId,
     undoSubjectId: id(1),
     undoAssignmentId: id(10),
@@ -234,7 +236,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(fields().find((form) => form.intent === 'unassign')).toMatchObject({
       assignmentId: id(12),
       revision: '8',
-      csrf_token: csrf(subject),
+      csrf_token: token ?? '',
     });
   };
   const observe = (state: string, subject: string | null, token = subject ? csrf(subject) : null) => {
