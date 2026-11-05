@@ -10,6 +10,7 @@ import type { CandidateTransport } from '../../subject/candidate-review';
 
 export const identifiersSubject = '00000000-0000-4000-8000-00000000d101';
 export const identifiersCandidate = '00000000-0000-4000-8000-00000000d102';
+export const identifiersCompetingCandidate = '00000000-0000-4000-8000-00000000d103';
 export const identifiersStatement = '00000000-0000-4000-8000-00000000d111';
 export const identifiersCitation = 'https://catalogue.example/edition/One?record=A%2Fb&lang=ja#original';
 export type IdentifiersScenario =
@@ -162,6 +163,15 @@ export function identifiersProfileFixture(scenario: IdentifiersScenario = 'ready
           rank: null,
           statement: { ...statement(id, proposed), rezics: { release: digest, revision: 2 } },
         });
+        if ((scenario === 'ready' || scenario === 'continued') && candidates.length === 1) {
+          const competing = structuredClone(candidates[0]!);
+          competing.id = identifiersCompetingCandidate;
+          competing.decision = 'accepted';
+          competing.head = 1;
+          competing.statement.id = identifiersCompetingCandidate;
+          competing.statement.value = { type: 'value', content: '978-4-00-000002-4' };
+          candidates.push(competing);
+        }
         const result = { candidate: id, revision: 2 };
         if (key) receipts.set(key, result);
         if (scenario === 'uncertain' && !lost) {
@@ -201,7 +211,13 @@ export function identifiersProfileFixture(scenario: IdentifiersScenario = 'ready
             item.rank = selection.find((entry) => item.id === entry.candidate)?.rank ?? null;
         }
         return json({
-          adoption: { context: candidateContext, property: body?.property, mode: 'replace', head: adoptionHead },
+          adoption: {
+            context: candidateContext,
+            property: body?.property,
+            mode: 'replace',
+            selection,
+            head: adoptionHead,
+          },
           revision: 4,
         });
       }
