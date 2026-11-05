@@ -135,10 +135,7 @@ test('general discovery admits a released inverse relation and carries it into n
     },
   };
   const filter: DiscoveryFilterDocument = {
-    and: [
-      { kind: { in: ['schema:Person'] } },
-      inverse,
-    ],
+    and: [{ kind: { in: ['schema:Person'] } }, inverse],
   };
   const request: MixedDiscoveryRequest = {
     representation: 'discovery-v1',
@@ -149,9 +146,7 @@ test('general discovery admits a released inverse relation and carries it into n
   const current = registry();
   const admitted = admitDiscoveryRequest(request, current, bundledRelease);
   expect(admitted.filter).toEqual(filter);
-  expect(currentDiscoveryFilter(admitted.filter!, current, 'schema:Person', bundledRelease)).toEqual(
-    inverse,
-  );
+  expect(currentDiscoveryFilter(admitted.filter!, current, 'schema:Person', bundledRelease)).toEqual(inverse);
   const capture = compileDiscoveryCapture(
     {
       representation: 'discovery-v1',

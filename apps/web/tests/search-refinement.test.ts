@@ -224,9 +224,7 @@ test('inverse released relations compile for facets and retire the previous face
   const direct: FilterDocument = {
     statement: { property, in: [author], qualifiers: [{ property: qualifier, in: [author] }] },
   };
-  expect(refinementKey(context)).not.toBe(
-    refinementKey({ ...context, filter: direct }),
-  );
+  expect(refinementKey(context)).not.toBe(refinementKey({ ...context, filter: direct }));
 });
 
 test('the mounted Search language refinement uses the generated facet client and current count-free options', async () => {

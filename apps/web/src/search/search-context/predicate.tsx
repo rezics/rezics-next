@@ -26,15 +26,17 @@ function relationDescription(property: ReactNode, values: ReactNode, locale: str
   const propertyToken = '\uE000property\uE001';
   const valuesToken = '\uE000values\uE001';
   const sentence = m.condition_relation_inverse({ property: propertyToken, values: valuesToken }, options);
-  return sentence.split(/(\uE000property\uE001|\uE000values\uE001)/g).map((part, index) =>
-    part === propertyToken ? (
-      <span key={index}>{property}</span>
-    ) : part === valuesToken ? (
-      <span key={index}>{values}</span>
-    ) : (
-      part
-    ),
-  );
+  return sentence
+    .split(/(\uE000property\uE001|\uE000values\uE001)/g)
+    .map((part, index) =>
+      part === propertyToken ? (
+        <span key={index}>{property}</span>
+      ) : part === valuesToken ? (
+        <span key={index}>{values}</span>
+      ) : (
+        part
+      ),
+    );
 }
 
 /** Preserve the executed Boolean structure and same-statement qualifiers in the explanation. */

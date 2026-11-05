@@ -369,9 +369,7 @@ test('an unsupported inverse stays visible and correctable, clears old paginatio
     statement: { property: 'ex:label', inverse: true, in: ['label'] },
   };
   const issues = conditionAdmission(unsupportedMetadata)(unsupported, state);
-  expect(issues).toEqual([
-    { pointer: `${CONDITION_POINTER}/statement/inverse`, code: 'unsupported' },
-  ]);
+  expect(issues).toEqual([{ pointer: `${CONDITION_POINTER}/statement/inverse`, code: 'unsupported' }]);
   const html = render(unsupported, issues, unsupportedMetadata);
   expect(html).toContain('Relation direction');
   expect(html).toContain(`data-condition-field-pointer="${CONDITION_POINTER}/statement/inverse"`);

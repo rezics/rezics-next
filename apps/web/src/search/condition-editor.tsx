@@ -549,7 +549,12 @@ function NodeEditor({
   >();
   const operandRequest =
     property && statementValue && 'in' in statementValue && context.entityLookup
-      ? conditionEntityRequestIdentity(`${draft.key}:statement`, property, definition?.targets ?? [], context.entityLookup)
+      ? conditionEntityRequestIdentity(
+          `${draft.key}:statement`,
+          property,
+          definition?.targets ?? [],
+          context.entityLookup,
+        )
       : undefined;
   const reportResolvedOperands = useCallback(
     (request: string, labels: Record<string, ResolvedConditionEntity>) => setResolvedOperands({ request, labels }),
@@ -557,8 +562,8 @@ function NodeEditor({
   );
   const relationDirectionVisible = Boolean(
     statementValue &&
-      (('inverse' in statementValue && statementValue.inverse === true) ||
-        ('in' in statementValue && definition?.datatype === 'wikibase-item' && definition.relation)),
+    (('inverse' in statementValue && statementValue.inverse === true) ||
+      ('in' in statementValue && definition?.datatype === 'wikibase-item' && definition.relation)),
   );
   const selectedOperandLabels =
     statementValue && 'in' in statementValue

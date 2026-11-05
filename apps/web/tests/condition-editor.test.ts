@@ -131,9 +131,7 @@ test('choosing inverse on a released relation keeps its operand and same-stateme
       entry.qualifiers?.some((property) => metadata.properties[property]?.datatype === 'wikibase-item'),
   )!;
   const property = Object.keys(metadata.properties).find((id) => metadata.properties[id] === definition)!;
-  const qualifier = definition.qualifiers!.find(
-    (id) => metadata.properties[id]?.datatype === 'wikibase-item',
-  )!;
+  const qualifier = definition.qualifiers!.find((id) => metadata.properties[id]?.datatype === 'wikibase-item')!;
   const operand = '018f0000-0000-7000-8000-00a000000020';
   const qualifierValue = '018f0000-0000-7000-8000-00a000000021';
   const initial: FilterDocument = {
@@ -160,7 +158,12 @@ test('choosing inverse on a released relation keeps its operand and same-stateme
       direction.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
     expect(current).toEqual({
-      statement: { property, inverse: true, in: [operand], qualifiers: [{ property: qualifier, in: [qualifierValue] }] },
+      statement: {
+        property,
+        inverse: true,
+        in: [operand],
+        qualifiers: [{ property: qualifier, in: [qualifierValue] }],
+      },
     });
   } finally {
     if (root) await act(() => root!.unmount());

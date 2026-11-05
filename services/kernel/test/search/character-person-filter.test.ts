@@ -72,9 +72,7 @@ function fixture() {
     read: async (partition, ids) => ({
       partition,
       position,
-      subjects: ids.flatMap((subject) =>
-        subject === current.id ? [current] : subject === work.id ? [work] : [],
-      ),
+      subjects: ids.flatMap((subject) => (subject === current.id ? [current] : subject === work.id ? [work] : [])),
     }),
     count: async () => ({ position, count: 1 }),
     matchRelationFacets: async (_, probes) => {
