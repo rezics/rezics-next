@@ -13,12 +13,10 @@ export type ShowcasePersonalListUpload =
 function preview(value: unknown): { uploadId: string; rows: number } | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const result = value as Record<string, unknown>;
-  return (
-    typeof result.uploadId === 'string' &&
+  return typeof result.uploadId === 'string' &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(result.uploadId) &&
     Number.isSafeInteger(result.rows) &&
     Number(result.rows) >= 0
-  )
     ? { uploadId: result.uploadId, rows: Number(result.rows) }
     : null;
 }
@@ -43,11 +41,7 @@ export async function seedShowcasePersonalList(input: {
       { headers: { 'idempotency-key': JSON.stringify(action.idempotency_key) } },
     );
   } catch (error) {
-    if (
-      !(error instanceof TypeError) &&
-      !(error instanceof DOMException) &&
-      !(error instanceof SyntaxError)
-    )
+    if (!(error instanceof TypeError) && !(error instanceof DOMException) && !(error instanceof SyntaxError))
       throw error;
     return { state: 'unknown-delivery', code: 'transport-unavailable' };
   }
