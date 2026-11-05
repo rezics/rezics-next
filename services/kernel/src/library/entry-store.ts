@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import type { EntryShelfWrite, HeadSnapshot } from './shelf-contract.ts';
 import { assertPreProfileLibraryRead } from './profile-source.ts';
 import { newId } from '../route/route.ts';
+import type copyRead from './entry-store-copy-read.sql';
 import entryDelete from './entry-store-entry-delete.sql';
 import entryInsert from './entry-store-entry-insert.sql';
 import entryPage from './entry-store-entry-page.sql';

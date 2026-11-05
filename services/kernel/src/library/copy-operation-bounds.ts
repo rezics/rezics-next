@@ -205,15 +205,15 @@ type CopyPagePlan = Readonly<{
   run(client: Parameters<typeof copyPage.run>[0]): Promise<CopyPageResult>;
 }>;
 
-function pagePlan<Client, Input extends CopyFilteredPageInput, Result extends CopyPageResult>(
+function pagePlan<Input extends CopyFilteredPageInput>(
   kind: string,
-  query: QueryModule<Client, Input, Result>,
+  query: { sql: string },
   input: Input,
 ): CopyPagePlan {
   const limit = Math.min(MAX_LIBRARY_PAGE_SIZE, input.limit);
-  const statement = copyStatementPlan(
+  const statement = copyStatementPlan<Parameters<typeof copyPage.run>[0], Input, CopyPageResult>(
     kind,
-    query,
+    query as unknown as QueryModule<Parameters<typeof copyPage.run>[0], Input, CopyPageResult>,
     { ...input, limit },
     { candidateKeys: limit, nativeRows: limit, emptySeeks: 1, nativePoints: 1 },
     COPY_PAGE_ROW,
@@ -222,7 +222,7 @@ function pagePlan<Client, Input extends CopyFilteredPageInput, Result extends Co
   return Object.freeze({
     input: statement.input,
     bound: statement.bound,
-    run: (client) => statement.run(client as Client),
+    run: (client) => statement.run(client),
   });
 }
 
@@ -328,8 +328,8 @@ export type CopyPrivateReadRow = {
   kind_profile_pin: unknown;
   status_profile_pin: unknown;
 };
-const COPY_PRIVATE_READ_SQL =
-  'SELECT subject_id, kind, status, library_profile_pin, kind_profile_pin, status_profile_pin FROM library.copy WHERE route=$1 AND copy_id=$2 AND account_id=$3';
+const COPY_PRIVATE_READ_SQL = `SELECT subject_id, kind, status, library_profile_pin, kind_profile_pin, status_profile_pin
+FROM library.copy WHERE route=$1 AND copy_id=$2 AND account_id=$3`;
 
 export function copyPrivateReadStatementPlan(input: CopyPrivateReadInput) {
   const query: QueryModule<CopyQueryClient, CopyPrivateReadInput, CopyPrivateReadRow | undefined> = {
