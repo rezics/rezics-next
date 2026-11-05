@@ -763,73 +763,53 @@ The page heading has the same space below it as the sections have between them.
 
 ## Delete account
 
-`/account/delete` obtains current advice and the session-bound identity through
-`POST /account-management/deletion-page`. An ordinary session receives authentication-required without private
-identity or deletion preparation. Deletion is permanent, signs the person out everywhere and has no account restore.
-The person reviews operated-account responsibilities, last organization ownership and pending transfers; application
-and consent inventories cannot verify eligibility. Native refusal does not identify the failed prerequisite.
-Operated-account and transfer guidance uses the existing operator-transfer route. Organization ownership uses
-supported website management; without a trusted destination and selected organization, retain the local Security
-fallback. No membership target is fabricated.
+`/account/delete` reads current advice and session-bound identity through
+`POST /account-management/deletion-page`. Ordinary sessions receive authentication-required without private identity
+or deletion preparation. Deletion is permanent, signs out everywhere and has no account restore. Review operated
+responsibilities, last organization ownership and pending transfers; application/consent inventories cannot establish
+eligibility. Native refusal identifies no prerequisite. Operator guidance uses the existing transfer route;
+organization ownership uses supported management, with Security as fallback when no trusted selected target exists.
 
-`loadAccountDeletionPage` performs one same-origin advice POST for entry, retained-document return or deliberate
-read Retry, with the five-second private-read deadline and no automatic retry. Only admitted advice mounts
-`SecurityInventory`: one clients page and one consents page, each capped at 20 rows. Further pages need explicit
-navigation. Review retirement aborts its lifetime and invalidates both inventory results. There is no separate
-session GET, approval or execution on return or Retry.
+Entry, retained-document return and deliberate read Retry each send one advice POST, with the five-second
+private-read lifetime and no automatic retry. Admitted advice mounts one clients and one consents inventory page,
+20 rows each; further pages require navigation. Retirement aborts that lifetime and invalidates both inventories.
+Return, read Retry, focus, dismissal and navigation send no command or extra session GET.
+Advice uses `readJsonBounded` before fatal UTF-8/JSON: `93 + 128×6 + 252×6 + 2 = 2375` bytes for fixed syntax,
+account id and email. Existing bounds remain 128 UTF-16 id units and nullable 254-unit email with `@` and `.`.
+Native identities outside that browser id contract remain a separate producer/consumer qualification.
 
-Decision: the response uses `readJsonBounded` with the existing five-second `privateAuthRead` signal and a 2,375-byte
-UTF-8 limit. Its largest compact native review costs `93 + (128 × 6) + (252 × 6 + 2) = 2,375` bytes: 93 fixed
-syntax/value bytes, at most six JSON bytes per UTF-16 code unit for the account id, and at most six bytes for each
-of the email's 252 non-separator units plus its one-byte `@` and `.`. The accepted `accountId` maximum remains 128
-UTF-16 code units; email remains nullable and capped at 254 code units by its existing pattern. Authentication-required
-and null-email envelopes remain accepted. Native identities outside the existing browser `accountId` contract remain
-an explicit qualification for the separate identity producer/consumer review; this read does not alter native identity
-storage.
-
-Each mounted attempt retains its original account, key and exact approval/execution payload. Before dispatch,
-authentication keeps an unsent continuation; execution dispatch sets its submitted marker. Older descriptors
-without a marker are conservatively submitted hints. Step-up returns to fresh native review, clears confirmation
-and compares exact human/target/key before another explicit choice. Confirmation uses the localized phrase,
-case-insensitive after surrounding-whitespace trimming and Unicode NFC normalization.
+Each attempt retains its original account, key and descriptor. Authentication saves an unsent continuation;
+only execution dispatch's exact stored `submitted:true` proof permits sending. Older descriptors conservatively
+imply submission. Step-up compares human/target/key, refreshes advice, clears confirmation and requires another
+explicit choice. Confirmation uses the localized phrase, trimmed, case-insensitive and NFC-normalized. Privacy
+contact remains required. Stay preserves confirmation, feedback and focus; Leave retires receiving. Unresolved
+sends retain their departure warning independently of current advice; dismissal hides only generic history.
 
 Decision: self-deletion reuses the shared sealed-reference approval contract and admits only exact original
-`{accountId}` completion. Each POST has its own five-second headers-and-body lifetime, including abort-ignoring
-transport; retries get independent lifetimes. `readJsonBounded` rejects raw excess before fatal UTF-8 decoding
-and JSON parsing. Approval is exactly `{reference,expiresAt}` with a nonempty sealed ASCII reference up to 4,096
-units and a canonical ISO expiry (at most 27 ASCII bytes), usable only before expiry. Its allowance is the empty
-JSON skeleton plus `6 × 4096 + 27` bytes, admitting legal escaping of every reference unit. Execution is exactly
-`{accountId}` with a nonempty native id up to 4,096 units: empty skeleton plus `6 × 4096` bytes. Identity must equal
-the immutable original target. Extra fields, expired/incomplete results, wrong identity and unreadable output cannot
-acknowledge deletion. The error allowance is the maximum serialized closed native refusal envelope; supported
-pairs are `step_up_required`/401 and `account_operation_denied`/400,401,403,409,413,415,503, each with
-`effect_status:not_applied`, plus exact `{error:unavailable}`/503. Bare statuses and malformed envelopes prove nothing.
+`{accountId}` completion. Every POST has its own five-second headers/body lifetime, including abort-ignoring
+transport. `readJsonBounded` rejects raw overflow before fatal UTF-8 decoding and JSON parsing. Approval is exactly
+`{reference,expiresAt}`: nonempty sealed ASCII reference up to 4096 units, canonical ISO expiry up to 27 bytes,
+usable only before expiry. Its allowance is the empty JSON skeleton plus `6×4096 + 27` bytes, including legal
+reference escaping. Execution is exactly `{accountId}`: nonempty opaque id up to 4096 units, original identity
+only, empty skeleton plus `6×4096` bytes. Extra fields, expired/incomplete variants and wrong targets cannot acknowledge.
+Error bytes are bounded by the larger serialized closed refusal: `{error:account_operation_denied,
+effect_status:not_applied}` at 400,401,403,409,413,415,503 or `{error:step_up_required,effect_status:not_applied}`
+at 401 (JSON string values). Exact `{error:unavailable}`/503 also fits. Bare statuses/malformed bodies prove nothing.
 
-Lost, timed-out or malformed execution replies remain unknown across later refusal, authentication change,
-unavailable advice, dismissal and account replacement. A submitted hint cannot reconstruct which phase ran.
-Keep the original descriptor and fence; another deliberate exact retry requires fresh review and typed confirmation.
-Only admitted original command evidence acknowledges acceptance, with cleanup and downstream custody still pending.
-Original acknowledgement survives private retirement as generic history; late results cannot complete replacement
-views, remove another continuation/key or disclose former identity. Native absence and current advice are no evidence.
+Lost, timed-out or unreadable execution stays unknown through later refusal, absent account, sign-out, unavailable
+advice, dismissal and replacement. Restored submitted hints supply no command evidence. Only original acknowledgement
+resolves uncertainty; it survives private retirement as generic completed history, with cleanup/downstream custody
+pending. Late results cannot complete replacement views, clear another continuation/key or reveal former identity.
+Another deliberate exact retry requires fresh review and typed confirmation; current advice grants no authority.
 
-From an admitted current review, ordinary submission sends one approval POST and one execution POST. Approval
-has one retry only for exact `503 unavailable`; the explicit deletion retry path has one same-body execution retry
-for that same envelope while current. Timeout, transport loss, malformed output and proven refusals do not retry.
-The execution retry preserves the original key, descriptor and reference. A later refusal cannot resolve earlier
-unknown execution. Submission costs two POSTs normally, at most four with both unavailable retries (10 seconds
-normally, at most 20 seconds across independent phase budgets). Admitted entry adds one advice POST and two
-inventory reads: five requests normally, at most seven with command retries. Each admitted return/read Retry adds
-one advice POST and two inventory reads, zero commands; authentication-required advice reads no inventory.
-Counts are independent of population. Native preparations/proofs remain owned by
-[Auth](../../services/auth/README.md#personal-account-deletion-review). Fixture tests establish mechanical custody,
-not native/browser qualification; integrated native output, replay and browser acceptance remain required.
-
-Protect meaningful confirmation and unresolved sends with Stay/Leave and unload warnings. Stay preserves review
-and focus; Leave retires callbacks without cancelling native work. Authority loss clears private controls and
-intended reauthentication retains its unsent continuation. An unresolved send keeps its generic history, exact
-reconciliation identity and departure caution independently of current advice. Dismissal hides the generic return
-summary only; it removes no descriptor, native fence or warning. After a failed exact retry, a fresh native review
-is required before another explicit retry; the earlier unknown and original operands remain unchanged.
+Submission costs two POSTs normally. Approval retries exact `503 unavailable` once; explicit deletion recovery may
+retry execution once while current, preserving its identical key, descriptor and reference. Malformed output,
+transport loss, timeout and proven refusal never retry. A later refusal cannot resolve earlier uncertainty.
+Thus command cost is at most four POSTs: 10 seconds normally, 20 with both independent retries. Admitted entry adds
+one advice and two inventory reads: five requests normally, seven maximum. Each admitted return/read Retry adds
+three reads and zero commands; authentication-required advice reads no inventory. Counts are population-independent.
+Native costs remain in [Auth](../../services/auth/README.md#personal-account-deletion-review). Fixtures prove mechanical
+custody only; integrated native output/replay and browser acceptance remain required.
 
 ## Delete organization
 

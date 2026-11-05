@@ -3167,55 +3167,41 @@ minimization are separate owner integrations.
 
 ## Personal account deletion review
 
-`POST /account-management/deletion-page` accepts exactly `{}` on the issuer origin, with an issuer cookie,
-JSON content type, no query or bearer header, and private/no-store responses. It derives the only target from
-the live human session. Ordinary sessions receive only `authentication-required` and their session account id;
-they cause neither a private identity read nor deletion preparation. The existing deletion step-up continuation
-returns to a new review and requires a new typed confirmation. It never executes deletion on return.
-Decision: authentication before review saves an unsent continuation; only dispatch marks it submitted, and older
-continuations retain their conservative submitted interpretation. This local departure hint grants no authority.
+`POST /account-management/deletion-page` accepts exactly `{}` with issuer Origin/cookie, JSON content type,
+no query/bearer and private/no-store output. The human supplies the target. Ordinary sessions get authentication-required
+and session id without identity/preparation. Step-up returns to fresh review/confirmation. Only dispatch marks
+submitted; older missing markers conservatively imply submission, never authority.
 
-The exact deletion management profile admits the narrow native `readAccountDeletionAdvice` producer installed
-by `createNativeAccountBindings`. It uses `managedAuthWorkflowDescriptor('delete', human.account_id)` and the
-installed `account:delete` preparation/formula, independently of the managed-account action directory. Live human,
-account lifecycle/fence/floor, actor/client/scopes, source session, home and deadline are checked around released
-preparation. The native source holds no connection during preparation, uses read transactions and never calls
-workflow approval, resolution, execution or command guards. A current refusal stays refused. Changed authority
-retires display and controls; dependency failure permits a fresh review. Only admitted exact-profile reviews read
-Auth's existing exact-self email projection, with current proof checks surrounding it; no token or proof is returned.
+`createNativeAccountBindings` installs `readAccountDeletionAdvice` under the exact deletion management profile:
+`managedAuthWorkflowDescriptor('delete', human.account_id)` and installed `account:delete` preparation/formula,
+independent of the action directory. Live human, lifecycle/fence/floor, actor/client/scopes, session, home and deadline
+surround released preparation. Read transactions release connections during preparation, with no approval/command.
+Changed authority retires controls; dependency failure allows review. Only admitted profiles read exact-self email
+with surrounding currentness checks.
 
-The finite full-call ceiling is one `withFreshHuman` admission, five `accessTokenForProof` calls (three transport,
-two native), one native `authenticate`, one read-time query, two exact account/home snapshots (four point reads),
-one installed Access preparation, one installed Access formula check, and one Auth user primary-key identity read.
-These fixed invocations compose their existing finite producer bounds, including the native permission operand
-caps; no invocation depends on account inventory size and none dispatches runtime prices. Failures short-circuit.
-The shared three-second deadline covers native I/O and the post-read disclosure decision. The browser has one
-five-second private-read deadline and no automatic page retry. Security retains its existing bounded inventory
-interface and link; this source adds no inventory or ownership scan.
+The full-call ceiling is one `withFreshHuman`, five `accessTokenForProof` (three transport/two native), one native
+`authenticate`, one read-time query, two two-account/home snapshots (four points), one Access preparation/formula
+and one Auth user primary-key read. Finite operand caps bound fixed calls; no population scan/runtime price. Failures short-circuit. Native I/O/disclosure
+share three seconds; browser reads five, without retry. Security inventories stay separate.
 
-Decision: deletion shares the public sealed-reference approval contract with rename; its only supported workflow
-success/replay projection is exact `{accountId}` for the requested account. Approval is validated before emission:
-exact `{reference,expiresAt}`, reference nonempty sealed ASCII up to 4,096 units, canonical ISO expiry up to 27 bytes.
-The browser approval allowance is the empty-string skeleton plus `6 × 4096 + 27` bytes (legal escaped reference);
-execution is its empty-string skeleton plus `6 × 4096` bytes for the opaque native id. Delete has no successful
-expired/incomplete variant. Incompatible, wrong-target or failed post-dispatch results emit exact `{error:unavailable}`
-with 503, never fabricated `not_applied`. Organization deletion keeps the same `{accountId}` wire projection.
-Resolution, native freshness, preparations, responsibilities, fences, CAS and erasure authority are unchanged.
+Decision: deletion reuses rename's sealed-reference approval contract: exact `{reference,expiresAt}`, nonempty
+sealed ASCII reference ≤4096 units and canonical ISO expiry ≤27 bytes. Validate before emission; browser requires
+unexpired approval. Allowance: empty JSON skeleton plus `6×4096 + 27` bytes (legal reference escaping). Workflow
+success/replay is exactly original `{accountId}`, nonempty opaque id ≤4096 units: empty skeleton plus `6×4096` bytes.
+Organization deletion retains this projection. Invalid/expired/incomplete/wrong-target results or post-dispatch
+exceptions emit `{error:unavailable}`/503, never false `not_applied`. Native resolution, freshness, preparations,
+responsibilities, CAS, fences and erasure remain authoritative.
 
-The finite refusal allowance is the maximum serialized `{error:account_operation_denied,effect_status:not_applied}`
-and `{error:step_up_required,effect_status:not_applied}` skeletons (quoted JSON strings). Supported statuses are
-400,401,403,409,413,415,503 for denied and 401 for step-up. Exact `{error:unavailable}`/503 fits that same allowance.
-Only these pairs establish browser refusal or retry eligibility. Each command POST retains its own five-second
-headers/body lifetime. Approval and explicit deletion recovery each permit one exact unavailable retry, so submission
-costs two POSTs normally and at most four, with the identical execution key, descriptor and reference. No calls are
-added. Timeout, malformed output and lost acknowledgement stay unknown and never automatically retry.
+Error allowance is the larger serialized closed refusal: `{error:account_operation_denied,effect_status:not_applied}`
+at 400,401,403,409,413,415,503 or `{error:step_up_required,effect_status:not_applied}`/401 (JSON string values).
+Exact `{error:unavailable}`/503 fits too. Each POST has five seconds through headers/body; approval and explicit
+execution recovery each retry unavailable once. Two POSTs normally, four maximum; execution body/key/reference stay
+identical. Timeout, transport loss and malformed output never retry. No native calls are added.
 
-Advice is a current read, not approval or original command acknowledgement. Operated accounts, last ownership,
-transfers, temporary holds and pending work are rechecked by the durable command. Original acknowledged completion
-survives private retirement as generic history; submitted/unknown custody is monotone through later refusal, missing
-account, sign-out or replacement. Exact-owned cleanup cannot affect a replacement. Commit means tombstone committed;
-active cleanup, adopted retention exceptions, backups and external copies remain separate. Fixture evidence does not
-qualify native output/replay or mounted browser behavior; integrated native/browser acceptance remains required.
+Advice/absence/sign-out cannot acknowledge execution. Uncertainty survives later refusal and
+replacement; only original success resolves it, retaining generic completed history after private retirement.
+Exact-owned cleanup preserves replacement custody. Commit means tombstone committed; cleanup, adopted retention,
+backups and external copies remain pending. Fixtures do not qualify native replay or browser acceptance.
 
 ## Organization deletion review
 
