@@ -65,7 +65,7 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   expect(controlPlane).not.toContain("Check the contract's premises");
   expect(controlPlane).not.toContain('.temp/continuation');
   expect(controlPlane).not.toContain('inbox send');
-  expect(controlPlane).toContain('Unfinished work is not a blocker');
+  expect(controlPlane).toContain('Build the whole outcome in this attempt');
   expect(controlPlane).toContain('Summary at most 120 words');
   expect(continuesItself(promptTask('web', { workspace: { module: 'apps/web', taskName: 'shared' } }))).toBe(false);
   expect(continuesItself(promptTask('web', { brief: { ...promptTask('web').brief, target: 'stabilize' } }))).toBe(
@@ -244,6 +244,21 @@ test('a continuation missing front matter inherits it from the brief it continue
   expect(completed.endsWith('\n---\nShow the notice.\n')).toBe(true);
   const complete = completeContinuation(markdown, parent, ownership);
   expect(completeContinuation(complete, parent, ownership)).toBe(complete);
+});
+
+test('a plain Markdown continuation takes the front matter of the brief it continues', () => {
+  const ownership = readRiskOwnership(join(import.meta.dir, '../risk-areas.json'));
+  const parent = { id: 'parent-task', brief: parseBrief(markdown, ownership) };
+  const completed = completeContinuation('# Finish the notice\n\nShow the rest.\n', parent, ownership);
+  expect(parseBrief(completed, ownership)).toMatchObject({
+    goal: parent.brief.goal,
+    manager: parent.brief.manager,
+    kind: parent.brief.kind,
+    paths: parent.brief.paths,
+    criticalPath: false,
+    after: ['parent-task'],
+  });
+  expect(completed.endsWith('\n---\n# Finish the notice\n\nShow the rest.\n')).toBe(true);
 });
 
 const toolBlockedWorker = `#!/usr/bin/env bun

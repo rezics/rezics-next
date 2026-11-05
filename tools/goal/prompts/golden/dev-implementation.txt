@@ -22,7 +22,7 @@ Failures on base are not yours; name them. Fix tests that passed on base but fai
 
 Never stop or remove containers, databases or processes this attempt did not start; never prune Docker. Never write under node_modules (shared hardlinks); instrument dependencies from .temp copies. Before changing package.json/bun.lock, run `bun tools/goal/src/cli.ts deps private`.
 
-If the outcome does not fit this attempt, commit a coherent, type-checking part and write the rest as a continuation brief at `.temp/continuation/<short-name>.md` (goal web, manager web). Unfinished work is not a blocker: return success and name the continuation.
+Build the whole outcome in this attempt and continue until it is built and its checks pass: a session that ends with work it could still do costs a new attempt. Write a continuation only for a part that needs another Goal's undelivered work: commit a coherent, type-checking part and write that part as a continuation brief at `.temp/continuation/<short-name>.md` (goal web, manager web). Such a remainder is not a blocker: return success and name the continuation.
 
 The task contract follows:
 
@@ -39,8 +39,6 @@ Record this choice in one summary line and the owner doc, send `bun tools/goal/s
 On dev, committed work blocked only by shared check infrastructure is success; name each skipped check and exact error. Dev is verified after merge.
 
 Large surveys are `spec-conflict` blockers starting "Research needed:". Research owner documents, primary sources and the main checkout's .reference/INDEX.md; list contract-named sources read before design.
-
-If unfinished, commit a coherent type-checking part. Put the rest in .temp/continuation/<short-name>.md (goal web, manager web); return success and name it. Unfinished work is not a blocker.
 
 ## Current controller launch context
 No controller launch context was supplied. Dependency status is unknown: build against each dependency contract.
