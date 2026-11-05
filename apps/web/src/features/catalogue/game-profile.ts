@@ -65,20 +65,24 @@ export async function readGameProfile(client: KernelClient, id?: string, visit?:
   if (id !== undefined && !gameUuid.test(id)) return { ok: false, reason: 'denied' };
   try {
     const [subject, active] = await Promise.all([
-      id ? client.subjects({ id }).get({
-        query: { context: visit?.context ?? candidateContext } as SubjectReadQuery,
-      }) : undefined,
+      id
+        ? client.subjects({ id }).get({
+            query: { context: visit?.context ?? candidateContext } as SubjectReadQuery,
+          })
+        : undefined,
       client.definitions.active.get(),
     ]);
     if (subject && [403, 404, 308].includes(subject.status)) return { ok: false, reason: 'denied' };
     if ((id && (subject?.status !== 200 || !subject.data)) || active.status !== 200 || !active.data)
       return { ok: false, reason: 'unavailable' };
-    if (subject?.data && (
-      subject.data.subject.id !== id ||
-      subject.data.subject.context !== (visit?.context ?? candidateContext) ||
-      (visit?.type !== undefined && subject.data.subject.type !== visit.type) ||
-      (visit?.release !== undefined && active.data.digest !== visit.release)
-    )) return { ok: false, reason: 'stale' };
+    if (
+      subject?.data &&
+      (subject.data.subject.id !== id ||
+        subject.data.subject.context !== (visit?.context ?? candidateContext) ||
+        (visit?.type !== undefined && subject.data.subject.type !== visit.type) ||
+        (visit?.release !== undefined && active.data.digest !== visit.release))
+    )
+      return { ok: false, reason: 'stale' };
     if (subject?.data && encodedBytes(subject.data) > 2 * 1024 * 1024)
       return { ok: false, reason: 'unavailable' };
     const bundle = await client.definitions.releases({ digest: active.data.digest }).get();

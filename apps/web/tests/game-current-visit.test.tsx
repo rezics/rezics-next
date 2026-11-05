@@ -111,6 +111,9 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
     expect(await readGameProfile(fixture.client, gameId, { ...parsed.visit, release: 'sha256:' + '0'.repeat(64) }))
       .toEqual({ ok: false, reason: 'stale' });
 
+    fixture.publicRead.subject.labels.en = 'X'.repeat(2 * 1024 * 1024);
+    expect(await readGameProfile(fixture.client, gameId, parsed.visit)).toEqual({ ok: false, reason: 'unavailable' });
+    fixture.publicRead.subject.labels.en = 'The Lantern Game';
     hold = new Promise((resolve) => { releaseRead = resolve; });
     await render(parsed.visit);
     const readerB = '00000000-0000-4000-8000-00000000f203';

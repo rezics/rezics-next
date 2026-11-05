@@ -1,4 +1,4 @@
-import { parseGameVisit, type GameCurrentVisit } from './game-current-visit';
+import { parseGameVisit } from './game-current-visit';
 import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
@@ -22,12 +22,17 @@ export const loadGameProfile = createServerFn({ method: 'GET', strict: false })
       if (!gameUuid.test(input)) throw new Error('Invalid game identity');
       return { id: input, visit: undefined };
     }
-    if (!input || typeof input.id !== 'string' || !gameUuid.test(input.id) ||
-      typeof input.locale !== 'string' || typeof input.search !== 'string')
+    if (
+      !input ||
+      typeof input.id !== 'string' ||
+      !gameUuid.test(input.id) ||
+      typeof input.locale !== 'string' ||
+      typeof input.search !== 'string'
+    )
       throw new Error('Invalid game visit');
     const parsed = parseGameVisit(input.search, input.id, input.locale);
     if (!parsed.valid) throw new Error('Invalid game visit');
-    return { id: input.id, visit: parsed.visit as GameCurrentVisit | undefined };
+    return { id: input.id, visit: parsed.visit };
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
