@@ -84,8 +84,8 @@ test('summary navigation focuses the scoped qualifier field, then its group when
 
     const editors = host.querySelectorAll<HTMLElement>('[data-condition-editor]');
     const first = editors[0]!;
-    const secondField = editors[1]!.querySelector<HTMLElement>(`[data-condition-field-pointer="${pointer}"] select`);
-    const field = first.querySelector<HTMLElement>(`[data-condition-field-pointer="${pointer}"] select`);
+    const secondField = editors[1]!.querySelector<HTMLElement>(`[data-condition-field-pointer="${pointer}"] input`);
+    const field = first.querySelector<HTMLElement>(`[data-condition-field-pointer="${pointer}"] input`);
     const action = first.querySelector<HTMLButtonElement>(`[data-error-pointer="${pointer}"] button`);
     const textIssue = first.querySelector(`[data-error-pointer="/text"]`);
     expect(field).not.toBeNull();
@@ -111,23 +111,35 @@ test('summary navigation focuses the scoped qualifier field, then its group when
 
     // Reopen an inverse occurrence, review replacement, cancel, then deliberately repair a retained range.
     let current: FilterDocument = { statement: { ...tree.statement, inverse: true } };
-    const renderCorrection = () => root!.render(createElement(ConditionEditor, {
-      value: current, metadata, locale: 'en', values: {
-        'schema:author': [{ value: 'author', labels: { en: 'Selected author' } }],
-        'schema:isPartOf': [{ value: 'book', labels: { en: 'Selected book' } }],
-      },
-      onChange(next) { current = next!; renderCorrection(); },
-    }));
+    const renderCorrection = () =>
+      root!.render(
+        createElement(ConditionEditor, {
+          value: current,
+          metadata,
+          locale: 'en',
+          values: {
+            'schema:author': [{ value: 'author', labels: { en: 'Selected author' } }],
+            'schema:isPartOf': [{ value: 'book', labels: { en: 'Selected book' } }],
+          },
+          onChange(next) {
+            current = next!;
+            renderCorrection();
+          },
+        }),
+      );
     const select = async (pointer: string, value: string) => {
-      const control = host.querySelector<HTMLSelectElement>(`[data-condition-field-pointer="${CONDITION_POINTER}/statement/${pointer}"] select`)!;
+      const control = host.querySelector<HTMLSelectElement>(
+        `[data-condition-field-pointer="${CONDITION_POINTER}/statement/${pointer}"] input`,
+      )!;
       await act(async () => {
         control.value = value;
         control.dispatchEvent(new window.Event('change', { bubbles: true }));
       });
     };
-    const press = async (label: string) => act(async () => {
-      [...host.querySelectorAll('button')].find((button) => button.textContent === label)!.click();
-    });
+    const press = async (label: string) =>
+      act(async () => {
+        [...host.querySelectorAll('button')].find((button) => button.textContent === label)!.click();
+      });
     await act(async () => renderCorrection());
     const originalInverse = current;
     await select('property', 'schema:wordCount');
@@ -139,7 +151,9 @@ test('summary navigation focuses the scoped qualifier field, then its group when
     await press(m.condition_property_change_confirm());
     expect(current).toMatchObject({ statement: { property: 'schema:wordCount', range: {} } });
     expect('inverse' in (current as typeof tree).statement).toBe(false);
-    current = { statement: { property: 'schema:wordCount', range: { gte: 7 }, inverse: true } } as unknown as FilterDocument;
+    current = {
+      statement: { property: 'schema:wordCount', range: { gte: 7 }, inverse: true },
+    } as unknown as FilterDocument;
     await act(async () => renderCorrection());
     await select('inverse', 'direct');
     expect(current).toEqual({ statement: { property: 'schema:wordCount', range: { gte: 7 } } });
