@@ -4,6 +4,7 @@ import { validatePageRealm } from '../../pages/view-cursor';
 import type { ReleaseOccurrence } from './reading/state';
 
 export const RELEASE_RETURN_BYTES = 8192;
+export const RELEASE_ENTRY_BYTES = 8192;
 const prefix = '#release-reading?';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const token = (value: unknown, limit: number): value is string =>
@@ -133,4 +134,35 @@ export function releaseSearch(input: Record<string, unknown>) {
     reviewProperty: input.reviewProperty as string | undefined,
     candidate: input.candidate as string | undefined,
   };
+}
+
+/** Compose the installed public release route from explicit outer intent only. */
+export function releaseEntryHref({
+  id,
+  label,
+  locale,
+  context,
+  via,
+}: {
+  id: string;
+  label: string;
+  locale: string;
+  context?: string | undefined;
+  via?: string | undefined;
+}): string {
+  const intent = releaseSearch({
+    ...(context !== undefined ? { context } : {}),
+    ...(via !== undefined ? { via } : {}),
+  });
+  const address = (includeVia: boolean) => {
+    const search = new URLSearchParams();
+    if (context !== undefined) search.set('context', intent.context);
+    if (includeVia && via !== undefined) search.set('via', via);
+    return `${subjectHref({ id, label }, locale).href}/release${search.size ? `?${search}` : ''}`;
+  };
+  const withOrigin = address(true);
+  if (bytes(withOrigin) <= RELEASE_ENTRY_BYTES) return withOrigin;
+  const currentRelease = address(false);
+  if (bytes(currentRelease) <= RELEASE_ENTRY_BYTES) return currentRelease;
+  throw new Error('Release entry address exceeds 8 KiB');
 }

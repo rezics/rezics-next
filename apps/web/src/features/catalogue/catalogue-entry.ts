@@ -1,9 +1,12 @@
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
+import { subjectVisitReturn } from '../pages/subject-visit-navigation';
 import { gameTypes } from './game-profile';
 import type { Release } from '@rezics/definitions';
 import { isFileOrGroupType } from './catalogue-file-profile/model';
 import { catalogueFileCorrectionHref } from './catalogue-file-reader/navigation';
+import { isReleaseType } from './release-fidelity/model';
+import { releaseEntryHref, RELEASE_ENTRY_BYTES } from './release-fidelity/navigation';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -11,6 +14,27 @@ type Locale = { locale: string };
 type Subject = Locale & { id: string; label: string };
 const options = (locale: string) => ({ locale: locale as never });
 const subject = ({ id, label, locale }: Subject) => subjectHref({ id, label }, locale).href;
+const utf8Bytes = (value: string) => new TextEncoder().encode(value).length;
+
+function releaseOrigin(
+  value: string | undefined,
+  { id, label, locale, context }: Locale & { id: string; label: string; context?: string | undefined },
+): string | undefined {
+  if (value === undefined) return;
+  const accepted = subjectVisitReturn(value, locale);
+  if (!accepted || utf8Bytes(accepted) > RELEASE_ENTRY_BYTES) return;
+  const url = new URL(accepted, 'https://rezics.invalid');
+  const base = subject({ id, label, locale });
+  if (url.pathname !== base && !url.pathname.startsWith(`${base}/`)) return;
+  if (url.hash !== '#connections') return;
+  const keys = [...url.searchParams.keys()];
+  if (
+    (context === undefined && keys.length !== 0) ||
+    (context !== undefined && (keys.length !== 1 || keys[0] !== 'context' || url.searchParams.get('context') !== context))
+  )
+    return;
+  return accepted;
+}
 
 /** Shared destinations for standalone native entries and their grouped navigation. No capability decisions. */
 export const catalogueEntries = {
@@ -178,14 +202,37 @@ export const catalogueEntries = {
     type,
     label = '',
     locale,
-  }: Locale & { id?: string | undefined; type?: string | undefined; label?: string | undefined }):
+    context,
+    returnHref,
+    release,
+  }: Locale & {
+    id?: string | undefined;
+    type?: string | undefined;
+    label?: string | undefined;
+    context?: string | undefined;
+    returnHref?: string | undefined;
+    release?: Pick<Release, 'types' | 'properties'> | undefined;
+  }):
     | CatalogueEntry
     | undefined => {
-    if (!id || !['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656'].includes(type ?? '')) return;
+    if (
+      !id ||
+      (release
+        ? !isReleaseType(release, type ?? '')
+        : !['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656'].includes(type ?? ''))
+    )
+      return;
+    const origin = releaseOrigin(returnHref, { id, label, locale, ...(context !== undefined ? { context } : {}) });
     return {
       group: 'edit',
       label: m.release_fidelity_title({}, options(locale)),
-      href: `${subject({ id, label, locale })}/release`,
+      href: releaseEntryHref({
+        id,
+        label,
+        locale,
+        ...(context !== undefined ? { context } : {}),
+        ...(origin !== undefined ? { via: origin } : {}),
+      }),
     };
   },
   catalogueFile: ({

@@ -1,7 +1,5 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { subjectHref } from '../../../subject/subject-href';
-import { m } from '../../../paraglide/messages.js';
-import { isReleaseType } from './model';
+import { catalogueEntries } from '../catalogue-entry';
 import type { Release } from '@rezics/definitions';
 
 export function ReleaseFidelityEntry({
@@ -9,22 +7,31 @@ export function ReleaseFidelityEntry({
   type,
   label,
   locale,
+  context,
+  returnHref,
   release,
 }: {
   id: string;
   type: string;
   label: string;
   locale: string;
+  context?: string | undefined;
+  returnHref?: string | undefined;
   release?: Pick<Release, 'types' | 'properties'> | undefined;
 }) {
-  if (release && !isReleaseType(release, type)) return null;
-  if (!release && !['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656'].includes(type)) return null;
+  const entry = catalogueEntries.releaseFidelity({
+    id,
+    type,
+    label,
+    locale,
+    ...(context !== undefined ? { context } : {}),
+    ...(returnHref !== undefined ? { returnHref } : {}),
+    ...(release !== undefined ? { release } : {}),
+  });
+  if (!entry) return null;
   return (
-    <a
-      className={buttonVariants({ variant: 'outline', size: 'sm' })}
-      href={`${subjectHref({ id, label }, locale).href}/release`}
-    >
-      {m.release_fidelity_title({}, { locale: locale as never })}
+    <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={entry.href}>
+      {entry.label}
     </a>
   );
 }
