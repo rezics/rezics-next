@@ -1,3 +1,4 @@
+import { synopsisVisit } from '../pages/subject-summary-reading/visit';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { loadSubjectPage, subjectBody } from '../pages/subject';
@@ -7,7 +8,7 @@ import { contextHref } from '../pages/context-navigation';
 import { explainSubjectSources, readSubjectSources, type SourcesResult } from './subject-sources';
 
 export const loadSubjectSources = createServerFn({ method: 'GET', strict: false })
-  .validator((input: { id: string; locale: string; realm?: string | undefined; reader?: string | null }) => {
+  .validator((input: { id: string; locale: string; realm?: string | undefined; via?: string; reader?: string | null }) => {
     if (
       !input ||
       typeof input.id !== 'string' ||
@@ -19,7 +20,8 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
         (typeof input.reader !== 'string' || !input.reader || input.reader.length > 128))
     )
       throw new Error('Invalid subject sources request');
-    return { id: input.id, locale: input.locale, realm: validatePageRealm(input.realm), reader: input.reader };
+    if (synopsisVisit(input.via, input.id, input.locale).kind === 'invalid') throw new Error('Invalid synopsis visit');
+    return { via: input.via, id: input.id, locale: input.locale, realm: validatePageRealm(input.realm), reader: input.reader };
   })
   .handler(async ({ data }): Promise<SourcesResult> => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -29,7 +31,8 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
     ]);
     // Start independent reads together; missing labels must not hide permitted citations.
     const definitions = readRelease().catch(() => undefined);
-    if (!data.realm) return readSubjectSources(kernelClient(data.locale), data.id, data.locale, definitions);
+    if (!data.realm) return readSubjectSources(kernelClient(data.locale), data.id, data.locale, definitions, false, data.via);
+    if (synopsisVisit(data.via, data.id, data.locale).kind === 'selected') return { kind: 'conflict' };
     const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
     let loaded = await loadSubjectPage(client, data.id, undefined, data.locale, { realm: data.realm, authorization });
     if (loaded.kind === 'redirect' && loaded.target !== 'account')
@@ -59,7 +62,7 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
 
 /** Hydrated private reading; the loader never serializes a viewer's action envelope into SSR. */
 export const readCurrentSubjectSources = createServerFn({ method: 'POST', strict: false })
-  .validator((input: { id: string; locale: string; expectedReader: string | null }) => {
+  .validator((input: { id: string; locale: string; expectedReader: string | null; via?: string }) => {
     if (
       !input ||
       !/^[0-9a-f-]{36}$/i.test(input.id) ||
@@ -68,6 +71,7 @@ export const readCurrentSubjectSources = createServerFn({ method: 'POST', strict
       (input.expectedReader !== null && (typeof input.expectedReader !== 'string' || input.expectedReader.length > 128))
     )
       throw new Error('Invalid Sources reader');
+    if (synopsisVisit(input.via, input.id, input.locale).kind === 'invalid') throw new Error('Invalid synopsis visit');
     return input;
   })
   .handler(async ({ data }): Promise<SourcesResult> => {
@@ -89,6 +93,7 @@ export const readCurrentSubjectSources = createServerFn({ method: 'POST', strict
       data.locale,
       readRelease().catch(() => undefined),
       true,
+      data.via,
     );
     if (result.kind === 'ready' && result.page.viewer)
       result.page.viewer.state = data.expectedReader ? 'signed-in' : 'signed-out';

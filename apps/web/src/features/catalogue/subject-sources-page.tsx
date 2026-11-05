@@ -139,6 +139,9 @@ export function SubjectSourcesPage({
       data-slot="subject-sources-detail"
       className="flex min-w-0 flex-col gap-8 [overflow-wrap:anywhere]"
     >
+      {page.selectedSynopsis && page.selectedSynopsis !== 'matched' && (
+        <p role="status">{page.selectedSynopsis === 'unsupported' ? m.subject_synopsis_sources_unsupported({}, o) : m.sources_conflict({}, o)}</p>
+      )}
       <SubjectFrame
         frame={{ id: page.id, type: '', title: page.title, summary: null }}
         locale={locale}

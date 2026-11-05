@@ -33,11 +33,11 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
       ...(selection ? { provider: selection.source, digest: selection.digest } : {}),
     };
   },
-  loaderDeps: ({ search }) => ({ realm: search.realm }),
+  loaderDeps: ({ search }) => ({ realm: search.realm, via: search.via }),
   loader: async ({ params, location, deps }) => {
     const reader = await subjectRequestReader({ data: { realm: deps.realm } });
     const result = await loadSubjectSources({
-      data: { id: params.id, locale: getLocale(), realm: deps.realm, reader },
+      data: { id: params.id, locale: getLocale(), realm: deps.realm, via: deps.via, reader },
     });
     if (result.kind === 'missing') throw notFound();
     if (result.kind === 'ready') {
@@ -81,6 +81,7 @@ function SourcesRoute() {
           id: result.kind === 'ready' ? result.page.id : '',
           locale: getLocale(),
           expectedReader: session.subject ?? null,
+          via,
         },
         headers: csrfHeaders(),
       })
@@ -94,7 +95,7 @@ function SourcesRoute() {
     return () => {
       live = false;
     };
-  }, [result, scope, realm]);
+  }, [result, scope, realm, via]);
   const selected =
     !realm && result.kind === 'ready' && (session.state === 'signed-in' || session.state === 'signed-out')
       ? current?.scope === scope && current.source === result
