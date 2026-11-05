@@ -228,9 +228,33 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           busy={snapshot.busy || locked || Boolean(snapshot.readRetry)}
           canPrevious={snapshot.collectionsWindow.canPrevious}
           onChoose={(collection) => touch(journey.chooseCollection(collection))}
-          onFirst={(event) => moveReader(event, 'collections', snapshot.collectionsWindow.revision, 'recovery-collections-title', journey.loadCollections())}
-          onPrevious={(event) => moveReader(event, 'collections', snapshot.collectionsWindow.revision, 'recovery-collections-title', journey.previousCollections())}
-          onNext={(cursor, event) => moveReader(event, 'collections', snapshot.collectionsWindow.revision, 'recovery-collections-title', journey.loadCollections(cursor))}
+          onFirst={(event) =>
+            moveReader(
+              event,
+              'collections',
+              snapshot.collectionsWindow.revision,
+              'recovery-collections-title',
+              journey.loadCollections(),
+            )
+          }
+          onPrevious={(event) =>
+            moveReader(
+              event,
+              'collections',
+              snapshot.collectionsWindow.revision,
+              'recovery-collections-title',
+              journey.previousCollections(),
+            )
+          }
+          onNext={(cursor, event) =>
+            moveReader(
+              event,
+              'collections',
+              snapshot.collectionsWindow.revision,
+              'recovery-collections-title',
+              journey.loadCollections(cursor),
+            )
+          }
         />
       ) : null}
 
@@ -243,9 +267,33 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
           onToggle={(row) => journey.setSelection(toggleOccurrence(snapshot.selected, row))}
           onTogglePage={(rows) => journey.setSelection(togglePage(snapshot.selected, rows))}
           onReview={() => journey.prepareReview()}
-          onPage={(cursor, event) => moveReader(event, 'occurrences', snapshot.occurrencesWindow.revision, 'recovery-occurrences-title', journey.loadOccurrences(cursor))}
-          onFirst={(event) => moveReader(event, 'occurrences', snapshot.occurrencesWindow.revision, 'recovery-occurrences-title', journey.loadOccurrences())}
-          onPrevious={(event) => moveReader(event, 'occurrences', snapshot.occurrencesWindow.revision, 'recovery-occurrences-title', journey.previousOccurrences())}
+          onPage={(cursor, event) =>
+            moveReader(
+              event,
+              'occurrences',
+              snapshot.occurrencesWindow.revision,
+              'recovery-occurrences-title',
+              journey.loadOccurrences(cursor),
+            )
+          }
+          onFirst={(event) =>
+            moveReader(
+              event,
+              'occurrences',
+              snapshot.occurrencesWindow.revision,
+              'recovery-occurrences-title',
+              journey.loadOccurrences(),
+            )
+          }
+          onPrevious={(event) =>
+            moveReader(
+              event,
+              'occurrences',
+              snapshot.occurrencesWindow.revision,
+              'recovery-occurrences-title',
+              journey.previousOccurrences(),
+            )
+          }
           onCollections={() => touch(journey.loadCollections())}
         />
       ) : null}
@@ -295,9 +343,33 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
             busy={snapshot.busy || locked || Boolean(snapshot.readRetry)}
             canPrevious={snapshot.outcomesWindow.canPrevious}
             onRead={() => touch(journey.loadOutcomes())}
-            onFirst={(event) => moveReader(event, 'outcomes', snapshot.outcomesWindow.revision, 'recovery-results-title', journey.loadOutcomes())}
-            onPrevious={(event) => moveReader(event, 'outcomes', snapshot.outcomesWindow.revision, 'recovery-results-title', journey.previousOutcomes())}
-            onNext={(cursor, event) => moveReader(event, 'outcomes', snapshot.outcomesWindow.revision, 'recovery-results-title', journey.loadOutcomes(cursor))}
+            onFirst={(event) =>
+              moveReader(
+                event,
+                'outcomes',
+                snapshot.outcomesWindow.revision,
+                'recovery-results-title',
+                journey.loadOutcomes(),
+              )
+            }
+            onPrevious={(event) =>
+              moveReader(
+                event,
+                'outcomes',
+                snapshot.outcomesWindow.revision,
+                'recovery-results-title',
+                journey.previousOutcomes(),
+              )
+            }
+            onNext={(cursor, event) =>
+              moveReader(
+                event,
+                'outcomes',
+                snapshot.outcomesWindow.revision,
+                'recovery-results-title',
+                journey.loadOutcomes(cursor),
+              )
+            }
           />
           <button
             type="button"

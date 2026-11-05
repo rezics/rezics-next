@@ -160,7 +160,12 @@ export function ArchiveCollectionChooser({
               {m.library_archive_recovery_first_page()}
             </button>
             {page.next ? (
-              <button className={actionClass} type="button" disabled={busy} onClick={(event) => onNext(page.next!, event)}>
+              <button
+                className={actionClass}
+                type="button"
+                disabled={busy}
+                onClick={(event) => onNext(page.next!, event)}
+              >
                 {m.library_archive_recovery_next_page()}
               </button>
             ) : null}

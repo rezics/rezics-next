@@ -143,8 +143,14 @@ export function createArchiveCollectionRecoveryJourney(input: {
       targets: new Map(targets),
       review,
       outcomesPage: outcomePageData,
-      collectionsWindow: { canPrevious: windows.collections.previous.length > 0, revision: windows.collections.revision },
-      occurrencesWindow: { canPrevious: windows.occurrences.previous.length > 0, revision: windows.occurrences.revision },
+      collectionsWindow: {
+        canPrevious: windows.collections.previous.length > 0,
+        revision: windows.collections.revision,
+      },
+      occurrencesWindow: {
+        canPrevious: windows.occurrences.previous.length > 0,
+        revision: windows.occurrences.revision,
+      },
       outcomesWindow: { canPrevious: windows.outcomes.previous.length > 0, revision: windows.outcomes.revision },
       readRetry,
       cost: ledger.snapshot(),
@@ -361,10 +367,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
     if (!live() || uploadId !== target.admission.uploadId) return false;
     if (kind === 'occurrences' && selectedCollection?.id !== target.admission.collectionId) return false;
     if (target.admission.phase === 'results') {
-      return (
-        (stage === 'results' || stage === 'conflict') &&
-        status?.state === target.admission.statusState
-      );
+      return (stage === 'results' || stage === 'conflict') && status?.state === target.admission.statusState;
     }
     if (kind === 'occurrences') return stage === 'occurrences' || stage === 'conflict';
     return stage === 'collections' || stage === 'occurrences' || stage === 'conflict';
@@ -404,9 +407,7 @@ export function createArchiveCollectionRecoveryJourney(input: {
       | RecoveryUnknown;
     try {
       const query: RecoveryPageQuery =
-        target.cursor === null
-          ? { limit: RECOVERY_PAGE_ROWS }
-          : { limit: RECOVERY_PAGE_ROWS, cursor: target.cursor };
+        target.cursor === null ? { limit: RECOVERY_PAGE_ROWS } : { limit: RECOVERY_PAGE_ROWS, cursor: target.cursor };
       switch (kind) {
         case 'collections':
           result = await port.collections(uploadId, query);
