@@ -140,7 +140,8 @@ test('a parent proposal cites the exact source path and both bound endpoints wit
     { type: 'value', content: binding!.childUri },
     { type: 'value', content: binding!.parentUri },
   ]);
-  expect(command.rights).toMatchObject({ license: 'ODbL-1.0', attribution: expect.stringContaining('VNDB') });
+  expect(command.rights?.license).toBe('ODbL-1.0');
+  expect(command.rights?.attribution).toContain('VNDB');
 
   const seen: unknown[] = [];
   expect(
