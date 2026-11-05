@@ -29,8 +29,12 @@ const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPr
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-const { hasUnsentPaymentReference, PaymentReferenceDraftNavigation, sameOriginDocumentDestination } =
-  await import('../src/checkout/payment-reference-draft-navigation');
+const {
+  eventElement,
+  hasUnsentPaymentReference,
+  PaymentReferenceDraftNavigation,
+  sameOriginDocumentDestination,
+} = await import('../src/checkout/payment-reference-draft-navigation');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
@@ -55,6 +59,14 @@ test('ordinary same-origin document links keep native click meanings', () => {
   expect(destination('/next', { download: true })).toBeNull();
   expect(destination('https://other.test/next')).toBeNull();
   expect(destination('/next', { ctrlKey: true })).toBeNull();
+
+  const text = window.document.createTextNode('Refresh');
+  expect(eventElement(text)).toBeNull();
+  const label = window.document.createElement('span');
+  label.append(text);
+  expect(eventElement(text)).toBe(label);
+  expect(eventElement(label)).toBe(label);
+  expect(eventElement({ nodeType: 1, closest: label.closest.bind(label) } as unknown as EventTarget)).toBeDefined();
 });
 
 test('unsent references warn on departure, Stay preserves text and focus, and discard does not submit', async () => {
@@ -115,6 +127,13 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
   const input = () => host.querySelector('input') as HTMLInputElement | null;
   const nextLink = () => host.querySelector<HTMLAnchorElement>('a[href="/next"]')!;
   const dialog = () => window.document.querySelector('[role="alertdialog"]');
+  const settle = async (ready: () => boolean) => {
+    for (let count = 0; count < 100 && !ready(); count++)
+      await act(async () => {
+        await Bun.sleep(10);
+      });
+    expect(ready()).toBe(true);
+  };
   const button = (label: string, within: ParentNode = dialog() ?? window.document) =>
     [...within.querySelectorAll('button')].find((item) => item.textContent === label)!;
   const assigned: string[] = [];
@@ -148,6 +167,7 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
     await act(async () => button('Refresh evidence', host).click());
     expect(input()!.value).toBe('  Bank/Exact é  ');
     await act(async () => void router.navigate({ href: '/next' }));
+    await settle(() => !!dialog());
     expect(dialog()?.textContent).toContain(m.payment_reference_draft_navigation_title());
     await act(async () => button(m.payment_reference_draft_navigation_stay()).click());
     expect(router.state.location.pathname).toBe('/statement');
@@ -157,7 +177,7 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
     expect(unload()).toBe(false);
     await edit('  Bank/Exact é  ');
     await act(async () => nextLink().click());
-    expect(dialog()).not.toBeNull();
+    await settle(() => !!dialog());
     await act(async () => button(m.payment_reference_draft_navigation_discard()).click());
     expect(assigned).toEqual(['https://site.test/next']);
     expect(router.state.location.pathname).toBe('/statement');
@@ -168,7 +188,7 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
     await act(async () => void router.navigate({ href: '/statement' }));
     await edit('Retiring reference');
     await act(async () => void router.navigate({ href: '/next' }));
-    expect(dialog()).not.toBeNull();
+    await settle(() => !!dialog());
     await act(async () => retire());
     expect(router.state.location.pathname).toBe('/next');
     expect(dialog()).toBeNull();

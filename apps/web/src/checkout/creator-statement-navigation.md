@@ -12,6 +12,6 @@ List and line paths are independent. A line path belongs to one statement id and
 
 The current reader owns identity, source admission, and displayed bodies. This consumer owns only cursor coordinates, pending movement, and eligible keyboard focus handoff. It retains no prior DTO, amount, evidence, draft, or authorization. The payment-reference navigation controller remains the sole draft departure owner; its narrow departure callback stages movement only after Leave and rechecks the original origin before navigation.
 
-Decision: Discard on a same-origin document link keeps the captured href and assigns it once; it does not start a second router pass, so Refresh and locale-prefixed statement links cannot skip the unsent-reference prompt.
+Decision: Discard on a same-origin document link keeps the captured href and assigns it once; the capturing document click stops later router handling so Refresh and locale-prefixed statement links cannot skip the unsent-reference prompt. Click targets are resolved without Window-bound `instanceof`, including text inside the link.
 
 Native request shapes, authorization, page limits, and failure meanings remain owned by the native statement contract. This navigation document does not redefine them. Source stories and focused tests do not claim installed browser or native acceptance.

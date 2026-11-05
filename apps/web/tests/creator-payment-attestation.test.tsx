@@ -379,6 +379,13 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
   document.body.append(host);
   const root = createRoot(host);
   const dialog = () => document.querySelector('[role="alertdialog"]');
+  const settle = async (ready: () => boolean) => {
+    for (let count = 0; count < 100 && !ready(); count++)
+      await act(async () => {
+        await Bun.sleep(10);
+      });
+    expect(ready()).toBe(true);
+  };
   const button = (label: string) =>
     [...document.querySelectorAll('button')].find((item) => item.textContent === label)!;
   try {
@@ -398,14 +405,16 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
       (anchor) => anchor.textContent?.trim() === m.statements_refresh(),
     )!;
     expect(refresh.href).toBe(`https://site.test${href}`);
-    const clickRefresh = async () =>
+    const clickRefresh = async () => {
       await act(async () => {
-        refresh.click();
-        await Promise.resolve();
+        refresh.dispatchEvent(
+          new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, composed: true }),
+        );
       });
+      await settle(() => !!dialog());
+    };
 
     await clickRefresh();
-    expect(dialog()).not.toBeNull();
     expect(dialog()!.textContent).toContain(m.payment_reference_draft_navigation_title());
     expect(field.getAttribute('aria-invalid')).toBe('false');
     await act(async () => button(m.payment_reference_draft_navigation_stay()).click());
@@ -430,11 +439,14 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
       rerenderSession();
     });
     await act(async () => {
-      refresh.click();
-      refresh.click();
-      await Promise.resolve();
+      const click = () =>
+        refresh.dispatchEvent(
+          new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, composed: true }),
+        );
+      click();
+      click();
     });
-    expect(dialog()).not.toBeNull();
+    await settle(() => !!dialog());
     await act(async () => button(m.payment_reference_draft_navigation_discard()).click());
     expect(assigned).toEqual([refresh.href, refresh.href]);
     const unload = new window.Event('beforeunload', { cancelable: true });

@@ -28,6 +28,20 @@ export function hasUnsentPaymentReference(value: string, hasCapturedAttempt: boo
   return !hasCapturedAttempt && validPaymentReference(value);
 }
 
+/** Click targets may be text, composed nodes, or another Window's Element type. */
+export function eventElement(target: EventTarget | null): Element | null {
+  if (target instanceof Element) return target;
+  if (target instanceof Node) return target.parentElement;
+  if (!target || typeof target !== 'object') return null;
+  const node = target as {
+    nodeType?: number;
+    parentElement?: Element | null;
+    closest?: Element['closest'];
+  };
+  if (node.nodeType === 1 && typeof node.closest === 'function') return target as Element;
+  return node.parentElement ?? null;
+}
+
 export function sameOriginDocumentDestination(
   anchor: HTMLAnchorElement,
   event: MouseEvent,
@@ -85,6 +99,8 @@ export function PaymentReferenceDraftNavigation({
   const discarded = useRef(false);
   const approvedDocumentDeparture = useRef(false);
   const router = useRouter({ warn: false });
+  const routerRef = useRef(router);
+  routerRef.current = router;
   const departure = useContext(DepartureContext);
   const protectedNow = () => live.current.active && live.current.isCurrent();
 
@@ -133,25 +149,24 @@ export function PaymentReferenceDraftNavigation({
       event.returnValue = '';
     };
     const documentLink = (event: MouseEvent) => {
-      const node = event.target;
-      if (!(node instanceof Node)) return;
-      const from = node instanceof Element ? node : node.parentElement;
-      const anchor = from?.closest<HTMLAnchorElement>('a[href]') ?? null;
+      const from = eventElement(event.target);
+      const anchor = from?.closest('a[href]') as HTMLAnchorElement | null;
       if (!anchor || (!protectedNow() && !departure)) return;
       const destination = sameOriginDocumentDestination(anchor, event, window.location.href);
       if (!destination) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
       if (
         !protectedNow() &&
         departure &&
-        router &&
+        routerRef.current &&
         (new URL(destination).pathname !== window.location.pathname ||
           new URL(destination).search !== window.location.search)
       ) {
-        event.preventDefault();
-        void router.navigate({ href: destination });
+        void routerRef.current.navigate({ href: destination });
         return;
       }
-      event.preventDefault();
       void (protectedNow() ? confirmRef.current() : Promise.resolve(true)).then((discard) => {
         if (!discard || (departure && !departure.beforeLeave(destination))) return;
         approvedDocumentDeparture.current = true;
@@ -159,11 +174,9 @@ export function PaymentReferenceDraftNavigation({
       });
     };
     window.addEventListener('beforeunload', beforeUnload);
-    window.addEventListener('click', documentLink, true);
     document.addEventListener('click', documentLink, true);
     return () => {
       window.removeEventListener('beforeunload', beforeUnload);
-      window.removeEventListener('click', documentLink, true);
       document.removeEventListener('click', documentLink, true);
     };
   }, [active, departure]);
@@ -220,6 +233,7 @@ function RouterDraftBoundary({
       const href = `${next.pathname}${query ? `?${query}` : ''}`;
       return departure ? !departure.beforeLeave(href) : false;
     },
+    withResolver: false,
     enableBeforeUnload: false,
   });
   return null;
