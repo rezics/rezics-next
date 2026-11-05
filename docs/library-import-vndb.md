@@ -12,14 +12,14 @@ no second importer or Library vote writer is introduced.
 
 ## Private evidence
 
-| Source field | Review and native treatment |
-| --- | --- |
-| Playing / Finished / Stalled / Dropped / Wishlist labels | Suggest active / completed / paused / dropped / planned roles; explicitly select a released native state ID. |
-| Other labels and per-label attributes | Private evidence; no automatic local label creation. |
-| Vote | Exact raw 1–10, step 0.1 evidence; zero invalid. Explicit native units and consent enter the native guarded writer, without rounding or automatic conversion. Supported commits require the native participants described below. |
-| Started / finished | Preserve year/month/day precision, including unknown trailing `00` components. Adopt only through explicit occurrence date review; no command clock is inferred. |
-| Play-time minutes | Each `length-votes/vn/minutes` row declares minutes. Explicitly select one occurrence/start and the `minutes` measure; only a current released scalar `minute` profile admits it. |
-| Progress extensions, speed, releases, notes, privacy, reviews, metadata, unknown XML | Retain exact evidence and its reason; never infer unit meaning or public review content. Original XML is downloadable only by its owner. |
+| Source field                                                                         | Review and native treatment                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Playing / Finished / Stalled / Dropped / Wishlist labels                             | Suggest active / completed / paused / dropped / planned roles; explicitly select a released native state ID.                                                                                                                     |
+| Other labels and per-label attributes                                                | Private evidence; no automatic local label creation.                                                                                                                                                                             |
+| Vote                                                                                 | Exact raw 1–10, step 0.1 evidence; zero invalid. Explicit native units and consent enter the native guarded writer, without rounding or automatic conversion. Supported commits require the native participants described below. |
+| Started / finished                                                                   | Preserve year/month/day precision, including unknown trailing `00` components. Adopt only through explicit occurrence date review; no command clock is inferred.                                                                 |
+| Play-time minutes                                                                    | Each `length-votes/vn/minutes` row declares minutes. Explicitly select one occurrence/start and the `minutes` measure; only a current released scalar `minute` profile admits it.                                                |
+| Progress extensions, speed, releases, notes, privacy, reviews, metadata, unknown XML | Retain exact evidence and its reason; never infer unit meaning or public review content. Original XML is downloadable only by its owner.                                                                                         |
 
 Missing, empty/unknown, invalid and valid values have distinct `kind` values with original `raw` text retained.
 Notes preserve significant whitespace when proposed for native adoption. Date parsing trims only its interpretation;
