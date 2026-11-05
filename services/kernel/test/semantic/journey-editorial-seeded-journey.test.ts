@@ -66,11 +66,22 @@ function languages(subject: SubjectBody['subject']) {
 }
 
 async function propose(id: string, content: string, source: string, headers = key(), persona: Persona = 'editor') {
-  const response = await write(persona, `/v1/subjects/${id}/candidates`, { statement: cited(language, content, source) }, headers);
+  const response = await write(
+    persona,
+    `/v1/subjects/${id}/candidates`,
+    { statement: cited(language, content, source) },
+    headers,
+  );
   expect(response.status, JSON.stringify(response.body)).toBe(201);
   expect(typeof response.body.candidate).toBe('string');
   expect(typeof response.body.revision).toBe('number');
-  return { id: response.body.candidate as string, revision: response.body.revision as number, headers, content, source };
+  return {
+    id: response.body.candidate as string,
+    revision: response.body.revision as number,
+    headers,
+    content,
+    source,
+  };
 }
 
 async function listCandidates(id: string, persona: Persona, limit = 20, cursor?: string) {
@@ -82,7 +93,11 @@ async function listCandidates(id: string, persona: Persona, limit = 20, cursor?:
   });
   const response = await get(persona, `/v1/subjects/${id}/candidates?${query}`);
   expect(response.status, JSON.stringify(response.body)).toBe(200);
-  return response.body as { candidates: Candidate[]; adoption: { mode: string; head: number } | null; next: string | null };
+  return response.body as {
+    candidates: Candidate[];
+    adoption: { mode: string; head: number } | null;
+    next: string | null;
+  };
 }
 
 beforeAll(async () => {
@@ -164,7 +179,9 @@ test('cited competing proposals complete through acceptance, adoption and indepe
     ).status,
   ).toBe(200);
   const afterDecision = await listCandidates(created.id, 'acceptor');
-  const decided = Object.fromEntries(afterDecision.candidates.filter((row) => !row.deleted).map((row) => [row.id, row]));
+  const decided = Object.fromEntries(
+    afterDecision.candidates.filter((row) => !row.deleted).map((row) => [row.id, row]),
+  );
   expect(decided[japanese.id]?.decision).toBe('accepted');
   expect(decided[korean.id]?.decision).toBe('rejected');
   expect(decided[chinese.id]?.decision).toBeNull();
@@ -254,7 +271,11 @@ test('cited competing proposals complete through acceptance, adoption and indepe
   const abstractRow = (abstractCandidates.body as { candidates: Candidate[] }).candidates.find(
     (row) => row.id === abstractCandidate,
   );
-  const documentLocator = abstractRow?.statement.value.content as { document?: string; digest?: string; language?: string };
+  const documentLocator = abstractRow?.statement.value.content as {
+    document?: string;
+    digest?: string;
+    language?: string;
+  };
   expect(typeof documentLocator?.document).toBe('string');
   expect(typeof documentLocator?.digest).toBe('string');
   expect(documentLocator?.language).toBe('en');
@@ -297,7 +318,9 @@ test('cited competing proposals complete through acceptance, adoption and indepe
 
   const revisions = await get('anonymous', `/v1/subjects/${created.id}/revisions?limit=20`);
   expect(revisions.status).toBe(200);
-  const kinds = (revisions.body as { revisions: { revision: number; kind: string }[] }).revisions.map((row) => row.kind);
+  const kinds = (revisions.body as { revisions: { revision: number; kind: string }[] }).revisions.map(
+    (row) => row.kind,
+  );
   expect(kinds).toEqual(expect.arrayContaining(['record', 'candidate', 'decision', 'adoption']));
   const inspected = await driver.inspect.revisions(created.id);
   expect(inspected.length).toBeGreaterThanOrEqual(kinds.length);
@@ -329,7 +352,13 @@ test('anonymous, outsider, delegated editor and suspended bearers keep editorial
   expect(suspended.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
 
   const outsider = await driver.fixtures.person('outsider');
-  const outsiderWrite = await driver.fixtures.send(outsider, 'POST', `/v1/subjects/${created.id}/candidates`, statement, key());
+  const outsiderWrite = await driver.fixtures.send(
+    outsider,
+    'POST',
+    `/v1/subjects/${created.id}/candidates`,
+    statement,
+    key(),
+  );
   problem(outsiderWrite, 403, 'forbidden');
 
   const delegated = await driver.fixtures.person('delegated-editor');

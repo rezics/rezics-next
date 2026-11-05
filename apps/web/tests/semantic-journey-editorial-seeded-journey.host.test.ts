@@ -4,10 +4,7 @@ import type { Page } from 'playwright';
 import { expect as visible } from 'playwright/test';
 import { GLOBAL_CONTEXT } from '../../../services/kernel/src/semantic/definitions.ts';
 import { m } from '../src/paraglide/messages.js';
-import {
-  authoredGlobalVisitHref,
-  authoredPublicCorrectionHref,
-} from '../src/features/catalogue/authored-public-visit';
+import { authoredGlobalVisitHref, authoredPublicCorrectionHref } from '../src/features/catalogue/authored-public-visit';
 import { subjectHref } from '../src/subject/subject-href.ts';
 import { startAuthStack, type NativeAuthStack } from './native/auth-stack.ts';
 import {
@@ -81,7 +78,9 @@ nativeBeforeAll(lifecycle, 360_000, async () => {
                 type: 'value',
                 content: { document: fromPlainText(currentText), language: 'en', licence: 'CC-BY-4.0' },
               },
-              references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: citation } }] }],
+              references: [
+                { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: citation } }] },
+              ],
               qualifiers: [],
               rank: 'normal',
             },
@@ -238,7 +237,8 @@ nativeTest(
         'list authored candidates',
       );
       const candidate = candidates.candidates.find(
-        (item) => item.statement.value.content.language === 'en' && typeof item.statement.value.content.document === 'string',
+        (item) =>
+          item.statement.value.content.language === 'en' && typeof item.statement.value.content.document === 'string',
       );
       if (!candidate?.statement.value.content.document || !candidate.statement.value.content.digest)
         throw new Error('Native candidate did not return its authored document locator and digest');
@@ -311,12 +311,15 @@ nativeTest(
       expect(authoredGlobalVisitHref(`${publicHref}/authored`, subjectId, 'en', publicHref)).not.toContain('via=');
 
       await page.setViewportSize({ width: 1280, height: 900 });
-      await page.goto(`${stack.web}${authoredPublicCorrectionHref(`${publicHref}/authored`, {
-        subject: subjectId,
-        context: GLOBAL_CONTEXT,
-        locale: 'en',
-        returnHref: publicHref,
-      })}`, { waitUntil: 'domcontentloaded' });
+      await page.goto(
+        `${stack.web}${authoredPublicCorrectionHref(`${publicHref}/authored`, {
+          subject: subjectId,
+          context: GLOBAL_CONTEXT,
+          locale: 'en',
+          returnHref: publicHref,
+        })}`,
+        { waitUntil: 'domcontentloaded' },
+      );
       await hydrate(page);
       await visible(page.getByRole('link', { name: m.authored_public_return() })).toBeVisible();
       await visible(page.locator('form')).toBeVisible();
