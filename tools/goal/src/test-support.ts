@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -194,6 +194,30 @@ function harnessGitTemplate(): string {
     );
     mkdirSync(join(root, 'scripts'), { recursive: true });
     writeFileSync(join(root, 'scripts/typecheck.ts'), 'process.exit(0);\n');
+    writeFileSync(
+      join(root, 'scripts/architecture.ts'),
+      readFileSync(resolve(import.meta.dir, '../../../scripts/architecture.ts'), 'utf8'),
+    );
+    mkdirSync(join(root, 'docs/architecture'), { recursive: true });
+    writeFileSync(
+      join(root, 'docs/architecture/modules.json'),
+      JSON.stringify({
+        version: 1,
+        sourceRoots: [{ path: 'packages/fixture', extensions: ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts'] }],
+        modules: [
+          {
+            id: 'fixture',
+            kind: 'adapter',
+            owner: 'platform',
+            paths: ['packages/fixture/**'],
+            publicEntries: [],
+            allowedDependencies: [],
+            capabilities: [],
+          },
+        ],
+      }),
+    );
+    writeFileSync(join(root, 'docs/architecture/boundary-baseline.json'), JSON.stringify({ version: 1, modules: {} }));
     mkdirSync(join(root, 'packages/definitions'), { recursive: true });
     writeFileSync(
       join(root, 'packages/definitions/package.json'),

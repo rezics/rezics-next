@@ -275,12 +275,12 @@ export type GateOutcome = AttemptRef & {
 
 /**
  * A dev landing repair returns to the source owner as a nonterminal same-session repair: a compiler diagnostic
- * (`dev-landing-transpile`), a failed schema-dump regeneration (`dev-landing-schema`), or a Kernel entry-import /
- * SQL-analysis failure (`dev-landing-kernel-import`).
+ * (`dev-landing-transpile`), an architecture-boundary diagnostic (`dev-landing-architecture`), a failed schema-dump
+ * regeneration (`dev-landing-schema`), or a Kernel entry-import / SQL-analysis failure (`dev-landing-kernel-import`).
  */
 export type DevLandingTranspileHandoff = AttemptRef & {
   kind: 'dev-landing-transpile';
-  guard: 'dev-landing-transpile' | 'dev-landing-schema' | 'dev-landing-kernel-import';
+  guard: 'dev-landing-transpile' | 'dev-landing-architecture' | 'dev-landing-schema' | 'dev-landing-kernel-import';
   entryId: number;
   request: LandingRequest;
   sourceCommit: string;

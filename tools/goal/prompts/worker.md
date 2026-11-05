@@ -17,3 +17,9 @@ Commit each coherent working step. Failures on base are not yours; name them. Fi
 Leave containers, databases and processes this attempt did not start running, and do not prune Docker. Do not write under node_modules (shared hardlinks). Before changing package.json or bun.lock, run `bun tools/goal/src/cli.ts deps private`.
 
 Finish with a JSON object: status, summary, blocker (null or kind/detail), checks, approaches. Summary at most 120 words: what you built, decisions, outside paths, checks not run; Blocker detail at most 80 words.
+
+## Architecture module map
+
+The generated rows give each module's kind, public entries, and allowed dependencies. Use only a declared public entry for a cross-module import; depend only on a module listed in that module's final field. The map follows.
+
+{{task.moduleMap}}

@@ -10,12 +10,14 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { defaultPolicy } from './policy.ts';
+import { formatModuleMap, loadManifest } from '../../../scripts/architecture.ts';
 import {
   applyRenderedPrompt,
   DEFAULT_PROMPT_DIRECTORY,
   fillTemplate,
+  gitBlobSha,
   renderManagerOpening,
   renderWorkerPrompt,
   type RenderedPrompt,
@@ -174,10 +176,24 @@ test('every template renders within its byte budget for the six golden tasks, an
     expect(rendered.conditionBytes).toBeLessThanOrEqual(defaultPolicy.prompt.conditionBytes);
     expect(rendered.manifest.layers.total).toBeLessThanOrEqual(defaultPolicy.prompt.workerTotalBytes);
     expect(rendered.manifest.overBudget).toEqual([]);
-    if (name === 'dev-implementation.txt')
-      expect(rendered.roleBytes + rendered.conditionPromptBytes).toBeLessThanOrEqual(5000);
+    expect(rendered.prompt).toContain('row module|kind|public entries|allowed dependencies');
+    expect(rendered.manifest.architectureModules).toMatch(/^[0-9a-f]{40}$/);
     if (update) writeFileSync(path, rendered.prompt);
     expect(rendered.prompt).toBe(readFileSync(path, 'utf8'));
+  }
+});
+
+test('implementation, research and verification worker roles receive the current generated architecture map', () => {
+  const repositoryRoot = resolve(import.meta.dir, '../../..');
+  const moduleMap = formatModuleMap(loadManifest(repositoryRoot));
+  const kinds = ['implementation', 'research', 'verification'] as const;
+  for (const kind of kinds) {
+    const rendered = renderWorkerPrompt({ task: worker(contract({ kind })), mainCheckout: MAIN });
+    const roleBudget =
+      kind === 'research' ? defaultPolicy.prompt.researchRoleBytes : defaultPolicy.prompt.workerRoleBytes;
+    expect(rendered.prompt).toContain(moduleMap);
+    expect(rendered.manifest.architectureModules).toBe(gitBlobSha(moduleMap));
+    expect(rendered.roleBytes).toBeLessThanOrEqual(roleBudget);
   }
 });
 
