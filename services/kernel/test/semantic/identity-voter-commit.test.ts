@@ -329,10 +329,7 @@ test('persisted control replacement invalidates the exact review without changin
 }, 180_000);
 
 /** Limit only this attempt's actual native writer, without changing its SQL or executor. */
-async function contendedWriter(
-  f: { pool: Pool },
-  write: () => Promise<unknown>,
-) {
+async function contendedWriter(f: { pool: Pool }, write: () => Promise<unknown>) {
   const originals = new Map<PoolClient, PoolClient['query']>();
   const acquire = (client: PoolClient) => {
     if (originals.has(client)) return;
@@ -477,7 +474,9 @@ test('the authorized vote transaction excludes native control writes through com
     const caller = await f.identity(['rating:vote', 'subject:read'], sourceHome);
     const votes = createVoteCommands({ pool: f.pool, access: f.access });
     const input = async (units: number) => ({
-      questionId: STANDARD_QUESTION_ID, targetId: requested, units,
+      questionId: STANDARD_QUESTION_ID,
+      targetId: requested,
+      units,
       guard: (await votes.readVoteReview(caller.actor, STANDARD_QUESTION_ID, requested)).guard,
     });
     let committed!: Awaited<ReturnType<typeof votes.putVoteOutcome>>;
@@ -521,7 +520,8 @@ test('the authorized vote transaction excludes native control writes through com
         }
       }
       expect(await votes.readOwnVote(caller.actor, STANDARD_QUESTION_ID, requested)).toMatchObject({
-        units: 16, revision: 1,
+        units: 16,
+        revision: 1,
       });
     }
     expect(committed.vote).toMatchObject({ units: 16, revision: 1 });
@@ -533,7 +533,8 @@ test('the authorized vote transaction excludes native control writes through com
     });
     expect(await votes.putVoteOutcome(caller.actor, first, key)).toEqual(committed);
     expect(await votes.readOwnVote(caller.actor, STANDARD_QUESTION_ID, requested)).toMatchObject({
-      units: 16, revision: 1,
+      units: 16,
+      revision: 1,
     });
   } finally {
     await f.close();
