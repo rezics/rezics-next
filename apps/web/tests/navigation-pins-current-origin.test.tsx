@@ -166,8 +166,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
   const { createRootRoute, createRouter, createMemoryHistory, RouterContextProvider } =
     await import('@tanstack/react-router');
   const { sessionQuery } = await import('../src/session/query');
-  const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
-  const { browserObservation } = await import('../src/session/observation');
+  const { viewerExposureQuery, viewerExposureLifetime } = await import('../src/kernel/viewer-exposure');
   const { workspaceAdmission } = await import('../src/reader/workspace-admission');
   const { useCurrentLibraryNavigation } = await import('../src/library/pins-current');
   const { usePinControlActions: useActions, PinControlNotice } = await import('../src/library/pin-control');
@@ -197,7 +196,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const session = (subject: string, csrfToken = 'csrf') => ({ state: 'signed-in' as const, subject, csrfToken });
-  const viewer = browserObservation(client);
+  const viewer = viewerExposureLifetime(client);
   const stopViewer = viewer.subscribeCache(() => {});
   const admit = (admitted: string[]) => {
     const snapshot = viewer.getSnapshot();
