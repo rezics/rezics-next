@@ -154,12 +154,9 @@ test('own-account Library writes keep the SQL live clock as deadline evidence', 
   ).toBe('allow');
   const mixed = compileNativePolicyCatalogue(
     new Map([
-      [
-        'rating:vote',
-        { anonymous: false, authority: 'own-account', 'x-resource-types': ['ex:Child'] },
-      ],
+      ['rating:vote', { anonymous: false, authority: 'own-account', 'x-resource-types': ['semantic.work'] }],
     ]),
-    { roles: new Map(), types: new Map([['ex:Child', { standing: [] }]]) },
+    { roles: new Map(), types: new Map([['semantic.work', { standing: [] }]]) },
   );
   expect(uniqueNativePolicyResourceType(mixed, 'rating:vote')).toBe('access.account');
 });
