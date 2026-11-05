@@ -509,7 +509,10 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     const previous = await navigateByKeyboard(m.library_my_logs_previous());
     expect(previous.cursor).toBeNull();
     retired();
-    await settle(previous, history('B', null, 'B accepted predecessor'));
+    const previousRetry = await retry();
+    expect(previousRetry.cursor).toBeNull();
+    await settle(previous, new Error('Superseded Previous read'));
+    await settle(previousRetry, history('B', null, 'B accepted predecessor'));
     expect(host.textContent).toContain('B accepted predecessor');
     expect(window.document.activeElement).toBe(host.querySelector('h1'));
     expect(link(m.library_my_logs_previous())).toBeUndefined();
