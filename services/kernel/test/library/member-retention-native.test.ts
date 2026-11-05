@@ -1,3 +1,8 @@
+import { BOUND_AXES, withinCeiling } from '@rezics/bounds';
+import {
+  observeMemberRetentionExecution,
+  type MemberRetentionExecution,
+} from '../../src/library/member-retention-bounds.ts';
 import { pageDueMemberDeletions } from '../../src/library/member-retention.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -76,48 +81,70 @@ async function code(response: Response, expected: string) {
   expect((await response.json()).code).toBe(expected);
 }
 test('parent CAS precedes fresh removal; exact episode Undo tolerates unrelated sibling writes and replay never moves source generation', async () => {
-  const m = await make();
-  const parent = await m.parent();
-  const receiptKey = entryKey();
-  const removed = await m.remove(owner.bearer, receiptKey);
-  const sibling = await m.add('independent sibling');
-  const before = await m.snapshot();
-  await code(
-    await f.send(owner.bearer, 'POST', m.path + ':restore', { ...removed, revision: removed.revision + 1 }),
-    'member_restore_stale',
-  );
-  expect(await m.snapshot()).toEqual(before);
-  const key = entryKey();
-  const restored = await f.send(owner.bearer, 'POST', m.path + ':restore', removed, key);
-  expect(restored.status).toBe(200);
-  expect((await restored.json()).member).toEqual(m.first);
-  const observed = await f.pool.query(
-    'SELECT source_generation,revision,member_count FROM library.collection WHERE route=$1 AND collection_id=$2',
-    [routeOf(m.collection.id), m.collection.id],
-  );
-  const replay = await f.send(owner.bearer, 'POST', m.path + ':restore', removed, key);
-  expect(replay.status).toBe(200);
-  expect((await replay.json()).member).toEqual(m.first);
-  const deletedReplay = await f.send(
-    owner.bearer,
-    'DELETE',
-    `${m.path}?revision=${parent.revision}`,
-    undefined,
-    receiptKey,
-  );
-  expect(deletedReplay.status).toBe(204);
-  expect(deletedReplay.headers.get('Library-Collection-Member-Deletion-Id')).toBe(removed.deletionId);
-  expect(
-    (
-      await f.pool.query(
+  const executions: MemberRetentionExecution[] = [];
+  await observeMemberRetentionExecution(
+    (execution) => executions.push(execution),
+    async () => {
+      const m = await make();
+      const parent = await m.parent();
+      const receiptKey = entryKey();
+      const removed = await m.remove(owner.bearer, receiptKey);
+      const sibling = await m.add('independent sibling');
+      const before = await m.snapshot();
+      await code(
+        await f.send(owner.bearer, 'POST', m.path + ':restore', { ...removed, revision: removed.revision + 1 }),
+        'member_restore_stale',
+      );
+      expect(await m.snapshot()).toEqual(before);
+      const key = entryKey();
+      const restored = await f.send(owner.bearer, 'POST', m.path + ':restore', removed, key);
+      expect(restored.status).toBe(200);
+      expect((await restored.json()).member).toEqual(m.first);
+      const observed = await f.pool.query(
         'SELECT source_generation,revision,member_count FROM library.collection WHERE route=$1 AND collection_id=$2',
         [routeOf(m.collection.id), m.collection.id],
-      )
-    ).rows,
-  ).toEqual(observed.rows);
-  const page = await f.send(owner.bearer, 'GET', m.root + '/members');
-  expect((await page.json()).members.map((member: { id: string }) => member.id)).toEqual([m.first.id, sibling.id]);
-  await code(await f.send(owner.bearer, 'DELETE', `${m.path}?revision=${parent.revision}`), 'conflict');
+      );
+      const replay = await f.send(owner.bearer, 'POST', m.path + ':restore', removed, key);
+      expect(replay.status).toBe(200);
+      expect((await replay.json()).member).toEqual(m.first);
+      const deletedReplay = await f.send(
+        owner.bearer,
+        'DELETE',
+        `${m.path}?revision=${parent.revision}`,
+        undefined,
+        receiptKey,
+      );
+      expect(deletedReplay.status).toBe(204);
+      expect(deletedReplay.headers.get('Library-Collection-Member-Deletion-Id')).toBe(removed.deletionId);
+      expect(
+        (
+          await f.pool.query(
+            'SELECT source_generation,revision,member_count FROM library.collection WHERE route=$1 AND collection_id=$2',
+            [routeOf(m.collection.id), m.collection.id],
+          )
+        ).rows,
+      ).toEqual(observed.rows);
+      const page = await f.send(owner.bearer, 'GET', m.root + '/members');
+      expect((await page.json()).members.map((member: { id: string }) => member.id)).toEqual([m.first.id, sibling.id]);
+      await code(await f.send(owner.bearer, 'DELETE', `${m.path}?revision=${parent.revision}`), 'conflict');
+      const undo = executions.filter((execution) => execution.operation === 'restore-attempt');
+      expect(
+        undo.some(
+          (execution) =>
+            execution.identity?.deletionId === removed.deletionId &&
+            execution.identity.revision === removed.revision &&
+            execution.identity.requestKey === key,
+        ),
+      ).toBe(true);
+      expect(executions.some((execution) => execution.operation === 'mounted-remove')).toBe(true);
+      expect(executions.some((execution) => execution.operation === 'mounted-undo')).toBe(true);
+      for (const execution of executions) {
+        expect(Object.keys(execution.total).sort()).toEqual([...BOUND_AXES].sort());
+        expect(Object.isFrozen(execution.total)).toBe(true);
+        expect(withinCeiling(execution.native, execution.total)).toBe(true);
+      }
+    },
+  );
 });
 test('native delegated editor can Undo a private occurrence; revoked authority cannot replay a retained receipt', async () => {
   const m = await make();
@@ -198,7 +225,7 @@ test('deleted parent stays deleted when an otherwise valid member episode is res
   expect(await m.snapshot()).toEqual(before);
 });
 
-test('restore respects the live 5000 member cap while preserving the retained episode', async () => {
+test('Undo preserves the original occurrence beyond the former 5000 member admission cap', async () => {
   const m = await make();
   for (let n = 1; n < 5000; n++) {
     if (n % 16 === 0) {
@@ -219,11 +246,11 @@ test('restore respects the live 5000 member cap while preserving the retained ep
     { subjectId: m.subjectId, note: 'replacement at cap' },
     entryKey(),
   );
-  const before = await m.snapshot();
   const response = await f.send(owner.bearer, 'POST', m.path + ':restore', removed);
-  expect(response.status).toBe(409);
-  expect((await response.json()).code).toBe('collection_full');
-  expect(await m.snapshot()).toEqual(before);
+  expect(response.status).toBe(200);
+  expect((await response.json()).member).toEqual(m.first);
+  expect((await m.parent()).memberCount).toBe(5001);
+  expect((await m.snapshot())[0].row.deletion_id).toBeNull();
 }, 300000);
 
 test('fresh Undo rechecks current native subject concealment without exposing the retained note', async () => {
@@ -329,10 +356,10 @@ test('native member purge is exact episode bounded and never decrements public l
   expect((await m.parent()).memberCount).toBe(1);
   const dueInput = { partition: routeOf(m.collection.id)! >>> 4, cutoff: secondDeadline, limit: 100 };
   const due = await pageDueMemberDeletions(f.pool, dueInput);
-  const originalKey = due.find(key => key.memberId === m.first.id)!;
+  const originalKey = due.find((key) => key.memberId === m.first.id)!;
   expect(originalKey.deletionId).toBe(d3.deletionId);
   const continued = await pageDueMemberDeletions(f.pool, { ...dueInput, after: originalKey });
-  expect(continued.some(key => key.memberId === originalKey.memberId)).toBe(false);
+  expect(continued.some((key) => key.memberId === originalKey.memberId)).toBe(false);
   expect(await pageDueMemberDeletions(f.pool, { ...dueInput, after: originalKey })).toEqual(continued);
   writeFileSync(clockPath, String(Date.parse(secondDeadline)));
   await (await trigger()).getResult({ pollingIntervalMs: 20 });
@@ -386,7 +413,10 @@ test('native member purge is exact episode bounded and never decrements public l
   expect(retained.rows[0].ordinal_key).toBe(`~${publicCollection.first.id}`);
   await (await trigger()).getResult({ pollingIntervalMs: 20 });
   expect((await publicCollection.snapshot())[0].row).toMatchObject({
-    deletion_id: publicDeletion.deletionId, note: null, added_at: null, purge_after: null,
+    deletion_id: publicDeletion.deletionId,
+    note: null,
+    added_at: null,
+    purge_after: null,
   });
   expect((await publicCollection.parent()).memberCount).toBe(1);
   expect((await publicCollection.snapshot()).find((row) => row.row.member_id === publicSibling.id)?.row.note).toBe(

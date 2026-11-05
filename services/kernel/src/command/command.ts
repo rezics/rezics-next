@@ -41,6 +41,16 @@ export type CommandTransaction = Pick<PoolClient, 'query'>;
 // A maintenance owner may surrender automatic retries. This is scheduling policy,
 // never authorization or another work allowance. Later scheduling starts a new unit.
 const singleAttempt = new AsyncLocalStorage<boolean>();
+// Accounting follows the actual executor attempt, including retries before preparation.
+// It does not choose attempts, acquire clients, authorize, or alter the command options.
+const attemptWork = new AsyncLocalStorage<Readonly<{ input: object; consume: () => Promise<void> }>>();
+export function withCommandAttemptWork<T>(
+  input: object,
+  consume: () => Promise<void>,
+  body: () => Promise<T>,
+): Promise<T> {
+  return attemptWork.run(Object.freeze({ input, consume }), body);
+}
 export function withSingleCommandAttempt<T>(body: () => Promise<T>): Promise<T> {
   return singleAttempt.run(true, body);
 }
@@ -628,6 +638,8 @@ async function executeCommand<T>(
   let lastAccessContention: AccessUnavailableError | undefined;
   let singleAttemptCount = 0;
   while (Date.now() < deadline) {
+    const work = attemptWork.getStore();
+    if (work?.input === input) await work.consume();
     if (singleAttempt.getStore() && singleAttemptCount++ > 0)
       throw new CommandUnavailableError('contention', partition);
     let time: AuthoritativeTime | undefined;

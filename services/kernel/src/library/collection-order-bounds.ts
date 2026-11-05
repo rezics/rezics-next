@@ -1011,6 +1011,22 @@ const beginActorCeiling = maxBound(beginSuccess, beginReuseCommand, beginEmptyCo
 const failedAddAndBegin = sumBounds(addFailed, beginActorCeiling);
 const failedMoveAndBegin = sumBounds(moveFailed, beginActorCeiling);
 
+/** Shared native Collection producers. Reusers keep ordinal's edit/repair declarations and handles intact. */
+export const COLLECTION_NATIVE_COST = Object.freeze({
+  accessPreparation,
+  authorizationCollection,
+  accountShare: accountShareCost,
+  collectionRow,
+  memberGuards: memberGuardTriggers,
+  structureAppend,
+  structurePending,
+  shelfWrite,
+  barrier: barrierCeiling,
+  partitionProbe,
+  actorRecovery,
+  actorTimeMint,
+});
+
 export const COLLECTION_ORDER_DECLARATION = Object.freeze({
   status: 'finite-owner-declarations' as const,
   axes: BOUND_AXES,

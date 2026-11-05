@@ -1,4 +1,16 @@
-import { consumeMemberRetention, memberRetentionControl, memberRetentionPartitionPlan, memberRetentionContinuationPlan, MEMBER_RETENTION_LIMITS, serializeMemberRetention } from './member-retention-bounds.ts';
+import {
+  memberRetentionDiscovery,
+  memberRetentionControl,
+  memberRetentionPartitionPlan,
+  withMemberRetentionPage,
+  runMemberRetentionPage,
+  runMemberRetentionSegment,
+  runMemberRetentionContinuation,
+  runMemberRetentionCutoff,
+  retainedMemberPageDeadline,
+  MEMBER_RETENTION_LIMITS,
+  serializeMemberRetention,
+} from './member-retention-bounds.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -23,58 +35,66 @@ type Page = { cursor: Cursor; examined: number; purged: number; pending: number;
 export async function registerLibraryMemberRetentionWork({ pool, client, clock }: WorkContext): Promise<void> {
   const captureCutoff = DBOS.registerStep(async () => clock().toISOString(), { name: 'library.memberRetentionCutoff' });
   const page = DBOS.registerStep(
-    async (cutoff: string, start: Cursor): Promise<Page> => {
-      const deadline = workStepDeadline();
-      const result: Page = { cursor: { ...start }, examined: 0, purged: 0, pending: 0, probes: 0 };
-      let loaded: number | undefined;
-      let seeks = 0;
-      while (result.cursor.partition < PARTITIONS && seeks < MEMBER_RETENTION_LIMITS.seeks && Date.now() < deadline - 100) {
-        const partition = result.cursor.partition;
-        const found = await withConnection(pool, async (connection) => {
-          await memberRetentionControl(connection, 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-          try {
-            if (loaded !== partition) {
-              const metadata = await consumeMemberRetention('partition', memberRetentionPartitionPlan(partition).total,
-                () => readPartition(connection, partition));
-              result.probes++;
-              if (!metadata || metadata.writeState !== 'active') {
-                await memberRetentionControl(connection, 'COMMIT');
-                return { pending: true as const };
+    async (cutoff: string, start: Cursor): Promise<Page> =>
+      withMemberRetentionPage(cutoff, start, async () => {
+        const deadline = retainedMemberPageDeadline();
+        const result: Page = { cursor: { ...start }, examined: 0, purged: 0, pending: 0, probes: 0 };
+        let loaded: number | undefined;
+        let seeks = 0;
+        while (
+          result.cursor.partition < PARTITIONS &&
+          seeks < MEMBER_RETENTION_LIMITS.seeks &&
+          Date.now() < deadline - 100
+        ) {
+          const partition = result.cursor.partition;
+          const found = await withConnection(pool, async (connection) => {
+            await memberRetentionControl(connection, 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+            try {
+              if (loaded !== partition) {
+                const metadata = await memberRetentionDiscovery(
+                  'partition',
+                  memberRetentionPartitionPlan(partition).total,
+                  () => readPartition(connection, partition),
+                );
+                result.probes++;
+                if (!metadata || metadata.writeState !== 'active') {
+                  await memberRetentionControl(connection, 'COMMIT');
+                  return { pending: true as const };
+                }
+                loaded = partition;
               }
-              loaded = partition;
+              seeks++;
+              const keys = await pageDueMemberDeletions(connection, {
+                partition,
+                cutoff,
+                ...(result.cursor.after ? { after: result.cursor.after } : {}),
+                limit: 1,
+              });
+              await memberRetentionControl(connection, 'COMMIT');
+              return { key: keys[0] };
+            } catch (error) {
+              await memberRetentionControl(connection, 'ROLLBACK');
+              throw error;
             }
-            seeks++;
-            const keys = await pageDueMemberDeletions(connection, {
-              partition,
-              cutoff,
-              ...(result.cursor.after ? { after: result.cursor.after } : {}),
-              limit: 1,
-            });
-            await memberRetentionControl(connection, 'COMMIT');
-            return { key: keys[0] };
-          } catch (error) {
-            await memberRetentionControl(connection, 'ROLLBACK');
-            throw error;
+          });
+          if (found.pending || !found.key) {
+            if (found.pending) result.pending++;
+            result.cursor = { partition: partition + 1 };
+            loaded = undefined;
+            continue;
           }
-        });
-        if (found.pending || !found.key) {
-          if (found.pending) result.pending++;
-          result.cursor = { partition: partition + 1 };
-          loaded = undefined;
-          continue;
+          result.examined++;
+          try {
+            const outcome = await purgeExpiredMemberDeletion({ pool, clock, deadline }, found.key);
+            if (outcome.value.purged) result.purged++;
+          } catch (error) {
+            if (!(error instanceof MemberPurgeNotDueError)) throw error;
+            result.pending++;
+          }
+          result.cursor = { partition, after: found.key };
         }
-        result.examined++;
-        try {
-          const outcome = await purgeExpiredMemberDeletion({ pool, clock, deadline }, found.key);
-          if (outcome.value.purged) result.purged++;
-        } catch (error) {
-          if (!(error instanceof MemberPurgeNotDueError)) throw error;
-          result.pending++;
-        }
-        result.cursor = { partition, after: found.key };
-      }
-      return serializeMemberRetention('page-output', result);
-    },
+        return serializeMemberRetention('page-output', result);
+      }),
     { name: 'library.memberRetentionPage', ...COMMAND_STEP_RETRIES },
   );
   const continuation = DBOS.registerStep(
@@ -85,20 +105,23 @@ export async function registerLibraryMemberRetentionWork({ pool, client, clock }
         workflowID: `library.memberRetention:${next.root}:${next.sequence}`,
         workflowIDReusePolicy: 'return-existing' as const,
       };
-      await consumeMemberRetention('continuation', memberRetentionContinuationPlan(next, options),
-        () => client.enqueue(options, next));
+      await runMemberRetentionContinuation(next, options, () => client.enqueue(options, next));
     },
     { name: 'library.memberRetentionContinue', ...COMMAND_STEP_RETRIES },
   );
-  const segment = async (input: Segment) => {
-    let cursor = input.cursor;
-    for (let n = 0; n < MEMBER_RETENTION_LIMITS.pages && cursor.partition < PARTITIONS; n++) cursor = (await page(input.cutoff, cursor)).cursor;
-    if (cursor.partition < PARTITIONS) await continuation({ ...input, sequence: input.sequence + 1, cursor });
-  };
+  const segment = async (input: Segment) =>
+    runMemberRetentionSegment(input, async () => {
+      let cursor = input.cursor;
+      for (let n = 0; n < MEMBER_RETENTION_LIMITS.pages && cursor.partition < PARTITIONS; n++)
+        cursor = (
+          await runMemberRetentionPage(input.cutoff, cursor, () => page(input.cutoff, cursor), workStepDeadline())
+        ).cursor;
+      if (cursor.partition < PARTITIONS) await continuation({ ...input, sequence: input.sequence + 1, cursor });
+    });
   DBOS.registerWorkflow(segment, { name: SEGMENT_WORKFLOW });
   DBOS.registerWorkflow(
     async () => {
-      const cutoff = await captureCutoff();
+      const cutoff = await runMemberRetentionCutoff(() => captureCutoff());
       await segment({ root: DBOS.workflowID!, sequence: 0, cutoff, cursor: { partition: 0 } });
     },
     { name: MEMBER_RETENTION_SWEEP_WORKFLOW },

@@ -37,26 +37,62 @@ retry composition. `collection-order-bounds.ts` owns complete add/move/begin act
 
 ## Retained member execution
 
-Decision: preserve exact-episode removal and Undo and normalize the existing due SQL into mutually exclusive
-first/next indexed seeks; partition probes are independent of the 100 due-seek ceiling. No new selection or
-internal refusal protocol is introduced.
+Authority: this section, [finite bounds](../../performance-contract.md#finite-bounds),
+[member retention](README.md#member-retention), [delivery efficiency](../../../../docs/development/efficiency.md)
+and [agent conduct](../../../../docs/development/agent-conduct.md#act-instead-of-asking-or-refusing).
 
-`member-retention-bounds.ts` binds original SQL operands at the retained-deletion producer shared by single and
-selected removal. Its JSON selection is encoded once. Retained episode reads, restoration CAS, due discovery,
-parent-owner lookup, exact maintenance authorization and physical purge use their original clients and timestamps.
-A negative probe reserves examined work independently of returned rows. The first/next due branches use the existing
-partition-leading index and preserve the `(purgeAfter,route,collectionId,memberId)` frontier and returned deletion ID.
+Decision: reuse the delivered exact-episode lifecycle, split first/next indexed due seeks, and count partition
+observations independently of due seeks. The current member-count authority is PostgreSQL's integer bound;
+the obsolete 5,000-member refusal assertion is replaced by successful exact Undo beyond 5,000.
 
-A page performs at most 100 due seeks and at most 4096 partition observations. Missing or pending partitions advance
-without spending a due seek; each observation retains the read-only repeatable-read transaction and rollback path.
-A segment executes at most 100 pages before enqueuing the original root/sequence/cutoff/frontier with return-existing
-identity. Fixed DBOS retries do not renew cutoff or command deadline. The population requires change-proportional
-segments; the native harness's 4096-byte checkpoint assertion is distinct from Source admission budgets.
+`member-retention-bounds.ts` binds closed immutable nine-axis declarations to the actual remove, Undo, maintenance,
+mounted response, discovery and SDK calls. Core's accounting-only attempt hook consumes the shared native scaffold
+before each actual attempt without choosing retries, renewing its deadline or changing receipt lookup order.
+Identity retains the original request key, Collection, occurrence, revision and deletion episode. Core's producer
+uses the installed receipt-key candidates and original options; its response/event projections price the actual
+member and maintenance shapes. No new selection or internal admission protocol is introduced.
 
-The SQL leaf declarations are disjoint from their enclosing command, Access, history-trigger and SDK work. They
-must not be presented as completed native evidence for those enclosing operations. Existing native lifecycle and
-committed-before-checkpoint recovery assertions remain authoritative; integration runs the mounted, native, growth
-and Search receiving suites.
+The command composition reuses Collection's native authorization, account sharing, order barrier and structure
+history producers, Source's native subject resolution and Shelf's owner costs. Access and Shelf consume their
+terms through their existing owners; disjoint Core/Library terms consume through the installed native translation.
+Covered retained SQL is not charged again. The compatibility removal's pre-command parent read is separate.
+Undo preparation includes negative episode reads and native subject disclosure; the body rereads the original
+episode and performs the original placement and expiry CAS. Authorization still precedes receipt replay.
+
+The retained-deletion producer shared by single and selected removal retains its 1–100 distinct-occurrence capacity
+and encodes its actual JSON bind once. SQL, binds, projections, examined rows, locks, index changes and trigger work
+are composed with the enclosing command. Structure history retains 16 operations per occurrence, at most two
+transfer sides per operation: cleanup prices 32 retained rows and their distinct gap heads. Changes also price
+pending state, indexed neighbour observations and bounded history pruning. Both native and export source-fence
+triggers retain their OLD/NEW upserts. Listed removal includes Semantic's privacy log/head/partition and nested
+unresolved coverage producer. Public expiry minimizes the existing structural tombstone; private or deleted-parent
+expiry removes the exact retained row. Neither path decrements visible membership again.
+
+Due SQL uses mutually exclusive first/next indexed ranges over the existing partition-leading due index. The
+frontier remains `(purgeAfter,route,collectionId,memberId)`, with `deletionId` in each returned key. An EOF/negative
+probe and examined work are separate from the returned row ceiling; old unrelated histories are not candidates.
+
+A page has at most 100 due seeks and 4096 partition probes, with at most their sum of read-only repeatable-read
+transactions. Missing/pending homes advance without a due seek. Discovery, controls, rollback and bounded output
+are declared before discovery. Each reached exact purge retains its own command-attempt composition, including
+absent/stale/no-effect and positive receipt paths. Core's existing deadline-driven retries remain per-attempt work;
+there is no claim that 100 seeks implies 100 total queries or a new Core retry cap. The original page invocation
+captures one deadline outside the registered step and retains it across the fixed eight DBOS attempts.
+
+`work/durable-step-bounds.ts` owns native SDK result lookup, cancellation/owner points, checkpoint PK/conflict and
+writer/FK triggers, transaction controls and input/output encoding. The page wrapper is outside the registered
+body, so replay still prices its lookup. A segment prices workflow result work and performs at most 100 pages,
+then enqueues the original root/sequence/cutoff/frontier using return-existing identity. The reached enqueue adds
+one engine request separately from its native SQL; native-only terms translate with zero engine requests.
+Page/segment discovery and SDK declarations compose independently; reached purge attempts add their command
+terms. A whole population requires change-proportional pages and segments, with no retained key vector.
+The native harness's measured 4096-byte checkpoint assertion is distinct from Source budgets.
+
+The existing mounted/native recovery suites retain exact D1 versus D3, authorization, strict expiry, collision,
+concealment, public minimization/private removal and committed-before-checkpoint recovery. Shared native growth
+now measures same-parent and other-parent histories independently, mounted remove/Undo responses, then increasing
+due populations at 64/512/4096 through actual SDK/page/segment SQL and repeated post-drain empty seeks. The five
+Search receiving suites and affected Kernel/root receiving remain integration acceptance.
 
 ## Whole-query publication
 

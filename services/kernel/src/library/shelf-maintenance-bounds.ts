@@ -504,6 +504,7 @@ export function shelfMaintenanceEnqueuePlan(input: unknown): ShelfMaintenanceOpe
 export function shelfMaintenanceCommandPlan(
   pool: Pool,
   options: LegacyCommandOptions | PrincipalCommandOptions,
+  projection?: Readonly<{ response: unknown; events: readonly unknown[] }>,
 ): ShelfMaintenanceOperation {
   const receipt = options.receipt;
   const principal =
@@ -515,7 +516,7 @@ export function shelfMaintenanceCommandPlan(
   const ring = receipt && principal ? receiptKeysFor(pool) : null;
   const candidates = receipt && principal ? receiptKeyCandidates(ring!, receipt.kind, principal, receipt.key) : [];
   const storageKey = candidates.find((key) => key.startsWith(`rk1.${ring?.current}.`));
-  const response = {
+  const response = projection?.response ?? {
     binding: { route: 65535, accountId: U, runId: U, epoch: D, sequence: D, segment: I },
     phase: 'retire-reservations',
     next: { route: 65535, accountId: U, runId: U, epoch: D, sequence: D, segment: I },
@@ -535,9 +536,11 @@ export function shelfMaintenanceCommandPlan(
     : null;
   // Receipt-bearing rebuild commands may emit the single maintenance event. Recovery ACK is
   // always no-effect. A matching request may also be no-effect; reserve the larger fresh branch.
-  const events = receipt
-    ? [{ id: U, type: 'com.rezics.library.shelf-maintenance.advanced.v1', subject: U, data: { accountId: U } }]
-    : [];
+  const events =
+    projection?.events ??
+    (receipt
+      ? [{ id: U, type: 'com.rezics.library.shelf-maintenance.advanced.v1', subject: U, data: { accountId: U } }]
+      : []);
   const basis = 'basis' in options ? options.basis : null;
   const prepared = !!options.authorization?.prepare;
   const controls = [
@@ -618,6 +621,15 @@ export function shelfMaintenanceCommandPlan(
     },
     [scaffold],
   );
+}
+
+/** Core scaffold shared by receipt-bearing native owners; body, Access and triggers are separate terms. */
+export function nativeCommandScaffoldPlan(
+  pool: Pool,
+  options: LegacyCommandOptions | PrincipalCommandOptions,
+  projection: Readonly<{ response: unknown; events: readonly unknown[] }>,
+): Bound {
+  return shelfMaintenanceCommandPlan(pool, options, projection).total;
 }
 
 /** Released observation costs keep the original snapshot/client. Full input length is obtained by a

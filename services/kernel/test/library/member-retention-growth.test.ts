@@ -98,12 +98,12 @@ async function remove(id: string, memberId: string, key = entryKey()) {
   const revision = (await parent(id)).revision;
   return commands.removeMember(owner.actor, id, memberId, revision, key);
 }
-async function grow(scale: number, previous: number) {
+async function grow(scale: number, previous: number, parents: readonly string[]) {
   time = origin + 86400000;
   for (let n = previous; n < scale; n++) {
     if (n % 16 === 0) await renew();
-    await add(parentId);
-    for (const id of [parentId, privateId, publicId]) {
+    if (parents.includes(parentId)) await add(parentId);
+    for (const id of parents) {
       const member = await add(id);
       await remove(id, member.id);
     }
@@ -147,31 +147,57 @@ async function operation() {
   const replay = await commands.removeMember(owner.actor, parentId, chosen.id, expectedRevision, deleteKey);
   expect(replay.replayed).toBe(true);
   expect(replay.value).toEqual(removed.value);
+  const path = `/v1/collections/${parentId}/members/${chosen.id}`;
+  const mountedUndo = await f.send(
+    owner.bearer,
+    'POST',
+    path + ':restore',
+    { deletionId: removed.value.deletionId, revision: removed.value.revision },
+    key,
+  );
+  expect(mountedUndo.status).toBe(200);
+  expect((await mountedUndo.json()).member).toEqual({
+    id: chosen.id,
+    subjectId: chosen.subjectId,
+    note: chosen.note,
+    addedAt: chosen.addedAt,
+  });
+  const mountedRemove = await f.send(
+    owner.bearer,
+    'DELETE',
+    `${path}?revision=${expectedRevision}`,
+    undefined,
+    deleteKey,
+  );
+  expect(mountedRemove.status).toBe(204);
+  expect(mountedRemove.headers.get('Library-Collection-Member-Deletion-Id')).toBe(removed.value.deletionId);
   expect((await parent(parentId)).memberCount).toBe(before.memberCount + 1);
   // Leave the same live neighbourhood size for every measured repetition.
   await remove(parentId, chosen.id);
 }
 test('whole native occurrence lifecycle and indexed raw readers stay bounded at 64/512/4096 live and deleted same-parent and other-parent histories', async () => {
-  const report = await checkGrowth(db, {
-    name: 'curated member exact episode Undo, stale refusal and authorized receipt replay',
-    scales: [64, 512, 4096],
-    repetitions: 1,
-    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-    async grow(_db, scale, previous) {
-      await grow(scale, previous);
-    },
-    prepare,
-    async warmup() {
-      await prepare();
-      await operation();
-    },
-    operation,
-  });
-  expect(report.samples).toHaveLength(3);
-  for (const sample of report.samples) expect(sample.cost.plans).toBeGreaterThan(0);
+  for (const parents of [[parentId], [privateId, publicId]]) {
+    const report = await checkGrowth(db, {
+      name: `curated member exact episode Undo and mounted replay, growing ${parents[0] === parentId ? 'same-parent' : 'other-parent'} histories`,
+      scales: [64, 512, 4096],
+      repetitions: 1,
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(_db, scale, previous) {
+        await grow(scale, previous, parents);
+      },
+      prepare,
+      async warmup() {
+        await prepare();
+        await operation();
+      },
+      operation,
+    });
+    expect(report.samples).toHaveLength(3);
+    for (const sample of report.samples) expect(sample.cost.plans).toBeGreaterThan(0);
+  }
 }, 300000);
 
-async function segment(cutoff: string) {
+async function segment(cutoff: string, firstPartition = partition) {
   const root = `member-retention-growth:${crypto.randomUUID()}`;
   let timer: ReturnType<typeof setTimeout>;
   const committed = new Promise<void>((resolve, reject) => {
@@ -181,7 +207,7 @@ async function segment(cutoff: string) {
   try {
     const handle = await client.enqueue(
       { workflowName: 'library.memberRetentionSegment', workflowID: root, queueName: 'maintenance' },
-      { root, sequence: 0, cutoff, cursor: { partition } },
+      { root, sequence: 0, cutoff, cursor: { partition: firstPartition } },
     );
     await committed;
     await handle.getResult();
@@ -189,14 +215,29 @@ async function segment(cutoff: string) {
     clearTimeout(timer!);
     completed.delete(root);
   }
-  const steps = await client.listWorkflowSteps(root);
-  const pages = steps?.filter((step) => step.name === 'library.memberRetentionPage') ?? [];
-  expect(pages.length).toBeGreaterThan(0);
-  for (const step of pages) {
-    const page = step.output as { examined: number; cursor: { partition: number; after?: DueMemberDeletionKey } };
-    expect(page.examined).toBeLessThanOrEqual(100);
-    expect(Buffer.byteLength(JSON.stringify(step.output))).toBeLessThanOrEqual(4096);
-    expect(page.cursor.partition).toBeGreaterThanOrEqual(partition);
+  const pages: {
+    examined: number;
+    purged: number;
+    probes: number;
+    cursor: { partition: number; after?: DueMemberDeletionKey };
+  }[] = [];
+  let id = root,
+    sequence = 0;
+  for (;;) {
+    await client.retrieveWorkflow(id).getResult();
+    const steps = await client.listWorkflowSteps(id);
+    const outputs = steps?.filter((step) => step.name === 'library.memberRetentionPage') ?? [];
+    expect(outputs.length).toBeGreaterThan(0);
+    for (const step of outputs) {
+      const page = step.output as (typeof pages)[number];
+      expect(page.examined).toBeLessThanOrEqual(100);
+      expect(page.probes).toBeLessThanOrEqual(4096);
+      expect(Buffer.byteLength(JSON.stringify(step.output))).toBeLessThanOrEqual(4096);
+      expect(page.cursor.partition).toBeGreaterThanOrEqual(firstPartition);
+      pages.push(page);
+    }
+    if (pages.at(-1)!.cursor.partition === 4096) return pages;
+    id = `library.memberRetention:${root}:${++sequence}`;
   }
 }
 test('actual default durable member due discovery and exact physical work include SDK and checkpoint cost as unrelated future histories grow', async () => {
@@ -233,6 +274,64 @@ test('actual default durable member due discovery and exact physical work includ
           )
         ).rows,
       ).toEqual([]);
+    },
+  });
+  expect(report.samples).toHaveLength(3);
+  for (const sample of report.samples) expect(sample.cost.plans).toBeGreaterThan(0);
+}, 300000);
+
+test('growing due populations require change-proportional durable pages and drain to repeatable empty', async () => {
+  const selectedOwner = await f.identity(scopes, 4093);
+  const selectedId = (
+    await commands.createCollection(
+      selectedOwner.actor,
+      { title: 'Due selected episodes', visibility: 'private' },
+      entryKey(),
+    )
+  ).value.id;
+  const cutoff = new Date(origin + 28 * 86400000).toISOString();
+  const report = await checkGrowth(db, {
+    name: 'due member population through original page, segment, SDK checkpoint and post-drain empty',
+    scales: [64, 512, 4096],
+    repetitions: 1,
+    bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
+    async grow(_db, scale) {
+      time = origin - 2 * 86400000;
+      for (let n = 0; n < scale; n++) {
+        if (n % 16 === 0) {
+          selectedOwner.bearer = await accountToken(selectedOwner.actor);
+          selectedOwner.actor = await f.access.authenticate(selectedOwner.bearer, {
+            pool: db.pool,
+            deadline: deadlineFor(30000),
+          });
+        }
+        const member = (
+          await commands.addMember(selectedOwner.actor, selectedId, { subjectId, note: 'selected due' }, entryKey())
+        ).value;
+        await commands.removeMember(
+          selectedOwner.actor,
+          selectedId,
+          member.id,
+          (await parent(selectedId)).revision,
+          entryKey(),
+        );
+      }
+      time = Date.parse(cutoff);
+    },
+    async warmup() {
+      // Warm the actual SDK/empty seek path without consuming the measured due population.
+      await segment(new Date(origin - 3 * 86400000).toISOString(), 4093);
+    },
+    async operation(_db, scale) {
+      const pages = await segment(cutoff, 4093);
+      expect(pages.reduce((n, page) => n + page.purged, 0)).toBe(scale);
+      expect(pages.reduce((n, page) => n + page.examined, 0)).toBe(scale);
+      expect(pages.length).toBeGreaterThanOrEqual(Math.ceil(scale / 100));
+      for (let n = 0; n < 2; n++) {
+        const empty = await segment(cutoff, 4093);
+        expect(empty.every((page) => page.examined === 0 && page.purged === 0)).toBe(true);
+        expect(empty.at(-1)!.cursor.partition).toBe(4096);
+      }
     },
   });
   expect(report.samples).toHaveLength(3);

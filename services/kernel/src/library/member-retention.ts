@@ -1,4 +1,13 @@
-import { consumeMemberRetention, memberRetentionDuePlan, memberRetentionPurgePlan, memberRetentionPoint } from './member-retention-bounds.ts';
+import {
+  consumeMemberRetention,
+  memberRetentionDuePlan,
+  memberRetentionPurgePlan,
+  memberRetentionPoint,
+  runMemberRetentionCommand,
+  withMemberRetentionEpisode,
+  MEMBER_RETENTION_SQL,
+  memberRetentionDiscovery,
+} from './member-retention-bounds.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -7,7 +16,6 @@ import {
   CommandUnavailableError,
   noEffect,
   normalizeCommandKey,
-  runCommand,
   type CommandAuthorization,
   type CommandOutcome,
 } from '../command/command.ts';
@@ -60,8 +68,7 @@ export async function pageDueMemberDeletions(
     after_member_id: input.after?.memberId ?? null,
     page_limit: input.limit,
   };
-  return consumeMemberRetention('due', memberRetentionDuePlan(operands).total,
-    () => duePage.run(client, operands));
+  return memberRetentionDiscovery('due', memberRetentionDuePlan(operands).total, () => duePage.run(client, operands));
 }
 
 export class MemberPurgeNotDueError extends Error {}
@@ -75,10 +82,13 @@ export async function purgeExpiredMemberDeletion(
   if (!Number.isFinite(deadline) || deadline <= Date.now())
     throw new CommandUnavailableError('deadline', partitionOf(route));
   const partition = partitionOf(route);
-  const ownerSql = 'SELECT curator_account_id FROM library.collection WHERE route=$1 AND collection_id=$2';
+  const ownerSql = MEMBER_RETENTION_SQL.owner;
   const ownerValues = [route, collectionId];
-  const curator = await consumeMemberRetention('parent-owner', memberRetentionPoint(ownerSql, ownerValues, 1, 64).total,
-    () => pool.query<{ curator_account_id: string }>(ownerSql, ownerValues));
+  const curator = await consumeMemberRetention(
+    'parent-owner',
+    memberRetentionPoint(ownerSql, ownerValues, 1, 64).total,
+    () => pool.query<{ curator_account_id: string }>(ownerSql, ownerValues),
+  );
   const actorAccountId = curator.rows[0]?.curator_account_id;
   if (!actorAccountId) throw new Error('Member retention parent is missing');
   let present = false;
@@ -87,59 +97,61 @@ export async function purgeExpiredMemberDeletion(
     resource: Object.freeze({ route, id: collectionId }),
     denied: () => new Error('Stale member deletion episode'),
     async authorize(tx, attempt) {
-      const sql = `SELECT member.member_id, member.deletion_id, member.purge_after, member.purge_after<= $5::timestamptz AS due
-           FROM library.collection_member member JOIN library.collection collection
-             ON collection.route=member.route AND collection.collection_id=member.collection_id
-          WHERE member.route=$1 AND member.collection_id=$2 AND member.member_id=$3
-            AND member.deletion_id=$4 AND member.purge_after=$6::timestamptz FOR UPDATE OF member,collection`;
+      const sql = MEMBER_RETENTION_SQL.authorize;
       const values = [route, collectionId, memberId, deletionId, authoritativeTimeValue(attempt.time), purgeAfter];
-      const found = await consumeMemberRetention('authorize-exact-episode', memberRetentionPoint(sql, values, 2, 512).total,
-        () => tx.query(sql, values));
+      const found = await consumeMemberRetention(
+        'authorize-exact-episode',
+        memberRetentionPoint(sql, values, 2, 512).total,
+        () => tx.query(sql, values),
+      );
       present = found.rows.length > 0;
       if (present && !found.rows[0].due) throw new MemberPurgeNotDueError('Member retention deadline has not elapsed');
       return 'execute';
     },
   };
   const kind = 'library.collection.member.retention.purge';
-  return runCommand<{ purged: boolean }>(
-    pool,
-    {
-      partition,
-      deadline,
-      clock,
-      authorization,
-      receipt: {
-        actorAccountId,
-        kind,
-        key: normalizeCommandKey({ kind: 'account', id: actorAccountId }, deletionId),
-        digest: createHash('sha256')
-          .update(JSON.stringify([kind, route, collectionId, memberId, deletionId, purgeAfter]))
-          .digest(),
+  return withMemberRetentionEpisode({ kind: 'purge', ...key, requestKey: deletionId }, () =>
+    runMemberRetentionCommand<{ purged: boolean }>(
+      pool,
+      {
+        partition,
+        deadline,
+        clock,
+        authorization,
+        receipt: {
+          actorAccountId,
+          kind,
+          key: normalizeCommandKey({ kind: 'account', id: actorAccountId }, deletionId),
+          digest: createHash('sha256')
+            .update(JSON.stringify([kind, route, collectionId, memberId, deletionId, purgeAfter]))
+            .digest(),
+        },
       },
-    },
-    async (tx, command) => {
-      const operands = {
-        route,
-        collection_id: collectionId,
-        member_id: memberId,
-        deletion_id: deletionId,
-        expected_purge_after: purgeAfter,
-        time: authoritativeTimeValue(command.time),
-      };
-      const result = await consumeMemberRetention('purge', memberRetentionPurgePlan(operands).total,
-        () => purge.run(tx, operands));
-      if (!result && present) throw new Error('Locked due member episode failed its exact native CAS');
-      if (!result) return noEffect({ purged: false });
-      return {
-        value: { purged: true },
-        events: [
-          {
-            type: 'com.rezics.library.collection.member.purged.v1',
-            subject: collectionId,
-            data: { memberId, deletionId },
-          },
-        ],
-      };
-    },
+      async (tx, command) => {
+        const operands = {
+          route,
+          collection_id: collectionId,
+          member_id: memberId,
+          deletion_id: deletionId,
+          expected_purge_after: purgeAfter,
+          time: authoritativeTimeValue(command.time),
+        };
+        const result = await consumeMemberRetention('purge', memberRetentionPurgePlan(operands).total, () =>
+          purge.run(tx, operands),
+        );
+        if (!result && present) throw new Error('Locked due member episode failed its exact native CAS');
+        if (!result) return noEffect({ purged: false });
+        return {
+          value: { purged: true },
+          events: [
+            {
+              type: 'com.rezics.library.collection.member.purged.v1',
+              subject: collectionId,
+              data: { memberId, deletionId },
+            },
+          ],
+        };
+      },
+    ),
   );
 }
