@@ -7,7 +7,6 @@ import type { SessionEnv } from '../src/session/client';
 import type { ProgressDetail, ProgressDetailAddress } from '../src/library/progress-detail-server';
 import type { NativeProgressSession } from '../src/library/progress-reads';
 
-// UNRUN: focused mounted/deferred regressions for the controller. These are not native or visual proof.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
