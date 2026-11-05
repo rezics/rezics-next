@@ -42,9 +42,10 @@ describe('recorded money values', () => {
       reason: 'malformed',
     });
     expect(decodeRecordedMoneyUnit(undefined, supported)).toEqual({ kind: 'unknown', reason: 'missing' });
-    expect(
-      decodeRecordedMoneyUnit({ ...twoExponent, factsVersion: 'stripe-money-v2' }, supported),
-    ).toEqual({ kind: 'unknown', reason: 'unsupported' });
+    expect(decodeRecordedMoneyUnit({ ...twoExponent, factsVersion: 'stripe-money-v2' }, supported)).toEqual({
+      kind: 'unknown',
+      reason: 'unsupported',
+    });
   });
 
   test('compatible values use exact signed arithmetic and reject unknown or incompatible units', () => {
@@ -60,9 +61,10 @@ describe('recorded money values', () => {
       ok: false,
       error: { code: 'incompatible-unit' },
     });
-    expect(
-      compareRecordedMoney(cents, { amountMinor: 1, unit: { kind: 'unknown', reason: 'missing' } }),
-    ).toEqual({ ok: false, error: { code: 'unknown-unit' } });
+    expect(compareRecordedMoney(cents, { amountMinor: 1, unit: { kind: 'unknown', reason: 'missing' } })).toEqual({
+      ok: false,
+      error: { code: 'unknown-unit' },
+    });
   });
 
   test('decimal input, range, increment, zero exponent and signed display parts stay exact', () => {
@@ -82,7 +84,10 @@ describe('recorded money values', () => {
       ok: false,
       error: { code: 'above-maximum' },
     });
-    expect(decimalParts(1200, 0)).toEqual({ ok: true, value: { negative: false, whole: 1200n, fraction: 0n, exponent: 0 } });
+    expect(decimalParts(1200, 0)).toEqual({
+      ok: true,
+      value: { negative: false, whole: 1200n, fraction: 0n, exponent: 0 },
+    });
     expect(decimalParts(-1, 2)).toEqual({ ok: true, value: { negative: true, whole: 0n, fraction: 1n, exponent: 2 } });
   });
 });

@@ -21,10 +21,7 @@ export class CreatorPriceError extends RangeError {
 }
 
 /** Validate a typed seller draft against the exact rule currently shown beside the input. */
-export function validateCreatorPrice(
-  text: string,
-  rule?: ConfiguredSaleCurrencyRule,
-): CreatorPriceValidation {
+export function validateCreatorPrice(text: string, rule?: ConfiguredSaleCurrencyRule): CreatorPriceValidation {
   if (!rule) return { kind: 'invalid', issue: 'unsupported-currency' };
   if (!isSaleCurrencyRule(rule)) return { kind: 'invalid', issue: 'policy-unavailable' };
 

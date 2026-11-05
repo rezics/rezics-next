@@ -102,8 +102,7 @@ export function validateOfferAmount(
   taxBehavior: 'exclusive';
 }> {
   const rule = policy.configuredSaleCurrencies.find((row) => row.currency === input.currency);
-  if ((input.currency !== 'usd' && input.currency !== 'eur') || !rule)
-    throw new RangeError('unsupported-currency');
+  if ((input.currency !== 'usd' && input.currency !== 'eur') || !rule) throw new RangeError('unsupported-currency');
   const amount = validateMinorAmount(input.amountMinor, {
     minimumMinor: rule.minAmountMinor,
     maximumMinor: rule.maxAmountMinor,

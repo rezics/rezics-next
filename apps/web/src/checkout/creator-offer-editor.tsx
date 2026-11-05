@@ -75,7 +75,7 @@ export function parsedPrice(text: string, rule?: ConfiguredSaleCurrencyRule): nu
 
 function priceIssueText(issue: CreatorPriceIssue, locale: string, rule?: ConfiguredSaleCurrencyRule): string {
   const format = (minor: number) =>
-    rule ? formatMinorAmount(locale, rule.currency, minor, rule.unit) ?? String(minor) : String(minor);
+    rule ? (formatMinorAmount(locale, rule.currency, minor, rule.unit) ?? String(minor)) : String(minor);
   switch (issue) {
     case 'malformed-decimal':
       return m.creator_price_malformed_decimal();
@@ -220,7 +220,11 @@ export function CreatorPriceField({
   const issue = policyUnavailable
     ? 'policy-unavailable'
     : text
-      ? (validation?.kind === 'invalid' ? validation.issue : rule ? null : 'unsupported-currency')
+      ? validation?.kind === 'invalid'
+        ? validation.issue
+        : rule
+          ? null
+          : 'unsupported-currency'
       : null;
   return (
     <Field>
@@ -264,10 +268,10 @@ export function CreatorPriceField({
         {issue
           ? priceIssueText(issue, locale, rule)
           : preview && rule
-          ? `${preview} · ${rule.currency.toUpperCase()} · ${m.commerce_before_tax()}`
-          : text
-            ? m.creator_invalid_price()
-            : m.creator_price_preview()}
+            ? `${preview} · ${rule.currency.toUpperCase()} · ${m.commerce_before_tax()}`
+            : text
+              ? m.creator_invalid_price()
+              : m.creator_price_preview()}
       </p>
     </Field>
   );
@@ -540,13 +544,7 @@ function CreatorOfferForm({
         <section className="space-y-4 rounded-xl border bg-card p-5 text-card-foreground" role="status">
           <p>{m.creator_price_unavailable()}</p>
           {currency && <p className="text-sm text-muted-foreground">{currency.toUpperCase()}</p>}
-          <CreatorPriceField
-            text={text}
-            onChange={() => {}}
-            locale={locale}
-            disabled
-            policyUnavailable
-          />
+          <CreatorPriceField text={text} onChange={() => {}} locale={locale} disabled policyUnavailable />
           {result && <p role="alert">{creatorNotice(result.kind)}</p>}
         </section>
       ) : editor.kind !== 'ready' ? (

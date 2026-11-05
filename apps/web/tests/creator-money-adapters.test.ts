@@ -2,11 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { readCommerceMoneyPolicy, validateOfferAmount } from '../../../services/kernel/src/commerce/money';
 import { validateCreatorPrice } from '../src/checkout/creator-price';
-import {
-  createNativeMoneySchemaApi,
-  isMoneyUnit,
-  recordedMoneyUnit,
-} from '../src/checkout/money-schema';
+import { createNativeMoneySchemaApi, isMoneyUnit, recordedMoneyUnit } from '../src/checkout/money-schema';
 import { configuredPriceExample, creatorOfferFixture, recordedStripeUnit } from '../src/kernel/fake/creator-offers';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));

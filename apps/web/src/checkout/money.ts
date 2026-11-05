@@ -33,8 +33,7 @@ export function formatMinorAmount(locale: string, currency: string, minor: numbe
   if (!Number.isSafeInteger(minor) || typeof currency !== 'string' || !/^[a-z]{3}$/i.test(currency)) return null;
   const code = currency.toUpperCase();
   const reading = decodeRecordedMoneyUnit(unit, stripeRecordedMoneyUnits);
-  if (reading.kind !== 'known')
-    return m.money_raw_minor_unknown_unit({ amount: String(minor), currency: code });
+  if (reading.kind !== 'known') return m.money_raw_minor_unknown_unit({ amount: String(minor), currency: code });
   if (!displayCurrencies.has(currency.toLowerCase()))
     return m.money_raw_minor_recorded_unit({
       amount: String(minor),

@@ -76,7 +76,9 @@ describe('Actual creator offer editor plus exact recorded money display', () => 
     expect(
       parseMoneySchema({
         ...configuredPriceExample,
-        configuredSaleCurrencies: [{ ...configuredUsdRule, minAmountMinor: 100, maxAmountMinor: 250000, chargeMultiple: 5 }],
+        configuredSaleCurrencies: [
+          { ...configuredUsdRule, minAmountMinor: 100, maxAmountMinor: 250000, chargeMultiple: 5 },
+        ],
       }),
     ).not.toBeNull();
     expect(parseMoneySchema({ ...configuredPriceExample, qualified: true })).toBeNull();
@@ -110,7 +112,11 @@ describe('Actual creator offer editor plus exact recorded money display', () => 
               maximumFractionDigits: 2,
             }).format(major),
           );
-        for (const [currency, raw] of [['usd', 1299], ['eur', 1299], ['usd', 0]] as const)
+        for (const [currency, raw] of [
+          ['usd', 1299],
+          ['eur', 1299],
+          ['usd', 0],
+        ] as const)
           expect(formatMinorAmount(locale, currency, raw, recordedStripeUnit)).toContain(
             `${raw} ${currency.toUpperCase()} minor units (exponent 2)`,
           );
@@ -145,9 +151,7 @@ describe('Actual creator offer editor plus exact recorded money display', () => 
     expect(formatMinorAmount('en', 'usd', 70)).toBe('Recorded amount 70 USD; unit meaning is unknown.');
     expect(formatMinorAmount('en', 'usd', -70)).toBe('Recorded amount -70 USD; unit meaning is unknown.');
     expect(recordedMoneyUnit({ currency: 'usd', unitAmountMinor: 70 })).toBeNull();
-    expect(formatMinorAmount('en', 'zzz', 70, recordedStripeUnit)).toBe(
-      'Recorded 70 minor units of ZZZ (exponent 2).',
-    );
+    expect(formatMinorAmount('en', 'zzz', 70, recordedStripeUnit)).toBe('Recorded 70 minor units of ZZZ (exponent 2).');
     expect(formatMinorAmount('en', 'kwd', 70, { ...recordedStripeUnit, exponent: 3 })).toBe(
       'Recorded amount 70 KWD; unit meaning is unknown.',
     );

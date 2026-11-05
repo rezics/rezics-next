@@ -197,7 +197,8 @@ function arithmetic(
   const a = BigInt(pair.value.left.amountMinor);
   const b = BigInt(pair.value.right.amountMinor);
   const result = subtract ? a - b : a + b;
-  if (result > BigInt(Number.MAX_SAFE_INTEGER) || result < BigInt(Number.MIN_SAFE_INTEGER)) return error('unsafe-integer');
+  if (result > BigInt(Number.MAX_SAFE_INTEGER) || result < BigInt(Number.MIN_SAFE_INTEGER))
+    return error('unsafe-integer');
   return Object.freeze({
     ok: true,
     value: Object.freeze({ amountMinor: Number(result), unit: pair.value.left.unit }),
@@ -215,10 +216,7 @@ export function subtractRecordedMoney(
   return arithmetic(left, right, true);
 }
 
-export function compareRecordedMoney(
-  left: RecordedMoneyValue,
-  right: RecordedMoneyValue,
-): MoneyResult<-1 | 0 | 1> {
+export function compareRecordedMoney(left: RecordedMoneyValue, right: RecordedMoneyValue): MoneyResult<-1 | 0 | 1> {
   const pair = compatiblePair(left, right);
   if (!pair.ok) return pair;
   const a = pair.value.left.amountMinor;

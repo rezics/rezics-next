@@ -233,10 +233,13 @@ async function mount() {
       ? (form as unknown as Record<string, { onSubmit?: (event: { preventDefault(): void }) => unknown }>)[key]
           ?.onSubmit
       : undefined;
-    return handler ?? ((event: { preventDefault(): void }) => {
-      event.preventDefault();
-      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-    });
+    return (
+      handler ??
+      ((event: { preventDefault(): void }) => {
+        event.preventDefault();
+        form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+      })
+    );
   };
   const submit = (twice = false) =>
     act(async () => {
