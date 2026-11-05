@@ -29,7 +29,8 @@ async function mounted(run: (host: HTMLDivElement, draw: (node: React.ReactNode)
   const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
   const window = new Window({ url: 'https://rezics.invalid/' });
   const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    HTMLAnchorElement: window.HTMLAnchorElement, Element: window.Element, Node: window.Node, IS_REACT_ACT_ENVIRONMENT: true };
+    HTMLAnchorElement: window.HTMLAnchorElement, Element: window.Element, Node: window.Node, scrollTo: () => {},
+    IS_REACT_ACT_ENVIRONMENT: true };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
   const { createRoot } = await import('react-dom/client');
@@ -106,8 +107,7 @@ test('Sources returns to a fresh names reading and rejects stale or missing loca
     const changedVia = new URLSearchParams(history.location.search).get('via')!;
     saved = namesReturn(Reflect.get(history.location.state, 'namesReturn'), 'en')!;
     current = admitted(2, false);
-    history.push(changedVia, { namesReturn: saved });
-    await act(async () => router.load());
+    await act(async () => { history.push(changedVia, { namesReturn: saved }); await router.load(); });
     await draw(h(RouterProvider, { router }));
     expect(host.textContent).toContain('The names reading changed');
     expect(host.textContent).not.toContain('Variant 39');
@@ -116,8 +116,10 @@ test('Sources returns to a fresh names reading and rejects stale or missing loca
 
     await act(async () => host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!.click());
     await act(async () => router.load());
-    history.push(new URLSearchParams(history.location.search).get('via')!, {});
-    await act(async () => router.load());
+    await act(async () => {
+      history.push(new URLSearchParams(history.location.search).get('via')!, {});
+      await router.load();
+    });
     await draw(h(RouterProvider, { router }));
     expect(host.textContent).toContain('The saved names view is unavailable');
     expect(host.querySelector<HTMLInputElement>('input[type="search"]')?.value).toBe('');
