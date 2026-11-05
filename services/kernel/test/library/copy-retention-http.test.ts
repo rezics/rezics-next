@@ -13,7 +13,7 @@ beforeAll(async () => {
   const release = await compileCatalogue(
     fixture({
       id: 'fixture.copy-retention',
-      copies: { kinds: [{ id: 'installation', statuses: [{ id: 'licensed' }] }] },
+      copies: { kinds: [{ id: 'physical', condition: 'physical-v1', statuses: [{ id: 'owned' }, { id: 'lent' }] }] },
     }),
   );
   await f.activate(await f.publish(release));
@@ -24,14 +24,45 @@ afterAll(async () => {
 });
 test('private holding clear and exact Undo preserve identity and independent siblings without exposing retained values', async () => {
   const subjectId = await f.createSubject('game');
-  const input = { subjectId, kind: 'installation', status: 'licensed', note: 'private edition' };
+  const input = {
+    subjectId,
+    kind: 'physical',
+    status: 'owned',
+    mediaCondition: 'mint',
+    packagingCondition: 'near_mint',
+    note: 'private edition',
+  };
   const made = await f.send(owner.bearer, 'POST', '/v1/copies', input);
   expect(made.status).toBe(201);
-  const original = (await made.json()).copy;
+  let original = (await made.json()).copy;
   const sibling = await f.send(owner.bearer, 'POST', '/v1/copies', input);
   expect(sibling.status).toBe(201);
   const siblingId = (await sibling.json()).copy.id;
   expect(siblingId).not.toBe(original.id);
+  const edited = await f.send(owner.bearer, 'PATCH', `/v1/copies/${original.id}`, {
+    revision: original.revision,
+    status: 'lent',
+    mediaCondition: 'good',
+    packagingCondition: null,
+  });
+  expect(edited.status).toBe(200);
+  original = (await edited.json()).copy;
+  expect(original).toMatchObject({ kind: 'physical', status: 'lent', revision: 2 });
+  const inventory = await f.send(
+    owner.bearer,
+    'GET',
+    `/v1/copies?subjectId=${subjectId}&kind=physical&status=lent&limit=1`,
+  );
+  expect(inventory.status).toBe(200);
+  const page = await inventory.json();
+  expect(page.copies.map((copy: { id: string }) => copy.id)).toEqual([original.id]);
+  expect(page.next).toBeNull();
+  expect(page.filterOptions.kinds.choices).toContainEqual(expect.objectContaining({ id: 'physical' }));
+  const current = await f.send(owner.bearer, 'GET', `/v1/copies/${original.id}?presentation=FULL`);
+  expect(current.status).toBe(200);
+  const presentation = (await current.json()).copy.presentation;
+  expect(presentation.mediaCondition).toMatchObject({ state: 'recorded', id: 'good' });
+  expect(presentation.packagingCondition).toEqual({ state: 'cleared' });
   const path = `/v1/copies/${original.id}`,
     key = entryKey();
   expect((await f.send(owner.bearer, 'DELETE', `${path}?revision=${original.revision + 1}`)).status).toBe(409);
@@ -67,6 +98,9 @@ test('private holding clear and exact Undo preserve identity and independent sib
   });
   expect(value.revision).toBeGreaterThan(revision);
   expect(value).not.toHaveProperty('libraryProfilePin');
+  const afterUndo = await f.send(owner.bearer, 'GET', `${path}?presentation=FULL`);
+  expect(afterUndo.status).toBe(200);
+  expect((await afterUndo.json()).copy.presentation).toEqual(presentation);
   const replay = await f.send(owner.bearer, 'DELETE', `${path}?revision=${original.revision}`, undefined, key);
   expect(replay.status).toBe(204);
   expect(replay.headers.get('Library-Copy-Deletion-Id')).toBe(deletionId);
