@@ -15,7 +15,9 @@ async function currentPage(driver: SearchDriver, body: Record<string, unknown>):
   } while (Date.now() < deadline);
   throw new Error('The default public Search journey did not finish finite preparation within 60 seconds');
 }
-function subjects(response: HttpResponse): { id: string; summary: unknown; base: unknown }[] {
+function subjects(
+  response: HttpResponse,
+): (Record<string, unknown> & { id: string; summary: unknown; base: unknown })[] {
   expect(response.status).toBe(200);
   expect(response.body).not.toHaveProperty('total');
   expect(response.body).not.toHaveProperty('observation');
@@ -23,6 +25,19 @@ function subjects(response: HttpResponse): { id: string; summary: unknown; base:
   expect(response.body).not.toHaveProperty('job');
   if (!Array.isArray(response.body.subjects)) throw new Error('Search omitted its subjects');
   return response.body.subjects;
+}
+
+async function currentSuggestions(driver: SearchDriver, query: string): Promise<HttpResponse> {
+  const deadline = Date.now() + 60_000;
+  do {
+    const response = await driver.request('anonymous', 'GET', `/v1/subjects:suggest?q=${encodeURIComponent(query)}`);
+    if (response.status === 200) return response;
+    expect(response.status).toBe(503);
+    expect(response.body.code).toMatch(/^(index_not_ready|semantic_not_ready)$/);
+    expect(response.headers.get('retry-after')).toBeTruthy();
+    await Bun.sleep(100);
+  } while (Date.now() < deadline);
+  throw new Error('The default public suggestion journey did not finish finite preparation within 60 seconds');
 }
 
 test('the default real Search journey provides useful current-authorized filled or exhausted pages with finite actual preparation and recovery', async () => {
@@ -134,6 +149,95 @@ test('the default prefix journey hydrates current suggestions and recovers after
     }
     await driver.indexing('running');
     expect(subjects(await suggestions()).map((hit) => hit.id)).not.toContain(id);
+  } finally {
+    await driver.close();
+  }
+}, 900_000);
+
+test('the default real Search and Suggest recheck corrected native terms while indexing is paused', async () => {
+  const driver = await createSearchDriver();
+  const suffix = randomUUID().replaceAll('-', '');
+  const marker = `termjourney${suffix}`;
+  const oldAlias = `oldalias${suffix}`;
+  const newAlias = `newalias${suffix}`;
+  try {
+    const changed = await driver.request(
+      'editor',
+      'POST',
+      '/v1/subjects',
+      {
+        type: 'schema:Book',
+        labels: { en: `${marker} before` },
+        aliases: { en: [oldAlias] },
+        descriptions: { en: `${marker} old description` },
+      },
+      { 'Idempotency-Key': `"${randomUUID()}"` },
+    );
+    expect(changed.status).toBe(201);
+    const changedId = (changed.body.subject as { id: string }).id;
+    const safe = await driver.request(
+      'editor',
+      'POST',
+      '/v1/subjects',
+      { type: 'schema:Book', labels: { en: `${oldAlias} independent` } },
+      { 'Idempotency-Key': `"${randomUUID()}"` },
+    );
+    expect(safe.status).toBe(201);
+    const safeId = (safe.body.subject as { id: string }).id;
+    const filter = { type: { in: ['schema:Book'] } };
+
+    const initial = subjects(
+      await currentPage(driver, { text: oldAlias, filter, sort: 'id', limit: 100 }),
+    );
+    expect(new Set(initial.map((hit) => hit.id))).toEqual(new Set([changedId, safeId]));
+    expect(new Set(subjects(await currentSuggestions(driver, oldAlias)).map((hit) => hit.id))).toEqual(
+      new Set([changedId, safeId]),
+    );
+
+    await driver.indexing('paused');
+    const patch = await driver.request(
+      'editor',
+      'PATCH',
+      `/v1/subjects/${changedId}/terms`,
+      {
+        labels: { en: `${marker} after` },
+        aliases: { en: [newAlias] },
+        descriptions: { en: `${marker} current description` },
+      },
+      {
+        'Idempotency-Key': `"${randomUUID()}"`,
+        'If-Match': '"1"',
+      },
+    );
+    expect(patch.status).toBe(200);
+
+    const duringLag = subjects(
+      await currentPage(driver, { text: oldAlias, filter, sort: 'id', limit: 100 }),
+    );
+    expect(duringLag.map((hit) => hit.id)).toEqual([safeId]);
+    expect(subjects(await currentSuggestions(driver, oldAlias)).map((hit) => hit.id)).toEqual([safeId]);
+
+    const currentFields = subjects(
+      await currentPage(driver, {
+        text: marker,
+        filter,
+        sort: 'id',
+        limit: 100,
+        descriptions: true,
+      }),
+    ).find((hit) => hit.id === changedId);
+    expect(currentFields).toBeDefined();
+    expect(currentFields?.labels).toEqual({ en: `${marker} after` });
+    expect(currentFields?.descriptions).toEqual({ en: `${marker} current description` });
+    const evidence = JSON.stringify(currentFields!.matchEvidence);
+    expect(evidence).not.toContain('before');
+    expect(evidence).not.toContain(oldAlias);
+
+    await driver.indexing('running');
+    expect(
+      subjects(await currentPage(driver, { text: newAlias, filter, sort: 'id', limit: 100 })).map((hit) => hit.id),
+    ).toContain(changedId);
+    expect(subjects(await currentSuggestions(driver, newAlias)).map((hit) => hit.id)).toContain(changedId);
   } finally {
     await driver.close();
   }
