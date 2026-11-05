@@ -373,9 +373,9 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       ? `https://api.bgm.tv/v0/persons/${person[1]}`
       : character
         ? `https://api.bgm.tv/v0/characters/${character[1]}`
-      : subject
-        ? `https://api.bgm.tv/v0/subjects/${subject}`
-        : undefined;
+        : subject
+          ? `https://api.bgm.tv/v0/subjects/${subject}`
+          : undefined;
     if (
       source.sourceAlias !== 'bangumi_cross_media' ||
       !endpoint ||
@@ -661,7 +661,9 @@ function admittedCoverMedia(
     imageRows.find((row) => row.key === record.sourceKey)?.payload as { images?: { large?: unknown } } | undefined
   )?.images?.large;
   const coverDigest =
-    character && typeof imageUrl === 'string' ? crossMediaCoverDigest(record.semanticDigest, imageUrl) : record.semanticDigest;
+    character && typeof imageUrl === 'string'
+      ? crossMediaCoverDigest(record.semanticDigest, imageUrl)
+      : record.semanticDigest;
   if (
     !outcome ||
     !receipt ||

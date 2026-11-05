@@ -326,8 +326,7 @@ test('default finite Bangumi selection imports a direct Character image through 
         yield { id: 84148, name: 'STEINS;GATE', name_cn: '命运石之门', type: 1 };
         yield { id: 51, name: 'CLANNAD -クラナド-', name_cn: 'CLANNAD', type: 2 };
       }
-      if (table === 'subject-characters')
-        yield { subject_id: 10380, character_id: 11546, type: 1, order: 0 };
+      if (table === 'subject-characters') yield { subject_id: 10380, character_id: 11546, type: 1, order: 0 };
       if (table === 'character') yield { id: 11546, name: 'アルパカ', type: 1 };
     },
   };
@@ -371,12 +370,18 @@ test('default finite Bangumi selection imports a direct Character image through 
       const row = rawPlan.records.bangumi.find((candidate) => candidate.key === String(subjectId))!;
       const images =
         subjectId === 10380
-          ? { large: characterWorkCoverSourceUrl, common: characterWorkCoverSourceUrl, medium: characterWorkCoverSourceUrl, small: characterWorkCoverSourceUrl, grid: characterWorkCoverSourceUrl }
+          ? {
+              large: characterWorkCoverSourceUrl,
+              common: characterWorkCoverSourceUrl,
+              medium: characterWorkCoverSourceUrl,
+              small: characterWorkCoverSourceUrl,
+              grid: characterWorkCoverSourceUrl,
+            }
           : null;
-      return new Response(
-        JSON.stringify({ id: subjectId, type: row.payload.type, name: row.payload.name, images }),
-        { status: 200, headers: { etag: `"native-subject-${subjectId}"` } },
-      );
+      return new Response(JSON.stringify({ id: subjectId, type: row.payload.type, name: row.payload.name, images }), {
+        status: 200,
+        headers: { etag: `"native-subject-${subjectId}"` },
+      });
     };
     const sourcePlan = await acquireBangumiCoverSources(rawPlan, {
       journal,
@@ -419,7 +424,13 @@ test('default finite Bangumi selection imports a direct Character image through 
     } as unknown as CrossMediaPort;
     const firstPort = captureShowcaseCommands(mediaPort, journal);
     await expect(
-      seedCrossMedia(sourcePlan, statePath, firstPort, { origin: runtime.origin }, { providers: ['bangumi'], mediaDeadlineMs: 0 }),
+      seedCrossMedia(
+        sourcePlan,
+        statePath,
+        firstPort,
+        { origin: runtime.origin },
+        { providers: ['bangumi'], mediaDeadlineMs: 0 },
+      ),
     ).rejects.toThrow('simulated lost media import response');
     expect(mediaRequests).toBe(2);
     const characterId = mediaIds.get('character:11546')!;
@@ -447,7 +458,11 @@ test('default finite Bangumi selection imports a direct Character image through 
 
     journal.close();
     journal = new ShowcaseJournal(journalPath);
-    const recoveredPlan = await acquireBangumiCoverSources(rawPlan, { journal, fetch: sourceFetch, sleep: async () => {} });
+    const recoveredPlan = await acquireBangumiCoverSources(rawPlan, {
+      journal,
+      fetch: sourceFetch,
+      sleep: async () => {},
+    });
     const recovered = await seedCrossMedia(
       recoveredPlan,
       statePath,
@@ -469,7 +484,11 @@ test('default finite Bangumi selection imports a direct Character image through 
     await runtime.mediaBoundary.drain({ mediaIds: [...mediaIds.values()], maxJobs: 16, signal });
     journal.close();
     journal = new ShowcaseJournal(journalPath);
-    const resumedPlan = await acquireBangumiCoverSources(rawPlan, { journal, fetch: sourceFetch, sleep: async () => {} });
+    const resumedPlan = await acquireBangumiCoverSources(rawPlan, {
+      journal,
+      fetch: sourceFetch,
+      sleep: async () => {},
+    });
     const resumed = await seedCrossMedia(
       resumedPlan,
       statePath,
@@ -479,7 +498,11 @@ test('default finite Bangumi selection imports a direct Character image through 
     );
     const workOutcome = resumed.mediaOutcomes.find((outcome) => outcome.externalId === '10380')!;
     const characterOutcome = resumed.mediaOutcomes.find((outcome) => outcome.externalId === 'character:11546')!;
-    expect(workOutcome).toMatchObject({ status: 'available', sourceUrl: characterWorkCoverSourceUrl, mediaId: mediaIds.get('10380') });
+    expect(workOutcome).toMatchObject({
+      status: 'available',
+      sourceUrl: characterWorkCoverSourceUrl,
+      mediaId: mediaIds.get('10380'),
+    });
     expect(characterOutcome).toMatchObject({
       status: 'available',
       sourceUrl: characterSourceUrl,
@@ -525,9 +548,7 @@ test('default finite Bangumi selection imports a direct Character image through 
     });
     expect(publication.status).toBe('published');
     const workMediaRecord = publication.manifest.media.find((record) => record.sourceKey === '10380')!;
-    const characterMediaRecord = publication.manifest.media.find(
-      (record) => record.sourceKey === 'character:11546',
-    )!;
+    const characterMediaRecord = publication.manifest.media.find((record) => record.sourceKey === 'character:11546')!;
     expect(workMediaRecord).toMatchObject({
       status: 'available',
       mediaId: mediaIds.get('10380'),
@@ -562,8 +583,7 @@ test('default finite Bangumi selection imports a direct Character image through 
         .statements;
       expect(statements['schema:image']?.some((row) => row.value.content === mediaIds.get(externalId))).toBe(true);
       expect((publicRead as { summary?: { cover?: unknown } }).summary?.cover).toBeTruthy();
-      if (externalId === 'character:11546')
-        expect(JSON.stringify(statements['schema:name'])).toContain('アルパカ');
+      if (externalId === 'character:11546') expect(JSON.stringify(statements['schema:name'])).toContain('アルパカ');
       if (subjectId === workSubjectId)
         expect(statements['schema:character']?.some((row) => row.value.content === characterSubjectId)).toBe(true);
       const variant = storedMedia.get(externalId)!.variants[0]!;
@@ -590,14 +610,17 @@ test('default finite Bangumi selection imports a direct Character image through 
         await runtime.request(
           `/v1/media/${characterId}:authorizeDownload?variant=${storedMedia.get('character:11546')!.variants[0]!.format}-${storedMedia.get('character:11546')!.variants[0]!.width}`,
         )
-      )
-        .status,
+      ).status,
     ).toBe(404);
 
     batchCalls.length = 0;
     journal.close();
     journal = new ShowcaseJournal(journalPath);
-    const fencedPlan = await acquireBangumiCoverSources(rawPlan, { journal, fetch: sourceFetch, sleep: async () => {} });
+    const fencedPlan = await acquireBangumiCoverSources(rawPlan, {
+      journal,
+      fetch: sourceFetch,
+      sleep: async () => {},
+    });
     const unchanged = await seedCrossMedia(
       fencedPlan,
       statePath,
@@ -605,9 +628,7 @@ test('default finite Bangumi selection imports a direct Character image through 
       { origin: runtime.origin },
       { providers: ['bangumi'], mediaDeadlineMs: 0 },
     );
-    expect(unchanged.mediaOutcomes.find((outcome) => outcome.externalId === 'character:11546')?.status).toBe(
-      'fenced',
-    );
+    expect(unchanged.mediaOutcomes.find((outcome) => outcome.externalId === 'character:11546')?.status).toBe('fenced');
     expect(batchCalls).toEqual([]);
     expect(mediaRequests).toBe(3);
     expect(statusReads).toBe(3);
@@ -619,9 +640,10 @@ test('default finite Bangumi selection imports a direct Character image through 
       review: mediaPort,
       publicClient,
     });
-    expect(
-      replay.manifest.media.find((record) => record.sourceKey === 'character:11546'),
-    ).toMatchObject({ status: 'fenced', gap: 'cover-fenced' });
+    expect(replay.manifest.media.find((record) => record.sourceKey === 'character:11546')).toMatchObject({
+      status: 'fenced',
+      gap: 'cover-fenced',
+    });
     expect(replay.manifest.media.find((record) => record.sourceKey === 'character:11546')?.mediaId).toBeUndefined();
     expect(replay.manifest.media.find((record) => record.sourceKey === '10380')?.status).toBe('available');
   } finally {

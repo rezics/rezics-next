@@ -578,10 +578,10 @@ test('direct selected Character images use CharacterDetail evidence and preserve
                 small: 'https://lain.bgm.tv/img/no_icon_subject.png',
                 grid: 'https://lain.bgm.tv/img/no_icon_subject.png',
               };
-      return new Response(
-        JSON.stringify({ id: 11546, name: 'アルパカ', type: 1, images }),
-        { status: 200, headers: { etag: `"character-11546-${characterReads}"` } },
-      );
+      return new Response(JSON.stringify({ id: 11546, name: 'アルパカ', type: 1, images }), {
+        status: 200,
+        headers: { etag: `"character-11546-${characterReads}"` },
+      });
     }) as typeof globalThis.fetch;
     const first = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
     const firstReceipt = first.coverSources!.find((source) => source.externalId === 'character:11546')!;
