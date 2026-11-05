@@ -708,17 +708,16 @@ export function createImportTransport(options: ImportTransportOptions) {
     let current = id;
     while (!visited.has(current)) {
       visited.add(current);
-      const reply = await response(
-        () => client.subjects({ id: current }).get({ fetch: { signal, redirect: 'manual' } }),
-        [200, 308],
-        signal,
-      );
-      if (reply.status === 200) {
-        const read = reply.body as ReviewedSubjectRead;
+      const reply = await client.subjects({ id: current }).get({ fetch: { signal, redirect: 'manual' } });
+      if (reply.status !== 308) {
+        const result = await response(async () => reply, 200, signal);
+        const read = result.body as ReviewedSubjectRead;
         ensure(read?.subject?.id === current);
         return read;
       }
-      const redirected = reply.body as { redirect?: { from?: unknown; to?: unknown } };
+      const redirected = snapshot(reply.error?.value ?? reply.data, RESPONSE_BYTES) as {
+        redirect?: { from?: unknown; to?: unknown };
+      };
       ensure(redirected.redirect?.from === current && typeof redirected.redirect.to === 'string');
       const target = redirected.redirect!.to as string;
       mediaId(target);
