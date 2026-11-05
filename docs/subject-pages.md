@@ -122,6 +122,8 @@ withheld, unavailable, unsupported, empty terminal, sparse, continued and trunca
 missing canonical work mapping. The native page's row limit applies before projection. A deliberate stream change
 starts that node without a cursor. A sparse page can continue; a stale cursor offers a fresh reading instead of
 claiming exhaustion. Overview enters the existing full view, since its preview node need not be the full view's node.
+Destinations opened from an Overview preview return to that exact preview node, property, direction and focus without
+a cursor; entering the full view remains a fresh address.
 Full-view continuation uses the exact current node and opaque cursor, replacing the loaded page rather than
 accumulating a catalogue. A selected stream that disappears or changes its released property or direction is
 unavailable until the reader explicitly reloads the current Subject.
