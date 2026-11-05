@@ -387,6 +387,9 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
     const voice = roleCommands.find(
       (command) => command.op === 'propose' && command.statement.property.id === 'wdt:P725',
     );
+    if (!author || author.op !== 'propose' || !voice || voice.op !== 'propose')
+      throw new Error('Expected selected VNDB author and voice proposals');
+    expect(current.vndbCreditCandidateKeys).toEqual(expect.arrayContaining([author.key, voice.key]));
     expect(author?.op === 'propose' ? author.statement.value : undefined).toEqual({
       type: 'value',
       content: readings.get('s4'),
