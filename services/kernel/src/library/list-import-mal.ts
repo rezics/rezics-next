@@ -12,6 +12,7 @@ import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor, type AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { SessionComponent } from '../tokens/session.ts';
 import type { ProgressSessionJournalDate, ProgressSessionJournalPatch } from './progress-model.ts';
 import { ProgressConflictError } from './sessions.ts';
 import type { createSessionCommands, ProgressSessionJournalAdmission } from './sessions.ts';
@@ -1205,7 +1206,7 @@ export function createMalImport(deps: Dependencies) {
     input: MalApplyInput,
     deadline: number,
     signal: AbortSignal,
-    record: (value: CommandOutcome<unknown>) => void,
+    record: (value: CommandOutcome<unknown> | SessionComponent) => void,
   ) {
     const outcomes: MalOutcome[] = [];
     if (input.rows.length > MAL_LABEL_LIMITS.rows) throw new ProblemError('invalid_request');
@@ -1401,12 +1402,13 @@ export function createMalImport(deps: Dependencies) {
             });
             checkpoint.started = true;
             try {
-              await votes.putVoteOutcome(actor, {
+              const result = await votes.putVoteOutcome(actor, {
                 questionId: scoreReview.question.id,
                 targetId: r.target!,
                 units: scoreReview.units,
                 guard: scoreReview.guard!,
               }, checkpoint.key);
+              if (result.component) record(result.component);
               // A receipt proves admission; only the native reader supplies current state.
               const current = await votes.readOwnVote(actor, scoreReview.question.id, r.target!);
               outcome.score = { action: scoreReview.action, status: 'applied', reason: null,
