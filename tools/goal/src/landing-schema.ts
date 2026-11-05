@@ -53,7 +53,7 @@ export async function regenerateLandingSchema(input: {
   changedFiles: readonly string[];
   taskId: string;
   logPath: string;
-  policy?: ControlPolicy['merge'];
+  policy?: ControlPolicy['merge'] | undefined;
 }): Promise<LandingSchemaResult> {
   const { cwd, logPath } = input;
   const policy = input.policy ?? defaultPolicy.merge;
