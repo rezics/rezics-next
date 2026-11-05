@@ -920,6 +920,10 @@ function AuthoredFieldLive({
           )}
         </div>
       </details>
+      <p className="text-sm text-muted-foreground">
+        {m.authored_language({}, o)}: {selectedLanguage(current) ?? m.authored_body_unavailable({}, o)}
+      </p>
+      <Provenance body={current.body} locale={locale} />
     </>
   );
   const selectedHeading = stage === 'compose' ? m.authored_selected({}, o) : m.authored_current_comparison({}, o);
@@ -929,19 +933,25 @@ function AuthoredFieldLive({
         <ContentItemHeading className="text-lg font-semibold">{selectedHeading}</ContentItemHeading>
         {current.selected ? (
           spoilerLevel(current.selected) > 0 ? (
-            <SpoilerGate label={m.thread_reveal_spoiler({}, o)}>{selectedContent}</SpoilerGate>
+            <SpoilerGate
+              key={JSON.stringify([
+                current.public.subject.context,
+                current.releaseDigest,
+                current.selected.id,
+                current.selected.value,
+                Reflect.get(current.selected, 'rezics'),
+                work.reader,
+              ])}
+              label={m.thread_reveal_spoiler({}, o)}
+            >
+              {selectedContent}
+            </SpoilerGate>
           ) : (
             selectedContent
           )
         ) : (
           <p>{m.authored_no_selected({}, o)}</p>
         )}
-        {current.selected && (
-          <p className="text-sm text-muted-foreground">
-            {m.authored_language({}, o)}: {selectedLanguage(current) ?? m.authored_body_unavailable({}, o)}
-          </p>
-        )}
-        {current.selected && <Provenance body={current.body} locale={locale} />}
         <Button
           variant="outline"
           className={actionClassName}

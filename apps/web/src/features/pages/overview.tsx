@@ -1734,7 +1734,12 @@ function SummaryContent({
         {selectedChoice &&
           (spoilered ? (
             <SpoilerGate
-              key={`${read.subject.id}/${value.locale}/${read.subject.context}/${selectedChoice.statement.id}/${value.reader.spoilerLevel}`}
+              key={JSON.stringify([
+                sourceKey,
+                selectedChoice.statement.id,
+                selectedChoice.digest,
+                Reflect.get(selectedChoice.statement, 'rezics'),
+              ])}
               label={value.spoilerShow}
               hideLabel={value.labels.spoilerHide}
             >
