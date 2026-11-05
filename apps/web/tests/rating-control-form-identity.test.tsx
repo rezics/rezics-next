@@ -175,7 +175,7 @@ test('composed rating controls label and submit their own question, value and re
         ),
       );
     await renderRecovery();
-    await act(async () => host.querySelectorAll('form button')[1]!.click());
+    await act(async () => host.querySelector('form')!.querySelectorAll('button')[1]!.click());
     expect(commands).toHaveLength(1);
     expect(commands[0]).toMatchObject({
       units: null,
@@ -189,12 +189,14 @@ test('composed rating controls label and submit their own question, value and re
       subject: 'reader',
       csrfToken: 'replacement-credential',
     });
-    await act(async () => host.querySelector('[data-slot="rating-uncertain"] button')!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>('[data-slot="rating-uncertain"] button')!.click());
     expect(commands).toHaveLength(2);
     expect(commands[1]).toBe(commands[0]);
-    await act(async () => host.querySelectorAll('[data-slot="rating-uncertain"] button')[1]!.click());
+    await act(async () =>
+      host.querySelectorAll<HTMLButtonElement>('[data-slot="rating-uncertain"] button')[1]!.click(),
+    );
     expect(host.querySelector('[data-slot="rating-uncertain"]')).toBeNull();
-    await act(async () => host.querySelectorAll('form button')[1]!.click());
+    await act(async () => host.querySelector('form')!.querySelectorAll('button')[1]!.click());
     expect(commands[2]!.idempotencyKey).not.toBe(commands[0]!.idempotencyKey);
     expect(commands[2]).toMatchObject({ expectedCredential: 'replacement-credential' });
     await renderRecovery({ ...questions[0]!, revision: 2 });
