@@ -508,7 +508,7 @@ self fallback. A selected nonmember is concealed, and an unproved selection retu
 without a write. No whole-source scan, result truncation, query count, Actor or permission payload is published.
 
 Preparation uses `bindOwnerFilterRead`, `CollectionSource`, complete native closure and scoped observations.
-One immutable nine-axis plan sums binding, fixed Source/scope/private authority, canonical deduplication, each
+One nine-axis plan sums binding, Source/scope/private authority, canonical deduplication, each
 positive/negative selected branch, pre-receipt reauthorization and output transaction. Each branch pays the native
 100-key group, full 32-label probe and accepted Members Source bound. Closure independently caps 100 references
 and 50 originals; every original pays disclosure even after deduplication. Empty selection still pays live Source,
