@@ -2619,7 +2619,7 @@ function subjectRoutes(
           query.filter !== undefined &&
           relation?.group === 'credit' &&
           relation.slotKey === 'wdt:P453' &&
-          property.qualifiers?.includes('wdt:P453') === true &&
+          property?.qualifiers?.includes('wdt:P453') === true &&
           active.release.properties['wdt:P453']?.targets?.includes('wd:Q95074') === true;
         if (query.qualifier !== undefined && !slotQualifier) throw new ProblemError('invalid_request');
         if (slotQualifier && (query.limit ?? 20) > 20) throw new ProblemError('invalid_request');
