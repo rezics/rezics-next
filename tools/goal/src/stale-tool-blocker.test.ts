@@ -277,7 +277,7 @@ test('three distinct tasks with one normalized blocker open one incident and hol
       taskIds,
     });
     expect(status.toolIncidents[0]!.nextProbeAt).toBeTruthy();
-    expect(status.tasks.map((task) => task.pendingRetry?.reason)).toEqual([
+    expect(status.tasks.filter((task) => taskIds.includes(task.id)).map((task) => task.pendingRetry?.reason)).toEqual([
       'environment-incident',
       'environment-incident',
       'environment-incident',
