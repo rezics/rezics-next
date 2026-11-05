@@ -17,9 +17,9 @@ const closeBitmap = mock(() => {});
 const decode = mock(async (_file: Blob) => ({ width: 7, height: 5, close: closeBitmap }));
 const calls: { path: string; init: RequestInit }[] = [];
 
-function media(state: string, id = mediaId): Response {
+function media(state: string, id = mediaId, containerId = 'original-thread'): Response {
   return Response.json({
-    media: { id, state, mediaType: file.type, byteCount: file.size },
+    media: { id, state, mediaType: file.type, byteCount: file.size, containerId },
   });
 }
 
@@ -247,7 +247,9 @@ test('failures before a native reservation never invent an ID, and avatar upload
   expect(calls.map(({ init }) => init.method)).toEqual(['POST']);
 
   calls.length = 0;
-  intercept((_path, init) => (init.method === 'POST' ? media('reserved') : new Response(null, { status: 503 })));
+  intercept((_path, init) =>
+    init.method === 'POST' ? media('reserved', mediaId, 'original-account') : new Response(null, { status: 503 }),
+  );
   expect(await refusal(uploadAvatar('original-account', file, signal()))).toMatchObject({
     reason: 'unavailable',
     mediaId,
@@ -457,7 +459,7 @@ test('failing reservation and transfer keep Retry-After observed before body cle
     if (step === 'invalid') return new Response(null, { status: 429, headers: { 'retry-after': 'later' } });
     if (init.method === 'POST' && step === 'limit')
       return new Response(later(), { status: 429, headers: { 'retry-after': '7200' } });
-    if (init.method === 'POST') return media('reserved');
+    if (init.method === 'POST') return media('reserved', mediaId, 'original-account');
     return new Response(later(), { status: 503, headers: { 'retry-after': date } });
   });
 

@@ -5,8 +5,11 @@ import {
   UploadRefusal,
   type MediaReservationIntent,
   type UploadStage,
+  type UploadStageUpdate,
+  type UploadResponseWait,
 } from '../threads/upload';
 import { preferenceRetryDeadline } from './preference-failure-retry';
+import { withProfileDeadline } from './profile-request-deadline';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
 import { readAvatarCropSource } from './profile-avatar-source';
@@ -26,16 +29,24 @@ export type AvatarUpload = (
   file: File,
   signal: AbortSignal,
   intent?: MediaReservationIntent,
-  onStage?: (stage: UploadStage) => void,
+  onStage?: UploadStageUpdate,
+  onResponseWait?: UploadResponseWait,
 ) => Promise<{ src: string }>;
-export type AvatarResume = (mediaId: string, file: File, signal: AbortSignal) => Promise<{ src: string }>;
+export type AvatarResume = (
+  mediaId: string,
+  file: File,
+  signal: AbortSignal,
+  onStage?: UploadStageUpdate,
+  intent?: MediaReservationIntent,
+  onResponseWait?: UploadResponseWait,
+) => Promise<{ src: string }>;
 export type AvatarAdviceReadResult = {
   ok: boolean;
   body?: unknown;
   retryAfter?: string;
   responseTime: number;
 };
-export type AvatarAdviceRead = (signal: AbortSignal) => Promise<AvatarAdviceReadResult>;
+export type AvatarAdviceRead = (signal: AbortSignal, onResponseWait?: UploadResponseWait) => Promise<AvatarAdviceReadResult>;
 export type AvatarAdviceState = 'loading' | 'unavailable' | 'denied' | 'allowed';
 type Failure = Pick<UploadRefusal, 'reason' | 'retryAfter'>;
 type Avatar = ProfileValues['avatar'];
@@ -63,6 +74,23 @@ type UploadState = {
   advice?: AvatarAdviceState;
 };
 const idle: UploadState = { phase: 'idle', url: null };
+type AvatarWaits = {
+  commandRetryAt: number;
+  commandFailure?: Failure;
+  adviceTarget: string | null;
+  adviceRetryAt: number;
+};
+const waitsByEditor = new WeakMap<ProfileEditor, AvatarWaits>();
+
+function waitsFor(editor: ProfileEditor): AvatarWaits {
+  let waits = waitsByEditor.get(editor);
+  if (!waits) {
+    waits = { commandRetryAt: 0, adviceTarget: null, adviceRetryAt: 0 };
+    waitsByEditor.set(editor, waits);
+  }
+  return waits;
+}
+
 export const avatarMedia = (avatar: Avatar) => avatar?.media ?? null;
 
 /** Owns only this card's local preview and request; cancellation never promises provider cleanup. */
@@ -70,23 +98,24 @@ export class ProfileAvatarUpload {
   private state = idle;
   private selection: Selection | null = null;
   private request: AbortController | null = null;
+  private preparationRequest: AbortController | null = null;
   private listeners = new Set<() => void>();
   private connected = false;
-  private retryAt = 0;
-  private rateFailure: Failure | undefined;
   private preparation = 0;
+  private readonly waits: AvatarWaits;
   private advice: AvatarAdviceState = 'loading';
   private adviceRequest: AbortController | null = null;
   private adviceTarget: string | null = null;
   private adviceEpisode = 0;
-  private adviceRetryAt = 0;
   constructor(
     private editor: ProfileEditor,
     private upload: AvatarUpload,
     private urls: Pick<typeof URL, 'createObjectURL' | 'revokeObjectURL'> = URL,
     private resume?: AvatarResume,
     private readAdvice: AvatarAdviceRead = readSiteAvatarUploadAdvice,
-  ) {}
+  ) {
+    this.waits = waitsFor(editor);
+  }
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -95,17 +124,17 @@ export class ProfileAvatarUpload {
     };
   };
   private update(state: UploadState) {
-    const failure = state.failure ?? this.rateFailure;
-    const next: UploadState = this.waiting()
-      ? { ...state, retryAt: this.retryAt, ...(failure ? { failure } : {}) }
+    const failure = state.failure ?? this.waits.commandFailure;
+    const next: UploadState = Date.now() < this.waits.commandRetryAt
+      ? { ...state, retryAt: this.waits.commandRetryAt, ...(failure ? { failure } : {}) }
       : { ...state };
-    if (this.adviceRetryAt > 0) next.adviceRetryAt = this.adviceRetryAt;
+    if (this.waits.adviceRetryAt > 0) next.adviceRetryAt = this.waits.adviceRetryAt;
     else delete next.adviceRetryAt;
     this.state = { ...next, advice: this.advice };
     this.listeners.forEach((listener) => listener());
   }
   private waiting() {
-    return Date.now() < this.retryAt;
+    return Date.now() < this.waits.commandRetryAt;
   }
   connect() {
     this.connected = true;
@@ -118,7 +147,6 @@ export class ProfileAvatarUpload {
       this.adviceRequest = null;
       this.adviceTarget = null;
       this.adviceEpisode++;
-      this.adviceRetryAt = 0;
       this.advice = 'unavailable';
       this.clear();
     };
@@ -140,9 +168,12 @@ export class ProfileAvatarUpload {
   private observeTarget(target: string | null) {
     this.adviceEpisode++;
     this.adviceTarget = target;
+    if (this.waits.adviceTarget !== target) {
+      this.waits.adviceTarget = target;
+      this.waits.adviceRetryAt = 0;
+    }
     this.adviceRequest?.abort();
     this.adviceRequest = null;
-    this.adviceRetryAt = 0;
     this.advice = target ? 'loading' : 'unavailable';
     this.update(this.state);
     if (target) this.startAdviceRead(target, this.adviceEpisode);
@@ -154,15 +185,20 @@ export class ProfileAvatarUpload {
   }
   private async readAdviceFor(target: string, episode: number, request: AbortController) {
     try {
-      const result = await this.readAdvice(request.signal);
+      const onResponseWait: UploadResponseWait = (_status, retryAfter, responseTime) =>
+        this.retainAdviceWait(target, retryAfter, responseTime);
+      const result = await withProfileDeadline(
+        (signal) => this.readAdvice(signal, onResponseWait),
+        request.signal,
+      );
       if (!this.ownsAdvice(target, episode, request)) return;
-      this.retainAdviceWait(result.retryAfter, result.responseTime);
+      this.retainAdviceWait(target, result.retryAfter, result.responseTime);
       const parsed = result.ok ? parseAvatarUploadAdvice(result.body, target) : null;
       this.advice = !parsed ? 'unavailable' : parsed.allowedActions.length ? 'allowed' : 'denied';
     } catch (error) {
       if (!this.ownsAdvice(target, episode, request)) return;
       if (error instanceof UploadRefusal)
-        this.retainAdviceWait(error.retryAfterHeader, error.responseTime ?? Date.now());
+        this.retainAdviceWait(target, error.retryAfterHeader, error.responseTime ?? Date.now());
       this.advice = 'unavailable';
     } finally {
       const current = this.connected && this.adviceEpisode === episode && this.adviceTarget === target;
@@ -170,8 +206,18 @@ export class ProfileAvatarUpload {
       if (current) this.update(this.state);
     }
   }
-  private retainAdviceWait(retryAfter: string | undefined, responseTime: number) {
-    this.adviceRetryAt = Math.max(this.adviceRetryAt, preferenceRetryDeadline(retryAfter, responseTime));
+  private retainAdviceWait(target: string, retryAfter: string | undefined, responseTime: number) {
+    if (this.waits.adviceTarget !== target) return;
+    const deadline = preferenceRetryDeadline(retryAfter, responseTime);
+    if (deadline <= this.waits.adviceRetryAt) return;
+    this.waits.adviceRetryAt = deadline;
+    if (this.connected && this.adviceTarget === target) this.update(this.state);
+  }
+  private retainCommandWait(status: number, retryAfter: string | undefined, responseTime: number) {
+    const deadline = preferenceRetryDeadline(retryAfter, responseTime);
+    if (deadline > this.waits.commandRetryAt) this.waits.commandRetryAt = deadline;
+    if (status === 429) this.waits.commandFailure = { reason: 'rate-limited' };
+    if (this.connected && (deadline > 0 || status === 429)) this.update(this.state);
   }
   private currentAdviceEpisode(target: string, episode: number) {
     return this.connected && this.adviceTarget === target && this.adviceEpisode === episode && this.target() === target;
@@ -186,7 +232,7 @@ export class ProfileAvatarUpload {
     this.target() === this.adviceTarget &&
     this.advice !== 'loading' &&
     (this.advice === 'unavailable' || this.advice === 'denied' || (!!this.selection && this.state.phase === 'error'));
-  canRetryAdvice = () => this.canOfferAdviceRetry() && Date.now() >= this.adviceRetryAt;
+  canRetryAdvice = () => this.canOfferAdviceRetry() && Date.now() >= this.waits.adviceRetryAt;
   retryAdvice = () => {
     if (!this.canRetryAdvice() || !this.adviceTarget) return;
     const target = this.adviceTarget;
@@ -200,6 +246,9 @@ export class ProfileAvatarUpload {
     this.preparation++;
     const selection = this.selection;
     this.selection = null;
+    const preparationRequest = this.preparationRequest;
+    this.preparationRequest = null;
+    preparationRequest?.abort();
     const request = this.request;
     this.request = null;
     request?.abort();
@@ -265,8 +314,10 @@ export class ProfileAvatarUpload {
       return;
     }
     const preparation = ++this.preparation;
+    const request = new AbortController();
+    this.preparationRequest = request;
     this.update({ phase: 'preparing', url: null });
-    void this.prepare(selection, preparation);
+    void this.prepare(selection, preparation, request.signal);
   };
   setCrop = (patch: Partial<AvatarCropPosition>) => {
     const selection = this.selection;
@@ -285,13 +336,18 @@ export class ProfileAvatarUpload {
     const bitmap = selection.bitmap;
     const sourceFile = selection.file;
     const position = selection.crop;
+    const request = new AbortController();
+    this.preparationRequest = request;
     this.update({ phase: 'exporting', url: selection.url, crop: { ...selection.source, position } });
-    void this.exportCrop(selection, preparation, bitmap, sourceFile, position);
+    void this.exportCrop(selection, preparation, bitmap, sourceFile, position, request.signal);
   };
   useOriginal = () => {
     const selection = this.selection;
     if (!selection || !this.canUpload() || !['crop', 'original-only'].includes(this.state.phase)) return;
     this.preparation++;
+    const preparationRequest = this.preparationRequest;
+    this.preparationRequest = null;
+    preparationRequest?.abort();
     selection.bitmap?.close();
     delete selection.bitmap;
     delete selection.source;
@@ -332,22 +388,34 @@ export class ProfileAvatarUpload {
     const reservation = selection.reservation;
     if (reservation && !this.resume) return;
     if (!reservation && !this.canUpload()) return;
-    const intent = reservation ? selection.intent : this.bindIntent(selection);
+    if (reservation && !selection.intent) return;
+    const intent = selection.intent ?? this.bindIntent(selection);
     const request = new AbortController();
     this.request = request;
     this.update({
       phase: 'uploading',
       url: selection.url,
-      stage: reservation ? 'transfer' : 'reservation',
+      stage: reservation ? 'processing' : 'reservation',
     });
+    const onStage: UploadStageUpdate = (stage, mediaId) => {
+      if (!this.owns(selection, request)) return;
+      if (mediaId) selection.reservation = mediaId;
+      this.update({ phase: 'uploading', url: selection.url, stage });
+    };
+    const onResponseWait: UploadResponseWait = (status, retryAfter, responseTime) =>
+      this.retainCommandWait(status, retryAfter, responseTime);
     try {
       const result = reservation
-        ? await this.resume!(reservation, selection.file, request.signal)
-        : await this.upload(selection.accountId, selection.file, request.signal, intent, (stage) => {
-            if (this.owns(selection, request)) this.update({ phase: 'uploading', url: selection.url, stage });
-          });
+        ? await withProfileDeadline(
+            (signal) => this.resume!(reservation, selection.file, signal, onStage, intent, onResponseWait),
+            request.signal,
+          )
+        : await withProfileDeadline(
+            (signal) => this.upload(selection.accountId, selection.file, signal, intent, onStage, onResponseWait),
+            request.signal,
+          );
       if (!this.owns(selection, request)) return;
-      if (reservation && result.src !== reservation) throw new UploadRefusal('unavailable');
+      if (selection.reservation && result.src !== selection.reservation) throw new UploadRefusal('unavailable');
       selection.media = result.src;
       this.update({ phase: 'ready', url: selection.url });
       this.editor.edit({ avatar: { media: result.src } });
@@ -361,8 +429,8 @@ export class ProfileAvatarUpload {
         };
         const observed = preferenceRetryDeadline(error.retryAfterHeader, error.responseTime ?? Date.now());
         if (observed > 0) {
-          this.retryAt = Math.max(this.retryAt, observed);
-          this.rateFailure = failure;
+          this.waits.commandRetryAt = Math.max(this.waits.commandRetryAt, observed);
+          this.waits.commandFailure = failure;
         }
         this.update({
           phase: 'error',
@@ -380,26 +448,26 @@ export class ProfileAvatarUpload {
       if (this.request === request) this.request = null;
     }
   }
-  private async prepare(selection: Selection, preparation: number) {
+  private async prepare(selection: Selection, preparation: number, signal: AbortSignal) {
     try {
-      const source = await readAvatarCropSource(selection.file);
+      const source = await withProfileDeadline(() => readAvatarCropSource(selection.file), signal);
       if (!this.ownsPreparation(selection, preparation)) return;
       if (!source) {
-        this.update({ phase: 'original-only', url: null, cropIssue: 'unsupported' });
+        this.update({ phase: 'original-only', url: selection.url, cropIssue: 'unsupported' });
         return;
       }
-      const bitmap = await decodeAvatarCrop(selection.file);
+      const bitmap = await this.decodeWithinDeadline(selection.file, signal);
       if (!this.ownsPreparation(selection, preparation)) {
         bitmap?.close();
         return;
       }
       if (!bitmap) {
-        this.update({ phase: 'original-only', url: null, cropIssue: 'unsupported' });
+        this.update({ phase: 'original-only', url: selection.url, cropIssue: 'unsupported' });
         return;
       }
       if (!avatarCropSourceSupported(bitmap)) {
         bitmap.close();
-        this.update({ phase: 'original-only', url: null, cropIssue: 'unsupported' });
+        this.update({ phase: 'original-only', url: selection.url, cropIssue: 'unsupported' });
         return;
       }
       selection.bitmap = bitmap;
@@ -412,7 +480,29 @@ export class ProfileAvatarUpload {
       });
     } catch {
       if (!this.ownsPreparation(selection, preparation)) return;
-      this.update({ phase: 'original-only', url: null, cropIssue: 'decode' });
+      this.update({ phase: 'original-only', url: selection.url, cropIssue: 'decode' });
+    } finally {
+      if (this.preparationRequest?.signal === signal) this.preparationRequest = null;
+    }
+  }
+  private async decodeWithinDeadline(file: File, signal: AbortSignal) {
+    let retired = false;
+    let decoded: ImageBitmap | null = null;
+    const pending = decodeAvatarCrop(file).then((bitmap) => {
+      decoded = bitmap;
+      if (retired) {
+        bitmap?.close();
+        decoded = null;
+      }
+      return bitmap;
+    });
+    try {
+      return await withProfileDeadline(() => pending, signal);
+    } catch (error) {
+      retired = true;
+      decoded?.close();
+      decoded = null;
+      throw error;
     }
   }
   private async exportCrop(
@@ -421,10 +511,12 @@ export class ProfileAvatarUpload {
     bitmap: ImageBitmap,
     sourceFile: File,
     position: AvatarCropPosition,
+    signal: AbortSignal,
   ) {
     try {
-      const file = await createCroppedAvatarFile(bitmap, sourceFile, position);
+      const file = await withProfileDeadline(() => createCroppedAvatarFile(bitmap, sourceFile, position), signal);
       if (!this.ownsPreparation(selection, preparation)) return;
+      if (this.preparationRequest?.signal === signal) this.preparationRequest = null;
       const url = this.urls.createObjectURL(file);
       const previousUrl = selection.url;
       selection.file = file;
@@ -444,6 +536,8 @@ export class ProfileAvatarUpload {
         ...(crop ? { crop } : {}),
         cropIssue: 'encode',
       });
+    } finally {
+      if (this.preparationRequest?.signal === signal) this.preparationRequest = null;
     }
   }
   private ownsPreparation(selection: Selection, preparation: number) {

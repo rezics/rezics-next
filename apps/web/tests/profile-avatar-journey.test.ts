@@ -12,6 +12,7 @@ import type { AvatarAdviceRead, AvatarAdviceReadResult, AvatarResume } from '../
 import { ProfileAvatarUpload, type AvatarUpload } from '../src/settings/profile-avatar-upload';
 import type { ProfileValues } from '../src/settings/profile-data';
 import { ProfileEditor, type ProfileAttempt } from '../src/settings/profile-write';
+import { managedReadTimeout } from '../src/settings/managed-read-deadline';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -296,7 +297,12 @@ test('an uncertain profile save retains its immutable retry and local draft unti
   boundary.disconnect();
 });
 
-function recovery(editor: ProfileEditor, resumeAvailable = true, readAdvice?: AvatarAdviceRead) {
+function recovery(
+  editor: ProfileEditor,
+  resumeAvailable = true,
+  readAdvice?: AvatarAdviceRead,
+  uploadOverride?: AvatarUpload,
+) {
   const calls: {
     operation: 'upload' | 'resume';
     target: string;
@@ -318,14 +324,14 @@ function recovery(editor: ProfileEditor, resumeAvailable = true, readAdvice?: Av
     calls.push({ operation, target, file, signal, intent, result });
     return result.promise;
   };
-  const upload: AvatarUpload = (accountId, file, signal, intent, onStage) => {
+  const defaultUpload: AvatarUpload = (accountId, file, signal, intent, onStage) => {
     onStage?.('reservation');
     return request('upload', accountId, file, signal, intent);
   };
   const resume: AvatarResume = (mediaId, file, signal) => request('resume', mediaId, file, signal);
   const controller = new ProfileAvatarUpload(
     editor,
-    upload,
+    uploadOverride ?? defaultUpload,
     {
       createObjectURL: () => {
         const url = `blob:recovery-${created.length}`;
@@ -341,8 +347,13 @@ function recovery(editor: ProfileEditor, resumeAvailable = true, readAdvice?: Av
   );
   return { controller, calls, created, revoked, disconnect: controller.connect() };
 }
-async function mountedRecovery(editor: ProfileEditor, resumeAvailable = true, readAdvice?: AvatarAdviceRead) {
-  const boundary = recovery(editor, resumeAvailable, readAdvice);
+async function mountedRecovery(
+  editor: ProfileEditor,
+  resumeAvailable = true,
+  readAdvice?: AvatarAdviceRead,
+  uploadOverride?: AvatarUpload,
+) {
+  const boundary = recovery(editor, resumeAvailable, readAdvice, uploadOverride);
   await settle();
   await settle();
   return boundary;
@@ -540,6 +551,98 @@ test('a known reservation without an injected resume binding stays unknown inste
   boundary.disconnect();
 });
 
+test('phase deadlines retire stalled crop and upload work, close a late bitmap, and fence a successor selection', async () => {
+  const originalBitmap = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap');
+  const timers: { id: number; delay: number; callback: () => void; active: boolean }[] = [];
+  let timerId = 0;
+  const setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(
+    ((callback: TimerHandler, delay = 0) => {
+      const timer = { id: ++timerId, delay, callback: callback as () => void, active: true };
+      timers.push(timer);
+      return timer.id as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout,
+  );
+  const clearTimeoutSpy = spyOn(globalThis, 'clearTimeout').mockImplementation(
+    ((id: ReturnType<typeof setTimeout>) => {
+      const timer = timers.find((candidate) => candidate.id === Number(id));
+      if (timer) timer.active = false;
+    }) as typeof clearTimeout,
+  );
+  const decoded = deferred<ImageBitmap>();
+  const decodeStarted = deferred<void>();
+  const lateTransfer = deferred<{ src: string }>();
+  let bitmapCloses = 0;
+  Object.defineProperty(globalThis, 'createImageBitmap', {
+    configurable: true,
+    value: () => {
+      decodeStarted.resolve();
+      return decoded.promise;
+    },
+  });
+  const upload: AvatarUpload = (_accountId, _file, _signal, _intent, onStage) => {
+    onStage?.('transfer', 'known-avatar-reservation');
+    return lateTransfer.promise;
+  };
+  const editor = recoveryEditor();
+  const boundary = await mountedRecovery(editor, false, undefined, upload);
+  const fireDeadline = () => {
+    const timer = timers.find((candidate) => candidate.active && candidate.delay === managedReadTimeout);
+    expect(timer).toBeDefined();
+    timer!.active = false;
+    timer!.callback();
+  };
+  try {
+    const jpeg = new File(
+      [
+        Uint8Array.from([
+          0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x05, 0x00, 0x07, 0x01, 0x01, 0x11, 0x00,
+          0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
+        ]),
+      ],
+      'local.jpg',
+      { type: 'image/jpeg' },
+    );
+    boundary.controller.choose(jpeg);
+    await decodeStarted.promise;
+    expect(boundary.controller.snapshot().phase).toBe('preparing');
+    fireDeadline();
+    await settle();
+    expect(boundary.controller.snapshot()).toMatchObject({ phase: 'original-only', cropIssue: 'decode' });
+
+    boundary.controller.choose(file());
+    await settle();
+    const successorUrl = boundary.controller.snapshot().url;
+    expect(boundary.controller.snapshot().phase).toBe('original-only');
+    const lateBitmap = { width: 7, height: 5, close: () => bitmapCloses++ } as ImageBitmap;
+    decoded.resolve(lateBitmap);
+    await settle();
+    expect(bitmapCloses).toBe(1);
+    expect(boundary.controller.snapshot()).toMatchObject({ phase: 'original-only', url: successorUrl });
+
+    boundary.controller.useOriginal();
+    expect(boundary.controller.snapshot()).toMatchObject({ phase: 'uploading', stage: 'transfer' });
+    fireDeadline();
+    await settle();
+    expect(boundary.controller.snapshot()).toMatchObject({ phase: 'error', stage: 'transfer' });
+    boundary.controller.cancel();
+    boundary.controller.choose(file());
+    await settle();
+    const current = boundary.controller.snapshot();
+    lateTransfer.resolve({ src: 'known-avatar-reservation' });
+    await settle();
+    expect(boundary.controller.snapshot()).toEqual(current);
+    expect(boundary.controller.snapshot().phase).toBe('original-only');
+    expect(editor.snapshot().draft?.avatar).toEqual(profile().avatar);
+  } finally {
+    boundary.disconnect();
+    setTimeoutSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
+    if (originalBitmap) Object.defineProperty(globalThis, 'createImageBitmap', originalBitmap);
+    else Reflect.deleteProperty(globalThis, 'createImageBitmap');
+  }
+  expect(boundary.revoked).toEqual(boundary.created);
+});
+
 test('upload admission follows current advice independently of profile-reference editing', async () => {
   const initial = profile();
   const writable = new ProfileEditor(
@@ -726,12 +829,13 @@ test('an unknown reservation acknowledgement retries the original intent; a new 
   boundary.disconnect();
 });
 
-test('lost site reservation acknowledgement retries the original key and body on the actual uploader', async () => {
-  const posts: { key: string | null; body: unknown }[] = [];
+test('lost site reservation acknowledgement retries the original key, body and credential on the actual uploader', async () => {
+  const posts: { key: string | null; credential: string | null; body: unknown }[] = [];
   const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async (_input, init = {}) => {
     if (init.method === 'POST') {
       posts.push({
         key: new Headers(init.headers).get('idempotency-key'),
+        credential: new Headers(init.headers).get('X-CSRF-Token'),
         body: JSON.parse(String(init.body)),
       });
       if (posts.length === 1) throw new Error('acknowledgement lost');
@@ -745,6 +849,7 @@ test('lost site reservation acknowledgement retries the original key and body on
       selected,
       'avatar',
       profile().accountId,
+      'original-csrf',
     );
     await expect(
       uploadAvatar(profile().accountId, selected, new AbortController().signal, intent),
@@ -755,6 +860,7 @@ test('lost site reservation acknowledgement retries the original key and body on
     expect(posts).toHaveLength(2);
     expect(posts[0]?.key).toBe(JSON.stringify(intent.key));
     expect(posts[1]).toEqual(posts[0]);
+    expect(posts[0]?.credential).toBe('original-csrf');
     expect(posts[0]?.body).toEqual(intent.body);
   } finally {
     fetchSpy.mockRestore();
@@ -786,7 +892,13 @@ test('command waits keep the longest response-time Retry-After through delayed c
     if (mode === 'limit') return delayed(429, '7200');
     if (init.method === 'POST')
       return Response.json({
-        media: { id: mediaId, state: 'reserved', mediaType: selected.type, byteCount: selected.size },
+        media: {
+          id: mediaId,
+          state: 'reserved',
+          mediaType: selected.type,
+          byteCount: selected.size,
+          containerId: profile().accountId,
+        },
       });
     return delayed(503, httpDate);
   });
