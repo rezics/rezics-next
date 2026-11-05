@@ -72,10 +72,10 @@ function YearlyGoalScreen({
   viewerSubject,
   api,
 }: {
-  year?: number;
+  year?: number | undefined;
   sessionState: 'signed-in' | 'signed-out' | 'unknown' | 'unavailable';
   viewerSubject: string | null;
-  api?: YearlyGoalPageApi;
+  api?: YearlyGoalPageApi | undefined;
 }) {
   const locale = getLocale();
   const path = `/${locale}/library/goals`;
@@ -547,7 +547,7 @@ export function YearlyGoalPage({
   year?: number | undefined;
   sessionState: 'signed-in' | 'signed-out' | 'unknown' | 'unavailable';
   viewerSubject?: string | null;
-  api?: YearlyGoalPageApi;
+  api?: YearlyGoalPageApi | undefined;
 }) {
   const key = `${year ?? 'invalid'}:${viewerSubject ?? 'no-viewer'}:${sessionState}`;
   return <YearlyGoalScreen key={key} year={year} sessionState={sessionState} viewerSubject={viewerSubject} api={api} />;
