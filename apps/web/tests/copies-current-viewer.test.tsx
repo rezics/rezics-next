@@ -405,8 +405,16 @@ test('Actual server exports certify only the exact native preparation, preserve 
 test('three routed inventory windows retain admitted predecessors, retry the exact target, inspect and return through Commerce address', async () => {
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createRoute, createRootRoute, createMemoryHistory, RouterProvider, Outlet, Link, useRouterState, createRouter } =
-    await import('@tanstack/react-router');
+  const {
+    createRoute,
+    createRootRoute,
+    createMemoryHistory,
+    RouterProvider,
+    Outlet,
+    Link,
+    useRouterState,
+    createRouter,
+  } = await import('@tanstack/react-router');
   const actions = await import('../src/library/copies-actions');
   const { copiesAddress, copiesQuery } = await import('../src/library/copies-query');
   const { copyInventoryReturnHref } = await import('../src/library/copy-reading-context/navigation');
@@ -442,7 +450,11 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
     loader: ({ deps }) => {
       const search = deps as Search;
       routeReads.push(search);
-      return inventory(search, search.cursor === 'c1' ? 2 : search.cursor === 'c2' ? 3 : 1, routeReads.length > 1 ? 'Fresh return' : undefined);
+      return inventory(
+        search,
+        search.cursor === 'c1' ? 2 : search.cursor === 'c2' ? 3 : 1,
+        routeReads.length > 1 ? 'Fresh return' : undefined,
+      );
     },
     shouldReload: ({ cause }) => cause === 'enter',
     component: () => {
@@ -462,10 +474,12 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
     component: () => {
       const via = useRouterState({ select: (state) => (state.location.search as { via?: string }).via });
       const address = new URL(via ?? '/', window.location.origin);
-      const search = Object.fromEntries(['subjectId', 'kind', 'status', 'cursor'].flatMap((key) => {
-        const value = address.searchParams.get(key);
-        return value === null ? [] : [[key, value]];
-      }));
+      const search = Object.fromEntries(
+        ['subjectId', 'kind', 'status', 'cursor'].flatMap((key) => {
+          const value = address.searchParams.get(key);
+          return value === null ? [] : [[key, value]];
+        }),
+      );
       return (
         <Link to="/library/copies" search={search}>
           Return to inventory

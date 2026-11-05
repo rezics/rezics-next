@@ -168,8 +168,7 @@ export function admitCopiesWindowRead(
     };
   }
 
-  if (state.current !== undefined && state.reader === reader && !pending)
-    return { state, focus: false };
+  if (state.current !== undefined && state.reader === reader && !pending) return { state, focus: false };
 
   return {
     state: { ...blank(address, reader, viewer), current: address.cursor },

@@ -70,7 +70,9 @@ const router = await import('@tanstack/react-router');
 const actualRouter = { ...router };
 mock.module('@tanstack/react-router', () => ({
   ...actualRouter,
-  Link: ({ children, className }: { children: ReactNode; className?: string }) => <a className={className}>{children}</a>,
+  Link: ({ children, className }: { children: ReactNode; className?: string }) => (
+    <a className={className}>{children}</a>
+  ),
 }));
 const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
 // Keep the public ResponsiveDialog and its stable portal real. The primitive boundary
