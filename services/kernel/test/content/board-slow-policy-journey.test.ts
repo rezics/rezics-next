@@ -15,7 +15,7 @@ let threads: Awaited<ReturnType<typeof f.thread>>[];
 const path = () => `/v1/boards/${f.board.id}/slowMode`;
 const key = () => crypto.randomUUID();
 
-async function call(actor: ActorName, method: string, url: string, body?: unknown, requestKey = key()) {
+async function call(actor: ActorName, method: string, url: string, body?: unknown, requestKey: string = key()) {
   const bearer = f.system.actors[actor].bearer;
   const response = await f.system.kernel.handle(
     new Request(`https://content.test${url}`, {

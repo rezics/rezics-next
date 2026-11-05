@@ -26,7 +26,7 @@ test('Subject threads retain native reaction totals, viewer isolation and final 
     const path = `/v1/subjects/${world.conceptId}/threads?place=${world.mainTarget.realmId}&kind=discussion`;
     const reactionPath = `/v1/threads/${threadId}/reaction`;
     const page = async (bearer?: string) => {
-      const result = await world.call('GET', path, { bearer });
+      const result = await world.call('GET', path, bearer === undefined ? {} : { bearer });
       expect(result.response.status, result.text).toBe(200);
       expect(result.value?.threads.map((entry: { id: string }) => entry.id)).toEqual([threadId]);
       return result;

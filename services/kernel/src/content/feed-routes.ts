@@ -59,7 +59,7 @@ export function feedRoutes(
     }),
   );
   return app.get(
-    operation.path,
+    '/v1/feedItems',
     {
       ...operation.options,
       transform: ({ request, set }) => {

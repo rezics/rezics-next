@@ -80,7 +80,7 @@ test('native appeal queue paths keep bounded work as each retained history grows
 
   const emptyBoardId = await fixture.createBoard('Terminal empty appeal boundary');
   await fixture.grant(emptyBoardId, people.reviewer.accountId, ['moderation:read_reports']);
-  const terminalRecords = [];
+  const terminalRecords: Awaited<ReturnType<typeof fixture.submitAppeal>>['record'][] = [];
   for (let index = 0; index < 4; index++) {
     const target = await fixture.createThread(emptyBoardId, `Terminal appeal ${index}`);
     const result = await fixture.submitAppeal(emptyBoardId, target);
@@ -299,7 +299,7 @@ test('current authority, session replacement, concurrent resolution and a lost r
 
   const replacement = await fixture.reviewerSession();
   const session = before.response.headers.get(SESSION_HEADER) ?? undefined;
-  const switched = await fixture.call('GET', inspect, { bearer: replacement.bearer, session });
+  const switched = await fixture.call('GET', inspect, { bearer: replacement.bearer, ...(session === undefined ? {} : { session }) });
   expect(switched.response.status).toBe(200);
   expect(switched.body?.provenance.actorId).toBe(people.reviewer.accountId);
   expect(switched.body?.provenance.session.clientId).not.toBe(before.body?.provenance.session.clientId);
@@ -372,7 +372,7 @@ test('current authority, session replacement, concurrent resolution and a lost r
   await fixture.reviewerSession(true);
   await fixture.deleteReviewer();
   for (const bearer of [people.reviewer.bearer, replacement.bearer]) {
-    expect((await fixture.call('GET', inspect, { bearer, session })).response.status).toBe(401);
+    expect((await fixture.call('GET', inspect, { bearer, ...(session === undefined ? {} : { session }) })).response.status).toBe(401);
     expect((await fixture.call('POST', path, { bearer, key: winningKey, body: winningInput })).response.status).toBe(
       401,
     );

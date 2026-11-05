@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import type { Access } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
-import { capture, openGrowthDatabase, type Population } from '../../support/growth.ts';
+import { capture, openGrowthDatabase, seed, type Population } from '../../support/growth.ts';
 import { explainPlanEntries, walkPlanTree } from '../../support/growth-plan-walk.ts';
 import type { Capture } from '../../support/growth-cost.ts';
 import {
@@ -56,7 +56,7 @@ export async function settingsPageGrowthFixture() {
       expect(source.response.status, source.text).toBe(200);
       const authored = await f.call('POST', `/v1/posts/${parentId}/revisions`, {
         body: { body: rulesBody() },
-        headers: { 'if-match': JSON.stringify(source.value.post.revisionId) },
+        headers: { 'if-match': JSON.stringify(source.value!.post.revisionId) },
       });
       expect(authored.response.status, authored.text).toBe(200);
       const pin = { postId: parentId, revisionId: authored.value.post.revisionId as string };

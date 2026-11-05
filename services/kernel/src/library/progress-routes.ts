@@ -860,7 +860,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       },
     )
     .post(
-      recordOperation.path,
+      '/v1/progressSessions/:sessionId/$record',
       recordOperation.options,
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);

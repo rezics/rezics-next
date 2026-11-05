@@ -1,4 +1,7 @@
 import { treaty, type Treaty } from '@elysia/eden';
+import type { Static } from 'typebox';
+import type { PublicationPreparationSchema } from './kernel/community/publication-preparation.ts';
+import type { DecisionPageSchema } from './kernel/content/decision-page.ts';
 import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
@@ -36,10 +39,8 @@ export type {
   PersonalEntryTimestampInput,
 } from './kernel/library/entry-personal-model';
 export type {
-  EntryAnnotationCorrectionCancelResult,
-  EntryAnnotationCorrectionInput,
   EntryAnnotationCorrectionItem,
-  EntryAnnotationCorrectionOperation,
+  EntryAnnotationOperation as EntryAnnotationCorrectionOperation,
   EntryAnnotationCorrectionPage,
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
@@ -61,7 +62,11 @@ export type {
   RealmClaimReviewPage,
   RealmClaimReviewPresentation,
 } from './kernel/community/realm-claim-review';
-export type { PublicationCommand, RealmPublicationPreparation } from './kernel/community/publication-preparation.ts';
+export type RealmPublicationPreparation = Static<typeof PublicationPreparationSchema>;
+export type PublicationCommand = RealmPublicationPreparation['commands']['publish'];
+type AnnotationCorrectionRoute = Routes['libraryEntryAnnotationCorrections'];
+export type EntryAnnotationCorrectionInput = AnnotationCorrectionRoute['post']['body'];
+export type EntryAnnotationCorrectionCancelResult = AnnotationCorrectionRoute[':reviewId']['cancel']['post']['response'][200];
 
 type NativePostHistoryPage = Routes['posts'][':id']['revisions']['get']['response'][200]['page'];
 type Routes = KernelType['~Routes']['v1'];
@@ -167,12 +172,10 @@ export type SourceClassificationClearResult = MethodResult<ClassificationMethod<
 
 export type KernelClient = GeneratedKernelClient;
 export type PostHistoryPage = NativePostHistoryPage;
-export type {
-  DecisionPageAppeal,
-  DecisionPageAppealAdvice,
-  DecisionPageTargetContext,
-  ModerationDecisionPage,
-} from './kernel/content/decision-page.ts';
+export type ModerationDecisionPage = Static<typeof DecisionPageSchema>;
+export type DecisionPageAppeal = NonNullable<ModerationDecisionPage['appeal']>;
+export type DecisionPageAppealAdvice = ModerationDecisionPage['viewer']['appeal'];
+export type DecisionPageTargetContext = ModerationDecisionPage['targetContext'];
 type NoticeInboxClient = ReturnType<KernelClient['accounts']>['notifications'];
 type NoticeInboxRead = Awaited<ReturnType<NoticeInboxClient['get']>>;
 type UnreadNoticeRead = Awaited<ReturnType<NoticeInboxClient['count']['get']>>;

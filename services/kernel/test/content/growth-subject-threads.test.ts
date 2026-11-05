@@ -51,6 +51,7 @@ test('subject thread page stays within its bound as the subject thread index gro
     pool: db.pool,
     access,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
+    routeKey: new Uint8Array(32).fill(41),
     cursorNow: () => Date.UTC(2026, 9, 27),
   };
   const context = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 30_000 };

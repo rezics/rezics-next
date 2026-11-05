@@ -477,44 +477,44 @@ export async function claimReviewGrowthFixture() {
     }
     async function measureListingPaths(expected: readonly RealmClaimReviewPage['claimRequests'][number][]) {
       const first = await listAt(100, undefined, 'reviewer', growthKernel);
-      expect(first).toEqual({ claimRequests: expected.slice(0, 20), next: expect.any(String) });
+      expect(first).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: expected.slice(0, 20), next: expect.any(String) });
       const deep = await listAt(100, first.next!, 'reviewer', growthKernel);
-      expect(deep).toEqual({ claimRequests: expected.slice(20), next: expect.any(String) });
-      expect(await listAt(100, deep.next!, 'reviewer', growthKernel)).toEqual({ claimRequests: [], next: null });
+      expect(deep).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: expected.slice(20), next: expect.any(String) });
+      expect(await listAt(100, deep.next!, 'reviewer', growthKernel)).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [], next: null });
 
       await setReviewTime(1);
       const filtered = await listAt(100, undefined, 'reviewer', growthKernel);
-      expect(filtered).toEqual({ claimRequests: [], next: expect.any(String) });
+      expect(filtered).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [], next: expect.any(String) });
       const filteredDeep = await listAt(100, filtered.next!, 'reviewer', growthKernel);
-      expect(filteredDeep).toEqual({ claimRequests: [], next: expect.any(String) });
+      expect(filteredDeep).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [], next: expect.any(String) });
       expect(await listAt(100, filteredDeep.next!, 'reviewer', growthKernel)).toEqual({
-        claimRequests: [],
+        selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [],
         next: null,
       });
       const filteredOne = await listAt(1, undefined, 'reviewer', growthKernel);
-      expect(filteredOne).toEqual({ claimRequests: [], next: expect.any(String) });
+      expect(filteredOne).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [], next: expect.any(String) });
       expect(await listAt(1, filteredOne.next!, 'reviewer', growthKernel)).toEqual({
-        claimRequests: [],
+        selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [],
         next: expect.any(String),
       });
       await setReviewTime(2);
       expect(await listAt(100, filtered.next!, 'reviewer', growthKernel)).toEqual({
-        claimRequests: expected.slice(20),
+        selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: expected.slice(20),
         next: expect.any(String),
       });
       expect(await listAt(1, filteredOne.next!, 'reviewer', growthKernel)).toEqual({
-        claimRequests: [expected[1]!],
+        selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [expected[1]!],
         next: expect.any(String),
       });
 
       await rejectListAt('not_found', 'claimant', 1, undefined, growthKernel);
       expect(await listAt(100, undefined, 'control', growthKernel)).toEqual({
-        claimRequests: expected.slice(0, 20),
+        selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: expected.slice(0, 20),
         next: expect.any(String),
       });
       await revokeDuringGrowthList();
       expect(await listAt(100, undefined, 'control', growthKernel)).toEqual({
-        claimRequests: expected.slice(0, 20),
+        selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: expected.slice(0, 20),
         next: expect.any(String),
       });
     }

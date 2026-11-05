@@ -14,7 +14,7 @@ const physical = {
   labels: { en: 'Physical copy' },
   statuses: [],
   condition: 'physical-v1',
-};
+} satisfies LibraryCopyKindDescriptor;
 const pin: LibraryProfilePin = {
   provenance: 'profile',
   releaseDigest: 'accepted',

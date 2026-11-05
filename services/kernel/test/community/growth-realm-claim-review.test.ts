@@ -50,10 +50,12 @@ test('registered owner erasure supplies the original episode and native HTTP req
       orphanedAt: claim.orphanedAt,
       claimEligibleAt: claim.claimEligibleAt,
       requestedAt: claim.requestedAt,
+      claimant: expect.objectContaining({ label: expect.any(String) }),
+      approvalAdvice: { method: 'POST' as const, destination: `/v1/realms/${claim.realmId}/claimRequests/${claim.requestId}:approve`, requiredAction: 'realm:approve_claim' as const, requiredHeader: 'Idempotency-Key' as const },
     };
-    expect(first).toEqual({ claimRequests: [disclosed], next: expect.any(String) });
+    expect(first).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [disclosed], next: expect.any(String) });
     // The cursor follows the last examined key even when its successor is empty.
-    expect(await fixture.list(1, first.next!)).toEqual({ claimRequests: [], next: null });
+    expect(await fixture.list(1, first.next!)).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [], next: null });
     await fixture.rejectedList('invalid_cursor', 'control', 1, first.next!);
     await fixture.rejectedList('invalid_cursor', 'reviewer', 2, first.next!);
     await fixture.bumpPartitionEpochAndReject(first.next!);
@@ -72,40 +74,42 @@ test('registered owner erasure supplies the original episode and native HTTP req
         orphanedAt: item.orphanedAt,
         claimEligibleAt: item.claimEligibleAt,
         requestedAt: item.requestedAt,
+        claimant: expect.objectContaining({ label: expect.any(String) }),
+        approvalAdvice: { method: 'POST' as const, destination: `/v1/realms/${item.realmId}/claimRequests/${item.requestId}:approve`, requiredAction: 'realm:approve_claim' as const, requiredHeader: 'Idempotency-Key' as const },
       })),
     ].sort((left, right) => (left.requestId < right.requestId ? -1 : left.requestId > right.requestId ? 1 : 0));
     const populated = await fixture.list(100);
-    expect(populated).toEqual({ claimRequests: expected.slice(0, 20), next: expect.any(String) });
+    expect(populated).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: expected.slice(0, 20), next: expect.any(String) });
     const deep = await fixture.list(100, populated.next!);
-    expect(deep).toEqual({ claimRequests: expected.slice(20), next: expect.any(String) });
-    expect(await fixture.list(100, deep.next!)).toEqual({ claimRequests: [], next: null });
+    expect(deep).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: expected.slice(20), next: expect.any(String) });
+    expect(await fixture.list(100, deep.next!)).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [], next: null });
 
     // A trusted read clock before these native requests, but after the original
     // eligibility instant, makes every raw candidate temporarily ineligible.
     // No stored episode, request timestamp or source fence is rewritten.
     await fixture.reviewTime(1);
     const filtered = await fixture.list(100);
-    expect(filtered).toEqual({ claimRequests: [], next: expect.any(String) });
+    expect(filtered).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [], next: expect.any(String) });
     const filteredDeep = await fixture.list(100, filtered.next!);
-    expect(filteredDeep).toEqual({ claimRequests: [], next: expect.any(String) });
-    expect(await fixture.list(100, filteredDeep.next!)).toEqual({ claimRequests: [], next: null });
+    expect(filteredDeep).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [], next: expect.any(String) });
+    expect(await fixture.list(100, filteredDeep.next!)).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [], next: null });
     const filteredOne = await fixture.list(1);
-    expect(filteredOne).toEqual({ claimRequests: [], next: expect.any(String) });
+    expect(filteredOne).toEqual({ selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [], next: expect.any(String) });
     await fixture.reviewTime(2);
     // The cursor consumed raw keys, so eligibility returning cannot refill them.
     expect(await fixture.list(100, filtered.next!)).toEqual({
-      claimRequests: expected.slice(20),
+      selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: expected.slice(20),
       next: expect.any(String),
     });
     expect(await fixture.list(1, filteredOne.next!)).toEqual({
-      claimRequests: [expected[1]!],
+      selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: [expected[1]!],
       next: expect.any(String),
     });
 
     await fixture.revokeDuringList();
     await fixture.rejectedList('not_found', 'reviewer');
     expect(await fixture.list(100, undefined, 'control')).toEqual({
-      claimRequests: expected.slice(0, 20),
+      selectedRequest: null, realmPresentation: expect.any(Object), claimRequests: expected.slice(0, 20),
       next: expect.any(String),
     });
 

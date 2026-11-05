@@ -8,7 +8,10 @@ import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel, type KernelDependencies } from '../../src/http/kernel.ts';
 
-type KernelContent = ContentRuntime & { cursorNow?: () => number } & { readConsent?: CurrentConsentReader };
+type KernelContent = ContentRuntime & { cursorNow?: () => number } & {
+  readConsent?: CurrentConsentReader;
+  shelfTitleInputs?: import('../../src/library/shelf-title-content-source.ts').ContentShelfTitleInputs;
+};
 
 test('trusted optional content runtime types retain exactly the three native ports', () => {
   expectTypeOf<ContentRuntime>().toEqualTypeOf<

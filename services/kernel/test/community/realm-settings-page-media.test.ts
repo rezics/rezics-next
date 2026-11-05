@@ -20,7 +20,7 @@ test.serial(
     const presentation = { avatarMediaId: avatar.id, bannerMediaId: banner.id, rules: null };
     const key = crypto.randomUUID();
     const saved = await f.patch(realm.realmId, realm.headRevisionId, presentation, key);
-    expect(saved.response.status, saved.text).toBe(200);
+    expect(saved.response.status, JSON.stringify(saved.value)).toBe(200);
     const writeCounts = async () =>
       (
         await f.base.db.admin.query(`SELECT
@@ -35,7 +35,7 @@ test.serial(
       writes: await writeCounts(),
     };
     const page = await f.base.call('GET', `/v1/realms/${realm.realmId}/settings`, { bearer: f.base.governor.bearer });
-    expect(page.response.status, page.text).toBe(200);
+    expect(page.response.status, JSON.stringify(page.value)).toBe(200);
     expect(page.value.snapshot).toMatchObject({
       head: saved.value.realm.headRevisionId,
       presentation,
@@ -100,11 +100,11 @@ test.serial(
       { ...presentation, bannerMediaId: null },
       crypto.randomUUID(),
     );
-    expect(sparse.response.status, sparse.text).toBe(200);
+    expect(sparse.response.status, JSON.stringify(sparse.value)).toBe(200);
     const readback = await f.base.call('GET', `/v1/realms/${realm.realmId}/settings`, {
       bearer: f.base.governor.bearer,
     });
-    expect(readback.response.status, readback.text).toBe(200);
+    expect(readback.response.status, JSON.stringify(readback.value)).toBe(200);
     expect(readback.value.snapshot.avatar.state).toBe('available');
     expect(readback.value.snapshot.banner).toEqual({ state: 'none', value: null });
     expect(await f.mediaRows([avatar.id, banner.id])).toEqual(before.media);

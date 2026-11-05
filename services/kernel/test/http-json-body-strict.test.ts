@@ -5,7 +5,7 @@ import { createPool } from '../src/database/pool.ts';
 import { createKernel } from '../src/http/kernel.ts';
 import { customMethod } from '../src/http/custom-method.ts';
 import { ProblemError, problemSchema } from '../src/http/problem.ts';
-import type { SearchService } from '../src/search/http/routes.ts';
+import type { SearchService } from '../src/search/service-scope.ts';
 import { Value } from 'typebox/value';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -17,6 +17,7 @@ let authentications = 0;
 const searches: unknown[] = [];
 const suggestions: unknown[] = [];
 const search: SearchService = {
+  async releaseGroups() { throw new Error('Unexpected grouped release search'); },
   async search(_principal, request) {
     searches.push(request);
     return { subjects: [], next: null, as_of: '2026-10-26T00:00:00Z' };

@@ -56,6 +56,8 @@ const collection: DiscoveryUnionHit = {
         presentationKindSource: 'owner',
         cover: null,
         coverSource: 'none',
+        curator: { state: 'unavailable', reason: 'native_projection' },
+        preview: { state: 'unavailable' },
         membershipKind: 'curated',
         memberCount: 2,
         orderEpoch: 1,

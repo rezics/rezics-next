@@ -21,9 +21,9 @@ test('readers can privately watch a visible thread and clear their watch after a
   const reader = f.accounts.principal;
   const path = `/v1/threads/${thread.id}/watch`;
 
-  expect(await f.call(reader, 'GET', path)).toEqual({ status: 200, value: { watching: false } });
+  expect(await f.call(reader, 'GET', path)).toEqual({ status: 200, value: { watching: false }, headers: expect.any(Headers), responseBytes: Buffer.byteLength(JSON.stringify({ watching: false })) });
   expect(await f.call(reader, 'PUT', path)).toMatchObject({ status: 204 });
-  expect(await f.call(reader, 'GET', path)).toEqual({ status: 200, value: { watching: true } });
+  expect(await f.call(reader, 'GET', path)).toEqual({ status: 200, value: { watching: true }, headers: expect.any(Headers), responseBytes: Buffer.byteLength(JSON.stringify({ watching: true })) });
 
   await f.db.admin.query(
     `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
