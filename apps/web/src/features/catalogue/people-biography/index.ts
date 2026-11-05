@@ -1,9 +1,10 @@
 import type { SubjectRead } from '@rezics/client';
-import { pickText } from '@rezics/composition';
-import type { PropertyDefinition, Release } from '@rezics/definitions';
+import { chooseLabel, languageRanges, type PropertyDefinition, type Release } from '@rezics/definitions';
 import { subjectHref } from '../../../subject/subject-href';
+import { originalLanguage } from '../../../subject/language';
 import { authoredProperties } from '../authored-field';
 import { correctionProperty } from '../statement-editor';
+import { peopleBiographyAddress, peopleBiographyEditorHref } from './current-visit';
 
 export const peopleBiographyRequested = {
   biography: ['schema:abstract'] as const,
@@ -36,6 +37,20 @@ export type PeopleBiographyGroup = {
 };
 type Definitions = Pick<Release, 'types' | 'properties'>;
 
+/** Use the shared Semantic label policy and keep the stored language tag for rendering. */
+export function peopleLabel(
+  labels: Readonly<Record<string, string>> | undefined,
+  locale: string,
+  original?: string | null,
+): { text: string; lang: string | null } {
+  const selected = chooseLabel(labels ?? {}, languageRanges(null, locale), original);
+  return selected ? { text: selected.value, lang: selected.language } : { text: '', lang: null };
+}
+
+export function peopleSubjectLabel(subject: SubjectRead['subject'], locale: string) {
+  return peopleLabel(subject.labels, locale, originalLanguage(subject));
+}
+
 function isType(release: Definitions, type: string, target: string, seen = new Set<string>()): boolean {
   if (type === target) return true;
   if (seen.has(type)) return false;
@@ -61,7 +76,7 @@ function disclosedTarget(
   if (!id || !Object.hasOwn(related, id)) return undefined;
   const summary = related[id];
   if (!summary || !('labels' in summary)) return undefined;
-  const label = pickText(summary.labels ?? {}, locale);
+  const label = peopleLabel(summary.labels ?? {}, locale);
   return label.text ? { id, label: label.text, lang: label.lang } : { id, label: '', lang: null };
 }
 
@@ -112,8 +127,8 @@ function requestedField(
     id,
     kind,
     status: unreadable && readable ? 'unreadable' : factStatus(definition, subject?.subject.statements[id], readable),
-    label: pickText(definition?.labels ?? release.properties[id]?.labels ?? {}, locale),
-    description: pickText(definition?.descriptions ?? release.properties[id]?.descriptions ?? {}, locale),
+    label: peopleLabel(definition?.labels ?? release.properties[id]?.labels ?? {}, locale),
+    description: peopleLabel(definition?.descriptions ?? release.properties[id]?.descriptions ?? {}, locale),
     ...(definition ? { datatype: definition.datatype } : {}),
     editor: definition ? itemEditor(definition) : 'none',
     facts,
@@ -201,14 +216,29 @@ export function peopleScalarFields(release: Release, type: string, locale: strin
   });
 }
 
-export function peopleBiographyHref(id: string, label: string, locale: string, property?: string): string {
+export function peopleBiographyHref(
+  id: string,
+  label: string,
+  locale: string,
+  context: string,
+  returnHref: string,
+  property?: string,
+): string {
   const authored = `${subjectHref({ id, label }, locale).href}/authored`;
-  return property ? `${authored}?property=${encodeURIComponent(property)}` : authored;
+  return peopleBiographyEditorHref(authored, context, returnHref, locale, property);
 }
 
-export function peopleRelationHref(id: string, label: string, locale: string): string {
-  return `${subjectHref({ id, label }, locale).href}/relation-edit`;
+export function peopleRelationHref(
+  id: string,
+  label: string,
+  locale: string,
+  context: string,
+  returnHref: string,
+): string {
+  return peopleBiographyEditorHref(`${subjectHref({ id, label }, locale).href}/relation-edit`, context, returnHref, locale);
 }
+
+export { peopleBiographyAddress };
 
 /** A previously chosen assertion is editable only while that exact statement remains selected. */
 export function peopleSelectedFact(

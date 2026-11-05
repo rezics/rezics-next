@@ -8,6 +8,7 @@ export type {
 import type { FilterDocument } from '@rezics/filter';
 import schema from '../schema/release.json';
 import type { LibraryProfile, LibraryProfileReference } from './library-profile.ts';
+export { chooseLabel, languageRanges } from './language.ts';
 
 export type {
   LibraryLabels,

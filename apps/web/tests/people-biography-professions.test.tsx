@@ -6,10 +6,14 @@ import type { SubjectRead } from '@rezics/client';
 import { peopleCandidateId, peoplePersonId, peopleProfileFixture } from '../src/kernel/fake/catalogue-people-profile';
 import {
   peopleBiographyGroups,
+  peopleBiographyAddress,
   peopleBiographyHref,
+  peopleSubjectLabel,
+  peopleRelationHref,
   peopleScalarFields,
   peopleSelectedFact,
 } from '../src/features/catalogue/people-biography';
+import { personBiographyReturn } from '../src/features/pages/subject-visit-navigation';
 import { sealFacts, sendFacts, type FactDraft } from '../src/features/catalogue/subject-facts';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -87,9 +91,40 @@ test('Person biography groups bind admitted multilingual documents, occupations 
       ?.fields.find((field) => field.id === 'wdt:P106')?.status,
   ).toBe('unreadable');
   expect(peopleScalarFields(fixture.release, 'schema:Person', 'en')).toContain('schema:url');
-  expect(peopleBiographyHref(peoplePersonId, 'Mira Sato', 'en', 'schema:abstract')).toContain(
-    '/authored?property=schema%3Aabstract',
+  const source = peopleBiographyAddress(
+    peoplePersonId,
+    'Mira Sato',
+    'en',
+    fixture.person.subject.context,
+    'biography',
+    'schema:abstract',
   );
+  const authored = peopleBiographyHref(
+    peoplePersonId,
+    'Mira Sato',
+    'en',
+    fixture.person.subject.context,
+    source,
+    'schema:abstract',
+  );
+  expect(authored).toContain('/authored?context=');
+  expect(authored).toContain('property=schema%3Aabstract');
+  expect(authored).toContain('via=');
+  const authoredVia = new URL(authored, 'https://site.invalid').searchParams.get('via')!;
+  expect(personBiographyReturn(new URL(authoredVia, 'https://site.invalid').hash)).toMatchObject({
+    context: fixture.person.subject.context,
+    field: 'schema:abstract',
+    window: 'biography',
+  });
+  const relation = peopleRelationHref(
+    peoplePersonId,
+    'Mira Sato',
+    'en',
+    fixture.person.subject.context,
+    source,
+  );
+  expect(relation).toContain('/relation-edit?context=');
+  expect(relation).toContain('via=');
 
   const occupation = '00000000-0000-4000-8000-00000000d201';
   const writer = '00000000-0000-4000-8000-00000000d202';
@@ -118,7 +153,7 @@ test('Person biography groups bind admitted multilingual documents, occupations 
     statement('00000000-0000-4000-8000-00000000d232', 'schema:knowsLanguage', english, 'wikibase-item'),
   ];
   fixture.person.related = {
-    [occupation]: { type: 'skos:Concept', labels: { en: 'Director', ja: '監督' } },
+    [occupation]: { type: 'skos:Concept', labels: { ja: '監督', en: 'Director', 'zh-Hant': '導演' } },
     [writer]: { type: 'skos:Concept', labels: { en: 'Writer', ja: '脚本家' } },
     [japanese]: { type: 'skos:Concept', labels: { ja: '日本語', en: 'Japanese' } },
     [english]: { type: 'skos:Concept', labels: { en: 'English' } },
@@ -137,6 +172,15 @@ test('Person biography groups bind admitted multilingual documents, occupations 
     '脚本家',
   ]);
   expect(languages.fields[0]?.facts.map((fact) => fact.target?.id)).toEqual([japanese, english]);
+  fixture.person.subject.labels = { ja: '佐藤ミラ', en: 'Mira Sato', 'zh-Hant': '佐藤米拉' };
+  expect(peopleSubjectLabel(fixture.person.subject, 'zh-Hant')).toEqual({ text: '佐藤米拉', lang: 'zh-Hant' });
+  fixture.person.related[occupation] = {
+    type: 'skos:Concept',
+    labels: { 'zh-Hant': '導演', en: 'Director', ja: '監督' },
+  };
+  expect(
+    peopleBiographyGroups(fixture.release, 'schema:Person', 'zh-Hant', fixture.person)[1]!.fields[0]!.facts[0]!.target,
+  ).toMatchObject({ label: '導演', lang: 'zh-Hant' });
   expect(occupations.fields.find((field) => field.id === 'schema:hasOccupation')?.status).toBe('unsupported');
   const hidden = structuredClone(fixture.person);
   delete hidden.related[occupation];
@@ -215,6 +259,7 @@ test('labelled People groups show admitted occupations, unreleased fields and re
   window.document.body.append(host);
   const root = createRoot(host);
   const fixture = peopleProfileFixture('ready', 'en', 'person');
+  fixture.person.subject.labels = { ja: '佐藤ミラ', en: 'Mira Sato' };
   const occupation = '00000000-0000-4000-8000-00000000d201';
   fixture.person.subject.statements['wdt:P106'] = [
     statement('00000000-0000-4000-8000-00000000d221', 'wdt:P106', occupation, 'wikibase-item'),
@@ -253,7 +298,12 @@ test('labelled People groups show admitted occupations, unreleased fields and re
     expect(host.textContent).toContain('Director');
     const authored = [...host.querySelectorAll('a')].find((link) => link.getAttribute('href')?.includes('/authored'));
     expect(authored?.getAttribute('href')).toContain('property=schema%3Aabstract');
-    expect(authored?.getAttribute('href')).toContain('return=');
+    expect(authored?.getAttribute('href')).toContain('context=');
+    expect(authored?.getAttribute('href')).toContain('via=');
+    const target = [...host.querySelectorAll('a')].find((link) => link.textContent === 'Director');
+    expect(target?.getAttribute('href')).toContain('context=');
+    expect(target?.getAttribute('href')).toContain('via=');
+    expect(target?.getAttribute('lang')).toBe('en');
     expect([...host.querySelectorAll('a')].some((link) => link.textContent === m.people_biography_return())).toBe(true);
     const withheld = structuredClone(fixture.person);
     delete withheld.related[occupation];

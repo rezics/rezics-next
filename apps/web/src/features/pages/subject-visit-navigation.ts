@@ -24,6 +24,54 @@ const returnAddressCap = 32768;
 const literaryHistoryLimit = 8;
 const collectionDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/collections/${uuid}$`);
 const subjectCommunityFragment = /^#subject-community-[A-Za-z0-9_-]{1,64}$/u;
+const personBiographyWindows = ['biography', 'occupations', 'languages', 'affiliations'] as const;
+
+export type PersonBiographyReturn = {
+  context: string;
+  field: string;
+  assertion?: string;
+  window: (typeof personBiographyWindows)[number];
+};
+
+/** A Person correction return names only its current Context, field, assertion and section. */
+export function personBiographyReturn(hash: string): PersonBiographyReturn | undefined {
+  if (!hash.startsWith('#person-biography?') || hash.length > 1024) return;
+  const params = new URLSearchParams(hash.slice('#person-biography?'.length));
+  const keys = [...params.keys()];
+  const context = params.get('context');
+  const field = params.get('field');
+  const assertion = params.get('assertion');
+  const window = params.get('window');
+  if (
+    new Set(keys).size !== keys.length ||
+    keys.some((key) => !['context', 'field', 'assertion', 'window'].includes(key)) ||
+    !context ||
+    !new RegExp(`^${uuid}$`, 'i').test(context) ||
+    !field ||
+    field.length > 256 ||
+    /[\s\u0000-\u001f\u007f]/u.test(field) ||
+    (assertion !== null && !new RegExp(`^${uuid}$`, 'i').test(assertion)) ||
+    !personBiographyWindows.includes(window as (typeof personBiographyWindows)[number])
+  )
+    return;
+  return {
+    context,
+    field,
+    ...(assertion ? { assertion } : {}),
+    window: window as PersonBiographyReturn['window'],
+  };
+}
+
+export function personBiographyReturnFragment(value: PersonBiographyReturn): string {
+  const params = new URLSearchParams({
+    context: value.context,
+    field: value.field,
+    window: value.window,
+    ...(value.assertion ? { assertion: value.assertion } : {}),
+  });
+  const hash = `#person-biography?${params}`;
+  return personBiographyReturn(hash) ? hash : '#person-biography';
+}
 
 function validLiteraryHistory(value: string): boolean {
   if (value.length > returnAddressCap) return false;
@@ -728,11 +776,12 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const realmPath = realmDestination.exec(url.pathname);
     const copiesPath = copiesDestination.exec(url.pathname);
     const match = subject ?? realmPath ?? copiesPath;
+    const personBiographyPath = subject?.[2] === 'people' && personBiographyReturn(url.hash) !== undefined;
     if (
       url.origin !== 'https://rezics.invalid' ||
       !match ||
       (locale !== undefined && match[1] !== locale) ||
-      (subject?.[2] !== undefined && !isView(subject[2]) && subject[2] !== 'sources')
+      (subject?.[2] !== undefined && !isView(subject[2]) && subject[2] !== 'sources' && !personBiographyPath)
     )
       return;
     if (copiesPath) {
@@ -795,6 +844,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     );
     const screenEntry = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(url.hash);
     const recordingStatement = new RegExp(`^#recording-statement-${uuid}$`, 'i').test(url.hash);
+    const personBiography = subject?.[2] === 'people' ? personBiographyReturn(url.hash) : undefined;
     const screenReturn = screenCursor !== null || screenSelection !== null || screenEntry !== null;
     const literaryOverviewStream =
       !!subject &&
@@ -807,6 +857,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     if (
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
       (selectedContext !== null && (!subject || !new RegExp(`^${uuid}$`, 'i').test(selectedContext))) ||
+      (personBiography !== undefined && selectedContext !== personBiography.context) ||
       (musicReturn &&
         (!subject ||
           (musicStream !== null && (!musicStream || musicStream.length > 256)) ||
@@ -881,6 +932,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
         mangaOccurrenceFromFragment(fragment)
       ) &&
       !(subject && (fragment === '#work-tags' || workTagReturn(fragment))) &&
+      !(subject?.[2] === 'people' && personBiography !== undefined) &&
       !(subject && subjectCommunityFragment.test(fragment)) &&
       fragment !== '#screen-episode-list' &&
       screenEntry === null &&
