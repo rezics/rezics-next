@@ -981,10 +981,12 @@ export function subjectCommunityVisitReturn(value: unknown, locale?: string): st
 export function subjectRouteSearchLimit(search: string, cursor?: string): number {
   const parameters = new URLSearchParams(search);
   const via = parameters.get('via');
+  const recipeReturn = parameters.getAll('recipeReturn');
   const acceptedVia = via && via.length <= returnAddressCap ? subjectVisitReturn(via) : undefined;
   try {
     const currentCursor = cursor && cursor.length <= 8192 ? encodeURIComponent(cursor).length : 0;
-    return 2048 + (acceptedVia ? encodeURIComponent(acceptedVia).length : 0) + currentCursor;
+    const recipeReturnBudget = recipeReturn.length === 1 && recipeReturn[0]!.length <= 8192 ? 8192 : 0;
+    return 2048 + (acceptedVia ? encodeURIComponent(acceptedVia).length : 0) + recipeReturnBudget + currentCursor;
   } catch {
     return 2048;
   }

@@ -26,7 +26,7 @@ const canonicalRecipe = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const intent = parseRecipeVisit(data.search);
+    const intent = parseRecipeVisit(data.search, data.locale, data.id);
     if (!intent.valid) return { id: data.id, intent };
     const [{ kernelClient }, { loadContextSubject }] = await Promise.all([
       import('../../kernel/client'),
@@ -42,9 +42,10 @@ const canonicalRecipe = createServerFn({ method: 'GET', strict: false })
       id: canonical.value.id,
       intent,
       sourceHref:
-        intent.visit.context === candidateContext || intent.visit.realm
+        intent.visit.returnHref ??
+        (intent.visit.context === candidateContext || intent.visit.realm
           ? contextHref(canonical.value.href, intent.visit.realm)
-          : undefined,
+          : undefined),
     };
   });
 export const Route = createFileRoute('/subjects/$id_/$slug_/recipe')({

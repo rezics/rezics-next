@@ -122,7 +122,7 @@ export const loadRecipeEditor = createServerFn({ method: 'GET', strict: false })
     if (typeof input === 'string')
       return { id: recipeUuid.test(input) ? input : '', context: undefined, expectedReader: undefined };
     if (!input || !recipeUuid.test(input.id) || typeof input.search !== 'string') return null;
-    const parsed = parseRecipeVisit(input.search);
+    const parsed = parseRecipeVisit(input.search, requestLocale() ?? 'en', input.id);
     return parsed.valid
       ? {
           id: input.id,
