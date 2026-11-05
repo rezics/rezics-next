@@ -2962,7 +2962,9 @@ export class MergeTrain {
       observe();
       // Stale code lets the command already running finish; the next boundary hands the request to a current controller.
       if (o.codeIsCurrent && !o.codeIsCurrent())
-        controller.abort(new ControlPlaneProofInterrupted('Control-plane code changed; current controller must hand off'));
+        controller.abort(
+          new ControlPlaneProofInterrupted('Control-plane code changed; current controller must hand off'),
+        );
       controller.signal.throwIfAborted();
       if (this.git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}`) !== source) {
         const error = new Error(
