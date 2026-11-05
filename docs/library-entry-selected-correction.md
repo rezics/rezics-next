@@ -86,7 +86,7 @@ lease, source lifetime and departure owner compose this review. The receiving gu
 The consumer uses generated create/read/confirm/cancel calls and the installed addressed personal-entry reader.
 Review pages contain four comparisons and exact intended values. Acknowledged confirmation refreshes the current
 bounded Entries page at its original address; it does not locally reorder priority or replace source/filter/order.
-Reopening a page reads at most four personal Entries separately from native outcomes. An uncertain confirmation
+Reopening a page reads at most four personal Entries separately from native outcomes. A new native page clears earlier readback immediately, so an unavailable row cannot retain a prior private note while other current reads finish. Returning refreshes the same bounded source before another deliberate review. An uncertain confirmation
 retains its original body, epoch, position, logical key and encrypted original authorization. Cancellation reconciles
 that command before native cancellation fences further work. A lost create response cannot have confirmed any item;
 it may be left to expire, without replaying admission as acknowledgement.
