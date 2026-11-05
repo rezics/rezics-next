@@ -171,6 +171,7 @@ test('each quotation assertion owns its evidence, language choice, inspection an
             h(QuotationView, {
               id: quote,
               locale: 'en',
+              context: uuid(1),
               initial: resume ? undefined : initial,
               quote: quoteIntent,
               transport: {
