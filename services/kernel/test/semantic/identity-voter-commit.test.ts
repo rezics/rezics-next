@@ -329,7 +329,7 @@ test('real admission, mapping, dirty capture and terminal closure cannot commit 
         return noEffect(null);
       });
       try {
-        await ready;
+        await Promise.race([ready, command]);
         await contendedWriter(f, write);
       } finally {
         release();
