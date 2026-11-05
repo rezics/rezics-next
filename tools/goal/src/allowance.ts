@@ -90,7 +90,7 @@ function selectPool(
   profile: Profile,
   pools: readonly Pool[],
   indexedReadings: AllowanceIndex,
-  options: Parameters<typeof choosePool>[3],
+  options: NonNullable<Parameters<typeof choosePool>[3]>,
   now: number,
   allowanceByPool: Map<Pool, PoolAllowance>,
 ): Pool | undefined {
