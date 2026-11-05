@@ -3,11 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  crossMediaAliases,
-  planCrossMediaSeed,
-  seedCrossMedia,
-} from '../../../importer/src/cross-media-seed.ts';
+import { crossMediaAliases, planCrossMediaSeed, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import {
   prepareShowcaseVndbCreditVocabulary,
@@ -160,10 +156,12 @@ test('selected-VN credits reach adopted current facts through exact current bind
     }
 
     function acknowledgedCreate(externalId: string): string {
-      const entry = journal!.acknowledgedCommands().find(
-        (acknowledgement) =>
-          acknowledgement.command.op === 'create' && acknowledgement.command.source.external_id === externalId,
-      );
+      const entry = journal!
+        .acknowledgedCommands()
+        .find(
+          (acknowledgement) =>
+            acknowledgement.command.op === 'create' && acknowledgement.command.source.external_id === externalId,
+        );
       expect(entry?.subjectId).toBeTruthy();
       if (!entry?.subjectId) throw new Error(`Expected acknowledged source identity for ${externalId}`);
       return entry.subjectId;
@@ -188,7 +186,9 @@ test('selected-VN credits reach adopted current facts through exact current bind
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
     port = captureShowcaseCommands(runtime.importTransport, journal);
     const concepts = await prepareShowcaseVndbCreditVocabulary({ plan, port, journal, stage: 'concepts' });
-    const conceptRequirements = concepts.requirements.filter((requirement) => requirement.nativeType === 'skos:Concept');
+    const conceptRequirements = concepts.requirements.filter(
+      (requirement) => requirement.nativeType === 'skos:Concept',
+    );
     expect(conceptRequirements.map((requirement) => requirement.sourceKey)).toEqual([
       'vndb.credit_type:chardesign',
       'vndb.credit_type:scenario',
@@ -253,7 +253,11 @@ test('selected-VN credits reach adopted current facts through exact current bind
       const subjectId = acknowledgedCreate(requirement.source.external_id);
       await acceptAdopt(subjectId, 'schema:url');
       const expectedScheme = requirement.sourceKey.endsWith(':chardesign') ? wrongSchemeId : schemeId;
-      await acceptAdopt(subjectId, 'skos:inScheme', (candidate) => candidate.statement.value.content === expectedScheme);
+      await acceptAdopt(
+        subjectId,
+        'skos:inScheme',
+        (candidate) => candidate.statement.value.content === expectedScheme,
+      );
     }
 
     const vocabularyAcks = journal.acknowledgedCommands().length;
@@ -294,17 +298,11 @@ test('selected-VN credits reach adopted current facts through exact current bind
       ],
     });
 
-    const first = await seedCrossMedia(
-      plan,
-      statePath,
-      port,
-      destination,
-      {
-        mediaDeadlineMs: 0,
-        vndbCreditReferences: references,
-        readPublicSubject: (id) => publicClient.readSubject(id),
-      },
-    );
+    const first = await seedCrossMedia(plan, statePath, port, destination, {
+      mediaDeadlineMs: 0,
+      vndbCreditReferences: references,
+      readPublicSubject: (id) => publicClient.readSubject(id),
+    });
     expect(first.vndbCreditDiagnostics).toContainEqual(
       expect.objectContaining({ code: 'chardesign', reason: 'missing_concept' }),
     );
@@ -340,17 +338,11 @@ test('selected-VN credits reach adopted current facts through exact current bind
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
     port = captureShowcaseCommands(runtime.importTransport, journal);
-    const replay = await seedCrossMedia(
-      plan,
-      statePath,
-      port,
-      destination,
-      {
-        mediaDeadlineMs: 0,
-        vndbCreditReferences: references,
-        readPublicSubject: (id) => publicClient.readSubject(id),
-      },
-    );
+    const replay = await seedCrossMedia(plan, statePath, port, destination, {
+      mediaDeadlineMs: 0,
+      vndbCreditReferences: references,
+      readPublicSubject: (id) => publicClient.readSubject(id),
+    });
     const replayCreditKeys = journal
       .acknowledgedCommands()
       .filter(
@@ -364,17 +356,11 @@ test('selected-VN credits reach adopted current facts through exact current bind
     expect(new Map(replay.readings.map((row) => [row.externalId, row.subject.subject.id])).get('v1')).toBe(workId);
 
     const correctedPlan = await planCrossMediaSeed(selectedVn('30'));
-    result = await seedCrossMedia(
-      correctedPlan,
-      statePath,
-      port,
-      destination,
-      {
-        mediaDeadlineMs: 0,
-        vndbCreditReferences: references,
-        readPublicSubject: (id) => publicClient.readSubject(id),
-      },
-    );
+    result = await seedCrossMedia(correctedPlan, statePath, port, destination, {
+      mediaDeadlineMs: 0,
+      vndbCreditReferences: references,
+      readPublicSubject: (id) => publicClient.readSubject(id),
+    });
     expect(result.vndbCreditDiagnostics).toContainEqual(
       expect.objectContaining({ code: 'chardesign', reason: 'missing_concept' }),
     );
@@ -411,7 +397,10 @@ test('selected-VN credits reach adopted current facts through exact current bind
     );
     expect(
       currentCredits.some(
-        (assertion) => assertion.property === 'wdt:P725' && assertion.statement.value.type === 'value' && assertion.statement.value.content === personId,
+        (assertion) =>
+          assertion.property === 'wdt:P725' &&
+          assertion.statement.value.type === 'value' &&
+          assertion.statement.value.content === personId,
       ),
     ).toBe(false);
     expect(currentCredits.some((assertion) => assertion.property === 'schema:illustrator')).toBe(false);
@@ -424,17 +413,23 @@ test('selected-VN credits reach adopted current facts through exact current bind
       candidate.statement.references?.some((reference) =>
         reference.parts.some((part) => part.property.id === 'schema:url' && part.value.content === uri),
       ) ?? false;
-    const authorCandidate = await acceptAdopt(workId, 'schema:author', (candidate) =>
-      candidate.statement.value.content === personId &&
-      byQualifier(candidate, 'wdt:P3831', scenarioId) &&
-      byQualifier(candidate, 'wdt:P1932', 'Writer Alias') &&
-      byCitation(candidate, 'https://vndb.org/v1#/vn_staff/v1/10/scenario'),
+    const authorCandidate = await acceptAdopt(
+      workId,
+      'schema:author',
+      (candidate) =>
+        candidate.statement.value.content === personId &&
+        byQualifier(candidate, 'wdt:P3831', scenarioId) &&
+        byQualifier(candidate, 'wdt:P1932', 'Writer Alias') &&
+        byCitation(candidate, 'https://vndb.org/v1#/vn_staff/v1/10/scenario'),
     );
-    const voiceCandidate = await acceptAdopt(workId, 'wdt:P725', (candidate) =>
-      candidate.statement.value.content === correctedVoiceId &&
-      byQualifier(candidate, 'wdt:P453', characterId) &&
-      byQualifier(candidate, 'wdt:P1932', 'Voice Alias') &&
-      byCitation(candidate, 'https://vndb.org/v1#/vn_seiyuu/v1/30/c3'),
+    const voiceCandidate = await acceptAdopt(
+      workId,
+      'wdt:P725',
+      (candidate) =>
+        candidate.statement.value.content === correctedVoiceId &&
+        byQualifier(candidate, 'wdt:P453', characterId) &&
+        byQualifier(candidate, 'wdt:P1932', 'Voice Alias') &&
+        byCitation(candidate, 'https://vndb.org/v1#/vn_seiyuu/v1/30/c3'),
     );
     expect(authorCandidate.statement.references).toBeDefined();
     expect(voiceCandidate.statement.qualifiers).toEqual(
@@ -486,12 +481,16 @@ test('selected-VN credits reach adopted current facts through exact current bind
       ]),
     );
     expect(current.statements['schema:illustrator']).toBeUndefined();
-    expect(author?.references?.some((reference) =>
-      reference.parts.some((part) => part.value.content === 'https://vndb.org/v1#/vn_staff/v1/10/scenario'),
-    )).toBe(true);
-    expect(voice?.references?.some((reference) =>
-      reference.parts.some((part) => part.value.content === 'https://vndb.org/v1#/vn_seiyuu/v1/30/c3'),
-    )).toBe(true);
+    expect(
+      author?.references?.some((reference) =>
+        reference.parts.some((part) => part.value.content === 'https://vndb.org/v1#/vn_staff/v1/10/scenario'),
+      ),
+    ).toBe(true);
+    expect(
+      voice?.references?.some((reference) =>
+        reference.parts.some((part) => part.value.content === 'https://vndb.org/v1#/vn_seiyuu/v1/30/c3'),
+      ),
+    ).toBe(true);
     expect(await read(personId)).toMatchObject({ id: personId, type: 'schema:Person' });
     expect(await read(correctedVoiceId)).toMatchObject({ id: correctedVoiceId, type: 'schema:Person' });
     expect(await read(characterId)).toMatchObject({ id: characterId, type: 'schema:Character' });
@@ -505,17 +504,11 @@ test('selected-VN credits reach adopted current facts through exact current bind
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
     port = captureShowcaseCommands(runtime.importTransport, journal);
-    const reopened = await seedCrossMedia(
-      correctedPlan,
-      statePath,
-      port,
-      destination,
-      {
-        mediaDeadlineMs: 0,
-        vndbCreditReferences: references,
-        readPublicSubject: (id) => publicClient.readSubject(id),
-      },
-    );
+    const reopened = await seedCrossMedia(correctedPlan, statePath, port, destination, {
+      mediaDeadlineMs: 0,
+      vndbCreditReferences: references,
+      readPublicSubject: (id) => publicClient.readSubject(id),
+    });
     const reopenedIdentities = new Map(reopened.readings.map((row) => [row.externalId, row.subject.subject.id]));
     expect(reopenedIdentities.get('v1')).toBe(workId);
     expect(reopenedIdentities.get('s4')).toBe(personId);

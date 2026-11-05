@@ -415,9 +415,7 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       readings: current.readings,
       acknowledgements: journal.acknowledgedCommands(),
       aliases: crossMediaAliases,
-      ...(current.vndbCreditCandidateDigests
-        ? { vndbCreditCandidateDigests: current.vndbCreditCandidateDigests }
-        : {}),
+      ...(current.vndbCreditCandidateDigests ? { vndbCreditCandidateDigests: current.vndbCreditCandidateDigests } : {}),
       vocabularyRequirements: concepts.requirements,
     });
     const work = creditManifest.records.find((record) => record.sourceKey === 'v1')!;
@@ -432,18 +430,14 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       statement: { ...author.statement, value: { type: 'value' as const, content: randomUUID() } },
     };
     await captured.batch({ commands: [stale] });
-    const staleCandidate = journal
-      .acknowledgedCommands()
-      .find((entry) => entry.command.key === stale.key)?.candidateId;
+    const staleCandidate = journal.acknowledgedCommands().find((entry) => entry.command.key === stale.key)?.candidateId;
     expect(staleCandidate).toBeTruthy();
     const afterStale = buildShowcaseManifest({
       plan,
       readings: current.readings,
       acknowledgements: journal.acknowledgedCommands(),
       aliases: crossMediaAliases,
-      ...(current.vndbCreditCandidateDigests
-        ? { vndbCreditCandidateDigests: current.vndbCreditCandidateDigests }
-        : {}),
+      ...(current.vndbCreditCandidateDigests ? { vndbCreditCandidateDigests: current.vndbCreditCandidateDigests } : {}),
       vocabularyRequirements: concepts.requirements,
     });
     expect(afterStale.records.find((record) => record.sourceKey === 'v1')?.assertions).not.toContainEqual(
