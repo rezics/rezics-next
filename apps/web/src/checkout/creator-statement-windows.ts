@@ -1,8 +1,7 @@
-import {
-  sameStatementsAddress,
-  type CreatorStatementData,
-  type CreatorStatementsAddress,
-  type CreatorStatementsData,
+import type {
+  CreatorStatementData,
+  CreatorStatementsAddress,
+  CreatorStatementsData,
 } from './creator-statements';
 
 export const CREATOR_STATEMENT_PREDECESSOR_LIMIT = 8;
@@ -23,6 +22,15 @@ type Movement =
   | 'return';
 type Pending = { movement: Movement; source: CreatorStatementsAddress; target: CreatorStatementsAddress; focus: boolean };
 type Candidate = { targetId: string; cancel(): void };
+
+function sameStatementsAddress(a: CreatorStatementsAddress, b: CreatorStatementsAddress) {
+  return (
+    a.kind === b.kind &&
+    a.locale === b.locale &&
+    a.cursor === b.cursor &&
+    (a.kind === 'list' || (b.kind === 'detail' && a.id === b.id && a.from === b.from))
+  );
+}
 
 export type StatementWindowControls = {
   previous?: Position;
