@@ -50,11 +50,6 @@ mock.module('../src/features/pages/graph-browser/actions', () => ({
     return { client: nativeClient, authorization: undefined };
   },
 }));
-const originalDefinitionGuide = await import('../src/features/catalogue/definition-guide');
-mock.module('../src/features/catalogue/definition-guide', () => ({
-  ...originalDefinitionGuide,
-  fetchGuideRelease: async () => release,
-}));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({}) }));
 mock.module('../src/shell/feature-slots', () => ({ useFeatureSlots: () => ({}) }));
 
@@ -98,6 +93,18 @@ function nativeSubject(
 }
 
 nativeClient = {
+  definitions: {
+    active: {
+      get: async () => ({
+        status: 200,
+        data: { digest: fixture.public.subject.release },
+        headers: new Headers(),
+      }),
+    },
+    releases: ({ digest }: { digest: string }) => ({
+      get: async () => ({ status: 200, data: { digest, release }, headers: new Headers() }),
+    }),
+  },
   subjects: ({ id }: { id: string }) => ({
     get: (options: { query: Record<string, unknown>; fetch: Record<string, unknown> }) => {
       const pending = deferredSubject();
