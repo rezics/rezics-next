@@ -101,7 +101,7 @@ test('router and both server reads admit the same address and malformed input ne
 test('saved-address recovery escapes bounded context and offers localized explicit GET correction at the right boundary', async () => {
   const { MineCollectionsAddressRecovery: Recovery } = await import('../src/library/mine-collections-address-recovery');
   const { setLocale } = await import('../src/paraglide/runtime.js');
-  setLocale('fr', { reload: false });
+  await setLocale('fr', { reload: false });
   try {
     const cursor = 'opaque+/page==&return_to=https://example.test';
     for (const layout of ['rows', 'previews'] as const) {
@@ -126,6 +126,6 @@ test('saved-address recovery escapes bounded context and offers localized explic
     expect(html).toContain('href="/fr/library/collections?layout=rows"');
     expect(admit({ cursor, layout: 'previews' }).cursor).toBe(cursor);
   } finally {
-    setLocale('en', { reload: false });
+    await setLocale('en', { reload: false });
   }
 });
