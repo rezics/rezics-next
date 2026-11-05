@@ -8,7 +8,7 @@ export function readSubjectCanonicalQuery<T>(
   options: SubjectCanonicalQueryOptions<T>,
   signal: AbortSignal,
 ): Promise<T> {
-  signal.throwIfAborted();
+  if (signal.aborted) return Promise.reject(signal.reason);
   const observer = new QueryObserver(client, options);
   return new Promise<T>((resolve, reject) => {
     let settled = false;
@@ -41,7 +41,7 @@ export function readSubjectCanonicalQuery<T>(
 
 /** Fence route results and errors even when the server function or native transport ignores abort. */
 export function awaitSubjectRoute<T>(signal: AbortSignal, read: () => Promise<T>): Promise<T> {
-  signal.throwIfAborted();
+  if (signal.aborted) return Promise.reject(signal.reason);
   return new Promise<T>((resolve, reject) => {
     let settled = false;
     const cleanup = () => signal.removeEventListener('abort', onAbort);

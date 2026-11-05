@@ -421,13 +421,12 @@ describe('Close current Context and Realm Subject navigation cache and continuat
     controller.abort();
     finishRead(Response.json({ ...recordedPage(), subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e81' }));
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    expect(requests).toEqual([
-      expect.objectContaining({
-        path: '/v1/pages:read',
-        authorization: 'Bearer selected-reader',
-        signal: expect.objectContaining({ aborted: true }),
-      }),
-    ]);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      path: '/v1/pages:read',
+      authorization: 'Bearer selected-reader',
+    });
+    expect(requests[0]?.signal.aborted).toBe(true);
     expect(requests[0]?.body).toEqual({
       target: { subject: recording.subject, realm },
       languages: ['en'],

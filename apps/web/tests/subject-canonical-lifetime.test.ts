@@ -41,7 +41,6 @@ test('one retired route releases its observer while another exact-query reader f
   reply.resolve({ revision: 1 });
   await expect(currentRead).resolves.toEqual({ revision: 1 });
   expect(reads).toBe(1);
-  client.clear();
 });
 
 test('an ignored retired read cannot satisfy a fresh same-address return', async () => {
@@ -74,7 +73,6 @@ test('an ignored retired read cannot satisfy a fresh same-address return', async
   obsoleteReply.resolve({ revision: 1 });
   await expect(readSubjectCanonicalQuery(client, options, new AbortController().signal)).resolves.toEqual({ revision: 2 });
   expect(reads).toBe(2);
-  client.clear();
 });
 
 test('a route that ignores abort cannot settle a late success or error into its caller', async () => {

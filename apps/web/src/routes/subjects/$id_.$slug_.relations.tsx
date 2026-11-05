@@ -172,11 +172,12 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
       const frame = subjectFrame(loaded.overview, getLocale());
       if (!frame) throw notFound();
       const type = subjectPageType(loaded.overview);
-      const [typeData, relations] = await Promise.all([
-        context.queryClient.ensureQueryData(subjectFrameQuery(type ?? '', getLocale())),
-        context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(loaded.page), getLocale())),
-      ]);
-      signal.throwIfAborted();
+      const [typeData, relations] = await awaitSubjectRoute(signal, () =>
+        Promise.all([
+          context.queryClient.ensureQueryData(subjectFrameQuery(type ?? '', getLocale())),
+          context.queryClient.ensureQueryData(subjectRelationsQuery(pageRelationProperties(loaded.page), getLocale())),
+        ]),
+      );
       return {
         configured: true as const,
         reader,
@@ -225,13 +226,14 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
     const properties = new Set<string>(deps.property ? [deps.property] : []);
     if (Array.isArray(body.links))
       for (const link of body.links) if (typeof link?.property === 'string') properties.add(link.property);
-    const [typeData, relations] = await Promise.all([
-      type
-        ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale()))
-        : Promise.resolve({ label: undefined, ratio: undefined, schemaOrgType: undefined }),
-      context.queryClient.ensureQueryData(subjectRelationsQuery([...properties], getLocale())),
-    ]);
-    signal.throwIfAborted();
+    const [typeData, relations] = await awaitSubjectRoute(signal, () =>
+      Promise.all([
+        type
+          ? context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale()))
+          : Promise.resolve({ label: undefined, ratio: undefined, schemaOrgType: undefined }),
+        context.queryClient.ensureQueryData(subjectRelationsQuery([...properties], getLocale())),
+      ]),
+    );
     return {
       configured: false as const,
       reader,
