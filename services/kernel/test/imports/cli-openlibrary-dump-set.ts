@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
@@ -17,9 +18,18 @@ import { openApiObserver } from './api-observer.ts';
 import { identitySupport } from './identity-fixture.ts';
 import workSource from '../../../../specs/fixtures/imports/open-library/work.json';
 import editionSource from '../../../../specs/fixtures/imports/open-library/edition.json';
+import firstPublicationSource from './fixtures/open-library-first-publication.json';
 
-type Candidate = { id: string; statement: Statement };
+type Candidate = { id: string; head?: number | null; statement: Statement };
 type Exchange = { path: string; key: string | null; bytes: string; status: number; body: string };
+type WorkRow = {
+  type: { key: string };
+  key: string;
+  revision: number;
+  last_modified: { value: string };
+  title: string;
+  [field: string]: unknown;
+};
 const author = {
   type: { key: '/type/author' },
   key: '/authors/OL900000001A',
@@ -41,7 +51,7 @@ function tsv(record: { type: { key: string }; key: string; revision: number; las
 }
 
 /** One Auth/application/worker world. Dump-set files and one lost native reply are supplied. */
-export async function runOpenLibraryDumpSetJourney() {
+export async function runOpenLibraryDumpSetJourney(options: { firstPublication?: boolean } = {}) {
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
   let directory: string | undefined;
   const close = async () => {
@@ -52,7 +62,7 @@ export async function runOpenLibraryDumpSetJourney() {
     }
   };
   try {
-    directory = await mkdtemp('/dev/shm/ol-dump-set-native-');
+    directory = await mkdtemp(join(tmpdir(), 'ol-dump-set-native-'));
     const state = join(directory, 'state.sqlite');
     const keyPath = join(directory, 'account.jwk');
     const identity = runtime.identity;
@@ -112,10 +122,25 @@ export async function runOpenLibraryDumpSetJourney() {
       return path;
     }
 
+    const publicationWork: WorkRow | undefined = options.firstPublication
+      ? {
+          type: firstPublicationSource.type,
+          key: firstPublicationSource.key,
+          revision: firstPublicationSource.revision,
+          last_modified: firstPublicationSource.last_modified,
+          title: firstPublicationSource.title,
+          authors: firstPublicationSource.authors,
+          first_publish_date: firstPublicationSource.first_publish_date,
+        }
+      : undefined;
+    const currentWork: WorkRow = publicationWork ?? workSource;
+    const currentEdition = publicationWork
+      ? { ...editionSource, works: [{ key: currentWork.key }], first_publish_date: '1853' }
+      : editionSource;
     const firstFiles = {
       author: tsv(author),
-      work: [workSource, ...extraWorks].map(tsv).join(''),
-      edition: tsv(editionSource),
+      work: [currentWork, ...extraWorks].map(tsv).join(''),
+      edition: tsv(currentEdition),
     };
 
     async function invoke(
@@ -234,11 +259,39 @@ export async function runOpenLibraryDumpSetJourney() {
       expect(binding).toEqual({ state: 'bound', subject: reply.value.id });
       return reply.value.id as string;
     }
+    async function datePage(subject: string) {
+      const response = await editor.http(
+        `/v1/subjects/${subject}/candidates?${new URLSearchParams({ property: 'schema:datePublished', context: GLOBAL_CONTEXT, limit: '100' })}`,
+      );
+      expect(response.status, JSON.stringify(response.body)).toBe(200);
+      return response.body as { candidates: Candidate[]; adoption: { head: number } | null };
+    }
+    async function currentDate(subject: string): Promise<Statement | undefined> {
+      const response = await runtime.request(`/v1/subjects/${subject}?context=${GLOBAL_CONTEXT}`);
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { subject: { statements: Record<string, Statement[]> } };
+      return body.subject.statements['schema:datePublished']?.[0];
+    }
+    async function selectDate(subject: string, candidate: Candidate, adoption: { head: number } | null) {
+      const accepted = await editor.http(`/v1/subjects/${subject}/candidates/${candidate.id}:accept`, {
+        context: GLOBAL_CONTEXT,
+        expected_head: candidate.head ?? null,
+      });
+      expect(accepted.status, JSON.stringify(accepted.body)).toBe(200);
+      const adopted = await editor.http(`/v1/subjects/${subject}:adopt`, {
+        context: GLOBAL_CONTEXT,
+        property: 'schema:datePublished',
+        mode: 'replace',
+        expected_head: adoption?.head ?? null,
+        selection: [{ candidate: candidate.id, rank: 'normal' }],
+      });
+      expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
+    }
 
     const firstManifest = await writeManifest('first', ['author', 'work', 'edition'], firstFiles);
     const initial = await invoke(own, firstManifest);
     expect(initial.code).toBe(0);
-    const workId = claim(own, workSource.key);
+    const workId = claim(own, currentWork.key);
     const editionId = claim(own, editionSource.key);
     const resolved = await editor.http(
       `/v1/subjects/${editionId}/candidates?${new URLSearchParams({ property: 'schema:exampleOfWork', context: GLOBAL_CONTEXT, limit: '100', target: workId })}`,
@@ -265,10 +318,49 @@ export async function runOpenLibraryDumpSetJourney() {
     const current = await runtime.request(`/v1/subjects/${editionId}`);
     expect(current.status).toBe(200);
 
+    let activeWork: WorkRow = currentWork;
+    let firstCandidate: Candidate | undefined;
+    let firstSelected: Statement | undefined;
+    let refreshedCandidate: Candidate | undefined;
+    let refreshedSelected: Statement | undefined;
+    let lostRequest: Exchange | undefined;
+    let replayedRequest: Exchange | undefined;
+    if (publicationWork) {
+      firstCandidate = (await datePage(workId)).candidates[0];
+      expect(firstCandidate).toBeDefined();
+      expect(firstCandidate!.statement.value).toEqual({
+        type: 'value',
+        content: { time: '+1853-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+      });
+      expect(await currentDate(workId)).toBeUndefined();
+      expect(firstCandidate!.statement.references[0]!.parts.map((part) => [
+        part.property.id,
+        part.value.type === 'value' ? part.value.content : null,
+      ])).toEqual([
+        ['schema:url', 'https://openlibrary.org/works/OL66554W.json'],
+        ['wdt:P648', 'OL66554W'],
+        ['schema:version', '120'],
+        ['schema:dateModified', { time: '+2026-09-18T00:00:00Z', precision: 11, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' }],
+      ]);
+      const editionDate = (await datePage(editionId)).candidates;
+      expect(editionDate).toHaveLength(1);
+      expect(editionDate[0]!.statement.value).toEqual({
+        type: 'value',
+        content: { time: '+1980-05-00T00:00:00Z', precision: 10, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+      });
+      await selectDate(workId, firstCandidate, (await datePage(workId)).adoption);
+      firstSelected = await currentDate(workId);
+      expect(firstSelected).toEqual(firstCandidate.statement);
+      const unchanged = await invoke(own, firstManifest);
+      expect(unchanged.code).toBe(0);
+      expect(claim(own, currentWork.key)).toBe(workId);
+      expect(await currentDate(workId)).toEqual(firstSelected);
+    }
+
     const reverseManifest = await writeManifest('reverse', ['edition', 'work', 'author'], firstFiles);
     const reversed = await invoke(reverse, reverseManifest);
     expect(reversed.code).toBe(0);
-    const reverseWork = claim(reverse, workSource.key);
+    const reverseWork = claim(reverse, currentWork.key);
     const reverseEdition = claim(reverse, editionSource.key);
     expect(reverseWork).not.toBe(workId);
     const reverseResolved = await editor.http(
@@ -281,10 +373,19 @@ export async function runOpenLibraryDumpSetJourney() {
     ).toBe(true);
 
     const changedWork = { ...extraWorks[0]!, revision: 2, title: 'Changed retained work 3' };
+    const refreshedPublicationWork: WorkRow = publicationWork
+      ? {
+          ...currentWork,
+          revision: 121,
+          last_modified: { value: '2026-10-01T00:00:00.000000' },
+          title: 'Synthetic refresh of OL66554W',
+          first_publish_date: '1854',
+        }
+      : currentWork;
     const refreshFiles = {
       author: tsv(author),
-      work: [workSource, changedWork, extraWorks[1]!, extraWorks[2]!].map(tsv).join(''),
-      edition: tsv(editionSource),
+      work: [refreshedPublicationWork, changedWork, extraWorks[1]!, extraWorks[2]!].map(tsv).join(''),
+      edition: tsv(currentEdition),
     };
     const refreshManifest = await writeManifest('refresh', ['author', 'work', 'edition'], refreshFiles);
     const refreshed = await invoke(own, refreshManifest);
@@ -292,6 +393,26 @@ export async function runOpenLibraryDumpSetJourney() {
     expect(refreshed.stdout).toContain('changed=');
     expect(refreshed.stdout).toContain('unchanged=');
     expect(refreshed.stdout).toContain('vanished=');
+    activeWork = refreshedPublicationWork;
+    if (publicationWork && firstCandidate && firstSelected) {
+      expect(await currentDate(workId)).toEqual(firstSelected);
+      const page = await datePage(workId);
+      refreshedCandidate = page.candidates.find(
+        (candidate) =>
+          candidate.statement.value.type === 'value' &&
+          JSON.stringify(candidate.statement.value.content) ===
+            JSON.stringify({ time: '+1854-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' }),
+      );
+      expect(refreshedCandidate).toBeDefined();
+      expect(refreshedCandidate!.id).not.toBe(firstCandidate.id);
+      expect(refreshedCandidate!.statement.references[0]!.parts).toContainEqual({
+        property: { id: 'schema:version' },
+        value: { type: 'value', content: '121' },
+      });
+      await selectDate(workId, refreshedCandidate!, page.adoption);
+      refreshedSelected = await currentDate(workId);
+      expect(refreshedSelected).toEqual(refreshedCandidate!.statement);
+    }
     const session = new ImportSession(state);
     try {
       const vanished = session.store.key(own, extraWorks[3]!.key);
@@ -300,15 +421,40 @@ export async function runOpenLibraryDumpSetJourney() {
       session.close();
     }
 
+    const interruptedSourceWork: WorkRow = publicationWork
+      ? {
+          ...activeWork,
+          revision: 122,
+          last_modified: { value: '2026-10-02T00:00:00.000000' },
+          title: 'Synthetic lost-response control for OL66554W',
+          first_publish_date: '1855',
+        }
+      : { ...workSource, revision: 8, title: 'Interrupted atlas' };
     const interruptManifest = await writeManifest('interrupt', ['author', 'work', 'edition'], {
       author: tsv(author),
-      work: [{ ...workSource, revision: 8, title: 'Interrupted atlas' }, changedWork, extraWorks[1]!, extraWorks[2]!]
+      work: [interruptedSourceWork, changedWork, extraWorks[1]!, extraWorks[2]!]
         .map(tsv)
         .join(''),
-      edition: tsv(editionSource),
+      edition: tsv(currentEdition),
     });
+    const lostStart = exchanges.length;
     const interrupted = await invoke(own, interruptManifest, { losePropose: true });
     expect([1, 130]).toContain(interrupted.code);
+    if (publicationWork && refreshedSelected) {
+      expect(await currentDate(workId)).toEqual(refreshedSelected);
+      lostRequest = exchanges.slice(lostStart).find(
+        (exchange) =>
+          exchange.path === '/v1/subjects:batchWrite' &&
+          (JSON.parse(exchange.bytes) as BatchWriteRequest).commands.some(
+            (command) =>
+              command.source.external_id === currentWork.key &&
+              command.source.record_revision === '122' &&
+              command.op === 'propose' &&
+              command.statement.property.id === 'schema:datePublished',
+          ),
+      );
+      expect(lostRequest).toBeDefined();
+    }
     const pendingBefore = local(
       (db) =>
         db.query('SELECT key,bytes FROM binding_journal WHERE acknowledgement IS NULL').all() as {
@@ -316,8 +462,17 @@ export async function runOpenLibraryDumpSetJourney() {
           bytes: string;
         }[],
     );
+    const recoveryStart = exchanges.length;
     const recovered = await invoke(own, interruptManifest);
     expect(recovered.code).toBe(0);
+    if (lostRequest && refreshedSelected) {
+      replayedRequest = exchanges.slice(recoveryStart).find((exchange) => exchange.key === lostRequest!.key);
+      expect(replayedRequest).toBeDefined();
+      expect(replayedRequest!.bytes).toBe(lostRequest.bytes);
+      expect(replayedRequest!.body).toBe(lostRequest.body);
+      expect(claim(own, currentWork.key)).toBe(workId);
+      expect(await currentDate(workId)).toEqual(refreshedSelected);
+    }
     const pendingAfter = local(
       (db) =>
         db.query('SELECT key,bytes FROM binding_journal WHERE acknowledgement IS NULL').all() as {
@@ -343,6 +498,19 @@ export async function runOpenLibraryDumpSetJourney() {
       reverseWork,
       reverseEdition,
       lostKeys,
+      publication:
+        firstCandidate && firstSelected && refreshedCandidate && refreshedSelected && replayedRequest
+          ? {
+              firstCandidateId: firstCandidate.id,
+              firstSelected,
+              refreshedCandidateId: refreshedCandidate.id,
+              refreshedSelected,
+              replayKey: replayedRequest.key!,
+              replayBytes: replayedRequest.bytes,
+              workId,
+              editionId,
+            }
+          : undefined,
     };
   } catch (error) {
     await close();

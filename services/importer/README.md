@@ -1602,9 +1602,15 @@ outside this mapping.
 
 ### Import Open Library edition page counts
 
-- Touches: one native `number_of_pages` field from an Open Library edition TSV row, the existing `open-library@4` converter, and ordinary proposal, editor selection and public-read paths on the same `bf:Instance`.
+- Touches: one native `number_of_pages` field from an Open Library edition TSV row, the existing `open-library@5` converter, and ordinary proposal, editor selection and public-read paths on the same `bf:Instance`.
 - Bound: Source bytes: one five-column TSV row remains capped at 256 KiB by default, with the sanitized projection capped at 2 MiB. Per-edition preparation: one bounded allowlist pass and source digest; the count adds one scalar and no relation or catalogue lookup. Native calls: author/work resolution remains at most 64 configured-source point reads per record; the count adds one proposal within the existing 100-command batch ceiling and no extra API call.
 - Growth check: `packages/conversion/tests/open-library-page-count.test.ts` covers the observed citation, released quantity validation, digest change and malformed/missing values. `../kernel/test/imports/openlibrary-cli-edition-media.test.ts` extends the real five-column CLI journey with proposal-only import, separate selection, changed-count replay, current refusal and facts fencing; native execution remains deferred to integration, with no new growth series.
+
+### Import Open Library Work first publication date
+
+- Touches: one optional Work `first_publish_date` from the existing five-column TSV reader and complete author/work/edition dump-set composition, the registered `open-library@5` converter, ordinary proposal, separate editor acceptance/adoption and independent current public read on the acknowledged Work.
+- Bound: the source row remains under the configured CLI record ceiling (256 KiB by default); the explicit 17-field projection remains at most 2 MiB, with this scalar capped at 1,500 characters and longer fields refused. It adds at most one proposal under the existing 100-command ceiling, no Edition lookup, additional relation lookup, catalogue/history scan or acquisition call. Existing author/work resolution stays at most 64 configured-source point reads per record.
+- Growth check: `packages/conversion/tests/open-library-growth.test.ts` measures the admitted field bytes and output while fixed input remains constant across unrelated catalogue/history growth and named I/O guards. `../kernel/test/imports/open-library-first-publication.test.ts` uses the existing dump-set fixture and `runImportCli`, then separately accepts/adopts the returned candidate and reads current public statements. The connected local runtime does not make a new Open Library network call or add a PostgreSQL growth series.
 
 ### Native mixed Wikidata acquisition
 

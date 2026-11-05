@@ -6,7 +6,9 @@ import {
   type BatchStatement,
   type FieldGroup,
 } from '@rezics/definitions/bulk';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
+import { checkStatementInput } from '@rezics/definitions/validate';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import {
   commandKey,
@@ -17,12 +19,12 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'open-library@4';
+export const converter_revision = 'open-library@5';
 
-// Explicit allowlist: sixteen top-level fields; each collection <=64 entries,
+// Explicit allowlist: seventeen top-level fields; each collection <=64 entries,
 // authors + works <=64 relations; <=100 commands; <=64 deferred cover assets.
 // Projection <=2 MiB, unknown-licensed prose <=1 MiB, other strings <=1500
-// characters (title included). Unknown/private subtrees are never traversed.
+// characters (title and Work first_publish_date included). Unknown/private subtrees are never traversed.
 // One projection pass, canonical sorting O(M log M), bounded construction O(M).
 const recordBytes = 2 * 1024 * 1024;
 const proseBytes = 1024 * 1024;
@@ -41,6 +43,7 @@ type NormalizedRecord = {
   isbn_10?: string[];
   isbn_13?: string[];
   publish_date?: string;
+  first_publish_date?: string;
   number_of_pages?: number;
   description?: string;
   covers?: number[];
@@ -159,7 +162,22 @@ function link(value: unknown, path: string): { url: string } {
     invalid(`${path}/url`, 'unsafe_source_link');
   }
 }
-function normalize(input: ConversionInput): { record: NormalizedRecord; pageCountDiagnostic?: string } {
+function firstPublicationDate(raw: object): { value?: string; diagnostic?: string } {
+  const descriptor = Object.getOwnPropertyDescriptor(raw, 'first_publish_date');
+  if (!descriptor) return {};
+  if (!descriptor.enumerable || !('value' in descriptor)) return { diagnostic: 'invalid_source_data_property' };
+  const value: unknown = descriptor.value;
+  if (typeof value !== 'string') return { diagnostic: 'invalid_source_string_or_limit' };
+  if (value.length > 1500) invalid('/first_publish_date', 'source_field_limit_1500_characters');
+  if (!value.isWellFormed() || !value.trim()) return { diagnostic: 'invalid_source_string_or_limit' };
+  return { value };
+}
+
+function normalize(input: ConversionInput): {
+  record: NormalizedRecord;
+  pageCountDiagnostic?: string;
+  firstPublicationDateDiagnostic?: string;
+} {
   const raw = object(input.record, '');
   const get = (key: string) => own(raw, key, `/${key}`);
   const type = own(object(get('type'), '/type'), 'key', '/type/key');
@@ -183,6 +201,7 @@ function normalize(input: ConversionInput): { record: NormalizedRecord; pageCoun
     title: string(get('title'), '/title'),
   };
   let pageCountDiagnostic: string | undefined;
+  let firstPublicationDateDiagnostic: string | undefined;
   if (type === '/type/edition') {
     const descriptor = Object.getOwnPropertyDescriptor(raw, 'number_of_pages');
     if (!descriptor) pageCountDiagnostic = 'missing_number_of_pages';
@@ -195,6 +214,10 @@ function normalize(input: ConversionInput): { record: NormalizedRecord; pageCoun
     )
       record.number_of_pages = descriptor.value;
     else pageCountDiagnostic = 'invalid_number_of_pages';
+  } else {
+    const firstPublication = firstPublicationDate(raw);
+    if (firstPublication.value !== undefined) record.first_publish_date = firstPublication.value;
+    firstPublicationDateDiagnostic = firstPublication.diagnostic;
   }
   for (const kind of ['authors', 'works'] as const) {
     const value = get(kind);
@@ -232,7 +255,11 @@ function normalize(input: ConversionInput): { record: NormalizedRecord; pageCoun
   const languages = get('languages');
   if (languages !== undefined) record.languages = array(languages, '/languages', language);
   if (Buffer.byteLength(JSON.stringify(record), 'utf8') > recordBytes) invalid('', 'source_record_byte_limit_2_MiB');
-  return { record, ...(pageCountDiagnostic === undefined ? {} : { pageCountDiagnostic }) };
+  return {
+    record,
+    ...(pageCountDiagnostic === undefined ? {} : { pageCountDiagnostic }),
+    ...(firstPublicationDateDiagnostic === undefined ? {} : { firstPublicationDateDiagnostic }),
+  };
 }
 function time(year: string, month = '00', day = '00'): Time {
   return {
@@ -241,7 +268,12 @@ function time(year: string, month = '00', day = '00'): Time {
     calendarmodel: calendar,
   };
 }
-function publicationDate(value: string): Time | undefined {
+type ParsedPublicationDate =
+  | { kind: 'date'; value: Time }
+  | { kind: 'invalid_calendar' }
+  | { kind: 'unsupported' };
+
+function parsePublicationDate(value: string): ParsedPublicationDate {
   const iso = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/u.exec(value);
   const months = [
     'January',
@@ -262,17 +294,23 @@ function publicationDate(value: string): Time | undefined {
   if (iso?.[0] === value) [year, month, day] = [iso[1]!, iso[2], iso[3]];
   else if (english?.[0] === value) {
     const index = months.findIndex((name) => name.toLowerCase() === english[1]!.toLowerCase());
-    if (index < 0) return undefined;
+    if (index < 0) return { kind: 'unsupported' };
     [year, month, day] = [english[3]!, String(index + 1).padStart(2, '0'), english[2]?.padStart(2, '0')];
-  } else return undefined;
+  } else return { kind: 'unsupported' };
   if (
     month !== undefined &&
     (Number(month) < 1 ||
       Number(month) > 12 ||
       (day !== undefined && !dayExists(Number(year), Number(month), Number(day))))
   )
-    invalid('/publish_date', 'invalid_publication_date');
-  return time(year, month, day);
+    return { kind: 'invalid_calendar' };
+  return { kind: 'date', value: time(year, month, day) };
+}
+
+function publicationDate(value: string): Time | undefined {
+  const parsed = parsePublicationDate(value);
+  if (parsed.kind === 'invalid_calendar') invalid('/publish_date', 'invalid_publication_date');
+  return parsed.kind === 'date' ? parsed.value : undefined;
 }
 function isbn13(value: string, ten: boolean, pointer: string): string {
   const digits = value.replace(/[ -]/gu, '').toUpperCase();
@@ -356,6 +394,8 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
   const diagnostics: OpenLibraryConversion['diagnostics'][number][] = [];
   const report = (pointer: string, code: string) => diagnostics.push({ pointer, code });
   if (normalized.pageCountDiagnostic !== undefined) report('/number_of_pages', normalized.pageCountDiagnostic);
+  if (normalized.firstPublicationDateDiagnostic !== undefined)
+    report('/first_publish_date', normalized.firstPublicationDateDiagnostic);
   const fact = (id: string, content: unknown): BatchStatement => ({ ...part(id, content), references: [reference] });
   const propose = (statement: BatchStatement, field: string, group: FieldGroup = 'facts') => {
     if (context.subjectId !== undefined)
@@ -427,6 +467,20 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     const date = publicationDate(record.publish_date);
     if (date) propose(fact('schema:datePublished', date), 'publish_date');
     else report('/publish_date', 'unsupported_publication_date_format');
+  }
+  if (record.type.key === '/type/work' && record.first_publish_date !== undefined) {
+    const parsed = parsePublicationDate(record.first_publish_date);
+    if (parsed.kind === 'date') {
+      const statement = fact('schema:datePublished', parsed.value);
+      if (checkStatementInput(statement, bundledRelease).violations.length)
+        invalid('/first_publish_date', 'invalid_released_publication_date');
+      propose(statement, 'first_publish_date');
+    } else {
+      report(
+        '/first_publish_date',
+        parsed.kind === 'invalid_calendar' ? 'invalid_publication_date' : 'unsupported_publication_date_format',
+      );
+    }
   }
   if (record.number_of_pages !== undefined)
     propose(fact('schema:numberOfPages', { amount: `+${record.number_of_pages}`, unit: '1' }), 'number_of_pages');

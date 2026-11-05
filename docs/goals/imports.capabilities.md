@@ -146,7 +146,7 @@ permissions, not inherit importer privilege. Suspended-valid and revoked/invalid
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Bangumi      | [API JSONL](../../specs/fixtures/imports/api/bangumi.jsonl): native IDs 1/2, TV-series records, summary and first cover; [single record](../../specs/fixtures/imports/bangumi/subject.json). `wdt:P5732`, names, Text abstract with CC-BY-SA-3.0; cover separately unknown rights                                                                                                                                                                                                                                                                                                                                    | Synthetic inspectable API data, not released Book classifications. Public metadata-tag input above is independently observed; its runtime mapping missing                                               |
 | VNDB         | API suite constructs public `vn`/`vn_titles`/`entry_meta` table streams, v1/v2, revisions 7/19 and zero votes using [real headers](../../specs/fixtures/imports/vndb-tables/db/vn.header). [Grouped record](../../specs/fixtures/imports/vndb/record.json) supports pure conversion; [legacy inline fixture](../../specs/fixtures/imports/api/vndb.sql) is rejection input                                                                                                                                                                                                                                           | Permitted metadata ODbL-1.0/LicenseRef-DbCL-1.0; descriptions/images omitted. Zero-vote API data cannot prove nonzero statistics                                                                        |
-| Open Library | [Five-column TSV](../../specs/fixtures/imports/api/openlibrary.tsv): OL1W/OL2W work revisions 1; synthetic [work](../../specs/fixtures/imports/open-library/work.json)/[edition](../../specs/fixtures/imports/open-library/edition.json) controls; observed bounded [OL7353617M edition fields](../../specs/fixtures/imports/open-library/edition-number-of-pages.json), revision 28, including `number_of_pages: 96`; linked work fields in [work-number-of-pages.json](../../specs/fixtures/imports/open-library/work-number-of-pages.json). Both controlled page-count refresh fixtures are explicitly synthetic. | CC0 bibliographic metadata; unknown-licensed prose omitted, cover separately unknown. This source fixture and registered caller do not claim an executed native edition-to-reader pass in this attempt. |
+| Open Library | [Five-column TSV](../../specs/fixtures/imports/api/openlibrary.tsv): OL1W/OL2W work revisions 1; synthetic [work](../../specs/fixtures/imports/open-library/work.json)/[edition](../../specs/fixtures/imports/open-library/edition.json) controls; observed bounded [OL7353617M edition fields](../../specs/fixtures/imports/open-library/edition-number-of-pages.json), revision 28, including `number_of_pages: 96`; linked work fields in [work-number-of-pages.json](../../specs/fixtures/imports/open-library/work-number-of-pages.json); exact observed [OL66554W Work response](../../services/kernel/test/imports/fixtures/open-library-first-publication.json), revision 120 and `first_publish_date: "1853"`. Refresh, absent, malformed and unsupported date controls are synthetic. | CC0 bibliographic metadata; unknown-licensed prose omitted, cover separately unknown. The pinned source date is Open Library's claim, not an independent chronology. The current focused native journey is documented below. |
 | Wikidata     | [JSONL](../../specs/fixtures/imports/api/wikidata.jsonl): Q1/Q2 revisions 101/102, Book P31 and referenced P648; [entity](../../specs/fixtures/imports/wikidata/entity.json) richer supported claim controls                                                                                                                                                                                                                                                                                                                                                                                                         | CC0 structured data; bundled vocabulary controls claims/types/qualifiers, unresolved references remain unresolved; no user/talk text                                                                    |
 
 [Source registration](../../services/importer/src/source-registry.ts) supplies trusted aliases and converter revisions;
@@ -1704,3 +1704,43 @@ acknowledged UUID, review/adoption and public current-read seams are reused.
   and overflow. Kernel `bangumi-game-web-destinations.test.ts` authors the
   same-UUID native review/adoption/current-read journey; no live source
   observation is claimed.
+
+## Open Library Work first publication date
+
+The Work-only `first_publish_date` string is retained exactly in the bounded
+source projection and digest. Supported year, month and day values become a
+separately keyed, cited `schema:datePublished` candidate on `schema:Book`, with
+their source precision preserved. Existing Work or Edition `publish_date`
+conversion remains independent; Edition `first_publish_date` is ignored.
+Editors separately accept and adopt the returned candidate. An invalid or
+unsupported optional Work value records a bounded `/first_publish_date`
+diagnostic without withholding independent Work facts; values over 1,500
+characters are refused by the field limit. This provider mapping does not
+expand the fixed M1 seed.
+
+The fixture [`open-library-first-publication.json`](../../services/kernel/test/imports/fixtures/open-library-first-publication.json)
+preserves the observed 5,739-byte [OL66554W response](https://openlibrary.org/works/OL66554W.json),
+revision 120 and last modified `2026-09-18T13:25:31.962669`; its SHA-256 is
+`558bd577a57250b220ba153f91208b716b892d86f841fb9221ee7d99a434ed1a`. The
+source type declares `first_publish_date` as a string at
+[`/type/work`](https://openlibrary.org/type/work). The value `1853` represents
+the source's claim, not an independent chronology. Refresh and invalid-date
+fixtures are marked synthetic.
+
+- Touches: the existing five-column Work payload, Open Library source
+  registration and author/work/edition dump-set composition, one candidate on
+  the acknowledged Work, explicit native selection and an independent public
+  current read. Work and Edition identity stay separate.
+- Bound: one scalar of at most 1,500 characters inside the 17-field, 2 MiB
+  conversion projection; the existing 64 relation, 100 command, configured
+  row-byte and journal limits remain. No Edition lookup, catalogue/history
+  scan, source network request or additional source command is added.
+- Growth check: `packages/conversion/tests/open-library-first-publication.test.ts`
+  covers supported precision, exact citation, released statement validation,
+  digest changes, malformed and unsupported values, accessors and Edition
+  exclusion. `packages/conversion/tests/open-library-growth.test.ts` measures
+  the admitted bytes and output under unrelated catalogue/history growth.
+  `services/kernel/test/imports/open-library-first-publication.test.ts` reuses
+  the production dump-set fixture and `runImportCli` with the in-process native
+  runtime, separate candidate acceptance/adoption and current public read. It
+  makes no Open Library network request and adds no PostgreSQL growth series.
