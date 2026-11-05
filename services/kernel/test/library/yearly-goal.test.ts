@@ -253,3 +253,23 @@ test('foreign owners see only their own goal state and account retirement erases
   const receiptAfter = await receipt();
   expect(receiptAfter.rows).toEqual(receiptBefore.rows);
 }, 120_000);
+
+test('HTTP boundary requires an owner and rejects noncanonical years and coercive goal commands', async () => {
+  const valid = { year: 2060, metric, target: 4, expectedRevision: null };
+  expect((await request(null, 'GET', `${path}?year=2060`)).status).toBe(401);
+  expect((await request(null, 'PUT', path, valid)).status).toBe(401);
+
+  for (const query of ['year=02060', 'year=0', 'year=2060&year=2061', 'year=2060&extra=1'])
+    expect((await request(owner, 'GET', `${path}?${query}`)).status).toBe(400);
+
+  const invalidBodies = [
+    { ...valid, year: '2060' },
+    { ...valid, target: 4.5 },
+    { ...valid, target: 1001 },
+    { ...valid, expectedRevision: 0 },
+    { ...valid, metric: 'completed_sessions' },
+    { ...valid, extra: true },
+    { ...valid, target: null, expectedRevision: null },
+  ];
+  for (const body of invalidBodies) expect((await request(owner, 'PUT', path, body)).status).toBe(400);
+});
