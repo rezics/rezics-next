@@ -131,8 +131,9 @@ shrinking it lowers the baseline. Raising a baseline requires a `Budget-Raise:` 
 
 ### The documentation check
 
-`bun scripts/docs-check.ts [--changed <base>]` runs at landing for every change that touches `**/*.md`,
-`tools/goal/prompts/**` or `tools/goal/defaults.json`, and it finishes in about two seconds. It enforces:
+`bun scripts/docs-check.ts [--changed <base>]` is advisory. It reports, in about two seconds, on changes that touch
+`**/*.md`, `tools/goal/prompts/**` or `tools/goal/defaults.json`; it never blocks a landing, and workers do not trim
+or rewrite documents to satisfy it. The supermanager reads its report daily and briefs fixes worth making. It checks:
 
 - the caps and the baseline;
 - a valid research registry;
