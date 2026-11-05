@@ -336,3 +336,31 @@ test('a reader chooses an indexed Type absent from loaded entries, retains the n
     await window.happyDOM.close();
   }
 });
+
+test('Type navigation bounds coordinates and commits only admitted exact staged movements', async () => {
+  const { ShelfTypeWindowNavigation } = await import('../src/library/shelf-type-window-navigation');
+  const path = new ShelfTypeWindowNavigation();
+  expect(path.stage('previous')).toBeUndefined();
+  path.stage('read');
+  path.settle(true);
+  for (let index = 1; index <= 10; index++) {
+    path.stage('next', `opaque-${index}`);
+    path.settle(true);
+  }
+  const failed = path.stage('previous');
+  expect(failed?.cursor).toBe('opaque-9');
+  expect(path.stage('previous')).toBeUndefined();
+  path.settle(false);
+  expect(path.stage('retry')).toBe(failed);
+  path.settle(true);
+  for (let index = 8; index >= 2; index--) {
+    expect(path.stage('previous')?.cursor).toBe(`opaque-${index}`);
+    path.settle(true);
+  }
+  expect(path.hasPrevious).toBe(false);
+  expect(path.stage('first')?.cursor).toBeUndefined();
+  path.settle(false);
+  expect(path.stage('retry')?.cursor).toBeUndefined();
+  path.settle(true);
+  expect(path.hasFirst).toBe(false);
+});
