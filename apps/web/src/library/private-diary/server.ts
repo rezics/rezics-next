@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { readSubjectSlotSession } from '../subject-slot';
@@ -11,7 +12,8 @@ import {
   readReportedYearSummary,
   type ReportedYearRead,
   type ConsumptionSummary,
-  type DiaryPage,
+  type DiaryRead,
+  type DiaryReadFailure,
 } from './native';
 
 import { diarySearch, type DiaryAddress } from './address';
@@ -31,11 +33,15 @@ export type PrivateDiaryLoad = {
   reportedYear: ReportedYearRead | null;
   viewer: string;
   csrfToken: string;
-  diary: { kind: 'ready'; page: DiaryPage } | { kind: 'stale' | 'retired' | 'unavailable' };
-  summary: { kind: 'ready'; value: ConsumptionSummary } | { kind: 'retired' | 'unavailable' | 'not-selected' };
+  diary: DiaryRead;
+  summary: { kind: 'ready'; value: ConsumptionSummary } | DiaryReadFailure | { kind: 'not-selected' };
 };
 
 export type PrivateDiaryLoadResult = PrivateDiaryLoad | { kind: 'signed-out' | 'unavailable' };
+
+function thrownReadFailure(error: unknown): DiaryReadFailure {
+  return { kind: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
+}
 
 export const readPrivateDiary = createServerFn({ method: 'GET' })
   .validator((value: unknown) =>
@@ -47,17 +53,15 @@ export const readPrivateDiary = createServerFn({ method: 'GET' })
     if (!identity) return { kind: 'signed-out' };
     const client = kernelClient();
     const [diary, summary, reportedYear] = await Promise.all([
-      readDiaryPage(client, identity.authorization, data.cursor, { year: data.year, month: data.month }).catch(() => ({
-        kind: 'unavailable' as const,
-      })),
+      readDiaryPage(client, identity.authorization, data.cursor, { year: data.year, month: data.month }).catch(
+        thrownReadFailure,
+      ),
       data.year === undefined
-        ? readConsumptionSummary(client, identity.authorization).catch(() => ({ kind: 'unavailable' as const }))
+        ? readConsumptionSummary(client, identity.authorization).catch(thrownReadFailure)
         : Promise.resolve({ kind: 'not-selected' as const }),
       data.year === undefined
         ? null
-        : readReportedYearSummary(client, identity.authorization, data.year).catch(() => ({
-            kind: 'unavailable' as const,
-          })),
+        : readReportedYearSummary(client, identity.authorization, data.year).catch(thrownReadFailure),
     ]);
     return {
       kind: 'ready',
@@ -66,12 +70,7 @@ export const readPrivateDiary = createServerFn({ method: 'GET' })
       viewer: identity.viewer,
       csrfToken: identity.csrfToken,
       diary,
-      summary:
-        summary.kind === 'ready'
-          ? { kind: 'ready', value: summary.summary }
-          : summary.kind === 'retired'
-            ? { kind: 'retired' }
-            : { kind: summary.kind },
+      summary: summary.kind === 'ready' ? { kind: 'ready', value: summary.summary } : summary,
     };
   });
 

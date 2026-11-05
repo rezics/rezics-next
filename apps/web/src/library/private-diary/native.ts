@@ -1,5 +1,6 @@
 import type { DiaryAddress } from './address';
 import type { KernelClient } from '@rezics/client';
+import { isPlatformClosedProblem } from '../../kernel/platform-closed';
 
 export const PRIVATE_DIARY_PAGE_LIMIT = 25;
 export const PRIVATE_DIARY_PAGE_BYTES = 65_536;
@@ -9,7 +10,15 @@ export type ConsumptionSummary = NonNullable<
   Awaited<ReturnType<KernelClient['libraryConsumptionSummary']['get']>>['data']
 >;
 
-export type DiaryRead = { kind: 'ready'; page: DiaryPage } | { kind: 'stale' | 'retired' | 'unavailable' };
+export type DiaryReadFailure = { kind: 'retired' | 'denied' | 'closed' | 'unavailable' };
+
+function readFailure(status: number, problem: unknown): DiaryReadFailure {
+  if (status === 401) return { kind: 'retired' };
+  if (isPlatformClosedProblem(status, problem)) return { kind: 'closed' };
+  return { kind: status === 403 ? 'denied' : 'unavailable' };
+}
+
+export type DiaryRead = { kind: 'ready'; page: DiaryPage } | { kind: 'stale' } | DiaryReadFailure;
 
 export async function readDiaryPage(
   client: KernelClient,
@@ -27,17 +36,15 @@ export async function readDiaryPage(
     headers: { authorization },
   });
   if (!result.error && result.data) return { kind: 'ready', page: result.data };
-  if (result.status === 401) return { kind: 'retired' };
-  return result.status === 409 ? { kind: 'stale' } : { kind: 'unavailable' };
+  return result.status === 409 ? { kind: 'stale' } : readFailure(result.status, result.error?.value);
 }
 
-export type SummaryRead = { kind: 'ready'; summary: ConsumptionSummary } | { kind: 'retired' | 'unavailable' };
+export type SummaryRead = { kind: 'ready'; summary: ConsumptionSummary } | DiaryReadFailure;
 
 export async function readConsumptionSummary(client: KernelClient, authorization: string): Promise<SummaryRead> {
   const result = await client.libraryConsumptionSummary.get({ headers: { authorization } });
   if (!result.error && result.data) return { kind: 'ready', summary: result.data };
-  if (result.status === 401) return { kind: 'retired' };
-  return { kind: 'unavailable' };
+  return readFailure(result.status, result.error?.value);
 }
 
 export async function cancelDiaryContinuation(
@@ -54,7 +61,7 @@ export const REPORTED_YEAR_SUMMARY_BYTES = 16_384;
 export type ReportedYearSummary = NonNullable<
   Awaited<ReturnType<KernelClient['libraryReportedYearSummary']['get']>>['data']
 >;
-export type ReportedYearRead = { kind: 'ready'; value: ReportedYearSummary } | { kind: 'retired' | 'unavailable' };
+export type ReportedYearRead = { kind: 'ready'; value: ReportedYearSummary } | DiaryReadFailure;
 
 export async function readReportedYearSummary(
   client: KernelClient,
@@ -63,5 +70,5 @@ export async function readReportedYearSummary(
 ): Promise<ReportedYearRead> {
   const result = await client.libraryReportedYearSummary.get({ query: { year }, headers: { authorization } });
   if (!result.error && result.data?.year === year) return { kind: 'ready', value: result.data };
-  return result.status === 401 ? { kind: 'retired' } : { kind: 'unavailable' };
+  return readFailure(result.status, result.error?.value);
 }
