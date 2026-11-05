@@ -140,6 +140,7 @@ function setField(field: HTMLInputElement | HTMLTextAreaElement, value: string) 
     if (!setter) throw new Error('Expected a native text field');
     setter.call(field, value);
     field.dispatchEvent(new Event('input', { bubbles: true }));
+    field.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }
 
