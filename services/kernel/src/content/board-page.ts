@@ -4,7 +4,6 @@ import {
   type CommunityActivityRead,
   type CommunityComments,
 } from './community-projection/index.ts';
-import type { REACTION_KINDS } from './events.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';

@@ -1098,7 +1098,6 @@ export function createCollectionReads(
           rows.length !== result.members.length
             ? { state: 'unavailable', reason: 'identity', retryable: true }
             : await dependencies.viewerPersonalActions(viewer, rows, STANDARD_QUESTION_ID, deadline);
-        if (!(await subjects.current())) facts = { state: 'unavailable', reason: 'currentness', retryable: true };
       }
       if (subjectsCurrent && !(await subjectsCurrent()))
         facts = { state: 'unavailable', reason: 'currentness', retryable: true };

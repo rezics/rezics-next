@@ -1,4 +1,3 @@
-import { valueContent } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

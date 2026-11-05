@@ -1,5 +1,3 @@
-import { valueContent } from './native-observations.ts';
-import { fixtureFetch } from './native-observations.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

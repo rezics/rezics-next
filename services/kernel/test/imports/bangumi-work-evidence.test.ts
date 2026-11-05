@@ -1,4 +1,3 @@
-import { valueContent } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';

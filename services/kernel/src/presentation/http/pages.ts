@@ -263,7 +263,6 @@ function nativePageRoute<App, const Path extends string>(
   path: Path,
   draftPreview: boolean,
 ) {
-  const draftPreview = verb === 'previewDraft';
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
   const routed = (app as ReturnType<typeof createApp>).post(

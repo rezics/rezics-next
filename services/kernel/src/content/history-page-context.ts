@@ -293,10 +293,6 @@ async function readReviewQuestions(
   return new Map(questions);
 }
 
-type HistoryActionInput =
-  | Readonly<{ type: 'content.thread'; id: string }>
-  | Readonly<{ type: 'content.post'; id: string; sourceRevisionId: string }>;
-
 function actionReferences(
   actor: Actor,
   runtime: ReadingPageViewerActionRuntime,
@@ -352,7 +348,7 @@ async function readHistoryActions(
         }),
       ))
   )
-    return { state: 'unavailable' as const, retryable: true, references: [] };
+    return { state: 'unavailable' as const, retryable: true, references: [] as const };
   try {
     const result = await readViewerActions(
       { pool: dependencies.pool, ...runtime },
@@ -367,7 +363,7 @@ async function readHistoryActions(
     };
   } catch (error) {
     if (!dependencyUnavailable(error)) throw error;
-    return { state: 'unavailable' as const, retryable: true, references: [] };
+    return { state: 'unavailable' as const, retryable: true, references: [] as const };
   }
 }
 

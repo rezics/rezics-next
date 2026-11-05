@@ -1,5 +1,4 @@
-import { valueContent } from './native-observations.ts';
-import { fixtureFetch, retainedCandidates } from './native-observations.ts';
+import { retainedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
