@@ -1397,6 +1397,14 @@ released; source validation alone does not repair or restart retained consumers 
 Disposable train worktrees capture their directory identity when created. Before Git removes one, the train restores
 owner access on its own directories, including immutable fixture stores left by checks. Cleanup rejects replaced roots
 or parents, never follows dependency links, and never changes package file modes or outside store directories.
+Decision: Train-owned temporary detached worktrees (ordinary and batch candidates, resolver-dev scratch, boot and
+affected baselines, control-plane merge candidates, batch proof trees and dev compatibility trees) live in
+`train-workspace.ts`. MergeTrain remains the selector, checker, publisher and settlement owner; the helper receives the
+selected checkout, tree, revision, Git and the caller's abort/cleanup profile, and returns add/release operations.
+`captureTrainWorktreeRemoval` stays exported from `merge-train.ts`. Markdown/import scratch, task-workspace
+preparation, finished worker-tree cleanup, main-checkout sync, ref transactions and cp-sync recovery stay with their
+owners. Public-boundary witnesses use disposable Git fixtures in `train-workspace.test.ts`; replaced-directory,
+symlink and shared-store assertions stay on the original `captureTrainWorktreeRemoval` entry.
 
 Store builds use `--backend=copyfile`; the `.bun` tree is made read-only before publication. Run
 `bun tools/goal/src/cli.ts deps private` before changing a manifest or lockfile. A five-directory host-c comparison

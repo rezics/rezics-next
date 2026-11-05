@@ -154,6 +154,7 @@ test('a resolution replays cleanly onto an unrelated new dev head without anothe
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
     expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
     expect(git(h.root, 'show', `dev:${devOnly}`)).toBe('export const devOnly = true;');
+    expect(git(h.root, 'worktree', 'list', '--porcelain')).not.toContain('train-resolver-dev-');
   } finally {
     h.dispose();
   }
