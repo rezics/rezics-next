@@ -117,6 +117,13 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
   const dialog = () => window.document.querySelector('[role="alertdialog"]');
   const button = (label: string, within: ParentNode = dialog() ?? window.document) =>
     [...within.querySelectorAll('button')].find((item) => item.textContent === label)!;
+  const assigned: string[] = [];
+  const assignDescriptor = Object.getOwnPropertyDescriptor(window.location, 'assign');
+  Object.defineProperty(window.location, 'assign', {
+    configurable: true,
+    writable: true,
+    value: (destination: string | URL) => assigned.push(String(destination)),
+  });
   const unload = () => {
     const event = new window.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event);
@@ -152,7 +159,8 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
     await act(async () => nextLink().click());
     expect(dialog()).not.toBeNull();
     await act(async () => button(m.payment_reference_draft_navigation_discard()).click());
-    expect(router.state.location.pathname).toBe('/next');
+    expect(assigned).toEqual(['https://site.test/next']);
+    expect(router.state.location.pathname).toBe('/statement');
     expect(submissions).toBe(0);
 
     current = true;
@@ -168,6 +176,8 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
     expect(unload()).toBe(false);
     expect(submissions).toBe(0);
   } finally {
+    if (assignDescriptor) Object.defineProperty(window.location, 'assign', assignDescriptor);
+    else Reflect.deleteProperty(window.location, 'assign');
     await act(async () => root.unmount());
     window.happyDOM.abort();
     for (const [key, descriptor] of previous) {

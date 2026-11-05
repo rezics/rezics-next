@@ -144,6 +144,22 @@ describe('native creator statements', () => {
       await page.close();
     }
 
+    const sales = await alice.context.newPage();
+    await openStatement(sales, new URL('/en/creator/sales', fixture.stack.web).href);
+    expect(await sales.getByRole('heading', { name: 'Sales history' }).count()).toBe(1);
+    expect(await sales.getByText(paid.paidReference, { exact: true }).count()).toBe(0);
+    expect(
+      await sales.getByText('Whether royalties are payable or funds are available is unknown.').count(),
+    ).toBe(0);
+    await sales.getByRole('link', { name: 'Royalty statements' }).click();
+    await sales.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    expect(new URL(sales.url()).pathname).toBe('/en/creator/statements');
+    await sales.goto(fixture.addresses.paidDetail, { waitUntil: 'domcontentloaded' });
+    await sales.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    expect(await sales.getByText(paid.paidReference, { exact: true }).count()).toBe(1);
+    await sales.screenshot({ path: join(evidence, 'alice-sales-to-statement.png') });
+    await sales.close();
+
     const restored = await alice.context.newPage();
     await openStatement(restored, fixture.addresses.detailLineContinuation);
     await restored.getByRole('link', { name: 'Back to statements' }).click();
