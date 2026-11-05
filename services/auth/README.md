@@ -1467,7 +1467,20 @@ handle })`. The native workflow creates the stage and supplies its registration 
 the browser can supply only the initial empty registration ID. Access's existing
 `creationBinding` verifies that stage against the original approved business request.
 Owner impersonation, browser bearer input, credentials and extra fields are refused.
-Unexpected or pending native results cannot become complete creation results.
+The native result projection accepts exactly `{ accountId }` with a UUID. Exact
+workflow replay returns the same projection. A pending or incompatible result, or
+an exception after `createAutomated` may have completed, returns HTTP 503
+`{ error: 'account_operation_unresolved' }` without `effect_status`; it cannot
+assert `not_applied` after a possible commit.
+
+The browser-safe DTO ceiling is derived from these producers. Access `seal` caps an
+opaque approval reference at 4,096 characters, the existing execute input admits
+the same maximum, and the producer serializes expiry with `Date.toISOString()`
+(24 ASCII bytes). The compact approval-success ceiling is
+`UTF8(JSON({ reference: '', expiresAt: '' })) + 6 × 4,096 + 24`; the execution
+acknowledgement ceiling is `UTF8(JSON({ accountId: '' })) + 36` for the native
+UUID. The execute request reader also admits
+`UTF8(JSON({ operation: { kind: 'automated', registrationId: '', operationKey: '', operatorAccountId: '', handle: '' }, operationKey: '', accountId: '', reference: '' })) + 6 × (4,096 + 2 × 128) + 2 × 36 + 64`; this includes the reference, both copies of the 128-character key, UUIDs and maximum normalized handle. The six-byte factor covers worst-case JSON escaping per UTF-16 unit without parsing or narrowing the opaque reference. Each response endpoint takes the maximum of its success form, exact `account_operation_denied/not_applied`, `platform_closed/not_applied` and `step_up_required/not_applied` bodies, and execution's unresolved body. Known refusal envelopes are closed status/body pairs. Once execution may have started, a transport exception or invalid native projection remains unresolved; it never becomes a new refusal guarantee.
 
 The shared management discriminator currently omits `automated`. The exact additive
 alias needed is `AUTH_MANAGEMENT_SCOPES.automated = ['account:manage']`, together with
@@ -1539,8 +1552,8 @@ existing native owners; rollout, identity publication and erasure debt stay with
 those owners.
 
 `test/automated-account-transport.test.ts` reuses the existing native account-binding
-fixture and names the approved creation acceptance, exact replay, foreign denial,
-source/key/operator substitution and stale-profile cases.
+fixture and names approved creation, exact replay, foreign denial, source/key/operator
+substitution, stale-profile and incompatible native-result cases.
 `apps/auth/test/automated-account-create.test.ts` and the focused
 `automated-account-create` stories cover confirmation, response loss, unavailable
 identity, step-up and pending-result refusal. Story fixtures are presentation evidence.

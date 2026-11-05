@@ -3,7 +3,8 @@ import { createRequire } from 'node:module';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
 import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
-import { automatedManagementProfile } from '../src/automated-account-transport.ts';
+import { automatedAccountOperationRequestByteBudgets } from '@rezics/auth-contract';
+import { automatedManagementProfile, automatedNativeResult } from '../src/automated-account-transport.ts';
 
 // Reuse the existing real native Auth/Access fixture, including its approval
 // source binding. No alternate registration writer, permission or custody world.
@@ -141,6 +142,70 @@ test('creating an operated actor uses existing native approved createAutomated w
   ).toBe(403);
   expect(await counts()).toEqual(completed);
 }, 180000);
+
+test('execute input admits the maximum escaped automated reference before native resolution', async () => {
+  const operationKey = '\u0002'.repeat(128);
+  const boundedOperation = {
+    ...operation,
+    operationKey,
+    handle: `a${'b'.repeat(62)}c`,
+  };
+  const body = {
+    operationKey,
+    operation: boundedOperation,
+    accountId: human.accountId,
+    reference: '\u0001'.repeat(4096),
+  };
+  expect(new TextEncoder().encode(JSON.stringify(body)).byteLength).toBe(
+    automatedAccountOperationRequestByteBudgets.execute,
+  );
+  const before = await counts();
+  const response = await send('/account-operations/execute', body);
+  expect(response.status).not.toBe(200);
+  expect(response.status).not.toBe(413);
+  expect(await counts()).toEqual(before);
+});
+
+test('automated result projection admits only the native accountId-only UUID and incompatible workflow output stays unresolved', async () => {
+  expect(automatedNativeResult({ accountId: human.accountId })).toEqual({ accountId: human.accountId });
+  for (const value of [
+    { accountId: human.accountId, pending: true },
+    { accountId: 'not-an-account' },
+    { accountId: human.accountId.toUpperCase(), callback: 'pending' },
+  ])
+    expect(automatedNativeResult(value)).toBeNull();
+
+  const invalidKey = 'incompatible-automated-result';
+  const invalidOperation = { ...operation, operationKey: invalidKey, handle: 'invalid_native_result' };
+  const approvalResponse = await approve(invalidOperation, invalidKey);
+  expect(approvalResponse.status).toBe(200);
+  const { reference } = (await approvalResponse.json()) as { reference: string };
+  const createAutomated = f.host.workflows.createAutomated;
+  f.host.workflows.createAutomated = (async () => ({ accountId: human.accountId, pending: true })) as never;
+  try {
+    const unresolved = await execute(reference, invalidOperation, invalidKey);
+    expect(unresolved.status).toBe(503);
+    expect(await unresolved.json()).toEqual({ error: 'account_operation_unresolved' });
+  } finally {
+    f.host.workflows.createAutomated = createAutomated;
+  }
+
+  const thrownKey = 'throwing-automated-result';
+  const thrownOperation = { ...operation, operationKey: thrownKey, handle: 'throwing_native_result' };
+  const thrownApproval = await approve(thrownOperation, thrownKey);
+  expect(thrownApproval.status).toBe(200);
+  const thrownReference = ((await thrownApproval.json()) as { reference: string }).reference;
+  f.host.workflows.createAutomated = (async () => {
+    throw new Error('simulated workflow transport exception');
+  }) as never;
+  try {
+    const unresolved = await execute(thrownReference, thrownOperation, thrownKey);
+    expect(unresolved.status).toBe(503);
+    expect(await unresolved.json()).toEqual({ error: 'account_operation_unresolved' });
+  } finally {
+    f.host.workflows.createAutomated = createAutomated;
+  }
+});
 
 test('closed automated transport refuses invented source, owner impersonation, credentials, bearer, wrong profile and stale authority before staging', async () => {
   const before = await counts();

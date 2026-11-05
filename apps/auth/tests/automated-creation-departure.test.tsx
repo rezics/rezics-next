@@ -119,20 +119,31 @@ test('Escape from the departure prompt stays on the exact review and restores ke
 test('Leave retains an unresolved command and retires its late approval before replacement work', async () => {
   const page = await start();
   await page.review();
-  await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
-  await flush(() => send(page.host));
-  const attempt = restoreAutomatedAttempt();
-  await page.navigate();
-  await page.click('Leave');
-  expect(restoreAutomatedAttempt()).toEqual(attempt);
-  await flush(() => {
-    void page.router.navigate({ to: '/automated/new' });
-  });
-  expect(page.host.textContent).toContain('robot-one');
-  await flush(() => page.calls[1]!.resolve(approval()));
-  expect(restoreAutomatedAttempt()).toEqual(attempt);
-  expect(page.calls).toHaveLength(2);
-  expect(page.host.querySelector<HTMLInputElement>('#automated-confirm')!.checked).toBe(false);
+  const fetch = globalThis.fetch;
+  let approvalSignal: AbortSignal | undefined;
+  globalThis.fetch = ((input, init) => {
+    if (String(input) === '/account-operations/approve') approvalSignal = init?.signal as AbortSignal;
+    return fetch(input, init);
+  }) as typeof fetch;
+  try {
+    await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+    await flush(() => send(page.host));
+    const attempt = restoreAutomatedAttempt();
+    await page.navigate();
+    await page.click('Leave');
+    expect(approvalSignal?.aborted).toBe(true);
+    expect(restoreAutomatedAttempt()).toEqual(attempt);
+    await flush(() => {
+      void page.router.navigate({ to: '/automated/new' });
+    });
+    expect(page.host.textContent).toContain('robot-one');
+    await flush(() => page.calls[1]!.resolve(approval()));
+    expect(restoreAutomatedAttempt()).toEqual(attempt);
+    expect(page.calls).toHaveLength(2);
+    expect(page.host.querySelector<HTMLInputElement>('#automated-confirm')!.checked).toBe(false);
+  } finally {
+    globalThis.fetch = fetch;
+  }
 });
 test('completed creation leaves normally, and caller replacement revokes a changed draft without a prompt', async () => {
   const page = await start();

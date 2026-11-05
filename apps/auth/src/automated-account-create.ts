@@ -1,11 +1,19 @@
-import { managementOperationProfile, type AccountOperation, type ManagementSession } from '@rezics/auth-contract';
 import {
-  AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH,
+  ACCOUNT_OPERATION_EXPIRY_MAX_LENGTH,
+  ACCOUNT_OPERATION_KEY_MAX_LENGTH,
+  ACCOUNT_OPERATION_REFERENCE_MAX_LENGTH,
   AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH,
   AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH,
+  AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH,
   AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES,
+  automatedAccountOperationResponseByteBudgets,
+  managementOperationProfile,
+  type AccountOperation,
+  type AccountOperationApprovalResponse,
+  type AutomatedAccountExecutionAcknowledgement,
+  type ManagementSession,
 } from '@rezics/auth-contract';
-import { authPost, type AuthPostResult } from './api';
+import { authPost } from './api';
 import { loadManagementSession } from './management-operations';
 import { normalizeSignupHandle } from './signup';
 import { privateAuthRead } from './private-auth-read';
@@ -52,7 +60,6 @@ export type AutomatedPageRead =
   | { kind: 'ready'; page: AutomatedCreationPage }
   | { kind: 'refused' | 'signed-out' | 'unavailable' };
 const storageKey = 'rezics.automated-create.attempt';
-const AUTOMATED_ATTEMPT_MAX_OPERATION_KEY_LENGTH = 128;
 const AUTOMATED_ATTEMPT_MAX_REFERENCE_LENGTH = 4096;
 function attemptStorageSkeleton(reference: boolean, submitted: boolean) {
   return JSON.stringify({
@@ -76,7 +83,7 @@ function attemptStorageStringUnits(reference: boolean) {
     2 * AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH +
     2 * AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH +
     6 *
-      (2 * AUTOMATED_ATTEMPT_MAX_OPERATION_KEY_LENGTH +
+      (2 * ACCOUNT_OPERATION_KEY_MAX_LENGTH +
         AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH +
         (reference ? AUTOMATED_ATTEMPT_MAX_REFERENCE_LENGTH : 0))
   );
@@ -246,7 +253,7 @@ export function parseAutomatedAttempt(value: unknown): AutomatedAttempt | null {
     ]) ||
     !automatedId(value.accountId) ||
     !text(value.operationKey) ||
-    value.operationKey.length > AUTOMATED_ATTEMPT_MAX_OPERATION_KEY_LENGTH ||
+    value.operationKey.length > ACCOUNT_OPERATION_KEY_MAX_LENGTH ||
     !identity(value.operator) ||
     (hasReference && (!text(value.reference) || value.reference.length > AUTOMATED_ATTEMPT_MAX_REFERENCE_LENGTH)) ||
     (hasSubmitted && value.submitted !== true)
@@ -362,73 +369,191 @@ export function automatedSessionMatches(session: ManagementSession, accountId: s
     Date.now() / 1000 - session.authTime <= 600
   );
 }
-async function boundSession(accountId: string): Promise<AutomatedOutcome | null> {
-  const session = await loadManagementSession();
+async function boundSession(accountId: string, signal?: AbortSignal): Promise<AutomatedOutcome | null> {
+  const session = await loadManagementSession(signal);
   if (session.kind === 'unavailable') return { kind: 'unavailable' };
   if (session.kind === 'signed-out') return { kind: 'step-up' };
   if (session.accountId !== accountId) return { kind: 'refused' };
   return automatedSessionMatches(session, accountId) ? null : { kind: 'step-up' };
 }
-function failure(result: Exclude<AuthPostResult, { ok: true }>): AutomatedOutcome {
-  if (result.status === 401 && result.code === 'step_up_required') return { kind: 'step-up' };
-  if ([400, 401, 403, 409, 413, 415].includes(result.status)) return { kind: 'refused' };
-  return { kind: 'unknown' };
+
+type BoundedCommandResponse =
+  | { kind: 'response'; status: number; body: unknown }
+  | { kind: 'unavailable' };
+
+/** Each command owns its existing five-second lifetime through streamed body consumption. */
+async function boundedCommandPost(
+  path: string,
+  body: unknown,
+  maxBytes: number,
+  caller?: AbortSignal,
+): Promise<BoundedCommandResponse> {
+  const serialized = JSON.stringify(body);
+  try {
+    return await privateAuthRead(async (signal) => {
+      let response: Response;
+      try {
+        response = await fetch(path, {
+          method: 'POST',
+          credentials: 'same-origin',
+          redirect: 'error',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: serialized,
+          signal,
+        });
+      } catch (error) {
+        if (signal.aborted || error instanceof TypeError) return { kind: 'unavailable' };
+        throw error;
+      }
+      let responseBody: unknown;
+      try {
+        responseBody = await readJsonBounded(response, maxBytes, signal);
+      } catch (error) {
+        if (signal.aborted || (error instanceof Error && error.message === 'Private JSON response unavailable'))
+          return { kind: 'unavailable' };
+        throw error;
+      }
+      return {
+        kind: 'response' as const,
+        status: response.status,
+        body: responseBody,
+      };
+    }, caller);
+  } catch (error) {
+    if (caller?.aborted || (error instanceof DOMException && error.name === 'TimeoutError'))
+      return { kind: 'unavailable' };
+    throw error;
+  }
+}
+
+function approvalResponse(body: unknown): AccountOperationApprovalResponse | null {
+  if (
+    !record(body) ||
+    !fields(body, ['reference', 'expiresAt']) ||
+    typeof body.reference !== 'string' ||
+    body.reference.length === 0 ||
+    body.reference.length > ACCOUNT_OPERATION_REFERENCE_MAX_LENGTH ||
+    typeof body.expiresAt !== 'string' ||
+    body.expiresAt.length !== ACCOUNT_OPERATION_EXPIRY_MAX_LENGTH
+  )
+    return null;
+  const expires = Date.parse(body.expiresAt);
+  if (!Number.isFinite(expires) || new Date(expires).toISOString() !== body.expiresAt || expires <= Date.now()) return null;
+  return { reference: body.reference, expiresAt: body.expiresAt };
+}
+
+function executionAcknowledgement(body: unknown): AutomatedAccountExecutionAcknowledgement | null {
+  if (!record(body) || !fields(body, ['accountId']) || !automatedId(body.accountId)) return null;
+  return { accountId: body.accountId };
+}
+
+/** Classify only the closed Auth-host status/body pairs for these commands. */
+function commandFailure(command: 'approve' | 'execute', status: number, body: unknown): AutomatedOutcome | null {
+  if (!record(body)) return null;
+  if (
+    command === 'approve' &&
+    status === 403 &&
+    fields(body, ['error', 'effect_status']) &&
+    body.error === 'platform_closed' &&
+    body.effect_status === 'not_applied'
+  )
+    return { kind: 'refused' };
+  if (
+    status === 401 &&
+    fields(body, ['error', 'effect_status']) &&
+    body.error === 'step_up_required' &&
+    body.effect_status === 'not_applied'
+  )
+    return { kind: 'step-up' };
+  if (
+    fields(body, ['error', 'effect_status']) &&
+    body.error === 'account_operation_denied' &&
+    body.effect_status === 'not_applied' &&
+    [400, 401, 403, 409, 413, 415].includes(status)
+  )
+    return { kind: 'refused' };
+  if (
+    status === 503 &&
+    fields(body, ['error', 'effect_status']) &&
+    body.error === 'account_operation_denied' &&
+    body.effect_status === 'not_applied'
+  )
+    return { kind: 'unknown' };
+  if (status === 503 && fields(body, ['error']) && body.error === 'account_operation_unresolved')
+    return { kind: 'unknown' };
+  return null;
 }
 
 /** Only explicit confirmation calls this. Return/navigation never invokes it. */
 export async function submitAutomatedAttempt(
   input: AutomatedAttempt,
   isCurrent: () => boolean = () => true,
+  signal?: AbortSignal,
 ): Promise<AutomatedOutcome> {
+  const current = () => isCurrent() && !signal?.aborted;
   let attempt = parseAutomatedAttempt(input);
-  if (!isCurrent() || !attempt || !saveAutomatedAttempt(attempt)) return { kind: 'refused' };
+  if (!current()) return { kind: 'unavailable' };
+  if (!attempt || !saveAutomatedAttempt(attempt)) return { kind: 'refused' };
   const retained = restoreAutomatedAttempt();
   if (!retained || retained === 'invalid') return { kind: 'unavailable' };
   attempt = retained;
   const uncertain = !!(attempt.submitted || attempt.reference);
-  const denied = await boundSession(attempt.accountId);
-  if (!isCurrent()) return { kind: 'unavailable' };
+  const denied = await boundSession(attempt.accountId, signal);
+  if (!current()) return { kind: 'unavailable' };
   if (denied) return uncertain && denied.kind === 'refused' ? { kind: 'unknown' } : denied;
   const { operation, operationKey, accountId } = attempt;
+  let approvalExpiresAt = '';
   {
     attempt = parseAutomatedAttempt({ ...attempt, submitted: true })!;
     if (!saveAutomatedAttempt(attempt)) return { kind: 'unavailable' };
-    const approval = await authPost('/account-operations/approve', { operation, operationKey, accountId });
-    if (!isCurrent()) return { kind: 'unavailable' };
-    if (!approval.ok) {
-      const outcome = failure(approval);
+    if (!current()) return { kind: 'unavailable' };
+    const approval = await boundedCommandPost(
+      '/account-operations/approve',
+      { operation, operationKey, accountId },
+      automatedAccountOperationResponseByteBudgets.approval,
+      signal,
+    );
+    if (!current()) return { kind: 'unavailable' };
+    if (approval.kind !== 'response') return { kind: 'unknown' };
+    if (approval.status !== 200) {
+      const outcome = commandFailure('approve', approval.status, approval.body) ?? { kind: 'unknown' as const };
       return uncertain && outcome.kind === 'refused' ? { kind: 'unknown' } : outcome;
     }
-    if (
-      !record(approval.body) ||
-      !fields(approval.body, ['reference', 'expiresAt']) ||
-      !text(approval.body.reference) ||
-      typeof approval.body.expiresAt !== 'string' ||
-      !Number.isFinite(Date.parse(approval.body.expiresAt))
-    )
-      return { kind: 'unknown' };
-    attempt = parseAutomatedAttempt({ ...attempt, reference: approval.body.reference })!;
+    const admitted = approvalResponse(approval.body);
+    if (!current()) return { kind: 'unavailable' };
+    if (!admitted) return { kind: 'unknown' };
+    approvalExpiresAt = admitted.expiresAt;
+    attempt = parseAutomatedAttempt({ ...attempt, reference: admitted.reference })!;
     if (!saveAutomatedAttempt(attempt)) return { kind: 'unknown' };
   }
-  const current = await boundSession(accountId);
-  if (!isCurrent()) return { kind: 'unavailable' };
-  if (current) return current.kind === 'refused' ? { kind: 'unknown' } : current;
-  const result = await authPost('/account-operations/execute', {
-    operation,
-    operationKey,
-    accountId,
-    reference: attempt.reference,
-  });
-  if (!isCurrent()) return { kind: 'unavailable' };
-  if (!result.ok) {
-    const outcome = failure(result);
-    return outcome.kind === 'refused' ? { kind: 'unknown' } : outcome;
-  }
-  if (!record(result.body) || !fields(result.body, ['accountId']) || !automatedId(result.body.accountId))
+  if (!current()) return { kind: 'unavailable' };
+  const sessionAfterApproval = await boundSession(accountId, signal);
+  if (!current()) return { kind: 'unavailable' };
+  if (sessionAfterApproval)
+    return sessionAfterApproval.kind === 'refused' ? { kind: 'unknown' } : sessionAfterApproval;
+  const expires = Date.parse(approvalExpiresAt);
+  if (!current()) return { kind: 'unavailable' };
+  if (!attempt.reference || !Number.isFinite(expires) || expires <= Date.now())
     return { kind: 'unknown' };
+  const result = await boundedCommandPost(
+    '/account-operations/execute',
+    { operation, operationKey, accountId, reference: attempt.reference },
+    automatedAccountOperationResponseByteBudgets.execution,
+    signal,
+  );
+  if (!current()) return { kind: 'unavailable' };
+  if (result.kind !== 'response') return { kind: 'unknown' };
+  if (result.status !== 200) {
+    const outcome = commandFailure('execute', result.status, result.body);
+    if (!outcome) return { kind: 'unknown' };
+    return uncertain && outcome.kind === 'refused' ? { kind: 'unknown' } : outcome;
+  }
+  const acknowledgement = executionAcknowledgement(result.body);
+  if (!acknowledgement) return { kind: 'unknown' };
   // Retain the immutable attempt even after success: navigation cannot accidentally
   // turn a lost acknowledgement into a new account/key. No automatic resubmit.
-  return { kind: 'complete', accountId: result.body.accountId };
+  return { kind: 'complete', accountId: acknowledgement.accountId };
 }
 
 /** Native sign-in materializes only existing current consent. No creation effect. */
@@ -437,13 +562,15 @@ export async function reauthenticateAutomated(
   email: string,
   password: string,
   isCurrent: () => boolean = () => true,
+  signal?: AbortSignal,
 ): Promise<AutomatedOutcome | null> {
-  const before = await loadManagementSession();
-  if (!isCurrent()) return { kind: 'unavailable' };
+  const current = () => isCurrent() && !signal?.aborted;
+  const before = await loadManagementSession(signal);
+  if (!current()) return { kind: 'unavailable' };
   if (before.kind !== 'ready' || before.accountId !== accountId) return { kind: 'refused' };
   const result = await authPost('/signin', { email, password, ...AUTOMATED_PROFILE });
-  if (!isCurrent()) return { kind: 'unavailable' };
+  if (!current()) return { kind: 'unavailable' };
   if (!result.ok) return { kind: 'unavailable' };
-  const current = await boundSession(accountId);
-  return isCurrent() ? current : { kind: 'unavailable' };
+  const sessionAfterSignIn = await boundSession(accountId, signal);
+  return current() ? sessionAfterSignIn : { kind: 'unavailable' };
 }

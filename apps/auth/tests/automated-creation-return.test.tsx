@@ -265,6 +265,127 @@ test('a native completion released after pagehide stays generic and cannot navig
   expect(restoreAutomatedAttempt()).toMatchObject({ submitted: true });
 });
 
+test('a lost execute reply retains the original unknown command without a refusal or completion', async () => {
+  const original = createAutomatedAttempt(human, operator, 'private-handle')!;
+  saveAutomatedAttempt(original);
+  const page = await open(<AutomatedAccountCreatePage />, session);
+  const fetch = globalThis.fetch;
+  globalThis.fetch = ((input, init) =>
+    String(input) === '/account-operations/execute'
+      ? Promise.reject(new TypeError('connection lost after dispatch'))
+      : fetch(input, init)) as typeof fetch;
+  try {
+    await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+    await flush(() => send(page.host));
+    await flush(() => page.calls.at(-1)!.resolve(approval()));
+
+    expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
+    expect(page.host.textContent).toContain('A creation may have been sent; its result remains unresolved.');
+    expect(page.host.textContent).not.toContain('Creation was refused');
+    expect(page.host.textContent).not.toContain('The native creation workflow acknowledged completion.');
+    expect(restoreAutomatedAttempt()).toMatchObject({
+      accountId: original.accountId,
+      operationKey: original.operationKey,
+      operation: original.operation,
+      reference: 'native-approval',
+      submitted: true,
+    });
+  } finally {
+    globalThis.fetch = fetch;
+  }
+});
+
+test('retirement aborts a stalled execution body that ignores cancellation without exposing former details', async () => {
+  const page = await open(<AutomatedAccountCreatePage />, session);
+  await review(page);
+  const fetch = globalThis.fetch;
+  let executeSignal: AbortSignal | undefined;
+  globalThis.fetch = ((input, init) => {
+    if (String(input) === '/account-operations/execute') executeSignal = init?.signal as AbortSignal;
+    return fetch(input, init);
+  }) as typeof fetch;
+  try {
+    await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+    await flush(() => send(page.host));
+    await flush(() => page.calls.at(-1)!.resolve(approval()));
+    const execute = page.calls.at(-1)!;
+    const response = new Response(
+      new ReadableStream({
+        cancel() {
+          return new Promise<void>(() => {});
+        },
+      }),
+      { status: 200 },
+    );
+    await flush(() => execute.resolve(response));
+    await flush(leave);
+    expect(executeSignal?.aborted).toBe(true);
+    expect(page.host.textContent).toContain('A creation may have been sent; its result remains unresolved.');
+    expectPrivateViewCleared(page.host, [human, operator.id, operator.handle, 'private-handle', created]);
+    expect(restoreAutomatedAttempt()).toMatchObject({ submitted: true, reference: 'native-approval' });
+  } finally {
+    globalThis.fetch = fetch;
+  }
+});
+
+test('retirement between approval and execute aborts the later caller read without sending execute', async () => {
+  const page = await open(<AutomatedAccountCreatePage />, session);
+  await review(page);
+  const fetch = globalThis.fetch;
+  let sessionReads = 0;
+  let laterSessionSignal: AbortSignal | undefined;
+  let releaseLaterSession: ((response: Response) => void) | undefined;
+  globalThis.fetch = ((input, init) => {
+    if (String(input) === '/session' && ++sessionReads === 3) {
+      laterSessionSignal = init?.signal as AbortSignal;
+      return new Promise<Response>((resolve) => {
+        releaseLaterSession = resolve;
+      });
+    }
+    return fetch(input, init);
+  }) as typeof fetch;
+  try {
+    await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+    await flush(() => send(page.host));
+    const approve = page.calls.at(-1)!;
+    expect(approve.path).toBe('/account-operations/approve');
+    await flush(() => approve.resolve(approval()));
+    expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
+
+    await flush(leave);
+    expect(laterSessionSignal?.aborted).toBe(true);
+    expect(restoreAutomatedAttempt()).toMatchObject({ submitted: true, reference: 'native-approval' });
+    releaseLaterSession!(Response.json(session));
+    await flush(() => {});
+
+    expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
+    expect(page.host.textContent).toContain('A creation may have been sent; its result remains unresolved.');
+  } finally {
+    globalThis.fetch = fetch;
+  }
+});
+
+test('late execution acknowledgement cannot claim a replacement attempt or display either private result', async () => {
+  const original = createAutomatedAttempt(human, operator, 'private-handle')!;
+  saveAutomatedAttempt(original);
+  const page = await open(<AutomatedAccountCreatePage />, session);
+  await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+  await flush(() => send(page.host));
+  await flush(() => page.calls.at(-1)!.resolve(approval()));
+  const execute = page.calls.at(-1)!;
+
+  window.sessionStorage.removeItem('rezics.automated-create.attempt');
+  const replacement = createAutomatedAttempt(human, operator, 'replacement-handle')!;
+  saveAutomatedAttempt(replacement);
+  await flush(() => execute.resolve(Response.json({ accountId: created })));
+
+  expect(restoreAutomatedAttempt()).toEqual(replacement);
+  expect(page.host.textContent).not.toContain(replacement.handle);
+  expect(page.host.textContent).not.toContain(created);
+  expect(page.host.textContent).not.toContain('The native creation workflow acknowledged completion.');
+  expectPrivateViewCleared(page.host, [human, operator.id, operator.handle, 'private-handle', created]);
+});
+
 test('pagehide clears credentials from an interrupted authentication review', async () => {
   const ordinary = { ...session, client_id: 'login', scope: [] as string[] };
   const page = await open(<AutomatedAccountCreatePage />, ordinary);
