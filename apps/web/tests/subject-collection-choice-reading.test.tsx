@@ -17,11 +17,13 @@ const globals = {
   Document: window.Document,
   DocumentFragment: window.DocumentFragment,
   MutationObserver: window.MutationObserver,
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+mock.module('cloudflare:workers', () => ({ env: {} }));
 const { createRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
 const { createRootRoute, createRouter, createMemoryHistory, RouterProvider } = await import('@tanstack/react-router');
@@ -168,12 +170,9 @@ test('received destination: exact supplied facts, missing projections and delibe
       visibility === 'public' ? m.library_destination_public_meaning() : m.library_destination_private_meaning(),
     );
   }
+  const { membershipKind, ...legacy } = row('legacy');
   await paint({
-    collections: [
-      row('legacy', { membershipKind: undefined }),
-      row('dynamic', { membershipKind: 'dynamic' }),
-      row('builtin', { builtinKind: 'inbox' }),
-    ],
+    collections: [legacy, row('dynamic', { membershipKind: 'dynamic' }), row('builtin', { builtinKind: 'inbox' })],
   });
   expect(host.querySelectorAll('button[data-collection-inspect]')).toHaveLength(1);
 });
