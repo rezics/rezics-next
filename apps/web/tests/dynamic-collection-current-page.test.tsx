@@ -48,8 +48,7 @@ const { CollectionRuleControls } = await import('../src/library/collection-rule-
 const { renderToStaticMarkup } = await import('react-dom/server');
 const { libraryNavigationQuery } = await import('../src/library/pins-read');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
-const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
-const { browserObservation } = await import('../src/session/observation');
+const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
 afterAll(async () => {
@@ -206,7 +205,7 @@ async function mount() {
   const authorize = (subject: string, admitted = ['collection.get']) =>
     settle(() => {
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', csrfToken: `csrf-${subject}`, subject });
-      const snapshot = browserObservation(client).getSnapshot();
+      const snapshot = viewerExposureLifetime(client).getSnapshot();
       expect(snapshot.state).toBe('signed-in');
       if (snapshot.state === 'signed-in')
         client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, { subject, admitted });
