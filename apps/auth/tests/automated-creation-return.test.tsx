@@ -388,7 +388,7 @@ test('late execution acknowledgement cannot claim a replacement attempt or displ
 
   expect(restoreAutomatedAttempt()).toEqual(replacement);
   const content = page.host.textContent ?? '';
-  expect(content).not.toContain(replacement.handle);
+  expect(content).not.toContain(replacement.operation.handle);
   expect(content).not.toContain(created);
   expect(content).not.toContain('The native creation workflow acknowledged completion.');
   expectPrivateViewCleared(page.host, [human, operator.id, operator.handle, 'private-handle', created]);
