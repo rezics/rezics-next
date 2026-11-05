@@ -183,14 +183,7 @@ test('mounted entry, contribution menu and authored route keep public intent out
     });
   const navigate = async (href: string) => {
     const url = new URL(href, window.location.origin);
-    const search = Object.fromEntries(url.searchParams.entries());
-    await act(async () =>
-      router.navigate({
-        to: '/subjects/$id/$slug/authored',
-        params: { id: addonProfileId, slug: 'harbor-northern-lights' },
-        search,
-      } as never),
-    );
+    await act(async () => router.history.push(`${url.pathname}${url.search}${url.hash}`));
   };
   const loader = Route.options.loader as unknown as (input: {
     params: { id: string; slug: string };
