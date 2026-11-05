@@ -155,7 +155,7 @@ export function LabelsPageView({
   } | null>(null);
   const createField = useRef<HTMLInputElement>(null);
   const renameField = useRef<HTMLInputElement>(null);
-  const locked = useRef<{ current: () => boolean } | null>(null);
+  const locked = useRef<{ current: () => boolean; sending: boolean } | null>(null);
   const mounted = useRef(false);
   const attempts = useRef(new Map<string, Attempt>());
   const ownedToast = useRef<{ id: string; owner: string } | null>(null);
@@ -210,7 +210,7 @@ export function LabelsPageView({
     setAction((selected) => selected ?? failedAction(next));
   }
   latestPage.current = page;
-  if (locked.current && !locked.current.current()) {
+  if (locked.current && !locked.current.current() && !locked.current.sending) {
     locked.current = null;
     setBusy(false);
   }
@@ -348,13 +348,18 @@ export function LabelsPageView({
           send: sendLabel,
         };
     attempts.current.set(slot, attempt);
-    const lock = { current: () => admitted(input) };
+    const lock = { current: () => admitted(input), sending: true };
     locked.current = lock;
     setBusy(true);
     const page = latestPage.current;
     try {
       if (!admitted(input)) return;
-      const result = await attempt.send({ data: attempt.input, headers: attempt.headers });
+      let result: LabelResult;
+      try {
+        result = await attempt.send({ data: attempt.input, headers: attempt.headers });
+      } finally {
+        lock.sending = false;
+      }
       if (!admitted(input)) return;
       attempt.unresolved = !result.ok && result.reason === 'unavailable';
       if (result.ok && input.operation === 'create') setCreateName((value) => (value === input.name ? '' : value));
@@ -470,7 +475,8 @@ export function LabelsPageView({
         },
       }));
     } finally {
-      if (alive() && (!originating || originating.isCurrent(operationOf(input))) && locked.current === lock) {
+      lock.sending = false;
+      if (mounted.current && locked.current === lock) {
         locked.current = null;
         setBusy(false);
       }
