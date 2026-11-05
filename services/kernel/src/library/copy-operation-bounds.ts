@@ -733,33 +733,55 @@ WHERE route=:route AND account_id=:account_id FOR UPDATE`;
   const liveCopySql = `SELECT EXISTS (SELECT 1 FROM library.copy WHERE route=:route AND account_id=:account_id
 AND subject_id=:subject_id AND deletion_id IS NULL AND COALESCE(library_profile_pin,'{}'::jsonb)=:pin)`;
   const headLockSql = `SELECT 1 FROM library.fact_source_head WHERE route=:route AND account_id=:account_id FOR UPDATE`;
+  const ownerActivitySql = `SELECT GREATEST(
+    (SELECT e.activity_at FROM library.entry e WHERE e.route=:route AND e.account_id=:account_id AND e.subject_id=:subject_id),
+    (SELECT h.last_changed_at FROM library.progress_head h WHERE h.route=:route AND h.account_id=:account_id AND h.subject_id=:subject_id)
+  ), EXISTS(SELECT 1 FROM library.entry e WHERE e.route=:route AND e.account_id=:account_id AND e.subject_id=:subject_id
+      AND e.activity_at IS NULL)
+    OR (EXISTS(SELECT 1 FROM library.progress_session p WHERE p.state <> 'retired' AND p.route=:route AND p.account_id=:account_id AND p.subject_id=:subject_id)
+      AND NOT EXISTS(SELECT 1 FROM library.progress_head h WHERE h.route=:route AND h.account_id=:account_id AND h.subject_id=:subject_id
+        AND h.last_changed_at IS NOT NULL))`;
+  const point = (sql: string, rows = 1) =>
+    operationSql(sql, input, { candidateKeys: rows, nativeRows: rows, points: rows, emptySeeks: 1 });
+  // refresh_owner_member_scope's live and absent arms are exclusive. The BEFORE
+  // INSERT owner activity trigger runs even when ON CONFLICT keeps the old row.
+  const liveScope = sumBounds(
+    point(
+      `INSERT INTO library.owner_member_support VALUES(:route,:account_id,:subject_id,:family,:pin) ON CONFLICT DO NOTHING`,
+    ),
+    point(`INSERT INTO library.owner_member_index VALUES(:route,:account_id,:subject_id) ON CONFLICT DO NOTHING`),
+    operationSql(ownerActivitySql, input, {
+      candidateKeys: 5,
+      nativeRows: 5,
+      points: 5,
+      emptySeeks: 5,
+      outputBytes: Buffer.byteLength(JSON.stringify({ activity_at: COPY_TIME, activity_unknown: true })),
+    }),
+    point(
+      `INSERT INTO library.owner_index_pin(route,account_id,pin) VALUES(:route,:account_id,:pin) ON CONFLICT DO NOTHING`,
+    ),
+  );
+  const absentScope = sumBounds(
+    point(
+      `DELETE FROM library.owner_member_support WHERE route=:route AND account_id=:account_id AND subject_id=:subject_id AND family=:family AND pin=:pin`,
+    ),
+    point(
+      `DELETE FROM library.owner_index_pin WHERE route=:route AND account_id=:account_id AND pin=:pin AND NOT EXISTS (
+      SELECT 1 FROM library.owner_member_support WHERE route=:route AND account_id=:account_id AND pin=:pin)`,
+      2,
+    ),
+    // The pin FK cascades to at most the release's 64 owner-index states.
+    point(`DELETE FROM library.owner_index_state WHERE route=:route AND account_id=:account_id AND pin=:pin`, 64),
+    point(
+      `DELETE FROM library.owner_member_index WHERE route=:route AND account_id=:account_id AND subject_id=:subject_id AND NOT EXISTS (
+      SELECT 1 FROM library.owner_member_support WHERE route=:route AND account_id=:account_id AND subject_id=:subject_id)`,
+      2,
+    ),
+  );
   const scope = sumBounds(
     operationSql(headLockSql, input, { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1 }),
     operationSql(liveCopySql, input, { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1 }),
-    maximumBound(
-      declareBound({
-        candidateKeys: 3,
-        nativeRows: 3,
-        identityMetadataRows: 0,
-        emptySeeks: 0,
-        nativePoints: 3,
-        witnessKeys: 0,
-        statements: 3,
-        bytes: Buffer.byteLength(JSON.stringify(input)) * 3,
-        engineRequests: 0,
-      }),
-      declareBound({
-        candidateKeys: 67,
-        nativeRows: 67,
-        identityMetadataRows: 0,
-        emptySeeks: 65,
-        nativePoints: 67,
-        witnessKeys: 0,
-        statements: 3,
-        bytes: Buffer.byteLength(JSON.stringify(input)) * 3,
-        engineRequests: 0,
-      }),
-    ),
+    maximumBound(liveScope, absentScope),
   );
   const profileMigration =
     operation === 'delete'
@@ -776,17 +798,14 @@ AND subject_id=:subject_id AND deletion_id IS NULL AND COALESCE(library_profile_
             },
           ),
           operationSql(migrationReadSql, input, { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1 }),
-          declareBound({
-            candidateKeys: 4,
-            nativeRows: 4,
-            identityMetadataRows: 0,
-            emptySeeks: 4,
-            nativePoints: 4,
-            witnessKeys: 0,
-            statements: 5,
-            bytes: Buffer.byteLength(JSON.stringify(input)) * 5,
-            engineRequests: 0,
-          }),
+          ...['entry', 'progress_session', 'copy', 'entry_deleted'].map((table) =>
+            point(
+              `SELECT 1 FROM library.${table} WHERE route=:route AND account_id=:account_id AND library_profile_pin IS NULL LIMIT 1`,
+            ),
+          ),
+          point(
+            `UPDATE library.fact_source_head SET profile_migration_phase='ready' WHERE route=:route AND account_id=:account_id`,
+          ),
         );
   const copyIndexes = 18; // PK plus the 17 live, retained, export and owner-scope indexes in schema.sql.
   const copyRow = declareBound({
