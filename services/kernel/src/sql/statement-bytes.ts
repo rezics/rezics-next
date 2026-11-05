@@ -5,6 +5,6 @@ export const SQL_COMMENT_BYTE_BOUND = 512;
 export function statementBytes(statement: string | { sql: string; source?: string | undefined }): number {
   if (typeof statement === 'string') return Buffer.byteLength(statement) + SQL_COMMENT_BYTE_BOUND;
   const source = statement.source;
-  const comment = source ? Buffer.byteLength(` /*file='${encodeURIComponent(source).replace(/'/g, "\\'")}'*/`) : 0;
+  const comment = source ? Buffer.byteLength(` /*file='${encodeURIComponent(source).replace(/'/g, "\\'")}'*/`) : SQL_COMMENT_BYTE_BOUND;
   return Buffer.byteLength(statement.sql) + comment;
 }
