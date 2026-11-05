@@ -189,7 +189,7 @@ const fake = Bun.serve({
       return json({
         challenge,
         rp: { id: 'localhost', name: 'REZICS' },
-        user: { id: base64url(Buffer.from(accountId)), name: email, displayName: email },
+        user: { id: base64url(Buffer.from('a'.repeat(32))), name: email, displayName: email },
         pubKeyCredParams: [-8, -7, -257].map((alg) => ({ type: 'public-key', alg })),
         extensions: { credProps: true },
         hints: [],

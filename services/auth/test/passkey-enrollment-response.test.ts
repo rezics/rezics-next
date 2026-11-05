@@ -44,7 +44,7 @@ test('real pinned producer maxima project completely with default and supported 
   expect(bytes(options).length).toBeLessThanOrEqual(budgets.options);
   for (const length of [undefined, '1']) {
     const received = await receiveRegistrationOptions(stream(bytes(options), length));
-    expect(received).toEqual({
+    expect<unknown>(received).toEqual({
       ...options,
       excludeCredentials: (options.excludeCredentials as object[]).map((row, i) =>
         i === 1 ? { ...row, transports: [] } : row,
