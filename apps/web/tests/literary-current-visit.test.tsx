@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { FactCommand } from '../src/features/catalogue/subject-facts';
 import * as start from '../.storybook/react-start';
 import type { LiteraryRead } from '../src/features/catalogue/literary-profile';
 import type { EditorRead } from '../src/features/catalogue/statement-editor';
@@ -174,13 +175,15 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     context: globalContext,
   });
   let freshAnswer: EditorRead = structuredClone(current);
+  let profileAnswer: LiteraryRead = structuredClone(initialProfile);
   const profileRequests: Record<string, unknown>[] = [];
   const correctionRequests: Record<string, unknown>[] = [];
+  const proposalCalls: (FactCommand & { expectedReader: string })[] = [];
   let nextRead: ReturnType<typeof deferred<EditorRead>> | undefined;
   mock.module('../src/features/catalogue/literary-profile-actions', () => ({
     loadLiteraryProfile: async ({ data }: { data: Record<string, unknown> }) => {
       profileRequests.push(data);
-      return structuredClone(initialProfile);
+      return structuredClone(profileAnswer);
     },
     createCatalogueLiteraryWork: async () => ({ ok: false, reason: 'denied' }),
   }));
@@ -199,7 +202,17 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     confirmCorrection: async () => ({ ok: false, reason: 'unavailable' }),
   }));
   mock.module('../src/features/catalogue/subject-facts-actions', () => ({
-    submitFactCorrection: async () => ({ ok: false, reason: 'unavailable' }),
+    submitFactCorrection: async ({ data }: { data: FactCommand & { expectedReader: string } }) => {
+      proposalCalls.push(structuredClone(data));
+      if (data.statement.property.id === 'schema:wordCount')
+        return {
+          ok: true,
+          kind: 'proposed-awaiting-review',
+          candidate: '00000000-0000-4000-8000-00000000b002',
+          revision: 2,
+        };
+      throw new Error('Lost proposal response');
+    },
   }));
   mock.module('../src/features/catalogue/create-subject-actions', () => ({
     readCatalogueCreateEligibility: async () => ({ state: 'unavailable' }),
@@ -371,6 +384,90 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
       await late.promise;
     });
     expect(inspection().querySelector('article')).toBeNull();
+
+    input = globalVisit;
+    address = globalAddress;
+    await draw();
+    await until(() => expect(inspection().querySelector('select')).not.toBeNull());
+    const field = (property: string) => {
+      const label = current.release.properties[property]!.labels.en;
+      return [...host.querySelectorAll<HTMLElement>('section[aria-label]')].find(
+        (item) => item.getAttribute('aria-label') === label,
+      )!;
+    };
+    const wordCount = field('schema:wordCount');
+    const sourcePicker = wordCount.querySelector<HTMLSelectElement>(
+      `select[aria-label="${m.facts_choose_value({}, { locale: 'en' as never })}"]`,
+    )!;
+    await act(async () => {
+      sourcePicker.value = first.id;
+      sourcePicker.dispatchEvent(new window.Event('change', { bubbles: true }));
+      [...wordCount.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent?.trim() === m.facts_edit_field({}, { locale: 'en' as never }))!
+        .click();
+    });
+    const enter = async (input: HTMLInputElement, value: string) =>
+      act(async () => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+        input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
+    await enter(
+      wordCount.querySelector<HTMLInputElement>(
+        `input[aria-label="${m.correction_amount({}, { locale: 'en' as never })}"]`,
+      )!,
+      '+13000',
+    );
+    const language = field('schema:inLanguage');
+    await act(async () =>
+      [...language.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent?.trim() === m.facts_edit_field({}, { locale: 'en' as never }))!
+        .click(),
+    );
+    await enter(
+      language.querySelector<HTMLInputElement>(
+        `input[aria-label="${m.correction_value({}, { locale: 'en' as never })}"]`,
+      )!,
+      'ja',
+    );
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent?.trim() === m.facts_review({}, { locale: 'en' as never }))!
+        .click(),
+    );
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent?.trim() === m.facts_submit({}, { locale: 'en' as never }))!
+        .click(),
+    );
+    await until(() => {
+      expect(proposalCalls).toHaveLength(2);
+      expect(host.textContent).toContain(m.correction_proposed({}, { locale: 'en' as never }));
+      expect(host.textContent).toContain(m.facts_uncertain({}, { locale: 'en' as never }));
+    });
+
+    profileAnswer = { ok: false, reason: 'unavailable' };
+    const correctionReload = () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent?.trim() === m.correction_reload({}, { locale: 'en' as never }),
+      )!;
+    const beforeFailedReadback = profileRequests.length;
+    await act(async () => correctionReload().click());
+    await until(() => expect(profileRequests.length).toBeGreaterThan(beforeFailedReadback));
+    await until(() => expect(host.querySelector('[data-literary-assertion-inspection]')).toBeNull());
+    profileAnswer = structuredClone(initialProfile);
+    await act(async () => correctionReload().click());
+    await until(() => expect(inspection().querySelector('select')).not.toBeNull());
+    await until(() => {
+      expect(host.textContent).toContain(m.correction_proposed({}, { locale: 'en' as never }));
+      expect(host.textContent).toContain(m.facts_uncertain({}, { locale: 'en' as never }));
+    });
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent?.trim() === m.facts_submit({}, { locale: 'en' as never }))!
+        .click(),
+    );
+    await until(() => expect(proposalCalls).toHaveLength(3));
+    expect(proposalCalls[2]).toEqual(proposalCalls[1]);
     await act(async () =>
       root.render(
         <QueryClientProvider client={client}>
