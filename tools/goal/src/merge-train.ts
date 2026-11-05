@@ -3118,7 +3118,7 @@ export class MergeTrain {
         this.git(this.options.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`),
       canonical,
     );
-    o.trainResolver?.devConflictStarted(
+    this.options.trainResolver?.devConflictStarted(
       entry.request,
       entry.request.workerCommit ??
         this.git(this.options.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`),
