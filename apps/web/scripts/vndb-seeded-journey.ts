@@ -1,5 +1,7 @@
 /** Run the selected VNDB journey on the worker-check host, using the real development composition. */
 import assert from 'node:assert/strict';
+import { Database } from 'bun:sqlite';
+import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../../services/importer/src/credentials.ts';
 import { closeSync, openSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -99,6 +101,14 @@ try {
       return [line.slice(0, at), line.slice(at + 1)];
     }),
   );
+  const reviewerToken = await createAccountTokenProvider({
+    accountKeyPath: seedEnv.REZICS_DEV_PERSONA_ACCOUNT_KEY!,
+    account: seedEnv.REZICS_DEV_PERSONA_ACCOUNT!, client: seedEnv.REZICS_DEV_PERSONA_CLIENT!,
+    authOrigin: issuerOrigin, scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
+  });
+  const reviewerBearer = await reviewerToken();
+  const claims = JSON.parse(Buffer.from(reviewerBearer.split('.')[1]!, 'base64url').toString());
+  await writeFile(resolve(evidence, 'reviewer-scope.json'), JSON.stringify({ scope: claims.scope }), { mode: 0o600 });
   // The complete composition may report an unavailable private list; catalogue reads remain independently testable.
   const seedLog = Bun.file(resolve(privateLogs, 'seed.log'));
   const seedDescriptor = openSync(seedLog.name!, 'a', 0o600);
@@ -108,6 +118,18 @@ try {
   const seedCode = await seed.exited;
   closeSync(seedDescriptor);
   if (!(await Bun.file(resolve(root, '.temp/cross-media-seed/result.json')).exists())) {
+    const database = new Database(resolve(root, '.temp/cross-media-seed/state.sqlite'), { readonly: true });
+    const subjects = database.query('SELECT source, external_id, subject FROM binding_records WHERE subject IS NOT NULL').all() as
+      { source: string; external_id: string; subject: string }[];
+    database.close();
+    const readings = [];
+    for (const subject of subjects) {
+      const response = await fetch(`${kernelOrigin}/v1/subjects/${subject.subject}?includeViewerActions=true`, {
+        headers: { authorization: `Bearer ${reviewerBearer}` },
+      });
+      readings.push({ ...subject, status: response.status, reading: await response.json() });
+    }
+    await writeFile(resolve(evidence, 'reviewed-bootstrap-readings.json'), JSON.stringify(readings), { mode: 0o600 });
     throw new Error(`seed exited ${seedCode}\n${(await seedLog.text()).replaceAll(password, '[redacted]').slice(-12000)}`);
   }
   const result = JSON.parse(await readFile(resolve(root, '.temp/cross-media-seed/result.json'), 'utf8')) as
