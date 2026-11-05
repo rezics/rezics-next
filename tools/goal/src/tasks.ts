@@ -30,14 +30,8 @@ import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.
 import { choosePoolWithFallback, PoolPolicyReloader } from './pools.ts';
 import { pace, readCodexSchedule } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
-import {
-  applyRenderedPrompt,
-  awaitHostCapacity,
-  launch,
-  renderWorkerPrompt,
-  startsFirst,
-  type RunningWorker,
-} from './launch.ts';
+import { applyRenderedPrompt, launch, renderWorkerPrompt, type RunningWorker } from './launch.ts';
+import { awaitHostCapacity, startsFirst } from './launch-capacity.ts';
 import { rebaseOnto } from './merge-train.ts';
 import { completeRebaseConflictContext } from './conflict-progress.ts';
 import {

@@ -1046,6 +1046,13 @@ reported as unknown rather than inferred.
 
 ### Host-capacity admission
 
+Decision: host-capacity tickets, waiters, memory/cap policy and `releaseWhenStarted` live in `launch-capacity.ts`.
+`launch.ts` re-exports that public admission entry. `WorkerTasks` and `WorkerJob` consume the capacity module; process
+identity, width snapshots and launch evidence stay with their current owners.
+Decision: existing capacity-wait, admission-reservation, urgent-dispatch and worker-prompt assertions stay;
+`launch-capacity.test.ts` pins public re-export identity, concurrent cap, queued progress after release, admitted-pending
+handoff and cancellation ticket cleanup at the original `launch.ts` entry.
+
 Decision: Host admission and width observations share the indexed, trigger-maintained `worker_current_attempts`
 projection; admission counts only each task's current attempt, while width retains its process-identity classification.
 

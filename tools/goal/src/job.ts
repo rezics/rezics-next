@@ -77,13 +77,12 @@ import type { PageDataRepair } from './page-data.ts';
 import type { RunningWorker } from './launch.ts';
 import {
   applyRenderedPrompt,
-  capacityWaiters,
   checkWaitMs,
   launch,
   renderWorkerPrompt,
   workerActivityBaseline,
 } from './launch.ts';
-import { awaitHostCapacity, startsFirst } from './launch.ts';
+import { awaitHostCapacity, capacityWaiters, startsFirst } from './launch-capacity.ts';
 import { agentAdapter, agentCommands } from './agents.ts';
 import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetime.ts';
 import { captureLaunchContext } from './launch-context.ts';
