@@ -258,6 +258,13 @@ operands. Runtime resolution admits the selected document again against the curr
 Serialized JSON configuration is also accepted through that same public parser and admission; it cannot introduce
 private operands or replace the configured Types.
 
+Decision: retained doctor readback pins the active release and shipped Home profile, resolves Anime and Book from
+exact current Bangumi source bindings, and verifies their finite native relation reads plus candidate/document
+disclosure anonymously and as the development member. Synopsis publication goes through native acceptance and
+Global adoption; the database connection is read-only and no observed Subject ID is retained between runs.
+The regression is enabled only with a non-`kernel_test_*` `DATABASE_URL` and
+`PAGE_DATA_CHECK_MEMBER_TOKEN`; `KERNEL_ORIGIN` selects the retained Kernel when it is not on the local default.
+
 A TypeList on a route, subject overview, account page or full view may continue by node ID. Its native Search cursor
 is attached before deduplication, so identical sibling lists remain independent after one advances. Other Search,
 links and relation descriptors are unrequested (204) on that continued response. Full-document admission still uses
