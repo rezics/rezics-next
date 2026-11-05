@@ -77,11 +77,11 @@ Scope row: **Realms and Spaces**. Stage: **specified red** for the complete capa
 User job: community creators and managers create and revise Spaces and Realms, publish subjects, manage membership
 and boards, and enforce protected admission and participation immediately when someone is banned.
 
-Decision: Web binds the Realm visitor journey only to the installed client declarations derived from the mounted Kernel
-root. Keep its Home binding unavailable while those declarations omit recent-discussion projections or type Board
-visibility as `never`; do not infer the contract from native implementation types or add a local DTO. Once published,
-show at most three newest admitted ordinary threads per Board, preserve exact/lower-bound/unavailable reply counts and
-empty/unavailable state, and use existing Realm-return and shelf-cursor navigation slots.
+Decision: Keep the Web Realm Home binding unavailable until the installed client declarations derived from the mounted
+Kernel root expose the Home and boardShelf discussion projections and Board visibility; do not infer their contract
+from native implementation types or add a local DTO. Once published, complete the connected visitor journey in one
+receiver: show at most three newest admitted ordinary threads per Board, preserve exact/lower-bound/unavailable reply
+counts and empty/unavailable state, and use existing Realm-return and shelf-cursor navigation slots.
 
 Personas: anonymous, creator, manager, moderator, Realm member, banned member and outsider, including a banned
 member with an independent read grant. Fixtures: the bound community suite's native Space/Realm fixtures and the

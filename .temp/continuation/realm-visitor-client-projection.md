@@ -2,28 +2,24 @@
 
 ## Goal content
 
-Finish the Realm visitor journey after the official client publication installs the complete root-derived Home and
-boardShelf projections. Replace the temporary `NativeRealmHomePage`, `NativeRealmBoardPage`, and
-`NativeRealmPublicationPage` receiver types with those installed projections and bind the existing adapter transport.
-Export `RealmCommunityBoards` from `realm-community/boards.tsx`; show up to three newest admitted ordinary threads per
-Board with independent accessible Board/thread links, safe opening context, complete empty versus unavailable state,
-and exact, lower-bound, or unavailable reply counts. Preserve the existing Realm return, selected shelf cursor,
-membership, member count, and publication owners. Do not add a producer, parallel shelf, cache, or session engine.
+Complete one connected Realm visitor journey: enter the Realm and selected supplying shelf, finish eligible membership
+or publication through existing owners, admit refresh and committed render, restore eligible shelf focus, open an
+ordinary Board or supplied thread, then return with the exact Realm and shelf cursor. Bind only the installed
+root-derived `KernelClient` Home and boardShelf declarations. Render no more than three newest admitted ordinary
+threads per original Board, independent accessible Board/thread links, safe opening context, empty versus unavailable
+state, and exact/lower-bound/unavailable reply counts. Preserve current membership, member count, publication,
+completion, lifetime and selected-shelf focus behavior; add English, Traditional Chinese and Japanese text. Do not
+create another host, shelf, cache or session engine.
 
 ## Manager content
 
-The current installed client has `RealmHomePage`, but its Home and boardShelf declarations omit the recent-discussion
-projection and type Board visibility as `never`. Keep the current unavailable Home binding until the named official
-publisher is integrated. Then continue the original acceptance: installed-client receiving; native, growth,
-physical-prefix, privacy, and Cost; rendered connected journey; `realm-home-native-visit.test.tsx`; and the six original
-membership/publication/Realm checks declared by the brief. Preserve the completion once-only, lifetime, and selected-
-shelf focus guards. Do not replace or weaken original assertions. Existing reported base failures remain the baseline:
+The installed `@rezics/client` route declarations still omit recent discussions from Home and boardShelf and type
+board visibility as `never`; the mounted Kernel endpoints already carry the native recent-discussion projection. Keep
+the receiver unavailable until the official installed client publication supplies the matching root-derived contract.
+Do not edit generated declarations, cast the route response, infer its shape from Kernel source, or add a Web DTO.
+When that publication is integrated, finish the entire journey in this receiver and run the original installed-client,
+native, growth, physical-prefix, privacy, Cost, rendered-journey and focused Web acceptance. Preserve all six original
+membership/publication/Realm checks and Web259 outer host consumption. Existing reported base failures remain:
 membership focus has one renewal failure, membership lifetime has five failures, and publication lifetime has three
-same-account/picker/menu failures. The earlier Web typing and shared runner preparation failures were Docker
-`ETIMEDOUT`; controller retains custody reconciliation for `/tmp/rezics-web-check-Qu8a8q/prepared-descriptor.json`.
-
-## Current attempt
-
-The receiver decision is recorded in `docs/goals/content.capabilities.md`. This attempt validates only the retained
-unavailable seam and hands the projection-bound UI and connected journey to the next receiver after publisher
-integration.
+same-account/picker/menu failures. Earlier Web typing and shared runner setup failures were Docker `ETIMEDOUT`; the
+controller retains reconciliation for its prepared descriptor.
