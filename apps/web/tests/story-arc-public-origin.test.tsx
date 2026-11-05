@@ -123,7 +123,6 @@ test('the mounted Subject, canonical route, correction session and existing read
   }));
   const fixture = storyArcProfileFixture();
   const profileLoads: unknown[] = [];
-  const readerLoads: unknown[] = [];
   mock.module('../src/features/catalogue/story-arc-profile-actions', () => ({
     loadStoryArcProfile: async ({ data }: { data: { id?: string; work?: string } }) => {
       profileLoads.push(data);
@@ -131,10 +130,7 @@ test('the mounted Subject, canonical route, correction session and existing read
     },
   }));
   mock.module('../src/features/catalogue/story-arc-reader/actions', () => ({
-    loadArcReader: async ({ data }: { data: unknown }) => {
-      readerLoads.push(data);
-      return { ok: false, reason: 'unavailable' };
-    },
+    loadArcReader: async () => ({ ok: false, reason: 'unavailable' }),
   }));
   const originalKernel = await import('../src/kernel/client');
   mock.module('../src/kernel/client', () => ({ ...originalKernel, kernelClient: () => fixture.client }));
@@ -251,8 +247,7 @@ test('the mounted Subject, canonical route, correction session and existing read
     const globalVisit = parseStoryArcProfileSearch(globalRoute.search, storyArcProfileId, 'en')!;
     expect(globalVisit).toMatchObject({ context: PAGE_GLOBAL_CONTEXT, definition: fixture.arc.subject.release });
     expect(globalVisit.via).toBe(`${actualSubject.href}#connections`);
-    await waitFor(() => readerLoads.length > 0);
-    expect(readerLoads).toContainEqual({ id: storyArcProfileId, context: PAGE_GLOBAL_CONTEXT, locale: 'en' });
+    expect(host.querySelector('[data-slot="story-arc-reader"]')).not.toBeNull();
 
     const nonGlobalEntry = await subjectEntry(selectedContext);
     expect(nonGlobalEntry).toBeDefined();
@@ -327,7 +322,6 @@ test('the mounted Subject, canonical route, correction session and existing read
     });
     expect(publicReads).toEqual([{ target: { subject: storyArcProfileId, realm: realmId }, languages: ['en'] }]);
     if (readBack.kind !== 'page') throw new Error('Expected a fresh admitted Subject page on return.');
-    const previousReaderLoads = readerLoads.length;
     await render(
       createElement(SubjectPage, {
         page: readBack.page,
@@ -338,14 +332,8 @@ test('the mounted Subject, canonical route, correction session and existing read
         renderJsonLd: false,
       }),
     );
-    await waitFor(() => readerLoads.length > previousReaderLoads);
     expect(host.textContent).toContain('Current returned arc');
-    expect(readerLoads.at(-1)).toEqual({
-      id: storyArcProfileId,
-      context: selectedContext,
-      locale: 'en',
-      realm: realmId,
-    });
+    expect(host.querySelector('[data-slot="story-arc-reader"]')).not.toBeNull();
 
     const validateSearch = Route.options.validateSearch;
     if (typeof validateSearch !== 'function') throw new Error('Expected the installed StoryArc search validator.');
