@@ -13,6 +13,8 @@ let subjectId: string;
 let artifact: { manifest: Record<string, unknown>; records: Record<string, unknown>[] };
 beforeAll(async () => {
   f = await createProfileEntryFixture({ ownerScopes: scopes });
+  for (const group of ['personal_library', 'reading_progress', 'collections'])
+    expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
   subjectId = await f.createSubject('game', 'Web archive recovery');
   await f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, entryKey());
   const labels = createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
@@ -79,6 +81,7 @@ test('Native producer file passes mounted receiving selection, preserved Entry, 
     const confirmation = journey.snapshot().state!.review!.body;
     expect(confirmation.items.every(item => item.reviewRevision > 0)).toBe(true);
     await journey.apply();
+    await journey.results();
     expect(await f.commands.readEntry(owner.actor, subjectId)).toMatchObject({ state: 'in_progress', revision: original.revision });
     await journey.readCurrent(label.ordinal);
     expect(journey.snapshot().readback?.value).toMatchObject({ label: { name: 'Archived private label' } });
@@ -90,8 +93,9 @@ test('Native producer file passes mounted receiving selection, preserved Entry, 
     expect(assignments.assignments).toHaveLength(1);
     // Complete native envelopes, not page counts or artifact recordBytes, determine caller bytes.
     const previewBytes = calls.filter(call => call.path.endsWith('/preview')).map(call => call.bytes);
+    const resultBytes = calls.filter(call => call.path.endsWith('/results')).map(call => call.bytes);
     expect(previewBytes.every(bytes => bytes > 0)).toBe(true);
-    console.info(JSON.stringify({ archiveEntryCaller: { requests: calls.length, responseBytes: calls.reduce((sum, call) => sum + call.bytes, 0), previewBytes } }));
+    console.info(JSON.stringify({ archiveEntryCaller: { requests: calls.length, responseBytes: calls.reduce((sum, call) => sum + call.bytes, 0), previewBytes, resultBytes } }));
     expect(calls.filter(call => call.path.endsWith('/preview'))).toHaveLength(3);
   } finally { journey.retire(); }
 }, 120_000);

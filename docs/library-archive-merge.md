@@ -177,6 +177,8 @@ runtime acceptance belongs to the controller's complete Kernel suite; focused ch
 
 ## Web ownership
 
-Web retains the private export interface. Commerce has sent the exact mounted consumer methods and supported
-coverage for an adjacent explicit import/recovery allocation. Web must adopt that contract before any UI completion
-is claimed. The decoder does not change the export producer's interface.
+Web retains the private export interface and mounts the Entry/private-label/assignment branch at
+`/library/recover-archive` using the installed generated native methods and immutable review revisions. Its
+[mounted visit owner](../apps/web/src/library/archive-entry-recovery.md) describes the selection, original-sender
+custody, cancellation and current readback. Independent annotation/journal field policy remains native-owned.
+The decoder does not change the export producer's interface.

@@ -57,6 +57,15 @@ export class ArchiveEntryRecoveryJourney {
   #feedback(reply: ArchiveReply<unknown>) {
     this.#notice = reply.kind === 'uncertain' ? 'uncertain' : reply.kind === 'refused' ? `${reply.status}:${reply.code}` : '';
   }
+  #retainAcknowledged(page: ResultPage): ResultPage {
+    const state = this.visit.state!;
+    const previous = state.results?.context.uploadId === page.context.uploadId ? state.results.rows : [];
+    const accepted = previous.filter(row => row.status === 'acknowledged' && state.choices.some(choice => choice.ordinal === row.ordinal && choice.section === row.section));
+    const rows = new Map(page.rows.map(row => [row.ordinal, row]));
+    // A later supplied page cannot erase matching receipts already acknowledged for this selection.
+    for (const row of accepted) rows.set(row.ordinal, row);
+    return { rows: [...rows.values()], context: page.context };
+  }
   async #run(action: () => Promise<void>) {
     this.#busy = true;
     this.#notice = '';
@@ -150,7 +159,7 @@ export class ArchiveEntryRecoveryJourney {
       const results = selectedArchiveRecoveryResults({ uploadId: reply.value.uploadId, state: cancelling ? 'cancelled' : 'ready', results: reply.value.applied.map(row => ({ ...row, section: state.choices.find(choice => choice.ordinal === row.ordinal)!.section })), next: null }, state.choices);
       const unresolved = reply.value.applied.some(row => row.status === 'applying');
       const changed = reply.value.applied.some(row => ['current_conflict', 'unresolved', 'unsupported'].includes(row.status));
-      this.visit.settleApply(original.request, unresolved ? 'recoverable' : changed && !cancelling ? 'stale' : 'complete', results);
+      this.visit.settleApply(original.request, unresolved ? 'recoverable' : changed && !cancelling ? 'stale' : 'complete', this.#retainAcknowledged(results));
       if (unresolved) this.#notice = 'uncertain';
       if (this.#cancelRequest && this.#cancelAcknowledged) this.visit.admitCancel(this.#cancelRequest);
     });
@@ -162,7 +171,7 @@ export class ArchiveEntryRecoveryJourney {
       const reply = await this.#port.results(state.upload!.id, after, request.signal);
       if (!this.#current() || request.signal.aborted) return;
       this.#feedback(reply);
-      if (reply.kind === 'ok') this.visit.admitResults(request, selectedArchiveRecoveryResults(reply.value, state.choices));
+      if (reply.kind === 'ok') this.visit.admitResults(request, this.#retainAcknowledged(selectedArchiveRecoveryResults(reply.value, state.choices)));
     });
   }
   async status() {

@@ -19,6 +19,7 @@ function fixture() {
   let refuseReplay = false;
   let current: typeof binding | null = binding;
   let applied = false;
+  let resultReads = 0;
   const rows: ArchiveRow[] = [
     { ordinal: 0, section: 'entries', evidence: { subject_id: 'old-source', state: 'old-state' }, status: 'unresolved', review: null, reviewRevision: 0 },
     { ordinal: 1, section: 'labels', evidence: { name: 'Old name' }, status: 'unresolved', review: null, reviewRevision: 0 },
@@ -44,7 +45,7 @@ function fixture() {
       }
       if (path.includes('/libraryEntries/')) return Response.json({ libraryEntry: { subjectId, state: 'in_progress', revision: 8 } });
       if (path.endsWith('/libraryLabelAssignments')) return Response.json({ label: { id: labelId, name: 'Current renamed label', revision: 3 }, assignments: [], next: null });
-      if (path.endsWith('/results')) return Response.json({ uploadId: id, state: 'ready', results: applied ? [{ ordinal: 0, section: 'entries', status: 'acknowledged', result: { effect: 'entry.put', subjectId } }] : [], next: null });
+      if (path.endsWith('/results')) return Response.json({ uploadId: id, state: 'ready', results: applied && resultReads++ === 0 ? [{ ordinal: 0, section: 'entries', status: 'acknowledged', result: { effect: 'entry.put', subjectId } }] : [], next: null });
       return Response.json(status);
     }, { preconnect: fetch.preconnect }),
   });
@@ -74,6 +75,8 @@ test('Original text, displayed revisions, original retry, cancellation and curre
     expect(f.journey.snapshot().state!.phase).toBe('uncertain');
     const original = f.calls.find(call => call.path.endsWith('/apply'))!;
     await f.journey.results();
+    await f.journey.results(100);
+    expect(f.journey.snapshot().state!.results!.rows[0]).toMatchObject({ ordinal: 0, status: 'acknowledged', subjectId });
     await f.journey.readCurrent(0);
     expect(f.journey.snapshot().readback?.value).toMatchObject({ libraryEntry: { state: 'in_progress' } });
     expect(f.journey.snapshot().state!.phase).toBe('uncertain');

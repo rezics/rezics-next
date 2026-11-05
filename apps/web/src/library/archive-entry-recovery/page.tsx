@@ -120,7 +120,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
           <label className="flex min-h-11 items-center gap-3"><input type="checkbox" checked={confirmed} disabled={busy || locked} onChange={event => setConfirmation(event.currentTarget.checked ? review : null)} />{m.library_archive_entry_confirm()}</label>
           <button type="button" className={control} disabled={busy || locked || !confirmed} onClick={() => { setConfirmation(null); act(journey!.apply()); }}>{m.library_archive_entry_apply()}</button>
         </div>}
-        {locked && <><p>{m.library_archive_recovery_uncertain()}</p><button type="button" className={control} disabled={busy} onClick={() => act(journey!.apply())}>{m.library_archive_recovery_retry_original()}</button></>}
+        {locked && <><p>{m.library_archive_recovery_uncertain()}</p><button type="button" className={control} disabled={busy} onClick={() => act(journey!.apply())}>{m.library_archive_recovery_retry_original()}</button><button type="button" className={control} disabled={busy} onClick={() => act(journey!.results())}>{m.library_archive_entry_results_refresh()}</button></>}
       </section>}
       {state.results && <section aria-labelledby="archive-results" className="space-y-3">
         <h2 id="archive-results" className="text-xl font-semibold">{m.library_archive_results_step()}</h2>
