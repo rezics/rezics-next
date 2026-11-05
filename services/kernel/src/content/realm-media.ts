@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { Compile } from 'typebox/compile';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
@@ -20,13 +21,15 @@ export {
   type RealmPresentationImage,
   type RealmPresentationOptional,
 } from './realm-presentation-image.ts';
-const imageValidator = Compile(RealmPresentationImageSchema);
+function imageValidator() {
+  return memoizedValue(imageValidator, () => Compile(RealmPresentationImageSchema()));
+}
 
 /** Exact JSON summary shared by native presentation consumers; never download authority. */
 export function exactRealmPresentationImage(
   value: RealmPresentationImage,
-): import('typebox').Static<typeof RealmPresentationImageSchema> | null {
-  if (!imageValidator.Check(value)) return null;
+): import('typebox').Static<ReturnType<typeof RealmPresentationImageSchema>> | null {
+  if (!imageValidator().Check(value)) return null;
   return { ...value, variants: value.variants.map((variant) => ({ ...variant })) };
 }
 

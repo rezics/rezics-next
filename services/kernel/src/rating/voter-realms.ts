@@ -80,7 +80,7 @@ export function createVoterRealmsEffect(pool: Pool): Effect {
     name: 'rating_voter_realms',
     types: [MEMBERSHIP],
     async run(event) {
-      if (event.type !== MEMBERSHIP || !Value.Check(COMMUNITY_EVENTS[MEMBERSHIP], event.data))
+      if (event.type !== MEMBERSHIP || !Value.Check(COMMUNITY_EVENTS()[MEMBERSHIP], event.data))
         throw new TypeError('Invalid Realm membership event');
       const { accountId: voterId, realmId, role, at } = event.data;
       const route = routeOf(voterId);

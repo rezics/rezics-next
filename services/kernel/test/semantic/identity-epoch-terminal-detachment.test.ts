@@ -73,7 +73,7 @@ for (const terminalLast of [false, true]) {
       ).rows[0]!;
       expect(saved.intent).toEqual(intent);
       expect(saved.remainder_terminal).toBe(remainder);
-      const page = await withConnection(f.pool, (tx) => identityEpochStore.pageChanges(tx, job, null));
+      const page = await withConnection(f.pool, (tx) => identityEpochStore().pageChanges(tx, job, null));
       expect(page.next).toBeNull();
       for (const id of originals)
         expect(page.changes.find((row) => row.original === id)).toEqual({
@@ -140,7 +140,7 @@ for (const terminalLast of [false, true]) {
           native_position: effect.position,
         });
       }
-      expect(await identityEpochStore.reconcileStepReceipt(f.pool, final.receipt)).toEqual(final);
+      expect(await identityEpochStore().reconcileStepReceipt(f.pool, final.receipt)).toEqual(final);
       const beforeReplay = await f.snapshot([...originals, terminal]);
       expect(await stepIdentityEpochMapping(f.pool, job)).toEqual(final);
       expect(await f.snapshot([...originals, terminal])).toEqual(beforeReplay);

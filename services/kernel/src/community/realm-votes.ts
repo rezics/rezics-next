@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { PoolClient } from 'pg';
 import { REACTION_KINDS } from '../content/events.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -8,14 +9,16 @@ export type RealmVoteWeight = 1 | -1;
 /** Kinds absent from the map count as 0. */
 export type RealmVotes = Readonly<Partial<Record<ReactionKind, RealmVoteWeight>>>;
 
-const reactionKinds = new Set<string>(REACTION_KINDS);
+function reactionKinds() {
+  return memoizedValue(reactionKinds, () => new Set<string>(REACTION_KINDS));
+}
 type VoteRow = { realm_id: string; votes: unknown };
 
 function votesOf(value: unknown): RealmVotes {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new TypeError('Invalid Realm votes');
   const votes: Partial<Record<ReactionKind, RealmVoteWeight>> = {};
   for (const [key, weight] of Object.entries(value)) {
-    if (!reactionKinds.has(key) || (weight !== 1 && weight !== -1)) throw new TypeError('Invalid Realm votes');
+    if (!reactionKinds().has(key) || (weight !== 1 && weight !== -1)) throw new TypeError('Invalid Realm votes');
     votes[key as ReactionKind] = weight;
   }
   if (Object.keys(votes).length > 7) throw new TypeError('Invalid Realm votes');

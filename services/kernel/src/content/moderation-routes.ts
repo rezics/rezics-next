@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -28,42 +29,63 @@ import {
 } from './schemas.ts';
 
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
-const sessionHeader = { [SESSION_HEADER]: t.String() };
-const reason = strictContentSchema(ModerationReasonSchema);
-const response = strictContentSchema(ModerationResponseSchema);
-const operation = strictContentSchema(OperationSchema);
-const readFailures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'dependency_unavailable'),
-};
-const historyReadFailures = { ...readFailures, 400: problemSchema('invalid_request', 'invalid_cursor') };
-const writeFailures = {
-  ...readFailures,
-  403: problemSchema('forbidden'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }));
+}
+function sessionHeader() {
+  return memoizedValue(sessionHeader, () => ({ [SESSION_HEADER]: t.String() }));
+}
+function reason() {
+  return memoizedValue(reason, () => strictContentSchema(ModerationReasonSchema));
+}
+function response() {
+  return memoizedValue(response, () => strictContentSchema(ModerationResponseSchema));
+}
+function operation() {
+  return memoizedValue(operation, () => strictContentSchema(OperationSchema));
+}
+function readFailures() {
+  return memoizedValue(readFailures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'dependency_unavailable'),
+  }));
+}
+function historyReadFailures() {
+  return memoizedValue(historyReadFailures, () => ({
+    ...readFailures(),
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+  }));
+}
+function writeFailures() {
+  return memoizedValue(writeFailures, () => ({
+    ...readFailures(),
+    403: problemSchema('forbidden'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
 function detail(operationId: string, action: 'moderation:takedown' | 'post:erase', type: 'board' | 'thread' | 'post') {
   return {
     operationId,
     'x-resource-types': [`content.${type}`],
     'x-exposure': 'public' as const,
     'x-action': action,
-    'x-rate-limit': writeRate,
+    'x-rate-limit': writeRate(),
     ...(action === 'post:erase' ? { 'x-replay-authorization': 'self-account-read' as const } : {}),
     security: [{ bearerAuth: [] }],
   };
@@ -133,13 +155,13 @@ export function moderationRoutes(
   ];
   const pointOptions = {
     params,
-    headers,
-    body: reason,
+    headers: headers(),
+    body: reason(),
     parse,
     transform: ({ request }: { request: Request }) => {
       if (oversized.delete(request)) throw new ProblemError('content_too_large');
     },
-    response: { 200: withHeaders(response, sessionHeader), ...writeFailures },
+    response: { 200: withHeaders(response(), sessionHeader()), ...writeFailures() },
   };
   return app
     .get(
@@ -147,8 +169,8 @@ export function moderationRoutes(
       {
         params,
         response: {
-          200: withHeaders(DecisionPageSchema, { ...sessionHeader, 'cache-control': t.String() }),
-          ...readFailures,
+          200: withHeaders(DecisionPageSchema(), { ...sessionHeader(), 'cache-control': t.String() }),
+          ...readFailures(),
         },
         detail: {
           operationId: 'moderation_decision.get',
@@ -173,11 +195,11 @@ export function moderationRoutes(
         params,
         query: ModerationHistoryQuerySchema,
         response: {
-          200: withHeaders(strictContentSchema(ModerationHistoryPageSchema), {
-            ...sessionHeader,
+          200: withHeaders(strictContentSchema(ModerationHistoryPageSchema()), {
+            ...sessionHeader(),
             'cache-control': t.String(),
           }),
-          ...historyReadFailures,
+          ...historyReadFailures(),
         },
         detail: {
           operationId: 'moderation_decision.list',
@@ -277,7 +299,7 @@ export function moderationRoutes(
       {
         ...pointOptions,
         body: strictContentSchema(AuthorErasureInputSchema),
-        response: { 202: withHeaders(operation, sessionHeader), ...writeFailures },
+        response: { 202: withHeaders(operation(), sessionHeader()), ...writeFailures() },
         detail: detail('thread.erase', 'post:erase', 'thread'),
       },
       async ({ params: { id }, actor, body, request, admission, job, session, set }) => {
@@ -314,7 +336,7 @@ export function moderationRoutes(
       '/v1/operations/:id',
       {
         params,
-        response: { 200: operation, ...readFailures },
+        response: { 200: operation(), ...readFailures() },
         detail: {
           operationId: 'operation.get',
           'x-exposure': 'public',

@@ -19,7 +19,7 @@ test('native mapping drains actual admitted cross-home effects with real receipt
     }
     for (const original of input.redirectedOriginals)
       expect(await f.nativeDirectRedirect(original)).toBe(input.survivor);
-    const ack = await identityEpochStore.reconcileStepReceipt(f.pool, final.receipt);
+    const ack = await identityEpochStore().reconcileStepReceipt(f.pool, final.receipt);
     expect(ack).toEqual(final);
     const job = await f.readJob(input.job);
     expect(job!.mapping!.state).toBe('complete');

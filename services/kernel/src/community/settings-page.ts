@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { documentText, DocumentSnapshotSchema } from '@rezics/document';
 import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
@@ -50,48 +51,52 @@ const operation = t.Object(
 
 /** A structural superset of Web's existing RealmAppearanceSnapshot. `none` uses
  * its existing concealed/unset optional contract; selected IDs remain in presentation. */
-export const RealmSettingsPageSchema = t.Object(
-  {
-    snapshot: t.Object(
+export function RealmSettingsPageSchema() {
+  return memoizedValue(RealmSettingsPageSchema, () =>
+    t.Object(
       {
-        realmId: id,
-        head: id,
-        title: t.String(),
-        summary: t.String(),
-        contextId: id,
-        visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
-        state: t.Literal('active'),
-        ownershipState: t.Union([t.Literal('owned'), t.Literal('orphaned')]),
-        governanceReadOnly: t.Boolean(),
-        canManage: t.Boolean(),
-        boardSchemeId: nullable(id),
-        votes: t.Record(t.String(), t.Union([t.Literal(1), t.Literal(-1)])),
-        presentation: RealmPresentationSchema,
-        avatar: optional(RealmPresentationImageSchema),
-        banner: optional(RealmPresentationImageSchema),
-        rules: optional(
-          t.Object(
-            {
-              postId: id,
-              revisionId: id,
-              title: t.String({ maxLength: 160 }),
-              summary: t.String({ maxLength: 800 }),
-              body: DocumentSnapshotSchema,
-              licence: t.String(),
-              sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
-            },
-            closed,
-          ),
+        snapshot: t.Object(
+          {
+            realmId: id,
+            head: id,
+            title: t.String(),
+            summary: t.String(),
+            contextId: id,
+            visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
+            state: t.Literal('active'),
+            ownershipState: t.Union([t.Literal('owned'), t.Literal('orphaned')]),
+            governanceReadOnly: t.Boolean(),
+            canManage: t.Boolean(),
+            boardSchemeId: nullable(id),
+            votes: t.Record(t.String(), t.Union([t.Literal(1), t.Literal(-1)])),
+            presentation: RealmPresentationSchema,
+            avatar: optional(RealmPresentationImageSchema()),
+            banner: optional(RealmPresentationImageSchema()),
+            rules: optional(
+              t.Object(
+                {
+                  postId: id,
+                  revisionId: id,
+                  title: t.String({ maxLength: 160 }),
+                  summary: t.String({ maxLength: 800 }),
+                  body: DocumentSnapshotSchema,
+                  licence: t.String(),
+                  sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+                },
+                closed,
+              ),
+            ),
+          },
+          closed,
         ),
+        host: t.Object({ spaceId: id, head: id, title: t.String(), summary: t.String() }, closed),
+        operations: t.Object({ update: operation, boardScheme: operation, reserveMedia: operation }, closed),
       },
       closed,
     ),
-    host: t.Object({ spaceId: id, head: id, title: t.String(), summary: t.String() }, closed),
-    operations: t.Object({ update: operation, boardScheme: operation, reserveMedia: operation }, closed),
-  },
-  closed,
-);
-export type RealmSettingsPage = Static<typeof RealmSettingsPageSchema>;
+  );
+}
+export type RealmSettingsPage = Static<ReturnType<typeof RealmSettingsPageSchema>>;
 type Dependencies = Pick<RealmDependencies, 'pool' | 'access' | 'clock'>;
 const none = { state: 'none', value: null } as const;
 const unavailable = { state: 'unavailable', value: null } as const;

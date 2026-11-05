@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { currentCommand, CommandUnavailableError } from '../command/command.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { ShelfWrite } from './shelf-contract.ts';
@@ -6,9 +7,15 @@ import readQuery from './shelf-counter-owner-read.sql';
 import { enterShelfWrite as enterNativeShelfWrite } from './shelf-maintenance-runtime.ts';
 import completeQuery from './shelf-counter-owner-complete.sql';
 import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
-const initialize = shelfMaintenanceQuery(initializeQuery);
-const read = shelfMaintenanceQuery(readQuery);
-const complete = shelfMaintenanceQuery(completeQuery);
+function initialize() {
+  return memoizedValue(initialize, () => shelfMaintenanceQuery(initializeQuery));
+}
+function read() {
+  return memoizedValue(read, () => shelfMaintenanceQuery(readQuery));
+}
+function complete() {
+  return memoizedValue(complete, () => shelfMaintenanceQuery(completeQuery));
+}
 
 export const NIL_SHELF_GENERATION = '00000000-0000-0000-0000-000000000000';
 export type ShelfNativeOwner = Readonly<{
@@ -34,18 +41,18 @@ export async function enterShelfWrite(write: ShelfWrite): Promise<ShelfNativeOwn
   });
   const args = { route: write.route, account_id: write.accountId };
   const client = write.client;
-  await initialize.run(client, { ...args, fence_id: newId(write.route) });
-  let row = await read.run(client, args);
+  await initialize().run(client, { ...args, fence_id: newId(write.route) });
+  let row = await read().run(client, args);
   if (!row) throw new Error('Shelf owner serialization row is missing');
   if (BigInt(row.epoch) > native.epoch) throw new CommandUnavailableError('contention', command.partition);
   if (row.state === 'initializing' || BigInt(row.epoch) < native.epoch || row.ready !== native.ready) {
-    await complete.run(client, {
+    await complete().run(client, {
       ...args,
       ready: native.ready,
       epoch: native.epoch.toString(),
       generation_id: native.generationId,
     });
-    row = (await read.run(client, args))!;
+    row = (await read().run(client, args))!;
   }
   if (row.state !== 'open' || (row.ready && row.generationId !== native.generationId))
     throw new CommandUnavailableError('contention', command.partition);

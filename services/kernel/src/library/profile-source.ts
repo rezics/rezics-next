@@ -106,7 +106,7 @@ export async function readLibraryProfileAnchor(
     )
       return null;
   }
-  const before = await identityEpochStore.readMapping(pool, subjectId);
+  const before = await identityEpochStore().readMapping(pool, subjectId);
   if (before.state !== 'mapped') return null;
   const work = currentCommandWorkAssociation()?.access;
   const context = { pool, deadline, time: at, ...(work ? { work } : {}) };
@@ -135,7 +135,7 @@ export async function readLibraryProfileAnchor(
       return acceptingType !== undefined;
     });
     if (!reference || acceptingType === undefined) return null;
-    const after = await identityEpochStore.readMapping(pool, subjectId);
+    const after = await identityEpochStore().readMapping(pool, subjectId);
     requireAccessDeadline(deadline);
     if (after.state !== 'mapped' || after.epoch !== before.epoch || after.terminal !== before.terminal) return null;
     return { ...resolved, component: reference.component, identityEpoch: after.epoch, acceptingType };

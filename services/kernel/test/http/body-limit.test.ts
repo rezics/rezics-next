@@ -155,7 +155,7 @@ test('a raw route delivers a non-JSON body as bytes without request-path JSON va
 });
 
 test('definition release transport limit is canonical bytes plus the agreed envelope headroom', () => {
-  expect(MAX_BODY_LIMIT).toBe(4 * 1024 * 1024 + 65_536);
+  expect(MAX_BODY_LIMIT()).toBe(4 * 1024 * 1024 + 65_536);
 });
 
 test('body reservations refuse overflow before reading and never exceed the ingress budget', () => {
@@ -362,7 +362,7 @@ test('mounted required and optional bodies preserve absent versus present empty 
 // This exercises the app's private lifecycle rather than inspecting or releasing its budget.
 test('mounted reservations release on success, duplicate, syntax, schema and native write-rate refusal', async () => {
   const probe = nativeWriteProbe();
-  const budget = (ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * DEFAULT_BODY_LIMIT + 2 * MAX_BODY_LIMIT;
+  const budget = (ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * DEFAULT_BODY_LIMIT + 2 * MAX_BODY_LIMIT();
   const capacity = Math.floor(budget / DEFAULT_BODY_LIMIT);
   const held: { controller: ReadableStreamDefaultController<Uint8Array>; response: Promise<Response> }[] = [];
   async function hold() {

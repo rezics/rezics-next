@@ -23,7 +23,7 @@ const scope = 'rezics:measurementScope';
 const method = 'wdt:P459';
 const measuredAt = 'rezics:measuredAt';
 const realizationVersion = 'owned-manuscript-v1';
-const producerInput = Compile(CountProducerInputSchema);
+const producerInput = Compile(CountProducerInputSchema());
 const body = 'Amber birds cross quiet winter fields.';
 const digest = (text: string) => `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`;
 const controlledRecord = {

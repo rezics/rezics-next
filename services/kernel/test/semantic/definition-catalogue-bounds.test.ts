@@ -12,7 +12,7 @@ import { catalogueConsumerCaptureDigest } from '../../src/semantic/definition-ca
 test('a malformed catalogue step can retain refusal after savepoint rollback without refunding bounded work', async () => {
   const deadline = Date.now() + 10_000,
     cost = CATALOGUE_BODY_COST.control;
-  const work = new NativeCollectionWork({ reservationId: 'refusal', remaining: CATALOGUE_COMMAND_BOUND }, deadline);
+  const work = new NativeCollectionWork({ reservationId: 'refusal', remaining: CATALOGUE_COMMAND_BOUND() }, deadline);
   await expect(
     catalogueBodyWork(
       work,
@@ -59,7 +59,7 @@ test('withdrawal identity binds the exact consumer, selector, provenance and roo
 test('unexpected failure remains charged and an expired catalogue frame never invokes its body', async () => {
   const deadline = Date.now() + 10_000,
     cost = CATALOGUE_BODY_COST.control;
-  const work = new NativeCollectionWork({ reservationId: 'failure', remaining: CATALOGUE_COMMAND_BOUND }, deadline);
+  const work = new NativeCollectionWork({ reservationId: 'failure', remaining: CATALOGUE_COMMAND_BOUND() }, deadline);
   await expect(
     catalogueBodyWork(
       work,
@@ -85,7 +85,7 @@ test('unexpected failure remains charged and an expired catalogue frame never in
   const expired = Date.now() - 1;
   await expect(
     catalogueBodyWork(
-      new NativeCollectionWork({ reservationId: 'expired', remaining: CATALOGUE_COMMAND_BOUND }, expired),
+      new NativeCollectionWork({ reservationId: 'expired', remaining: CATALOGUE_COMMAND_BOUND() }, expired),
       cost,
       async () => {
         invoked = true;

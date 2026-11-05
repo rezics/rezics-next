@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { profileDigest, platformRegistry, validateProfileFilters, type PresentationProfile } from '@rezics/composition';
 import type { Pool } from 'pg';
 import { activeRelease } from '../semantic/definitions.ts';
@@ -13,7 +14,9 @@ import read from './profiles-read.sql';
 const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const resource = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
-const profiles = new ProfileCache();
+function profiles() {
+  return memoizedValue(profiles, () => new ProfileCache());
+}
 
 export { ProfileInputError } from './profile-cache.ts';
 export class ProfileAccessDeniedError extends Error {}
@@ -28,7 +31,7 @@ export async function readProfile(
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
   const row = await read.run(pool, { route: resource.route, digest });
   if (!row) return null;
-  return profiles.read(digest, row.body);
+  return profiles().read(digest, row.body);
 }
 
 export async function activeProfile(

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -10,26 +11,36 @@ import { strictContentSchema } from './schemas.ts';
 import { takedownSourceFence, type SourceFenceDependencies } from './source-fence-command.ts';
 import type { sourceFenceRoutes } from './source-fence-routes.ts';
 
-const body = strictContentSchema(
-  t.Object(
-    {
-      source: t.String({ minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9_-]{0,31}$' }),
-      externalId: t.String({ minLength: 1, maxLength: 1024 }),
-      fieldGroup: t.Union([t.Literal('facts'), t.Literal('summary'), t.Literal('cover')]),
-      reason: t.String({ minLength: 1, maxLength: 1024 }),
-    },
-    { additionalProperties: false },
-  ),
-);
-const response = strictContentSchema(
-  t.Object(
-    {
-      securityRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
-    },
-    { additionalProperties: false },
-  ),
-);
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
+function body() {
+  return memoizedValue(body, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          source: t.String({ minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9_-]{0,31}$' }),
+          externalId: t.String({ minLength: 1, maxLength: 1024 }),
+          fieldGroup: t.Union([t.Literal('facts'), t.Literal('summary'), t.Literal('cover')]),
+          reason: t.String({ minLength: 1, maxLength: 1024 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
+}
+function response() {
+  return memoizedValue(response, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          securityRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
+}
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
 
 export function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourceFenceRoutes>, deps: SourceFenceDependencies) {
   const oversized = new WeakSet<Request>();
@@ -79,9 +90,9 @@ export function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourceFenceRo
         if (oversized.delete(request)) throw new ProblemError('content_too_large');
       },
       headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
-      body,
+      body: body(),
       response: {
-        200: withHeaders(response, { [SESSION_HEADER]: t.String(), 'cache-control': t.String() }),
+        200: withHeaders(response(), { [SESSION_HEADER]: t.String(), 'cache-control': t.String() }),
         400: problemSchema('invalid_request'),
         401: problemSchema('authentication_required', 'invalid_credentials'),
         403: problemSchema('forbidden'),
@@ -103,7 +114,7 @@ export function sourceFenceGovernanceRoutes(app: ReturnType<typeof sourceFenceRo
         operationId: 'source_fence.takedown',
         'x-exposure': 'public',
         'x-action': 'source_fence:takedown',
-        'x-rate-limit': writeRate,
+        'x-rate-limit': writeRate(),
         security: [{ bearerAuth: [] }],
       },
     },

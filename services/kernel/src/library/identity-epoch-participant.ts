@@ -269,7 +269,7 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
   bounded(async (deadline) => {
     if (routeOf(job.jobId) === null || typeof job.epoch !== 'bigint' || job.epoch <= 0n)
       throw new TypeError('Library identity work requires a native job ID and positive bigint epoch');
-    const saved = await withReadTransaction(pool, (tx) => identityEpochStore.readJob(tx, job));
+    const saved = await withReadTransaction(pool, (tx) => identityEpochStore().readJob(tx, job));
     if (!saved || (saved.state !== 'pending' && saved.state !== 'published'))
       throw stale('Library identity work requires an admitted native job');
     const previous = saved.participants[step];
@@ -285,7 +285,7 @@ export const stepLibraryIdentityEpoch: IdentityEpochStep = (pool, job) =>
         receipt.version !== 1
       )
         throw new IdentityEpochStoreError('identity_step_receipt_invalid', 'Library identity receipt scope is invalid');
-      return identityEpochStore.reconcileStepReceipt(pool, receipt);
+      return identityEpochStore().reconcileStepReceipt(pool, receipt);
     }
     if (saved.state !== 'pending') throw stale('Published identity job is missing its ALL-Library receipt');
     const pending = await runCommand(pool, { partition: identityJobPartition(job), deadline }, async (tx) => {

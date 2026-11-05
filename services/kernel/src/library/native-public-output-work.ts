@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { PoolClient, QueryConfig, QueryResult } from 'pg';
 import type { WorkDimensions } from './collection-source.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
@@ -29,8 +30,12 @@ export {
   PUBLIC_OUTPUT_PARTITION_METADATA_SQL,
 } from './native-public-output-bounds.ts';
 
-export const publicOutputPartitionSizeSQL = PUBLIC_OUTPUT_PARTITION_SIZE_SQL;
-export const publicOutputXidSQL = PUBLIC_OUTPUT_XID_SQL;
+export function publicOutputPartitionSizeSQL() {
+  return memoizedValue(publicOutputPartitionSizeSQL, () => PUBLIC_OUTPUT_PARTITION_SIZE_SQL);
+}
+export function publicOutputXidSQL() {
+  return memoizedValue(publicOutputXidSQL, () => PUBLIC_OUTPUT_XID_SQL);
+}
 
 /** Compatibility observation for callers not yet migrated to named journeys.
  * The closed descriptor is the authority; this never invents a bound from observed rows.

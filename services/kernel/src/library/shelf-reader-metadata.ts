@@ -15,7 +15,7 @@ import valueRows from './shelf-reader-values.sql';
 function count(text: string): number {
   const value = Number(text);
   if (!/^\d+$/.test(text) || !Number.isSafeInteger(value))
-    throw new ShelfReadUnavailableError('maintained count outside the transport integer range');
+    throw new (ShelfReadUnavailableError())('maintained count outside the transport integer range');
   return value;
 }
 
@@ -26,7 +26,7 @@ export function createShelfMetadataReaders(
   async function current(...args: Parameters<ShelfReadGenerationReader>) {
     const state = await generation(...args);
     if (state.readiness !== 'ready' || state.activeGeneration === null)
-      throw new ShelfReadUnavailableError('native complete shelf generation');
+      throw new (ShelfReadUnavailableError())('native complete shelf generation');
     return state.activeGeneration;
   }
   return {
@@ -58,7 +58,7 @@ export const readShelfSummary = async (
   ) as ShelfSummary['tabs'];
   for (const row of rows) {
     const tab = row.bucket as ShelfTab;
-    if (!Object.hasOwn(tabs, tab)) throw new ShelfReadUnavailableError('maintained shelf bucket');
+    if (!Object.hasOwn(tabs, tab)) throw new (ShelfReadUnavailableError())('maintained shelf bucket');
     const n = count(row.n);
     if (row.typeId === EMPTY_SHELF_GENERATION) tabs[tab].total = n;
     else tabs[tab].shown = n;
@@ -90,7 +90,7 @@ export const readShelfFacets = async (
   );
   // Missing dictionary evidence invalidates the page, including a discovered lookahead key.
   if (rows.some((row) => row.jsonBytes === null))
-    throw new ShelfReadUnavailableError('complete private type dictionary');
+    throw new (ShelfReadUnavailableError())('complete private type dictionary');
   const selected: { typeId: string; n: number }[] = [];
   // Reserve the maximum 4096-byte cursor plus JSON envelope, escaping, separators and count fields.
   let bytes = 4224;
@@ -102,7 +102,7 @@ export const readShelfFacets = async (
     bytes += itemBytes;
     selected.push({ typeId: row.typeId, n });
   }
-  if (rows.length > 0 && selected.length === 0) throw new ShelfReadUnavailableError('type response byte budget');
+  if (rows.length > 0 && selected.length === 0) throw new (ShelfReadUnavailableError())('type response byte budget');
   const values =
     selected.length === 0
       ? []
@@ -118,7 +118,7 @@ export const readShelfFacets = async (
   const dictionary = new Map(values.map((row) => [row.typeId, row.type]));
   const types = selected.map((row) => {
     const type = dictionary.get(row.typeId);
-    if (type === undefined) throw new ShelfReadUnavailableError('complete private type dictionary');
+    if (type === undefined) throw new (ShelfReadUnavailableError())('complete private type dictionary');
     return { type, count: row.n };
   });
   return { types, more: rows.length > selected.length, after: selected.at(-1)?.typeId ?? null };

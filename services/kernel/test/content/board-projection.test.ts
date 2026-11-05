@@ -109,8 +109,8 @@ async function eventFor(threadId: string): Promise<CloudEvent> {
 
 test('closed content events are registered in the kernel relay catalogue', () => {
   for (const type of [created, revised]) {
-    expect(Object.hasOwn(CONTENT_EVENTS, type)).toBe(true);
-    expect(Object.hasOwn(EVENT_TYPES, type)).toBe(true);
+    expect(Object.hasOwn(CONTENT_EVENTS(), type)).toBe(true);
+    expect(Object.hasOwn(EVENT_TYPES(), type)).toBe(true);
   }
 });
 

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { ConfigError } from '../commerce/config.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
@@ -70,12 +71,17 @@ function scopes(value: unknown): value is string[] {
   );
 }
 // JSON adds two quotes per scope, punctuation, two bounded IDs and field names.
-const consentResponseOctets = MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 4 * 1024 + 128;
+function consentResponseOctets() {
+  return memoizedValue(
+    consentResponseOctets,
+    () => MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 4 * 1024 + 128,
+  );
+}
 async function boundedJson(response: Response, signal: AbortSignal): Promise<unknown> {
   if (
     !response.body ||
     response.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json' ||
-    Number(response.headers.get('content-length') ?? 0) > consentResponseOctets
+    Number(response.headers.get('content-length') ?? 0) > consentResponseOctets()
   )
     throw new Error('Unavailable');
   const reader = response.body.getReader();
@@ -91,7 +97,7 @@ async function boundedJson(response: Response, signal: AbortSignal): Promise<unk
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > consentResponseOctets) throw new Error('Unavailable');
+      if (size > consentResponseOctets()) throw new Error('Unavailable');
       chunks.push(value);
     }
     const bytes = new Uint8Array(size);

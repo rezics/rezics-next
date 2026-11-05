@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { FilterDocument } from '@rezics/filter';
@@ -85,91 +86,100 @@ export function compareZoneKeys(order: ZoneOrder, a: ZoneKey, b: ZoneKey): numbe
 /** One request reservation, shared by discovery, aliases, rejected/lookahead/reread keys and final use.
  * Native metadata is an independent axis; public ordered cost is a breakdown of the same receipt.
  */
-export class ZoneWork extends CollectionSourceLedger {
-  private selected = 'target';
-  private structuralKeys = 0;
-  private ordered = zeroScopeWork();
-  private readonly reads = new Map<
-    string,
-    { limit: WorkDimensions; used: WorkDimensions; engine: number; structural: boolean }
-  >();
-  select(key: string, order: ZoneOrder, size: number): void {
-    this.selected = key;
-    if (this.reads.has(key)) return;
-    const candidates = order === 'id' ? 256 : Math.min(600, 6 * size + 3);
-    this.reads.set(key, {
-      engine: 0,
-      structural: order === 'id',
-      used: zeroScopeWork(),
-      limit:
-        order === 'id'
-          ? scopeAllowance(256, this.initial.reservationId).remaining
-          : {
-              ...this.initial.remaining,
-              candidateKeys: candidates,
-              nativePoints: 16 + 8 * candidates,
-              nativeRows: 64 + 16 * candidates,
-              bytes: 16 * 1024 + 4 * 1024 * candidates,
-              statements: 12,
-            },
-    });
-  }
-  override allowance(): WorkAllowance {
-    let root = super.allowance();
-    const read = this.reads.get(this.selected);
-    if (!read) return root;
-    if (read.structural)
-      root = {
-        ...root,
-        remaining: {
-          ...root.remaining,
-          candidateKeys: Math.min(root.remaining.candidateKeys, 256 - this.structuralKeys),
-        },
-      };
-    else
-      root = {
-        ...root,
-        remaining: {
-          ...root.remaining,
-          nativeRows: Math.min(root.remaining.nativeRows, 14080 - this.ordered.nativeRows),
-          nativePoints: Math.min(root.remaining.nativePoints, 6784 - this.ordered.nativePoints),
-          statements: Math.min(root.remaining.statements, 72 - this.ordered.statements),
-        },
-      };
-    return {
-      ...root,
-      remaining: Object.fromEntries(
-        scopeWorkAxes.map((axis) => [axis, Math.min(root.remaining[axis], read.limit[axis] - read.used[axis])]),
-      ) as unknown as WorkDimensions,
-    };
-  }
-  override take(receipt: WorkReceipt): void {
-    const read = this.reads.get(this.selected);
-    if (scopeWorkAxes.some((axis) => receipt.used[axis] > this.allowance().remaining[axis])) return zoneUnavailable();
-    super.take(receipt);
-    if (read?.structural) this.structuralKeys += receipt.used.candidateKeys;
-    else if (read)
-      for (const axis of scopeWorkAxes)
-        this.ordered = { ...this.ordered, [axis]: this.ordered[axis] + receipt.used[axis] };
-    if (read)
-      for (const axis of scopeWorkAxes) read.used = { ...read.used, [axis]: read.used[axis] + receipt.used[axis] };
-  }
-  orderedAvailable(): boolean {
-    return (this.reads.get(this.selected)?.engine ?? 0) <= 4;
-  }
-  orderedCost(engineSearches: number): void {
-    const read = this.reads.get(this.selected);
-    if (!read || !Number.isSafeInteger(engineSearches) || engineSearches < 0 || read.engine + engineSearches > 6)
-      return zoneUnavailable();
-    read.engine += engineSearches;
-  }
+export function ZoneWork() {
+  return memoizedValue(
+    ZoneWork,
+    () =>
+      class ZoneWork extends CollectionSourceLedger {
+        private selected = 'target';
+        private structuralKeys = 0;
+        private ordered = zeroScopeWork();
+        private readonly reads = new Map<
+          string,
+          { limit: WorkDimensions; used: WorkDimensions; engine: number; structural: boolean }
+        >();
+        select(key: string, order: ZoneOrder, size: number): void {
+          this.selected = key;
+          if (this.reads.has(key)) return;
+          const candidates = order === 'id' ? 256 : Math.min(600, 6 * size + 3);
+          this.reads.set(key, {
+            engine: 0,
+            structural: order === 'id',
+            used: zeroScopeWork(),
+            limit:
+              order === 'id'
+                ? scopeAllowance(256, this.initial.reservationId).remaining
+                : {
+                    ...this.initial.remaining,
+                    candidateKeys: candidates,
+                    nativePoints: 16 + 8 * candidates,
+                    nativeRows: 64 + 16 * candidates,
+                    bytes: 16 * 1024 + 4 * 1024 * candidates,
+                    statements: 12,
+                  },
+          });
+        }
+        override allowance(): WorkAllowance {
+          let root = super.allowance();
+          const read = this.reads.get(this.selected);
+          if (!read) return root;
+          if (read.structural)
+            root = {
+              ...root,
+              remaining: {
+                ...root.remaining,
+                candidateKeys: Math.min(root.remaining.candidateKeys, 256 - this.structuralKeys),
+              },
+            };
+          else
+            root = {
+              ...root,
+              remaining: {
+                ...root.remaining,
+                nativeRows: Math.min(root.remaining.nativeRows, 14080 - this.ordered.nativeRows),
+                nativePoints: Math.min(root.remaining.nativePoints, 6784 - this.ordered.nativePoints),
+                statements: Math.min(root.remaining.statements, 72 - this.ordered.statements),
+              },
+            };
+          return {
+            ...root,
+            remaining: Object.fromEntries(
+              scopeWorkAxes.map((axis) => [axis, Math.min(root.remaining[axis], read.limit[axis] - read.used[axis])]),
+            ) as unknown as WorkDimensions,
+          };
+        }
+        override take(receipt: WorkReceipt): void {
+          const read = this.reads.get(this.selected);
+          if (scopeWorkAxes.some((axis) => receipt.used[axis] > this.allowance().remaining[axis]))
+            return zoneUnavailable();
+          super.take(receipt);
+          if (read?.structural) this.structuralKeys += receipt.used.candidateKeys;
+          else if (read)
+            for (const axis of scopeWorkAxes)
+              this.ordered = { ...this.ordered, [axis]: this.ordered[axis] + receipt.used[axis] };
+          if (read)
+            for (const axis of scopeWorkAxes)
+              read.used = { ...read.used, [axis]: read.used[axis] + receipt.used[axis] };
+        }
+        orderedAvailable(): boolean {
+          return (this.reads.get(this.selected)?.engine ?? 0) <= 4;
+        }
+        orderedCost(engineSearches: number): void {
+          const read = this.reads.get(this.selected);
+          if (!read || !Number.isSafeInteger(engineSearches) || engineSearches < 0 || read.engine + engineSearches > 6)
+            return zoneUnavailable();
+          read.engine += engineSearches;
+        }
+      },
+  );
 }
+export type ZoneWork = InstanceType<ReturnType<typeof ZoneWork>>;
 export function zoneWork(deadline: number, orderedSlots: readonly number[] = []) {
   // NAME/COUNT use their own direct-plan operation class, rather than the structural UUID ceiling.
   const candidates = orderedSlots.length
     ? Math.min(816, orderedSlots.reduce((sum, size) => sum + Math.min(600, 6 * size + 3), 0) + 256)
     : 256;
-  const ledger = new ZoneWork(
+  const ledger = new (ZoneWork())(
     scopeAllowance(candidates, crypto.randomUUID(), {
       candidateKeys: candidates,
       nativeRows: 65536,

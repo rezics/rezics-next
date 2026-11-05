@@ -791,7 +791,7 @@ import { CANONICAL_SOURCE_REPAIR_STEP, canonicalSourceCallAllowance } from './ca
 
 const sourceStepAllowance = (): CanonicalAllowance => ({
   reservationId: randomUUID(),
-  ...canonicalSourceCallAllowance(CANONICAL_SOURCE_REPAIR_STEP),
+  ...canonicalSourceCallAllowance(CANONICAL_SOURCE_REPAIR_STEP()),
 });
 type SourceLocator = { accounts: [string]; collectionId: string };
 type SourceSweep = {

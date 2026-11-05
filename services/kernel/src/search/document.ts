@@ -144,8 +144,8 @@ function documentTextFields(
     !selection.observation ||
     selection.observation.length > 2048 ||
     subjectPartition(selection.subject) !== partition ||
-    selection.references.length > DOCUMENT_TEXT_COST.documents ||
-    projection.documents.length > DOCUMENT_TEXT_COST.documents
+    selection.references.length > DOCUMENT_TEXT_COST().documents ||
+    projection.documents.length > DOCUMENT_TEXT_COST().documents
   )
     throw new TypeError('Document text projection is not bound to the indexed subject');
   const admittedReferences = new Set(
@@ -182,8 +182,8 @@ function documentTextFields(
   });
   const serialized = { coverage: projection.coverage, documents };
   if (
-    textBytes > DOCUMENT_TEXT_COST.textBytesPerSubject ||
-    Buffer.byteLength(JSON.stringify(serialized), 'utf8') > DOCUMENT_TEXT_COST.serializedBytesPerSubject
+    textBytes > DOCUMENT_TEXT_COST().textBytesPerSubject ||
+    Buffer.byteLength(JSON.stringify(serialized), 'utf8') > DOCUMENT_TEXT_COST().serializedBytesPerSubject
   )
     throw new TypeError('Document text projection exceeds its retained bounds');
   return {

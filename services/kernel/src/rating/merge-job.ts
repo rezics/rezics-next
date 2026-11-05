@@ -274,7 +274,7 @@ export async function reconcileMergedSubjectVote(
 export async function resolveSubjectTarget(
   client: CommandTransaction,
   targetId: string,
-  readEpoch: RatingIdentityEpochReader = (tx, partition) => identityEpochStore.readEpoch(tx, partition),
+  readEpoch: RatingIdentityEpochReader = (tx, partition) => identityEpochStore().readEpoch(tx, partition),
 ): Promise<string> {
   if (!validId(targetId)) throw new TypeError('Invalid rating vote target');
   const [row] = await resolveTarget.run(client, { subject_id: targetId });

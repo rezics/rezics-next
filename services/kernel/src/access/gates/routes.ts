@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
@@ -17,25 +18,29 @@ import type { KeyRing } from '../../tokens/seal.ts';
 
 const closed = { additionalProperties: false } as const;
 const paramsSchema = t.Object({ group: t.String({ pattern: '^(?!(?:any|open|close)$)[a-z][a-z_-]{0,62}$' }) }, closed);
-const headersSchema = t.Object({ [IDEMPOTENCY_HEADER]: t.String() });
+function headersSchema() {
+  return memoizedValue(headersSchema, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String() }));
+}
 const success = t.Object(
   { exposure: t.Object({ group: t.String(), open: t.Boolean(), changed: t.Boolean() }, closed) },
   closed,
 );
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  422: problemSchema('idempotency_conflict'),
-  429: problemSchema('rate_limited'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'rate_limit_unavailable',
-  ),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    422: problemSchema('idempotency_conflict'),
+    429: problemSchema('rate_limited'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
 function strict<S extends TSchema>(schema: S) {
   const validator = Compile(schema);
   return {
@@ -70,9 +75,9 @@ export function exposureRoutes(
   const commands = () => (resolved ??= createExposureCommands({ pool: dependencies.pool, clock: dependencies.clock }));
 
   const options = (operation: 'open' | 'close') => ({
-    headers: strict(headersSchema),
+    headers: strict(headersSchema()),
     params: strict(paramsSchema),
-    response: { 200: success, ...failures },
+    response: { 200: success, ...failures() },
     detail: detail(operation),
   });
   const discovered = admittedGroupsRoutes(app, dependencies);

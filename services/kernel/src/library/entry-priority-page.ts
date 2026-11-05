@@ -61,7 +61,7 @@ function createReader(direction: ShelfDirection): ShelfPriorityReader {
           row.revision === null ||
           (row.priority !== null && (!Number.isInteger(row.priority) || row.priority < 1 || row.priority > 100))
         )
-          throw new ShelfReadUnavailableError('native priority shelf projection');
+          throw new (ShelfReadUnavailableError())('native priority shelf projection');
         return {
           subjectId: row.subjectId,
           incarnationId: row.incarnationId,

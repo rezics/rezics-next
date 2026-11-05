@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import {
   stepIdentityTerminalClosure,
   retireIdentityTerminalPage,
@@ -64,7 +65,9 @@ import exportEmpty from './identity-epoch-bootstrap-export-empty.sql';
 import receiveEmpty from './identity-epoch-bootstrap-receive-empty.sql';
 import ackEmpty from './identity-epoch-bootstrap-ack-empty.sql';
 
-const singleBootstrapCommand: typeof runCommand = runIdentityTerminalCommand;
+function singleBootstrapCommand(): typeof runCommand {
+  return memoizedValue(singleBootstrapCommand, () => runIdentityTerminalCommand);
+}
 
 const NIL = '00000000-0000-0000-0000-000000000000';
 type Phase = 'subjects' | 'members' | 'dirty' | 'member-dirty';
@@ -145,7 +148,7 @@ async function stepBootstrapHome(
   let page = await readPage(pool, partition);
   work.statements += page ? 3 : 2;
   if (!page) {
-    const exported = await singleBootstrapCommand<Omit<Page, 'native'> | null>(pool, { partition }, async (tx) => {
+    const exported = await singleBootstrapCommand()<Omit<Page, 'native'> | null>(pool, { partition }, async (tx) => {
       await query(tx, bootstrapInsertBootstrapHome.sql, [partition, partition * 16 - 1, NIL]);
       const saved = (await query(tx, bootstrapSelectBootstrapHome.sql, [partition])).rows[0];
       const owner = await readPartition(tx, partition);
@@ -262,7 +265,7 @@ async function stepBootstrapHome(
   // Every old home commits withdrawal custody before any new home can add this export.
   // The retained source page survives uncertainty at either side of the handoff.
   for (const [destination, rows] of withdrawals) {
-    await singleBootstrapCommand(pool, { partition: destination }, async (tx) => {
+    await singleBootstrapCommand()(pool, { partition: destination }, async (tx) => {
       await query(tx, bootstrapSelectControl.sql, [destination]);
       const duplicate = (
         await query(tx, bootstrapSelectBootstrapCustody.sql, [
@@ -307,7 +310,7 @@ async function stepBootstrapHome(
   // Empty exports still require real receiving custody, never a count-only closure.
   if (!homes.size && !identityPage) homes.set(partition, []);
   for (const [destination, rows] of homes) {
-    await singleBootstrapCommand(pool, { partition: destination }, async (tx, { transactionId }) => {
+    await singleBootstrapCommand()(pool, { partition: destination }, async (tx, { transactionId }) => {
       const duplicate = (
         await query(tx, bootstrapSelectBootstrapCustody.sql, [
           destination,
@@ -418,7 +421,7 @@ async function stepBootstrapHome(
     for (const entry of basis.mapping) mappingEpochs.set(entry.original, entry.epoch);
   }
   // Receiving custody committed before this source transaction. Only captured h is acknowledged; h+1 survives.
-  const acknowledged = await singleBootstrapCommand(pool, { partition }, async (tx, { transactionId }) => {
+  const acknowledged = await singleBootstrapCommand()(pool, { partition }, async (tx, { transactionId }) => {
     await tx.query("SELECT set_config('semantic.erasure_native_transaction',$1,true)", [transactionId]);
     const saved = (await query(tx, bootstrapSelectBootstrapPage3.sql, [partition, retained.native.transactionId]))
       .rows[0];
@@ -518,7 +521,7 @@ export async function stepIdentityEpochBootstrapWork(
     if (next?.remaining !== 0) return null;
     return (await tx.query(bootstrapSelectBootstrapHome3.sql, [next.repair_partition])).rows[0]?.partition_no ?? null;
   });
-  const selected = await singleBootstrapCommand<number | null>(pool, { partition: 0 }, async (tx) => {
+  const selected = await singleBootstrapCommand()<number | null>(pool, { partition: 0 }, async (tx) => {
     await tx.query(bootstrapSelectBootstrapTopology3.sql);
     const next = (await tx.query(bootstrapSelectBootstrapTopology2.sql)).rows[0];
     if (!next) return noEffect(null);
@@ -549,7 +552,7 @@ export async function stepIdentityEpochBootstrapWork(
       ? home
       : null;
   });
-  await singleBootstrapCommand(pool, { partition: 0 }, async (tx) => {
+  await singleBootstrapCommand()(pool, { partition: 0 }, async (tx) => {
     const state = (await tx.query(bootstrapSelectBootstrapTopology3.sql)).rows[0];
     if (state.remaining === 0)
       return {
@@ -583,7 +586,7 @@ export async function stepIdentityEpochBootstrapWork(
  * Selection and custody are amortized over the bounded frontier, never over foreign source rows.
  */
 export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> {
-  const selected = await singleBootstrapCommand<number[]>(pool, { partition: 0 }, async (tx) => {
+  const selected = await singleBootstrapCommand()<number[]>(pool, { partition: 0 }, async (tx) => {
     const state = (await tx.query(bootstrapSelectBootstrapTopology3.sql)).rows[0];
     if (!state || state.remaining === 0) return noEffect([]);
     const homes = (await tx.query(selectFrontier.sql, [state.next_partition])).rows.map((r) => r.source_partition);
@@ -665,7 +668,7 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
       }
     }),
   );
-  await singleBootstrapCommand(pool, { partition: 0 }, async (tx) => {
+  await singleBootstrapCommand()(pool, { partition: 0 }, async (tx) => {
     await tx.query(bootstrapSelectBootstrapTopology3.sql);
     await tx.query(takeClosures.sql, [JSON.stringify(closures)]);
     return {
@@ -688,14 +691,14 @@ export async function runIdentityEpochBootstrapBatch(pool: Pool): Promise<void> 
  * back to the existing retained-page recovery path, including exact owner/head checks.
  */
 async function closeInitialEmptyHome(pool: Pool, partition: number, schedule: boolean) {
-  const exported = await singleBootstrapCommand(pool, { partition }, async (tx, { transactionId }) => {
+  const exported = await singleBootstrapCommand()(pool, { partition }, async (tx, { transactionId }) => {
     const applied = (await tx.query(exportEmpty.sql, [partition, transactionId])).rows[0]?.applied;
     if (!applied) return noEffect(false);
     return { value: true, events: [{ ...identityBootstrapWake(partition, 1n), type: IDENTITY_EPOCH_PROGRESS }] };
   });
   if (!exported.value) return null;
   // These locators are actual committed outcomes, not input supplied by a caller.
-  const received = await singleBootstrapCommand(pool, { partition }, async (tx, { transactionId }) => {
+  const received = await singleBootstrapCommand()(pool, { partition }, async (tx, { transactionId }) => {
     const applied = (
       await tx.query(receiveEmpty.sql, [
         partition,
@@ -709,7 +712,7 @@ async function closeInitialEmptyHome(pool: Pool, partition: number, schedule: bo
     return { value: true, events: [{ ...identityBootstrapWake(partition, 1n), type: IDENTITY_EPOCH_PROGRESS }] };
   });
   if (!received.value) return null;
-  const acknowledged = await singleBootstrapCommand(pool, { partition }, async (tx, { transactionId }) => {
+  const acknowledged = await singleBootstrapCommand()(pool, { partition }, async (tx, { transactionId }) => {
     const result = (
       await tx.query(ackEmpty.sql, [
         partition,

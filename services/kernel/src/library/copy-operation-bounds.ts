@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
@@ -543,31 +544,41 @@ const COPY_ACCOUNT_ROW = {
   minimumAuthnEpoch: '9223372036854775807',
   transactionId: UUID,
 };
-const COPY_RESPONSE_BYTES = projectedBytes(COPY_STORE_ROW, 9) + Buffer.byteLength('{"copy":{}}');
-const COPY_PAGE_RESPONSE_BYTES = projectedBytes(COPY_PAGE_ROW, 3) + 2;
+function COPY_RESPONSE_BYTES() {
+  return memoizedValue(COPY_RESPONSE_BYTES, () => projectedBytes(COPY_STORE_ROW, 9) + Buffer.byteLength('{"copy":{}}'));
+}
+function COPY_PAGE_RESPONSE_BYTES() {
+  return memoizedValue(COPY_PAGE_RESPONSE_BYTES, () => projectedBytes(COPY_PAGE_ROW, 3) + 2);
+}
 // Profile labels contain at most 80 Unicode code points. Two UTF-16 units per
 // point, each maximally escaped by JSON, bound every admitted label.
 const PROFILE_LABEL = '\0'.repeat(80 * 2);
-const COPY_PRESENTATION_SHAPE = {
-  meaning: 'known',
-  kindLabel: PROFILE_LABEL,
-  kindLabelLanguage: '\0'.repeat(64),
-  statusLabel: PROFILE_LABEL,
-  statusLabelLanguage: '\0'.repeat(64),
-  statusEditing: {
-    state: 'supported',
-    statuses: Array.from({ length: MAX_COPY_FILTER_OPTIONS }, () => ({
-      id: ID64,
-      label: PROFILE_LABEL,
-      labelLanguage: '\0'.repeat(64),
-    })),
-  },
-  mediaCondition: { state: 'known', value: '\0'.repeat(64), label: '\0'.repeat(64) },
-  packagingCondition: { state: 'known', value: '\0'.repeat(64), label: '\0'.repeat(64) },
-  conditionEditing: { state: 'supported', currentness: 'current', choices: COPY_CONDITION_CHOICES },
-};
-const COPY_PRESENTATION_RESPONSE_BYTES =
-  COPY_RESPONSE_BYTES + Buffer.byteLength(JSON.stringify(COPY_PRESENTATION_SHAPE)) + 2;
+function COPY_PRESENTATION_SHAPE() {
+  return memoizedValue(COPY_PRESENTATION_SHAPE, () => ({
+    meaning: 'known',
+    kindLabel: PROFILE_LABEL,
+    kindLabelLanguage: '\0'.repeat(64),
+    statusLabel: PROFILE_LABEL,
+    statusLabelLanguage: '\0'.repeat(64),
+    statusEditing: {
+      state: 'supported',
+      statuses: Array.from({ length: MAX_COPY_FILTER_OPTIONS }, () => ({
+        id: ID64,
+        label: PROFILE_LABEL,
+        labelLanguage: '\0'.repeat(64),
+      })),
+    },
+    mediaCondition: { state: 'known', value: '\0'.repeat(64), label: '\0'.repeat(64) },
+    packagingCondition: { state: 'known', value: '\0'.repeat(64), label: '\0'.repeat(64) },
+    conditionEditing: { state: 'supported', currentness: 'current', choices: COPY_CONDITION_CHOICES },
+  }));
+}
+function COPY_PRESENTATION_RESPONSE_BYTES() {
+  return memoizedValue(
+    COPY_PRESENTATION_RESPONSE_BYTES,
+    () => COPY_RESPONSE_BYTES() + Buffer.byteLength(JSON.stringify(COPY_PRESENTATION_SHAPE())) + 2,
+  );
+}
 
 function commandEnvelope(input: {
   route: number;
@@ -879,7 +890,7 @@ export function copyMutationOperationPlan(
     receiptKeys: input.receiptKeys,
     commandInput: input.commandInput,
     eventType: operation === 'delete' ? COPY_DELETED_EVENT : COPY_EVENT,
-    responseBytes: COPY_RESPONSE_BYTES,
+    responseBytes: COPY_RESPONSE_BYTES(),
     clientId: input.clientId,
     requestedBy: input.requestedBy,
     durationMs: input.durationMs,
@@ -899,7 +910,7 @@ export function copyMutationOperationPlan(
     component('command.partition', controls.partition),
     component('command.retry.recovery', controls.retryRecovery),
     component('command.input.serialization', bytes(Buffer.byteLength(JSON.stringify(input.commandInput)))),
-    component('command.response.serialization', bytes(3 * COPY_RESPONSE_BYTES)),
+    component('command.response.serialization', bytes(3 * COPY_RESPONSE_BYTES())),
   ];
   const prepareRead = sumBounds(
     ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map(textBound),
@@ -1135,7 +1146,7 @@ export function copyReadOperationPlan(route: number, accountId: string, copyId: 
       component('owner.read-only-transaction', transaction),
       component('owner.partition', sessionPartitionWork(partitionOf(route))),
       component('copy.read.branch', maximumBound(...Object.values(branches))),
-      component('copy.response.serialization', bytes(COPY_RESPONSE_BYTES)),
+      component('copy.response.serialization', bytes(COPY_RESPONSE_BYTES())),
     ],
     branches,
   );
@@ -1170,7 +1181,7 @@ export function copyPresentationOperationPlan(
     component('copy.detail.two-observations', repeatBound(observation, 2)),
     component('copy.original-and-current-profile-pins', pins),
     component('copy.original-and-current-source', source),
-    component('copy.mounted-presentation.serialization', bytes(COPY_PRESENTATION_RESPONSE_BYTES)),
+    component('copy.mounted-presentation.serialization', bytes(COPY_PRESENTATION_RESPONSE_BYTES())),
   ]);
 }
 
@@ -1260,7 +1271,7 @@ export function copyInventoryOperationPlan(input: CopyInventoryOperationInput): 
   const observation = sumBounds(maximumBound(pageBranch, maximumPage), options);
   const distinctPins = repeatBound(sessionReleaseWork('sha256:' + 'f'.repeat(64)), 2 * MAX_COPY_FILTER_OPTIONS);
   const rawResponses = sumBounds(
-    repeatBound(bytes(COPY_PAGE_RESPONSE_BYTES), input.limit),
+    repeatBound(bytes(COPY_PAGE_RESPONSE_BYTES()), input.limit),
     bytes(2 * MAX_COPY_FILTER_OPTIONS_BYTES),
     repeatBound(bytes(projectedBytes(INVENTORY_OPTION_ROW, 2)), 2 * COPY_FILTER_OPTION_QUERY_LIMIT),
   );

@@ -196,13 +196,15 @@ test('lifting a thread or post takedown makes it readable again with its data in
       subject: id,
       data: { targetKind: kind, targetId: id, securityRevision: '9007199254740994' },
     });
-    expect(Value.Check(CONTENT_EVENTS[events[0]!.type as keyof typeof CONTENT_EVENTS], events[0]!.data)).toBe(true);
+    expect(
+      Value.Check(CONTENT_EVENTS()[events[0]!.type as keyof ReturnType<typeof CONTENT_EVENTS>], events[0]!.data),
+    ).toBe(true);
     for (const invalid of [
       { ...(events[0]!.data as object), targetKind: 'board' },
       { ...(events[0]!.data as object), body: 'Retained bytes' },
       { ...(events[0]!.data as object), securityRevision: 2 },
     ]) {
-      expect(Value.Check(CONTENT_EVENTS['com.rezics.content.moderation.restored.v1'], invalid)).toBe(false);
+      expect(Value.Check(CONTENT_EVENTS()['com.rezics.content.moderation.restored.v1'], invalid)).toBe(false);
     }
     expect(await stored(kind, id)).toEqual({ ...before, security_revision: '9007199254740994' });
     const restored =

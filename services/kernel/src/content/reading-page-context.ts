@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { classifyUnavailability } from '../access/unavailable.ts';
@@ -28,32 +29,36 @@ const PublishedCitationSchema = t.Union([
   t.Object({ state: t.Union([t.Literal('absent'), t.Literal('withheld')]) }, closed),
 ]);
 
-export const ReadingPageReviewContextSchema = t.Object(
-  {
-    source: t.Object({ threadId: uuid, postId: uuid, revisionId: t.Union([uuid, t.Null()]) }, closed),
-    target: t.Union([FeedReviewTargetSchema, t.Object({ state: t.Literal('unavailable') }, closed)]),
-    citations: t.Object(
+export function ReadingPageReviewContextSchema() {
+  return memoizedValue(ReadingPageReviewContextSchema, () =>
+    t.Object(
       {
-        state: t.Literal('current'),
-        items: t.Array(
-          t.Object(
-            {
-              postId: uuid,
-              sourceRevisionId: t.Union([uuid, t.Null()]),
-              citation: PublishedCitationSchema,
-            },
-            closed,
-          ),
-          { minItems: 1, maxItems: READING_PAGE_CITATION_LIMIT },
+        source: t.Object({ threadId: uuid, postId: uuid, revisionId: t.Union([uuid, t.Null()]) }, closed),
+        target: t.Union([FeedReviewTargetSchema, t.Object({ state: t.Literal('unavailable') }, closed)]),
+        citations: t.Object(
+          {
+            state: t.Literal('current'),
+            items: t.Array(
+              t.Object(
+                {
+                  postId: uuid,
+                  sourceRevisionId: t.Union([uuid, t.Null()]),
+                  citation: PublishedCitationSchema,
+                },
+                closed,
+              ),
+              { minItems: 1, maxItems: READING_PAGE_CITATION_LIMIT },
+            ),
+          },
+          closed,
         ),
       },
       closed,
     ),
-  },
-  closed,
-);
+  );
+}
 
-export type ReadingPageReviewContext = Static<typeof ReadingPageReviewContextSchema>;
+export type ReadingPageReviewContext = Static<ReturnType<typeof ReadingPageReviewContextSchema>>;
 
 function optionalUnavailable(error: unknown): boolean {
   return (

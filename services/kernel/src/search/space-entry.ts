@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import type { FollowDiscovery, FollowDiscoveryTarget } from '../library/follow-discovery.ts';
@@ -51,8 +52,12 @@ export function spaceEntryFollowing(
     return { rows, current: async () => isDeepStrictEqual(before, await read(actor, targets, deadline)) };
   };
 }
-const followValidator = Compile(SpaceEntryFollowSchema);
-const presentationValidator = Compile(SpaceEntryPresentationSchema);
+function followValidator() {
+  return memoizedValue(followValidator, () => Compile(SpaceEntryFollowSchema));
+}
+function presentationValidator() {
+  return memoizedValue(presentationValidator, () => Compile(SpaceEntryPresentationSchema));
+}
 
 export async function observeSearchSpaceEntries(input: {
   page: DiscoveryPage;
@@ -80,7 +85,7 @@ export async function observeSearchSpaceEntries(input: {
         card.description !== (value.summary ?? '') ||
         card.realmId !== (value.realm?.id ?? null) ||
         card.realmTitle !== (value.realm?.title ?? null) ||
-        !presentationValidator.Check(card.presentation) ||
+        !presentationValidator().Check(card.presentation) ||
         card.presentation.identity.id !== (card.realmId ?? card.id) ||
         card.presentation.identity.kind !== (card.realmId ? 'realm' : 'space')
       )
@@ -101,7 +106,7 @@ export async function observeSearchSpaceEntries(input: {
       for (const [id, row] of following.rows)
         if (
           !ids.includes(id) ||
-          !followValidator.Check(row) ||
+          !followValidator().Check(row) ||
           row.state === 'sign-in' ||
           (row.state === 'current' && row.action === 'sign-in')
         )

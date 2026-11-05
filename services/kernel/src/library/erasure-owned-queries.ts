@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import purgeShelfScoreHead from './erasure-owned-shelf-score-head.sql';
 import purgeMembersPreparation from './erasure-owned-members-preparation.sql';
 import purgeMembersPreparationResult from './erasure-owned-members-preparation-result.sql';
@@ -41,7 +42,7 @@ import purgeCopyLoan from './erasure-owned-copy-loan.sql';
 import purgeCopyLoanGeneration from './erasure-owned-copy-loan-generation.sql';
 
 /** Fixed producer inventory, in child-before-parent order; heads are last. */
-export const ownedQueries: {
+export function ownedQueries(): {
   readonly list_import_anilist: typeof purgeAniList;
   readonly members_preparation_result: typeof purgeMembersPreparationResult;
   readonly members_preparation: typeof purgeMembersPreparation;
@@ -83,47 +84,53 @@ export const ownedQueries: {
   readonly diary_navigation: typeof purgeDiaryNavigation;
   readonly copy_loan: typeof purgeCopyLoan;
   readonly copy_loan_generation: typeof purgeCopyLoanGeneration;
-} = {
-  list_import_anilist: purgeAniList,
-  members_preparation_result: purgeMembersPreparationResult,
-  members_preparation: purgeMembersPreparation,
-  members_preparation_owner: purgeMembersPreparationOwner,
-  collection_kind_retired: purgeCollectionKindRetired,
-  collection_kind_observation: purgeCollectionKindObservation,
-  collection_kind_count: purgeCollectionKindCount,
-  collection_kind_subject: purgeCollectionKindSubject,
-  collection_kind_consent_consumer: purgeCollectionKindConsentConsumer,
-  owner_index_label_repair: purgeOwnerIndexLabelRepair,
-  owner_index_state: purgeOwnerIndexState,
-  owner_member_support: purgeOwnerMemberSupport,
-  owner_member_index: purgeOwnerMemberIndex,
-  owner_index_pin: purgeOwnerIndexPin,
-  owner_index_control: purgeOwnerIndexControl,
+} {
+  return memoizedValue(
+    ownedQueries,
+    () =>
+      ({
+        list_import_anilist: purgeAniList,
+        members_preparation_result: purgeMembersPreparationResult,
+        members_preparation: purgeMembersPreparation,
+        members_preparation_owner: purgeMembersPreparationOwner,
+        collection_kind_retired: purgeCollectionKindRetired,
+        collection_kind_observation: purgeCollectionKindObservation,
+        collection_kind_count: purgeCollectionKindCount,
+        collection_kind_subject: purgeCollectionKindSubject,
+        collection_kind_consent_consumer: purgeCollectionKindConsentConsumer,
+        owner_index_label_repair: purgeOwnerIndexLabelRepair,
+        owner_index_state: purgeOwnerIndexState,
+        owner_member_support: purgeOwnerMemberSupport,
+        owner_member_index: purgeOwnerMemberIndex,
+        owner_index_pin: purgeOwnerIndexPin,
+        owner_index_control: purgeOwnerIndexControl,
 
-  entry_deleted: purgeEntryDeleted,
-  label_consolidation: purgeLabelConsolidation,
-  entry_annotation_review: purgeEntryAnnotationReview,
-  label_assignment: purgeLabelAssignment,
-  personal_label: purgePersonalLabel,
-  progress_head: purgeProgressHead,
-  published_log: purgePublishedLog,
-  collection_pins: purgeCollectionPins,
-  builtin_state_reference_source: purgeBuiltinStateReferenceSource,
-  builtin_collection_reference: purgeBuiltinCollectionReference,
-  shelf_score_head: purgeShelfScoreHead,
-  shelf_writer_owner: purgeShelfWriterOwner,
-  shelf_count: purgeShelfCount,
-  shelf_type_node: purgeShelfTypeNode,
-  shelf_type_reservation: purgeShelfTypeReservation,
-  shelf_type_root: purgeShelfTypeRoot,
-  shelf_type_value: purgeShelfTypeValue,
-  owner_write_counter: purgeOwnerWriteCounter,
-  fact_source_head: purgeFactSourceHead,
-  type_preparation_slot: purgeTypePreparationSlot,
-  type_preparation_progress: purgeTypePreparationProgress,
-  type_preparation_header: purgeTypePreparationHeader,
-  bulk_target: purgeBulkTarget,
-  diary_navigation: purgeDiaryNavigation,
-  copy_loan: purgeCopyLoan,
-  copy_loan_generation: purgeCopyLoanGeneration,
-} as const;
+        entry_deleted: purgeEntryDeleted,
+        label_consolidation: purgeLabelConsolidation,
+        entry_annotation_review: purgeEntryAnnotationReview,
+        label_assignment: purgeLabelAssignment,
+        personal_label: purgePersonalLabel,
+        progress_head: purgeProgressHead,
+        published_log: purgePublishedLog,
+        collection_pins: purgeCollectionPins,
+        builtin_state_reference_source: purgeBuiltinStateReferenceSource,
+        builtin_collection_reference: purgeBuiltinCollectionReference,
+        shelf_score_head: purgeShelfScoreHead,
+        shelf_writer_owner: purgeShelfWriterOwner,
+        shelf_count: purgeShelfCount,
+        shelf_type_node: purgeShelfTypeNode,
+        shelf_type_reservation: purgeShelfTypeReservation,
+        shelf_type_root: purgeShelfTypeRoot,
+        shelf_type_value: purgeShelfTypeValue,
+        owner_write_counter: purgeOwnerWriteCounter,
+        fact_source_head: purgeFactSourceHead,
+        type_preparation_slot: purgeTypePreparationSlot,
+        type_preparation_progress: purgeTypePreparationProgress,
+        type_preparation_header: purgeTypePreparationHeader,
+        bulk_target: purgeBulkTarget,
+        diary_navigation: purgeDiaryNavigation,
+        copy_loan: purgeCopyLoan,
+        copy_loan_generation: purgeCopyLoanGeneration,
+      }) as const,
+  );
+}

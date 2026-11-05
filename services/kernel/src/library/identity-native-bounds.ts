@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from './collection-source.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
@@ -241,11 +242,23 @@ const basisBindings: Readonly<Record<string, unknown>> = Object.freeze({
   collection_fence: boundDecimal,
   account_fence: boundDecimal,
 });
-const basisQueries = Object.freeze(
-  [nativeIdentityPartitionQuery, accountQuery, sourceQuery, outputQuery, fencesQuery, identityCapture, proofQuery].map(
-    (query) => Object.freeze({ sql: query.sql, params: Object.freeze([...query.params]) }),
-  ) satisfies readonly Query[],
-);
+function basisQueries() {
+  return memoizedValue(basisQueries, () =>
+    Object.freeze(
+      [
+        nativeIdentityPartitionQuery,
+        accountQuery,
+        sourceQuery,
+        outputQuery,
+        fencesQuery,
+        identityCapture,
+        proofQuery,
+      ].map((query) =>
+        Object.freeze({ sql: query.sql, params: Object.freeze([...query.params]) }),
+      ) satisfies readonly Query[],
+    ),
+  );
+}
 const currentCaptureProjectionBytes = Buffer.byteLength(
   JSON.stringify({
     captureId: boundId,
@@ -260,197 +273,238 @@ const currentCaptureProjectionBytes = Buffer.byteLength(
     version: 2147483647,
   }),
 );
-const basisProjectionBytes = new Map<Query, number>([
-  [
-    nativeIdentityPartitionQuery,
-    Buffer.byteLength(
-      JSON.stringify({ epoch: 2147483647, position: boundDecimal, writeState: 'active', movedTo: null }),
-    ),
-  ],
-  [accountQuery, Buffer.byteLength(JSON.stringify({ state: 'suspended', fenced: false, epoch: boundDecimal }))],
-  [
-    sourceQuery,
-    Buffer.byteLength(
-      JSON.stringify({
-        accountId: boundId,
-        incarnation: boundText.repeat(128),
-        generation: boundDecimal,
-        state: 'deleted',
-        kind: 'dynamic',
-        builtin: 'everything',
-        visibility: 'unlisted',
-        ruleReady: false,
-      }),
-    ),
-  ],
-  [
-    outputQuery,
-    Buffer.byteLength(
-      JSON.stringify({
-        generation: boundId,
-        transactionId: boundId,
-        position: boundDecimal,
-        nativeXid: boundDecimal,
-        members: boundDecimal,
-        memberFence: boundDecimal,
-        sourceGeneration: boundDecimal,
-      }),
-    ),
-  ],
-  [
-    fencesQuery,
-    Buffer.byteLength(
-      JSON.stringify([
-        { kind: 'collection', generation: boundDecimal },
-        { kind: 'account', generation: boundDecimal },
+function basisProjectionBytes() {
+  return memoizedValue(
+    basisProjectionBytes,
+    () =>
+      new Map<Query, number>([
+        [
+          nativeIdentityPartitionQuery,
+          Buffer.byteLength(
+            JSON.stringify({ epoch: 2147483647, position: boundDecimal, writeState: 'active', movedTo: null }),
+          ),
+        ],
+        [accountQuery, Buffer.byteLength(JSON.stringify({ state: 'suspended', fenced: false, epoch: boundDecimal }))],
+        [
+          sourceQuery,
+          Buffer.byteLength(
+            JSON.stringify({
+              accountId: boundId,
+              incarnation: boundText.repeat(128),
+              generation: boundDecimal,
+              state: 'deleted',
+              kind: 'dynamic',
+              builtin: 'everything',
+              visibility: 'unlisted',
+              ruleReady: false,
+            }),
+          ),
+        ],
+        [
+          outputQuery,
+          Buffer.byteLength(
+            JSON.stringify({
+              generation: boundId,
+              transactionId: boundId,
+              position: boundDecimal,
+              nativeXid: boundDecimal,
+              members: boundDecimal,
+              memberFence: boundDecimal,
+              sourceGeneration: boundDecimal,
+            }),
+          ),
+        ],
+        [
+          fencesQuery,
+          Buffer.byteLength(
+            JSON.stringify([
+              { kind: 'collection', generation: boundDecimal },
+              { kind: 'account', generation: boundDecimal },
+            ]),
+          ),
+        ],
+        [identityCapture, currentCaptureProjectionBytes],
+        [proofQuery, Buffer.byteLength(JSON.stringify({ transactionId: boundId, position: boundDecimal }))],
       ]),
-    ),
-  ],
-  [identityCapture, currentCaptureProjectionBytes],
-  [proofQuery, Buffer.byteLength(JSON.stringify({ transactionId: boundId, position: boundDecimal }))],
-]);
-const basisWork = new Map<Query, Bound>([
-  [nativeIdentityPartitionQuery, bound({ nativeRows: 16, nativePoints: 1, identityMetadataRows: 1, emptySeeks: 1 })],
-  [accountQuery, bound({ nativeRows: 16, nativePoints: 1 })],
-  [sourceQuery, bound({ nativeRows: 16, nativePoints: 1 })],
-  [outputQuery, bound({ nativeRows: 56, nativePoints: 7, identityMetadataRows: 1, emptySeeks: 1 })],
-  [fencesQuery, bound({ nativeRows: 32, nativePoints: 2 })],
-  [identityCapture, bound({ nativeRows: 32, nativePoints: 1 })],
-  [proofQuery, bound({ nativeRows: 64, nativePoints: 3, identityMetadataRows: 1, emptySeeks: 1 })],
-]);
-const basisBindBounds = new Map(
-  basisQueries.map((query) => [
-    normalize(query.sql),
-    Buffer.byteLength(JSON.stringify(query.params.map((name) => basisBindings[name]))),
-  ]),
-);
+  );
+}
+function basisWork() {
+  return memoizedValue(
+    basisWork,
+    () =>
+      new Map<Query, Bound>([
+        [
+          nativeIdentityPartitionQuery,
+          bound({ nativeRows: 16, nativePoints: 1, identityMetadataRows: 1, emptySeeks: 1 }),
+        ],
+        [accountQuery, bound({ nativeRows: 16, nativePoints: 1 })],
+        [sourceQuery, bound({ nativeRows: 16, nativePoints: 1 })],
+        [outputQuery, bound({ nativeRows: 56, nativePoints: 7, identityMetadataRows: 1, emptySeeks: 1 })],
+        [fencesQuery, bound({ nativeRows: 32, nativePoints: 2 })],
+        [identityCapture, bound({ nativeRows: 32, nativePoints: 1 })],
+        [proofQuery, bound({ nativeRows: 64, nativePoints: 3, identityMetadataRows: 1, emptySeeks: 1 })],
+      ]),
+  );
+}
+function basisBindBounds() {
+  return memoizedValue(
+    basisBindBounds,
+    () =>
+      new Map(
+        basisQueries().map((query) => [
+          normalize(query.sql),
+          Buffer.byteLength(JSON.stringify(query.params.map((name) => basisBindings[name]))),
+        ]),
+      ),
+  );
+}
 
-const nativeSQLParts: Readonly<Record<keyof typeof libraryIdentitySQL, StatementPart>> = Object.freeze({
-  oldFacts: projected(libraryIdentitySQL.oldFacts, [], 0, 1, 0, 256, 1),
-  oldReferences: projected(libraryIdentitySQL.oldReferences, [], 0, 1, 0, 256, 1),
-  invalidateKey: projected(libraryIdentitySQL.invalidateKey, [], 1, 1, 0, 64, 1),
-  invalidateKeyInline: projected(libraryIdentitySQL.invalidateKeyInline, [], 1, 1, 0, 64, 1),
-  retainedGenerations: projected(libraryIdentitySQL.retainedGenerations, [], 3, 1, 0, 256, 1),
-  oldHead: projected(libraryIdentitySQL.oldHead, [], 1, 1, 0, 128, 1),
-  oldState: projected(libraryIdentitySQL.oldState, [], 1, 1, 0, 1024, 1),
-  invalidateGeneration: projected(libraryIdentitySQL.invalidateGeneration, [], 1, 1, 0, 64, 1),
-  abandonWorking: projected(libraryIdentitySQL.abandonWorking, [], 1, 1, 0, 64, 1),
-  insertGeneration: projected(libraryIdentitySQL.insertGeneration, [], 2, 2, 0, 64, 1),
-  insertPlan: projected(libraryIdentitySQL.insertPlan, [], 4, 4, 0, 64, 1),
-  advanceCapture: projected(libraryIdentitySQL.advanceCapture, [], 1, 1, 0, 64, 1),
-  mappingClaim: projected(libraryIdentitySQL.mappingClaim, [], 2, 2, 2, 256, 1),
-  insertEffect: projected(libraryIdentitySQL.insertEffect, [], 2, 2, 0, 64, 1),
-  readEffect: projected(libraryIdentitySQL.readEffect, [], 1, 1, 0, 4608, 1),
-  insertReference: projected(libraryIdentitySQL.insertReference, [], 2, 2, 0, 64, 1),
-  advanceGeneration: projected(libraryIdentitySQL.advanceGeneration, [], 1, 1, 0, 64, 1),
-  advancePlan: projected(libraryIdentitySQL.advancePlan, [], 1, 1, 0, 64, 1),
-  detachHead: projected(libraryIdentitySQL.detachHead, [], 2, 2, 0, 64, 1),
-  detachState: projected(libraryIdentitySQL.detachState, [], 2, 2, 0, 64, 1),
-  insertSeal: projected(libraryIdentitySQL.insertSeal, [], 2, 2, 0, 64, 1),
-  sealPlan: projected(libraryIdentitySQL.sealPlan, [], 1, 1, 0, 64, 1),
-  nextPlan: projected(libraryIdentitySQL.nextPlan, [], 2, 1, 0, 2304, 1),
-  effectPage: projected(libraryIdentitySQL.effectPage, [], 0, 1, 0, 512, 1),
-});
+function nativeSQLParts(): Readonly<Record<keyof typeof libraryIdentitySQL, StatementPart>> {
+  return memoizedValue(nativeSQLParts, () =>
+    Object.freeze({
+      oldFacts: projected(libraryIdentitySQL.oldFacts, [], 0, 1, 0, 256, 1),
+      oldReferences: projected(libraryIdentitySQL.oldReferences, [], 0, 1, 0, 256, 1),
+      invalidateKey: projected(libraryIdentitySQL.invalidateKey, [], 1, 1, 0, 64, 1),
+      invalidateKeyInline: projected(libraryIdentitySQL.invalidateKeyInline, [], 1, 1, 0, 64, 1),
+      retainedGenerations: projected(libraryIdentitySQL.retainedGenerations, [], 3, 1, 0, 256, 1),
+      oldHead: projected(libraryIdentitySQL.oldHead, [], 1, 1, 0, 128, 1),
+      oldState: projected(libraryIdentitySQL.oldState, [], 1, 1, 0, 1024, 1),
+      invalidateGeneration: projected(libraryIdentitySQL.invalidateGeneration, [], 1, 1, 0, 64, 1),
+      abandonWorking: projected(libraryIdentitySQL.abandonWorking, [], 1, 1, 0, 64, 1),
+      insertGeneration: projected(libraryIdentitySQL.insertGeneration, [], 2, 2, 0, 64, 1),
+      insertPlan: projected(libraryIdentitySQL.insertPlan, [], 4, 4, 0, 64, 1),
+      advanceCapture: projected(libraryIdentitySQL.advanceCapture, [], 1, 1, 0, 64, 1),
+      mappingClaim: projected(libraryIdentitySQL.mappingClaim, [], 2, 2, 2, 256, 1),
+      insertEffect: projected(libraryIdentitySQL.insertEffect, [], 2, 2, 0, 64, 1),
+      readEffect: projected(libraryIdentitySQL.readEffect, [], 1, 1, 0, 4608, 1),
+      insertReference: projected(libraryIdentitySQL.insertReference, [], 2, 2, 0, 64, 1),
+      advanceGeneration: projected(libraryIdentitySQL.advanceGeneration, [], 1, 1, 0, 64, 1),
+      advancePlan: projected(libraryIdentitySQL.advancePlan, [], 1, 1, 0, 64, 1),
+      detachHead: projected(libraryIdentitySQL.detachHead, [], 2, 2, 0, 64, 1),
+      detachState: projected(libraryIdentitySQL.detachState, [], 2, 2, 0, 64, 1),
+      insertSeal: projected(libraryIdentitySQL.insertSeal, [], 2, 2, 0, 64, 1),
+      sealPlan: projected(libraryIdentitySQL.sealPlan, [], 1, 1, 0, 64, 1),
+      nextPlan: projected(libraryIdentitySQL.nextPlan, [], 2, 1, 0, 2304, 1),
+      effectPage: projected(libraryIdentitySQL.effectPage, [], 0, 1, 0, 512, 1),
+    }),
+  );
+}
 type SQLDeclarations = Readonly<
   Record<keyof typeof libraryIdentitySQL, Readonly<{ sql: string; work: Bound; resultBytes: number }>>
 >;
-const sqlDeclarations = Object.freeze(
-  Object.fromEntries(
-    Object.entries(nativeSQLParts).map(([name, value]) => [
-      name,
-      Object.freeze({
-        sql: libraryIdentitySQL[name as keyof typeof libraryIdentitySQL],
-        work: Object.freeze(value.work),
-        resultBytes: value.resultBytes,
-      }),
-    ]),
-  ) as SQLDeclarations,
-);
+function sqlDeclarations() {
+  return memoizedValue(sqlDeclarations, () =>
+    Object.freeze(
+      Object.fromEntries(
+        Object.entries(nativeSQLParts()).map(([name, value]) => [
+          name,
+          Object.freeze({
+            sql: libraryIdentitySQL[name as keyof typeof libraryIdentitySQL],
+            work: Object.freeze(value.work),
+            resultBytes: value.resultBytes,
+          }),
+        ]),
+      ) as SQLDeclarations,
+    ),
+  );
+}
 
-const selectedParts: Readonly<Record<keyof typeof LIBRARY_IDENTITY_SELECTED_STATEMENTS, StatementPart>> = Object.freeze(
-  {
-    plan: projected(
-      LIBRARY_IDENTITY_SELECTED_STATEMENTS.plan.sql,
-      LIBRARY_IDENTITY_SELECTED_STATEMENTS.plan.values,
-      1,
-      1,
-      0,
-      LIBRARY_IDENTITY_PLAN_RESULT_BYTES,
-      1,
-    ),
-    current: projected(
-      LIBRARY_IDENTITY_SELECTED_STATEMENTS.current.sql,
-      LIBRARY_IDENTITY_SELECTED_STATEMENTS.current.values,
-      7,
-      7,
-      1,
-      64,
-      1,
-    ),
-    job: projected(
-      LIBRARY_IDENTITY_SELECTED_STATEMENTS.job.sql,
-      LIBRARY_IDENTITY_SELECTED_STATEMENTS.job.values,
-      16,
-      13,
-      16,
-      2048,
-      4,
-    ),
-    seal: projected(
-      LIBRARY_IDENTITY_SELECTED_STATEMENTS.seal.sql,
-      LIBRARY_IDENTITY_SELECTED_STATEMENTS.seal.values,
-      5,
-      5,
-      2,
-      256,
-      1,
-    ),
-    // The selected page's declaration is one item; its native EOF term is composed separately.
-    page: projected(
-      LIBRARY_IDENTITY_SELECTED_STATEMENTS.page.sql,
-      LIBRARY_IDENTITY_SELECTED_STATEMENTS.page.values,
-      1,
-      0,
-      0,
-      512,
-      0,
-      1,
-    ),
-  },
-);
+function selectedParts(): Readonly<
+  Record<keyof ReturnType<typeof LIBRARY_IDENTITY_SELECTED_STATEMENTS>, StatementPart>
+> {
+  return memoizedValue(selectedParts, () =>
+    Object.freeze({
+      plan: projected(
+        LIBRARY_IDENTITY_SELECTED_STATEMENTS().plan.sql,
+        LIBRARY_IDENTITY_SELECTED_STATEMENTS().plan.values,
+        1,
+        1,
+        0,
+        LIBRARY_IDENTITY_PLAN_RESULT_BYTES,
+        1,
+      ),
+      current: projected(
+        LIBRARY_IDENTITY_SELECTED_STATEMENTS().current.sql,
+        LIBRARY_IDENTITY_SELECTED_STATEMENTS().current.values,
+        7,
+        7,
+        1,
+        64,
+        1,
+      ),
+      job: projected(
+        LIBRARY_IDENTITY_SELECTED_STATEMENTS().job.sql,
+        LIBRARY_IDENTITY_SELECTED_STATEMENTS().job.values,
+        16,
+        13,
+        16,
+        2048,
+        4,
+      ),
+      seal: projected(
+        LIBRARY_IDENTITY_SELECTED_STATEMENTS().seal.sql,
+        LIBRARY_IDENTITY_SELECTED_STATEMENTS().seal.values,
+        5,
+        5,
+        2,
+        256,
+        1,
+      ),
+      // The selected page's declaration is one item; its native EOF term is composed separately.
+      page: projected(
+        LIBRARY_IDENTITY_SELECTED_STATEMENTS().page.sql,
+        LIBRARY_IDENTITY_SELECTED_STATEMENTS().page.values,
+        1,
+        0,
+        0,
+        512,
+        0,
+        1,
+      ),
+    }),
+  );
+}
 type SelectedDeclarations = Readonly<
   Record<
-    keyof typeof LIBRARY_IDENTITY_SELECTED_STATEMENTS,
+    keyof ReturnType<typeof LIBRARY_IDENTITY_SELECTED_STATEMENTS>,
     Readonly<{ sql: string; values: readonly unknown[]; work: Bound; resultBytes: number }>
   >
 >;
-const selectedDeclarations = Object.freeze(
-  Object.fromEntries(
-    Object.entries(LIBRARY_IDENTITY_SELECTED_STATEMENTS).map(([name, statement]) => [
-      name,
-      Object.freeze({ ...statement, ...selectedParts[name as keyof typeof selectedParts] }),
-    ]),
-  ) as SelectedDeclarations,
-);
+function selectedDeclarations() {
+  return memoizedValue(selectedDeclarations, () =>
+    Object.freeze(
+      Object.fromEntries(
+        Object.entries(LIBRARY_IDENTITY_SELECTED_STATEMENTS()).map(([name, statement]) => [
+          name,
+          Object.freeze({ ...statement, ...selectedParts()[name as keyof ReturnType<typeof selectedParts>] }),
+        ]),
+      ) as SelectedDeclarations,
+    ),
+  );
+}
 
 /** Immutable Library-owned declarations. Each result projection remains beside its exact SQL identity. */
-export const LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS = Object.freeze({
-  sql: sqlDeclarations,
-  selected: selectedDeclarations,
-  sourceBasis: Object.freeze(
-    basisQueries.map((query) => {
-      const values = Object.freeze(query.params.map((name) => basisBindings[name]));
-      return Object.freeze({
-        sql: query.sql,
-        values,
-        work: nativeIdentitySourceBasisBound(query.sql, values)!,
-      });
+export function LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS() {
+  return memoizedValue(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS, () =>
+    Object.freeze({
+      sql: sqlDeclarations(),
+      selected: selectedDeclarations(),
+      sourceBasis: Object.freeze(
+        basisQueries().map((query) => {
+          const values = Object.freeze(query.params.map((name) => basisBindings[name]));
+          return Object.freeze({
+            sql: query.sql,
+            values,
+            work: nativeIdentitySourceBasisBound(query.sql, values)!,
+          });
+        }),
+      ),
     }),
-  ),
-});
+  );
+}
 
 export function isNativeIdentitySourceBasisSQL(sql: string): boolean {
-  return basisBindBounds.has(normalize(sql));
+  return basisBindBounds().has(normalize(sql));
 }
 export function isLibraryIdentityFullPartitionSQL(sql: string): boolean {
   return equal(sql, partition.sql);
@@ -458,16 +512,16 @@ export function isLibraryIdentityFullPartitionSQL(sql: string): boolean {
 
 /** Exact shared native-basis declaration used by planner execution, custody and original composition. */
 export function nativeIdentitySourceBasisBound(sql: string, values: readonly unknown[]): Bound | undefined {
-  const query = basisQueries.find((item) => equal(item.sql, sql));
+  const query = basisQueries().find((item) => equal(item.sql, sql));
   if (!query || values.length !== query.params.length) return undefined;
   const serialized = bindText(values);
-  if (serialized === undefined || Buffer.byteLength(serialized) > basisBindBounds.get(normalize(sql))!)
+  if (serialized === undefined || Buffer.byteLength(serialized) > basisBindBounds().get(normalize(sql))!)
     return undefined;
   const queryBound = base(sql, values);
   if (!queryBound) return undefined;
   // basisQueries holds frozen copies; the work and projection tables are keyed by the original queries.
-  const original = [...basisWork.keys()].find((item) => item.sql === query.sql)!;
-  return sumBounds(queryBound, basisWork.get(original)!, bound({ bytes: basisProjectionBytes.get(original)! }));
+  const original = [...basisWork().keys()].find((item) => item.sql === query.sql)!;
+  return sumBounds(queryBound, basisWork().get(original)!, bound({ bytes: basisProjectionBytes().get(original)! }));
 }
 export function nativeIdentitySourceBasisFootprint(
   sql: string,
@@ -482,7 +536,7 @@ export function declareNativeIdentitySourceBasisStatements(): readonly Readonly<
   engineRequests: 0;
 }>[] {
   return Object.freeze(
-    basisQueries.map((query) => {
+    basisQueries().map((query) => {
       const values = query.params.map((name) => basisBindings[name]);
       const value = nativeIdentitySourceBasisBound(query.sql, values)!;
       return Object.freeze({ sql: query.sql, work: workDimensions(value), engineRequests: 0 as const });
@@ -500,7 +554,7 @@ export function libraryIdentityNativeOperationBound(
   if (isNativeIdentitySourceBasisSQL(sql)) return nativeIdentitySourceBasisBound(sql, values);
   if (!libraryIdentitySelectedBindBound(sql, values)) return undefined;
   const text = normalize(sql);
-  const selected = LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.selected;
+  const selected = LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS().selected;
   const point = (rows: number, points: number, metadata: number, output: number, candidates = 0, seeks = 0) =>
     one(sql, values, rows, points, metadata, output, candidates, seeks);
   if (
@@ -535,7 +589,7 @@ export function libraryIdentityNativeOperationBound(
     return point(2, 2, 1, 64);
   }
   if (equal(sql, commit.sql) && values[2] === 'library-private-follow-counts') return point(2, 2, 1, 64);
-  if (equal(sql, selected.plan.sql) || equal(sql, libraryIdentityBoundedPlanSQL))
+  if (equal(sql, selected.plan.sql) || equal(sql, libraryIdentityBoundedPlanSQL()))
     return declaredPoint(sql, values, selected.plan);
   if (equal(sql, plan.sql) || equal(sql, plan.sql.replace(/;\s*$/, ' FOR UPDATE')))
     return point(1, 1, 0, LIBRARY_IDENTITY_PLAN_RESULT_BYTES, 0, 1);
@@ -576,7 +630,7 @@ export function libraryIdentityNativeOperationBound(
     return repeatedRows(sql, values, 0, rows, points, metadata, output);
   }
   if (equal(sql, facts.sql) || equal(sql, labels.sql)) return ranged(sql, values, 5, 256, true);
-  for (const [name, declaration] of Object.entries(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.sql)) {
+  for (const [name, declaration] of Object.entries(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS().sql)) {
     if (!equal(sql, declaration.sql)) continue;
     if (name === 'oldFacts') return ranged(sql, values, 8, declaration.resultBytes, true);
     if (name === 'oldReferences') return ranged(sql, values, 7, declaration.resultBytes, true);
@@ -590,11 +644,11 @@ export function libraryIdentityNativeOperationBound(
 
 export function libraryIdentitySelectedOperationBound(sql: string, values: readonly unknown[]): Bound | undefined {
   if (!libraryIdentitySelectedBindBound(sql, values)) return undefined;
-  const selected = Object.values(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.selected).some(
+  const selected = Object.values(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS().selected).some(
     (item) =>
       equal(item.sql, sql) ||
-      (item === LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.selected.plan &&
-        equal(libraryIdentityBoundedPlanSQL, sql)),
+      (item === LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS().selected.plan &&
+        equal(libraryIdentityBoundedPlanSQL(), sql)),
   );
   if (!selected) return undefined;
   return libraryIdentityNativeOperationBound(sql, values);

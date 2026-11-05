@@ -468,7 +468,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     if (!validStandardQuestion(question))
       return { status: 'preparing', reason: 'question-changed', retry: 'same-input', targets: [] };
 
-    const first = await identityEpochStore.readMappings(deps.pool, ids);
+    const first = await identityEpochStore().readMappings(deps.pool, ids);
     const visible = new Set(
       await readableSubjects(
         { pool: deps.pool, access: deps.access },
@@ -476,7 +476,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
         ids.filter((_, index) => first[index]?.state === 'mapped'),
       ),
     );
-    const last = await identityEpochStore.readMappings(deps.pool, ids);
+    const last = await identityEpochStore().readMappings(deps.pool, ids);
     if (!identityObservationsEqual(first, last))
       return { status: 'preparing', reason: 'identity-changed', retry: 'same-input', targets: [] };
 
@@ -611,7 +611,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
         return { status: 'preparing', reason: 'question-changed', retry: 'same-input' };
     }
 
-    const first = await identityEpochStore.readMappings(deps.pool, ids);
+    const first = await identityEpochStore().readMappings(deps.pool, ids);
     const visible = new Set(
       await readableSubjects(
         { pool: deps.pool, access: deps.access },
@@ -619,7 +619,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
         ids.filter((_, index) => first[index]?.state === 'mapped'),
       ),
     );
-    const last = await identityEpochStore.readMappings(deps.pool, ids);
+    const last = await identityEpochStore().readMappings(deps.pool, ids);
     if (!identityObservationsEqual(first, last))
       return { status: 'preparing', reason: 'identity-changed', retry: 'same-input' };
     const originalWitnesses = identityWitnesses.get(preparation);

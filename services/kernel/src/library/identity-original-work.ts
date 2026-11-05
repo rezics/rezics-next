@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from './collection-source.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
@@ -111,22 +112,30 @@ export function declareLibraryIdentityCustodyOperation(
 }
 
 /** The Source-selected page can dispatch one capture page or its terminal finish step. */
-export const LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP = declared(NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND);
+export function LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP() {
+  return memoizedValue(LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP, () =>
+    declared(NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND()),
+  );
+}
 
 /** Pool checkout itself has no SQL, result projection, candidate or witness. */
-export const LIBRARY_IDENTITY_CHECKOUT_WORK = declared(
-  declareBound({
-    candidateKeys: 0,
-    nativeRows: 0,
-    identityMetadataRows: 0,
-    emptySeeks: 0,
-    nativePoints: 1,
-    witnessKeys: 0,
-    statements: 0,
-    bytes: 0,
-    engineRequests: 0,
-  }),
-);
+export function LIBRARY_IDENTITY_CHECKOUT_WORK() {
+  return memoizedValue(LIBRARY_IDENTITY_CHECKOUT_WORK, () =>
+    declared(
+      declareBound({
+        candidateKeys: 0,
+        nativeRows: 0,
+        identityMetadataRows: 0,
+        emptySeeks: 0,
+        nativePoints: 1,
+        witnessKeys: 0,
+        statements: 0,
+        bytes: 0,
+        engineRequests: 0,
+      }),
+    ),
+  );
+}
 
 /** Inclusive component algebra. A caller cannot splice an arbitrary vector into it.
  * Repeats (including rejected SQL and failed COMMIT followed by ROLLBACK) are separate
@@ -201,8 +210,8 @@ export const LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS: readonly LibraryIdentit
  * enforce these maxima. Pending native plans require a later independently admitted original.
  */
 export function assembleLibraryIdentitySelectedBodies() {
-  const statement = (name: keyof typeof LIBRARY_IDENTITY_SELECTED_STATEMENTS) => {
-    const { sql, values } = LIBRARY_IDENTITY_SELECTED_STATEMENTS[name];
+  const statement = (name: keyof ReturnType<typeof LIBRARY_IDENTITY_SELECTED_STATEMENTS>) => {
+    const { sql, values } = LIBRARY_IDENTITY_SELECTED_STATEMENTS()[name];
     const footprint = libraryIdentitySelectedFootprint(sql, values);
     const value = footprint && declared(asBound(footprint));
     if (!value) throw new TypeError(`Unknown Library selected ${name} declaration`);
@@ -227,7 +236,7 @@ export function assembleLibraryIdentitySelectedBodies() {
   const page = assembleLibraryIdentityOriginalComponents([
     { component: verification, multiplicity: 1 },
     { component: statement('page'), multiplicity: 1 },
-    { component: LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP, multiplicity: 1 },
+    { component: LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP(), multiplicity: 1 },
   ]);
   const total = assembleLibraryIdentityOriginalComponents([
     { component: page, multiplicity: LIBRARY_IDENTITY_SELECTED_MULTIPLICITIES.effectPages },
@@ -249,10 +258,14 @@ export function assembleLibraryIdentitySelectedBodies() {
  * Source/History term before it can allocate either child. This exact own data
  * shape contains no component brand, caller price, allowance or parent authority.
  */
-export const IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION = Object.freeze({
-  work: assembleLibraryIdentitySelectedBodies().total.work,
-  engineRequests: 0 as const,
-});
+export function IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION() {
+  return memoizedValue(IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION, () =>
+    Object.freeze({
+      work: assembleLibraryIdentitySelectedBodies().total.work,
+      engineRequests: 0 as const,
+    }),
+  );
+}
 
 export type LibraryIdentityOriginalMissingOperand =
   | Readonly<{

@@ -584,12 +584,16 @@ export function withIdentitySourceFenceCommand<T>(
  * rather than accepting total:null or a local-only price as whole-child funding. */
 export async function readIdentitySourceOriginalCostDisposition() {
   const {
-    IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION,
-    IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS,
-    IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS,
-    IDENTITY_SOURCE_LOCAL_CALLS,
+    IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION: IDENTITY_SOURCE_HISTORY_GUARD_DECLARATIONGetter,
+    IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS: IDENTITY_SOURCE_LOCAL_READ_DECLARATIONSGetter,
+    IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS: IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTSGetter,
+    IDENTITY_SOURCE_LOCAL_CALLS: IDENTITY_SOURCE_LOCAL_CALLSGetter,
     IDENTITY_SOURCE_WIDER_COMMAND_REQUIREMENTS,
   } = await import('./identity-source-consumer-custody.ts');
+  const IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION = IDENTITY_SOURCE_HISTORY_GUARD_DECLARATIONGetter();
+  const IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS = IDENTITY_SOURCE_LOCAL_READ_DECLARATIONSGetter();
+  const IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS = IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTSGetter();
+  const IDENTITY_SOURCE_LOCAL_CALLS = IDENTITY_SOURCE_LOCAL_CALLSGetter();
   const { scopeConsumerFootprint } = await import('./identity-scoped-observations.ts');
   const history = await import('../history/agent-identity-inventory-work.ts');
   const retirement = await import('../history/agent-identity-retirement.ts');

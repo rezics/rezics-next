@@ -212,7 +212,7 @@ function createView(
     proposals: observation.proposals,
     outcome: review.confirmation?.outcome ?? null,
   };
-  if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS.responseBytes)
+  if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS().responseBytes)
     throw new ProblemError('invalid_request');
   return view;
 }

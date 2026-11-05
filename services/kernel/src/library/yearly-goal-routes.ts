@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
@@ -75,49 +76,77 @@ const action = t.Union([
     closed,
   ),
 ]);
-const readResponse = t.Object(
-  {
-    year: t.Integer({ minimum: 1, maximum: 9999 }),
-    metric: t.Literal(YEARLY_COMPLETION_GOAL_METRIC),
-    viewer: t.Object(
+function readResponse() {
+  return memoizedValue(readResponse, () =>
+    t.Object(
       {
-        state: t.Literal('owner'),
-        actions: t.Object({ editTarget: action, clearTarget: action, navigateYear: availableAction }, closed),
+        year: t.Integer({ minimum: 1, maximum: 9999 }),
+        metric: t.Literal(YEARLY_COMPLETION_GOAL_METRIC),
+        viewer: t.Object(
+          {
+            state: t.Literal('owner'),
+            actions: t.Object({ editTarget: action, clearTarget: action, navigateYear: availableAction }, closed),
+          },
+          closed,
+        ),
+        target,
+        progress: t.Union([
+          t.Object({ state: t.Literal('available'), summary: reportedYear }, closed),
+          t.Object({ state: t.Literal('unavailable'), reason: t.Literal('summary_unavailable') }, closed),
+        ]),
       },
       closed,
     ),
-    target,
-    progress: t.Union([
-      t.Object({ state: t.Literal('available'), summary: reportedYear }, closed),
-      t.Object({ state: t.Literal('unavailable'), reason: t.Literal('summary_unavailable') }, closed),
-    ]),
-  },
-  closed,
-);
-const changeResponse = t.Object(
-  {
-    year: t.Integer({ minimum: 1, maximum: 9999 }),
-    metric: t.Literal(YEARLY_COMPLETION_GOAL_METRIC),
-    target: t.Union([t.Integer({ minimum: 1, maximum: 1000 }), t.Null()]),
-    revision,
-  },
-  closed,
-);
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
-const forbidden = problemSchema('forbidden');
-const invalid = problemSchema('invalid_request');
-const conflict = problemSchema('conflict');
-const idempotencyConflict = problemSchema('idempotency_conflict');
-const unavailable = problemSchema(
-  'semantic_not_ready',
-  'overloaded',
-  'partition_unavailable',
-  'transaction_retry_exhausted',
-  'deadline_exceeded',
-  'dependency_unavailable',
-);
-const idempotencyHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
+  );
+}
+function changeResponse() {
+  return memoizedValue(changeResponse, () =>
+    t.Object(
+      {
+        year: t.Integer({ minimum: 1, maximum: 9999 }),
+        metric: t.Literal(YEARLY_COMPLETION_GOAL_METRIC),
+        target: t.Union([t.Integer({ minimum: 1, maximum: 1000 }), t.Null()]),
+        revision,
+      },
+      closed,
+    ),
+  );
+}
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
+function forbidden() {
+  return memoizedValue(forbidden, () => problemSchema('forbidden'));
+}
+function invalid() {
+  return memoizedValue(invalid, () => problemSchema('invalid_request'));
+}
+function conflict() {
+  return memoizedValue(conflict, () => problemSchema('conflict'));
+}
+function idempotencyConflict() {
+  return memoizedValue(idempotencyConflict, () => problemSchema('idempotency_conflict'));
+}
+function unavailable() {
+  return memoizedValue(unavailable, () =>
+    problemSchema(
+      'semantic_not_ready',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+      'dependency_unavailable',
+    ),
+  );
+}
+function idempotencyHeaders() {
+  return memoizedValue(idempotencyHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+  );
+}
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
 
 function detail(operationId: string, actionName: string, isWrite = false) {
   return {
@@ -127,7 +156,7 @@ function detail(operationId: string, actionName: string, isWrite = false) {
     'x-authority-anchor': 'own-account',
     'x-authority-resource-types': Object.keys(bundledRelease.types),
     security: [{ bearerAuth: [] }],
-    ...(isWrite ? { 'x-rate-limit': writeRate } : {}),
+    ...(isWrite ? { 'x-rate-limit': writeRate() } : {}),
   };
 }
 
@@ -195,11 +224,11 @@ export function yearlyCompletionGoalRoutes(
             throw new ProblemError('invalid_request');
         },
         response: {
-          200: readResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          503: unavailable,
+          200: readResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          503: unavailable(),
         },
         detail: detail('library_yearly_goal.read', 'progress_session:list'),
       },
@@ -241,7 +270,7 @@ export function yearlyCompletionGoalRoutes(
     .put(
       '/v1/libraryYearlyCompletionGoal',
       {
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         transform: ({ set }) => {
           set.headers['cache-control'] = 'private, no-store';
         },
@@ -255,14 +284,14 @@ export function yearlyCompletionGoalRoutes(
           closed,
         ),
         response: {
-          200: changeResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          409: conflict,
-          422: idempotencyConflict,
+          200: changeResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          409: conflict(),
+          422: idempotencyConflict(),
           410: problemSchema('command_result_erased'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: detail('library_yearly_goal.update', 'progress_session:update', true),
       },

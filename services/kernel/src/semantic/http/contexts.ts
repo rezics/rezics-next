@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import {
   createContextDirectory,
   ContextDirectoryEntrySchema,
@@ -50,7 +51,9 @@ const ContextSchema = t.Object(
   { additionalProperties: false },
 );
 const contextResponse = t.Object({ context: ContextSchema }, { additionalProperties: false });
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
 
 const emptyBody = t.Object({}, { additionalProperties: false });
 const lifecycleResponse = t.Object(
@@ -65,16 +68,18 @@ const lifecycleResponse = t.Object(
   },
   { additionalProperties: false },
 );
-const lifecycleResponses = {
-  200: withHeaders(lifecycleResponse, { [SESSION_HEADER]: t.String() }),
-  400: problemSchema('invalid_request'),
-  401: unauthorized,
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
-};
+function lifecycleResponses() {
+  return memoizedValue(lifecycleResponses, () => ({
+    200: withHeaders(lifecycleResponse, { [SESSION_HEADER]: t.String() }),
+    400: problemSchema('invalid_request'),
+    401: unauthorized(),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  }));
+}
 function lifecycleProblem(error: unknown): never {
   if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
   if (error instanceof ContextNotFoundError) throw new ProblemError('not_found');
@@ -95,7 +100,7 @@ function contextRoutes(
   const directory = () => createContextDirectory({ ...dependencies, access: dependencies.access() });
   const readResponses = {
     400: problemSchema('invalid_request'),
-    401: unauthorized,
+    401: unauthorized(),
     404: problemSchema('not_found'),
     503: problemSchema('semantic_not_ready', 'overloaded', 'partition_unavailable', 'deadline_exceeded'),
   };
@@ -174,7 +179,7 @@ function contextRoutes(
         response: {
           201: withHeaders(contextResponse, { [SESSION_HEADER]: t.String(), location: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           422: problemSchema('idempotency_conflict'),
           503: problemSchema(
@@ -268,7 +273,7 @@ function contextRoutes(
         params: t.Object({ id: t.String() }),
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
         body: t.Optional(emptyBody),
-        response: lifecycleResponses,
+        response: lifecycleResponses(),
         detail: {
           operationId: 'context.delete',
           'x-exposure': 'public',
@@ -307,7 +312,7 @@ function contextRoutes(
         params: t.Object({ id: t.String() }),
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
         body: emptyBody,
-        response: lifecycleResponses,
+        response: lifecycleResponses(),
         detail: {
           operationId: 'context.restore',
           'x-exposure': 'public',
@@ -346,7 +351,7 @@ function contextRoutes(
         params: t.Object({ id: t.String() }),
         response: {
           200: withHeaders(contextResponse, { [SESSION_HEADER]: t.String() }),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
         },

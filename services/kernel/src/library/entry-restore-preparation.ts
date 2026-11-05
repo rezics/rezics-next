@@ -50,7 +50,7 @@ export async function prepareEntryRestoration(
         }
       });
       if (!deletion) throw new LibraryNotFoundError();
-      if (deletion.deletedRevision !== input.revision) throw new LibraryEntryLifecycleConflictError('stale');
+      if (deletion.deletedRevision !== input.revision) throw new (LibraryEntryLifecycleConflictError())('stale');
       // The owner checkout has ended before either immutable Global or source reads.
       requireAccessDeadline(deadline);
       let reference: Reference | null = null;

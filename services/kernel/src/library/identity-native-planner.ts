@@ -166,7 +166,7 @@ export async function readLibraryIdentityPlan(
 ): Promise<LibraryIdentityPlan | null> {
   const row = (
     await tx.query<LibraryIdentityPlan & { projection_valid: boolean }>(
-      libraryIdentityBoundedPlanSQL.replace(/;\s*$/, lock ? ' FOR UPDATE' : ''),
+      libraryIdentityBoundedPlanSQL().replace(/;\s*$/, lock ? ' FOR UPDATE' : ''),
       [key.sourceIdentity.route, key.sourceIdentity.collectionId, libraryIdentityPlanKey(key)],
     )
   ).rows[0];
@@ -248,7 +248,7 @@ export async function currentLibraryIdentityPlan(
   const job = (
     await query<{ transaction_id: string; scope_digest: string; writer_fence: unknown }>(
       tx,
-      libraryIdentityBoundedJobSQL,
+      libraryIdentityBoundedJobSQL(),
       [currentCommand(tx).partition, key.job.jobId, key.job.epoch.toString()],
     )
   )[0];
@@ -333,7 +333,7 @@ async function plannedOriginal(
   const change: IdentityChange | undefined = page.changes.find((item) => item.original === key.storedSubjectId);
   if (change) return { key, change, terminal: change.terminal, mappingEpoch: null };
   const mapping = await bounded(ledger, () =>
-    withRequestDeadline(deadlineOf(ledger), () => identityEpochStore.readMapping(pool, key.storedSubjectId)),
+    withRequestDeadline(deadlineOf(ledger), () => identityEpochStore().readMapping(pool, key.storedSubjectId)),
   );
   return mapping.state === 'mapped'
     ? { key, change: null, terminal: mapping.terminal, mappingEpoch: mapping.epoch.toString() }
@@ -494,7 +494,7 @@ async function advanceNativePlan(
     const job = (
       await query<{ transaction_id: string; scope_digest: string; writer_fence: unknown }>(
         tx,
-        libraryIdentityBoundedJobSQL,
+        libraryIdentityBoundedJobSQL(),
         [home, input.job.jobId, input.job.epoch.toString()],
       )
     )[0];

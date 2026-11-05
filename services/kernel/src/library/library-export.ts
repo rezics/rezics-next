@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { readAccount } from '../access/account-data.ts';
@@ -55,7 +56,9 @@ const groups = [
   ['reading_progress', 'progress_session:list'],
   ['collections', 'collection:read'],
 ] as const;
-export const exportAuthorityTypes = Object.keys(bundledRelease.types);
+export function exportAuthorityTypes() {
+  return memoizedValue(exportAuthorityTypes, () => Object.keys(bundledRelease.types));
+}
 
 function owner(actor: Actor) {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');

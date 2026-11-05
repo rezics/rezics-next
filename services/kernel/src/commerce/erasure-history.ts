@@ -1,17 +1,15 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
 import type { AccountReference } from '../history/locator.ts';
-import { declareCommandHistory, registerCommandHistoryKind, unionHistoryScope } from '../history/record.ts';
+import { declareCommandHistory, unionHistoryScope } from '../history/record.ts';
 import { routeOf } from '../route/route.ts';
 
 // Permanent owner-assigned IDs, shared by API producers and the default worker.
-const kinds = {
-  'commerce.offer.create': 1000,
-  'commerce.offer.delist': 1001,
-  'commerce.offer.revise': 1002,
-  'commerce.order.create': 1003,
-} as const;
-for (const [kind, id] of Object.entries(kinds)) registerCommandHistoryKind(kind, id);
+type CommerceHistoryKind =
+  | 'commerce.offer.create'
+  | 'commerce.offer.delist'
+  | 'commerce.offer.revise'
+  | 'commerce.order.create';
 
 /** Only ordinary writes use the shared sink's reject-after-seal protocol. Financial
  * reconciliation must remain available after T and needs the producer's late-copy
@@ -19,7 +17,7 @@ for (const [kind, id] of Object.entries(kinds)) registerCommandHistoryKind(kind,
  */
 export async function declareCommerceCommandHistory(
   tx: CommandTransaction,
-  kind: keyof typeof kinds,
+  kind: CommerceHistoryKind,
   source: { creatorAccountId: string; buyerAccountId?: string },
 ): Promise<void> {
   function reference(accountId: string, roles: number): AccountReference {

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { hasLiveCommandTransaction, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import type { Access, AccessClient, Actor, Resource } from '../request/access.ts';
 import recordGovernanceReach from './governance-reach-record.sql';
@@ -8,7 +9,9 @@ export const PLATFORM_RESOURCE = Object.freeze({
   id: '00000000-0000-8000-8000-000000000000',
 } as const);
 
-const actions = new Set<string>(governance.globalReach);
+function actions() {
+  return memoizedValue(actions, () => new Set<string>(governance.globalReach));
+}
 const reached = new WeakMap<object, readonly Resource[]>();
 const registered = new WeakMap<CommandTransaction, Set<string>>();
 
@@ -20,7 +23,7 @@ export type GovernanceReachUse = Readonly<{
 }>;
 
 export function isGlobalReachAction(action: string): boolean {
-  return actions.has(action);
+  return actions().has(action);
 }
 
 export function isPlatformResource(resource: Resource): boolean {

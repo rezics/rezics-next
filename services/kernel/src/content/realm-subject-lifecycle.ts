@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { WorkDimensions } from '../library/collection-source.ts';
@@ -59,16 +60,22 @@ const communitySourceTypes = [
   'com.rezics.community.space.restored.v1',
   'com.rezics.community.space.address-changed.v1',
 ] as const;
-const identitySourceTypes = [SUBJECT_MERGED, SUBJECT_REVISED] as const;
+function identitySourceTypes() {
+  return memoizedValue(identitySourceTypes, () => [SUBJECT_MERGED, SUBJECT_REVISED] as const);
+}
 export const REALM_SUBJECT_LIFECYCLE_EFFECT = 'content_realm_subject_lifecycle';
 export const REALM_SUBJECT_IDENTITY_WORKFLOW = 'content.realmSubject.identity';
 export const REALM_SUBJECT_CENSUS_WORKFLOW = 'content.realmSubject.census';
 export const REALM_SUBJECT_CENSUS_SCHEDULE = 'content.realmSubject.census.minute';
 export const REALM_SUBJECT_CENSUS_PAGE = 32;
-export const REALM_SUBJECT_IDENTITY_PAGE = REALM_SUBJECT_RAW_LIMIT;
+export function REALM_SUBJECT_IDENTITY_PAGE() {
+  return memoizedValue(REALM_SUBJECT_IDENTITY_PAGE, () => REALM_SUBJECT_RAW_LIMIT);
+}
 const maxPosition = 9_223_372_036_854_775_807n;
 const zero = '00000000-0000-0000-0000-000000000000';
-const schemas: readonly Record<string, unknown>[] = [CONTENT_EVENTS, COMMUNITY_EVENTS, SEMANTIC_EVENTS];
+function schemas(): readonly Record<string, unknown>[] {
+  return memoizedValue(schemas, () => [CONTENT_EVENTS(), COMMUNITY_EVENTS(), SEMANTIC_EVENTS]);
+}
 
 export type RealmSubjectIdentityWork = Readonly<{
   original: string;
@@ -122,7 +129,9 @@ type IdentityRow = Readonly<{
 }>;
 
 function checkSchema(event: CloudEvent): void {
-  const schema = schemas.map((catalogue) => catalogue[event.type]).find((value) => value !== undefined);
+  const schema = schemas()
+    .map((catalogue) => catalogue[event.type])
+    .find((value) => value !== undefined);
   if (!schema || !Value.Check(schema as never, event.data)) throw new TypeError('Invalid Realm Subject source event');
 }
 
@@ -483,7 +492,7 @@ export function createRealmSubjectLifecycle(input: {
          FROM content.realm_subject_candidate
          WHERE original_id=$1 AND (route,realm_id,thread_id)>($2::integer,$3::uuid,$4::uuid)
          ORDER BY route,realm_id,thread_id LIMIT $5`,
-        [work.original, state.after_route, state.after_realm_id, state.after_thread_id, REALM_SUBJECT_IDENTITY_PAGE],
+        [work.original, state.after_route, state.after_realm_id, state.after_thread_id, REALM_SUBJECT_IDENTITY_PAGE()],
       ),
     );
     if (rows.rows.length === 0) {
@@ -647,7 +656,7 @@ export function createRealmSubjectLifecycle(input: {
 
   const effect: Effect = {
     name: REALM_SUBJECT_LIFECYCLE_EFFECT,
-    types: [...contentSourceTypes, ...communitySourceTypes, ...identitySourceTypes],
+    types: [...contentSourceTypes, ...communitySourceTypes, ...identitySourceTypes()],
     async run(event) {
       checkSchema(event);
       const data = event.data as Record<string, unknown>;
@@ -656,7 +665,7 @@ export function createRealmSubjectLifecycle(input: {
       // Opening candidates are sourced from the committed thread/post/revision, never the event projection.
       if (currentThreadEvent(event)) await refreshThread(event, data, source, Date.now() + 30_000);
       await invalidateScope(event, data, source, Date.now() + 30_000);
-      if (identitySourceTypes.includes(event.type as (typeof identitySourceTypes)[number])) {
+      if (identitySourceTypes().includes(event.type as ReturnType<typeof identitySourceTypes>[number])) {
         const isIdentityRevision = event.type === SUBJECT_MERGED || data.kind === 'identity' || data.kind === 'merge';
         if (isIdentityRevision) {
           const work: RealmSubjectIdentityWork = {

@@ -81,13 +81,13 @@ test('logical erasure immediately returns current and exact authorized tombstone
 test('point ports exist without an author-scope command', () => {
   expect([takedown, erasePost, eraseStandaloneMedia].every((port) => typeof port === 'function')).toBe(true);
   expect(
-    Value.Check(CONTENT_EVENTS['com.rezics.content.post.erased.v1'], {
+    Value.Check(CONTENT_EVENTS()['com.rezics.content.post.erased.v1'], {
       postId: board.id,
       securityRevision: '9007199254740994',
     }),
   ).toBe(true);
   expect(
-    Value.Check(CONTENT_EVENTS['com.rezics.content.post.erased.v1'], {
+    Value.Check(CONTENT_EVENTS()['com.rezics.content.post.erased.v1'], {
       postId: board.id,
       securityRevision: '2',
       body: 'old text',

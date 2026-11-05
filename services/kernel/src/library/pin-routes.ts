@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import type { Pool } from 'pg';
@@ -18,24 +19,28 @@ const revision = t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
 const result = t.Object({ revision }, closed);
 const id = t.String();
 const params = t.Object({ collectionId: id }, closed);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden', 'platform_closed'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict', 'collection_full', 'stale_cursor'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema(
-    'dependency_unavailable',
-    'overloaded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'deadline_exceeded',
-    'semantic_not_ready',
-    'presentation_not_ready',
-  ),
-};
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden', 'platform_closed'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict', 'collection_full', 'stale_cursor'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema(
+      'dependency_unavailable',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+      'semantic_not_ready',
+      'presentation_not_ready',
+    ),
+  }));
+}
 function detail(operation: string, action: string, write = false) {
   return {
     operationId: `library_pin.${operation}`,
@@ -49,7 +54,7 @@ function queryFields(request: Request, allowed: string[]) {
   for (const key of new URL(request.url).searchParams.keys())
     if (!allowed.includes(key)) throw new ProblemError('invalid_request');
 }
-function pinTarget(value: CollectionResourceView | null): Static<typeof collectionResourceSchema> | null {
+function pinTarget(value: CollectionResourceView | null): Static<ReturnType<typeof collectionResourceSchema>> | null {
   if (!value) return null;
   const target = collectionReadView(value);
   if ('builtinKind' in target) return { ...target };
@@ -87,14 +92,14 @@ export function pinRoutes(
           200: t.Object(
             {
               pins: t.Array(
-                t.Object({ collectionId: id, target: t.Union([collectionResourceSchema, t.Null()]) }, closed),
+                t.Object({ collectionId: id, target: t.Union([collectionResourceSchema(), t.Null()]) }, closed),
               ),
               revision,
               next: t.Union([t.String(), t.Null()]),
             },
             closed,
           ),
-          ...failures,
+          ...failures(),
         },
         detail: detail('list', 'list'),
       },
@@ -117,10 +122,10 @@ export function pinRoutes(
       '/v1/libraryPins/:collectionId',
       {
         params,
-        headers,
+        headers: headers(),
         body: strict(t.Object({ revision, after: t.Optional(t.Union([id, t.Null()])) }, closed)),
         transform: ({ request }) => queryFields(request, []),
-        response: { 200: result, ...failures },
+        response: { 200: result, ...failures() },
         detail: detail('put', 'update', true),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
@@ -135,13 +140,13 @@ export function pinRoutes(
       '/v1/libraryPins/:collectionId',
       {
         params,
-        headers,
+        headers: headers(),
         query: t.Object(
           { revision: t.Numeric({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER, multipleOf: 1 }) },
           closed,
         ),
         transform: ({ request }) => queryFields(request, ['revision']),
-        response: { 200: result, ...failures },
+        response: { 200: result, ...failures() },
         detail: detail('delete', 'update', true),
       },
       async ({ actor, params, query, headers, admission, job, session, set }) => {

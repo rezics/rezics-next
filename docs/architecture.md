@@ -70,6 +70,15 @@ capabilities it registers. The kinds are:
 7. Shared code becomes a package under `packages/<capability>` only with a complete contract, conformance tests and
    two production consumers, or a recorded standalone requirement. A package never imports a service or an app.
 8. Existing violations are listed in a ratchet baseline with an owner and a reason. The baseline may only shrink.
+9. Importing a Kernel source file never evaluates values from another repository module, including workspace
+   packages. Module initializers defer imported reads and calls behind functions or memoized getters; callers obtain
+   the value at use. Shared literal data may be imported from a literal-only leaf with no runtime imports. Function
+   bodies and instance fields are deferred; class inheritance, static fields, local initializer calls and registry
+   construction are eager. Third-party packages are outside this repository graph. Process entry points run only
+   when explicitly launched. Composition roots collect declared registrations before starting their resources.
+
+Decision: Kernel computed values use memoized getters that retain value identity; literal-only leaves remain eager.
+The syntax-tree architecture check enforces this at file boundaries, including within an architecture module.
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
 

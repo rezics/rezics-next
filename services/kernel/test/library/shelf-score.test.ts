@@ -92,8 +92,8 @@ test('native first, middle and final pages preserve ties, zero and unrated-last 
   });
   const question = await readPersonalScoreQuestion(db.admin);
   expect(question).toMatchObject({ id: STANDARD_QUESTION_ID, minimumUnits: 0, maximumUnits: 20, stepUnits: 1 });
-  expect(Value.Check(shelfListQuerySchema, query)).toBe(false); // Internal typeId is not a wire predicate.
-  expect(Value.Check(shelfListQuerySchema, { orderBy: 'personalScore', direction: 'asc', limit: 2 })).toBe(true);
+  expect(Value.Check(shelfListQuerySchema(), query)).toBe(false); // Internal typeId is not a wire predicate.
+  expect(Value.Check(shelfListQuerySchema(), { orderBy: 'personalScore', direction: 'asc', limit: 2 })).toBe(true);
 });
 
 test('atomic Content score update, clear, counted-target merge and Entry identity/removal invalidate the native order facts', async () => {

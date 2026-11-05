@@ -137,7 +137,7 @@ export async function readQuestionManagementSource(input: {
   try {
     const body = await boundedBody(response);
     const source: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
-    if (!Value.Check(QuestionManagementResponseSchema, source)) return { state: 'unavailable' };
+    if (!Value.Check(QuestionManagementResponseSchema(), source)) return { state: 'unavailable' };
     const page = source as QuestionManagementPageData;
     if (
       page.realmId !== input.address.realmId ||

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
@@ -30,36 +31,53 @@ import {
 } from './scope-members-source-declaration.ts';
 
 const sourceBound = (work: Readonly<WorkReceipt['used']>): Bound => declareBound({ ...work, engineRequests: 0 });
-const ordinalPath = MEMBERS_PREPARATION_SOURCE_PATHS.ordinal;
-const nativeOrdinal = nativeCollectionOrdinalPageBound(ordinalPath.rawOrdinalRowsMaximum);
+function ordinalPath() {
+  return memoizedValue(ordinalPath, () => MEMBERS_PREPARATION_SOURCE_PATHS.ordinal);
+}
+function nativeOrdinal() {
+  return memoizedValue(nativeOrdinal, () => nativeCollectionOrdinalPageBound(ordinalPath().rawOrdinalRowsMaximum));
+}
 // Reuse the selected Source metadata envelope and Search body ceiling. They already include the two
 // work-definition currentness reads and the reached current identity, owner-filter, and disclosure calls.
-const ordinalTerms = Object.freeze({
-  metadataPrefix: MEMBERS_PREPARATION_SOURCE_TERMS.metadataPrefix,
-  searchBody: MEMBERS_PREPARATION_SOURCE_TERMS.searchBody,
-  collectionState: repeatBound(sourceBound(CANONICAL_SOURCE_RECEIVING_COST.state), ordinalPath.membersSnapshots),
-  nativeOrdinal: repeatBound(sourceBound(nativeOrdinal.work), ordinalPath.rawOrdinalRowsMaximum),
-  sourceTransaction: MEMBERS_PREPARATION_SOURCE_TERMS.sourceTransaction,
-});
-const ordinalCost = sumBounds(...Object.values(ordinalTerms));
-if (!withinCeiling(ordinalCost, MEMBERS_PREPARATION_SOURCE_COST))
-  throw new TypeError('Selected ordinal Source operation exceeds its existing Source declaration');
+function ordinalTerms() {
+  return memoizedValue(ordinalTerms, () =>
+    Object.freeze({
+      metadataPrefix: MEMBERS_PREPARATION_SOURCE_TERMS().metadataPrefix,
+      searchBody: MEMBERS_PREPARATION_SOURCE_TERMS().searchBody,
+      collectionState: repeatBound(sourceBound(CANONICAL_SOURCE_RECEIVING_COST().state), ordinalPath().membersSnapshots),
+      nativeOrdinal: repeatBound(sourceBound(nativeOrdinal().work), ordinalPath().rawOrdinalRowsMaximum),
+      sourceTransaction: MEMBERS_PREPARATION_SOURCE_TERMS().sourceTransaction,
+    }),
+  );
+}
+function ordinalCost() {
+  return memoizedValue(ordinalCost, () => {
+    const cost = sumBounds(...Object.values(ordinalTerms()));
+    if (!withinCeiling(cost, MEMBERS_PREPARATION_SOURCE_COST()))
+      throw new TypeError('Selected ordinal Source operation exceeds its existing Source declaration');
+    return cost;
+  });
+}
 
 /** Fixed selected-work schedule for one raw ordinal continuation. This bounds work; it grants no dispatch authority. */
-export const SEARCH_SCOPE_ORDINAL_OPERATION = Object.freeze({
-  axes: BOUND_AXES,
-  rawLimit: ordinalPath.rawOrdinalRowsMaximum,
-  schedule: ordinalPath,
-  nativeStatement: Object.freeze({
-    limit: nativeOrdinal.limit,
-    requestBytes: nativeOrdinal.requestBytes,
-    resultBytes: nativeOrdinal.resultBytes,
-    work: sourceBound(nativeOrdinal.work),
-  }),
-  terms: ordinalTerms,
-  cost: ordinalCost,
-  ceiling: MEMBERS_PREPARATION_SOURCE_COST,
-});
+export function SEARCH_SCOPE_ORDINAL_OPERATION() {
+  return memoizedValue(SEARCH_SCOPE_ORDINAL_OPERATION, () =>
+    Object.freeze({
+      axes: BOUND_AXES,
+      rawLimit: ordinalPath().rawOrdinalRowsMaximum,
+      schedule: ordinalPath(),
+      nativeStatement: Object.freeze({
+        limit: nativeOrdinal().limit,
+        requestBytes: nativeOrdinal().requestBytes,
+        resultBytes: nativeOrdinal().resultBytes,
+        work: sourceBound(nativeOrdinal().work),
+      }),
+      terms: ordinalTerms(),
+      cost: ordinalCost(),
+      ceiling: MEMBERS_PREPARATION_SOURCE_COST(),
+    }),
+  );
+}
 
 /** Internal Source locator, never an authority assertion or public Search sort. */
 export type SearchScopeOrder =
@@ -160,7 +178,7 @@ export function createSearchScopeOrder(
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Invalid ordinal limit');
       const statement =
         options.work?.kind === 'members-preparation'
-          ? SEARCH_SCOPE_ORDINAL_OPERATION.nativeStatement
+          ? SEARCH_SCOPE_ORDINAL_OPERATION().nativeStatement
           : nativeCollectionOrdinalPageBound(limit);
       if (limit !== statement.limit) throw new ProblemError('dependency_unavailable');
       const admitted = await currentWork(collection.order, collection.observation);

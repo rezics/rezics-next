@@ -34,7 +34,7 @@ function unavailable(): ProblemError {
 export function collectionPublicationStepAllowance(reservationId: string) {
   return {
     reservationId,
-    remaining: collectionPublicationWorkDimensions(COLLECTION_PUBLICATION_STEP_CEILING),
+    remaining: collectionPublicationWorkDimensions(COLLECTION_PUBLICATION_STEP_CEILING()),
   };
 }
 

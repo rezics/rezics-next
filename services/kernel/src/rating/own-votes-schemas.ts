@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import { RatingQuestionResponseSchema, RatingVoteResponseSchema } from './vote-response-schemas.ts';
@@ -24,28 +25,32 @@ export const OwnVoteActionsSchema = t.Union([
     closed,
   ),
 ]);
-export const OwnVotesPageSchema = t.Object(
-  {
-    viewer: t.Object({ accountId: id }, closed),
-    votes: t.Array(
-      t.Object(
-        {
-          targetId: id,
-          questionId: id,
-          subject: SubjectSummarySchema,
-          subjectHref: path,
-          question: RatingQuestionResponseSchema,
-          own: RatingVoteResponseSchema,
-          actions: OwnVoteActionsSchema,
-        },
-        closed,
-      ),
-      { maxItems: 20 },
+export function OwnVotesPageSchema() {
+  return memoizedValue(OwnVotesPageSchema, () =>
+    t.Object(
+      {
+        viewer: t.Object({ accountId: id }, closed),
+        votes: t.Array(
+          t.Object(
+            {
+              targetId: id,
+              questionId: id,
+              subject: SubjectSummarySchema,
+              subjectHref: path,
+              question: RatingQuestionResponseSchema,
+              own: RatingVoteResponseSchema,
+              actions: OwnVoteActionsSchema,
+            },
+            closed,
+          ),
+          { maxItems: 20 },
+        ),
+        next: t.Union([t.String(), t.Null()]),
+      },
+      closed,
     ),
-    next: t.Union([t.String(), t.Null()]),
-  },
-  closed,
-);
+  );
+}
 export const OwnVotesPageQuerySchema = t.Object(
   { cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })) },
   closed,

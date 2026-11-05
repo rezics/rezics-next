@@ -28,7 +28,7 @@ test('closed ordering API imports the canonical native ordinal key and raw row c
 });
 
 test('selected ordinal dispatch follows its complete immutable Source ceiling and one-row schedule', () => {
-  const plan = SEARCH_SCOPE_ORDINAL_OPERATION;
+  const plan = SEARCH_SCOPE_ORDINAL_OPERATION();
   expect(plan.axes).toEqual(BOUND_AXES);
   expect(plan.rawLimit).toBe(1);
   expect(plan.schedule).toMatchObject({

@@ -160,7 +160,7 @@ test('default registered tombstone effect resumes after process and DBOS loss, r
       },
     );
     const deadline = Date.now() + 540000;
-    while ((await progress(erased.accountId))?.phase !== NATIVE_ERASURE_GROUPS.length && Date.now() < deadline) {
+    while ((await progress(erased.accountId))?.phase !== NATIVE_ERASURE_GROUPS().length && Date.now() < deadline) {
       const status = await client.getWorkflow(nativeId);
       if (status?.status === 'ERROR' || status?.status === 'MAX_RECOVERY_ATTEMPTS_EXCEEDED')
         throw new Error(`Native erasure failed: ${JSON.stringify(status)}`);
@@ -168,7 +168,7 @@ test('default registered tombstone effect resumes after process and DBOS loss, r
     }
     expect(await progress(erased.accountId)).toEqual({
       progress_id: progressId,
-      phase: NATIVE_ERASURE_GROUPS.length,
+      phase: NATIVE_ERASURE_GROUPS().length,
       page: 0,
       pending: 'native-inventory',
     });

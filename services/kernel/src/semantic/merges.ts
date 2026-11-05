@@ -157,7 +157,7 @@ export async function admitMergeSubjects(
       digest: options.digest,
     },
   };
-  const job = await identityEpochStore.prepareAdmission(
+  const job = await identityEpochStore().prepareAdmission(
     pool,
     {
       basis: {
@@ -233,7 +233,7 @@ export async function observeSubjectIdentityOperation(
     | { job_id: string; epoch: string }
     | undefined;
   if (!found) return null;
-  const job = await identityEpochStore.readJob(tx, { jobId: found.job_id, epoch: BigInt(found.epoch) });
+  const job = await identityEpochStore().readJob(tx, { jobId: found.job_id, epoch: BigInt(found.epoch) });
   if (!job || identityJobPartition(job.ref) !== partitionOf(route)) return null;
   if (job.intent.kind !== 'merge' || job.receipt.kind !== 'subject.merge') return null;
   const complete =

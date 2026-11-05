@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool, PoolClient } from 'pg';
 import { defineQuery } from 'reylo';
 import { Value } from 'typebox/value';
@@ -34,28 +35,36 @@ import markPriorRepublishPage from './public-figure-republish-mark-page.sql';
 import { flushPopulationTotalDeliveries, readPopulationTotalClock } from './population-total.ts';
 import { STANDARD_QUESTION_ID } from './votes.ts';
 
-const readPublicFiguresStatement = defineQuery<
-  (typeof readPublicFiguresSql)['~reylo']['input'],
-  (typeof readPublicFiguresSql)['~reylo']['element'],
-  typeof readPublicFiguresSql.cardinality,
-  'postgres'
->({
-  dialect: readPublicFiguresSql.dialect,
-  sql: readPublicFiguresSql.raw,
-  params: readPublicFiguresSql.params,
-  cardinality: readPublicFiguresSql.cardinality,
-});
-const pagePublicFiguresStatement = defineQuery<
-  (typeof pagePublicFiguresSql)['~reylo']['input'],
-  (typeof pagePublicFiguresSql)['~reylo']['element'],
-  typeof pagePublicFiguresSql.cardinality,
-  'postgres'
->({
-  dialect: pagePublicFiguresSql.dialect,
-  sql: pagePublicFiguresSql.raw,
-  params: pagePublicFiguresSql.params,
-  cardinality: pagePublicFiguresSql.cardinality,
-});
+function readPublicFiguresStatement() {
+  return memoizedValue(readPublicFiguresStatement, () =>
+    defineQuery<
+      (typeof readPublicFiguresSql)['~reylo']['input'],
+      (typeof readPublicFiguresSql)['~reylo']['element'],
+      typeof readPublicFiguresSql.cardinality,
+      'postgres'
+    >({
+      dialect: readPublicFiguresSql.dialect,
+      sql: readPublicFiguresSql.raw,
+      params: readPublicFiguresSql.params,
+      cardinality: readPublicFiguresSql.cardinality,
+    }),
+  );
+}
+function pagePublicFiguresStatement() {
+  return memoizedValue(pagePublicFiguresStatement, () =>
+    defineQuery<
+      (typeof pagePublicFiguresSql)['~reylo']['input'],
+      (typeof pagePublicFiguresSql)['~reylo']['element'],
+      typeof pagePublicFiguresSql.cardinality,
+      'postgres'
+    >({
+      dialect: pagePublicFiguresSql.dialect,
+      sql: pagePublicFiguresSql.raw,
+      params: pagePublicFiguresSql.params,
+      cardinality: pagePublicFiguresSql.cardinality,
+    }),
+  );
+}
 
 const FIGURE_CHANGED = 'com.rezics.rating.public_figure.changed.v1';
 const AGGREGATE_APPLIED = 'com.rezics.rating.aggregate.applied.v1';
@@ -663,7 +672,7 @@ export async function readPublicFigures(
     if (route === null || partitionOf(route) !== input.partition)
       throw new TypeError('Public figure subjects must belong to the requested partition');
   }
-  const rows = (await readPublicFiguresStatement.run(client, {
+  const rows = (await readPublicFiguresStatement().run(client, {
     partition_no: input.partition,
     question_id: input.questionId,
     population_id: input.populationId,
@@ -686,7 +695,7 @@ export async function pagePublicFigures(
     (input.after !== null && (afterRoute === null || partitionOf(afterRoute) !== input.partition))
   )
     throw new TypeError('Invalid public rating figure page');
-  const rows = (await pagePublicFiguresStatement.run(client, {
+  const rows = (await pagePublicFiguresStatement().run(client, {
     partition_no: input.partition,
     question_id: input.questionId,
     population_id: input.populationId,
@@ -741,7 +750,7 @@ export function createPublicFigureDrainEffect(pool: Pool): Effect {
       const partition = eventPartition(event);
       await flushPopulationTotalDeliveries(pool, partition);
       if (event.type === PRIOR_EPOCH_WORK) {
-        if (!Value.Check(RATING_EVENTS[PRIOR_EPOCH_WORK], event.data))
+        if (!Value.Check(RATING_EVENTS()[PRIOR_EPOCH_WORK], event.data))
           throw new TypeError('Invalid rating prior epoch work event');
         const data = event.data as {
           action: 'check' | 'mark' | 'advance';
@@ -764,7 +773,7 @@ export function createPublicFigureDrainEffect(pool: Pool): Effect {
         return;
       }
 
-      if (event.type !== AGGREGATE_APPLIED || !Value.Check(RATING_EVENTS[AGGREGATE_APPLIED], event.data))
+      if (event.type !== AGGREGATE_APPLIED || !Value.Check(RATING_EVENTS()[AGGREGATE_APPLIED], event.data))
         throw new TypeError('Invalid rating aggregate applied event');
       while ((await drainPublicFigures(pool, partition)) === MAX_DRAIN_LIMIT) {
         // A full page has a successor; durable prior-epoch work events drive pages on other partitions.

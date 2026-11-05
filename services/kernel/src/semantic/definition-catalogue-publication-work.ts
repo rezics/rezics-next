@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool, QueryResultRow } from 'pg';
 import {
   runCommand,
@@ -64,13 +65,13 @@ function commandBound(): WorkDimensions {
       },
       repetitions[id as CataloguePublisherOperation] ?? 1,
     );
-  for (const [id, cost] of Object.entries(CATALOGUE_PUBLISHER_CONTROLS)) add(cost, id === 'memberIdentity' ? 65 : 1);
+  for (const [id, cost] of Object.entries(CATALOGUE_PUBLISHER_CONTROLS())) add(cost, id === 'memberIdentity' ? 65 : 1);
   // Request, close, cut/stage and finish: at most four transitions, each with
   // at most four head/root/status points. Include one bounded retirement component.
   for (const [id, cost] of Object.entries(CATALOGUE_BODY_COST))
     add({ ...cost, bytes: cost.bytes + 262144 }, id === 'withdrawalAck' ? 100 : 16);
   for (const cost of Object.values(CATALOGUE_NATIVE_CONTROLS)) add(cost, 4);
-  for (const op of Object.values(CATALOGUE_LEDGER_OPERATIONS))
+  for (const op of Object.values(CATALOGUE_LEDGER_OPERATIONS()))
     add(
       {
         ...op.bound,
@@ -82,7 +83,9 @@ function commandBound(): WorkDimensions {
     if (!Number.isSafeInteger(total[axis])) throw new TypeError('Catalogue bound overflow');
   return Object.freeze(total);
 }
-export const CATALOGUE_COMMAND_BOUND = commandBound();
+export function CATALOGUE_COMMAND_BOUND() {
+  return memoizedValue(CATALOGUE_COMMAND_BOUND, () => commandBound());
+}
 type Binding = Readonly<{
   phase: CataloguePublisherPhase;
   root: string;
@@ -131,13 +134,13 @@ export async function cataloguePublisherQuery<R extends QueryResultRow = QueryRe
 }
 export async function cataloguePublisherControl<T>(
   tx: CommandTransaction,
-  operation: keyof typeof CATALOGUE_PUBLISHER_CONTROLS,
+  operation: keyof ReturnType<typeof CATALOGUE_PUBLISHER_CONTROLS>,
   body: () => Promise<T>,
 ): Promise<T> {
   const bound = boundCommand(tx);
   return catalogueBodyWork(
     bound.work,
-    CATALOGUE_PUBLISHER_CONTROLS[operation],
+    CATALOGUE_PUBLISHER_CONTROLS()[operation],
     body,
     currentCommandResources(tx).deadline,
   );
@@ -181,7 +184,7 @@ export function cataloguePublisherInvocation(pool: Pool, phase: CataloguePublish
         const command = currentCommand(tx);
         if (!mechanical && command.authorization?.mode !== 'execute') throw new AccessUnavailableError('overloaded');
         const work = new NativeCollectionWork(
-          { reservationId: context.transactionId, remaining: CATALOGUE_COMMAND_BOUND },
+          { reservationId: context.transactionId, remaining: CATALOGUE_COMMAND_BOUND() },
           currentCommandResources(tx).deadline,
         );
         bindings.set(tx, { phase, root, command, work });

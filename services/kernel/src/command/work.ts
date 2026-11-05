@@ -83,7 +83,7 @@ export function createCommandWorkAssociation(
   )
     throw new TypeError('Invalid original native command work frame or deadline');
   const bound = copyDimensions(envelope);
-  if (!bound) throw new AccessWorkUnavailableError('Collection command work envelope');
+  if (!bound) throw new (AccessWorkUnavailableError())('Collection command work envelope');
   const requiredBound = bound;
 
   native.assertReady();
@@ -99,16 +99,16 @@ export function createCommandWorkAssociation(
 
   function reserveFrame(operation: string, candidate: WorkDimensions | undefined) {
     if (!open || currentCommandWorkAssociation() !== association)
-      throw new AccessWorkUnavailableError(`${operation}: command work frame`);
+      throw new (AccessWorkUnavailableError())(`${operation}: command work frame`);
     if (typeof operation !== 'string' || operation.length === 0) throw new TypeError('Invalid command work operation');
     native.assertReady();
     if (!Number.isFinite(deadline) || Date.now() >= deadline)
-      throw new AccessWorkUnavailableError(`${operation}: deadline`);
+      throw new (AccessWorkUnavailableError())(`${operation}: deadline`);
     const child = copyDimensions(candidate);
-    if (!child) throw new AccessWorkUnavailableError(operation);
+    if (!child) throw new (AccessWorkUnavailableError())(operation);
     for (const axis of sourceAxes) {
       if (used[axis] + held[axis] + child[axis] > requiredBound[axis])
-        throw new AccessWorkUnavailableError(`${operation}: command work capacity`);
+        throw new (AccessWorkUnavailableError())(`${operation}: command work capacity`);
     }
     for (const axis of sourceAxes) held[axis] += child[axis];
 
@@ -167,7 +167,9 @@ export function createCommandWorkAssociation(
       if (!open) return closeFailure;
       open = false;
       if (pending.size) {
-        closeFailure = new AccessWorkUnavailableError('Collection command work has unsettled dispatched operations');
+        closeFailure = new (AccessWorkUnavailableError())(
+          'Collection command work has unsettled dispatched operations',
+        );
         for (const finish of [...pending.values()]) finish();
       }
       const actual = { ...used, nativeRows: bound.nativeRows };

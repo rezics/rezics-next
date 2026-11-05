@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
@@ -821,7 +822,7 @@ export async function readAgentIdentityRecoveryArtifactInTransaction(
   try {
     await reserveIdentityHistoryWork(
       resources.pool,
-      AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST,
+      AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST(),
       context ?? {
         deadline: resources.deadline,
       },
@@ -861,11 +862,14 @@ export async function readAgentIdentityRecoveryArtifactInTransaction(
 // The in-transaction cut and released snapshot are separate reached declarations.
 // BEGIN, timeout setting, COMMIT and failure ROLLBACK add four statements, one
 // returned setting row and its 128-byte bound before the snapshot's checkout.
-export const AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST = nativeWork(135, 135, 6, 32768);
-export const AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST = addNativeWork(
-  AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST,
-  nativeWork(1, 0, 4, 128),
-);
+export function AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST() {
+  return memoizedValue(AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST, () => nativeWork(135, 135, 6, 32768));
+}
+export function AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST() {
+  return memoizedValue(AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST, () =>
+    addNativeWork(AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST(), nativeWork(1, 0, 4, 128)),
+  );
+}
 
 /** Released exact recovery cut plus the ordinary History receiving API; no SDK mapping is read. */
 export async function readAgentIdentityRecoveryInventory(
@@ -878,7 +882,7 @@ export async function readAgentIdentityRecoveryInventory(
   const fixedKey = structuredClone(key);
   const partition = params(fixedKey)[0];
   historyDeadline(context, partition);
-  await reserveIdentityHistoryWork(deps.pool, AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST, context);
+  await reserveIdentityHistoryWork(deps.pool, AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST(), context);
   const inventory = await withConnection(deps.pool, async (tx) => {
     await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     try {
@@ -1169,8 +1173,12 @@ export async function verifyAgentIdentityInventory(
     if (held.state === 'pending') return { state: 'pending', native: 'verified', gap: held.gap };
     // This verifies the actual original durable-work physical row, full immutable
     // role union, later receiving COMMIT, generation-2 guard and eight-table absence.
-    const { AGENT_IDENTITY_HISTORY_GUARD_COST, AGENT_IDENTITY_HISTORY_ABSENCE_COST } =
-      await import('./agent-identity-sdk-fence.ts');
+    const {
+      AGENT_IDENTITY_HISTORY_GUARD_COST: AGENT_IDENTITY_HISTORY_GUARD_COSTGetter,
+      AGENT_IDENTITY_HISTORY_ABSENCE_COST: AGENT_IDENTITY_HISTORY_ABSENCE_COSTGetter,
+    } = await import('./agent-identity-sdk-fence.ts');
+    const AGENT_IDENTITY_HISTORY_GUARD_COST = AGENT_IDENTITY_HISTORY_GUARD_COSTGetter();
+    const AGENT_IDENTITY_HISTORY_ABSENCE_COST = AGENT_IDENTITY_HISTORY_ABSENCE_COSTGetter();
     const { addNativeWork } = await import('./agent-identity-inventory-work.ts');
     await reserveIdentityHistoryWork(
       pool,

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import {
   BATCH_LIMIT,
@@ -51,13 +52,22 @@ import type { subjectRoutes } from './subjects.ts';
 
 // A malformed command key still needs its own result. Keep the portable success
 // shapes while allowing the diagnostic result to echo an empty or invalid key.
-const portableResult = BatchWriteResultSchema.properties.results.items.anyOf;
-const responseSchema = t.Object({
-  results: t.Array(t.Union([portableResult[0], t.Object({ ...portableResult[1].properties, key: t.String() })]), {
-    minItems: 1,
-    maxItems: BATCH_LIMIT,
-  }),
-});
+function portableResult() {
+  return memoizedValue(portableResult, () => BatchWriteResultSchema.properties.results.items.anyOf);
+}
+function responseSchema() {
+  return memoizedValue(responseSchema, () =>
+    t.Object({
+      results: t.Array(
+        t.Union([portableResult()[0], t.Object({ ...portableResult()[1].properties, key: t.String() })]),
+        {
+          minItems: 1,
+          maxItems: BATCH_LIMIT,
+        },
+      ),
+    }),
+  );
+}
 
 /** `unavailable` is an availability verdict. It is raised only after the command's authorization and source fence. */
 type Pending = {
@@ -145,7 +155,7 @@ export function bulkRoutes(
         { additionalProperties: false },
       ),
       response: {
-        200: withHeaders(responseSchema, { [SESSION_HEADER]: t.String() }),
+        200: withHeaders(responseSchema(), { [SESSION_HEADER]: t.String() }),
         400: problemSchema('invalid_request'),
         401: problemSchema('authentication_required', 'invalid_credentials'),
         403: problemSchema('forbidden'),

@@ -82,7 +82,7 @@ async function preparation(
   else await guard.write(subjectPartition(original), [original], 0n);
   const actor = await f.actor();
   const commandKey = randomUUID();
-  const job = await store.prepareAdmission(
+  const job = await store().prepareAdmission(
     f.pool,
     {
       basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -332,7 +332,7 @@ test('native drain counts committed preparations and distinguishes an unprepared
   );
   expect(empty.value.value).toEqual({ state: 'empty' });
   // Native empty never claims Source first-apply/support/participant completion.
-  expect((await store.readJob(f.pool, input.selection.job))?.participants['search-canonical-index']).toBeNull();
+  expect((await store().readJob(f.pool, input.selection.job))?.participants['search-canonical-index']).toBeNull();
 });
 
 test('native work retains the original finite reservation and deadline across caller mutation', () => {

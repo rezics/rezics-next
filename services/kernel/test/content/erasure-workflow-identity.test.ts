@@ -350,7 +350,7 @@ for (const same of [true, false])
   });
 
 test('requested event catalogue is closed and native readBatch still stops unknown or malformed events', async () => {
-  expect(CONTENT_EVENTS[requested]).toBe(OPERATION_EVENTS[requested]);
+  expect(CONTENT_EVENTS()[requested]).toBe(OPERATION_EVENTS[requested]);
   expect(Value.Check(OPERATION_EVENTS[requested], data(target))).toBe(true);
   for (const invalid of [
     { ...data(target), body: 'private' },

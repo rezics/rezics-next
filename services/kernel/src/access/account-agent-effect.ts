@@ -51,7 +51,7 @@ export function accountAgentOptions(account: AccountAgentSource) {
 }
 
 function validateEvent(event: CloudEvent): string {
-  const schema = (ACCESS_EVENTS as unknown as Record<string, TSchema>)[event.type];
+  const schema = (ACCESS_EVENTS() as unknown as Record<string, TSchema>)[event.type];
   if (!ACCOUNT_AGENT_EVENT_TYPES.includes(event.type) || !schema || !Value.Check(schema, event.data))
     throw new TypeError('Invalid account agent event');
   const accountId = (event.data as { accountId: string }).accountId;

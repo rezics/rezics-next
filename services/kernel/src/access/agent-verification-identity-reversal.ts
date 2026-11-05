@@ -199,7 +199,7 @@ async function published(pool: Pool, entry: Bound, deadline: number): Promise<vo
   const read = async () =>
     (
       await runCommand(pool, { partition: entry.binding.home, deadline }, async (tx) => {
-        const saved = await identityEpochStore.readJob(tx, job);
+        const saved = await identityEpochStore().readJob(tx, job);
         // Native job/control ownership is checked at its own home, released before Source.
         const current = (
           await tx.query(
@@ -240,7 +240,7 @@ async function published(pool: Pool, entry: Bound, deadline: number): Promise<vo
       normalized(progress.receipt.job) !== normalized(job)
     )
       throw accountIdentityUnavailable('incomplete original native publication receipt');
-    const reconciled = await identityEpochStore.reconcileStepReceipt(pool, progress.receipt);
+    const reconciled = await identityEpochStore().reconcileStepReceipt(pool, progress.receipt);
     if (reconciled.state !== 'complete' || normalized(reconciled) !== normalized(progress))
       throw accountIdentityUnavailable('unreconciled original native publication receipt');
   }

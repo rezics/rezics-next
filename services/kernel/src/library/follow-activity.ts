@@ -157,7 +157,7 @@ export function createFollowActivitySource(deps: {
           result.push({ target, status: exact?.state === 'following' ? 'following' : 'not_following' });
           continue;
         }
-        const mapping = await within(deadline, () => identityEpochStore.readMapping(deps.pool, target.id));
+        const mapping = await within(deadline, () => identityEpochStore().readMapping(deps.pool, target.id));
         if (mapping.state === 'absent') {
           result.push({ target, status: 'not_following' });
           continue;
@@ -172,7 +172,7 @@ export function createFollowActivitySource(deps: {
           continue;
         }
         if (exact?.state === 'following') {
-          const final = await within(deadline, () => identityEpochStore.readMapping(deps.pool, target.id));
+          const final = await within(deadline, () => identityEpochStore().readMapping(deps.pool, target.id));
           const native = await ownerRows([target.id]);
           result.push({
             target,
@@ -208,9 +208,9 @@ export function createFollowActivitySource(deps: {
           continue;
         }
         const ids = pairs.map((pair) => pair.original_id);
-        const mappings = await within(deadline, () => identityEpochStore.readMappings(deps.pool, ids));
+        const mappings = await within(deadline, () => identityEpochStore().readMappings(deps.pool, ids));
         const originalRows = await ownerRows(ids);
-        const finalMappings = await within(deadline, () => identityEpochStore.readMappings(deps.pool, ids));
+        const finalMappings = await within(deadline, () => identityEpochStore().readMappings(deps.pool, ids));
         const finalRows = await ownerRows(ids);
         const positive = mappings.some(
           (value) =>
@@ -231,7 +231,7 @@ export function createFollowActivitySource(deps: {
               (row) => row.target_id === value.original && row.target_type === 'subject' && row.state === 'following',
             ),
         );
-        const final = await within(deadline, () => identityEpochStore.readMapping(deps.pool, target.id));
+        const final = await within(deadline, () => identityEpochStore().readMapping(deps.pool, target.id));
         result.push({
           target,
           status:

@@ -204,7 +204,7 @@ async function assertOutputs(bytes: Uint8Array, width: number, height: number, w
     event_count: 1,
     data: { mediaId: fixture.id, containerId: fixture.containerId },
   });
-  expect(Value.Check(CONTENT_EVENTS['com.rezics.content.media.available.v1'], snapshot.events[0].data)).toBe(true);
+  expect(Value.Check(CONTENT_EVENTS()['com.rezics.content.media.available.v1'], snapshot.events[0].data)).toBe(true);
   expect(snapshot.events[0].id).toMatch(/^[0-9a-f-]{36}$/);
   const position = await admin.query('SELECT epoch,position FROM core.partition WHERE partition_no=$1', [
     partitionOf(fixture.route),
@@ -302,7 +302,7 @@ test('malformed over-pixel and truncated images reject without retaining samples
     expect(fixture.store.deletes).toEqual([`m/${fixture.id}/`]);
     expect(snapshot.events).toHaveLength(1);
     expect(snapshot.events[0]).toMatchObject({ type: 'com.rezics.content.media.rejected.v1', subject: fixture.id });
-    expect(Value.Check(CONTENT_EVENTS['com.rezics.content.media.rejected.v1'], snapshot.events[0].data)).toBe(true);
+    expect(Value.Check(CONTENT_EVENTS()['com.rezics.content.media.rejected.v1'], snapshot.events[0].data)).toBe(true);
     expect((await processImage(pool, fixture.store, fixture.id)).state).toBe('already_terminal');
     expect(await inspect(fixture)).toEqual(snapshot);
     expect([...fixture.store.objects.keys()]).toEqual([]);
@@ -553,7 +553,7 @@ test('closed media schemas preserve command payloads and the actual consumer acc
   const fixture = await uploaded(await source(), new ByteStore(), route + 48);
   await processImage(pool, fixture.store, fixture.id);
   for (const name of ['reserved', 'uploaded'] as const) {
-    const schema = CONTENT_EVENTS[`com.rezics.content.media.${name}.v1`];
+    const schema = CONTENT_EVENTS()[`com.rezics.content.media.${name}.v1`];
     const data = { mediaId: fixture.id, containerId: fixture.containerId, actorId: newId(route) };
     expect(Value.Check(schema, data)).toBe(true);
     expect(Value.Check(schema, { ...data, body: 'private' })).toBe(false);
@@ -569,7 +569,7 @@ test('closed media schemas preserve command payloads and the actual consumer acc
   });
   expect(result.status).toBe('read');
   expect(applied).toEqual(['com.rezics.content.media.available.v1']);
-  const schema = CONTENT_EVENTS['com.rezics.content.media.available.v1'];
+  const schema = CONTENT_EVENTS()['com.rezics.content.media.available.v1'];
   expect(Value.Check(schema, { mediaId: fixture.id, containerId: fixture.containerId, unexpected: true })).toBe(false);
   expect(Value.Check(schema, { mediaId: 3, containerId: fixture.containerId })).toBe(false);
 });

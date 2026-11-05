@@ -77,7 +77,7 @@ test('an actual admitted identity job yields complete original support and curre
       'resolved',
     );
     if (resolved.status !== 'resolved') throw new Error(`Native Source binding ${resolved.status}`);
-    const admission = await ordinaryAdmission(f, store, {
+    const admission = await ordinaryAdmission(f, store(), {
       kind: 'merge',
       survivor,
       redirected,
@@ -90,7 +90,7 @@ test('an actual admitted identity job yields complete original support and curre
       const result = await mapping(f.pool, job);
       if (result.state === 'complete') break;
     }
-    expect((await store.readJob(f.pool, job))?.mapping?.state).toBe('complete');
+    expect((await store().readJob(f.pool, job))?.mapping?.state).toBe('complete');
     expect(
       (
         await source.readPublicFilterProjectionPage({
@@ -146,11 +146,11 @@ test('an actual admitted identity job yields complete original support and curre
       });
       expect(record.projection.source.revision).toBeGreaterThan(0);
     }
-    const saved = await store.readJob(f.pool, job);
+    const saved = await store().readJob(f.pool, job);
     expect(saved?.state).toBe('pending');
     expect(saved?.participants['search-canonical-index']).toBeNull();
     expect(saved?.participants['library-private-follow-counts']).toBeNull();
-    expect((await store.readMapping(f.pool, survivor)).state).toBe('pending');
+    expect((await store().readMapping(f.pool, survivor)).state).toBe('pending');
     expect(
       (
         await source.readPublicFilterProjectionPage({
@@ -205,7 +205,7 @@ test('cancelled native preparation never becomes support readiness or an empty c
     const survivor = (await f.create('Cancelled target', 0x6020)).subject.id;
     const actor = await f.actor();
     const key = randomUUID();
-    const job = await store.prepareAdmission(
+    const job = await store().prepareAdmission(
       f.pool,
       {
         basis: {

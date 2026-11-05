@@ -93,8 +93,8 @@ test('non-JSON event data is refused without sealing startup registration', asyn
 });
 
 test('registered JSON snapshots commit, read back unchanged, and seal registration', async () => {
-  expect(readerTypes).toBe(EVENT_TYPES);
-  expect(EVENT_TYPES[type]).toBe(schema);
+  expect(readerTypes()).toBe(EVENT_TYPES());
+  expect(EVENT_TYPES()[type]).toBe(schema);
   expect(compiled.IsAccelerated()).toBe(true);
   const data = { n: 7, omitted: undefined };
   const result = await runCommand(

@@ -292,8 +292,8 @@ test('native Auth and mounted platform suspension commit the real terminal state
   expect(JSON.stringify(audit)).not.toContain(reason);
   expect(JSON.stringify(result.value)).not.toContain(reason);
   expect(audit[0].type).toBe('com.rezics.access.account.suspended.v1');
-  const schema = ACCESS_EVENTS['com.rezics.access.account.suspended.v1'];
-  expect(EVENT_TYPES['com.rezics.access.account.suspended.v1']).toBe(schema);
+  const schema = ACCESS_EVENTS()['com.rezics.access.account.suspended.v1'];
+  expect(EVENT_TYPES()['com.rezics.access.account.suspended.v1']).toBe(schema);
   expect(Value.Check(schema, audit[0].data)).toBe(true);
   expect(Value.Check(schema, { ...audit[0].data, reason })).toBe(false);
   expect(JSON.stringify(await readPublicAccount(db.pool, after.route, target.accountId))).not.toContain(reason);

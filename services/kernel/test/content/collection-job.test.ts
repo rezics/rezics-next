@@ -294,7 +294,7 @@ test('all unclaimed states collect at exactly 24 hours; younger, claimed, erased
   expect(await job().collectPartition(partition, 100)).toMatchObject({ examined: 0, collected: 0, complete: true });
   expect(await effects()).toEqual(snapshot);
   const events = (await admin.query('SELECT type,data FROM core.outbox')).rows;
-  for (const event of events) expect(Object.hasOwn(CONTENT_EVENTS, event.type)).toBe(true);
+  for (const event of events) expect(Object.hasOwn(CONTENT_EVENTS(), event.type)).toBe(true);
   expect(events.filter((e) => e.type === 'com.rezics.content.media.collected.v1')).toHaveLength(4);
   expect(await job().collectPartition(partition + 1, 1)).toMatchObject({ collected: 1 });
 });

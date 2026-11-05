@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
@@ -18,7 +19,9 @@ import {
 const sourcePattern = /^[a-z][a-z0-9_-]{0,31}$/;
 const controls = /[\u0000-\u001f\u007f-\u009f]/u;
 const decimal = /^(0|[1-9][0-9]*)$/;
-const sourceTupleLimit = SPACE_DISCOVERY_DEPENDENCY_PAGE;
+function sourceTupleLimit() {
+  return memoizedValue(sourceTupleLimit, () => SPACE_DISCOVERY_DEPENDENCY_PAGE);
+}
 
 export type SpaceDiscoveryTupleWitnessInput = Readonly<{
   spaceId: string;
@@ -126,7 +129,7 @@ function checkedInput(input: SpaceDiscoveryTupleWitnessInput): SpaceDiscoveryTup
         input.native.position !== input.sourcePosition ||
         String(input.native.epoch) !== input.producerEpoch)) ||
     !Array.isArray(input.tuples) ||
-    input.tuples.length > sourceTupleLimit
+    input.tuples.length > sourceTupleLimit()
   )
     throw new TypeError('Invalid Space source tuple witness');
   const tuples = input.tuples.map(checkedTuple);

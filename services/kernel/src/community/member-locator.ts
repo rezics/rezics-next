@@ -24,7 +24,7 @@ export function createMemberLocatorEffect(pool: Pool): Effect {
     async run(event) {
       if (
         (event.type !== sourceType && event.type !== terminalType) ||
-        !Value.Check(COMMUNITY_EVENTS[event.type], event.data)
+        !Value.Check(COMMUNITY_EVENTS()[event.type], event.data)
       )
         throw new TypeError('Invalid member locator source event');
       const data = event.data as {

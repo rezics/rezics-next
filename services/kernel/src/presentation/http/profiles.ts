@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { PresentationProfile } from '@rezics/composition';
@@ -25,7 +26,9 @@ import {
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { readCurationOpening } from '../curation-advice.ts';
 
-const resource = { route: 0, id: GLOBAL_CONTEXT };
+function resource() {
+  return memoizedValue(resource, () => ({ route: 0, id: GLOBAL_CONTEXT }));
+}
 const digestResponse = t.Object({ digest: t.String() }, { additionalProperties: false });
 const activeResponse = t.Object({ digest: t.String(), head: t.Integer() }, { additionalProperties: false });
 const profileObject = t.Record(t.String(), t.Any());
@@ -44,15 +47,22 @@ const curationOpeningResponse = t.Union([
     { additionalProperties: false },
   ),
 ]);
-const writeHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
-const unavailable = problemSchema(
-  'overloaded',
-  'partition_unavailable',
-  'transaction_retry_exhausted',
-  'deadline_exceeded',
-);
-const sessionHeaders = { [SESSION_HEADER]: t.String() };
+function writeHeaders() {
+  return memoizedValue(writeHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+  );
+}
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
+function unavailable() {
+  return memoizedValue(unavailable, () =>
+    problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  );
+}
+function sessionHeaders() {
+  return memoizedValue(sessionHeaders, () => ({ [SESSION_HEADER]: t.String() }));
+}
 
 function profileProblem(error: unknown): never {
   if (error instanceof ProfileInputError)
@@ -83,16 +93,16 @@ export function profileRoutes(
     .post(
       '/v1/presentation/profiles',
       {
-        headers: writeHeaders,
+        headers: writeHeaders(),
         body: t.Object({ profile: t.Any() }, { additionalProperties: false }),
         response: {
-          200: withHeaders(digestResponse, sessionHeaders),
-          201: withHeaders(digestResponse, sessionHeaders),
+          200: withHeaders(digestResponse, sessionHeaders()),
+          201: withHeaders(digestResponse, sessionHeaders()),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: {
           operationId: 'presentation.publish',
@@ -107,7 +117,7 @@ export function profileRoutes(
       async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const authorization = await authorizeCommand(resource, () => new ProfileAccessDeniedError());
+        const authorization = await authorizeCommand(resource(), () => new ProfileAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
             publishProfile(pool, {
@@ -137,7 +147,7 @@ export function profileRoutes(
             etag: t.String(),
             'cache-control': t.String(),
           }),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
         },
@@ -150,7 +160,7 @@ export function profileRoutes(
       },
       async ({ params, authorize, admission, job, set }) => {
         const check = await authorize({
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
         });
         const profile = await admission.run('normal', job, async () => {
@@ -168,7 +178,7 @@ export function profileRoutes(
       {
         response: {
           200: activeResponse,
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
         },
@@ -181,7 +191,7 @@ export function profileRoutes(
       },
       async ({ authorize, admission, job }) => {
         const check = await authorize({
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
         });
         const active = await admission.run('normal', job, async () => {
@@ -197,7 +207,7 @@ export function profileRoutes(
       {
         response: {
           200: withHeaders(curationOpeningResponse, { 'cache-control': t.String() }),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           409: problemSchema('stale_editorial_head'),
           503: problemSchema('overloaded', 'deadline_exceeded', 'dependency_unavailable'),
@@ -212,7 +222,7 @@ export function profileRoutes(
       async ({ actor, authorize, admission, job, headers, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         const check = await authorize({
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
         });
         return admission.run('normal', job, async () => {
@@ -249,20 +259,20 @@ export function profileRoutes(
       customMethod('/v1/presentation/profiles/:digest', 'activate'),
       {
         params: t.Object({ digest: t.String() }),
-        headers: writeHeaders,
+        headers: writeHeaders(),
         body: t.Object(
           { expected_head: t.Union([t.Integer({ minimum: 1, maximum: 2147483646 }), t.Null()]) },
           { additionalProperties: false },
         ),
         response: {
-          200: withHeaders(activeResponse, sessionHeaders),
+          200: withHeaders(activeResponse, sessionHeaders()),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('stale_editorial_head'),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: {
           operationId: 'presentation.activate',
@@ -277,7 +287,7 @@ export function profileRoutes(
       async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const authorization = await authorizeCommand(resource, () => new ProfileAccessDeniedError());
+        const authorization = await authorizeCommand(resource(), () => new ProfileAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
             activateProfile(pool, {

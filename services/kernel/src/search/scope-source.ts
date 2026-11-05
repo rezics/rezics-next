@@ -1601,7 +1601,7 @@ export function createSearchScopeSource({
       if (value.members) {
         const members = value.members;
         // One fixed raw window, including deletions/rejections. Unknown work stops before that raw slot.
-        const limit = SEARCH_SCOPE_ORDINAL_OPERATION.rawLimit;
+        const limit = SEARCH_SCOPE_ORDINAL_OPERATION().rawLimit;
         const raw = await runMembersWork(members.input, work, (budget) =>
           membersSource(budget, 4, (allowance) =>
             order!.rawOrdinal(value.collection!, request.after, limit, allowance),
@@ -1682,7 +1682,7 @@ export function createSearchScopeSource({
       if (!retained.complete) {
         // Each retry advances a retained, finite native frontier. No request scans the
         // collection to completion, and raw exhaustion alone never publishes a page.
-        const limit = SEARCH_SCOPE_ORDINAL_OPERATION.rawLimit;
+        const limit = SEARCH_SCOPE_ORDINAL_OPERATION().rawLimit;
         const raw = await order!.rawOrdinal(value.collection, retained.frontier, limit, work.remaining());
         work.native(raw.work);
         const rows: { subject: string; after: NativeOrdinalKey }[] = [];

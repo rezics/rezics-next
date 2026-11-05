@@ -11,7 +11,7 @@ import { withdrawFollowCountDestination } from './follow-count-target.ts';
  * relay replay cannot recreate a private source/account maintenance item. */
 export async function admitFollowCountErasure(client: PoolClient, event: CloudEvent) {
   if (
-    !Value.Check(ACCESS_EVENTS['com.rezics.access.account-tombstoned.v1'], event.data) ||
+    !Value.Check(ACCESS_EVENTS()['com.rezics.access.account-tombstoned.v1'], event.data) ||
     typeof event.data !== 'object' ||
     event.data === null ||
     !('accountId' in event.data) ||

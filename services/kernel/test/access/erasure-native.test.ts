@@ -459,9 +459,9 @@ describe('Access native terminal cleanup', () => {
     const before = await snapshot('account', survivor.accountId);
     await expect(openNativeErasure(pool, survivor.accountId)).rejects.toThrow();
     expect(await snapshot('account', survivor.accountId)).toEqual(before);
-    expect(NATIVE_ERASURE_GROUPS).toContainEqual(['resource_grant', 'subject_id']);
-    expect(NATIVE_ERASURE_GROUPS).toContainEqual(['resource_role_grant', 'subject_id']);
-    expect(NATIVE_ERASURE_GROUPS).toContainEqual(['resource_denial', 'subject_id']);
+    expect(NATIVE_ERASURE_GROUPS()).toContainEqual(['resource_grant', 'subject_id']);
+    expect(NATIVE_ERASURE_GROUPS()).toContainEqual(['resource_role_grant', 'subject_id']);
+    expect(NATIVE_ERASURE_GROUPS()).toContainEqual(['resource_denial', 'subject_id']);
   });
 
   test('native cleanup severs bootstrap attribution and rate associations without reopening either owner', async () => {
@@ -488,7 +488,7 @@ describe('Access native terminal cleanup', () => {
     // to obtain the denial: the counter's own transaction must enforce the fence.
     await expect(limiter.spend(retained, 'write')).rejects.toThrow();
     const progressId = await openNativeErasure(pool, erased.accountId);
-    const lastRate = NATIVE_ERASURE_GROUPS.findIndex(([store]) => store === 'write_rate_counter');
+    const lastRate = NATIVE_ERASURE_GROUPS().findIndex(([store]) => store === 'write_rate_counter');
     for (;;) {
       const progress = await pool.query('SELECT phase FROM access.erasure_native_progress WHERE progress_id=$1', [
         progressId,

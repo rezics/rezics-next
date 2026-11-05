@@ -6,6 +6,7 @@ import {
   buildGraph,
   changedGraph,
   formatModuleMap,
+  findLoadTimeReads,
   type ArchitectureManifest,
   type BoundaryBaseline,
   loadBaseline,
@@ -138,6 +139,110 @@ describe('architecture boundaries', () => {
     expect(report).toContain('rule 7: packages/foo/src/index.ts:');
     expect(report).toContain('apps/web/src/main.ts');
   });
+
+  test('reports eager repository reads through aliases, local calls, callbacks and static initialization', () => {
+    const root = fixtureRoot();
+    const current = manifest([]);
+    put(
+      root,
+      'src/peer.ts',
+      'export const value = Object.assign({}, { count: 1 }); export function make() { return value; }',
+    );
+    put(
+      root,
+      'src/literals.ts',
+      'import type { Value } from "./types"; export const LIMIT = Object.freeze({ count: 4 } as const);',
+    );
+    put(root, 'src/types.ts', 'export interface Value { count: number }');
+    put(
+      root,
+      'src/main.ts',
+      `
+      import { value as remote, make } from './peer';
+      import * as peer from './peer';
+      import { LIMIT } from './literals';
+      import type { Value } from './types';
+      const literal = LIMIT.count;
+      const copied = remote;
+      const called = make();
+      const namespace = peer.value;
+      function local() { return remote.count; }
+      const indirect = local();
+      const callback = [1].map(() => remote.count);
+      const immediate = (() => remote.count)();
+      const nested = (() => { function read() { return remote; } return read(); })();
+      const nestedArrow = (() => { const read = () => remote; return read(); })();
+      const deferred = () => remote.count;
+      function later(value = remote) { return value; }
+      function shadowed(remote: Value) { return remote.count; }
+      const shadow = shadowed({ count: 1 });
+      type Schema = typeof remote;
+      class Fields { instance = remote; static value = remote; method() { return remote; } }
+      class Deferred { instance = remote; method() { return remote; } }
+    `,
+    );
+    const reads = findLoadTimeReads(root, buildGraph(root, current)).filter((read) => read.file === 'src/main.ts');
+    expect([...new Set(reads.map((read) => read.initializer))].sort()).toEqual([
+      'ClassDeclaration',
+      'callback',
+      'called',
+      'copied',
+      'immediate',
+      'indirect',
+      'namespace',
+      'nested',
+      'nestedArrow',
+    ]);
+    expect(reads.every((read) => read.line > 0 && read.column > 0 && read.specifier === './peer')).toBe(true);
+  });
+
+  test('enforces Kernel load-time reads and rechecks a changed literal leaf against the full graph', () => {
+    const root = fixtureRoot();
+    const current: ArchitectureManifest = {
+      version: 1,
+      sourceRoots: [{ path: 'services/kernel/src', extensions: ['.ts'] }],
+      modules: [
+        {
+          id: 'kernel',
+          kind: 'adapter',
+          owner: 'platform',
+          paths: ['services/kernel/src/**'],
+          publicEntries: [],
+          allowedDependencies: [],
+          capabilities: [],
+        },
+      ],
+    };
+    put(root, 'services/kernel/src/leaf.ts', 'export const LIMIT = 4;');
+    put(root, 'services/kernel/src/consumer.ts', `import { LIMIT } from './leaf'; export const limit = LIMIT + 1;`);
+    const graph = buildGraph(root, current);
+    expect(auditArchitecture(root, current, baseline(), graph).violations.filter((v) => v.rule === 'rule 9')).toEqual(
+      [],
+    );
+    writeGraphCache(root, graph);
+    put(root, 'services/kernel/src/leaf.ts', 'export const LIMIT = Number("4");');
+    const result = auditArchitecture(
+      root,
+      current,
+      baseline(),
+      changedGraph(root, current, ['services/kernel/src/leaf.ts']),
+    );
+    expect(result.errors.join('\n')).toContain(
+      'rule 9: services/kernel/src/consumer.ts: load-time initializer limit reads LIMIT',
+    );
+  });
+
+  test('Kernel production modules have no cross-module load-time evaluation', () => {
+    const root = process.cwd();
+    const graph = buildGraph(root, loadManifest(root));
+    expect(
+      findLoadTimeReads(
+        root,
+        graph,
+        Object.keys(graph.hashes).filter((file) => file.startsWith('services/kernel/src/')),
+      ),
+    ).toEqual([]);
+  }, 60_000);
 
   test('requires an owner and reason on every ratchet group', () => {
     const errors = validateBaseline({

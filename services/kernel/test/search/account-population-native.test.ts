@@ -322,7 +322,7 @@ test('native account context reads the exact published agent graph and withholds
         { pool, deadline: Date.now() + 30_000 },
         { accountId, clientId, scopes },
       );
-      const store = identityEpochStore,
+      const store = identityEpochStore(),
         key = crypto.randomUUID();
       const receipt: IdentityReceipt = {
         kind: 'subject.merge',

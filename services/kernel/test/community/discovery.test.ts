@@ -92,7 +92,7 @@ test('discovery summaries collapse whitespace and truncate Unicode characters wi
     description: discoveryDescription(' A summary '),
     avatar: null,
   };
-  const response = Compile(discoveryResponseSchema);
+  const response = Compile(discoveryResponseSchema());
   expect(response.Check({ realms: [card], next: null })).toBe(true);
   expect(response.Check({ realms: [], next: 'signed-continuation' })).toBe(true);
   expect(response.Check({ items: [card], next: null })).toBe(false);
@@ -103,7 +103,7 @@ test('discovery summaries collapse whitespace and truncate Unicode characters wi
 });
 
 test('discovery accepts only the exact native image summary in its existing closed card', () => {
-  const response = Compile(discoveryResponseSchema);
+  const response = Compile(discoveryResponseSchema());
   const avatar = {
     id: newId(0x1234),
     containerId: newId(0x1234),
@@ -158,7 +158,7 @@ test('the assigned real current-authorized journey binds its native source while
       const response = await nativeKernel.handle(new Request(`http://kernel.test${path}`));
       expect(response.status).toBe(200);
       const value: unknown = await response.json();
-      expect(Compile(discoveryResponseSchema).Check(value)).toBe(true);
+      expect(Compile(discoveryResponseSchema()).Check(value)).toBe(true);
       return value as import('../../src/community/discovery.ts').DiscoveryPage;
     };
     const read = (currentAccess = access, cursor?: string) =>

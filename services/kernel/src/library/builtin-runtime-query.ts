@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { FilterDocument } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -31,27 +32,34 @@ export type OwnerQueryDependencies = {
   search?: SearchService;
 };
 
-class OwnerQueryWork extends ScopeWork {
-  constructor(readonly plan: OrdinaryCollectionPagePlan) {
-    super(scopeAllowance(plan.candidateLimit, crypto.randomUUID(), ordinaryPageWorkDimensions(plan.total)));
-  }
+function OwnerQueryWork() {
+  return memoizedValue(
+    OwnerQueryWork,
+    () =>
+      class OwnerQueryWork extends ScopeWork {
+        constructor(readonly plan: OrdinaryCollectionPagePlan) {
+          super(scopeAllowance(plan.candidateLimit, crypto.randomUUID(), ordinaryPageWorkDimensions(plan.total)));
+        }
 
-  override consume(used: WorkDimensions): void {
-    try {
-      super.consume(used);
-    } catch (error) {
-      if (error instanceof RangeError)
-        throw new ProblemError('dependency_unavailable', {
-          detail: error.message,
-        });
-      throw error;
-    }
-  }
+        override consume(used: WorkDimensions): void {
+          try {
+            super.consume(used);
+          } catch (error) {
+            if (error instanceof RangeError)
+              throw new ProblemError('dependency_unavailable', {
+                detail: error.message,
+              });
+            throw error;
+          }
+        }
+      },
+  );
 }
+type OwnerQueryWork = InstanceType<ReturnType<typeof OwnerQueryWork>>;
 
 /** Canonical and Search work settle into the same request reservation, including failed dispatches. */
 export function ownerQueryWork(limit: number, view: 'BASIC' | 'FULL' = 'BASIC') {
-  return new OwnerQueryWork(ordinaryCollectionPagePlan(limit, view));
+  return new (OwnerQueryWork())(ordinaryCollectionPagePlan(limit, view));
 }
 
 function canonicalAllowance(allowance: WorkAllowance) {
@@ -101,7 +109,7 @@ export async function openOwnerQuery(
   const close = () => {
     if (input.at === undefined) releaseOperationalTime(at);
   };
-  const planned = input.work instanceof OwnerQueryWork ? input.work.plan : undefined;
+  const planned = input.work instanceof OwnerQueryWork() ? input.work.plan : undefined;
   const native = planned ? createOrdinaryCollectionPageSource(deps) : createCollectionSource(deps);
   const context = { actor: input.actor, at, deadline: input.deadline };
   const sourceAllowance = (): WorkAllowance => ({

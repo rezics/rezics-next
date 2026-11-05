@@ -303,7 +303,7 @@ test.serial(
     const boardEvent = boardEvents.find((event) => event.subject === published.id)!;
     expect(boardEvent.type).toBe('com.rezics.content.board.created.v1');
     expect(boardEvent.data).toEqual({ boardId: published.id, realmId: null, conceptId, actorId: governance.accountId });
-    expect(Value.Check(CONTENT_EVENTS['com.rezics.content.board.created.v1'], boardEvent.data)).toBe(true);
+    expect(Value.Check(CONTENT_EVENTS()['com.rezics.content.board.created.v1'], boardEvent.data)).toBe(true);
 
     expect(published).toMatchObject({
       realmId: null,

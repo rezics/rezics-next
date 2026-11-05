@@ -66,7 +66,7 @@ export function shelfTitleObservations(ids: readonly string[], entries: readonly
     observations.size !== ids.length ||
     ids.some((id) => !observations.has(id))
   )
-    throw new ShelfReadUnavailableError('complete disclosed title batch');
+    throw new (ShelfReadUnavailableError())('complete disclosed title batch');
   for (const row of entries)
     if (
       typeof row.sourceBasis !== 'string' ||
@@ -74,7 +74,7 @@ export function shelfTitleObservations(ids: readonly string[], entries: readonly
       row.sourceBasis.length > 256 ||
       routeOf(row.sourceId) === null
     )
-      throw new ShelfReadUnavailableError('current title source reference');
+      throw new (ShelfReadUnavailableError())('current title source reference');
   return observations;
 }
 
@@ -107,7 +107,8 @@ export function createShelfTitlePreparation(deps: {
           try {
             const basis = await currentShelfTitleBasis(deps.titleSource, owner, languages, actor);
             // currentShelfTitleBasis reports the missing producer before any native candidate work.
-            if (!deps.titleSource) throw new ShelfReadUnavailableError('Content shelfTitleInputs.observe installation');
+            if (!deps.titleSource)
+              throw new (ShelfReadUnavailableError())('Content shelfTitleInputs.observe installation');
             const head = await withConnection(deps.pool, (client) => readHead(client, owner));
             const candidates =
               head?.phase === 'build' && head.policy === policy && head.source_basis === basis
@@ -124,7 +125,7 @@ export function createShelfTitlePreparation(deps: {
                 )
               : { status: 'current' as const, entries: [] };
             if (labels.status !== 'current')
-              throw new ShelfReadUnavailableError(
+              throw new (ShelfReadUnavailableError())(
                 'Content exact disclosed title batch under the captured source basis',
               );
             const observations = shelfTitleObservations(
@@ -144,7 +145,9 @@ export function createShelfTitlePreparation(deps: {
             });
             // The whole source basis, including disclosure/ownership, is checked after the batched reads.
             if (basis !== (await currentShelfTitleBasis(deps.titleSource, owner, languages, actor)))
-              throw new ShelfReadUnavailableError('Content unchanged whole-source basis after the exact title batch');
+              throw new (ShelfReadUnavailableError())(
+                'Content unchanged whole-source basis after the exact title batch',
+              );
             return { basis, head, rows, more: candidates.length > 100 };
           } catch (error) {
             return { error };
@@ -152,7 +155,7 @@ export function createShelfTitlePreparation(deps: {
         },
       },
       async (tx, _command, input) => {
-        if (!input) throw new ShelfReadUnavailableError('complete current Content title/disclosure source');
+        if (!input) throw new (ShelfReadUnavailableError())('complete current Content title/disclosure source');
         if ('error' in input) throw input.error;
         await tx.query(
           `INSERT INTO library.shelf_title_owner(route,account_id) VALUES($1,$2::uuid) ON CONFLICT DO NOTHING`,
@@ -189,7 +192,7 @@ export function createShelfTitlePreparation(deps: {
         // A concurrent page, population edit or replacement build cannot advance this captured frontier.
         if (JSON.stringify(head) !== JSON.stringify(input.head)) return { value: pending, events: [] };
         if (input.rows.some((row) => row.incarnation_id === null || row.type_id === null))
-          throw new ShelfReadUnavailableError('complete native Entry incarnation and type maintenance');
+          throw new (ShelfReadUnavailableError())('complete native Entry incarnation and type maintenance');
         // Exactly the bounded captured Entry versions must remain at this frontier; no per-Subject reads.
         const current = await readCandidates(tx, owner, head.after_subject_id);
         if (

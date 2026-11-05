@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import {
   exportSectionsV2,
   LIBRARY_EXPORT_FORMAT,
@@ -9,13 +10,19 @@ import {
 } from './library-export-format.ts';
 
 /** Consumer bounds, fixed before parsing. No upload, permission or effect is admitted here. */
-export const LIBRARY_ARCHIVE_LIMITS = {
-  ...LIBRARY_EXPORT_LIMITS,
-  // Compact producer records plus commas, the final manifest and bounded formatting whitespace.
-  uploadBytes: 34 * 1024 * 1024,
-  depth: 32,
-  sections: exportSectionsV2.length,
-} as const;
+export function LIBRARY_ARCHIVE_LIMITS() {
+  return memoizedValue(
+    LIBRARY_ARCHIVE_LIMITS,
+    () =>
+      ({
+        ...LIBRARY_EXPORT_LIMITS,
+        // Compact producer records plus commas, the final manifest and bounded formatting whitespace.
+        uploadBytes: 34 * 1024 * 1024,
+        depth: 32,
+        sections: exportSectionsV2.length,
+      }) as const,
+  );
+}
 /** Installed private Collection recovery bounds; these are independent of each native command's own cap. */
 export const LIBRARY_ARCHIVE_RECOVERY_LIMITS = {
   retainedUploadsPerOwner: 2,
@@ -115,7 +122,7 @@ function inspectJson(text: string) {
       }
     } else if (c === '{' || c === '[') {
       stack.push(c === '{' ? { kind: c, keys: new Set() } : { kind: c });
-      if (stack.length > LIBRARY_ARCHIVE_LIMITS.depth) fail('bounds');
+      if (stack.length > LIBRARY_ARCHIVE_LIMITS().depth) fail('bounds');
     } else if (c === '}' || c === ']') {
       if (stack.pop()?.kind !== (c === '}' ? '{' : '[')) fail('invalid_json');
     }
@@ -124,7 +131,7 @@ function inspectJson(text: string) {
 }
 
 function parse(bytes: Uint8Array): unknown {
-  if (bytes.byteLength > LIBRARY_ARCHIVE_LIMITS.uploadBytes) fail('bounds');
+  if (bytes.byteLength > LIBRARY_ARCHIVE_LIMITS().uploadBytes) fail('bounds');
   let text: string;
   try {
     // Invalid UTF-8 must not silently acquire replacement characters in private evidence.
@@ -481,7 +488,7 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
   const manifest = manifestOf(envelope.manifest);
   if (!exactKeys(envelope, ['manifest', 'records'])) fail('invalid_envelope');
   if (!Array.isArray(envelope.records)) fail('invalid_envelope');
-  if (envelope.records.length > LIBRARY_ARCHIVE_LIMITS.records) fail('bounds');
+  if (envelope.records.length > LIBRARY_ARCHIVE_LIMITS().records) fail('bounds');
   if (envelope.records.length !== manifest.rows) fail('inconsistent_manifest');
   const manifestSections: readonly string[] = sectionsForVersion(manifest.version);
   const counts = new Map<LibraryExportSection, number>(exportSectionsV2.map((s) => [s, 0]));
@@ -500,9 +507,9 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     if (index < previousSection || index === -1) fail('invalid_record');
     previousSection = index;
     const size = Buffer.byteLength(JSON.stringify(row));
-    if (size > LIBRARY_ARCHIVE_LIMITS.pageBytes) fail('bounds');
+    if (size > LIBRARY_ARCHIVE_LIMITS().pageBytes) fail('bounds');
     recordBytes += size;
-    if (recordBytes > LIBRARY_ARCHIVE_LIMITS.recordBytes) fail('bounds');
+    if (recordBytes > LIBRARY_ARCHIVE_LIMITS().recordBytes) fail('bounds');
     if ((archiveMergeSections as readonly string[]).includes(section))
       supportedRecord(row, section as MergeSection, manifest.version);
     const key = recordKey(row, section);

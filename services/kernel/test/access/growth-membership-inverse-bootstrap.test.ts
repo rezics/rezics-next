@@ -193,7 +193,7 @@ test('one source-cursor bootstrap stays bounded and preserves historical reserva
   for (const { accountId, reservationId, sourceTransactionId, holdTransactionId } of items) {
     await expect(
       withConnection(database.pool, (client) => readMembershipInverse(client, { accountId })),
-    ).rejects.toBeInstanceOf(MembershipInverseIncompleteError);
+    ).rejects.toBeInstanceOf(MembershipInverseIncompleteError());
     const rows = await database.admin.query(
       `SELECT i.reservation_id, i.source_transaction_id, i.transaction_id,
          i.transaction_id = c.transaction_id AS matched

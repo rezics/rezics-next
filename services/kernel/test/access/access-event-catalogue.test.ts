@@ -888,6 +888,6 @@ test('real access commands cover every registered event and the log reader accep
       if (result.envelopes === 0) break;
     }
   }
-  const missing = Object.keys(ACCESS_EVENTS).filter((type) => !seen.has(type));
+  const missing = Object.keys(ACCESS_EVENTS()).filter((type) => !seen.has(type));
   expect(missing).toEqual([]);
 }, 60_000);

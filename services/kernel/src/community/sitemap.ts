@@ -22,8 +22,8 @@ const ZERO_ID = '00000000-0000-0000-0000-000000000000';
 const ANONYMOUS: Actor = Object.freeze({ kind: 'anonymous' });
 
 export type CommunitySitemapInput = { cursor?: string; limit?: number };
-export type SitemapRealmItem = Static<typeof SitemapRealmItemSchema>;
-export type SitemapSpaceItem = Static<typeof SitemapSpaceItemSchema>;
+export type SitemapRealmItem = Static<ReturnType<typeof SitemapRealmItemSchema>>;
+export type SitemapSpaceItem = Static<ReturnType<typeof SitemapSpaceItemSchema>>;
 export type CommunitySitemapPage<Item> = { items: Item[]; next: string | null };
 export type CommunitySitemapDependencies = Readonly<{
   pool: Pool;

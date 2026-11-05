@@ -61,7 +61,7 @@ test('missing-source recovery seals its exact receipt and account-updated cut wi
   await recordPendingAgentVerification(fixture.pool, { ...decision.value, receiptId: receipt }, () => new Date());
   const identityReceipt = { kind: 'account-agent.verify' as const, account: accounts.owner, receipt };
   const original = await loadAccountIdentitySource(fixture.pool, identityReceipt);
-  const job = await identityEpochStore.prepareAdmission(fixture.pool, {}, original.input);
+  const job = await identityEpochStore().prepareAdmission(fixture.pool, {}, original.input);
   for (let page = 0; page < 512; page++) {
     const progress = await stepIdentityEpochAdmission(fixture.pool, job);
     if (progress.state === 'pending') break;

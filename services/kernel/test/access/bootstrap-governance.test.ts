@@ -300,7 +300,7 @@ test('exact root CLI installs one durable normal Global role and one registered 
     role: PLATFORM_GOVERNANCE_ROLE,
   });
   expect(first.marker[0].transaction_id).toBe(first.grants[0].transaction_id);
-  expect(first.events[0].type in EVENT_TYPES).toBe(true);
+  expect(first.events[0].type in EVENT_TYPES()).toBe(true);
   expect(await bootstrapGovernance(pool, person)).toMatchObject({ replayed: true });
   await invoke(person);
   await invoke(other, false);

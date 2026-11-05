@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../../memoized.ts';
 import { SpaceEntryPresentationSchema } from '../../../community/space-discovery-entry-contract.ts';
 import type { Static } from 'typebox';
 import type { DiscoveryUnionHit } from '../../discovery.ts';
@@ -5,37 +6,51 @@ import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import { MatchEvidenceSchema } from '../../http/match-evidence-schema.ts';
 import { closed, id, nullableText, key, unavailable, evidenceOrDefault, admitIdentity } from './primitives.ts';
-const spaceKey = t.Object(
-  { owner: t.Literal('community'), kind: t.Literal('space'), route: t.Integer({ minimum: 0, maximum: 65535 }), id },
-  closed,
-);
-const spaceSummary = t.Object(
-  {
-    presentation: t.Optional(SpaceEntryPresentationSchema),
-    id,
-    title: t.String({ minLength: 1 }),
-    address: t.String({ minLength: 1, maxLength: 256 }),
-    summary: t.Optional(t.String()),
-    realm: t.Optional(t.Union([t.Object({ id, title: nullableText }, closed), t.Null()])),
-  },
-  closed,
-);
-export const SpaceHitSchema = t.Object(
-  {
-    key: spaceKey,
-    summary: t.Object({ kind: t.Literal('space'), value: spaceSummary }, closed),
-    matchEvidence: MatchEvidenceSchema,
-  },
-  closed,
-);
+function spaceKey() {
+  return memoizedValue(spaceKey, () =>
+    t.Object(
+      { owner: t.Literal('community'), kind: t.Literal('space'), route: t.Integer({ minimum: 0, maximum: 65535 }), id },
+      closed,
+    ),
+  );
+}
+function spaceSummary() {
+  return memoizedValue(spaceSummary, () =>
+    t.Object(
+      {
+        presentation: t.Optional(SpaceEntryPresentationSchema),
+        id,
+        title: t.String({ minLength: 1 }),
+        address: t.String({ minLength: 1, maxLength: 256 }),
+        summary: t.Optional(t.String()),
+        realm: t.Optional(t.Union([t.Object({ id, title: nullableText }, closed), t.Null()])),
+      },
+      closed,
+    ),
+  );
+}
+export function SpaceHitSchema() {
+  return memoizedValue(SpaceHitSchema, () =>
+    t.Object(
+      {
+        key: spaceKey(),
+        summary: t.Object({ kind: t.Literal('space'), value: spaceSummary() }, closed),
+        matchEvidence: MatchEvidenceSchema,
+      },
+      closed,
+    ),
+  );
+}
 
-export type SpaceHttpHit = Static<typeof SpaceHitSchema>;
+export type SpaceHttpHit = Static<ReturnType<typeof SpaceHitSchema>>;
 type SpaceHit = Extract<DiscoveryUnionHit, { summary: { kind: 'space' } }>;
-const check = Compile(SpaceHitSchema);
+function check() {
+  return memoizedValue(check, () => Compile(SpaceHitSchema()));
+}
 
 export function admitSpaceHit(value: unknown): asserts value is SpaceHit {
   const admitted = evidenceOrDefault(value);
-  if (!check.Check(admitted)) unavailable();
+  if (!check().Check(admitted)) unavailable();
   const hit = admitted as SpaceHttpHit;
   admitIdentity(hit);
   const { key, summary, matchEvidence } = hit;

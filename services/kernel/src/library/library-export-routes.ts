@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { defineRateLimit } from '../http/rate-limit.ts';
@@ -130,18 +131,21 @@ const statusSchema = t.Union([
   t.Object({ ...manifestV4Fields, state, first: nullable }, closed),
 ]);
 const sectionTotal = t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed);
-const sectionTotalsV2 = t.Object(
-  Object.fromEntries(exportSectionsV2.map((section) => [section, sectionTotal])),
-  closed,
-);
-const sectionTotalsV3 = t.Object(
-  Object.fromEntries(exportSectionsV3.map((section) => [section, sectionTotal])),
-  closed,
-);
-const sectionTotalsV4 = t.Object(
-  Object.fromEntries(exportSectionsV4.map((section) => [section, sectionTotal])),
-  closed,
-);
+function sectionTotalsV2() {
+  return memoizedValue(sectionTotalsV2, () =>
+    t.Object(Object.fromEntries(exportSectionsV2.map((section) => [section, sectionTotal])), closed),
+  );
+}
+function sectionTotalsV3() {
+  return memoizedValue(sectionTotalsV3, () =>
+    t.Object(Object.fromEntries(exportSectionsV3.map((section) => [section, sectionTotal])), closed),
+  );
+}
+function sectionTotalsV4() {
+  return memoizedValue(sectionTotalsV4, () =>
+    t.Object(Object.fromEntries(exportSectionsV4.map((section) => [section, sectionTotal])), closed),
+  );
+}
 const year = t.Integer({ minimum: 1, maximum: 9999 });
 const month = t.Integer({ minimum: 1, maximum: 12 });
 const day = t.Integer({ minimum: 1, maximum: 31 });
@@ -305,61 +309,74 @@ const exportRecord = t.Union([
   vndbEvidenceRecord,
   anilistEvidenceRecord,
 ]);
-const finalManifest = t.Union([
-  t.Object({ ...manifestV1Fields, rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
-  t.Object(
-    {
-      ...manifestV2Fields,
-      rows: t.Integer({ minimum: 0 }),
-      recordBytes: t.Integer({ minimum: 0 }),
-      sectionTotals: sectionTotalsV2,
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...manifestV3Fields,
-      rows: t.Integer({ minimum: 0 }),
-      recordBytes: t.Integer({ minimum: 0 }),
-      sectionTotals: sectionTotalsV3,
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      ...manifestV4Fields,
-      rows: t.Integer({ minimum: 0 }),
-      recordBytes: t.Integer({ minimum: 0 }),
-      sectionTotals: sectionTotalsV4,
-    },
-    closed,
-  ),
-]);
-const pageSchema = t.Object(
-  {
-    exportId: text,
-    state,
-    records: t.Array(exportRecord, { maxItems: 16 }),
-    next: nullable,
-    manifest: t.Union([finalManifest, t.Null()]),
-  },
-  closed,
-);
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema(
-    'dependency_unavailable',
-    'overloaded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'deadline_exceeded',
-  ),
-};
+function finalManifest() {
+  return memoizedValue(finalManifest, () =>
+    t.Union([
+      t.Object(
+        { ...manifestV1Fields, rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) },
+        closed,
+      ),
+      t.Object(
+        {
+          ...manifestV2Fields,
+          rows: t.Integer({ minimum: 0 }),
+          recordBytes: t.Integer({ minimum: 0 }),
+          sectionTotals: sectionTotalsV2(),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...manifestV3Fields,
+          rows: t.Integer({ minimum: 0 }),
+          recordBytes: t.Integer({ minimum: 0 }),
+          sectionTotals: sectionTotalsV3(),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          ...manifestV4Fields,
+          rows: t.Integer({ minimum: 0 }),
+          recordBytes: t.Integer({ minimum: 0 }),
+          sectionTotals: sectionTotalsV4(),
+        },
+        closed,
+      ),
+    ]),
+  );
+}
+function pageSchema() {
+  return memoizedValue(pageSchema, () =>
+    t.Object(
+      {
+        exportId: text,
+        state,
+        records: t.Array(exportRecord, { maxItems: 16 }),
+        next: nullable,
+        manifest: t.Union([finalManifest(), t.Null()]),
+      },
+      closed,
+    ),
+  );
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema(
+      'dependency_unavailable',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+    ),
+  }));
+}
 type ExportService = ReturnType<typeof createLibraryExport>;
 type StatusOutput = Awaited<ReturnType<ExportService['get']>>;
 type PageOutput = Awaited<ReturnType<ExportService['page']>>;
@@ -378,7 +395,7 @@ function statusView(value: StatusOutput): Static<typeof statusSchema> {
   }
 }
 
-function finalManifestView(value: NonNullable<PageOutput['manifest']>): Static<typeof finalManifest> {
+function finalManifestView(value: NonNullable<PageOutput['manifest']>): Static<ReturnType<typeof finalManifest>> {
   const omissions = { ...value.omissions };
   switch (value.version) {
     case 1:
@@ -392,7 +409,7 @@ function finalManifestView(value: NonNullable<PageOutput['manifest']>): Static<t
   }
 }
 
-function pageView(value: PageOutput): Static<typeof pageSchema> {
+function pageView(value: PageOutput): Static<ReturnType<typeof pageSchema>> {
   return {
     exportId: value.exportId,
     state: value.state,
@@ -410,7 +427,7 @@ function detail(operationId: string, write = false) {
     'x-action': 'library_entry:list',
     'x-exposure': 'gate:personal_library',
     'x-authority-anchor': 'own-account',
-    'x-authority-resource-types': exportAuthorityTypes,
+    'x-authority-resource-types': exportAuthorityTypes(),
     security: [{ bearerAuth: [] }],
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
   };
@@ -426,7 +443,7 @@ export function libraryExportRoutes(
       '/v1/libraryExports',
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: text }),
-        response: { 200: statusSchema, ...failures },
+        response: { 200: statusSchema, ...failures() },
         detail: detail('library_export.create', true),
       },
       async ({ request, actor, headers, admission, job, set }) => {
@@ -446,7 +463,7 @@ export function libraryExportRoutes(
       '/v1/libraryExports/:id',
       {
         params,
-        response: { 200: statusSchema, ...failures },
+        response: { 200: statusSchema, ...failures() },
         detail: detail('library_export.get'),
       },
       async ({ request, actor, params, admission, job, set }) => {
@@ -461,7 +478,7 @@ export function libraryExportRoutes(
       {
         params,
         query: t.Object({ cursor: t.String({ minLength: 1, maxLength: 4096 }) }, closed),
-        response: { 200: pageSchema, ...failures },
+        response: { 200: pageSchema(), ...failures() },
         detail: detail('library_export.page'),
       },
       async ({ request, actor, params, query, admission, job, set }) => {
@@ -475,7 +492,7 @@ export function libraryExportRoutes(
       '/v1/libraryExports/:id',
       {
         params,
-        response: { 200: statusSchema, ...failures },
+        response: { 200: statusSchema, ...failures() },
         detail: detail('library_export.cancel', true),
       },
       async ({ request, actor, params, admission, job, set }) => {

@@ -257,7 +257,7 @@ export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): Entr
             }
           : !noteRaw.isWellFormed() ||
               noteRaw.includes('\u0000') ||
-              Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+              Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS().noteBytes
             ? {
                 state: 'unsupported',
                 sourceField: noteField,
@@ -278,7 +278,7 @@ export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): Entr
           }
         : typeof privacyRaw === 'string' &&
             privacyRaw.length > 0 &&
-            Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes &&
+            Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS().privacyValueBytes &&
             !/[\u0000-\u001f\u007f]/.test(privacyRaw)
           ? {
               state: 'unknown',
@@ -317,7 +317,7 @@ export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): Entr
       return { state: 'value', sourceField: field, value: { status: 'known', value: raw }, sourceValue: raw };
     } catch {
       if (
-        Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes &&
+        Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS().timestampBytes &&
         !/[\u0000-\u001f\u007f]/.test(raw) &&
         !/^\d{4}(?:-\d{2})?(?:-\d{2})?(?:T|$)/.test(raw)
       )

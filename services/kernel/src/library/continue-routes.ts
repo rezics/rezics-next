@@ -50,7 +50,7 @@ export function continueRoutes(
       response: {
         reference: 'library.continue.page',
         schema: {
-          200: continuePageSchema,
+          200: continuePageSchema(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           401: problemSchema('authentication_required', 'invalid_credentials'),
           403: problemSchema('forbidden', 'platform_closed'),

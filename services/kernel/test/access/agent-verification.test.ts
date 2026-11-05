@@ -855,10 +855,10 @@ test('verification workflow event payloads remain registered and every required 
   );
   const seen = new Set(rows.map(({ type }) => type));
   for (const type of eventNames) {
-    expect(EVENT_TYPES[type]).toBeDefined();
+    expect(EVENT_TYPES()[type]).toBeDefined();
     expect(seen.has(type)).toBe(true);
   }
-  for (const row of rows) expect(Value.Check(EVENT_TYPES[row.type]!, row.data)).toBe(true);
+  for (const row of rows) expect(Value.Check(EVENT_TYPES()[row.type]!, row.data)).toBe(true);
 });
 
 test('original in-flight verification requires its retained pending receipt and original accepted release without fabricating either', async () => {
@@ -942,7 +942,8 @@ test('original in-flight verification requires its retained pending receipt and 
 });
 
 test('Original native accepted Source input recovery consumes actual read and same-home verifier while independently validating original Account decision pending or reversal receipt and preserving distinct original versus recovery native provenance', async () => {
-  const { identityEpochStore: store } = await import('../../src/semantic/identity-epoch-store.ts');
+  const { identityEpochStore: storeGetter } = await import('../../src/semantic/identity-epoch-store.ts');
+  const store = storeGetter();
   const { stepIdentityEpochAdmission } = await import('../../src/semantic/identity-epoch-admission.ts');
   const { readOriginalAccountAgentIdentity, verifyOriginalAccountAgentIdentity } =
     await import('../../src/semantic/account-agent-identity-recovery.ts');
@@ -1081,7 +1082,8 @@ test('Original native accepted Source input recovery consumes actual read and sa
 });
 
 test('accepted original Source cannot recover verification without the independent original Global decision write basis', async () => {
-  const { identityEpochStore: store } = await import('../../src/semantic/identity-epoch-store.ts');
+  const { identityEpochStore: storeGetter } = await import('../../src/semantic/identity-epoch-store.ts');
+  const store = storeGetter();
   const { stepIdentityEpochAdmission } = await import('../../src/semantic/identity-epoch-admission.ts');
   const { readOriginalAccountAgentIdentity } = await import('../../src/semantic/account-agent-identity-recovery.ts');
   const account = await seedAccount(`no_basis_${randomUUID().slice(0, 8)}`);

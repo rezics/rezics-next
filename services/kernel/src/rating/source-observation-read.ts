@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import canonicalize from 'canonicalize';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
@@ -45,20 +46,24 @@ const sourceScaleSchema = t.Object(
   },
   closed,
 );
-const positivePayloadSchema = t.Object(
-  {
-    sourceAlias: sourceAliasSchema,
-    sourceRecordId: sourceRecordIdSchema,
-    scale: sourceScaleSchema,
-    mean: t.Number(),
-    figures: t.Optional(SourceFiguresSchema),
-    count: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
-    asOf: t.String({ format: 'date' }),
-    licence: t.String({ minLength: 1, maxLength: 1024 }),
-    attribution: t.String({ minLength: 1, maxLength: 2000 }),
-  },
-  closed,
-);
+function positivePayloadSchema() {
+  return memoizedValue(positivePayloadSchema, () =>
+    t.Object(
+      {
+        sourceAlias: sourceAliasSchema,
+        sourceRecordId: sourceRecordIdSchema,
+        scale: sourceScaleSchema,
+        mean: t.Number(),
+        figures: t.Optional(SourceFiguresSchema),
+        count: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+        asOf: t.String({ format: 'date' }),
+        licence: t.String({ minLength: 1, maxLength: 1024 }),
+        attribution: t.String({ minLength: 1, maxLength: 2000 }),
+      },
+      closed,
+    ),
+  );
+}
 const clearPayloadSchema = t.Object(
   {
     sourceAlias: sourceAliasSchema,
@@ -68,57 +73,69 @@ const clearPayloadSchema = t.Object(
   },
   closed,
 );
-const observationPayloadSchema = t.Union([positivePayloadSchema, clearPayloadSchema]);
-const observationValidator = Compile(observationPayloadSchema);
-const observationSchema = t.Object(
-  {
-    digest: digestSchema,
-    payloadVersion: t.Literal(SOURCE_OBSERVATION_PAYLOAD_VERSION),
-    sourceAlias: sourceAliasSchema,
-    sourceRecordId: sourceRecordIdSchema,
-    asOf: t.String({ format: 'date' }),
-    nativeOrder: t.Union([t.String({ pattern: '^[1-9][0-9]*$' }), t.Null()]),
-    legacy: t.Boolean(),
-    provenance: t.Object({ kind: t.Literal('unversioned'), digest: digestSchema }, closed),
-    payload: observationPayloadSchema,
-  },
-  closed,
-);
-export const SourceObservationReadResponseSchema = t.Object(
-  {
-    source: t.Union([t.Literal('vndb'), t.Literal('bangumi')]),
-    head: t.Object(
+function observationPayloadSchema() {
+  return memoizedValue(observationPayloadSchema, () => t.Union([positivePayloadSchema(), clearPayloadSchema]));
+}
+function observationValidator() {
+  return memoizedValue(observationValidator, () => Compile(observationPayloadSchema()));
+}
+function observationSchema() {
+  return memoizedValue(observationSchema, () =>
+    t.Object(
       {
-        digest: t.Union([digestSchema, t.Null()]),
-        state: t.Union([t.Literal('empty'), t.Literal('published'), t.Literal('cleared')]),
-        observation: t.Union([observationSchema, t.Null()]),
+        digest: digestSchema,
+        payloadVersion: t.Literal(SOURCE_OBSERVATION_PAYLOAD_VERSION),
+        sourceAlias: sourceAliasSchema,
+        sourceRecordId: sourceRecordIdSchema,
+        asOf: t.String({ format: 'date' }),
+        nativeOrder: t.Union([t.String({ pattern: '^[1-9][0-9]*$' }), t.Null()]),
+        legacy: t.Boolean(),
+        provenance: t.Object({ kind: t.Literal('unversioned'), digest: digestSchema }, closed),
+        payload: observationPayloadSchema(),
       },
       closed,
     ),
-    resolution: t.Object(
+  );
+}
+export function SourceObservationReadResponseSchema() {
+  return memoizedValue(SourceObservationReadResponseSchema, () =>
+    t.Object(
       {
-        put: t.Object({ expectedObservation: t.Union([digestSchema, t.Null()]) }, closed),
-        clear: t.Object({ expectedObservation: t.Union([digestSchema, t.Null()]) }, closed),
+        source: t.Union([t.Literal('vndb'), t.Literal('bangumi')]),
+        head: t.Object(
+          {
+            digest: t.Union([digestSchema, t.Null()]),
+            state: t.Union([t.Literal('empty'), t.Literal('published'), t.Literal('cleared')]),
+            observation: t.Union([observationSchema(), t.Null()]),
+          },
+          closed,
+        ),
+        resolution: t.Object(
+          {
+            put: t.Object({ expectedObservation: t.Union([digestSchema, t.Null()]) }, closed),
+            clear: t.Object({ expectedObservation: t.Union([digestSchema, t.Null()]) }, closed),
+          },
+          closed,
+        ),
+        selectedObservation: t.Optional(observationSchema()),
+        history: t.Optional(
+          t.Object(
+            {
+              items: t.Array(observationSchema(), { maxItems: SOURCE_OBSERVATION_HISTORY_PAGE_SIZE }),
+              nextCursor: t.Union([t.String({ maxLength: 512 }), t.Null()]),
+            },
+            closed,
+          ),
+        ),
       },
       closed,
     ),
-    selectedObservation: t.Optional(observationSchema),
-    history: t.Optional(
-      t.Object(
-        {
-          items: t.Array(observationSchema, { maxItems: SOURCE_OBSERVATION_HISTORY_PAGE_SIZE }),
-          nextCursor: t.Union([t.String({ maxLength: 512 }), t.Null()]),
-        },
-        closed,
-      ),
-    ),
-  },
-  closed,
-);
+  );
+}
 
-export type SourceObservationPayload = Static<typeof observationPayloadSchema>;
-export type SourceObservationReadItem = Static<typeof observationSchema>;
-export type SourceObservationReadResponse = Static<typeof SourceObservationReadResponseSchema>;
+export type SourceObservationPayload = Static<ReturnType<typeof observationPayloadSchema>>;
+export type SourceObservationReadItem = Static<ReturnType<typeof observationSchema>>;
+export type SourceObservationReadResponse = Static<ReturnType<typeof SourceObservationReadResponseSchema>>;
 
 export type SourceObservationReadDependencies = Readonly<{
   pool: Pool;
@@ -374,7 +391,7 @@ function payloadOf(
   if (row.payloadVersion !== SOURCE_OBSERVATION_PAYLOAD_VERSION)
     throw new ProblemError('partition_unavailable', { detail: 'Unsupported source observation payload version' });
   const payload = row.payload;
-  if (!observationValidator.Check(payload)) throw new ProblemError('partition_unavailable');
+  if (!observationValidator().Check(payload)) throw new ProblemError('partition_unavailable');
   const observed = payload as SourceObservationPayload;
   if (
     row.digest !== metadata.digest ||
@@ -434,7 +451,7 @@ function legacyPayloadOf(
     attribution: String(row.attribution),
   };
   const observed = sourceObservation(subjectId, source, value);
-  if (!observationValidator.Check(observed.payload)) throw new ProblemError('partition_unavailable');
+  if (!observationValidator().Check(observed.payload)) throw new ProblemError('partition_unavailable');
   if (metadata.digest !== null && metadata.digest !== observed.digest) throw new ProblemError('partition_unavailable');
   return {
     digest: observed.digest,

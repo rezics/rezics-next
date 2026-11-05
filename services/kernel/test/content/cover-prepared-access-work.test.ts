@@ -87,7 +87,7 @@ test('missing native time and unadmitted preparation refuse before nested or med
   expect(result.usage).toEqual(EMPTY_ACCESS_WORK);
   expect(admitted).toHaveLength(0);
   expect(called).toBe(false);
-  await expect(callbacks.verify(input)).rejects.toBeInstanceOf(AccessWorkUnavailableError);
+  await expect(callbacks.verify(input)).rejects.toBeInstanceOf(AccessWorkUnavailableError());
 });
 
 test('ordinary prepared actor and anonymous calls retain their callable behavior', async () => {
@@ -375,7 +375,7 @@ describe.skipIf(!process.env.DATABASE_URL)('cover nested prepared native Access'
         ]) {
           const bridge = coverPreparedAccessWork(check, check, preparation);
           expect(bridge.bound(input)).toBeUndefined();
-          await expect(bridge.run(input, check)).rejects.toBeInstanceOf(AccessWorkUnavailableError);
+          await expect(bridge.run(input, check)).rejects.toBeInstanceOf(AccessWorkUnavailableError());
         }
         expect(called).toBe(false);
       });

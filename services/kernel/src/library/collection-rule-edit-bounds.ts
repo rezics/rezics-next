@@ -41,7 +41,7 @@ function plan(
     operation,
     input: frozen,
     total,
-    withinExistingCeiling: withinCeiling(total, COLLECTION_PUBLICATION_STEP_CEILING),
+    withinExistingCeiling: withinCeiling(total, COLLECTION_PUBLICATION_STEP_CEILING()),
   });
 }
 

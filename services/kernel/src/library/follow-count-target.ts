@@ -27,7 +27,7 @@ export async function resolveCountDestination(
   key: Pick<CountKey, 'targetType' | 'targetId'>,
 ): Promise<CountDestination> {
   if (key.targetType !== 'subject') return { targetId: key.targetId, route: countRoute(key.targetId), epoch: null };
-  const mapping = await identityEpochStore.readMapping(deps.pool, key.targetId);
+  const mapping = await identityEpochStore().readMapping(deps.pool, key.targetId);
   if (mapping.state === 'absent') throw new FollowCountTargetAbsentError();
   if (mapping.state !== 'mapped') throw new FollowCountUnavailableError('Current count identity is unavailable');
   return { targetId: mapping.terminal, route: countRoute(mapping.terminal), epoch: mapping.epoch };
@@ -53,7 +53,7 @@ export async function applyFollowCount(
       if (fenced.rowCount) return noEffect({ fenced: true });
       if (replacement.targetType === 'subject') {
         if (destination.epoch === null) throw new FollowCountUnavailableError();
-        await identityEpochStore.admitHomeEffect(tx, {
+        await identityEpochStore().admitHomeEffect(tx, {
           kind: 'follow-count',
           original: replacement.targetId,
           terminal: destination.targetId,

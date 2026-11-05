@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Native Collection-kind binding. Locators resolve retained owner records on every call. */
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -41,11 +42,21 @@ import { collectionKindConsentAdoptionCurrent } from './collection-kind-consent.
 const anonymous: Actor = Object.freeze({ kind: 'anonymous' });
 const publicAudience = 'anonymous';
 const unavailable = () => ({ status: 'unavailable', reason: 'source_unready' }) as const;
-const preparation = COLLECTION_KIND_PREPARATION_TERMS;
-const scopeBound = collectionKindInputWorkDimensions(preparation.scope);
-const observationBound = collectionKindInputWorkDimensions(preparation.observation);
-const retiredBound = collectionKindInputWorkDimensions(preparation.retired);
-const clockBound = collectionKindInputWorkDimensions(preparation.clock);
+function preparation() {
+  return memoizedValue(preparation, () => COLLECTION_KIND_PREPARATION_TERMS());
+}
+function scopeBound() {
+  return memoizedValue(scopeBound, () => collectionKindInputWorkDimensions(preparation().scope));
+}
+function observationBound() {
+  return memoizedValue(observationBound, () => collectionKindInputWorkDimensions(preparation().observation));
+}
+function retiredBound() {
+  return memoizedValue(retiredBound, () => collectionKindInputWorkDimensions(preparation().retired));
+}
+function clockBound() {
+  return memoizedValue(clockBound, () => collectionKindInputWorkDimensions(preparation().clock));
+}
 /** Access-heavy metadata reads keep their producer charging; adopt/retire use the shared observation plan. */
 function allowance(): WorkAllowance {
   return {
@@ -66,7 +77,7 @@ function observationAllowance(deadline: number): CollectionSourceLedger {
   return new CollectionSourceLedger(
     {
       reservationId: crypto.randomUUID(),
-      remaining: collectionKindInputWorkDimensions(COLLECTION_KIND_PREPARATION_OBSERVATION),
+      remaining: collectionKindInputWorkDimensions(COLLECTION_KIND_PREPARATION_OBSERVATION()),
     },
     deadline,
   );
@@ -163,7 +174,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
     );
     const metadata = read.metadata;
     if (!metadata || metadata.state !== 'active') return null;
-    const at = await work.bounded(clockBound, () =>
+    const at = await work.bounded(clockBound(), () =>
       withConnection(deps.pool, (client) => mintReadTime(deadlineClient(client, deadline), deps.clock)),
     );
     const authorized = await work.run((allowance) =>
@@ -174,7 +185,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
 
   /** Exact current native Source, including population/excluded/order dependencies; no capture is minted here. */
   async function retained(metadata: NativeCollectionMetadata, work: CollectionSourceLedger, deadline: number) {
-    const rows = await work.bounded(scopeBound, () =>
+    const rows = await work.bounded(scopeBound(), () =>
       withConnection(deps.pool, (client) =>
         scopeQuery.run(deadlineClient(client, deadline), {
           route: metadata.route,
@@ -275,7 +286,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
           }),
         );
         if (completed.status !== 'complete') return unavailable();
-        const previous = await read.work.bounded(observationBound, () =>
+        const previous = await read.work.bounded(observationBound(), () =>
           withConnection(deps.pool, (client) =>
             readObservation.run(deadlineClient(client, input.deadline), {
               route: read.metadata.route,
@@ -382,7 +393,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
         }
         // SAME home only. No Source/Access/identity callback or foreign checkout while Core is held.
         const work = observationAllowance(Math.min(input.deadline, resources.deadline));
-        const row = await work.bounded(scopeBound, () =>
+        const row = await work.bounded(scopeBound(), () =>
           scopeQuery.run(input.tx, {
             route: routeOf(input.capture.collectionId)!,
             collection_id: input.capture.collectionId,
@@ -441,7 +452,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
           },
           async (tx) => {
             const work = new CollectionSourceLedger(allowance(), input.deadline);
-            const retired = await work.bounded(retiredBound, () =>
+            const retired = await work.bounded(retiredBound(), () =>
               retiredCapture.run(tx, {
                 route,
                 collection_id: input.collectionId,
@@ -450,7 +461,7 @@ export function createCollectionKindPreparation(sources: CollectionKindSourceBin
               }),
             );
             if (!retired) return unavailable();
-            const row = await work.bounded(scopeBound, () =>
+            const row = await work.bounded(scopeBound(), () =>
               scopeQuery.run(tx, { route, collection_id: input.collectionId, source_fence: key.fence }),
             );
             if (!row || row.nativeCaptureId !== key.captureId) return unavailable();

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
@@ -106,14 +107,21 @@ export async function applyRealmOwnershipSuccession(
   return realmContinuityView(row);
 }
 
-export class RealmReadOnlyError extends ProblemError {
-  constructor() {
-    super('conflict', {
-      detail: 'This Realm is orphaned and governance is read-only pending a platform ownership decision.',
-    });
-    this.name = 'RealmReadOnlyError';
-  }
+export function RealmReadOnlyError() {
+  return memoizedValue(
+    RealmReadOnlyError,
+    () =>
+      class RealmReadOnlyError extends ProblemError {
+        constructor() {
+          super('conflict', {
+            detail: 'This Realm is orphaned and governance is read-only pending a platform ownership decision.',
+          });
+          this.name = 'RealmReadOnlyError';
+        }
+      },
+  );
 }
+export type RealmReadOnlyError = InstanceType<ReturnType<typeof RealmReadOnlyError>>;
 
 export function realmContinuityView(row: {
   ownership_state: string;
@@ -148,7 +156,7 @@ export function realmGovernanceAuthorization(
         at: authoritativeTimeValue(attempt.time),
       });
       if (!row) throw new GrantDeniedError();
-      if (row.ownership_state !== 'owned') throw new RealmReadOnlyError();
+      if (row.ownership_state !== 'owned') throw new (RealmReadOnlyError())();
       return outcome;
     },
   };

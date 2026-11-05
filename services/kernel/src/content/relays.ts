@@ -123,9 +123,9 @@ function enqueueEffect(pool: Pool, client: WorkClient, name: string, types: stri
     name,
     types,
     async run(event) {
-      if (!types.includes(event.type) || !Object.hasOwn(CONTENT_EVENTS, event.type))
+      if (!types.includes(event.type) || !Object.hasOwn(CONTENT_EVENTS(), event.type))
         throw new TypeError('Unsupported content work event');
-      const schema = CONTENT_EVENTS[event.type as keyof typeof CONTENT_EVENTS];
+      const schema = CONTENT_EVENTS()[event.type as keyof ReturnType<typeof CONTENT_EVENTS>];
       if (!Value.Check(schema, event.data)) throw new TypeError('Invalid content work event data');
       const data = event.data as { mediaId?: string; operationId?: string };
       const objectId = (kind === 'authorErase' ? data.operationId : data.mediaId)!;

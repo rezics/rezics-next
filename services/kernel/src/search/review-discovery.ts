@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { ContentReadDependencies } from '../content/reads.ts';
 import {
   createReviewDiscoverySource as createContentReviewDiscoverySource,
@@ -11,8 +12,12 @@ import { FEED_EXCERPT_LIMIT } from '../content/feed-summary.ts';
 import type { DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 
-export const REVIEW_DISCOVERY_PAGE_SIZE = CONTENT_REVIEW_PAGE_LIMIT;
-export const REVIEW_DISCOVERY_BATCH_SIZE = CONTENT_REVIEW_READ_LIMIT;
+export function REVIEW_DISCOVERY_PAGE_SIZE() {
+  return memoizedValue(REVIEW_DISCOVERY_PAGE_SIZE, () => CONTENT_REVIEW_PAGE_LIMIT);
+}
+export function REVIEW_DISCOVERY_BATCH_SIZE() {
+  return memoizedValue(REVIEW_DISCOVERY_BATCH_SIZE, () => CONTENT_REVIEW_READ_LIMIT);
+}
 export const REVIEW_DISCOVERY_CURRENT_LIMIT = 160;
 export const REVIEW_DISCOVERY_OWNER_CURRENT_LIMIT = 200;
 
@@ -369,8 +374,8 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
       }>
     > {
       partitionNumber(partition);
-      if (!Number.isInteger(limit) || limit < 1 || limit > REVIEW_DISCOVERY_PAGE_SIZE)
-        throw new RangeError(`Review discovery page limit must be from 1 to ${REVIEW_DISCOVERY_PAGE_SIZE}`);
+      if (!Number.isInteger(limit) || limit < 1 || limit > REVIEW_DISCOVERY_PAGE_SIZE())
+        throw new RangeError(`Review discovery page limit must be from 1 to ${REVIEW_DISCOVERY_PAGE_SIZE()}`);
       const previous = after === null ? null : key(after, partition);
       if (cut !== undefined) position(cut);
       const ownerSource = native();
@@ -442,8 +447,8 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
       const result = new Map<string, ReviewDiscoverySummary>();
       for (const partition of new Set(saved.map((row) => row.partition))) {
         const owned = saved.filter((row) => row.partition === partition);
-        for (let offset = 0; offset < owned.length; offset += REVIEW_DISCOVERY_BATCH_SIZE) {
-          const chunk = owned.slice(offset, offset + REVIEW_DISCOVERY_BATCH_SIZE);
+        for (let offset = 0; offset < owned.length; offset += REVIEW_DISCOVERY_BATCH_SIZE()) {
+          const chunk = owned.slice(offset, offset + REVIEW_DISCOVERY_BATCH_SIZE());
           const current = await currentRows(
             ownerSource,
             partition,
@@ -481,8 +486,8 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
       if (!ownerSource) return new Map();
       const result = new Map<string, DiscoveryOwnerMetadataSummary<'review'>>();
       for (const [partition, keys] of groups) {
-        for (let offset = 0; offset < keys.length; offset += REVIEW_DISCOVERY_BATCH_SIZE) {
-          const chunk = keys.slice(offset, offset + REVIEW_DISCOVERY_BATCH_SIZE);
+        for (let offset = 0; offset < keys.length; offset += REVIEW_DISCOVERY_BATCH_SIZE()) {
+          const chunk = keys.slice(offset, offset + REVIEW_DISCOVERY_BATCH_SIZE());
           const current = await currentRows(ownerSource, partition, chunk);
           for (const row of current.reviews) {
             if (!row.subjectId || !row.authorId) throw new TypeError('Current Content review context is incomplete');

@@ -202,7 +202,7 @@ test('listed events have a registered closed schema and are readable by the inde
   const subjectId = newId(subjectRoute + 16);
   const source = await collection(pool, subjectId, 'public');
   await sync(subjectId, source.id);
-  const schema = EVENT_TYPES[listed];
+  const schema = EVENT_TYPES()[listed];
   expect(Value.Check(schema, { subjectId })).toBe(true);
   expect(Value.Check(schema, { subjectId, collectionId: source.id })).toBe(false);
   expect(Value.Check(schema, {})).toBe(false);

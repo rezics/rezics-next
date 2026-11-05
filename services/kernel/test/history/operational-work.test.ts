@@ -47,8 +47,8 @@ test('shared bounds compose finite History declarations and refuse invalid or ov
   const composed = sumBounds(page, page);
   expect(composed).toMatchObject({ candidateKeys: 4, statements: 2, bytes: 512 });
   expect(repeatBound(page, 3)).toMatchObject({ candidateKeys: 6, statements: 3, bytes: 768 });
-  expect(OPERATIONAL_WORK_LOCAL_DECLARATION.engineRequests).toBe(0);
-  expect(SELECTED_LOCAL_DECLARATION.engineRequests).toBe(0);
+  expect(OPERATIONAL_WORK_LOCAL_DECLARATION().engineRequests).toBe(0);
+  expect(SELECTED_LOCAL_DECLARATION().engineRequests).toBe(0);
   expect(withinCeiling(composed, declareBound({ ...composed, statements: 2 }))).toBe(true);
   expect(withinCeiling(composed, page)).toBe(false);
   expect(() => declareBound({ ...zero, unsupported: 1 })).toThrow('Invalid bound declaration axes');

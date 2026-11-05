@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { createTypeDirectory, TYPE_DIRECTORY_LOCALES } from '../definition-type-directory.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { CatalogueArtifactError, type KindDeclarationV1 } from '@rezics/definitions';
@@ -41,7 +42,9 @@ import {
   StaleEditorialHeadError,
 } from '../definitions.ts';
 
-const resource = { route: 0, id: GLOBAL_CONTEXT };
+function resource() {
+  return memoizedValue(resource, () => ({ route: 0, id: GLOBAL_CONTEXT }));
+}
 const digestResponse = t.Object({ digest: t.String() }, { additionalProperties: false });
 const activeResponse = t.Object({ digest: t.String(), head: t.Integer() }, { additionalProperties: false });
 const releaseObject = t.Record(t.String(), t.Any());
@@ -59,21 +62,28 @@ const typeDescriptor = t.Object({
   definition: releaseObject,
   properties: t.Record(t.String(), releaseObject),
 });
-const writeHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
-const unavailable = problemSchema(
-  'overloaded',
-  'partition_unavailable',
-  'transaction_retry_exhausted',
-  'deadline_exceeded',
-);
+function writeHeaders() {
+  return memoizedValue(writeHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+  );
+}
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
+function unavailable() {
+  return memoizedValue(unavailable, () =>
+    problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  );
+}
 const unavailableCodes = [
   'overloaded',
   'partition_unavailable',
   'transaction_retry_exhausted',
   'deadline_exceeded',
 ] as const;
-const sessionHeaders = { [SESSION_HEADER]: t.String() };
+function sessionHeaders() {
+  return memoizedValue(sessionHeaders, () => ({ [SESSION_HEADER]: t.String() }));
+}
 
 function definitionProblem(error: unknown): never {
   if (error instanceof CatalogueArtifactError) {
@@ -126,22 +136,26 @@ const catalogueStatusSchema = t.Object({
   missing_digest: t.Union([t.String(), t.Null()]),
   error: t.Union([t.String(), t.Null()]),
 });
-const catalogueWriteResponses = {
-  400: problemSchema('invalid_request'),
-  401: unauthorized,
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('stale_editorial_head'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema('semantic_not_ready', ...unavailableCodes),
-};
-const catalogueReadResponses = {
-  400: problemSchema('invalid_request'),
-  401: unauthorized,
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  503: problemSchema('semantic_not_ready', ...unavailableCodes),
-};
+function catalogueWriteResponses() {
+  return memoizedValue(catalogueWriteResponses, () => ({
+    400: problemSchema('invalid_request'),
+    401: unauthorized(),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('stale_editorial_head'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema('semantic_not_ready', ...unavailableCodes),
+  }));
+}
+function catalogueReadResponses() {
+  return memoizedValue(catalogueReadResponses, () => ({
+    400: problemSchema('invalid_request'),
+    401: unauthorized(),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    503: problemSchema('semantic_not_ready', ...unavailableCodes),
+  }));
+}
 function catalogueReadContext(
   actor: import('../../request/access.ts').Actor,
   deadline: number,
@@ -189,7 +203,7 @@ export function definitionRoutes(
   const types = createTypeDirectory({ pool, tokens, clock });
   const typeLocale = t.Optional(t.Union(TYPE_DIRECTORY_LOCALES.map((locale) => t.Literal(locale))));
   const typeReadResponses = {
-    401: unauthorized,
+    401: unauthorized(),
     404: problemSchema('not_found'),
     400: problemSchema('invalid_request', 'invalid_cursor'),
     409: problemSchema('stale_cursor'),
@@ -214,7 +228,7 @@ export function definitionRoutes(
       },
       async ({ query, authorize, admission, job }) => {
         const check = await authorize({
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
         });
         return admission.run('normal', job, () => types.list(query, (client) => check(client), job.deadline));
@@ -230,7 +244,7 @@ export function definitionRoutes(
       },
       async ({ params, query, authorize, admission, job }) => {
         const check = await authorize({
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
         });
         return admission.run('normal', job, () =>
@@ -241,7 +255,7 @@ export function definitionRoutes(
     .post(
       '/v1/definitions/catalogue/artifacts',
       {
-        headers: writeHeaders,
+        headers: writeHeaders(),
         body: t.Object(
           {
             kind: t.Union([t.Literal('root'), t.Literal('node'), t.Literal('release'), t.Literal('declaration')]),
@@ -250,18 +264,18 @@ export function definitionRoutes(
           { additionalProperties: false },
         ),
         response: {
-          200: withHeaders(digestResponse, sessionHeaders),
-          201: withHeaders(digestResponse, sessionHeaders),
-          ...catalogueWriteResponses,
+          200: withHeaders(digestResponse, sessionHeaders()),
+          201: withHeaders(digestResponse, sessionHeaders()),
+          ...catalogueWriteResponses(),
         },
         detail: {
           ...catalogueWriteDetail('definition_catalogues.publish_artifact', 'definitions:publish'),
-          'x-body-limit': MAX_BODY_LIMIT,
+          'x-body-limit': MAX_BODY_LIMIT(),
         },
       },
       async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        const authorization = await authorizeCommand(resource, () => new DefinitionAccessDeniedError());
+        const authorization = await authorizeCommand(resource(), () => new DefinitionAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
             publishCatalogueArtifact(pool, {
@@ -287,14 +301,14 @@ export function definitionRoutes(
     .post(
       '/v1/definitions/catalogues',
       {
-        headers: writeHeaders,
+        headers: writeHeaders(),
         body: t.Object({ pin: cataloguePinSchema }, { additionalProperties: false }),
-        response: { 200: withHeaders(catalogueStatusSchema, sessionHeaders), ...catalogueWriteResponses },
+        response: { 200: withHeaders(catalogueStatusSchema, sessionHeaders()), ...catalogueWriteResponses() },
         detail: catalogueWriteDetail('definition_catalogues.build', 'definitions:publish'),
       },
       async ({ body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        const authorization = await authorizeCommand(resource, () => new DefinitionAccessDeniedError());
+        const authorization = await authorizeCommand(resource(), () => new DefinitionAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
             startCatalogueBuild(pool, {
@@ -320,14 +334,14 @@ export function definitionRoutes(
       customMethod('/v1/definitions/catalogues/:root', 'step'),
       {
         params: t.Object({ root: t.String() }),
-        headers: writeHeaders,
+        headers: writeHeaders(),
         body: t.Object({}, { additionalProperties: false }),
-        response: { 200: withHeaders(catalogueStatusSchema, sessionHeaders), ...catalogueWriteResponses },
+        response: { 200: withHeaders(catalogueStatusSchema, sessionHeaders()), ...catalogueWriteResponses() },
         detail: catalogueWriteDetail('definition_catalogues.step', 'definitions:publish'),
       },
       async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        const authorization = await authorizeCommand(resource, () => new DefinitionAccessDeniedError());
+        const authorization = await authorizeCommand(resource(), () => new DefinitionAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
             stepCatalogueBuild(pool, {
@@ -353,20 +367,20 @@ export function definitionRoutes(
       customMethod('/v1/definitions/catalogues/:root', 'activate'),
       {
         params: t.Object({ root: t.String() }),
-        headers: writeHeaders,
+        headers: writeHeaders(),
         body: t.Object(
           { expected_head: t.Union([t.Integer({ minimum: 1, maximum: 2147483646 }), t.Null()]) },
           { additionalProperties: false },
         ),
         response: {
-          200: withHeaders(t.Object({ pin: cataloguePinSchema, head: t.Integer() }), sessionHeaders),
-          ...catalogueWriteResponses,
+          200: withHeaders(t.Object({ pin: cataloguePinSchema, head: t.Integer() }), sessionHeaders()),
+          ...catalogueWriteResponses(),
         },
         detail: catalogueWriteDetail('definition_catalogues.activate', 'definitions:activate'),
       },
       async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        const authorization = await authorizeCommand(resource, () => new DefinitionAccessDeniedError());
+        const authorization = await authorizeCommand(resource(), () => new DefinitionAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
             activateCatalogue(pool, {
@@ -393,7 +407,7 @@ export function definitionRoutes(
       {
         response: {
           200: t.Union([t.Object({ pin: cataloguePinSchema, head: t.Integer() }), t.Null()]),
-          ...catalogueReadResponses,
+          ...catalogueReadResponses(),
         },
         detail: catalogueReadDetail('definition_catalogues.head'),
       },
@@ -409,7 +423,7 @@ export function definitionRoutes(
       '/v1/definitions/catalogues/:root/build',
       {
         params: t.Object({ root: t.String() }),
-        response: { 200: catalogueStatusSchema, ...catalogueReadResponses },
+        response: { 200: catalogueStatusSchema, ...catalogueReadResponses() },
         detail: catalogueReadDetail('definition_catalogues.status'),
       },
       async ({ params, actor, admission, job }) => {
@@ -436,7 +450,7 @@ export function definitionRoutes(
           200: t.Unsafe<Awaited<ReturnType<NativeDefinitionCatalogue['kinds']>>>(
             t.Array(t.Object({ id: t.String(), value: t.Union([pinnedKindSchema, t.Null()]) })),
           ),
-          ...catalogueReadResponses,
+          ...catalogueReadResponses(),
         },
         detail: catalogueReadDetail('definition_catalogues.resolve_kinds'),
       },
@@ -467,7 +481,7 @@ export function definitionRoutes(
           200: t.Unsafe<Awaited<ReturnType<NativeDefinitionCatalogue['kindPage']>>>(
             t.Object({ kinds: t.Array(pinnedKindSchema), next: t.Union([t.String(), t.Null()]) }),
           ),
-          ...catalogueReadResponses,
+          ...catalogueReadResponses(),
         },
         detail: catalogueReadDetail('definition_catalogues.kind_page'),
       },
@@ -503,7 +517,7 @@ export function definitionRoutes(
           200: t.Unsafe<Awaited<ReturnType<NativeDefinitionCatalogue['kindCandidates']>>>(
             t.Object({ candidates: t.Array(pinnedKindSchema), next: t.Union([t.String(), t.Null()]) }),
           ),
-          ...catalogueReadResponses,
+          ...catalogueReadResponses(),
         },
         detail: catalogueReadDetail('definition_catalogues.candidates'),
       },
@@ -528,16 +542,16 @@ export function definitionRoutes(
     .post(
       '/v1/definitions/releases',
       {
-        headers: writeHeaders,
+        headers: writeHeaders(),
         body: t.Object({ release: releaseObject }, { additionalProperties: false }),
         response: {
-          200: withHeaders(digestResponse, sessionHeaders),
-          201: withHeaders(digestResponse, sessionHeaders),
+          200: withHeaders(digestResponse, sessionHeaders()),
+          201: withHeaders(digestResponse, sessionHeaders()),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: {
           operationId: 'definitions.publish',
@@ -545,14 +559,14 @@ export function definitionRoutes(
           'x-action': 'definitions:publish',
           'x-resource-types': ['semantic.context'],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
-          'x-body-limit': MAX_BODY_LIMIT,
+          'x-body-limit': MAX_BODY_LIMIT(),
           security: [{ bearerAuth: [] }],
         },
       },
       async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const authorization = await authorizeCommand(resource, () => new DefinitionAccessDeniedError());
+        const authorization = await authorizeCommand(resource(), () => new DefinitionAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
             publishRelease(pool, {
@@ -583,7 +597,7 @@ export function definitionRoutes(
             etag: t.String(),
             'cache-control': t.String(),
           }),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
         },
@@ -596,7 +610,7 @@ export function definitionRoutes(
       },
       async ({ params, authorize, admission, job, set }) => {
         const check = await authorize({
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
         });
         const release = await admission.run('normal', job, async () => {
@@ -615,7 +629,7 @@ export function definitionRoutes(
       {
         response: {
           200: activeResponse,
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
         },
@@ -628,7 +642,7 @@ export function definitionRoutes(
       },
       async ({ authorize, admission, job }) => {
         const check = await authorize({
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
         });
         const active = await admission.run('normal', job, async () => {
@@ -643,20 +657,20 @@ export function definitionRoutes(
       customMethod('/v1/definitions/releases/:digest', 'activate'),
       {
         params: t.Object({ digest: t.String() }),
-        headers: writeHeaders,
+        headers: writeHeaders(),
         body: t.Object(
           { expected_head: t.Union([t.Integer({ minimum: 1, maximum: 2147483646 }), t.Null()]) },
           { additionalProperties: false },
         ),
         response: {
-          200: withHeaders(activeResponse, sessionHeaders),
+          200: withHeaders(activeResponse, sessionHeaders()),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('stale_editorial_head'),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: {
           operationId: 'definitions.activate',
@@ -670,7 +684,7 @@ export function definitionRoutes(
       async ({ params, body, headers, actor, authorizeCommand, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const authorization = await authorizeCommand(resource, () => new DefinitionAccessDeniedError());
+        const authorization = await authorizeCommand(resource(), () => new DefinitionAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
             activateRelease(pool, {
@@ -696,13 +710,13 @@ export function definitionRoutes(
       '/v1/contexts/:id/definitions/extensions',
       {
         params: t.Object({ id: t.String() }),
-        headers: writeHeaders,
+        headers: writeHeaders(),
         body: t.Object({ extension: releaseObject }, { additionalProperties: false }),
         response: {
-          200: withHeaders(digestResponse, sessionHeaders),
-          201: withHeaders(digestResponse, sessionHeaders),
+          200: withHeaders(digestResponse, sessionHeaders()),
+          201: withHeaders(digestResponse, sessionHeaders()),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           422: problemSchema('idempotency_conflict'),
@@ -762,20 +776,20 @@ export function definitionRoutes(
       customMethod('/v1/contexts/:id/definitions/extensions/:digest', 'activate'),
       {
         params: t.Object({ id: t.String(), digest: t.String() }),
-        headers: writeHeaders,
+        headers: writeHeaders(),
         body: t.Object(
           { expected_head: t.Union([t.Integer({ minimum: 1, maximum: 2147483646 }), t.Null()]) },
           { additionalProperties: false },
         ),
         response: {
-          200: withHeaders(activeResponse, sessionHeaders),
+          200: withHeaders(activeResponse, sessionHeaders()),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('stale_editorial_head'),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: {
           operationId: 'definitions.activate_extension',
@@ -841,7 +855,7 @@ export function definitionRoutes(
             },
             { additionalProperties: false },
           ),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
         },

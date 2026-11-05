@@ -1,5 +1,4 @@
-// Loaded first: nativeCollectionOrdinalPageBound runs during module initialization of an import cycle
-// (search/service-scope-order.ts), before later imports of this file are evaluated.
+import { memoizedValue } from '../memoized.ts';
 import ordinalPage from './collection-source-native-ordinal.sql';
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
 import { declareBound, type Bound } from '@rezics/bounds';
@@ -120,7 +119,9 @@ type ProbeEvidence =
     };
 export type NativeCollectionProbe = ProbeEvidence & { work: WorkReceipt };
 import headerQuery from './collection-source-native-header.sql';
-const headerSQL = headerQuery.sql;
+function headerSQL() {
+  return memoizedValue(headerSQL, () => headerQuery.sql);
+}
 import membersQuery from './collection-source-native-members.sql';
 import factsQuery from './collection-source-native-facts.sql';
 import probeQuery from './collection-source-native-probe.sql';
@@ -166,7 +167,9 @@ export function nativeCollectionOrdinalPageBound(limit: number): NativeCollectio
   return Object.freeze({ limit, requestBytes, resultBytes, work, projection });
 }
 
-const probeSQL = probeQuery.sql;
+function probeSQL() {
+  return memoizedValue(probeSQL, () => probeQuery.sql);
+}
 const bind = (query: { params: readonly string[] }, values: Record<string, unknown>) =>
   query.params.map((name) => values[name]);
 // Metadata consumes owner state and stamp only. It never needs node or the move address.
@@ -203,124 +206,136 @@ const normal = (sql: string) =>
     .replace(/--[^\n]*/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-const costs = new Map<string, (values: readonly unknown[]) => Partial<WorkDimensions>>();
-const register = (sql: string, cost: (values: readonly unknown[]) => Partial<WorkDimensions>) =>
-  costs.set(normal(sql), cost);
-const fixed = (rows: number, points: number, bytes: number) => () => ({
-  nativeRows: rows,
-  nativePoints: points,
-  bytes,
-});
-/**
- * One saved-Collection membership probe: current metadata (including a prior public output head), one entry
- * check, copy and session points, and the complete 32-label native window. The saved-rule contract excludes
- * the state-builtin compressed-pin branch. This bound is paired with the separate canonical group cap.
- */
-export const COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST: Bound = declareBound({
-  candidateKeys: 35,
-  engineRequests: 0,
-  identityMetadataRows: 0,
-  nativeRows: 512,
-  emptySeeks: 16,
-  nativePoints: 64,
-  witnessKeys: 35,
-  statements: 16,
-  bytes: 2_200_000,
-});
-// These bounds count plan-node row work, including materialization/sort/joins, rather than result.rowCount.
-// Header/fence/reference/account/partition are exact native primary-key points with fixed-width projections.
-for (const sql of [headerSQL, fenceSQL, referenceSQL, accountSQL]) register(sql, fixed(4, 1, 2048));
-// The native identity JSON has a schema-enforced 4096-byte ceiling, plus its result framing.
-register(scopeIdentitySQL, fixed(4, 1, 4608));
-register(nativeCollectionPartitionMetadataSQL, fixed(4, 1, 128));
-register(outputHead.sql, fixed(48, 7, 1024));
-register(outputProbe.sql, () => ({
-  nativeRows: 4,
-  nativePoints: 1,
-  candidateKeys: 1,
-  witnessKeys: 1,
-  bytes: 256,
-}));
-register(outputPage.sql, (v) => ({
-  nativeRows: 4 * Number(v[4]) + 4,
-  nativePoints: 1,
-  candidateKeys: Number(v[4]),
-  bytes: 256 * Number(v[4]),
-}));
-register(ordinalPage.sql, (v) => nativeCollectionOrdinalPageBound(Number(v[4])).projection);
-register(entrySQL, () => ({
-  nativeRows: 8,
-  nativePoints: 2,
-  candidateKeys: 1,
-  witnessKeys: 1,
-  bytes: 256,
-}));
-register(pinSQL, (v) => ({
-  nativeRows: 4,
-  nativePoints: 1,
-  candidateKeys: 1,
-  witnessKeys: 1,
-  bytes: Number(v[3]),
-}));
-for (const sql of [probeSQL, copySQL, sessionSQL])
-  register(sql, () => ({
-    nativeRows: 6,
-    nativePoints: 1,
-    witnessKeys: 1,
-    candidateKeys: 1,
-    bytes: 256,
-  }));
-for (const query of [membersQuery, factsQuery])
-  register(query.sql, (values) => {
-    const limit = Number(values[query.params.indexOf('limit')]);
-    return {
-      nativeRows: 8 * limit + 8,
-      nativePoints: 1,
-      candidateKeys: limit,
-      bytes: 256 * limit,
-    };
-  });
-register(labelSQL, (v) => ({
-  nativeRows: 12 * Number(v[4]) + 8,
-  nativePoints: 1 + Number(v[4]),
-  candidateKeys: Number(v[4]),
-  witnessKeys: Number(v[4]),
-  bytes: 256 * Number(v[4]),
-}));
-register(permissionTime.sql, fixed(1, 0, 256));
-register(opening.sql, fixed(8, 1, 256));
-// The inverse owner admits <=1000 groups; the anchored view reads one account plus that native inverse range.
-register(inverse.sql, fixed(4004, 1, 128128));
-register(assignment.sql, fixed(8, 2, 512));
-register(membership.sql, fixed(32, 5, 1024));
-for (const query of [candidates, permissions])
-  register(query.sql, (values) => {
-    const params = Object.fromEntries(query.params.map((name, i) => [name, values[i]]));
-    const roles =
-      typeof params.roles === 'string'
-        ? (JSON.parse(params.roles) as unknown[])
-        : Array.isArray(params.roles)
-          ? params.roles
-          : [];
-    const arrayLength = (value: unknown) =>
-      Array.isArray(value)
-        ? value.length
-        : typeof value === 'string'
-          ? (types.getTypeParser(1009 as Parameters<typeof types.getTypeParser>[0])(value) as unknown[]).length
-          : 0;
-    const grantRoles = arrayLength(params.grant_roles);
-    const targets = arrayLength(params.resource_ids) + (params.include_global === true ? 1 : 0);
-    const branches = params.include_explicit === true ? 2 : 1;
-    // Two actor/principal identities and their active-account keys supplement the admitted group-role records.
-    // Each target/key probes one exclusion-constrained grant, <=3 denial reasons and each installed role.
-    const keys = roles.length + 4,
-      points = targets * branches * keys * (grantRoles + 4) + 1;
-    return {
-      nativeRows: 32 * points + 64,
-      nativePoints: points,
-      bytes: 256 * keys,
-    };
-  });
+export function COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST(): Bound {
+  return memoizedValue(COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST, () =>
+    declareBound({
+      candidateKeys: 35,
+      engineRequests: 0,
+      identityMetadataRows: 0,
+      nativeRows: 512,
+      emptySeeks: 16,
+      nativePoints: 64,
+      witnessKeys: 35,
+      statements: 16,
+      bytes: 2_200_000,
+    }),
+  );
+}
+
+function costs() {
+  return memoizedValue(costs, () =>
+    (() => {
+      const costs = new Map<string, (values: readonly unknown[]) => Partial<WorkDimensions>>();
+      const register = (sql: string, cost: (values: readonly unknown[]) => Partial<WorkDimensions>) =>
+        costs.set(normal(sql), cost);
+      const fixed = (rows: number, points: number, bytes: number) => () => ({
+        nativeRows: rows,
+        nativePoints: points,
+        bytes,
+      });
+      /**
+       * One saved-Collection membership probe: current metadata (including a prior public output head), one entry
+       * check, copy and session points, and the complete 32-label native window. The saved-rule contract excludes
+       * the state-builtin compressed-pin branch. This bound is paired with the separate canonical group cap.
+       */
+      // These bounds count plan-node row work, including materialization/sort/joins, rather than result.rowCount.
+      // Header/fence/reference/account/partition are exact native primary-key points with fixed-width projections.
+      for (const sql of [headerSQL(), fenceSQL, referenceSQL, accountSQL]) register(sql, fixed(4, 1, 2048));
+      // The native identity JSON has a schema-enforced 4096-byte ceiling, plus its result framing.
+      register(scopeIdentitySQL, fixed(4, 1, 4608));
+      register(nativeCollectionPartitionMetadataSQL, fixed(4, 1, 128));
+      register(outputHead.sql, fixed(48, 7, 1024));
+      register(outputProbe.sql, () => ({
+        nativeRows: 4,
+        nativePoints: 1,
+        candidateKeys: 1,
+        witnessKeys: 1,
+        bytes: 256,
+      }));
+      register(outputPage.sql, (v) => ({
+        nativeRows: 4 * Number(v[4]) + 4,
+        nativePoints: 1,
+        candidateKeys: Number(v[4]),
+        bytes: 256 * Number(v[4]),
+      }));
+      register(ordinalPage.sql, (v) => nativeCollectionOrdinalPageBound(Number(v[4])).projection);
+      register(entrySQL, () => ({
+        nativeRows: 8,
+        nativePoints: 2,
+        candidateKeys: 1,
+        witnessKeys: 1,
+        bytes: 256,
+      }));
+      register(pinSQL, (v) => ({
+        nativeRows: 4,
+        nativePoints: 1,
+        candidateKeys: 1,
+        witnessKeys: 1,
+        bytes: Number(v[3]),
+      }));
+      for (const sql of [probeSQL(), copySQL, sessionSQL])
+        register(sql, () => ({
+          nativeRows: 6,
+          nativePoints: 1,
+          witnessKeys: 1,
+          candidateKeys: 1,
+          bytes: 256,
+        }));
+      for (const query of [membersQuery, factsQuery])
+        register(query.sql, (values) => {
+          const limit = Number(values[query.params.indexOf('limit')]);
+          return {
+            nativeRows: 8 * limit + 8,
+            nativePoints: 1,
+            candidateKeys: limit,
+            bytes: 256 * limit,
+          };
+        });
+      register(labelSQL, (v) => ({
+        nativeRows: 12 * Number(v[4]) + 8,
+        nativePoints: 1 + Number(v[4]),
+        candidateKeys: Number(v[4]),
+        witnessKeys: Number(v[4]),
+        bytes: 256 * Number(v[4]),
+      }));
+      register(permissionTime.sql, fixed(1, 0, 256));
+      register(opening.sql, fixed(8, 1, 256));
+      // The inverse owner admits <=1000 groups; the anchored view reads one account plus that native inverse range.
+      register(inverse.sql, fixed(4004, 1, 128128));
+      register(assignment.sql, fixed(8, 2, 512));
+      register(membership.sql, fixed(32, 5, 1024));
+      for (const query of [candidates, permissions])
+        register(query.sql, (values) => {
+          const params = Object.fromEntries(query.params.map((name, i) => [name, values[i]]));
+          const roles =
+            typeof params.roles === 'string'
+              ? (JSON.parse(params.roles) as unknown[])
+              : Array.isArray(params.roles)
+                ? params.roles
+                : [];
+          const arrayLength = (value: unknown) =>
+            Array.isArray(value)
+              ? value.length
+              : typeof value === 'string'
+                ? (types.getTypeParser(1009 as Parameters<typeof types.getTypeParser>[0])(value) as unknown[]).length
+                : 0;
+          const grantRoles = arrayLength(params.grant_roles);
+          const targets = arrayLength(params.resource_ids) + (params.include_global === true ? 1 : 0);
+          const branches = params.include_explicit === true ? 2 : 1;
+          // Two actor/principal identities and their active-account keys supplement the admitted group-role records.
+          // Each target/key probes one exclusion-constrained grant, <=3 denial reasons and each installed role.
+          const keys = roles.length + 4,
+            points = targets * branches * keys * (grantRoles + 4) + 1;
+          return {
+            nativeRows: 32 * points + 64,
+            nativePoints: points,
+            bytes: 256 * keys,
+          };
+        });
+      return costs;
+    })(),
+  );
+}
 export function nativeCollectionFootprint(
   sql: string,
   values: readonly unknown[],
@@ -349,7 +364,7 @@ export function nativeCollectionFootprint(
       ? partitionBytes === undefined
         ? undefined
         : { nativeRows: 4, nativePoints: 1, bytes: partitionBytes }
-      : costs.get(normal(sql))?.(values);
+      : costs().get(normal(sql))?.(values);
   if (!cost) return undefined; // Includes unproved cold catalogue/schema checks and unknown owner ports.
   return {
     candidateKeys: 0,
@@ -472,7 +487,7 @@ function validate(ref: Ref) {
 async function observe(client: QueryClient, ref: Ref): Promise<NativeCollectionMetadata | null> {
   validate(ref);
   const row = (
-    await client.query<Header>(headerSQL, bind(headerQuery, { route: ref.route, collection_id: ref.collectionId }))
+    await client.query<Header>(headerSQL(), bind(headerQuery, { route: ref.route, collection_id: ref.collectionId }))
   ).rows[0];
   if (!row) {
     if ((await client.query(referenceSQL, [ref.route, ref.collectionId])).rows.length)
@@ -601,7 +616,7 @@ export async function readNativeCollectionMetadataForWork(
   )
     throw new ProblemError('semantic_not_ready');
   const allowed = new Set(
-    [headerSQL, referenceSQL, nativeCollectionPartitionMetadataSQL, outputHead.sql, fenceSQL].map(normal),
+    [headerSQL(), referenceSQL, nativeCollectionPartitionMetadataSQL, outputHead.sql, fenceSQL].map(normal),
   );
   const calls = new Set<string>();
   const client: QueryClient = {
@@ -961,7 +976,7 @@ export async function probeNativeCollectionOriginal(
         if (current.authority === 'curated') {
           const row = (
             await client.query<{ storedSubjectId: string; factId: string }>(
-              probeSQL,
+              probeSQL(),
               bind(probeQuery, {
                 route: current.route,
                 collection_id: current.collectionId,
