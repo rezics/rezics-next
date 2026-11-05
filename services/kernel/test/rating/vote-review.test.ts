@@ -145,6 +145,10 @@ test('supported native guarded effects retain exact retries, current readback an
       .rejects.toMatchObject({ reason: 'own_vote_changed' });
     const competing = await createLocalSubject();
     const absent = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, competing);
+    const own = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);
+    await expect(votes.putVoteOutcome(voter, input(target, 5, {
+      ...own.guard, subject: { ...own.guard.subject, identity: absent.guard.subject.identity! },
+    }), crypto.randomUUID())).rejects.toMatchObject({ name: 'VoteInvalidError', field: 'guard' });
     const writers = await Promise.allSettled([3, 4].map((units) =>
       votes.putVoteOutcome(voter, input(competing, units, absent.guard), crypto.randomUUID()),
     ));
