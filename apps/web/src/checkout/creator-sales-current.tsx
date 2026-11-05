@@ -13,12 +13,14 @@ import { CreatorSalesWindows, type SalesCoordinate, type SalesMovement } from '.
 
 type Origin = ReturnType<typeof useCreatorCurrentOrigin>['origin'];
 type Props = { initial: CreatorSalesCurrentRead; locale: string; cursor?: string | undefined;
-  navigate?: ((href: string) => void) | undefined };
+  navigate?: ((href: string) => Promise<void>) | undefined };
 type Windows = {
   coordinates: CreatorSalesWindows;
   source: object | undefined;
   focus: HTMLElement | undefined;
   admitting: boolean;
+  completed: object | undefined;
+  retrying: boolean;
 };
 
 function matches(value: unknown, subject: string, cursor: string | null): value is CreatorSalesCurrentRead {
@@ -52,7 +54,7 @@ export function CreatorSalesCurrent(props: Props) {
     current.admission, current.observation, current.exposure, current.csrfToken]);
   const [visit, setVisit] = useState(() => ({ authority, client: current.client, initial, origin: current.origin,
     cursor, transfer: false, windows: { coordinates: new CreatorSalesWindows(cursor), source: undefined,
-      focus: undefined, admitting: false } as Windows }));
+      focus: undefined, admitting: false, completed: undefined, retrying: false } as Windows }));
   let active = visit;
   if (visit.authority !== authority || visit.client !== current.client || visit.initial !== initial ||
       visit.origin !== current.origin || visit.cursor !== cursor) {
@@ -61,11 +63,12 @@ export function CreatorSalesCurrent(props: Props) {
       visit.windows.coordinates.staged.cursor === cursor;
     active = { authority, client: current.client, initial, origin: current.origin, cursor, transfer,
       windows: transfer ? visit.windows : { coordinates: new CreatorSalesWindows(cursor),
-        source: undefined, focus: undefined, admitting: false } };
+        source: undefined, focus: undefined, admitting: false, completed: undefined, retrying: false } };
     active.windows.source = undefined;
     active.windows.admitting = transfer;
     setVisit(active);
   }
+  const [, wake] = useState(0);
   const live = useRef(active);
   live.current = active;
   useLayoutEffect(() => {
@@ -105,6 +108,7 @@ export function CreatorSalesCurrent(props: Props) {
       hydrated={current.hydrated}
       revision={admittedLoader.version}
       windows={active.windows}
+      settled={() => { if (live.current.windows === active.windows) wake((n) => n + 1); }}
       seed={active.transfer || current.seed || (admittedLoader.version > 0 && admittedLoader.origin === current.origin.id)}
     />
   );
@@ -121,6 +125,7 @@ function CurrentSalesRead({
   revision,
   windows,
   navigate,
+  settled,
 }: Props & {
   subject: string;
   origin: Origin;
@@ -128,6 +133,7 @@ function CurrentSalesRead({
   seed: boolean;
   revision: number;
   windows: Windows;
+  settled: () => void;
 }) {
   const client = useQueryClient();
   const [, redraw] = useState(0);
@@ -180,15 +186,16 @@ function CurrentSalesRead({
     client.getQueryState(queryKey)?.fetchStatus !== 'fetching' &&
     client.getQueryData(queryKey) === value;
   if (windows.source && windows.source !== source &&
-      (!windows.admitting || !windows.coordinates.staged || windows.coordinates.staged.cursor !== cursor)) {
+      (!windows.retrying || !windows.coordinates.staged || windows.coordinates.staged.cursor !== cursor)) {
     windows.coordinates = new CreatorSalesWindows(cursor);
     windows.focus = undefined;
   }
+  if (windows.source !== source) windows.retrying = false;
   windows.source = source;
   const staged = windows.coordinates.staged;
   useLayoutEffect(() => {
     if (value?.page.kind !== 'ready' && value?.page.kind !== 'loading') windows.focus = undefined;
-    if (!windows.admitting || !staged || staged.cursor !== cursor || value?.page.kind !== 'ready' || !sourceIsCurrent()) return;
+    if (windows.completed !== staged || !windows.admitting || !staged || staged.cursor !== cursor || value?.page.kind !== 'ready' || !sourceIsCurrent()) return;
     windows.coordinates.accept();
     windows.admitting = false;
     const focus = windows.focus;
@@ -204,10 +211,16 @@ function CurrentSalesRead({
     if (!navigate || !sourceIsCurrent() || (staged && !windows.admitting)) return;
     windows.coordinates.stage(movement, target);
     windows.admitting = false;
+    windows.completed = undefined;
+    const attempt = windows.coordinates.staged;
     windows.focus = keyboard ? element : undefined;
     redraw((n) => n + 1);
     // Re-admit the initiating source immediately before the existing route navigation.
-    if (sourceIsCurrent()) navigate(creatorSalesHref(locale, target));
+    if (sourceIsCurrent()) void navigate(creatorSalesHref(locale, target)).then(() => {
+      if (windows.coordinates.staged !== attempt) return;
+      windows.completed = attempt;
+      settled();
+    });
   };
   if (hydrated && !origin.isCurrent())
     return (
@@ -224,7 +237,7 @@ function CurrentSalesRead({
         previous: windows.coordinates.previous,
         staged: windows.coordinates.staged,
         move,
-        retry: () => { if (sourceIsCurrent()) void query.refetch(); },
+        retry: () => { if (sourceIsCurrent()) { windows.retrying = true; void query.refetch(); } },
       } : undefined}
       refreshing={query.isFetching}
       refresh={() => {

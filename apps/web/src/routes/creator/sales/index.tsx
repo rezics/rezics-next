@@ -34,6 +34,6 @@ export const Route = createFileRoute('/creator/sales/')({
       );
     if (!initial) return <CreatorSalesPage page={{ kind: 'unavailable' }} locale={locale} {...search} />;
     return <CreatorSalesCurrent initial={initial} locale={locale} {...search}
-      navigate={(href) => { void router.navigate({ href }); }} />;
+      navigate={async (href) => { await router.navigate({ href }); }} />;
   },
 });

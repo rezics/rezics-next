@@ -269,9 +269,10 @@ test('three windows return through exact Previous and failed Restart retry witho
     return value;
   });
   const show = () => root.render(<QueryClientProvider client={client}><RouterContextProvider router={router}>
-    <CreatorSalesCurrent initial={initial} cursor={cursor} locale="en" navigate={(href) => {
+    <CreatorSalesCurrent initial={initial} cursor={cursor} locale="en" navigate={async (href) => {
       cursor = new URL(href, 'https://site.test').searchParams.get('cursor') ?? undefined;
-      void reads.readCreatorSalesCurrent({ data: cursor ? { cursor } : {} }).then((value) => { initial = value; show(); });
+      initial = await reads.readCreatorSalesCurrent({ data: cursor ? { cursor } : {} });
+      show();
     }} />
   </RouterContextProvider></QueryClientProvider>);
   const tick = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
@@ -288,6 +289,11 @@ test('three windows return through exact Previous and failed Restart retry witho
     await tick();
     await click('Older sales');
     await click('Inspect sale');
+    expect(host.querySelector('#creator-sale-inspection')).not.toBeNull();
+    await click('Open current offer');
+    await act(async () => { window.dispatchEvent(new window.Event('pagehide')); });
+    window.history.replaceState(null, '', 'https://site.test/en/creator/sales?cursor=second%2B%2F%3D');
+    await act(async () => { window.dispatchEvent(new window.Event('pageshow')); });
     expect(host.querySelector('#creator-sale-inspection')).not.toBeNull();
     await click('Older sales');
     expect(host.querySelector('#creator-sale-inspection')).toBeNull();
