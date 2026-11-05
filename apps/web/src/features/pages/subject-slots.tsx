@@ -1,9 +1,11 @@
-import { createContext, useContext, useSyncExternalStore, type ComponentType } from 'react';
+import { createContext, useContext, useId, useSyncExternalStore, type ComponentType } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { useFeatureSlots } from '../../shell/feature-slots';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
+import { candidateContext } from '../../subject/candidates';
 import { subjectHref } from '../../subject/subject-href';
+import { subjectVisitReturn } from './subject-visit-navigation';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
 import { CharacterRelationshipsEntry } from '../catalogue/character-relationships/entry';
 import { CharacterRelationshipsGroups } from './character-relationships';
@@ -63,12 +65,48 @@ export function SubjectPurchaseSlot({ context }: { context: SubjectPurchaseConte
   );
 }
 
-function CompanionLink({ href, label }: { href: string; label: string }) {
+function CompanionLink({ href, label, describedBy }: { href: string; label: string; describedBy?: string }) {
   return (
-    <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={href}>
+    <a
+      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+      href={href}
+      {...(describedBy ? { 'aria-describedby': describedBy } : {})}
+    >
       {label}
     </a>
   );
+}
+
+function quotationOrigin(value: string, subjectId: string, locale: string, context?: string): string | null {
+  if (value.length > 2048 || new TextEncoder().encode(value).byteLength > 2048) return null;
+  const accepted = subjectVisitReturn(value, locale);
+  if (!accepted || accepted.length > 2048 || new TextEncoder().encode(accepted).byteLength > 2048) return null;
+  const url = new URL(accepted, 'https://rezics.invalid');
+  const subjectPrefix = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(subjectId)}/`;
+  if (
+    url.origin !== 'https://rezics.invalid' ||
+    !url.pathname.startsWith(subjectPrefix) ||
+    ['via', 'returnTo', 'quote', 'quotationReturn'].some((key) => url.searchParams.has(key))
+  )
+    return null;
+  const originContexts = url.searchParams.getAll('context');
+  const sameContext = (left: string, right: string) => left.toLowerCase() === right.toLowerCase();
+  if (
+    (context === undefined && originContexts.length > 0) ||
+    (context !== undefined &&
+      !(sameContext(context, candidateContext) && originContexts.length === 0) &&
+      (originContexts.length !== 1 || !sameContext(originContexts[0]!, context)))
+  )
+    return null;
+  return accepted;
+}
+
+function quotationUnsupportedText(reason: 'realm' | 'context' | 'origin' | 'address', locale: string) {
+  const o = { locale: locale as never };
+  if (reason === 'realm') return m.quotation_entry_realm_unsupported({}, o);
+  if (reason === 'context') return m.quotation_entry_context_unsupported({}, o);
+  if (reason === 'origin') return m.quotation_entry_origin_unsupported({}, o);
+  return m.quotation_entry_address_unsupported({}, o);
 }
 
 /** Additive graph / quotation / concept / music-context companions; View enum stays unchanged. */
@@ -77,18 +115,32 @@ export function SubjectExploreSlot({
   subjectType,
   label,
   locale,
+  context,
+  realm,
+  returnTo,
 }: {
   subjectId: string;
   subjectType: string;
   label: string;
   locale: string;
+  context?: string | undefined;
+  realm?: string | undefined;
+  returnTo?: string | undefined;
 }) {
+  const unsupportedId = useId();
   const address = { id: subjectId, label, locale };
   const o = { locale: locale as never };
   const graph = catalogueEntries.graph(address);
   const quotations =
     subjectType === 'wd:Q95074' || subjectType === 'schema:Quotation' || subjectType.startsWith('schema:')
-      ? catalogueEntries.quotations(address)
+      ? catalogueEntries.quotations({
+          ...address,
+          context,
+          realm,
+          ...(returnTo === undefined
+            ? {}
+            : { returnTo: quotationOrigin(returnTo, subjectId, locale, context) }),
+        })
       : undefined;
   const concepts =
     subjectType === 'skos:Concept' || subjectType === 'skos:ConceptScheme'
@@ -108,7 +160,22 @@ export function SubjectExploreSlot({
     <section data-slot="subject-explore" className="flex min-w-0 flex-wrap gap-2">
       <p className="w-full text-sm font-medium">{m.graph_explore_title({}, o)}</p>
       <CompanionLink href={graph.href} label={graph.label} />
-      {quotations && <CompanionLink href={quotations.href} label={quotations.label} />}
+      {quotations && 'href' in quotations ? (
+        <CompanionLink href={quotations.href} label={quotations.label} />
+      ) : quotations ? (
+        <div role="group" aria-label={quotations.label} className="flex min-w-0 flex-wrap items-center gap-2">
+          <p id={unsupportedId} role="status" className="max-w-prose text-sm text-muted-foreground">
+            {quotationUnsupportedText(quotations.unsupported, locale)}
+          </p>
+          {quotations.generalHref && (
+            <CompanionLink
+              href={quotations.generalHref}
+              label={m.quotation_entry_general({}, o)}
+              describedBy={unsupportedId}
+            />
+          )}
+        </div>
+      ) : null}
       {concepts && <CompanionLink href={concepts.href} label={concepts.label} />}
       {music && <CompanionLink href={music.href} label={music.label} />}
     </section>

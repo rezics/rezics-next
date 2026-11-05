@@ -8,10 +8,37 @@ import { catalogueFileCorrectionHref } from './catalogue-file-reader/navigation'
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
+type QuotationUnsupported = 'realm' | 'context' | 'origin' | 'address';
+export type QuotationEntry = CatalogueEntry | {
+  group: 'read';
+  label: string;
+  unsupported: QuotationUnsupported;
+  generalHref?: string;
+};
 type Locale = { locale: string };
 type Subject = Locale & { id: string; label: string };
 const options = (locale: string) => ({ locale: locale as never });
 const subject = ({ id, label, locale }: Subject) => subjectHref({ id, label }, locale).href;
+const contextId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function addressFits(value: string): boolean {
+  return value.length <= 2048 && new TextEncoder().encode(value).byteLength <= 2048;
+}
+
+function quotationPath(address: Subject): string {
+  const url = new URL(`${subject(address)}/quotations`, 'https://rezics.invalid');
+  return `${url.pathname}${url.search}`;
+}
+
+function unsupportedQuotation(address: Subject, unsupported: QuotationUnsupported): QuotationEntry {
+  const generalHref = quotationPath(address);
+  return {
+    group: 'read',
+    label: m.quotation_title({}, options(address.locale)),
+    unsupported,
+    ...(addressFits(generalHref) ? { generalHref } : {}),
+  };
+}
 
 /** Shared destinations for standalone native entries and their grouped navigation. No capability decisions. */
 export const catalogueEntries = {
@@ -247,11 +274,42 @@ export const catalogueEntries = {
     label: m.graph_explore_title({}, options(locale)),
     href: `${subject({ id, label, locale })}/graph`,
   }),
-  quotations: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
-    group: 'read',
-    label: m.quotation_title({}, options(locale)),
-    href: `${subject({ id, label, locale })}/quotations`,
-  }),
+  quotations: ({
+    id,
+    label = '',
+    locale,
+    context,
+    realm,
+    returnTo,
+  }: Locale & {
+    id: string;
+    label?: string | undefined;
+    context?: string | undefined;
+    realm?: string | undefined;
+    /** A validated same-locale, same-Subject public origin, or null when an explicit origin was refused. */
+    returnTo?: string | null | undefined;
+  }): QuotationEntry => {
+    const address = { id, label, locale };
+    if (realm !== undefined) return unsupportedQuotation(address, 'realm');
+    if (context !== undefined && !contextId.test(context)) return unsupportedQuotation(address, 'context');
+    if (returnTo !== undefined) {
+      if (
+        returnTo === null ||
+        !addressFits(returnTo) ||
+        !returnTo.startsWith('/') ||
+        returnTo.startsWith('//') ||
+        returnTo.startsWith('/\\') ||
+        /[\\\u0000-\u001f\u007f]/u.test(returnTo)
+      )
+        return unsupportedQuotation(address, 'origin');
+    }
+    const url = new URL(quotationPath(address), 'https://rezics.invalid');
+    if (context !== undefined) url.searchParams.set('context', context);
+    if (typeof returnTo === 'string') url.searchParams.set('returnTo', returnTo);
+    const href = `${url.pathname}${url.search}`;
+    if (!addressFits(href)) return unsupportedQuotation(address, 'address');
+    return { group: 'read', label: m.quotation_title({}, options(locale)), href };
+  },
   concepts: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
     group: 'read',
     label: m.concept_explore_title({}, options(locale)),
