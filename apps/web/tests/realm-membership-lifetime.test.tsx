@@ -752,11 +752,44 @@ test.each(['accepted', 'refused'] as const)(
       await surface.updateConfig({ realmId, nativeObservation: nativeHome('member'), onCompleted });
       await surface.settle();
       expect(completions).toHaveLength(outcome === 'accepted' ? 1 : 0);
+      expect(surface.hasText(m.realm_membership_command_uncertain())).toBe(outcome !== 'accepted');
       await surface.settle();
       expect(completions).toHaveLength(outcome === 'accepted' ? 1 : 0);
     } finally {
       await surface.dispose();
       expect(completions.every((receipt) => !receipt.current() && !receipt.focusEligible())).toBe(true);
+    }
+  },
+);
+
+test.each(['equal', 'denied', 'A-B-A'] as const)(
+  'native acknowledgement cannot cross a %s source replacement',
+  async (replacement) => {
+    resetFixtures();
+    sendMembership = async () => ({ outcome: 'accepted', workflowId: 'retired-completion' });
+    const initial = nativeHome('none');
+    let completions = 0;
+    const onCompleted = () => {
+      completions++;
+      return false;
+    };
+    const surface = await makeSurface({ realmId, nativeObservation: initial, onCompleted });
+    try {
+      await surface.until(() => surface.hasText(m.realm_join()), 'native join advice');
+      await click(surface, m.realm_join());
+      await surface.until(() => surface.hasText(m.realm_membership_command_uncertain()), 'acknowledged join');
+      const replaced = nativeHome('none');
+      if (replacement === 'denied') replaced.viewer = { state: 'denied' };
+      await surface.updateConfig({ realmId, nativeObservation: replaced, onCompleted });
+      if (replacement === 'A-B-A') await surface.updateConfig({ realmId, nativeObservation: initial, onCompleted });
+      await surface.updateConfig({ realmId, nativeObservation: nativeHome('member'), onCompleted });
+      await surface.settle();
+      expect(completions).toBe(0);
+      expect(surface.hasText(m.realm_membership_command_uncertain())).toBe(true);
+      await click(surface, m.realm_membership_command_discard());
+      expect(surface.hasText(m.realm_membership_command_uncertain())).toBe(false);
+    } finally {
+      await surface.dispose();
     }
   },
 );

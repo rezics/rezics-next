@@ -195,7 +195,7 @@ export type RealmShelfTransport = {
     cursor?: string;
     credentialMode: ReadCredentialMode;
   }) => Promise<ShelfPage<PublishedSubject>>;
-  change: PublicationSend;
+  change?: PublicationSend;
   prepare?: PublicationPrepare;
 };
 
@@ -617,7 +617,7 @@ function SpaceHome({
     [nativeOperations, page.realm?.id, locale],
   );
   const nativeShelfTransport = useMemo<RealmShelfTransport | undefined>(
-    () => (nativeShelves ? { ...nativeShelves, change: async () => ({ kind: 'denied' }) } : undefined),
+    () => nativeShelves ?? undefined,
     [nativeShelves],
   );
   const pageSource = page.realm?.continuity;

@@ -9,6 +9,8 @@ import type { SpacePageAdmission } from '../src/community/space-page-lifetime';
 import * as start from '../.storybook/react-start';
 import { available, image } from '../src/kernel/fake/community';
 import { realmMembershipTestReaders } from './realm-membership-test-fixture';
+import { boardSearch, admittedBoardReturn } from '../src/threads/board-navigation';
+import { threadLocation } from '../src/threads/thread-href';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -674,63 +676,81 @@ test('late initial native home cannot bind to a retired route observation', asyn
   expect(host.textContent).toBe('');
 });
 
-test('the mounted Board seam restores its supplying shelf and links to the exact Realm cursor', async () => {
-  native = fixture(0);
-  client.setQueryData(sessionModule.sessionQuery.queryKey, session);
-  const page = await readNativeRealmHome(operations, input);
-  const realm = page.realm!;
-  const restored: (string | undefined)[] = [];
-  const returnTo = '/en/spaces/realm?node=boards&cursor=selected-window';
-  await settle(() =>
-    root.render(
-      <Frame.Provider
-        value={
-          <RealmShelf
-            realm={realm}
-            returnTo={returnTo}
-            transport={{
-              publications: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
-              change: async () => ({ kind: 'denied' }),
-              boards: async ({ cursor }) => {
-                restored.push(cursor);
-                return {
-                  kind: 'page',
-                  items: [
-                    {
-                      id: id(80),
-                      title: 'Supplied Board',
-                      description: 'Independent description',
-                      purpose: 'discussion',
-                      visibility: 'published',
-                    },
-                  ],
-                  next: null,
-                  unavailable: 0,
-                };
-              },
-            }}
-          />
-        }
-      >
-        <QueryClientProvider client={client}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
-      </Frame.Provider>,
-    ),
-  );
-  await settle(() => {});
-  expect(restored).toEqual(['selected-window']);
-  const section = host.querySelector('[data-slot="realm-community-boards"]')!;
-  const link = section.querySelector<HTMLAnchorElement>('[data-slot="realm-board-link"]')!;
-  expect(link.textContent).toBe('Supplied Board');
-  expect(link.closest('h3')).not.toBeNull();
-  expect(link.textContent).not.toContain('Independent description');
-  expect(link.className).not.toContain('absolute');
-  expect(section.querySelectorAll('a')).toHaveLength(1);
-  const destination = new URL(link.href, 'https://site.test');
-  expect(destination.pathname).toBe(`/boards/${id(80)}`);
-  expect(destination.searchParams.get('returnTo')).toBe(
-    `/en/spaces/realm?node=boards&cursor=selected-window#realm-board-${id(80)}`,
-  );
-  expect(document.activeElement?.id).toBe('realm-boards-heading');
-});
+test.each(['en', 'zh-Hant', 'ja'] as const)(
+  'the mounted Board seam preserves the %s supplying shelf through thread return',
+  async (locale) => {
+    visitLocale = locale;
+    native = fixture(0);
+    client.setQueryData(sessionModule.sessionQuery.queryKey, session);
+    const page = await readNativeRealmHome(operations, input);
+    const realm = page.realm!;
+    const restored: (string | undefined)[] = [];
+    const returnTo = `/${locale}/spaces/realm?node=boards&cursor=selected-window`;
+    await settle(() =>
+      root.render(
+        <Frame.Provider
+          value={
+            <RealmShelf
+              realm={realm}
+              returnTo={returnTo}
+              transport={{
+                publications: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
+                change: async () => ({ kind: 'denied' }),
+                boards: async ({ cursor }) => {
+                  restored.push(cursor);
+                  return {
+                    kind: 'page',
+                    items: [
+                      {
+                        id: id(80),
+                        title: 'Supplied Board',
+                        description: 'Independent description',
+                        purpose: 'discussion',
+                        visibility: 'published',
+                      },
+                    ],
+                    next: null,
+                    unavailable: 0,
+                  };
+                },
+              }}
+            />
+          }
+        >
+          <QueryClientProvider client={client}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </Frame.Provider>,
+      ),
+    );
+    await settle(() => {});
+    expect(restored).toEqual(['selected-window']);
+    const section = host.querySelector('[data-slot="realm-community-boards"]')!;
+    const link = section.querySelector<HTMLAnchorElement>('[data-slot="realm-board-link"]')!;
+    expect(link.textContent).toBe('Supplied Board');
+    expect(link.closest('h3')).not.toBeNull();
+    expect(link.textContent).not.toContain('Independent description');
+    expect(link.className).not.toContain('absolute');
+    expect(section.querySelectorAll('a')).toHaveLength(1);
+    const destination = new URL(link.href, 'https://site.test');
+    expect(destination.pathname).toBe(`/${locale}/boards/${id(80)}`);
+    expect(destination.searchParams.get('returnTo')).toBe(`${returnTo}#realm-board-${id(80)}`);
+    const thread = new URL(
+      threadLocation(
+        locale,
+        { id: id(81), title: 'Ordinary thread' },
+        undefined,
+        undefined,
+        undefined,
+        link.getAttribute('href')!,
+      ),
+      'https://site.test',
+    );
+    const backToBoard = admittedBoardReturn(thread.searchParams.get('boardReturn'))!;
+    expect(backToBoard).toBe(link.getAttribute('href')!);
+    expect(
+      boardSearch(Object.fromEntries(new URL(backToBoard, 'https://site.test').searchParams), locale).returnTo,
+    ).toBe(`${returnTo}#realm-board-${id(80)}`);
+    expect(document.activeElement?.id).toBe('realm-boards-heading');
+  },
+);

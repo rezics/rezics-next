@@ -122,9 +122,19 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const spaceActions = await import('../src/community/space-actions');
+const originalHostWrites: { input: PublicationChange; credential: string }[] = [];
 mock.module('../src/community/space-actions', () => ({
   ...spaceActions,
-  changeRealmPublication: async () => ({ kind: 'unavailable' }),
+  changeRealmPublication: async ({
+    data,
+    headers,
+  }: {
+    data: PublicationChange;
+    headers: { 'X-CSRF-Token': string };
+  }) => {
+    originalHostWrites.push({ input: structuredClone(data), credential: headers['X-CSRF-Token'] });
+    return new Promise<PublicationOutcome>((resolve) => hostWrites.push({ input: data, resolve }));
+  },
   readRealmBoards: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
   readRealmPublicationPreparation: async () => ({ kind: 'unavailable' }),
   readRealmPublications: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
@@ -152,6 +162,7 @@ async function mountHook(session = viewer()) {
   await close();
   writes.length = 0;
   hostWrites.length = 0;
+  originalHostWrites.length = 0;
   saved.length = 0;
   activeCredential = session.csrfToken ?? '';
   shelfSubjects = subjects();
@@ -495,6 +506,7 @@ describe('Complete Realm publication original caller lifetime', () => {
   );
   type Completion = import('../src/community/space-page').RealmPublicationCompletion;
   let onCompleted: ((receipt: Completion) => boolean) | undefined;
+  let useOriginalHost = false;
   let completionRead:
     | ReturnType<typeof deferred<import('../src/community/space').ShelfPage<PublishedSubject>>>
     | undefined;
@@ -510,10 +522,11 @@ describe('Complete Realm publication original caller lifetime', () => {
     },
   };
   function RealmShelfHost() {
+    const { change, ...readers } = hostTransport;
     return (
       <RealmShelf
         realm={realm}
-        transport={hostTransport}
+        transport={useOriginalHost ? readers : hostTransport}
         search={hostSearch}
         {...(onCompleted ? { onCompleted } : {})}
       />
@@ -598,10 +611,11 @@ describe('Complete Realm publication original caller lifetime', () => {
     });
   }
 
-  test.each(['handoff', 'decline', 'pointer', 'retired', 'unavailable', 'uncertain'])(
+  test.each(['handoff', 'decline', 'pointer', 'retired', 'unavailable', 'uncertain', 'original-host'])(
     '%s publication completion waits for an admitted committed shelf refresh',
     async (scenario) => {
       await mountHook();
+      useOriginalHost = scenario === 'original-host';
       completionRead = deferred();
       const completions: Completion[] = [];
       const sentinel = window.document.createElement('button');
@@ -629,6 +643,9 @@ describe('Complete Realm publication original caller lifetime', () => {
           await tick();
         });
         await settleHost(0, scenario === 'uncertain' ? { kind: 'unavailable' } : { kind: 'saved', head: nextHead });
+        expect(originalHostWrites).toEqual(
+          useOriginalHost ? [{ input: hostWrites[0]!.input, credential: 'csrf-one' }] : [],
+        );
         expect(completions).toHaveLength(0);
         if (scenario === 'pointer') window.document.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
         if (scenario === 'retired') await updateSession(viewer(reader, 'csrf-two'));
@@ -650,6 +667,7 @@ describe('Complete Realm publication original caller lifetime', () => {
         expect(completions.every((receipt) => !receipt.current() && !receipt.focusEligible())).toBe(true);
       } finally {
         onCompleted = undefined;
+        useOriginalHost = false;
         completionRead = undefined;
         sentinel.remove();
       }
