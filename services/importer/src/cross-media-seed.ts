@@ -2164,7 +2164,9 @@ export type CrossMediaSeedExtras = {
 
 function bangumiSourceIdentity(key: string, nativeType?: string): { property: string; value: string } | undefined {
   if (key.startsWith('person:'))
-    return nativeType === 'schema:Organization' ? undefined : { property: 'wdt:P6298', value: key.slice('person:'.length) };
+    return nativeType === 'schema:Organization'
+      ? undefined
+      : { property: 'wdt:P6298', value: key.slice('person:'.length) };
   if (key.startsWith('character:')) return { property: 'wdt:P6296', value: key.slice('character:'.length) };
   if (key.startsWith('episode:')) return { property: 'schema:url', value: bangumiRecordUrl(key) };
   if (/^[1-9][0-9]*$/u.test(key)) return { property: 'wdt:P5732', value: key };
@@ -2645,8 +2647,7 @@ export async function seedCrossMedia(
             ? record.key.startsWith('person:') && expectedType === 'schema:Organization'
             : (subject?.statements?.[identity.property]?.some(
                 (statement) => statement.value?.type === 'value' && statement.value.content === identity.value,
-              ) ??
-              false);
+              ) ?? false);
         if (subject?.id !== claim.subject || subject.type !== expectedType || !matches) {
           if (identity)
             sourceIdentityGaps.push({

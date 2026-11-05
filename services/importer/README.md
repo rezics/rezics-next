@@ -2751,7 +2751,7 @@ all media checks stay active.
 - Growth check: `tests/bindings-growth.test.ts`, “Media projection stays within its bound as B grows”, measures the
   current projection and unsubmitted-intent check together at three seeded scales. `tests/showcase-media.test.ts`
   checks refusal, text completion, unchanged-input retry and eventual actual availability.
-Decision: `task seed:dev` uses one exact five-work selection with direct cast and episodes and at most 64 people or organizations per provider; Bangumi Organization `wdt:P6298` is omitted with an explicit conversion gap because the released Organization profile has no property that preserves Bangumi-ID semantics.
+  Decision: `task seed:dev` uses one exact five-work selection with direct cast and episodes and at most 64 people or organizations per provider; Bangumi Organization `wdt:P6298` is omitted with an explicit conversion gap because the released Organization profile has no property that preserves Bangumi-ID semantics.
 
 Decision: selected graph preparation retains at most 8,192 edges and 8 MiB total (1 MiB per edge), recording a bounded gap when either limit is exceeded.
 
@@ -2799,6 +2799,7 @@ canonical equivalence.
   and sealed replay. `services/kernel/test/imports/bangumi-person-careers.test.ts`
   covers default review/adoption, current reads and ordinary source proposals;
   broader acceptance remains integration-owned.
+
 ### Bangumi TVAnime official websites
 
 The official-website projection runs through ordinary `bangumi@14` and the

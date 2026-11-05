@@ -431,7 +431,10 @@ export async function acquireBangumiCoverSources(
   const creatorImageSources = creatorRows.map((row) => results.get(row.key)!).filter(Boolean);
   const sources = [...coverSources, ...creatorImageSources];
   ensure(sources.length <= MEDIA_SOURCE_LIMIT, 'Selected Bangumi media evidence limit exceeded');
-  ensure(Buffer.byteLength(JSON.stringify(sources), 'utf8') <= MAX_IMPORT_RESPONSE_BYTES, 'Selected Bangumi media evidence exceeds its byte limit');
+  ensure(
+    Buffer.byteLength(JSON.stringify(sources), 'utf8') <= MAX_IMPORT_RESPONSE_BYTES,
+    'Selected Bangumi media evidence exceeds its byte limit',
+  );
   const byKey = new Map(sources.map((source) => [source.externalId, source]));
   const rows = plan.records.bangumi.map((row) => {
     const evidence = byKey.get(row.key);

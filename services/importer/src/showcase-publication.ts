@@ -619,9 +619,7 @@ function admittedCoverMedia(
   );
   const imageRows = creator ? plan.entities.bangumi : plan.records.bangumi;
   const imageUrl = (
-    imageRows.find((row) => row.key === record.sourceKey)?.payload as
-      | { images?: { large?: unknown } }
-      | undefined
+    imageRows.find((row) => row.key === record.sourceKey)?.payload as { images?: { large?: unknown } } | undefined
   )?.images?.large;
   if (
     !outcome ||

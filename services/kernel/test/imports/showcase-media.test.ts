@@ -81,9 +81,10 @@ test('synthetic selected Person and Organization images use the common authorize
         const url = new URL(String(input));
         if (url.pathname.startsWith('/v0/persons/')) {
           const id = Number(url.pathname.split('/').at(-1));
-          const creator = id === 29
-            ? { name: '鶴岡陽太', type: 1, image: personImageUrl }
-            : { name: 'TBS', type: 2, image: organizationImageUrl };
+          const creator =
+            id === 29
+              ? { name: '鶴岡陽太', type: 1, image: personImageUrl }
+              : { name: 'TBS', type: 2, image: organizationImageUrl };
           return new Response(
             JSON.stringify({
               id,
@@ -235,9 +236,11 @@ test('synthetic selected Person and Organization images use the common authorize
       ).toBe(200);
     }
     const organizationRead = await publicClient.readSubject(subjects.get('person:27')!);
-    const organizationStatements = (organizationRead.subject as {
-      statements: Record<string, unknown[]>;
-    }).statements;
+    const organizationStatements = (
+      organizationRead.subject as {
+        statements: Record<string, unknown[]>;
+      }
+    ).statements;
     expect(organizationStatements['wdt:P6298']).toBeUndefined();
 
     const takedown = await editor.http('/v1/sourceFences:takedown', {
@@ -253,10 +256,11 @@ test('synthetic selected Person and Organization images use the common authorize
     const suppressed = await publicClient.readSubject(personSubjectId);
     expect((suppressed as { summary?: { cover?: unknown } }).summary?.cover).toBeNull();
     expect(
-      (await runtime.request(
-        `/v1/media/${personMediaId}:authorizeDownload?variant=${personVariant.format}-${personVariant.width}`,
-      ))
-        .status,
+      (
+        await runtime.request(
+          `/v1/media/${personMediaId}:authorizeDownload?variant=${personVariant.format}-${personVariant.width}`,
+        )
+      ).status,
     ).toBe(404);
 
     batchCalls.length = 0;
