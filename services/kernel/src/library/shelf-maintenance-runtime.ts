@@ -53,8 +53,14 @@ import {
 } from './shelf-maintenance-ops-contract.ts';
 import { runLibraryCommand, workStepDeadline } from './command-support.ts';
 import {
-  consumeShelfMaintenance, shelfMaintenanceQuery, withShelfMaintenanceAllocator, shelfMaintenanceStatementPlan,
-  shelfMaintenanceEnqueuePlan, shelfMaintenanceCommandPlan, shelfMaintenanceSourceExecution,
+  consumeShelfMaintenance,
+  shelfMaintenanceQuery,
+  withShelfMaintenanceAllocator,
+  shelfMaintenanceStatementPlan,
+  shelfMaintenanceEnqueuePlan,
+  shelfMaintenanceCommandPlan,
+  shelfMaintenanceSourceExecution,
+  SHELF_MAINTENANCE_OPERATIONS,
 } from './shelf-maintenance-bounds.ts';
 import accountShareQuery from '../access/account-share.sql';
 import { readMaintenanceSessions } from './maintenance-session-page.ts';
@@ -245,8 +251,10 @@ function live(tx: CommandTransaction, owner: ShelfOwner) {
   return command;
 }
 async function shareShelfAccount(tx: CommandTransaction, accountId: string) {
-  const plan = shelfMaintenanceStatementPlan(accountShareQuery.sql,
-    accountShareQuery.params.map((name) => name === 'route' ? routeOf(accountId)! : accountId))!;
+  const plan = shelfMaintenanceStatementPlan(
+    accountShareQuery.sql,
+    accountShareQuery.params.map((name) => (name === 'route' ? routeOf(accountId)! : accountId)),
+  )!;
   return consumeShelfMaintenance('account', plan.total, () => shareAccount(tx, accountId));
 }
 async function ownerAuthority(tx: CommandTransaction, owner: ShelfOwner) {
@@ -390,7 +398,9 @@ export function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPor
       const proof = await derivedAuthority(tx, page);
       if (proof.source !== source) throw new TypeError('Shelf source is not bound to this live page');
       const result = await withShelfDerivedTypePreparation(tx, page, null, () =>
-        withShelfMaintenanceAllocator(tx, source.fullType, () => proof.keys.reserve({ client: tx, ...proof.owner }, source.fullType)),
+        withShelfMaintenanceAllocator(tx, source.fullType, () =>
+          proof.keys.reserve({ client: tx, ...proof.owner }, source.fullType),
+        ),
       );
       if (!result.done) {
         const rows = await reservationBind.run(tx, {
@@ -418,7 +428,9 @@ export function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPor
       )
         throw new TypeError('Reservation is not bound to this live shelf page');
       return withShelfDerivedTypePreparation(tx, page, reservationId, () =>
-        withShelfMaintenanceAllocator(tx, undefined, () => proof.keys.continue({ client: tx, ...proof.owner }, { reservationId })),
+        withShelfMaintenanceAllocator(tx, undefined, () =>
+          proof.keys.continue({ client: tx, ...proof.owner }, { reservationId }),
+        ),
       );
     },
   };
@@ -589,8 +601,16 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         dependencies.shelfTypeDigest === undefined ? undefined : { digest: dependencies.shelfTypeDigest },
       ),
     sources: dependencies.sources ?? {
-      observe: (id) => observePreparationSource({ ...dependencies, deadline: pageDeadlines.getStore(), execution: shelfMaintenanceSourceExecution }, id),
-      observeIdentity: (id) => observePreparationIdentity({ ...dependencies, deadline: pageDeadlines.getStore(), execution: shelfMaintenanceSourceExecution }, id),
+      observe: (id) =>
+        observePreparationSource(
+          { ...dependencies, deadline: pageDeadlines.getStore(), execution: shelfMaintenanceSourceExecution },
+          id,
+        ),
+      observeIdentity: (id) =>
+        observePreparationIdentity(
+          { ...dependencies, deadline: pageDeadlines.getStore(), execution: shelfMaintenanceSourceExecution },
+          id,
+        ),
     },
   };
   const { pool, clock, access } = deps;
@@ -602,12 +622,19 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         ? Promise.resolve(deps.client)
         : (work ??= createWorkClient(pool.options.connectionString ?? '', pool));
   const ports = createShelfMaintenanceDerivedPorts();
-  function command<T>(options: LegacyCommandOptions | PrincipalCommandOptions,
-    body: (tx: CommandTransaction, context: { transactionId: string; time: import('../command/command.ts').AuthoritativeTime }) => Promise<CommandResult<T>>) {
+  function command<T>(
+    options: LegacyCommandOptions | PrincipalCommandOptions,
+    body: (
+      tx: CommandTransaction,
+      context: { transactionId: string; time: import('../command/command.ts').AuthoritativeTime },
+    ) => Promise<CommandResult<T>>,
+  ) {
     const declaration = shelfMaintenanceCommandPlan(pool, options);
-    const dispatch = () => 'principal' in options ? runCommand(pool, options, body) : runCommand(pool, options, body);
-    return runLibraryCommand(() => withSingleCommandAttempt(dispatch),
-      (run) => consumeShelfMaintenance('command', declaration.total, run));
+    const dispatch = () => ('principal' in options ? runCommand(pool, options, body) : runCommand(pool, options, body));
+    return runLibraryCommand(
+      () => withSingleCommandAttempt(dispatch),
+      (run) => consumeShelfMaintenance('command', declaration.total, run),
+    );
   }
   async function requestRebuild(
     actor: Parameters<ShelfMaintenanceOps['requestRebuild']>[0],
@@ -769,7 +796,6 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     );
     try {
       const outcome = await command<ShelfMaintenanceReceipt>(
-
         {
           partition: partitionOf(owner.route),
           deadline,
@@ -1089,7 +1115,11 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     } catch (error) {
       // A concurrent winner may have captured another current observation. Its
       // immutable native header, never that losing observation, defines replay.
-      if (retry === 0 && error instanceof IdempotencyConflictError) return executePage(binding, 1, deadline);
+      if (
+        retry < SHELF_MAINTENANCE_OPERATIONS.page.conflictReconciliations &&
+        error instanceof IdempotencyConflictError
+      )
+        return executePage(binding, retry + 1, deadline);
       throw error;
     }
   }
@@ -1146,19 +1176,16 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         );
       await enqueueShelfMaintenance(client!, binding, BigInt(row.attempt).toString());
       // Conditional acknowledgement cannot erase a concurrently advanced successor intent.
-      await command(
-        { partition: partitionOf(owner.route), deadline: workStepDeadline(), clock },
-        async (tx) => {
-          await ack.run(tx, {
-            ...runArgs(owner, row.runId),
-            epoch: BigInt(row.epoch),
-            sequence: BigInt(row.sequence),
-            segment: row.segment,
-            attempt: BigInt(row.attempt),
-          });
-          return noEffect(null);
-        },
-      );
+      await command({ partition: partitionOf(owner.route), deadline: workStepDeadline(), clock }, async (tx) => {
+        await ack.run(tx, {
+          ...runArgs(owner, row.runId),
+          epoch: BigInt(row.epoch),
+          sequence: BigInt(row.sequence),
+          segment: row.segment,
+          attempt: BigInt(row.attempt),
+        });
+        return noEffect(null);
+      });
       enqueued.push(binding);
     }
     const last = rows.at(-1);
@@ -1177,15 +1204,17 @@ export async function enqueueShelfMaintenance(
   const original = Object.freeze({ ...binding });
   validateShelfMaintenanceBinding(original);
   const declaration = shelfMaintenanceEnqueuePlan({ binding: original, attempt });
-  await consumeShelfMaintenance('enqueue', declaration.total, () => client.enqueue(
-    {
-      workflowName: SHELF_MAINTENANCE_WORKFLOW,
-      queueName: 'maintenance',
-      workflowID: `shelf:${original.accountId}:${original.runId}:${original.epoch}:${original.sequence}:${original.segment}:${attempt}`,
-      workflowIDReusePolicy: 'return-existing',
-    },
-    original,
-  ));
+  await consumeShelfMaintenance('enqueue', declaration.total, () =>
+    client.enqueue(
+      {
+        workflowName: SHELF_MAINTENANCE_WORKFLOW,
+        queueName: 'maintenance',
+        workflowID: `shelf:${original.accountId}:${original.runId}:${original.epoch}:${original.sequence}:${original.segment}:${attempt}`,
+        workflowIDReusePolicy: 'return-existing',
+      },
+      original,
+    ),
+  );
 }
 
 /** Installed exactly once by the existing Library WorkModule. */
@@ -1211,10 +1240,20 @@ export async function registerShelfMaintenanceWork(
   );
   DBOS.registerWorkflow(
     async (start: ShelfMaintenanceBinding) => {
-      let binding: ShelfMaintenanceBinding | null = start;
-      for (let n = 0; n < 100 && binding && binding.segment === start.segment; n++)
-        binding = (await page(binding)).next;
-      if (binding) await continuation(binding);
+      const original = Object.freeze({ ...start });
+      let binding: ShelfMaintenanceBinding | null = original;
+      for (
+        let n = 0;
+        n < SHELF_MAINTENANCE_OPERATIONS.segment.pages && binding && binding.segment === original.segment;
+        n++
+      ) {
+        const locator = binding;
+        binding = (await SHELF_MAINTENANCE_OPERATIONS.segment.step(locator, () => page(locator))).next;
+      }
+      if (binding) {
+        const successor = binding;
+        await SHELF_MAINTENANCE_OPERATIONS.segment.step(successor, () => continuation(successor));
+      }
     },
     { name: SHELF_MAINTENANCE_WORKFLOW },
   );
@@ -1225,25 +1264,35 @@ export async function registerShelfMaintenanceWork(
   type Recovery = { root: string; segment: number; after: readonly [number, string, string] | null };
   const next = DBOS.registerStep(
     async (input: Recovery) => {
-      await context.client.enqueue(
-        {
-          workflowName: 'library.shelfMaintenanceRecoverySegment',
-          queueName: 'maintenance',
-          workflowID: `shelf-recovery:${input.root}:${input.segment}`,
-          workflowIDReusePolicy: 'return-existing',
-        },
-        input,
+      const original = Object.freeze({
+        ...input,
+        after: input.after ? Object.freeze([...input.after] as const) : null,
+      });
+      const declaration = shelfMaintenanceEnqueuePlan(original);
+      await consumeShelfMaintenance('recovery.enqueue', declaration.total, () =>
+        context.client.enqueue(
+          {
+            workflowName: 'library.shelfMaintenanceRecoverySegment',
+            queueName: 'maintenance',
+            workflowID: `shelf-recovery:${original.root}:${original.segment}`,
+            workflowIDReusePolicy: 'return-existing',
+          },
+          original,
+        ),
       );
     },
     { name: 'library.shelfMaintenanceRecoveryContinue', ...COMMAND_STEP_RETRIES },
   );
   const sweep = async (input: Recovery) => {
-    let after = input.after;
-    for (let n = 0; n < 100; n++) {
-      after = (await recover(after)).next;
+    const original = Object.freeze({ ...input, after: input.after ? Object.freeze([...input.after] as const) : null });
+    let after = original.after;
+    for (let n = 0; n < SHELF_MAINTENANCE_OPERATIONS.segment.pages; n++) {
+      const cursor = after;
+      after = (await SHELF_MAINTENANCE_OPERATIONS.segment.step(cursor, () => recover(cursor))).next;
       if (!after) return;
     }
-    await next({ ...input, segment: input.segment + 1, after });
+    const successor = Object.freeze({ ...original, segment: original.segment + 1, after });
+    await SHELF_MAINTENANCE_OPERATIONS.segment.step(successor, () => next(successor));
   };
   DBOS.registerWorkflow(sweep, { name: 'library.shelfMaintenanceRecoverySegment' });
   DBOS.registerWorkflow(() => sweep({ root: DBOS.workflowID!, segment: 0, after: null }), {

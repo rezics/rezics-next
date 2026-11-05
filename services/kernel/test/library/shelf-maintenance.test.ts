@@ -9,6 +9,7 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { readErasureStatus } from '../../src/access/erasure.ts';
 import { createOwnedErasureFixture } from './support/erasure-worker.ts';
 import { deletePersona } from '../support/account-deletion.ts';
+import { observePreparationSource, observePreparationIdentity } from '../../src/library/preparation-source.ts';
 import advance from '../../src/library/shelf-maintenance-advance.sql';
 import type { PoolClient } from 'pg';
 import type { CloudEvent } from '../../src/events/log.ts';
@@ -101,9 +102,12 @@ test('default native empty owner initializes, drains, fences a late writer and a
     interrupted = step.next!;
     if (step.phase === 'count-collections') break;
   }
-  const native = (await f.db.admin.query(
-    'SELECT build_generation,sequence::text FROM library.shelf_maintenance_run WHERE run_id=$1', [next.runId],
-  )).rows[0];
+  const native = (
+    await f.db.admin.query(
+      'SELECT build_generation,sequence::text FROM library.shelf_maintenance_run WHERE run_id=$1',
+      [next.runId],
+    )
+  ).rows[0];
   // The empty count-collections aggregate still INSERTs a real zero counter. Fail the later
   // checkpoint CAS so rollback must remove useful work as well as preserve the exact header.
   const clients = new Map<PoolClient, PoolClient['query']>();
@@ -131,26 +135,112 @@ test('default native empty owner initializes, drains, fences a late writer and a
     for (const [client, query] of clients) client.query = query;
   }
   expect(failed).toBe(true);
-  expect((await f.db.admin.query(
-    'SELECT sequence::text FROM library.shelf_maintenance_run WHERE run_id=$1', [next.runId],
-  )).rows[0].sequence).toBe(native.sequence);
-  expect((await f.db.admin.query(
-    'SELECT n::text FROM library.shelf_count WHERE route=$1 AND account_id=$2 AND generation_id=$3',
-    [account.route, account.accountId, native.build_generation],
-  )).rows).toEqual([]);
+  expect(
+    (await f.db.admin.query('SELECT sequence::text FROM library.shelf_maintenance_run WHERE run_id=$1', [next.runId]))
+      .rows[0].sequence,
+  ).toBe(native.sequence);
+  expect(
+    (
+      await f.db.admin.query(
+        'SELECT n::text FROM library.shelf_count WHERE route=$1 AND account_id=$2 AND generation_id=$3',
+        [account.route, account.accountId, native.build_generation],
+      )
+    ).rows,
+  ).toEqual([]);
   const retried = await ops().page(interrupted);
   expect(retried.phase).toBe('validate');
   expect(await ops().page(interrupted)).toEqual(retried);
   await finish(retried.next!);
-  expect((await f.db.admin.query(
-    `SELECT NOT EXISTS (SELECT 1 FROM library.shelf_count c
+  expect(
+    (
+      await f.db.admin.query(
+        `SELECT NOT EXISTS (SELECT 1 FROM library.shelf_count c
        WHERE c.route=g.route AND c.account_id=g.account_id AND c.generation_id<>g.active_generation) AS retired,
        NOT EXISTS (SELECT 1 FROM library.shelf_type_reservation r
        WHERE r.route=g.route AND r.account_id=g.account_id) AS reservations_retired
      FROM library.shelf_maintenance g WHERE g.route=$1 AND g.account_id=$2`,
-    [account.route, account.accountId],
-  )).rows[0]).toEqual({ retired: true, reservations_retired: true });
+        [account.route, account.accountId],
+      )
+    ).rows[0],
+  ).toEqual({ retired: true, reservations_retired: true });
 }, 30000);
+
+test('source change before type work preserves the native boundary and advanced replay has no fresh source dependency', async () => {
+  const person = f.people.alice,
+    as = await actor(person),
+    account = owner(person.accountId);
+  const subjectId = await f.subject();
+  await f.json(person, 'PUT', `/v1/libraryEntries/${subjectId}`, 201, { state: 'planned' });
+  let binding = await ops().requestRebuild(as, { owner: account, kind: 'backfill', requestKey: crypto.randomUUID() });
+  for (;;) {
+    const step = await ops().page(binding);
+    binding = step.next!;
+    if (step.phase === 'types') break;
+  }
+  const read = async () =>
+    (
+      await f.db.admin.query(
+        `SELECT type_id,type_source_id,type_source_epoch,type_source_position,transaction_id FROM library.entry
+     WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
+        [account.route, account.accountId, subjectId],
+      )
+    ).rows[0];
+  const before = await read();
+  let changed = false;
+  const changing = createShelfMaintenanceOps({
+    pool: f.db.pool,
+    access: f.kernel.testAccess,
+    client: f.client,
+    sources: {
+      async observe(id) {
+        const source = await observePreparationSource({ pool: f.db.pool }, id);
+        if (!changed) {
+          changed = true;
+          // The original source RR is released before a real external source command changes visibility.
+          await f.json(f.people.staff, 'POST', `/v1/subjects/${subjectId}:hide`, 200, {
+            reason: 'Interrupted rebuild source',
+          });
+        }
+        return source;
+      },
+      observeIdentity: (id) => observePreparationIdentity({ pool: f.db.pool }, id),
+    },
+  });
+  await expect(changing.page(binding)).rejects.toThrow();
+  expect(changed).toBe(true);
+  expect(await read()).toEqual(before);
+  const pending = (
+    await f.db.admin.query('SELECT sequence::text FROM library.shelf_maintenance_run WHERE run_id=$1', [binding.runId])
+  ).rows[0];
+  expect(pending.sequence).toBe(binding.sequence);
+  expect(
+    (
+      await f.db.admin.query('SELECT ready FROM library.shelf_maintenance WHERE route=$1 AND account_id=$2', [
+        account.route,
+        account.accountId,
+      ])
+    ).rows[0].ready,
+  ).toBe(false);
+  await f.json(f.people.staff, 'POST', `/v1/subjects/${subjectId}:restore`, 200, {
+    reason: 'Resume exact rebuild source',
+  });
+  const retried = await ops().page(binding);
+  await finish(retried.next!);
+  const replayOnly = createShelfMaintenanceOps({
+    pool: f.db.pool,
+    access: f.kernel.testAccess,
+    client: f.client,
+    sources: {
+      observe: async () => {
+        throw new Error('advanced header must not prepare another source');
+      },
+      observeIdentity: async () => {
+        throw new Error('advanced header must not observe another source');
+      },
+    },
+  });
+  expect(await replayOnly.page(binding)).toEqual(retried);
+}, 60000);
 
 test('terminal native tombstone rejects fabricated envelopes and late writers; private completion leaves shared erasure pending', async () => {
   const person = f.people.bob,
