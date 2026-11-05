@@ -232,9 +232,10 @@ export const activateCuration = createServerFn({ method: 'POST' })
 export const readDraftPreview = createServerFn({ method: 'POST', strict: false })
   .validator(captureDraftPreview)
   .handler(async ({ data }): Promise<DraftPreviewResult> => {
+    const request = getRequest();
     const admission = await curationAdmission();
     if (!data) return { ok: false, reason: 'invalid' };
-    return loadDraftPreview(kernelClient() as unknown as DraftPreviewClient, data, admission);
+    return loadDraftPreview(kernelClient() as unknown as DraftPreviewClient, data, admission, request.signal);
   });
 
 /** Inspection uses the current session only at the BFF; every native read is explicitly anonymous. */

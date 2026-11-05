@@ -115,8 +115,13 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const calls: { input: DraftPreviewInput; resolve: (value: DraftPreviewResult) => void }[] = [];
-  const read: DraftPreviewRead = (input) => new Promise((resolve) => calls.push({ input, resolve }));
+  const calls: {
+    input: DraftPreviewInput;
+    signal: AbortSignal;
+    resolve: (value: DraftPreviewResult) => void;
+  }[] = [];
+  const read: DraftPreviewRead = (input, signal) =>
+    new Promise((resolve) => calls.push({ input, signal, resolve }));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   let returned = 0;
 
@@ -259,6 +264,7 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
       await act(async () =>
         user.click(controls().getByRole('button', { name: m.draft_preview_interrupt({}, { locale: 'en' }) })),
       );
+      expect(calls[1]!.signal.aborted).toBe(true);
       expect(controls().getByText(m.draft_preview_stop_request({}, { locale: 'en' }))).toBeTruthy();
       await settle(1, successful(calls[1]!.input));
       expect(controls().queryByRole('heading', { name: 'Unsent profile update details' })).toBeNull();
@@ -267,6 +273,7 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
       await submit(m.draft_preview_retry({}, { locale: 'en' }));
       await waitForCalls(3);
       expect(calls[2]!.input).toEqual(calls[1]!.input);
+      expect(calls[2]!.signal.aborted).toBe(false);
       await settle(2, { ok: false, reason: 'unavailable' });
       await waitFor(() =>
         expect(controls().getByText(m.draft_preview_dependency_failure({}, { locale: 'en' }))).toBeTruthy(),
@@ -309,7 +316,10 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
       );
       await waitFor(() => expect(controls().getByRole('heading', { name: 'Unsent profile update' })).toBeTruthy());
 
+      await submit(m.draft_preview_recapture({}, { locale: 'en' }));
+      await waitForCalls(6);
       await act(async () => root.render(<></>));
+      expect(calls[5]!.signal.aborted).toBe(true);
       calls.length = 0;
     }
   } finally {
