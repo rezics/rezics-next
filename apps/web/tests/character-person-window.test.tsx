@@ -183,7 +183,9 @@ test.each(['people', 'characters'])(
     await activateWindow('next');
     expect(reads).toHaveLength(2);
     await finish({ ...ready, page: { ...ready.page, next: null } });
-    expect(host.textContent).toContain(m.search_window_address({}, { locale: 'en' }));
+    expect(host.querySelector('[data-search-window-current]')?.textContent).toContain(
+      m.search_window_current({ number: new Intl.NumberFormat('en').format(2) }, { locale: 'en' }),
+    );
     const previous = host.querySelector<HTMLAnchorElement>('[data-window-action="previous"]')!;
     expect(previous.href).toBe(`https://search.test${characterPersonHref('en', parsed.search)}`);
     await activateWindow('previous');
@@ -251,7 +253,7 @@ test('request A/B/A and locale replacement start fresh reads for the current add
 
   pageLocale = 'de';
   await act(async () => {
-    setLocale('de', { reload: false });
+    await setLocale('de', { reload: false });
     await router.navigate({ href: characterPersonHref('de', searchB) });
   });
   if (reads.length !== 4)
