@@ -244,11 +244,17 @@ async function mount() {
     });
   const button = (label: string) => [...host.querySelectorAll('button')].find((node) => node.textContent === label)!;
   const click = (label: string) =>
-    act(async () => {
-      button(label).click();
-    });
+    (async () => {
+      await act(async () => {
+        button(label).click();
+      });
+      await tick();
+    })();
   const refresh = async () => {
-    const query = client.getQueryCache().findAll({ queryKey: ['creator-offers-current'] })[0];
+    const query = client
+      .getQueryCache()
+      .findAll({ queryKey: ['creator-offers-current'] })
+      .find((candidate) => candidate.getObserversCount() > 0);
     if (!query) throw new Error('Expected the mounted seller read');
     await act(async () => {
       void query.fetch();
