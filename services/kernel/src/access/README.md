@@ -3448,6 +3448,7 @@ also runs the existing old-role provenance trigger once per selected row and cas
 each of `current_resource_role_key` and `current_resource_role_due`. No migration or new index is needed. Each
 Zone grant writer adds one exact resource-initialization point read; an identity addition also locks one account
 row and one Zone parent row before its existing grant mutation.
+
 - `access.resource_denial`, account resource: [the schema](../../db/access/schema.sql) has no deleted-resource purge.
 - `access.resource_initialization`, resource account: [the schema](../../db/access/schema.sql) retains initialization
   after account deletion, with no child-before-parent erasure path.

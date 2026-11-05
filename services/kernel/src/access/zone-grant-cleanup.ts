@@ -49,7 +49,8 @@ export type ZoneGrantCleanupAdmission = (
       barrier: Readonly<{ version: string; at: string }>;
       primaryOwner: ZonePrimaryOwnerEvidence;
     }>
-) & Readonly<{ [admittedZoneCleanup]: true }>;
+) &
+  Readonly<{ [admittedZoneCleanup]: true }>;
 
 export type ZoneGrantCleanupCursor = Readonly<{
   scope: Readonly<{
@@ -168,10 +169,7 @@ export async function minimizeZoneGrantPage(
     throw new RangeError('Zone grant cleanup page size must be between 1 and 100');
   const command = currentCommand(tx);
   const { source } = admission;
-  if (
-    partitionOf(source.zone.route) !== source.zone.home.partition ||
-    command.partition !== source.zone.home.partition
-  )
+  if (partitionOf(source.zone.route) !== source.zone.home.partition || command.partition !== source.zone.home.partition)
     throw new RangeError('Zone grant cleanup must run in the original Zone home');
 
   const scope = scopeOf(admission);
@@ -187,18 +185,13 @@ export async function minimizeZoneGrantPage(
     limit: limit + 1,
   };
   const rows: GrantPageRow[] =
-    cursor.store === 'resource_grant'
-      ? await resourcePage.run(tx, parameters)
-      : await rolePage.run(tx, parameters);
+    cursor.store === 'resource_grant' ? await resourcePage.run(tx, parameters) : await rolePage.run(tx, parameters);
   const selected = rows.slice(0, limit);
   const eligible =
     admission.kind === 'zone-disposition'
       ? selected
       : selected.filter(
-          (row) =>
-            row.subjectKind === 'identity' &&
-            row.subjectId === admission.accountId &&
-            row.subjectRole === '',
+          (row) => row.subjectKind === 'identity' && row.subjectId === admission.accountId && row.subjectRole === '',
         );
 
   let removedRows = 0;
@@ -256,8 +249,10 @@ export async function lockZoneGrantWriterTarget(
     subject_account_id: input.subjectAccountId ?? null,
   });
   if (!row?.isZone || !input.addsGrant) return true;
-  if (input.subjectAccountId !== undefined &&
-      (row.subjectCount !== 1 || row.subjectState !== 'active' || row.subjectFenced))
+  if (
+    input.subjectAccountId !== undefined &&
+    (row.subjectCount !== 1 || row.subjectState !== 'active' || row.subjectFenced)
+  )
     return false;
   return row.state === 'active' && !row.writeFenced && !row.held;
 }
