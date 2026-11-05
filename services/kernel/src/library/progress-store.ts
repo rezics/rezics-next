@@ -1,3 +1,5 @@
+import { consumeSessionWork, sessionProfileMigrationWork } from './session-operation-bounds.ts';
+import { sessionInsertPlan, sessionReadPlan, sessionUpdatePlan, sessionSubjectPagePlan, sessionJournalReadPlan, sessionJournalLockPlan, sessionJournalUpdatePlan, sessionUnitAddPlan, sessionUnitRemovePlan, sessionUnitPagePlan, sessionChangeAppendPlan, sessionChangePagePlan, sessionDiscoveryPagePlan, sessionDiscoveryGenerationPlan, sessionMeaningInsertPlan, sessionMeaningRefreshPlan } from './session-operation-bounds.ts';
 import { assertPreProfileLibraryRead } from './profile-source.ts';
 import type { PoolClient } from 'pg';
 import type { ProgressMode, ProgressState } from './progress.ts';
@@ -228,7 +230,7 @@ export async function insertSession(
   assertMode(session.mode);
   const acceptedPin = pin === undefined ? null : decodeLibraryProfilePin(pin);
   assertUnit(session.unit, acceptedPin !== null);
-  const row = await sessionInsert.run(queryClient(client), {
+  const row = await sessionInsertPlan({
     route,
     session_id: session.id,
     account_id: session.accountId,
@@ -246,7 +248,7 @@ export async function insertSession(
       amount: null,
       total: measure.total,
     })),
-  });
+  }).run(queryClient(client));
   if (!row) throw new Error('Library session insert returned no row');
   if (meaningDescriptors?.length) {
     if (!acceptedPin) throw new TypeError('Accepted progress meaning requires a profile pin');
@@ -261,25 +263,18 @@ export async function insertSession(
       identity_kind: descriptor.identity.kind,
       structure_kind: descriptor.structure.kind,
     }));
-    await client.query(
-      `INSERT INTO library.reading_insights_progress_meaning
-        (route,session_id,unit_id,meaning_revision,mode,profile_pin,dimension,precision,minimum,maximum,
-         total_policy,identity_kind,structure_kind)
-       SELECT $1,$2,unit_id,1,mode,$3::jsonb,dimension,precision,minimum,maximum,total_policy,identity_kind,structure_kind
-       FROM jsonb_to_recordset($4::jsonb) AS accepted(
-         unit_id text, mode text, dimension text, precision smallint, minimum numeric, maximum numeric,
-         total_policy text, identity_kind text, structure_kind text)`,
-      [route, session.id, JSON.stringify(acceptedPin), JSON.stringify(meanings)],
-    );
-    await client.query('SELECT library.reading_insights_current_progress_refresh($1,$2)', [route, session.id]);
+    await sessionMeaningInsertPlan({ route, sessionId: session.id,
+      pin: JSON.stringify(acceptedPin), meanings: JSON.stringify(meanings) }, meanings.length).run(client);
+    await sessionMeaningRefreshPlan({ route, sessionId: session.id }).run(client);
   }
   return asSession(row);
 }
 
 export async function readSession(client: Client, route: number, sessionId: string): Promise<ProgressSession | null> {
-  const row = await sessionRead.run(queryClient(client), { route, session_id: sessionId });
+  const row = await sessionReadPlan({ route, session_id: sessionId }).run(queryClient(client));
   if (row && decodeLibraryProfilePin(row.libraryProfilePin) === null) {
-    await assertPreProfileLibraryRead(client, row.accountId);
+    await consumeSessionWork('legacy-profile', sessionProfileMigrationWork(route, row.accountId),
+      () => assertPreProfileLibraryRead(client, row.accountId));
     assertUnit(row.unit, false);
   }
   return row ? asSession(row) : null;
@@ -290,7 +285,7 @@ export async function readSessionFact(
   route: number,
   sessionId: string,
 ): Promise<{ session: ProgressSession; pin: LibraryProfilePin | null } | null> {
-  const row = await sessionRead.run(queryClient(client), { route, session_id: sessionId });
+  const row = await sessionReadPlan({ route, session_id: sessionId }).run(queryClient(client));
   return row ? { session: asSession(row), pin: decodeLibraryProfilePin(row.libraryProfilePin) } : null;
 }
 
@@ -300,11 +295,11 @@ export async function readSessionJournal(
   accountId: string,
   sessionId: string,
 ): Promise<ProgressSessionJournal | null> {
-  const row = await sessionJournalRead.run(queryClient(client), {
+  const row = await sessionJournalReadPlan({
     route,
     account_id: accountId,
     session_id: sessionId,
-  });
+  }).run(queryClient(client));
   return row ? asJournal(row) : null;
 }
 
@@ -314,11 +309,11 @@ export async function lockSessionJournal(
   accountId: string,
   sessionId: string,
 ): Promise<(ProgressSessionJournal & { assessmentPresence: string | null }) | null> {
-  const row = await sessionJournalLock.run(queryClient(client), {
+  const row = await sessionJournalLockPlan({
     route,
     account_id: accountId,
     session_id: sessionId,
-  });
+  }).run(queryClient(client));
   return row ? { ...asJournal(row), assessmentPresence: row.assessmentPresence } : null;
 }
 
@@ -331,7 +326,7 @@ export async function updateSessionJournal(
   journal: ProgressSessionJournal,
   assessmentPresence?: 'explicit_null' | 'value',
 ): Promise<ProgressSessionJournal | null> {
-  const row = await sessionJournalUpdate.run(queryClient(client), {
+  const row = await sessionJournalUpdatePlan({
     route,
     account_id: accountId,
     session_id: sessionId,
@@ -346,7 +341,7 @@ export async function updateSessionJournal(
     assessment_units: journal.assessment.units,
     assessment_presence: assessmentPresence ?? null,
     assessment_meaning_revision: journal.assessment.meaningRevision,
-  });
+  }).run(queryClient(client));
   return row ? asJournal(row) : null;
 }
 
@@ -360,7 +355,7 @@ export async function updateSession(
 ): Promise<ProgressSession> {
   assertState(changes.state);
   assertCount(changes.completedUnitCount);
-  const row = await sessionUpdate.run(queryClient(client), {
+  const row = await sessionUpdatePlan({
     route,
     session_id: sessionId,
     revision,
@@ -373,7 +368,7 @@ export async function updateSession(
     additional_measures: (changes.measures?.slice(1) ?? []).map(({ unit, amount, total }) => ({ unit, amount, total })),
     time: context.time,
     transaction_id: context.transactionId,
-  });
+  }).run(queryClient(client));
   // A missed revision returns no row. `null!` keeps that result while the declared
   // session type stays free of null, which Array.find's miss (undefined) can be compared with.
   return row ? asSession(row) : null!;
@@ -387,12 +382,12 @@ export async function addUnits(
   context: WriteContext,
 ): Promise<number> {
   assertUnitIds(unitIds);
-  const row = await unitAdd.run(queryClient(client), {
+  const row = await sessionUnitAddPlan({
     route,
     session_id: sessionId,
     unit_ids: [...unitIds],
     time: context.time,
-  });
+  }).run(queryClient(client));
   return row.added;
 }
 
@@ -403,11 +398,11 @@ export async function removeUnits(
   unitIds: readonly string[],
 ): Promise<number> {
   assertUnitIds(unitIds);
-  const row = await unitRemove.run(queryClient(client), {
+  const row = await sessionUnitRemovePlan({
     route,
     session_id: sessionId,
     unit_ids: [...unitIds],
-  });
+  }).run(queryClient(client));
   return row.removed;
 }
 
@@ -419,14 +414,14 @@ export async function appendChange(
   intent: unknown,
   context: WriteContext,
 ): Promise<ProgressChange> {
-  const row = await changeAppend.run(queryClient(client), {
+  const row = await sessionChangeAppendPlan({
     route,
     session_id: sessionId,
     change_no: changeNo,
     intent,
     time: context.time,
     transaction_id: context.transactionId,
-  });
+  }).run(queryClient(client));
   return asChange(row);
 }
 
@@ -438,7 +433,7 @@ export async function pageSessions(
   page: ProgressSessionPage,
 ): Promise<ProgressSession[]> {
   assertLimit(page.limit);
-  const rows = await sessionPage.run(queryClient(client), {
+  const rows = await sessionSubjectPagePlan({
     route,
     account_id: accountId,
     subject_id: subjectId,
@@ -446,16 +441,17 @@ export async function pageSessions(
     after_session_id: page.after?.sessionId ?? '00000000-0000-0000-0000-000000000000',
     has_cursor: page.after !== null,
     limit: Math.min(MAX_PROGRESS_PAGE_SIZE, page.limit),
-  });
+  }).run(queryClient(client));
   if (rows.some((row) => row.libraryProfilePin === null)) {
-    await assertPreProfileLibraryRead(client, accountId);
+    await consumeSessionWork('legacy-profile', sessionProfileMigrationWork(route, accountId),
+      () => assertPreProfileLibraryRead(client, accountId));
     for (const row of rows) if (row.libraryProfilePin === null) assertUnit(row.unit, false);
   }
   return rows.map((row) => asSession(row));
 }
 
 export async function progressDiscoveryGeneration(client: Client, route: number, accountId: string): Promise<string> {
-  const row = await discoveryGenerationRead.run(queryClient(client), { route, account_id: accountId });
+  const row = await sessionDiscoveryGenerationPlan({ route, account_id: accountId }).run(queryClient(client));
   if (!/^(0|[1-9][0-9]*)$/.test(row.generation)) throw new Error('Invalid progress discovery generation');
   return row.generation;
 }
@@ -487,7 +483,7 @@ export async function pageProgressDiscovery(
           : hasSubject
             ? 'subject'
             : 'owner';
-  const rows = await discoveryPage.run(queryClient(client), {
+  const rows = await sessionDiscoveryPagePlan({
     route,
     account_id: accountId,
     subject_id: filter.subjectId ?? null,
@@ -499,9 +495,10 @@ export async function pageProgressDiscovery(
     after_session_id: after?.sessionId ?? null,
     has_cursor: after !== null,
     limit,
-  });
+  }).run(queryClient(client));
   if (rows.some((row) => row.libraryProfilePin === null)) {
-    await assertPreProfileLibraryRead(client, accountId);
+    await consumeSessionWork('legacy-profile', sessionProfileMigrationWork(route, accountId),
+      () => assertPreProfileLibraryRead(client, accountId));
     for (const row of rows) if (row.libraryProfilePin === null) assertUnit(row.unit, false);
   }
   return rows.map((row) => ({ session: asSession(row), profilePin: decodeLibraryProfilePin(row.libraryProfilePin) }));
@@ -514,13 +511,13 @@ export async function pageUnits(
   page: ProgressUnitPage,
 ): Promise<ProgressUnitRecord[]> {
   assertLimit(page.limit);
-  const rows = await unitPage.run(queryClient(client), {
+  const rows = await sessionUnitPagePlan({
     route,
     session_id: sessionId,
     after_unit_id: page.after?.unitId ?? '',
     has_cursor: page.after !== null,
     limit: Math.min(MAX_PROGRESS_PAGE_SIZE, page.limit),
-  });
+  }).run(queryClient(client));
   return rows.map((row) => asUnitRecord(row));
 }
 
@@ -531,12 +528,12 @@ export async function pageChanges(
   page: ProgressChangePage,
 ): Promise<ProgressChange[]> {
   assertLimit(page.limit);
-  const rows = await changePage.run(queryClient(client), {
+  const rows = await sessionChangePagePlan({
     route,
     session_id: sessionId,
     after_change_no: page.after?.changeNo ?? 0,
     has_cursor: page.after !== null,
     limit: Math.min(MAX_PROGRESS_PAGE_SIZE, page.limit),
-  });
+  }).run(queryClient(client));
   return rows.map((row) => asChange(row));
 }

@@ -2,8 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { Value } from 'typebox/value';
-import { readAccount, type Account } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
@@ -32,8 +31,8 @@ const persona = (accountId: string, permissions = scopes): AccountActor => ({
   requestedBy: null,
   authnEpoch: 1,
 });
-const owner = persona(newId(route));
-const other = persona(newId(route));
+let owner = persona(newId(route));
+let other = persona(newId(route));
 const suspended = persona(newId(route));
 const anonymous: Actor = { kind: 'anonymous' };
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(59)]]) };
@@ -79,7 +78,6 @@ async function snapshot() {
 beforeAll(async () => {
   database = await openGrowthDatabase();
   await bootstrapRelease(database.pool, bundledRelease);
-  const accounts = new Map<string, Account>();
   for (const actor of [owner, other, suspended]) {
     await database.admin.query(
       `INSERT INTO access.account
@@ -88,12 +86,17 @@ beforeAll(async () => {
       [route, actor.accountId, 'active', newId(route)],
     );
     if (actor === suspended) await suspendAccount(database.admin, actor.accountId);
-    accounts.set(actor.accountId, (await readAccount(database.admin, route, actor.accountId))!);
   }
-  const access = createAccess({
-    actions: new Map([['subject:read', { anonymous: true }]]),
-    accountEvidence: (actor) => accounts.get(actor.accountId) ?? null,
+  const access = admittedAccess({
+    actions: new Map<string, { anonymous: boolean; authority?: 'own-account' }>([
+      ['subject:read', { anonymous: true }],
+      ...['progress_session:create', 'progress_session:update', 'progress_session:read', 'progress_session:list']
+        .map((action) => [action, { anonymous: false, authority: 'own-account' as const }] as const),
+    ]),
   });
+  const context = { pool: database.pool, deadline: Date.now() + 300_000 };
+  owner = await authenticateAccount(access, context, owner);
+  other = await authenticateAccount(access, context, other);
   commands = createSessionCommands({ pool: database.pool, access, tokens, clock });
   subjectId = await subject();
   versionSubjectId = await subject();

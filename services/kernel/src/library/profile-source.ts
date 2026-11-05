@@ -16,6 +16,7 @@ import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { readItemTypes, type SubjectComponent } from '../semantic/subject.ts';
 import { selectLibraryProfile, type LibraryProfileDescriptor, type LibraryProfilePin } from './profile.ts';
 import { resolveSubject } from './subject-anchor.ts';
+import { currentCommandWorkAssociation } from '../command/work-context.ts';
 
 export type LibraryProfileSourceDependencies = {
   pool: Pool;
@@ -88,7 +89,8 @@ export async function readLibraryProfileAnchor(
   if (actor.kind === 'account') {
     const accountRoute = routeOf(actor.accountId);
     if (accountRoute === null) return null;
-    const account = await readAccount(deadlineClient(pool, deadline), accountRoute, actor.accountId);
+    const account = await readAccount(deadlineClient(pool, deadline), accountRoute, actor.accountId,
+      currentCommandWorkAssociation()?.access);
     if (
       !account ||
       account.kind !== 'actor' ||
@@ -102,7 +104,9 @@ export async function readLibraryProfileAnchor(
   }
   const before = await identityEpochStore.readMapping(pool, subjectId);
   if (before.state !== 'mapped') return null;
-  const resolved = await resolveSubject({ pool, access }, actor, subjectId, at, { pool, deadline, time: at });
+  const work = currentCommandWorkAssociation()?.access;
+  const context = { pool, deadline, time: at, ...(work ? { work } : {}) };
+  const resolved = await resolveSubject({ pool, access }, actor, subjectId, at, context);
   if (!resolved || resolved.subjectId !== before.terminal) return null;
   const route = routeOf(resolved.subjectId)!;
   const check = await accessCheck(
@@ -114,7 +118,7 @@ export async function readLibraryProfileAnchor(
       id: resolved.subjectId,
       eligibility: subjectReadEligibility({ route, id: resolved.subjectId }),
     },
-    { pool, deadline, time: at },
+    context,
   );
   let acceptingType: string | undefined;
   try {

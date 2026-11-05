@@ -1,4 +1,3 @@
-import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -20,9 +19,11 @@ import {
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { accessCommandAuthorization, type Access, type AccountActor, type Actor } from '../request/access.ts';
-import { deadlineFor } from '../request/deadline.ts';
-import { currentCommandWorkAssociation } from '../command/work-context.ts';
+import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { receiptKeysFor } from '../command/receipt-key.ts';
+import { currentCommandWorkAssociation } from '../command/work-context.ts';
+import { consumeSessionWork, sessionCommandPlan, sessionShelfWork, withSessionCommandPlan, type SessionOperationKind } from './session-operation-bounds.ts';
 
 import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
 
@@ -51,6 +52,9 @@ export type OwnAccountCommand = {
   input: unknown;
   /** Local cost owners may bind this execution to their existing descriptor. */
   execution?: LibraryCommandExecutionBinding;
+  sessionOperation?: SessionOperationKind;
+  sessionPreparation?: boolean;
+  deadline?: number;
 };
 
 export type TrustedAccountCommand = {
@@ -148,13 +152,20 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     const route = routeOf(owner.accountId);
     if (route === null) throw new GrantDeniedError();
     const identity = principalCommandIdentity(owner);
+    const deadline = request.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
+    const plan = request.sessionOperation === undefined ? undefined : sessionCommandPlan(request.sessionOperation,
+      { accountId: owner.accountId, clientId: owner.clientId, requestedBy: owner.requestedBy ?? null,
+        kind: request.kind, key: request.requestKey, input: request.input },
+      receiptKeysFor(pool).keys.size, request.sessionPreparation ?? false, Math.max(0, deadline - Date.now()));
+    // Capture original command identity before any permission preparation awaits.
+    const commandInput = plan?.original.input ?? request.input;
     const native = config.access
       ? await accessCommandAuthorization(
           config.access,
           owner,
           request.action,
           { route, id: owner.accountId },
-          { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+          { pool, deadline },
           () => new GrantDeniedError(),
         )
       : undefined;
@@ -163,6 +174,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       resource: Object.freeze({ route, id: owner.accountId }),
       denied: () => (receiptOnly ? new ReceiptNotFoundError() : new GrantDeniedError()),
       async prepare(attempt) {
+        await plan?.consumeAttempt();
         const evidence = await native?.prepare?.(attempt);
         await prepare?.(attempt);
         return evidence;
@@ -174,7 +186,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
           if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
           throw error;
         }
-        const current = await readAccount(tx, route, owner.accountId);
+        const current = await readAccount(tx, route, owner.accountId, currentCommandWorkAssociation()?.access);
         if (
           !current ||
           current.kind !== 'actor' ||
@@ -197,27 +209,29 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       },
     };
 
+    const execute = () => withRequestDeadline(deadline, () => runCommand(
+      pool,
+      {
+        ...identity,
+        partition: partitionOf(route),
+        deadline,
+        clock,
+        receipt: {
+          kind: request.kind,
+          key: request.requestKey,
+          digest: receiptOnly ?? digest(identity, request.kind, commandInput),
+        },
+        authorization,
+      },
+      async (tx, command) => {
+        const enter = () => enterShelfWrite(tx, { route, accountId: owner.accountId });
+        if (plan) await consumeSessionWork('shelf-gate', sessionShelfWork(route, owner.accountId, false), enter);
+        else await enter();
+        return body(tx, command);
+      },
+    ));
     return runLibraryCommand(
-      () =>
-        runCommand(
-          pool,
-          {
-            ...identity,
-            partition: partitionOf(route),
-            deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-            clock,
-            receipt: {
-              kind: request.kind,
-              key: request.requestKey,
-              digest: receiptOnly ?? digest(identity, request.kind, request.input),
-            },
-            authorization,
-          },
-          async (tx, command) => {
-            await enterShelfWrite(tx, { route, accountId: owner.accountId });
-            return body(tx, command);
-          },
-        ),
+      () => plan ? withSessionCommandPlan(plan, execute) : execute(),
       request.execution,
     );
   }

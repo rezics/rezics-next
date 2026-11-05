@@ -22,6 +22,7 @@ import {
   type LibraryProfileSource,
   type LibraryProfileSourceDependencies,
 } from './profile-source.ts';
+import { consumeSessionWork, sessionReleaseWork, sessionSourceWork, sessionPresentationWork } from './session-operation-bounds.ts';
 
 type Fact = { session: ProgressSession; pin: LibraryProfilePin | null };
 type Snapshot = { digest: string; release: Release } | null;
@@ -77,14 +78,16 @@ export async function prepareProgressPresentation(deps: LibraryProfileSourceDepe
   let version: Awaited<ReturnType<typeof readLibraryProfileAnchor>> = null;
   if (pin) {
     try {
-      const release = await readRelease(deps.pool, pin.releaseDigest, { composed: false });
+      const release = await consumeSessionWork('presentation-release', sessionReleaseWork(pin.releaseDigest),
+        () => readRelease(deps.pool, pin.releaseDigest, { composed: false }));
       if (release) snapshot = { digest: pin.releaseDigest, release };
     } catch {
       // Optional historic display dependency: missing/failed required release never selects a different one.
     }
   }
   try {
-    const observed = await readLibraryProfileSourceObservation(deps, session.subjectId);
+    const observed = await consumeSessionWork('presentation-source', sessionSourceWork(session.subjectId, true),
+      () => readLibraryProfileSourceObservation(deps, session.subjectId));
     source = observed?.source ?? null;
     anchor = observed?.anchor ?? null;
   } catch {
@@ -94,13 +97,14 @@ export async function prepareProgressPresentation(deps: LibraryProfileSourceDepe
     if (session.versionSubjectId === session.subjectId) version = anchor;
     else {
       try {
-        version = await readLibraryProfileAnchor(deps, session.versionSubjectId);
+        version = await consumeSessionWork('presentation-version', sessionSourceWork(session.versionSubjectId, false),
+          () => readLibraryProfileAnchor(deps, session.versionSubjectId!));
       } catch {
         // Version summaries have their own current disclosure, independent of historical display.
       }
     }
   }
-  return {
+  return consumeSessionWork('presentation-values', sessionPresentationWork(session.measures?.length ?? 1), async () => ({
     presentation: presentProgressSession(fact, snapshot, source),
     measurePresentations: (session.measures ?? []).map((measure): ProgressMeasurePresentation => ({
       unit: measure.unit,
@@ -113,14 +117,21 @@ export async function prepareProgressPresentation(deps: LibraryProfileSourceDepe
     disclosure: { subject: source !== null, versionSubject: version !== null },
     async verify(at: AuthoritativeTime) {
       const current = { ...deps, at };
-      if (anchor && !sameLibraryProfileAnchor(anchor, await readLibraryProfileAnchor(current, session.subjectId)))
-        throw new ProblemError('semantic_not_ready');
+      if (anchor) {
+        const final = await consumeSessionWork('presentation-source-final', sessionSourceWork(session.subjectId, true),
+          () => readLibraryProfileSourceObservation(current, session.subjectId));
+        if (!final || !sameLibraryProfileAnchor(anchor, final.anchor) || source?.kind !== final.source.kind ||
+          (source.kind === 'supported' && final.source.kind === 'supported' &&
+            JSON.stringify(source.pin) !== JSON.stringify(final.source.pin)))
+          throw new ProblemError('semantic_not_ready');
+      }
       if (
         version &&
         session.versionSubjectId !== session.subjectId &&
-        !sameLibraryProfileAnchor(version, await readLibraryProfileAnchor(current, session.versionSubjectId!))
+        !sameLibraryProfileAnchor(version, await consumeSessionWork('presentation-version-final',
+          sessionSourceWork(session.versionSubjectId!, false), () => readLibraryProfileAnchor(current, session.versionSubjectId!)))
       )
         throw new ProblemError('semantic_not_ready');
     },
-  };
+  }));
 }

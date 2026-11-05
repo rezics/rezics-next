@@ -1,4 +1,4 @@
-# Library performance contract
+# Library native-operation authority
 
 This leaf owns Collection operation bounds and custody across Library consumers. The detailed SQL derivations and
 operation-specific growth suites remain in the [Library Cost sections](README.md#cost); this contract does not claim
@@ -267,7 +267,7 @@ deadline. Current authorization still precedes receipt replay; a replayed return
 return against an already returned loan. Copy-before-loan locking, private-name fidelity, exact revision CAS,
 open uniqueness, disposal conflicts and retained history remain with the existing command owner.
 
-## Native Entry operation bounds
+## Entry
 
 Decision: this attempt delivers immutable direct SQL plans for Entry point reads, lists, history pages and reviews;
 the Entry mutation lifecycle composition continues separately. Keep SQL plans on the existing native association and
@@ -331,37 +331,87 @@ serialization from their current owners. That completion is tracked in
 [the continuation brief](../../../../.temp/continuation/copy-operation-composition.md); this leaf set does not claim
 a complete end-to-end copy operation bound.
 
-## Progress session operations
+## Progress
 
 The existing Progress and Continue descriptors retain their native session commands and response contracts.
 An operation declaration describes work; it supplies neither owner authority nor evidence of execution.
 Native owner admission still precedes receipt lookup. A completed mutation receipt and its current presentation
 are independent: failure to present current source evidence cannot erase or acknowledge a mutation.
 
-### Journal command identity
+### Command identity and currentness
 
-`patchSessionJournal` retains the principal, command kind, request key, session ID and normalized patch, including
-the expected journal revision. Its receipt input retains the public `admission: null` member. Private import
-admission identity never enters that digest. Consequently changing an import review cannot change the identity
-of an already acknowledged journal command. A different patch with the same key remains a conflict.
+`session-operation-bounds.ts` supplies closed nine-axis SQL and native composition declarations using pure
+`@rezics/bounds` arithmetic. The existing `createLibraryCommandRunner` remains the command boundary. Session
+commands now bind its existing Access port, retain one absolute preparation/authorization/execution deadline,
+and consume one immutable whole-operation declaration per native attempt. Included SQL, preparation and transaction leaves execute on the original resources without a second charge. Account/action/group preparation and final
+native authorization keep their original Access producers and accounting. No declaration opens a connection,
+changes an owner, manufactures execution evidence or grants another allowance.
 
-Private admission runs inside the fresh mutation transaction after the session lock and owner check. Failure
-rolls back the mutation and creates no successful receipt. Replay returns the original result under current
-owner authorization without reasserting an obsolete import review or overwriting later journal edits. Private
-admission does not grant public command authority.
+Decision: bind immutable original operands at the session store and existing command owner, preserve public
+journal identity, and use causal native journey assertions for repeated measures, preparation replacement,
+independent presentation failure and first/next pages. A source observation, including an independent version source, is checked again at the end of preparation before the owner connection is acquired;
+a redirect, identity/profile replacement or hidden source cannot admit a value prepared against obsolete meaning.
+Preparation failures remain deferred until the fresh body, so an exact authorized replay remains independent of
+later source changes. A matching current value is never a receipt for an older command.
 
-Decision: retain the public journal digest shape and exclude private admission identity; two causal additions to
-the existing native session suite cover replay after a later clear and rollback followed by retry.
+`patchSessionJournal` retains principal, command kind, key, session ID and normalized patch including expected
+journal revision, with public `admission: null`. Trusted import identity remains outside the digest. Private
+assertion runs only in a fresh mutation transaction after session locking and owner admission. Failure rolls back
+without a successful receipt; replay preserves its original response after later corrections/clear without
+reasserting an obsolete review. The journal revision remains independent of progress revision.
 
-### Operation derivation boundary
+### Execution derivation
 
-Closed session plans must compose preparation, original and current profile reads, owner/partition fences,
-receipt replay, shelf head/activity, mutation, triggers, History and terminal presentation work through the
-existing native ports. Keep logical results, examined rows, points, serialized bytes and engine requests as
-separate axes. SQL-only terms can declare zero engine requests; nested native calls need their own declarations.
-The ordinary session/unit/change limits remain default 20 and maximum 100; owner discovery remains maximum 50.
-Raw sentinels and discarded candidates consume work and retain their original keyset frontier. No declaration
-permits refill, account-history scans, cap increases or a second native admission.
+Each SQL plan freezes a deep copy of the original operands and dispatches those operands on the caller's live
+client. Its declaration separates raw candidates, examined rows, points, identity metadata, empty seeks,
+witnesses, statements, serialized bytes and engine requests. Literal compiled SQL and original serialized binds
+are separate byte terms. There is no observed-row repricing. The explicit eight-axis adapter retains a documented
+zero ninth axis for this SQL-only family; Search's engine calls stay at Search's native root.
+
+Session reads include UUIDs, int32/bigint projections, 64-character PostgreSQL timestamps, 128-character unit IDs, 256-character escaped
+locators, the native numeric range, the independent 4096-byte additional-measure JSONB ceiling and immutable
+Definitions release ceilings for pinned identifiers. Journal projection includes its 2000-character/4096-byte
+reflection and nullable dates/assessment. Change projection includes both original add/remove lists and cursor
+or lifecycle intent. No fixed 8192-byte projection or population estimate substitutes for these terms.
+
+Mutations include old/new heap/index entries, owner source/fact/discovery heads, profile-migration probes,
+consumption and reported-year statistics, assessment/year/profile/subject counters, owner member scope and
+current-progress refresh. Refresh removes every old measure and inserts every new measure, up to eight per side,
+including same-state writes and journal updates. Sparse adds/removes price original inputs, conflicts and child
+source-fence triggers; clear prices the retained 20000-key native cap. Start also declares accepted meaning rows
+and the second refresh after meaning insertion. Failed CAS, stale revision and rollback retain dispatched work.
+Nested statistics bytes use their bigint, UUID and escaped profile-key projections for every reached tuple;
+current-progress values include the complete projected meaning and numeric operands on both refresh sides.
+
+The command control declaration includes authoritative time, native account hold, original receipt candidates,
+replay projection, transaction controls, commit/rollback, no-effect and event fences, History attribution,
+outbox, original receipt input and repeated response serialization, including the primary measure repeated in the public measures array. Executor retries retain native custody and
+the original deadline; declarations do not introduce a runner, scheduler, retry or permission protocol. Shelf
+gate/owner composition includes first initialization, existing durable backfill run/step creation, run reads,
+head locks, activity and Entry activity effects. The future backfill pages retain their own operation owner;
+creating its durable continuation does not claim those pages have executed.
+Core's pre-preparation time mint and post-rollback partition checks include their read-only transaction controls.
+Fenced recovery probes are bounded by the original remaining deadline divided by Core's existing 25ms pause;
+each probe uses a released checkout, and the attempt declaration includes failed-read rollback work.
+
+### Current presentation and continuation
+
+Current presentation and first/next page roots consume complete immutable read declarations before dispatch. Current presentation includes original-release, current Source/profile, version-disclosure and final verification, including a changed active profile after rendering. Rendering is charged before invocation, including failure after a completed command.
+Released owner snapshots surround the render and final source/epoch/fact comparison. Expired snapshot cleanup rolls back on the original raw connection before its single release. The original command's
+receipt remains replayable if rendering fails. Historic meaning never selects a replacement release. Discovery
+uses one bounded release batch and independently serializes all repeated measure presentations.
+
+Subject/session/unit/change pages retain default 20 and maximum 100; owner discovery remains maximum 50.
+First subject pages price one range; next pages price both timestamp ranges before their merge discards raw
+candidates. Owner discovery prices candidate IDs and joined facts separately. At the capped helper's maximum,
+the separate one-row sentinel probe is its own SQL plan. Raw sentinel work is charged even though no sentinel
+is returned. Cursor scope, epoch, discovery generation, order and exact raw frontier are unchanged; there is no
+hidden refill or unrelated-history scan. Pre-profile rollout checks remain read-only.
+
+The existing native session/profile/activity/HTTP/growth suites own behavioral evidence, including maximum
+repeated measures, sparse units, correction/clear, stale journal revision, replay after later edits, private
+assertion rollback and independent current presentation. Five Search suites retain their Source contracts and
+scales. Native/mounted acceptance runs after integration; declarations alone do not establish that acceptance.
 
 ## Shelf rebuild invocation custody
 
