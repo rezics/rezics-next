@@ -47,8 +47,18 @@ export function webModule(brief: Brief, settings: Settings): string | undefined 
   );
   return modules.length === 1 ? modules[0]![0] : undefined;
 }
-function git(cwd: string, ...args: string[]): string {
-  return policyGit(cwd, args);
+function gitText(cwd: string, args: string[], policy = defaultPolicy.merge, input?: string): string {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: policy.gitBufferBytes,
+    timeout: policy.commandTimeoutMs,
+    ...(input === undefined ? {} : { input }),
+  });
+  const overflow = gitOutputError(result, policy.gitBufferBytes, `git ${args[0]}`);
+  if (overflow) throw overflow;
+  if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || `git ${args[0]} failed`);
+  return result.stdout;
 }
 export function isAncestor(cwd: string, commit: string, head: string, policy = defaultPolicy.merge): boolean {
   const args = ['merge-base', '--is-ancestor', commit, head];
@@ -68,15 +78,33 @@ export function isAncestor(cwd: string, commit: string, head: string, policy = d
     (result.signal ? `terminated by signal ${result.signal}` : `exited with status ${result.status}`);
   throw new Error(`git ${args.join(' ')} failed: ${cause}`);
 }
+export type WorkspaceInterval = {
+  base: string;
+  head: string;
+  commits: string[];
+  tasks: Map<string, string[]>;
+  filesByCommit: Map<string, string[]>;
+  landed: Set<string>;
+  gitReads: number;
+};
 /** Git's trailer parser excludes matching text in the subject or ordinary message body. */
-export function workspaceCommits(
+export function projectWorkspaceInterval(
   cwd: string,
   base: string,
   head = 'HEAD',
   policy = defaultPolicy.merge,
-): Map<string, string[]> {
-  const byTask = new Map<string, string[]>();
-  const log = policyGit(
+  landedHead?: string,
+): WorkspaceInterval {
+  const interval: WorkspaceInterval = {
+    base,
+    head,
+    commits: [],
+    tasks: new Map(),
+    filesByCommit: new Map(),
+    landed: new Set(),
+    gitReads: 1,
+  };
+  for (const line of gitText(
     cwd,
     [
       'log',
@@ -86,32 +114,62 @@ export function workspaceCommits(
       `${base}..${head}`,
     ],
     policy,
-  );
-  for (const line of log.split('\n')) {
+  ).split('\n')) {
     const [commit, ...tasks] = line.split('\t');
     if (!commit) continue;
-    for (const id of new Set(tasks.map((task) => task.trim()).filter(Boolean)))
-      byTask.set(id, [...(byTask.get(id) ?? []), commit]);
+    interval.commits.push(commit);
+    interval.filesByCommit.set(commit, []);
+    for (const id of new Set(tasks.map((task) => task.trim()).filter(Boolean))) {
+      const owned = interval.tasks.get(id);
+      if (owned) owned.push(commit);
+      else interval.tasks.set(id, [commit]);
+    }
   }
-  return byTask;
+  if (interval.commits.length) {
+    interval.gitReads++;
+    const known = new Set(interval.commits);
+    let current: string | undefined;
+    for (const token of gitText(
+      cwd,
+      ['diff-tree', '--stdin', '--name-only', '--no-renames', '-r', '-z'],
+      policy,
+      `${interval.commits.join('\n')}\n`,
+    ).split('\0')) {
+      if (!token) continue;
+      if (known.has(token)) {
+        current = token;
+        continue;
+      }
+      if (current) interval.filesByCommit.get(current)!.push(token);
+    }
+  }
+  if (landedHead !== undefined) {
+    interval.gitReads++;
+    for (const commit of gitText(cwd, ['rev-list', '--reverse', `${base}..${landedHead}`], policy)
+      .trim()
+      .split('\n')
+      .filter(Boolean))
+      interval.landed.add(commit);
+  } else for (const commit of interval.commits) interval.landed.add(commit);
+  return interval;
+}
+export function workspaceCommits(
+  cwd: string,
+  base: string,
+  head = 'HEAD',
+  policy = defaultPolicy.merge,
+): Map<string, string[]> {
+  return projectWorkspaceInterval(cwd, base, head, policy).tasks;
 }
 export function taskCommits(task: Task, head = 'HEAD', policy = defaultPolicy.merge): string[] {
-  return workspaceCommits(task.worktree, task.base, head, policy).get(task.id) ?? [];
+  return projectWorkspaceInterval(task.worktree, task.base, head, policy).tasks.get(task.id) ?? [];
 }
 export function taskChangedPaths(task: Task, head = 'HEAD', policy = defaultPolicy.merge): string[] {
-  return [
-    ...new Set(
-      taskCommits(task, head, policy).flatMap((commit) =>
-        policyGit(
-          task.worktree,
-          ['diff-tree', '--no-commit-id', '--name-only', '--no-renames', '-r', '-z', commit],
-          policy,
-        )
-          .split('\0')
-          .filter(Boolean),
-      ),
-    ),
-  ];
+  const interval = projectWorkspaceInterval(task.worktree, task.base, head, policy);
+  const files = new Set<string>();
+  for (const commit of interval.tasks.get(task.id) ?? [])
+    for (const file of interval.filesByCommit.get(commit) ?? []) files.add(file);
+  return [...files];
 }
 
 /** Workers edit and commit directly. The module lease only guards idle dev merges against worker launch. */
@@ -214,17 +272,19 @@ export class WorkspaceController {
   /** Publication preserves source commits, so attribution is ancestry, never a whole-branch diff. */
   integrated(module: string, dev: string): Task[] {
     const workspace = this.workspace(module);
-    const commits = workspaceCommits(workspace.worktree, workspace.base, undefined, this.settings.policy?.merge);
+    const interval = projectWorkspaceInterval(
+      workspace.worktree,
+      workspace.base,
+      'HEAD',
+      this.settings.policy?.merge,
+      dev,
+    );
     const integrated: Task[] = [];
     for (const task of this.store
       .tasks()
       .filter((task) => task.workspace?.module === module && !['cancelled', 'merged'].includes(task.state))) {
-      const own = commits.get(task.id) ?? [];
-      if (
-        !own.length ||
-        !own.every((commit) => isAncestor(workspace.worktree, commit, dev, this.settings.policy?.merge))
-      )
-        continue;
+      const own = interval.tasks.get(task.id) ?? [];
+      if (!own.length || !own.every((commit) => interval.landed.has(commit))) continue;
       // A stopped worker may have been integrated by a peer's earlier landing. Do not rewrite its terminal
       // attempt or move an already recorded integration to an unrelated, later dev head.
       if (

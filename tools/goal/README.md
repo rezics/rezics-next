@@ -285,10 +285,10 @@ worker cap or holds. Several workers run in the same module at once.
 Peers edit the tree at the same time. Workers commit their own work often with `git add <your paths>` (never `-A`
 or `.`), then a path-limited `git commit --only ... -- <your paths>` to leave a peer's staged files alone. The subject
 is `<task name>: <message>`; task name is the original brief's file name without `.md`. Every worker commit carries
-`Goal-Task: <task id>` as a Git trailer. Attribution uses Git's trailer parser, never subject text or the entire branch
-diff. Workers never reset, checkout, stash, clean or rebase. A failure in files they did not touch is a peer's work in
-progress: rerun later or check only their own tests. The controller never sweeps shared leftovers into a commit or
-stops processes merely because their working directory is shared. Frozen acceptance inputs retain their usual
+`Goal-Task: <task id>` as a Git trailer. Attribution projects one immutable `base..head` interval (trailers, NUL paths,
+no merges), never cached across heads. Workers never reset, checkout, stash, clean or rebase.
+A failure in files they did not touch is a peer's work in progress. The controller never sweeps shared leftovers into a
+commit or stops processes merely because their working directory is shared. Frozen acceptance inputs retain their usual
 protection and controller commits; undeclared risk areas remain closed.
 
 When a worker finishes, the train captures the workspace branch head and merges it with dev in the train's own
