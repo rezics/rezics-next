@@ -61,11 +61,11 @@ DECLARE
 BEGIN
   IF (NEW.route, NEW.order_id, NEW.buyer_account_id, NEW.offer_id, NEW.offer_revision,
       NEW.creator_account_id, NEW.title, NEW.currency, NEW.unit_amount_minor, NEW.tax_code,
-      NEW.royalty_basis_points, NEW.created_at)
+      NEW.royalty_basis_points, NEW.created_at, NEW.target_subject_id)
      IS DISTINCT FROM
      (OLD.route, OLD.order_id, OLD.buyer_account_id, OLD.offer_id, OLD.offer_revision,
       OLD.creator_account_id, OLD.title, OLD.currency, OLD.unit_amount_minor, OLD.tax_code,
-      OLD.royalty_basis_points, OLD.created_at) THEN
+      OLD.royalty_basis_points, OLD.created_at, OLD.target_subject_id) THEN
     RAISE EXCEPTION 'Order identity and captured offer terms are immutable' USING ERRCODE = '23514';
   END IF;
   IF OLD.checkout_session_id IS NOT NULL AND
