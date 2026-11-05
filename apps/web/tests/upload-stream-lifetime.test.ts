@@ -36,7 +36,15 @@ const kernel = Bun.serve({
         sha256: input.sha256,
       });
       if (completionStatus !== 200)
-        return Response.json({ code: 'dependency_unavailable' }, { status: completionStatus });
+        return Response.json(
+          {
+            type: 'https://rezics.com/problems/dependency_unavailable',
+            title: 'Dependency Unavailable',
+            status: completionStatus,
+            code: 'dependency_unavailable',
+          },
+          { status: completionStatus },
+        );
       return Response.json({ media: { id, state: 'uploaded' } });
     }
     return Response.json({

@@ -2236,8 +2236,8 @@ Full subject views page through their owner list read with the first page's para
 
 ### Upload (`PUT /media/<id>`)
 
-- **Touches:** Credential prelude → K reservation read/permission → count/hash stream → R `put` → K `:complete`;
-  transfer failure → R `delete`; unknown completion retains bytes.
+- **Touches:** Credential → K reservation read/permission → count/hash → R `put` → K `:complete`;
+  failed transfer → R `delete`; unknown completion retains bytes
 - **Bound:** ≤2 K, ≤1 put + ≤1 cleanup delete; add credential D/A; constant buffering per stage, independent of M; O(M)
   bytes streamed and hashed once, bounded by reserved byteCount
 - **Growth check:** `tests/upload-memory.test.ts`:
