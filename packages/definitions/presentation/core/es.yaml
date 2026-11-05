@@ -104,6 +104,7 @@ inverseProperties:
   wdt:P1365: reemplazado por
   wdt:P1366: reemplaza
   rezics:releaseGroup: 'archivos de este grupo de publicación'
+  schema:containedInPlace: 'Contiene lugares'
 typeDescriptions:
   wd:Q2095: 'Un alimento o sustancia comestible, como la harina; la receta describe cómo prepararlo.'
   wd:Q2620972: 'Un tramo narrativo con nombre y orden dentro de una obra, delimitado por números de episodios o capítulos.'

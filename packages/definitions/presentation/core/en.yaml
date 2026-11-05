@@ -105,6 +105,7 @@ inverseProperties:
   wdt:P1366: replaces
 
   rezics:releaseGroup: 'files from this release group'
+  schema:containedInPlace: 'Contains places'
 propertyDescriptions:
   rezics:penNameOf: 'The person or organization behind this pen name or collective name.'
   wdt:P186: 'A food or prepared recipe used as a material or component; qualify its quantity and list order where known.'
