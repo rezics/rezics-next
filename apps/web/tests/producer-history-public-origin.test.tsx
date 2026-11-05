@@ -258,6 +258,15 @@ test('public Organization entry preserves Context and current return, refuses un
     await click(m.producer_history_inspect(), occurrences[1]!);
     await click(m.producer_history_correct(), occurrences[1]!);
     await click(m.relation_open());
+    await act(async () => {
+      const input = host.querySelector<HTMLInputElement>('input[type="url"]')!;
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'https://example.org/corrected-history',
+      );
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    await click(m.relation_add_citation());
     for (const action of [m.relation_propose(), m.candidate_accept(), m.candidate_adopt()]) {
       await click(action);
       const group = host.querySelector(`[aria-label="${m.candidate_confirm_title({ action })}"]`)!;
@@ -269,6 +278,12 @@ test('public Organization entry preserves Context and current return, refuses un
       slot: { property: 'wdt:P749', target: example.fixture.similar.subject.id },
     });
     expect(commands).toHaveLength(3);
+    expect((commands[0] as RelationProposal).statement.references).toHaveLength(2);
+    expect((commands[0] as RelationProposal).statement.references[1]!.parts[0]!.value).toEqual({
+      type: 'value',
+      content: 'https://example.org/corrected-history',
+    });
+    expect(windows.calls.filter((call) => call.path.endsWith('/relations'))).toHaveLength(producerReads.length - 1);
     expect(producerReads.at(-1)!.data).toEqual(origin);
     expect(host.querySelector('li[aria-current="true"] h2,li[aria-current="true"] h3')).toBe(
       window.document.activeElement,
