@@ -561,8 +561,8 @@ export class WorkerTasks {
   }
   private neverLaunchedAbsent(task: Task, ref: { taskId: string; attempt: number }): boolean {
     const intent = this.store.attempt(ref).terminationIntent;
+    if (!intent) return false;
     return (
-      Boolean(intent) &&
       intent.process === null &&
       !(intent.auxiliaryProcesses ?? []).length &&
       neverLaunchedAttempt(this.store, ref) &&
