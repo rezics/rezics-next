@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import { consumeSessionWork, sessionProfileMigrationWork } from './session-operation-bounds.ts';
 import {
   sessionInsertPlan,
@@ -438,7 +439,7 @@ export async function appendChange(
     route,
     session_id: sessionId,
     change_no: changeNo,
-    intent,
+    intent: jsonParameter(intent),
     time: context.time,
     transaction_id: context.transactionId,
   }).run(queryClient(client));

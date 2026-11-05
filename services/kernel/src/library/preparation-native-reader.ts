@@ -1,3 +1,9 @@
+import { Value } from 'typebox/value';
+import {
+  TypePreparationBindingSchema,
+  TypePreparationOriginSchema,
+  TypePreparationIdentitySchema,
+} from './type-preparation-contract.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { PoolClient } from 'pg';
 import readReceipt from '../command/read-receipt.sql';
@@ -19,10 +25,10 @@ export async function readPreparationNativeHeader(
     route: row.route,
     accountId: row.accountId,
     preparationId: row.preparationId,
-    binding: row.binding as PreparationHeaderCommitment['binding'],
-    origin: row.origin as PreparationHeaderCommitment['origin'],
-    sourceIdentity: row.sourceIdentity as PreparationHeaderCommitment['sourceIdentity'],
-    originIdentity: row.originIdentity as PreparationHeaderCommitment['originIdentity'],
+    binding: Value.Decode(TypePreparationBindingSchema, row.binding),
+    origin: Value.Decode(TypePreparationOriginSchema, row.origin),
+    sourceIdentity: Value.Decode(TypePreparationIdentitySchema, row.sourceIdentity),
+    originIdentity: Value.Decode(TypePreparationIdentitySchema, row.originIdentity),
     principalNamespace: row.principalNamespace as PreparationHeaderCommitment['principalNamespace'],
     reservationId: row.reservationId,
     inputByteLength: row.inputByteLength,

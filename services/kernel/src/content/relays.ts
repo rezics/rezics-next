@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import { withConnection } from '../database/pool.ts';
@@ -75,7 +76,7 @@ async function eventIndex(client: Pick<PoolClient, 'query'>, source: Source, eve
     id: event.id,
     type: event.type,
     subject: event.subject ?? null,
-    data: event.data,
+    data: jsonParameter(event.data),
   });
   const row = rows[0];
   if (

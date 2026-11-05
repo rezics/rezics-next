@@ -1,6 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createHash } from 'node:crypto';
-import type { Source } from '@rezics/definitions/bulk';
+import { SourceSchema, type Source } from '@rezics/definitions/bulk';
+import { Value } from 'typebox/value';
 import type { Pool, PoolClient } from 'pg';
 import { noEffect, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { enqueueIntent, runOperationalTransaction } from '../command/operational.ts';
@@ -347,12 +348,14 @@ async function hydrate(pool: Pool, keys: Key[], options: ReadOptions): Promise<P
       ...(await withReadTransaction(pool, async (tx) => {
         const owner = await readPartition(tx, partition);
         if (!owner || owner.writeState !== 'active') throw new ProviderReviewNotReadyError();
-        const rows = (await readCandidates.run(tx, {
-          routes: group.map((key) => routeOf(key.subject_id)!),
-          subjects: group.map((key) => key.subject_id),
-          candidates: group.map((key) => key.candidate_id),
-          source: options.source,
-        })) as StoredCandidate[];
+        const rows: StoredCandidate[] = (
+          await readCandidates.run(tx, {
+            routes: group.map((key) => routeOf(key.subject_id)!),
+            subjects: group.map((key) => key.subject_id),
+            candidates: group.map((key) => key.candidate_id),
+            source: options.source,
+          })
+        ).map((row) => ({ ...row, source: Value.Decode(SourceSchema, row.source) }));
         const shown: typeof snapshots = [];
         for (const subject of new Set(rows.map((row) => row.subject_id))) {
           const local = rows.filter((row) => row.subject_id === subject);

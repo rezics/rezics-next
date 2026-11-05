@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import {
   prepareAccountIdentityReversalSettlement,
   recordAccountIdentityReversalSettlement,
@@ -613,7 +614,7 @@ export function createAgentVerificationCommands(config: { pool: Pool; access: Ac
         accountId: input.accountId,
         subject: input.subject,
         statement: input.statement,
-        links: input.links,
+        links: jsonParameter(input.links),
       });
       try {
         return await runCommand(
@@ -644,7 +645,7 @@ export function createAgentVerificationCommands(config: { pool: Pool; access: Ac
                 requested_by: actor.accountId,
                 catalogue_subject_id: input.subject,
                 statement: input.statement,
-                links: input.links,
+                links: jsonParameter(input.links),
                 transaction_id: transactionId,
               }),
             );

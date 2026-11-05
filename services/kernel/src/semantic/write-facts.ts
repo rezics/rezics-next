@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import type { PoolClient } from 'pg';
 import insertFacts from './insert-facts.sql';
 
@@ -36,6 +37,6 @@ export async function writeFacts(
     route: input.route,
     subject_id: input.subject_id,
     transaction_id: input.transaction_id,
-    facts: [...input.facts],
+    facts: jsonParameter(input.facts),
   });
 }

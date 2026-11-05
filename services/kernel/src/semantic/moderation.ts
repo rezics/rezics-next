@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import { subjectPageSlot, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import type { Pool } from 'pg';
 import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
@@ -248,7 +249,7 @@ export async function moderateSubject(
         action: options.action,
         visibility: nextVisibility,
         actor: options.actor.accountId,
-        body,
+        body: jsonParameter(body),
         transaction_id: transactionId,
       });
       if (nextVisibility !== 'visible')
@@ -402,7 +403,7 @@ export async function moderateStatement(
         action: options.action,
         visibility: nextVisibility,
         actor: options.actor.accountId,
-        body,
+        body: jsonParameter(body),
         transaction_id: transactionId,
         candidate_id: options.candidate,
       });

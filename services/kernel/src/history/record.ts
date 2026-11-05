@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import { captureAgentIdentityInventory, finalizeAgentIdentityInventory } from './agent-identity-inventory.ts';
 import { hasCommandRecordSourceSet } from './record-source-set.ts';
 import {
@@ -199,7 +200,7 @@ export async function recordCommandHistory(
       partition_no: declaration.partition,
       artifact_type: scope.artifactType,
       locator: Buffer.from(locator),
-      accounts: scope.accounts,
+      accounts: jsonParameter(scope.accounts),
     });
     const { decodeLocator } = await import('./locator.ts');
     const nativeLocator = decodeLocator(scope.artifactType, locator);
@@ -209,7 +210,7 @@ export async function recordCommandHistory(
       {
         partition: declaration.partition,
         locator: nativeLocator,
-        accounts: scope.accounts,
+        accounts: jsonParameter(scope.accounts),
       },
       input.position,
     );

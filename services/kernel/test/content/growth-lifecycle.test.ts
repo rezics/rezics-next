@@ -1,3 +1,4 @@
+import { jsonParameter } from '../../src/sql/json.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
@@ -796,7 +797,7 @@ async function reserveMediaAnchor(
       key: `m/${mediaId}/original`,
       source_url: request.sourceUrl,
       credit: request.credit,
-      provenance: request.provenance,
+      provenance: jsonParameter(request.provenance),
       at: authoritativeTimeValue(command.time),
       transaction_id: command.transactionId,
     });
@@ -892,7 +893,7 @@ function mediaPopulationRows(
         collection_pending: false,
         source_url: request.sourceUrl,
         credit: request.credit,
-        provenance: request.provenance,
+        provenance: jsonParameter(request.provenance),
         taken_down: false,
         security_revision: 0,
       },

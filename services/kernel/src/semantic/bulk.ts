@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { beginSemanticRecordSourceSet, sealSemanticRecordSourceSet } from './record-source-set.ts';
 import { collectSemanticCandidateSource, recordSemanticDocumentSource } from './record-source-set.ts';
@@ -375,7 +376,7 @@ export async function batchCommand(
           subject_id: command.subject,
           candidate_id: command.candidate,
           revision,
-          references: command.references,
+          references: jsonParameter(command.references),
         });
         await deleteSourceCandidate.run(tx, {
           route,

@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import { commandRecordSources, finalizeCommandRecordSources } from '../history/record-source.ts';
 import { hasCommandRecordSourceSet } from '../history/record-source-set.ts';
 import { commandAgentIdentitySource } from '../history/agent-identity-source.ts';
@@ -828,17 +829,17 @@ async function executeCommand<T>(
             noEffectFenceStatement.run(client, {
               partition_no: partition,
               transaction_id: transactionId,
-              receipt,
+              receipt: jsonParameter(receipt),
             });
           const eventFence = () =>
             fenceStatement.run(client, {
               partition_no: partition,
-              events,
+              events: jsonParameter(events),
               transaction_id: transactionId,
               basis: basis
                 ? { principal: options.principal, clientId: basis.clientId, requestedBy: basis.requestedBy }
                 : null,
-              receipt,
+              receipt: jsonParameter(receipt),
             });
           const row = noEffect
             ? await (dispatch ? dispatch.control('noEffectFence', noEffectFence) : noEffectFence())

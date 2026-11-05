@@ -1,3 +1,4 @@
+import { Type, type Static } from 'typebox';
 /** Native preparation ports; final work registration composes the bounded continuation runner. */
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -16,16 +17,17 @@ export interface TypePreparationInput {
 }
 
 /** Bounded internal workflow identity. Neither a source proof nor an authorization token. */
-export interface TypePreparationBinding {
-  readonly accountId: string;
-  readonly subjectId: string;
-  readonly requestKey: string;
-  readonly sourceId: string;
-  readonly sourcePartition: number;
-  readonly sourceEpoch: number;
-  readonly sourcePosition: string;
-  readonly ownerEpoch: string;
-}
+export const TypePreparationBindingSchema = Type.Object({
+  accountId: Type.String(),
+  subjectId: Type.String(),
+  requestKey: Type.String(),
+  sourceId: Type.String(),
+  sourcePartition: Type.Number(),
+  sourceEpoch: Type.Number(),
+  sourcePosition: Type.String(),
+  ownerEpoch: Type.String(),
+});
+export type TypePreparationBinding = Readonly<Static<typeof TypePreparationBindingSchema>>;
 
 export function typePreparationBinding(input: TypePreparationInput): TypePreparationBinding {
   if (input.source.position < 0n || input.ownerEpoch < 0n)
@@ -43,23 +45,25 @@ export function typePreparationBinding(input: TypePreparationInput): TypePrepara
 }
 
 /** Requested-source binding retained even if it redirects to the resolved source in binding. */
-export interface TypePreparationOrigin {
-  readonly sourceId: string;
-  readonly partition: number;
-  readonly epoch: number;
-  readonly position: string;
-  readonly survivorId: string | null;
-}
+export const TypePreparationOriginSchema = Type.Object({
+  sourceId: Type.String(),
+  partition: Type.Number(),
+  epoch: Type.Number(),
+  position: Type.String(),
+  survivorId: Type.Union([Type.String(), Type.Null()]),
+});
+export type TypePreparationOrigin = Readonly<Static<typeof TypePreparationOriginSchema>>;
 
 /** Fixed visible create/identity version; partition position is ordering, not an item version or Access proof. */
-export interface TypePreparationIdentity {
-  readonly sourceId: string;
-  readonly partition: number;
-  readonly epoch: number;
-  readonly revision: number;
-  readonly transactionId: string;
-  readonly redirect: string | null;
-}
+export const TypePreparationIdentitySchema = Type.Object({
+  sourceId: Type.String(),
+  partition: Type.Number(),
+  epoch: Type.Number(),
+  revision: Type.Number(),
+  transactionId: Type.String(),
+  redirect: Type.Union([Type.String(), Type.Null()]),
+});
+export type TypePreparationIdentity = Readonly<Static<typeof TypePreparationIdentitySchema>>;
 
 /** Immutable native row header. Exact input text/bytes and their equality evidence stay native. */
 export interface TypePreparationEvidence {

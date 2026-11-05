@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import { beginRecordHistorySerialization, recordRecordHistoryCopy } from '../history/record-source.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -64,7 +65,7 @@ async function persist(
       partition_no: partition,
       artifact_type: 'durable-work/v1',
       locator: Buffer.from(encodeLocator({ artifactType: 'durable-work/v1', workId: custodyId })),
-      accounts: request.scope.accounts,
+      accounts: jsonParameter(request.scope.accounts),
     });
   return { retired: false, admitted: row.admitted as boolean };
 }

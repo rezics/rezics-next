@@ -1,3 +1,4 @@
+import { jsonParameter } from '../sql/json.ts';
 import type {
   ConversationActivityReplyCount,
   ConversationActivityWitness as SelectedActivityWitness,
@@ -319,7 +320,7 @@ async function proveEnvelope(client: AccessClient, event: CloudEvent, id: string
     id: event.id,
     type: event.type,
     subject: event.subject ?? null,
-    data: event.data,
+    data: jsonParameter(event.data),
   });
   if (proof.length !== 1 || proof[0]!.event_count > 1000 || proof[0]!.event_seq >= proof[0]!.event_count)
     throw new TypeError('Conversation activity event has no native source');
