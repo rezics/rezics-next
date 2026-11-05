@@ -1,28 +1,20 @@
-# Complete installed public contribution actions
+# Complete public contribution actions
 
 Goal: content
 Manager: content
 
-Complete the original public-profile Discussion/Post/Review action journey in the assigned contract. The installed
-public client at base 4dc0807ff9ac9aa78e5941c29161a34786bb4a23 lacks the contribution-actions callable and anonymous
-actionSelection in its mounted Content declarations. Existing prepared watch, reaction, report and reply owners
-and the unavailable production wire remain intact. This is unfinished delivery, not accepted production behavior.
+Keep this original worktree/session and retained receiver. Do not start a parallel receiver or replace its handle.
 
-Read apps/web/src/accounts/public-profile/contributions/README.md and
-services/kernel/src/content/README.md#public-author-contribution-context. Preserve the original contract's
-acceptance, native, physical-growth, mounted and root obligations; this continuation does not replace them.
+The installed public entry packages/client/src/index.ts and its generated kernel contain neither the contribution-actions callable nor anonymous actionSelection. Production must remain unavailable until publication000 installs both through the official public entry. No publisher, generated patch, private producer import, local replacement DTO or unknown-value native authority is permitted.
 
-After the admitted complete-input publisher installs the official public output, derive request/reference/response
-types from @rezics/client, replace the local receiver ABI and validate the closed external response. Mount one
-official adapter through the existing account page and surviving exact occurrences. Keep unavailable/denied/
-withheld/sign-in/not-applicable distinct, both reaction operations, original operation leases, viewer and credential.
-Keep native command owners authoritative for immutable uncertain reports/replies/watch/reactions and deliberate
-retry/discard. Preserve exact original destinations and profile view/cursor/query/hash return, observation retirement
-and page recovery focus. Repair demonstrated native composition/acknowledgement/readback/return defects together.
+This attempt fixes one prepared watch defect: cloning otherwise-current advice used to replace ThreadWatch's readAuthority and retire its unresolved command. Authority now uses the original operation lease. The existing focused host test checks exact command object retry after that echo. It does not establish the full journey.
 
-Use focused mounted scenarios only for actual changes. Retain existing host, account journey, prepared recovery,
-occurrence-return and managed-session-reader assertions with their owners. Run changed tests with
-`bun apps/web/scripts/focused.ts --private-network -- bun test <files>` and Web typecheck; Kernel changes use
-`bun run --cwd services/kernel check <files>` and its normal typecheck placement. Controller executes broader native,
-growth, browser and root acceptance after integration. No generated patches, internal producer imports or second
-publisher. Merge or cherry-pick only the dependencies named in the original contract; do not rebase.
+Continue from the original contract and owner documents:
+- apps/web/src/accounts/public-profile/contributions/README.md
+- services/kernel/src/content/README.md#public-author-contribution-context
+
+After official publication, derive request/reference/response from the installed callable, replace the local ABI and validate the closed external response. Mount the single adapter on surviving original Discussion, Post and Review rows with prepared watch/reaction/report/reply owners. Keep current, denied, missing, withheld, sign-in, not-applicable and unavailable distinct. Reaction requires both set/clear advice. Preserve exact occurrence, destination, operation lease, reader/credential and return view/cursor/query/hash. Report/reply retain original private operands through uncertainty; reads never acknowledge writes. Replacement readers obtain new advice without old intent.
+
+Complete denied-advice uncertain-owner retention, deliberate exact retry/discard and current recovery notice. Preserve shared browser observation and address retirement across fetching/invalidation/equal replacement/remount/A-B-A. Do not add native writers, shared lifetime tests or another frontier.
+
+Keep original account-public-journey, managed-session-reader, prepared watch/reaction recovery and occurrence-return acceptance with their owners. Add only focused mounted tests needed by the actual integration. Run changed tests using bun apps/web/scripts/focused.ts --private-network -- bun test <files>, typecheck changed workspaces, and commit before checks and after fixes. Controller runs deferred native, growth, browser and root integration acceptance. Actual installed production integration remains unfinished.
