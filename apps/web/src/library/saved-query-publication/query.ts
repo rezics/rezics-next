@@ -67,10 +67,15 @@ export function queryPublicationResponse(code: number, body: unknown, collection
   )
     return { ok: false, reason: 'unknown' };
   const common: Pick<QueryPublicationStatus, 'id' | 'collectionId' | 'visibility'> = {
-    id: body.id, collectionId, visibility: body.visibility,
+    id: body.id,
+    collectionId,
+    visibility: body.visibility,
   };
   if (body.phase === 'complete' && isRecord(body.publication) && uuid(body.publication.generation))
-    return { ok: true, status: { ...common, phase: 'complete', publication: { generation: body.publication.generation } } };
+    return {
+      ok: true,
+      status: { ...common, phase: 'complete', publication: { generation: body.publication.generation } },
+    };
   if (body.phase === 'staging' || body.phase === 'awaiting_activation' || body.phase === 'refused')
     return { ok: true, status: { ...common, phase: body.phase } };
   return { ok: false, reason: 'unknown' };
@@ -85,10 +90,12 @@ export async function publishQueryNative(
 ): Promise<QueryPublicationResult> {
   const session = await writeSession(request, env);
   if (!asSession(session)) return { ok: false, reason: 'denied' };
-  const result = await client.collections({ collectionId: input.collectionId }).$publish.post(
-    { revision: input.revision, visibility: input.visibility },
-    { headers: kernelHeaders(session.authorization, input.idempotencyKey) },
-  );
+  const result = await client
+    .collections({ collectionId: input.collectionId })
+    .$publish.post(
+      { revision: input.revision, visibility: input.visibility },
+      { headers: kernelHeaders(session.authorization, input.idempotencyKey) },
+    );
   return queryPublicationResponse(result.status, result.data ?? result.error?.value, input.collectionId);
 }
 
@@ -100,7 +107,9 @@ export async function readQueryPublicationNative(
 ): Promise<QueryPublicationResult> {
   const session = await writeSession(request, env);
   if (!asSession(session)) return { ok: false, reason: 'denied' };
-  const result = await client.collectionPublications({ id: input.id }).get({ headers: { authorization: session.authorization } });
+  const result = await client
+    .collectionPublications({ id: input.id })
+    .get({ headers: { authorization: session.authorization } });
   const value = queryPublicationResponse(result.status, result.data ?? result.error?.value, input.collectionId);
   return value.ok && value.status.id !== input.id ? { ok: false, reason: 'unknown' } : value;
 }

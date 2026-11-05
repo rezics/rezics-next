@@ -652,35 +652,35 @@ function CurrentPublicationPage({
         />
       ) : null}
       <div hidden={wholeQuery && page.source.state === 'ready'}>
-      <CollectionPublicationPageView
-        page={page}
-        isCurrent={owner.isCurrent}
-        isOwnerCurrent={owner.isOwnerCurrent}
-        canPublish={canPublish}
-        captureSubmit={() => {
-          const csrf = owner.credential();
-          if (!csrf || !canPublish()) return null;
-          const send = publishSelectedCollection;
-          return (input) => send({ data: input, headers: { 'X-CSRF-Token': csrf } });
-        }}
-        submit={async (input) => {
-          const csrf = owner.credential();
-          if (!csrf || !canPublish()) return { ok: false, reason: 'denied' };
-          // Preserve the real outcome of a dispatched native write. Its view fences settlement by owner identity.
-          return publishSelectedCollection({ data: input, headers: { 'X-CSRF-Token': csrf } });
-        }}
-        {...(query.isFetching
-          ? {}
-          : {
-              onReload: () => {
-                if (
-                  owner.isCurrent() &&
-                  client.getQueryState([...options.queryKey, owner.lifetime])?.fetchStatus !== 'fetching'
-                )
-                  void query.refetch().catch(() => undefined);
-              },
-            })}
-      />
+        <CollectionPublicationPageView
+          page={page}
+          isCurrent={owner.isCurrent}
+          isOwnerCurrent={owner.isOwnerCurrent}
+          canPublish={canPublish}
+          captureSubmit={() => {
+            const csrf = owner.credential();
+            if (!csrf || !canPublish()) return null;
+            const send = publishSelectedCollection;
+            return (input) => send({ data: input, headers: { 'X-CSRF-Token': csrf } });
+          }}
+          submit={async (input) => {
+            const csrf = owner.credential();
+            if (!csrf || !canPublish()) return { ok: false, reason: 'denied' };
+            // Preserve the real outcome of a dispatched native write. Its view fences settlement by owner identity.
+            return publishSelectedCollection({ data: input, headers: { 'X-CSRF-Token': csrf } });
+          }}
+          {...(query.isFetching
+            ? {}
+            : {
+                onReload: () => {
+                  if (
+                    owner.isCurrent() &&
+                    client.getQueryState([...options.queryKey, owner.lifetime])?.fetchStatus !== 'fetching'
+                  )
+                    void query.refetch().catch(() => undefined);
+                },
+              })}
+        />
       </div>
     </>
   );
