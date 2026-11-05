@@ -5,10 +5,7 @@ import { MediaProblem } from '../media/kernel';
 import type { NativePreferenceFailure } from './preferences';
 
 type ProfileGet = ReturnType<KernelClient['accounts']>['profile']['get'];
-/** Official private GET body: closed `{ profile, editing }` from the installed client. */
-export type EditableProfileRead = NonNullable<Awaited<ReturnType<ProfileGet>>['data']>;
-export type EditableProfile = EditableProfileRead['profile'];
-export type ProfileEditing = EditableProfileRead['editing'];
+export type EditableProfile = NonNullable<Awaited<ReturnType<ProfileGet>>['data']>['profile'];
 
 /** The private source uses the same server-held credential and account key as the existing PATCH. */
 export type EditableProfileSource = {
@@ -128,6 +125,9 @@ const response = v.strictObject({
 });
 
 const patchAck = v.strictObject({ accountId: v.string() });
+/** Runtime GET body includes `editing`; the installed client type currently only names `profile`. */
+export type ProfileEditing = v.InferOutput<typeof response>['editing'];
+export type EditableProfileRead = { profile: EditableProfile; editing: ProfileEditing };
 
 /** Closed field advice for the official `{ profile, editing }` observation. */
 export function closedProfileEditing(
