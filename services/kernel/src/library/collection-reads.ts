@@ -97,7 +97,7 @@ export type CollectionView = CollectionPresentation &
     visibility: 'private' | 'unlisted' | 'public';
     revision: number;
     /** Present for the curator and derived from the same native update authority as the writer. */
-    allowedVisibilityActions?: readonly ('private' | 'unlisted' | 'public')[];
+    allowedVisibilityActions?: ('private' | 'unlisted' | 'public')[];
     memberCount: number;
     createdAt: string;
     updatedAt: string;
@@ -118,7 +118,7 @@ export type CollectionResourceView =
   | CollectionView
   | SavedDynamicCollectionView
   | (BuiltinCollectionView & {
-      allowedVisibilityActions?: readonly ('private' | 'unlisted' | 'public')[];
+      allowedVisibilityActions?: ('private' | 'unlisted' | 'public')[];
     });
 
 /** Check the required wire fields without expanding the older curated caller guarantee. */
