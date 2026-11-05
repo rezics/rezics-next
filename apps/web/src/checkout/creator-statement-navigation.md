@@ -14,4 +14,6 @@ The current reader owns identity, source admission, and displayed bodies. This c
 
 Decision: Discard on a same-origin document link keeps the captured href and assigns it once. Window capture runs before the router's document listener and stops the click there, so Refresh and locale-prefixed statement links cannot skip the unsent-reference prompt. Click targets are resolved without Window-bound `instanceof`, including text inside the link. The router blocker keeps a stable callback so opening the prompt cannot unregister an in-flight departure.
 
+Decision: the unsent-reference prompt uses one notify-before-wait Stay/Discard owner, the same pattern as other draft navigations, so the prompt is on the current document while the blocker waits.
+
 Native request shapes, authorization, page limits, and failure meanings remain owned by the native statement contract. This navigation document does not redefine them. Source stories and focused tests do not claim installed browser or native acceptance.
