@@ -6,7 +6,7 @@ import { locales } from '../paraglide/runtime.js';
 export type { FollowState, FollowWriteInput, FollowWriteResult } from './follow-records';
 import { m } from '../paraglide/messages.js';
 import type { FollowState, FollowWriteInput, FollowWriteResult } from './follow-records';
-import { createFollowIntent } from './mine-following-intent';
+import { createFollowIntent, type FollowIntentOwner } from './mine-following-intent';
 
 /** Removal is independent of create and of the ability to read the target or the own edge. */
 export function followAction(state: FollowState, canFollow: boolean, canRemove: boolean): 'follow' | 'remove' | null {
@@ -34,6 +34,8 @@ export type FollowControlProps = {
   isCurrent?: (following: boolean) => boolean;
   readLifetime?: string | null;
   onAccepted?: (following: boolean, input: FollowWriteInput) => boolean;
+  /** A mounted visit can retain the existing command owner while replacing row presentation. */
+  intentOwner?: FollowIntentOwner;
 };
 
 /** The same presenter serves a target button and a Following row's responsive menu. */
@@ -115,15 +117,20 @@ function FollowControlState({
   isCurrent,
   readLifetime,
   onAccepted,
+  intentOwner,
 }: FollowControlProps) {
   const options = locale ? { locale } : {};
   const accessibleLabel = (label: string) => (labelContext ? `${label}: ${labelContext}` : label);
   const [current, setCurrent] = useState(initial);
   const [pendingState, setPending] = useState(false);
-  const [failure, setFailure] = useState<Exclude<FollowWriteResult, { ok: true }>['reason'] | null>(null);
+  const localIntent = useRef<FollowIntentOwner | null>(null);
+  if (!intentOwner && !localIntent.current) localIntent.current = createFollowIntent();
+  const intent = intentOwner ?? localIntent.current!;
+  const [failure, setFailure] = useState<Exclude<FollowWriteResult, { ok: true }>['reason'] | null>(
+    intent.conflicted ? 'conflict' : null,
+  );
   const [removed, setRemoved] = useState(false);
-  const intent = useRef(createFollowIntent()).current;
-  const conflict = useRef(false);
+  const conflict = useRef(intent.conflicted);
   const review = useRef<{ readLifetime: FollowControlProps['readLifetime'] } | null>(null);
   const [reviewState, setReviewState] = useState<'idle' | 'pending' | 'failed' | 'ready'>('idle');
   const inFlight = useRef<{
@@ -267,6 +274,7 @@ function FollowControlState({
         if (!running.onAccepted) running.onChange?.(result.following);
       } else {
         conflict.current = result.reason === 'conflict';
+        if (conflict.current) intent.markConflicted(input);
         setFailure(result.reason);
       }
     } finally {

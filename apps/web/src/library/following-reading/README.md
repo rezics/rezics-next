@@ -67,4 +67,8 @@ kind, cursor and locale, replacing rows and inspection without supplying read or
 refresh may replace it; list denial never settles or replaces a captured uncertain Follow command. Accounts owns requested
 and issued website scope alignment; native permissions, preparations, admission and session ceilings remain authoritative.
 
+Decision: Within the same Following visit, an uncertain removal keeps its exact command and captured sender/credential
+across denied list presentation; denied DOM contains no target or continuation, and only a current admitted list may
+reattach the row control for native-admitted replay. Viewer or address retirement fences the old callbacks.
+
 Kind navigation is owned by [Following kind navigation](../following-kind-navigation/README.md).
