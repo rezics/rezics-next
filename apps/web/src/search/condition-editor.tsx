@@ -636,11 +636,7 @@ function NodeEditor({
   const unitChangeDialog = useRef<HTMLDialogElement>(null);
   const unitChangeId = useId();
   useEffect(() => {
-    if (
-      currentPropertyChange &&
-      propertyChangeDialog.current &&
-      !propertyChangeDialog.current.open
-    ) {
+    if (currentPropertyChange && propertyChangeDialog.current && !propertyChangeDialog.current.open) {
       propertyChangeDialog.current.showModal();
     }
   }, [currentPropertyChange]);
@@ -663,8 +659,7 @@ function NodeEditor({
     ) {
       setPendingUnitChange(undefined);
     }
-    if (pendingPropertyChange && (context.disabled || !currentPropertyChange))
-      setPendingPropertyChange(undefined);
+    if (pendingPropertyChange && (context.disabled || !currentPropertyChange)) setPendingPropertyChange(undefined);
   }, [
     context.disabled,
     context.identity,
@@ -698,14 +693,26 @@ function NodeEditor({
     setPendingPropertyChange(undefined);
     setPendingUnitChange(undefined);
     if (transition.requiresConfirmation)
-      setPendingPropertyChange({ property: nextProperty, identity: context.identity, occurrence: draft.key, metadata: context.metadata, transition });
+      setPendingPropertyChange({
+        property: nextProperty,
+        identity: context.identity,
+        occurrence: draft.key,
+        metadata: context.metadata,
+        transition,
+      });
     else onChange(transition.next);
   };
   const selectQualifierProperty = (index: number, nextProperty: string) => {
     const transition = changeQualifierProperty(value, index, nextProperty, context.metadata.properties);
     setPendingPropertyChange(undefined);
     if (transition.requiresConfirmation)
-      setPendingPropertyChange({ property: nextProperty, identity: context.identity, occurrence: draft.key, metadata: context.metadata, transition });
+      setPendingPropertyChange({
+        property: nextProperty,
+        identity: context.identity,
+        occurrence: draft.key,
+        metadata: context.metadata,
+        transition,
+      });
     else onChange(transition.next);
   };
   const resolvePendingPropertyChange = (confirmed: boolean) => {
@@ -1229,25 +1236,27 @@ function NodeEditor({
               <p className="mt-2 text-sm">{m.condition_property_change_direction_reset({}, options)}</p>
             )}
           <div className="mt-2 space-y-2" data-property-change-review>
-            {[currentPropertyChange.transition.original, currentPropertyChange.transition.next].map((condition, index) => (
-              <div key={index} data-property-change-version={index === 0 ? 'original' : 'next'}>
-                <PredicateDescription
-                  value={condition}
-                  locale={context.locale}
-                  presentation={{
-                    property: (id) => name(context.metadata.properties[id]?.labels, id),
-                    catalogueType: (id) => name(context.metadata.types[id]?.labels, id),
-                    discoveryType: (id) => id,
-                    value: (id, operand) =>
-                      (id === property && operandRequest && resolvedOperands?.request === operandRequest
-                        ? resolvedOperands.labels[operand.toLowerCase()]?.label
-                        : undefined) ??
-                      name(context.values[id]?.find((choice) => choice.value === operand)?.labels, operand),
-                    conceptScheme: (id) => id,
-                  }}
-                />
-              </div>
-            ))}
+            {[currentPropertyChange.transition.original, currentPropertyChange.transition.next].map(
+              (condition, index) => (
+                <div key={index} data-property-change-version={index === 0 ? 'original' : 'next'}>
+                  <PredicateDescription
+                    value={condition}
+                    locale={context.locale}
+                    presentation={{
+                      property: (id) => name(context.metadata.properties[id]?.labels, id),
+                      catalogueType: (id) => name(context.metadata.types[id]?.labels, id),
+                      discoveryType: (id) => id,
+                      value: (id, operand) =>
+                        (id === property && operandRequest && resolvedOperands?.request === operandRequest
+                          ? resolvedOperands.labels[operand.toLowerCase()]?.label
+                          : undefined) ??
+                        name(context.values[id]?.find((choice) => choice.value === operand)?.labels, operand),
+                      conceptScheme: (id) => id,
+                    }}
+                  />
+                </div>
+              ),
+            )}
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button type="button" variant="outline" autoFocus onClick={() => resolvePendingPropertyChange(false)}>

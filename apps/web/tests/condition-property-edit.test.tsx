@@ -69,16 +69,32 @@ test('qualifier changes preserve only the same released value definition and can
 });
 
 test('inverse property transitions preserve compatible meaning and explicitly reset unsupported direction', () => {
-  const relation = { datatype: 'wikibase-item', targets: ['ex:Work'], relation: { group: 'association' }, qualifiers: ['ex:language'] } as const;
+  const relation = {
+    datatype: 'wikibase-item',
+    targets: ['ex:Work'],
+    relation: { group: 'association' },
+    qualifiers: ['ex:language'],
+  } as const;
   const metadata: ConditionMetadata = {
     types: { 'ex:Work': { facets: ['ex:relation', 'ex:copy', 'ex:plain', 'ex:weight'] } },
-    properties: { ...properties, 'ex:relation': relation, 'ex:copy': relation,
-      'ex:plain': { datatype: 'wikibase-item', targets: ['ex:Work'] } },
+    properties: {
+      ...properties,
+      'ex:relation': relation,
+      'ex:copy': relation,
+      'ex:plain': { datatype: 'wikibase-item', targets: ['ex:Work'] },
+    },
   };
-  const original: FilterDocument = { statement: { property: 'ex:relation', inverse: true,
-    in: ['018f0000-0000-7000-8000-00a000000020'], qualifiers: [{ property: 'ex:language', in: ['ja'] }] } };
+  const original: FilterDocument = {
+    statement: {
+      property: 'ex:relation',
+      inverse: true,
+      in: ['018f0000-0000-7000-8000-00a000000020'],
+      qualifiers: [{ property: 'ex:language', in: ['ja'] }],
+    },
+  };
   expect(changeStatementProperty(original, 'ex:copy', metadata)).toMatchObject({
-    requiresConfirmation: false, next: { statement: { ...original.statement, property: 'ex:copy' } },
+    requiresConfirmation: false,
+    next: { statement: { ...original.statement, property: 'ex:copy' } },
   });
   for (const property of ['ex:plain', 'ex:weight', 'ex:date', 'ex:missing']) {
     const transition = changeStatementProperty(original, property, metadata);
@@ -87,7 +103,12 @@ test('inverse property transitions preserve compatible meaning and explicitly re
     expect('inverse' in (transition.next as typeof original).statement).toBe(false);
   }
   const range = changeStatementProperty(original, 'ex:weight', metadata).next;
-  expect(range).toEqual({ statement: { property: 'ex:weight', range: { unit: 'kg' },
-    qualifiers: original.statement.qualifiers } });
-  expect(validateFilter({ statement: { property: 'ex:weight', range: { gte: 4 }, inverse: true } }, metadata, { inverse: true }).length).toBeGreaterThan(0);
+  expect(range).toEqual({
+    statement: { property: 'ex:weight', range: { unit: 'kg' }, qualifiers: original.statement.qualifiers },
+  });
+  expect(
+    validateFilter({ statement: { property: 'ex:weight', range: { gte: 4 }, inverse: true } }, metadata, {
+      inverse: true,
+    }).length,
+  ).toBeGreaterThan(0);
 });
