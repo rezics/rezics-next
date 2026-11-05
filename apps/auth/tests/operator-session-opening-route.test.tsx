@@ -108,6 +108,7 @@ async function open(
           fill(host.querySelector('#opening-operator')!, operator);
         });
         await submit();
+        await flush(() => Promise.resolve());
       },
       confirm: () => flush(() => host.querySelector<HTMLInputElement>('#opening-confirm')!.click()),
       boundary: (cached: boolean) =>
@@ -151,6 +152,7 @@ test('failed initial and review reads recover the exact identity and key through
     expect(button(p.host, 'Approve and open session')!.disabled).toBe(true);
     await p.confirm();
     await p.submit();
+    await flush(() => Promise.resolve());
     await p.respond(0, approval());
     expect(p.requests[1]!.body).toEqual(selected);
     await p.respond(1, new Response(null, { status: 503 }));
@@ -200,6 +202,7 @@ for (const stage of ['review', 'session', 'approval', 'issuance', 'readback'] as
         await p.confirm();
         if (stage === 'session') p.session.mockReturnValueOnce(lateSession.promise);
         await p.submit();
+        await flush(() => Promise.resolve());
       }
       if (['issuance', 'readback'].includes(stage)) await p.respond(0, approval());
       if (stage === 'readback') {
