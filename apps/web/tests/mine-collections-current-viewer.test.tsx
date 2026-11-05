@@ -309,7 +309,7 @@ test('The default My Collections route immediately retires private collections a
         useServerIsomorphicFunctions = false;
         root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
       } else root.render(tree());
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 10));
     });
   };
   const pin = () => {
