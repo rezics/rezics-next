@@ -831,7 +831,7 @@ credit properties and character appearances to the types that use them.
 An appearance is a `schema:character` statement, qualified by an appearance role
 concept (main, supporting, and so on), its credited name and spoiler level. The
 custom `rezics:spoilerLevel` quantity uses unit `1`, from 0 (no spoiler) through
-2 (major spoiler). This disclosure mechanism has no standard vocabulary term.
+2 (major spoiler). This disclosure mechanism has no standard vocabulary term. Imported `spoil_gender` values retain the released enumeration, exact source value and uncertainty; they are not normalized or inferred.
 
 Genres, tags and detailed roles are SKOS concepts. A concept and its scheme are
 subjects, created and adopted like any other subject; a Realm's board scheme is
@@ -1566,8 +1566,6 @@ Completeness of a particular software release for its work is `wdt:P31` on
 `schema:exampleOfWork`. `wdt:P155` may target a `VideoGameRelease` as well as a
 `CreativeWork`; `VideoGameRelease` is not a `CreativeWork`. Unresolved follow
 targets keep their source code on the existing `schema:sameAs` qualifier.
-
-Decision: VNDB `releases_supersedes.id → rid` maps to the native `rezics:releaseSupersedes` relation; P155 remains chronology, and P1365/P1366 remain Organization replacement.
 
 `rezics:releaseSupersedes` points from the current software release to the exact
 release it replaces. It is a separate directed relation from P155/P156 sequence
