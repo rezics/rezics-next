@@ -198,3 +198,42 @@ evidence, with at most 20,000 cumulative entries. Each native notice is limited 
 its raw UTF-8 size before parsing. Unsupported or exhausted evidence fails after tracked work drains and returns no
 partial cost or pass. Read-only cleanup observations run through the post-capture verification boundary, after
 capture and drain and before the next preparation mutates the sample.
+
+## Private Web consumer
+
+Decision: Web reviews one explicitly mapped occurrence at a time, using the generated copy-archive transport,
+existing current-profile choices, independent-measure readout and exact episode checklist. Membership inspection
+creates a native review for only the ten displayed archived IDs; it never confirms them. The final review binds
+only the owner's selected IDs and measure mappings. Refresh always creates a new review epoch and apply key.
+
+The authenticated `/library/recover-progress` journey is adjacent to private export. Original file bytes travel in a
+base64 server-function envelope and then a JSON Blob through the generated native upload method. The page never
+parses or clones the complete archive. On acknowledgement it drops that envelope and keeps only one holdings,
+occurrence and unit page, one selected occurrence, at most twenty selected IDs and the displayed review/result.
+Upload/review/apply commands retain their exact operands, key and sealed original sender before delivery. Unresolved
+commands survive mounted-visit retirement in private memory; matching bindings can reconcile them. Viewer,
+credential, exposure, locale or address replacement hides evidence and retires callbacks. A reload loses this
+memory, so navigation stays blocked while acknowledgement is unresolved. Native command storage remains authoritative.
+Cancellation stops unclaimed effects and original-command replay reconciles an in-flight claim. Removal repeats the
+native bounded DELETE until complete; accepted Sessions remain independently readable.
+
+The installed export producer now defaults to V4, which these owners explicitly refuse. Native journey fixtures
+select an installed V2 capture before paging, then finish it through the mounted export owner; they do not relabel
+completed V4 artifacts or widen recovery admission. V1/V3 decoder and authorization acceptance stay with the native
+owner. This corrects the earlier prose's V2-default premise without inventing a recovery version.
+
+For a composed caller let H/O/T be holdings/occurrence/unit pages inspected, M membership reviews, R final reviews,
+A confirmed applications, L original-command retries and D bounded deletion calls. Native HTTP operations are
+`1+H+O+T+M+R+A+L+A+D+C` including upload, one result read per application and C cancellation requests; deliberate
+result refreshes add one each. A scalar application retains the existing ten-command/twenty-archive-operation bound,
+so A applications contribute at most 10A nested native commands and 20A archive operations before replay and result
+reads. Membership reviews pay the same bounded current-profile/direct-membership work as final reviews. Each result
+pays its actual Session read and optional exact episode read; neither is an Apply-only cost.
+
+Let wire sizes be U for raw upload, h/o/t for page responses, q/r for review request/response, a/s for apply/result,
+and c/d for cancellation/deletion responses. Composed native bytes are
+`U + Σh + Σo + Σt + Σ(q+r) + Σ(a+s) + retryBytes + Σc + Σd`, plus paths, keys, headers and JSON framing for each
+operation. Web upload adds `4*ceil(U/3)` base64 characters plus its RPC framing; it is not another native evidence
+store. Review is at most 32 KiB, active canonical command at most 8 KiB, while cumulative checkpoint serialization
+remains separately charged. This formula is a caller accounting model, not measured native growth or browser proof;
+64/512/4096, currentness, erasure, browser and promotion acceptance remain with the controller.

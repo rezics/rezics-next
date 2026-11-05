@@ -1,0 +1,17 @@
+# Archived progress recovery
+
+The private route `/library/recover-progress` consumes only installed `KernelClient.libraryCopyArchives` methods.
+[Native recovery](../../../../docs/library-archive-progress-recovery.md) owns admission, effects, bounds and cost.
+The private export page links this journey separately from Entry/label/journal recovery.
+
+`native.ts` derives all request/result types from generated methods and quotes logical keys once. `server.ts`
+binds current HTTP viewer evidence and the existing sealed original command credential. `controller.ts` retains
+unresolved commands before dispatch, fences callbacks by private visit and reconciles original receipts. `page.tsx`
+composes current profile choices, existing independent measure presentation and exact episode selection. Native
+review resolves direct membership for the displayed ten IDs; final selection stays explicit and capped at twenty.
+No archived count, date, profile pin or revision becomes a current native operand.
+
+One occurrence, review and confirmation creates one Session. Recovery reads the actual native result after apply;
+recoverable replies hide facts until original checkpoint reconciliation. Cancellation and evidence removal preserve
+accepted Sessions. Unresolved commands remain in memory when the protected visit retires; navigation is blocked
+until they can be acknowledged. Full browser reload is not a persisted-command resume mechanism.
