@@ -247,6 +247,14 @@ async function clickPageButton(host: HTMLElement, label: string) {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
+
 test('native year read uses one addressed summary, retains exact strings and rejects a mismatched year', async () => {
   const requests: Request[] = [];
   let body = summary;
@@ -884,6 +892,47 @@ test('Close retries the exact failed continuation before returning', async () =>
     expect(assigned).toEqual([returnTo]);
   } finally {
     window.location.assign = originalAssign;
+    await h.close();
+  }
+});
+
+test('late replacement cancellation cannot show stale retry state after the period changes', async () => {
+  const oldCancellation = deferred<Response>();
+  const cancelled: string[] = [];
+  nativeClient = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === 'POST') {
+        const body = (await request.json()) as { continuation: string };
+        cancelled.push(body.continuation);
+        if (cancelled.length === 1) return oldCancellation.promise;
+        return Response.json({ cancelled: true });
+      }
+      return Response.json({});
+    },
+  });
+  const later = { year: 2020, month: 2, cursor: 'later', snapshot: 'opaque', returnTo: '/library' };
+  const h = await mount(later);
+  try {
+    await h.show(diaryLoad(later, null, 'old-slot'));
+    await clickPageButton(h.host, m.library_continue_first_window());
+    const first = h.currentAddress();
+    await h.show(diaryLoad(first, null, 'new-slot'));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(cancelled).toEqual(['old-slot']);
+
+    const nextPeriod = { year: 2021, month: 3, returnTo: '/library' };
+    await h.navigate(nextPeriod);
+    await h.show(diaryLoad(nextPeriod, null, 'period-slot', 'period-2021'));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    oldCancellation.resolve(Response.json({ code: 'dependency_unavailable' }, { status: 503 }));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(cancelled).toEqual(['old-slot', 'new-slot']);
+    expect(h.host.textContent).not.toContain(m.library_diary_cancel_unavailable());
+    expect([...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_selection_retry())).toBe(
+      false,
+    );
+  } finally {
     await h.close();
   }
 });
