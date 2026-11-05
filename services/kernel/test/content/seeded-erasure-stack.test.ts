@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
-import { chromium } from 'playwright';
+import { walkSeededAuthorErasure } from '../../../../apps/web/tests/seeded-content-erasure-browser.ts';
 import { developmentEnv } from '../../scripts/database.ts';
 
 const root = resolve(import.meta.dir, '../../../..');
@@ -58,7 +58,6 @@ test('seeded product erases author content through its served control and defaul
   await run(['run', '--cwd', 'services/kernel', 'search', 'up']);
   let stack: Bun.Subprocess | undefined;
   const database = new Pool({ connectionString: process.env.DATABASE_URL });
-  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     await run(['services/auth/scripts/dev-stack.ts', 'setup']);
     await run(['services/auth/scripts/dev-stack.ts', 'persona']);
@@ -85,43 +84,15 @@ test('seeded product erases author content through its served control and defaul
       source: seeded.community.source, seed: '.temp/erasure-seed/.temp/cross-media-seed/result.json',
       author: 'developer@rezics.test',
     }, null, 2));
-    // This browser must share the remote stack's loopback; the desktop browser cannot reach it.
-    browser = await chromium.launch({ args: ['--no-sandbox'] });
-    const context = await browser.newContext();
-    const page = await context.newPage();
     const keys = JSON.parse(await readFile(resolve(root, '.temp/local-stack/keys.json'), 'utf8'));
-    await page.goto(`${web}/auth/sign-in?returnTo=${encodeURIComponent(`/en/threads/${threadId}`)}`);
-    await page.getByLabel(/email/i).fill('developer@rezics.test');
-    await page.locator('input[name="password"]').fill(keys.password);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await page.waitForURL((url) => url.origin === web && url.pathname.includes(threadId));
-    for (const locale of ['en', 'zh-Hant', 'ja']) {
-      for (const width of [390, 1440]) {
-        for (const colorScheme of ['light', 'dark'] as const) {
-          await page.setViewportSize({ width, height: 1000 });
-          await page.emulateMedia({ colorScheme });
-          await page.goto(`${web}/${locale}/threads/${threadId}`);
-          await page.locator('html[data-hydrated]').waitFor();
-          await page.screenshot({ path: resolve(review, `${locale}-${width}-${colorScheme}.png`), fullPage: true });
-        }
-      }
-    }
-    await page.goto(`${web}/en/threads/${threadId}`);
-    await page.getByRole('button', { name: 'Erase my posts in this thread…', exact: true }).click();
-    await page.getByRole('checkbox', { name: 'I understand that erasing my posts is permanent.' }).check();
-    await page.getByRole('button', { name: 'Permanently erase my posts', exact: true }).click();
-    await page.waitForURL(/operations/);
-    await page.getByText('The service confirmed that cleanup completed for your posts in this thread.', { exact: true })
-      .waitFor({ timeout: 180_000 });
+    await walkSeededAuthorErasure({ web, threadId, password: keys.password, review });
     const rows = await database.query('SELECT body FROM content.revision WHERE post_id=$1', [postId]);
     expect(rows.rows.length).toBeGreaterThan(0);
     expect(rows.rows.every((row) => row.body === null)).toBe(true);
     const current = await fetch(`${kernel}/v1/posts/${postId}`);
     expect(current.status).toBe(200);
     expect((await current.json()).post).toMatchObject({ availability: 'erased', body: null });
-    await page.screenshot({ path: resolve(review, 'completed.png'), fullPage: true });
   } finally {
-    await browser?.close();
     if (stack) { stack.kill('SIGTERM'); await stack.exited; }
     await database.end();
     await run(['run', '--cwd', 'services/kernel', 'search', 'down']);
