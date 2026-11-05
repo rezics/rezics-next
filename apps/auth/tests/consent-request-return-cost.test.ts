@@ -7,11 +7,11 @@ afterEach(() => {
 });
 
 test('retirement bounds a stalled private response body; generic presentation adds no transport', async () => {
-  const body = Promise.withResolvers<unknown>();
+  const body = Promise.withResolvers<void>();
   const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = (async (url, init) => {
     calls.push({ url: String(url), init });
-    return { ok: true, status: 200, json: () => body.promise } as Response;
+    return new Response(new ReadableStream({ pull: () => body.promise }), { status: 200 });
   }) as typeof fetch;
   let state!: ConsentDecision;
   let notices: ConsentNotices = {};
@@ -38,7 +38,7 @@ test('retirement bounds a stalled private response body; generic presentation ad
     expect(calls[0]!.url).toBe('/consent/client?scope=openid');
     visit.dispose();
     expect(calls[0]!.init?.signal?.aborted).toBe(true);
-    body.resolve({ client_id: 'client', private: 'retired body' });
+    body.resolve();
     await drain();
     expect(state.consent).toBeUndefined();
     expect(notices).toEqual({});

@@ -37,7 +37,7 @@ const fake = Bun.serve({
       .split(';')
       .some((cookie) => cookie.trim() === `auth_session=${session}`);
     if (url.pathname.startsWith('/consent/') && request.method === 'GET') {
-      if (!signedIn) return Response.json({ code: 'authentication_denied' }, { status: 401, headers });
+      if (!signedIn) return Response.json({ error: 'authentication_denied' }, { status: 401, headers });
       const id = decodeURIComponent(url.pathname.slice('/consent/'.length));
       if (id !== clientId && id !== 'unnamed') return Response.json({ code: 'not_found' }, { status: 404, headers });
       if (readStatus === 200)
@@ -58,7 +58,7 @@ const fake = Bun.serve({
       return Response.json({ code: responseCode }, { status: readStatus, headers });
     }
     if (url.pathname === '/consent' && request.method === 'POST') {
-      if (!signedIn) return Response.json({ code: 'authentication_denied' }, { status: 401, headers });
+      if (!signedIn) return Response.json({ error: 'authentication_denied' }, { status: 401, headers });
       const body = JSON.parse(call.body);
       if (
         Object.keys(body).sort().join(',') !==
@@ -66,7 +66,7 @@ const fake = Bun.serve({
         !Array.isArray(body.scope) ||
         body.scope.some((scope: string) => !registered.includes(scope))
       )
-        return Response.json({ code: 'invalid_request' }, { status: 400, headers });
+        return Response.json({ error: 'authentication_denied' }, { status: 400, headers });
       if (writeStatus === 200)
         return Response.json(
           {
@@ -78,7 +78,7 @@ const fake = Bun.serve({
           { headers },
         );
       headers.set('retry-after', '37');
-      return Response.json({ code: responseCode, message: 'HOSTILE AUTH BODY' }, { status: writeStatus, headers });
+      return Response.json({ error: 'authentication_denied' }, { status: writeStatus, headers });
     }
     return new Response('Not Found', { status: 404, headers });
   },

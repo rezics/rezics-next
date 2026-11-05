@@ -1,4 +1,10 @@
-import { securityScopeLimit, securityResponseByteBudgets, securityResponseLimits } from '@rezics/auth-contract';
+import {
+  CONSENT_PAGE_MAX_SCOPES,
+  securityScopeLimit,
+  securityResponseByteBudgets,
+  securityResponseLimits,
+  type ReviewedConsentDecisionResponse,
+} from '@rezics/auth-contract';
 import { securityId, securityDisplay, securityPasskey } from './security-response-bounds.ts';
 import { AuthRestoreAdmissionError, requireRestoredAuthAdmission } from './restore-admission.ts';
 import { configureClientLabel, scrubMetadataConfigurationPage } from './metadata-scrub.ts';
@@ -2762,7 +2768,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           if (
             (body.reviewed_requested !== undefined && !reviewedRequested) ||
             (reviewedAccountId !== undefined && (reviewedScopes === undefined || reviewedRequested === undefined)) ||
-            (reviewedAccountId === undefined && reviewedRequested !== undefined)
+            (reviewedAccountId === undefined && reviewedRequested !== undefined) ||
+            (reviewedAccountId !== undefined &&
+              (granted.length > CONSENT_PAGE_MAX_SCOPES || reviewedScopes!.length > CONSENT_PAGE_MAX_SCOPES))
           )
             throw new Denied(400);
           const outcome = await withIssuance(clientId, async () => {
@@ -2793,12 +2801,17 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               if (reviewedScopes !== undefined && !sameScopeSet(previous?.scopes ?? [], reviewedScopes))
                 throw new Denied(409);
               if (reviewedAccountId !== undefined) {
-                const expected = scopes([
+                const union = [
                   ...new Set([
                     ...reviewedScopes!,
                     ...reviewedRequested!.filter((scope) => client.scopes.includes(scope)),
                   ]),
-                ]);
+                ];
+                // A registration change can make an old request's union exceed
+                // the fixed browser acknowledgement contract. Refuse it under
+                // the existing locks before any grant or barrier effect.
+                if (union.length > CONSENT_PAGE_MAX_SCOPES) throw new Denied(409);
+                const expected = scopes(union);
                 if (!sameScopeSet(granted, expected)) throw new Denied(409);
               }
               if (operated && (!previous || granted.some((scope) => !previous.scopes.includes(scope))))
@@ -2998,11 +3011,14 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               minimumAuthnEpoch: receipt.minimumAuthnEpoch,
             });
           }
-          return json({
+          if (reviewedAccountId === undefined) return json({ client_id: clientId, scope: granted });
+          const acknowledgement: ReviewedConsentDecisionResponse = {
+            account_id: reviewedAccountId,
             client_id: clientId,
+            requested: reviewedRequested!,
             scope: granted,
-            ...(reviewedAccountId === undefined ? {} : { account_id: reviewedAccountId, requested: reviewedRequested }),
-          });
+          };
+          return json(acknowledgement);
         }
         fields(body, []);
         // Better Auth owns cookie clearing and deletion of its own persistent session.

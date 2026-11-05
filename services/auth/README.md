@@ -762,7 +762,7 @@ Better Auth. Host consent UI must show the selected client and scopes explicitly
 | `GET /consent/<client_id>`         | Cookie and optional single `scope` query; returns a private no-store projection `{ client_id, display_name, scopes, requested, granted, pending_reduction, acting_account, decisions }` for a covered third-party client. Revalidates the admitted human and registered client while reading exact consent; 400 for malformed/extra query parameters, 401 for an invalid human session, 404 for unknown, first-party, uncovered or reducing clients                                                                    |
 | `GET /sessions`                    | Cookie; returns `{ sessions: [{ id, client_id, client_display_name, created_at, expires_at, user_agent, current }] }`, only this person's unexpired sessions, newest first, at most 64; IDs are opaque native row IDs, never cookie tokens                                                                                                                                                                                                                                                                             |
 | `POST /sessions/revoke`            | Cookie and `{ session_id }`; deletes an own session and returns `{}` without step-up; clears cookies when revoking the current session; unknown or foreign IDs return 404 without mutation                                                                                                                                                                                                                                                                                                                             |
-| `POST /consent`                    | Cookie and `{ client_id, scope: string[] }`; explicitly replaces this actor's third-party consent. Review-bound approval may also send `{ reviewed_account_id, reviewed_scopes, reviewed_requested }`; a stale account/grant/request returns 409 `stale_review` before mutation or a reduction barrier. Existing callers without review fields keep the exact replacement behavior                                                                                                                                     |
+| `POST /consent`                    | Cookie and `{ client_id, scope: string[] }`; explicitly replaces this actor's third-party consent. Review-bound approval may also send `{ reviewed_account_id, reviewed_scopes, reviewed_requested }`; it returns the closed `{ account_id, client_id, requested, scope }` acknowledgement. A stale account/grant/request returns 409 `stale_review` before mutation or a reduction barrier. Existing callers without `reviewed_account_id` retain the exact `{ client_id, scope }` response and replacement behavior                                                                                                                                     |
 | `POST /signout`                    | Cookie and `{}`; Better Auth deletes the session and clears its cookie                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `POST /account-operations/approve` | Auth-host composition only; session cookie and `{ operationKey, operation }`, where `operation` is an organization creation, rename, deletion, transfer, transfer acceptance, membership or operator-fencing request without `authorization`. Requires `auth_time` within the last 600 seconds (otherwise 401 `step_up_required`); organization creation is also checked against the `organizations` platform gate group (403 `platform_closed`). Answers `{ reference, expiresAt }` from the kernel workflow approval |
 | `POST /account-operations/execute` | Auth-host composition only; session cookie and `{ operationKey, operation, reference }`, plus `acceptance` for a co-approved transfer. Resolves the approval for the same person, runs the workflow and answers its native result, such as `{ accountId }`; replaying an operation key returns the same result without repeating effects. Transfer acceptance is approve-only                                                                                                                                          |
@@ -788,11 +788,15 @@ only its optional single `scope` query; other page routes reject query
 parameters. Page reads use the current native session, human and Access checks,
 and `private, no-store` responses. POSTs retain issuer Origin and closed JSON
 body rules. Allow compares the reviewed account, request and exact reviewed union under the native consent lock before
-mutation; it rereads and refuses `stale_review` if same-account grants were added after review. Nonempty Security
-reductions likewise bind their reviewed grant set before any reduction barrier; ordinary unguarded native callers and explicit remove-all remain
-unchanged.
-Decision: the fixed consent review projection and browser intake share the pure public
-`@rezics/auth-contract` consent response bounds. Native `consent-page` retains its existing exports.
+mutation; it rereads and refuses `stale_review` if same-account grants were added after review. For reviewed browser
+submissions, the native seam also refuses a current union above the fixed 1,000-scope acknowledgement ceiling before
+any grant or reduction-barrier effect. This affects only the reviewed page contract; unreviewed native replacement
+and Security reduction callers retain their existing scope behavior. Nonempty Security reductions likewise bind their
+reviewed grant set before any reduction barrier; explicit remove-all remains unchanged.
+Decision: Reviewed Allow success requires a finite exact account/client/request/submitted-union acknowledgement;
+every ambiguous post-dispatch reply keeps its account/client/request marker unresolved. The fixed consent review
+projection and browser intake share the pure public `@rezics/auth-contract` consent response bounds. Native
+`consent-page` retains its existing exports.
 The response allowance includes every key/punctuation, both 1024-unit IDs, nullable 100-unit display name,
 254-unit email, all three 1000-entry arrays of 128 OAuth ASCII characters, pending state and decisions.
 Six bytes per UTF-16 text unit covers JSON escapes/UTF-8 conservatively; the 8192-byte requested query
@@ -800,6 +804,14 @@ further reduces GET output. Native errors are closed `authentication_denied` wit
 only that shape determines the error allowance. This is separate from Security catalogue C and kind-consent.
 Browser admission adds no native query: the existing single current read, locks, decisions and issuance
 remain authoritative, and unreadable/over-limit preflight cannot authorize a reduction.
+The reviewed acknowledgement is `{ account_id, client_id, requested, scope }`, with `scope` the actual submitted
+union. Its maximum UTF-8 body is `JSON.stringify({account_id:'',client_id:'',requested:[],scope:[]}).length +
+12*1024 + 2*(1000*(128+3)-1)`: two maximally escaped 1,024-unit IDs and two independently bounded scope arrays,
+including JSON punctuation. The POST error allowance is
+`Math.max(JSON.stringify({error:'authentication_denied'}).length, JSON.stringify({error:'authentication_denied',code:'stale_review'}).length, JSON.stringify({error:'step_up_required',effect_status:'not_applied'}).length, JSON.stringify({error:'account_suspended',code:'ACCOUNT_SUSPENDED'}).length)`;
+`Retry-After` adds no body bytes. Unreviewed native callers still
+receive only `{ client_id, scope }`. `pages-consent-sessions.test.ts` exercises the producer and legacy compatibility;
+native/browser qualification remains outstanding at the manager's integration gate.
 The Cost table derives consent/session reads and single-session revocation,
 including their complete handler growth citations. `pages-consent-sessions.test.ts`
 exercises the real handlers and database.

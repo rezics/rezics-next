@@ -1,4 +1,5 @@
 import { trustedAccessPorts } from './support/trusted-access.ts';
+import { CONSENT_DECISION_MAX_RESPONSE_BYTES } from '@rezics/auth-contract';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -105,7 +106,9 @@ test('consent read returns the client display name registered scopes and current
     acting_account: { account_id: person, email: `${person}@example.test` },
     decisions: { allow: true, decline: true, switch_account: true },
   });
-  expect((await request('/consent', { client_id: external, scope: ['read'] })).status).toBe(200);
+  const legacyAllow = await request('/consent', { client_id: external, scope: ['read'] });
+  expect(legacyAllow.status).toBe(200);
+  expect(await legacyAllow.json()).toEqual({ client_id: external, scope: ['read'] });
   expect((await request('/consent', { client_id: external, scope: ['write'] }, otherCookie)).status).toBe(200);
   expect((await (await request(path)).json()).granted).toEqual(['read']);
   const review = await request(`${path}?scope=write%20unknown:permission`);
@@ -148,6 +151,44 @@ test('consent read returns the client display name registered scopes and current
     'UPDATE auth_consent SET pending_scopes=NULL,pending_reference=NULL WHERE account_id=$1 AND client_id=$2',
     [person, external],
   );
+});
+
+test('reviewed Allow returns a bounded exact union with maximal escaped client ID and keeps empty and legacy shapes', async () => {
+  const escapedClient = '\u0001'.repeat(1024);
+  await service.internal.registerClient({
+    clientId: escapedClient,
+    firstParty: false,
+    scopes: ['read', 'write'],
+  });
+  const empty = await request('/consent', {
+    client_id: escapedClient,
+    scope: [],
+    reviewed_account_id: person,
+    reviewed_scopes: [],
+    reviewed_requested: [],
+  });
+  expect(empty.status).toBe(200);
+  const emptyAcknowledgement = await empty.json();
+  expect(emptyAcknowledgement).toEqual({ account_id: person, client_id: escapedClient, requested: [], scope: [] });
+  expect(new TextEncoder().encode(JSON.stringify(emptyAcknowledgement)).length).toBeLessThanOrEqual(
+    CONSENT_DECISION_MAX_RESPONSE_BYTES,
+  );
+
+  const legacy = await request('/consent', { client_id: escapedClient, scope: ['read'] });
+  expect(await legacy.json()).toEqual({ client_id: escapedClient, scope: ['read'] });
+  const allow = await request('/consent', {
+    client_id: escapedClient,
+    scope: ['read', 'write'],
+    reviewed_account_id: person,
+    reviewed_scopes: ['read'],
+    reviewed_requested: ['write'],
+  });
+  expect(await allow.json()).toEqual({
+    account_id: person,
+    client_id: escapedClient,
+    requested: ['write'],
+    scope: ['read', 'write'],
+  });
 });
 
 test('review-bound Allow and a nonempty reduction refuse grants added after the browser review', async () => {

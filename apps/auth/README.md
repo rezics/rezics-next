@@ -385,14 +385,26 @@ counts every closed key and punctuation, all three 1000-entry/128-character OAut
 IDs (1024 UTF-16 units each), nullable display name (100) and email (254), pending state and decisions.
 Six bytes per text unit conservatively covers JSON escaping and UTF-8; the requested query's 8192-byte cap can
 only reduce the projection. The error allowance comes only from native `authentication_denied` plus optional
-`stale_review`. Headers never raise either allowance. Overflow, invalid UTF-8, malformed JSON and stalled bodies
-are unavailable; a failed nonempty reduction preflight sends no mutation. The client ID is checked before URL
-construction. One current native read and the existing whole-call deadline retain their authority and costs.
-Each deliberate Allow performs one existing five-second bounded POST with exact reviewed account/grant/request
-bindings; native currentness and stale-review refusal remain authoritative. There is no implicit resend, inventory
-read, marker scan, polling, prefetch or per-permission call. Repeated activation shares the active read or decision;
-locale changes, history dismissal, Decline and Stay send zero decisions and add no reads. Leaving only retires browser
-ownership; native work can continue. Return and Retry send zero decisions.
+`stale_review`. Headers never raise either GET allowance. The reviewed Allow acknowledgement is the closed
+`{account_id, client_id, requested, scope}` DTO; native callers without `reviewed_account_id` keep the legacy smaller
+`{client_id, scope}` response. Its byte allowance is
+`JSON.stringify({account_id:'',client_id:'',requested:[],scope:[]}).length + 12*1024 + 2*(1000*(128+3)-1)`.
+The two array terms cover both the reviewed request and the actual submitted union; the union can be larger than the
+URL request. Six bytes per UTF-16 unit covers worst-case escaping for both IDs, and OAuth scope syntax is ASCII
+without quotes or backslashes. The POST error allowance is
+`Math.max(JSON.stringify({error:'authentication_denied'}).length, JSON.stringify({error:'authentication_denied',code:'stale_review'}).length, JSON.stringify({error:'step_up_required',effect_status:'not_applied'}).length, JSON.stringify({error:'account_suspended',code:'ACCOUNT_SUSPENDED'}).length)`.
+These are the exact native denial, stale-review, step-up and suspension variants. A 429 uses the generic denial body
+where returned; its `Retry-After` header never changes the body allowance.
+
+Both reads and the reviewed POST admit actual streamed bytes before fatal UTF-8 decoding and JSON parsing. Overflow,
+invalid UTF-8, malformed JSON, lost bodies and stalled bodies are unavailable; a malformed or excess post-dispatch
+reply remains unresolved even when its status is 4xx. A legal acknowledgement must exactly match the frozen reviewed
+account, client, request and submitted scope set. Each deliberate Allow performs one five-second bounded POST; its
+signal covers headers and body and races a stalled transport. Native currentness and stale-review refusal remain
+authoritative. There is no implicit resend, inventory read, marker scan, polling, prefetch or per-permission call.
+Repeated activation shares the active read or decision; locale changes, history dismissal, Decline and Stay send zero
+decisions and add no reads. Leaving retires browser receiving but cannot cancel native work. Return and Retry send
+zero decisions.
 
 Page paths render only for GET and HEAD. Other methods, including `POST /consent` and `POST /signup`, pass the
 original request through to Auth at the issuer origin in production, or through the existing `AUTH_ORIGIN` proxy in
