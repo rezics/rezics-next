@@ -170,38 +170,19 @@ async function mount() {
       <RouterContextProvider router={router}>{node}</RouterContextProvider>
     </QueryClientProvider>
   );
-  const show = async (nextSession = session, nextAddress = currentAddress) => {
-    await flush(() => {
+  const show = (nextSession = session, nextAddress = currentAddress) =>
+    flush(() => {
       session = nextSession;
       currentAddress = nextAddress;
       client.setQueryData(sessionQuery.queryKey, session);
-    });
-    const snapshot = exposure.getSnapshot();
-    if (snapshot.state === 'signed-in')
-      await flush(() =>
+      const snapshot = exposure.getSnapshot();
+      if (snapshot.state === 'signed-in')
         client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
           subject: snapshot.observation.subject,
           admitted: ['collections'],
-        }),
-      );
-    await flush(() => {
+        });
       root.render(tree(<CollectionPublicationPage address={currentAddress} />));
     });
-    if (nextSession.state === 'signed-in' && nextSession.subject && reads.length === 0) {
-      const snapshot = exposure.getSnapshot();
-      const groups =
-        snapshot.state === 'signed-in'
-          ? client.getQueryData(viewerExposureQuery(snapshot.observation).queryKey)
-          : undefined;
-      const publicationQueries = client.getQueryCache().findAll({ queryKey: ['collection-publication'] }).map((query) => ({
-        key: query.queryKey,
-        status: query.state.status,
-        error: query.state.error instanceof Error ? query.state.error.message : query.state.error,
-      }));
-      throw new Error(
-        `Expected an admitted collection read; viewer=${JSON.stringify(snapshot)}, exposure=${JSON.stringify(groups)}, queries=${JSON.stringify(publicationQueries)}, page=${host.textContent}`,
-      );
-    }
   };
   const button = (label: string) => {
     const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === label);
@@ -216,23 +197,9 @@ async function mount() {
       if (twice) node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     });
   const checkboxes = () => [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
-  const querySummary = () =>
-    client.getQueryCache().findAll({ queryKey: ['collection-publication'] }).map((query) => ({
-      key: query.queryKey,
-      status: query.state.status,
-      error: query.state.error instanceof Error ? query.state.error.message : query.state.error,
-      source: query.state.data?.source.state,
-      revision: query.state.data?.source.state === 'ready' ? query.state.data.source.revision : undefined,
-    }));
   const choose = async (indices = [0]) => {
-    for (const index of indices) {
-      const node = checkboxes()[index];
-      if (!node) throw new Error(`Missing candidate checkbox ${index}; page=${host.textContent}; queries=${JSON.stringify(querySummary())}`);
-      await flush(() => node.click());
-    }
-    const confirmation = checkboxes().at(-1);
-    if (!confirmation) throw new Error(`Missing confirmation checkbox; page=${host.textContent}; queries=${JSON.stringify(querySummary())}`);
-    await flush(() => confirmation.click());
+    for (const index of indices) await flush(() => checkboxes()[index]!.click());
+    await flush(() => checkboxes().at(-1)!.click());
   };
   const settle = <T,>(work: ReturnType<typeof deferred<T>>, outcome: T | Error) =>
     flush(() => {
@@ -280,7 +247,7 @@ async function mount() {
         const query = client.getQueryCache().find({
           queryKey: collectionPublicationQuery(credential, currentAddress).queryKey,
         });
-        if (!query) throw new Error(`Missing publication query for ${JSON.stringify(credential)}; queries=${JSON.stringify(querySummary())}`);
+        expect(query).toBeDefined();
         client.setQueryData(query!.queryKey, page);
       }),
     async dispose() {
