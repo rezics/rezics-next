@@ -486,10 +486,10 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
                         "idempotency-key": string;
                     };
                     response: {
-                        200: {
-                            survivor: string;
-                            redirected: string;
-                            revision: number;
+                        202: {
+                            operation: {
+                                id: string;
+                            };
                         };
                         400: Response | {
                             type: unknown;
