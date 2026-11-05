@@ -1,3 +1,4 @@
+import { useEffect, useRef, type ReactElement } from 'react';
 import { editorRequest } from '../../features/catalogue/editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
@@ -85,7 +86,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/authored')({
   component: candidateSession(AuthoredRoute),
 });
 
-function AuthoredRoute() {
+function AuthoredRoute(): ReactElement {
   const { id } = Route.useLoaderData();
   const { property } = Route.useSearch();
   const locale = getLocale();
@@ -101,6 +102,8 @@ function AuthoredRoute() {
   const candidateWork = useCandidateWork(identity);
   const editorWork = useCatalogueLifetime(identity);
   const currentFieldHref = `${location.pathname}?${new URLSearchParams({ property: SUMMARY_PROPERTY })}`;
+  const failureHeading = useRef<HTMLHeadingElement>(null);
+  const focusedFailure = useRef<number>(undefined);
   const { state } = useSession();
   const returnHref = via ?? (invalid ? location.pathname.replace(/\/authored$/u, '') : undefined);
   const returnLink = returnHref ? (
@@ -127,10 +130,24 @@ function AuthoredRoute() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  useEffect(() => {
+    const target = failureHeading.current;
+    if (!target || !editorWork.active() || focusedFailure.current === editorWork.generation) return;
+    const document = target.ownerDocument;
+    if (document.activeElement !== document.body && document.activeElement !== document.documentElement) return;
+    focusedFailure.current = editorWork.generation;
+    target.focus();
+  }, [editorWork, query.data, invalid, unsupported]);
   if (invalid || unsupported)
     return (
       <div className="space-y-3 p-6">
-        <h1 className="text-xl font-semibold">{m.authored_title()}</h1>
+        <h1
+          ref={failureHeading}
+          tabIndex={-1}
+          className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          {m.authored_title()}
+        </h1>
         <p role="status">{unsupported ? m.subject_synopsis_global_only() : m.subject_synopsis_visit_invalid()}</p>
         {returnLink}
       </div>
@@ -138,7 +155,13 @@ function AuthoredRoute() {
   if (selectedVia && query.data && !query.data.ok)
     return (
       <div className="space-y-3 p-6">
-        <h1 className="text-xl font-semibold">{m.authored_title()}</h1>
+        <h1
+          ref={failureHeading}
+          tabIndex={-1}
+          className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          {m.authored_title()}
+        </h1>
         <p role="status">{m.subject_synopsis_visit_changed()}</p>
         <EditorFailure reason={query.data.reason} locale={locale} />
         <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={currentFieldHref}>
@@ -181,6 +204,7 @@ function AuthoredRoute() {
         key={editorWork.generation}
         initial={query.isError ? { ok: false, reason: 'unavailable' } : query.data}
         locale={locale}
+        inspection={selectedVia}
         transport={{
           read,
           propose: (data) => submitAuthoredField({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),

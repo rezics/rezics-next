@@ -30,4 +30,4 @@ erasure/binding/growth checks and browser gates at 390/1440, light/dark, keyboar
 Contract-named sources read: rezics-workflow skill, docs/development/README.md, agent-conduct.md,
 documentation.md, efficiency.md; architecture/scope sections; docs/subject-pages.md;
 legacy-final:apps/web/features/entity-page/identity-relations.ts. The brief's unspecified legacy unit detail section
-was not surveyed; no legacy implementation was copied. No main checkout or other outside path was opened or changed.
+was not surveyed; no legacy implementation was copied. Product edits stayed in the worktree. Routed checks use their configured read-only main-checkout host file and external scratch directories.
