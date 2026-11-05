@@ -71,3 +71,82 @@ test('installed session refuses unsupported and malformed intent before mounting
   }
   client.clear();
 });
+
+test('mounted installed route and session retain canonical origin, acquire fresh Global reads and retire source/caller visits', async () => {
+  const { createRequire } = await import('node:module');
+  const { act, createContext, useContext } = await import('react');
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.test' + base });
+  const names = 'window document navigator HTMLElement HTMLButtonElement HTMLInputElement HTMLSelectElement Element Node Document DocumentFragment ShadowRoot MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame matchMedia IS_REACT_ACT_ENVIRONMENT'.split(' ');
+  const saved = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+  for (const name of names) Object.defineProperty(globalThis, name, { configurable: true, writable: true,
+    value: name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : Reflect.get(window, name) });
+  const { createRoot } = await import('react-dom/client');
+  const { waitFor } = await import(createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom'));
+  const { createRootRoute, createRouter, createMemoryHistory, RouterProvider } = await import('@tanstack/react-router');
+  const { mangaFixture } = await import('../src/kernel/fake/catalogue-manga-profile');
+  const fixture = mangaFixture();
+  const kernel = await import('../src/kernel/client');
+  const originalKernel = { ...kernel };
+  mock.module('../src/kernel/client', () => ({ ...originalKernel, kernelClient: () => fixture.client }));
+  const { MangaProfileSession } = await import('../src/features/catalogue/manga-profile-session');
+  const { Route } = await import('../src/routes/subjects/$id_.$slug_.manga');
+  const { sessionQuery } = await import('../src/session/query');
+  const { m } = await import('../src/paraglide/messages');
+  const { setLocale } = await import('../src/paraglide/runtime');
+  setLocale('en', { reload: false });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const credentials = (csrfToken: string) => client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: other, csrfToken });
+  credentials('first');
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const Content = createContext<import('react').ReactNode>(null);
+  const router = createRouter({ routeTree: createRootRoute({ component: () => useContext(Content) }), history: createMemoryHistory({ initialEntries: ['/'] }) });
+  const render = async (visit: ReturnType<typeof parse>) => act(async () => {
+    root.render(<QueryClientProvider client={client}><Content.Provider value={<MangaProfileSession id={id} locale="en" visit={visit} />}><RouterProvider router={router} /></Content.Provider></QueryClientProvider>);
+    await router.load();
+  });
+  const loader = Route.options.loader;
+  if (typeof loader !== 'function') throw new Error('Missing canonical Manga loader');
+  const href = mangaPublicCorrectionHref(base, origin);
+  const load = (slug: string, search = new URL(href, window.location.origin).search) => loader({ params: { id, slug }, location: { searchStr: search, hash: '' } } as never);
+  try {
+    await expect(load('old-slug')).rejects.toMatchObject({ options: { statusCode: 301, href: expect.stringContaining('/the-paper-observatory/manga?origin=') } });
+    expect(await load('the-paper-observatory')).toMatchObject({ id, visit: { kind: 'origin', origin } });
+    await expect(load('x'.repeat(129))).rejects.toBeDefined();
+    await render(parse(href));
+    await waitFor(() => expect(host.textContent).toContain(m.manga_membership()));
+    const reads = fixture.calls.length;
+    await render(parse(mangaPublicCorrectionHref(base, mangaObservedOrigin({ ...origin, context: other }))));
+    expect(host.textContent).toContain(m.manga_origin_unsupported());
+    expect(fixture.calls).toHaveLength(reads);
+    expect(host.querySelector('input, select')).toBeNull();
+    await render(parse(href));
+    await waitFor(() => expect(fixture.calls.length).toBeGreaterThan(reads));
+    const beforeCredentials = fixture.calls.length;
+    await act(async () => { credentials('second'); });
+    await waitFor(() => expect(fixture.calls.length).toBeGreaterThan(beforeCredentials));
+    const beforeReturn = fixture.calls.length;
+    await act(async () => { credentials('first'); });
+    await waitFor(() => expect(fixture.calls.length).toBeGreaterThan(beforeReturn));
+    await render(parse(mangaPublicCorrectionHref(base, { ...origin, definition: 'sha256:' + 'f'.repeat(64) })));
+    await waitFor(() => expect(host.textContent).toContain(m.manga_origin_changed()));
+    expect(host.querySelector('input, select')).toBeNull();
+    const fresh = host.querySelector<HTMLAnchorElement>('a[href*="publicReturn="]')!;
+    expect(fresh).not.toBeNull();
+    await render(parse(fresh.getAttribute('href')!));
+    await waitFor(() => expect(host.textContent).toContain(m.manga_membership()));
+    expect(fixture.calls.filter(call => call.method === 'POST')).toHaveLength(0);
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    mock.module('../src/kernel/client', () => originalKernel);
+    for (const [name, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else Reflect.deleteProperty(globalThis, name);
+    }
+    window.happyDOM.abort();
+  }
+});
