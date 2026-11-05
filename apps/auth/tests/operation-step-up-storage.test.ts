@@ -9,6 +9,9 @@ import {
 import {
   MANAGEMENT_OPERATION_STEP_UP_STORAGE_LIMIT,
   RENAME_REVIEW_STEP_UP_STORAGE_LIMIT,
+  consumeRenameReviewReturn,
+  markManagementOpeningSubmitted,
+  markManagementOperationReturned,
   markRenameReviewReturned,
   pendingManagementOperationStepUpState,
   pendingRenameReviewStepUpState,
@@ -162,6 +165,17 @@ test('account compatibility is closed and the optional submitted marker stays op
     authorization: 'private',
   } as never)).toBe(false);
   expect(data.get(accountStorageKey)).toBe(unknown);
+  data.set(managementStorageKey, 'previous-management-value');
+  const stringify = spyOn(JSON, 'stringify');
+  expect(storePendingManagementOperationStepUp({
+    accountId: 'human',
+    operationKey: 'key',
+    operation: { kind: 'opening', operatorAccountId: 'operator', subjectAccountId: 'subject' },
+    authorization: 'private',
+  } as never)).toBe(false);
+  expect(stringify).not.toHaveBeenCalled();
+  expect(data.get(managementStorageKey)).toBe('previous-management-value');
+  stringify.mockRestore();
   expect(writes).toBe(0);
 });
 
@@ -179,6 +193,9 @@ test('producers bound escaping at legal field maxima and round-trip every manage
   const accountRaw = data.get(accountStorageKey)!;
   expect(accountRaw.length).toBeLessThanOrEqual(ACCOUNT_OPERATION_STEP_UP_STORAGE_LIMIT);
   expect(pendingAccountOperationStepUpState()).toMatchObject({ kind: 'pending', value: { submitted: true } });
+  const handle = `a${'x'.repeat(62)}z`;
+  expect(storePendingAccountOperationStepUp({ kind: 'organization', accountId: 'human', operationKey: 'b'.repeat(32), operation: { kind: 'organization', handle } })).toBe(true);
+  expect(pendingAccountOperationStepUpState()).toMatchObject({ kind: 'pending', value: { operation: { handle } } });
 
   const largest: ManagementOperationInput = {
     accountId: escaped,
@@ -225,7 +242,22 @@ test('producers bound escaping at legal field maxima and round-trip every manage
     const input = { accountId: 'human', operationKey: 'request', operation };
     expect(storePendingManagementOperationStepUp(input)).toBe(true);
     expect(pendingManagementOperationStepUpState()).toMatchObject({ kind: 'pending', value: input });
+    if (operation.kind === 'opening') {
+      const state = pendingManagementOperationStepUpState();
+      expect(state.kind === 'pending' && markManagementOperationReturned(state.value)).toBe(true);
+      expect(markManagementOpeningSubmitted(input)).toBe(true);
+      expect(pendingManagementOperationStepUpState()).toMatchObject({ kind: 'pending', value: { phase: 'submitted' } });
+    }
   }
+});
+
+test('rename review consumption is deliberate and account-bound', () => {
+  expect(storePendingRenameReviewStepUp(reviewAccountId)).toBe(true);
+  expect(markRenameReviewReturned({ kind: 'rename', accountId: reviewAccountId, returnTo: '/account/rename', phase: 'awaiting' })).toBe(true);
+  expect(consumeRenameReviewReturn('00000000-0000-4000-8000-000000000002')).toBe(false);
+  expect(pendingRenameReviewStepUpState()).toMatchObject({ kind: 'pending', value: { accountId: reviewAccountId, phase: 'returned' } });
+  expect(consumeRenameReviewReturn(reviewAccountId)).toBe(true);
+  expect(pendingRenameReviewStepUpState()).toEqual({ kind: 'absent' });
 });
 
 test('malformed, absent and inaccessible storage keep their established distinctions', async () => {
