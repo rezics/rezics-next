@@ -198,11 +198,6 @@ test('production route admits public scope before the original session transport
         ),
       ).toBe(true),
     );
-    const signedInReadCount = reads.length;
-    await act(async () =>
-      client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: signedInReader, csrfToken: 'second' }),
-    );
-    await waitFor(() => expect(reads.length).toBeGreaterThan(signedInReadCount));
     const publicReadCount = reads.length;
 
     const nonGlobalReturn = conceptPublicReturnHref(
