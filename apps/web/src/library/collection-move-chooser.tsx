@@ -29,6 +29,10 @@ const controlClass =
 const linkClass =
   'min-h-11 max-w-full break-words [overflow-wrap:anywhere] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2';
 
+type ReadAttempt =
+  | { kind: 'choices'; visit: BoundedPageVisit }
+  | { kind: 'placements'; visit: BoundedPageVisit; target: CollectionDestination };
+
 type ReadIssue = 'denied' | 'expired' | 'changed' | 'unavailable';
 
 function issueMessage(issue: ReadIssue) {
@@ -77,6 +81,7 @@ export function CollectionMoveChooser({
   const selectionAdmitted = useRef(false);
   const [selectionReady, setSelectionReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const readAttempt = useRef<ReadAttempt | null>(null);
   const version = useRef(0);
   const live = useRef(false);
   const callbacks = useRef({ current, onChange });
@@ -110,15 +115,19 @@ export function CollectionMoveChooser({
     if (focus) focusAfterEpisode.current = episode;
     setLoading(true);
     setChoiceIssue(null);
+    readAttempt.current = { kind: 'choices', visit };
     try {
       const page = await readCollectionMoveChoices({ data: visit.cursor });
       if (!retained(episode)) return;
-      const eligible = page.collections.filter((choice) => choice.id !== sourceId);
+      readAttempt.current = null;
       setChoices(page);
       setChoiceVisit(visit);
       setChoiceIssue(null);
     } catch (error) {
-      if (retained(episode)) setChoiceIssue(moveReadFailure(error));
+      if (!retained(episode)) return;
+      const issue = moveReadFailure(error);
+      setChoiceIssue(issue);
+      if (issue === 'denied') setChoices({ collections: [], next: null });
     } finally {
       if (retained(episode)) setLoading(false);
     }
@@ -135,11 +144,13 @@ export function CollectionMoveChooser({
     if (focus) focusAfterEpisode.current = episode;
     setLoading(true);
     setPlacementIssue(null);
+    readAttempt.current = { kind: 'placements', visit, target };
     try {
       const page = await readCollectionMovePlacements({
         data: { collectionId: target.id, revision: target.revision, cursor: visit.cursor },
       });
       if (!retained(episode)) return;
+      readAttempt.current = null;
       setPlacements(page);
       setPlacementVisit(visit);
       setPlacementIssue(null);
@@ -158,8 +169,13 @@ export function CollectionMoveChooser({
       setSelectionReady(false);
       callbacks.current.onChange(null);
       if (issue === 'changed' || issue === 'denied') {
+        readAttempt.current = null;
+        setDestination(null);
+        if (issue === 'changed' || issue === 'denied') {
+        readAttempt.current = null;
         setDestination(null);
         if (issue === 'denied') setDestinationId('');
+      }
         setSelectedAnchor(null);
         setPlacements({ members: [], next: null });
       }
@@ -176,6 +192,7 @@ export function CollectionMoveChooser({
     setSelectionReady(false);
     setLoading(true);
     setPlacementIssue(null);
+    readAttempt.current = null;
     setDestinationId(id);
     setDestination(null);
     setSelectedAnchor(null);
@@ -193,11 +210,14 @@ export function CollectionMoveChooser({
       if (!target) throw new Error('Move destination unavailable');
       if (target.id !== id || target.id === sourceId) throw new Error('Move destination changed');
       if (placement) {
+        setDestination(target);
+        readAttempt.current = { kind: 'placements', visit: firstPageVisit(), target };
         const page = await readCollectionMovePlacements({ data: { collectionId: id, revision: target.revision } });
         if (!retained(episode)) return;
         setPlacements(page);
         setPlacementVisit(firstPageVisit());
       }
+      readAttempt.current = null;
       setDestination(target);
       setPlacementIssue(null);
       selectionAdmitted.current = true;
@@ -210,14 +230,18 @@ export function CollectionMoveChooser({
       selectionAdmitted.current = false;
       setSelectionReady(false);
       callbacks.current.onChange(null);
-      if (issue === 'denied') setDestinationId('');
+      if (issue === 'changed' || issue === 'denied') {
+        readAttempt.current = null;
+        setDestination(null);
+        if (issue === 'denied') setDestinationId('');
+      }
     } finally {
       if (retained(episode)) setLoading(false);
     }
   }
 
   function chooseStart() {
-    if (!destination || !callbacks.current.current() || loading) return;
+    if (!destination || !callbacks.current.current() || loading || placementIssue) return;
     selectionAdmitted.current = true;
     setSelectionReady(true);
     setSelectedAnchor(null);
@@ -226,7 +250,7 @@ export function CollectionMoveChooser({
   }
 
   function chooseAnchor(member: MovePlacements['members'][number], index: number) {
-    if (!destination || !callbacks.current.current() || loading) return;
+    if (!destination || !callbacks.current.current() || loading || placementIssue) return;
     const anchor: CollectionMoveAnchor = {
       id: member.id,
       title: member.title,
@@ -248,6 +272,7 @@ export function CollectionMoveChooser({
     setSelectionReady(false);
     setDestination(null);
     setDestinationId('');
+    readAttempt.current = null;
     setSelectedAnchor(null);
     setPlacements({ members: [], next: null });
     setPlacementVisit(firstPageVisit());
@@ -274,22 +299,22 @@ export function CollectionMoveChooser({
   }
 
   function retryChoicePage() {
-    void readChoices(choiceVisit, true);
+    const attempt = readAttempt.current;
+    if (attempt?.kind === 'choices') void readChoices(attempt.visit, true);
   }
 
   function retryPlacementPage() {
-    if (!destination) {
-      if (destinationId) void chooseDestination(destinationId);
-      return;
+    const attempt = readAttempt.current;
+    if (attempt?.kind === 'placements') {
+      selectionAdmitted.current = false;
+      setSelectionReady(false);
+      void readPlacementPage(attempt.visit, attempt.target, true, false);
     }
-    if (placementIssue === 'expired' || placementIssue === 'changed' || placementIssue === 'denied') {
-      restartPlacements();
-      return;
-    }
-    selectionAdmitted.current = false;
-    setSelectionReady(false);
-    const preserveSelection = false;
-    void readPlacementPage(placementVisit, destination, true, preserveSelection);
+  }
+
+  function chooseBrowseDestination(id: string) {
+    if (disabled || loading || choiceIssue) return;
+    void chooseDestination(id);
   }
 
   const visibleChoices = choices.collections.filter((choice) => choice.id !== sourceId);
@@ -315,9 +340,9 @@ export function CollectionMoveChooser({
                   variant={destinationId === choice.id ? 'default' : 'outline'}
                   className={`${controlClass} w-full justify-start px-3 py-2`}
                   data-move-destination={choice.id}
-                  disabled={disabled || loading}
+                  disabled={disabled || loading || !!choiceIssue}
                   aria-pressed={destinationId === choice.id}
-                  onClick={() => void chooseDestination(choice.id)}
+                  onClick={() => chooseBrowseDestination(choice.id)}
                 >
                   {choice.title}
                 </Button>
@@ -476,7 +501,7 @@ export function CollectionMoveChooser({
                 className={controlClass}
                 disabled={disabled || loading}
                 onClick={
-                  placementIssue === 'changed' || placementIssue === 'denied' ? retryPlacementPage : restartPlacements
+                  placementIssue === 'expired' ? restartPlacements : retryPlacementPage
                 }
               >
                 {placementIssue === 'changed' || placementIssue === 'denied'

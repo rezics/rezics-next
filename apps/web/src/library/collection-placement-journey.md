@@ -72,6 +72,10 @@ retains its original capture and is not cleared by later producer changes.
 
 ## Decisions and remaining evidence
 
+Decision: Retry repeats the captured failed bounded read, including its cursor and destination revision; only success
+advances the displayed visit. Expiry offers explicit Restart. Failed catalogue rows stay readonly, and placement
+recovery requires deliberate fresh selection without replacing captured parent command intent.
+
 Decision: browse visits retain the current page plus one previous cursor; Previous steps back once, and Restart
 explicitly rereads page one, so deep browsing never stores cursor history.
 
