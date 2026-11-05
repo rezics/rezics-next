@@ -417,10 +417,9 @@ test('projects verifier source inputs once per immutable revision with bounded G
   expect(checkInput(settings, head, globbed, many)).toBeUndefined();
   const input = checkInput(settings, head, present, many);
   expect(input).toEqual(expect.any(String));
-  expect(checkInput(settings, head, { ...present, cwd: undefined }, many)).not.toBe(input);
-  expect(checkInput({ ...settings, stateDirectory: join(root, '.other') } as Settings, head, present, many)).not.toBe(
-    input,
-  );
+  expect(checkInput(settings, head, { command: present.command, closure: present.closure }, many)).not.toBe(input);
+  writeFileSync(join(settings.stateDirectory, 'remote-check-hosts.json'), '{"hosts":[]}');
+  expect(checkInput(settings, head, present, many)).not.toBe(input);
 });
 
 test('fallback landings keep acceptance while skipped kinds do not', async () => {
