@@ -16,6 +16,8 @@ let failBackward = false;
 const commands: (RelationProposal | RelationConfirmation)[] = [];
 let proposed = false;
 let accepted = false;
+let pauseSelection = false;
+let finishSelection: (() => void) | undefined;
 const candidate: Candidate = {
   id: '00000000-0000-4000-8000-00000000e299',
   source: null,
@@ -60,6 +62,10 @@ mock.module('../src/features/catalogue/relation-editor-actions', () => ({
   },
   confirmSubjectRelation: async ({ data }: { data: RelationConfirmation }) => {
     commands.push(data);
+    if (pauseSelection)
+      await new Promise<void>((resolve) => {
+        finishSelection = resolve;
+      });
     accepted = true;
     return { ok: true, kind: data.operation === 'adopt' ? 'selected' : 'accepted', public: example.fixture.studio };
   },
@@ -298,6 +304,23 @@ test('Organization origin completes three producer windows, exact Retry and corr
     expect(
       [...host.querySelectorAll('button')].some((item) => item.textContent === m.producer_history_previous()),
     ).toBe(false);
+    await click(m.producer_history_correct(), host.querySelectorAll('li[data-slot="list-row"]')[1]!);
+    await click(m.relation_open());
+    await click(m.candidate_adopt());
+    const decision = host.querySelector(
+      `[aria-label="${m.candidate_confirm_title({ action: m.candidate_adopt() })}"]`,
+    )!;
+    button(m.candidate_adopt(), decision).focus();
+    pauseSelection = true;
+    await click(m.candidate_adopt(), decision);
+    const toolbar = window.document.createElement('button');
+    window.document.body.append(toolbar);
+    toolbar.focus();
+    await act(async () => finishSelection!());
+    expect(window.document.activeElement).toBe(toolbar);
+    toolbar.remove();
+    pauseSelection = false;
+    await click(m.producer_history_retired_close());
     await navigate(link(m.producer_history_back()).getAttribute('href')!);
     expect(router.state.location.hash).toBe(historyFragment(globalContext).slice(1));
     expect(host.querySelector('[role="region"]')?.textContent).toContain(selected);

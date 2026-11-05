@@ -33,3 +33,6 @@ lease. The delivered Organization context visit and deliberate Global-origin cho
 The Producer admission composes the existing private-reader lease with exposure query revisions through the common
 observation store. Its synchronous predicate retires old callbacks before React remounts the visit, even when the
 replacement has equal data. Native continuation tokens are not session-cache observations and do not retire it.
+
+Keyboard return consent starts at the editor button activation and uses the existing focus transition across the
+command and origin read. Moving focus elsewhere cancels it; a late selected callback never adopts a new focus source.
