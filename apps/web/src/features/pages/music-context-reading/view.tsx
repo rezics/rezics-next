@@ -2,12 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
+import { candidateContext } from '../../../subject/candidates';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { subjectHref } from '../../../subject/subject-href';
-import { subjectVisitReturn, withSubjectVisitReturn } from '../subject-visit-navigation';
+import { withSubjectVisitReturn } from '../subject-visit-navigation';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
 import type { MusicContextFailure, MusicContextKind, MusicContextRead } from '../../catalogue/music-context-profile';
-import type { MusicContextAddress } from '../../catalogue/music-context-profile/navigation';
+import {
+  musicContextAddressHref,
+  musicContextRouteSearch,
+  musicContextTargetHref,
+  validatedMusicContextReturn,
+  MUSIC_CONTEXT_ADDRESS_BYTE_CAP,
+  type MusicContextAddress,
+} from '../../catalogue/music-context-profile/navigation';
 import { ViewHeading } from '../view-heading';
 
 const actionClass =
@@ -15,9 +23,24 @@ const actionClass =
 const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const HISTORY_CAP = 8;
+const fitsRetainedAddress = (value: string) =>
+  new TextEncoder().encode(value).byteLength <= MUSIC_CONTEXT_ADDRESS_BYTE_CAP;
 
 export type MusicContextTransport = {
-  read: (input: MusicContextAddress & { session?: string | undefined }) => Promise<MusicContextRead>;
+  read: (input: Pick<MusicContextAddress, 'context' | 'stream' | 'cursor'> & { session?: string | undefined }) => Promise<MusicContextRead>;
+};
+type MusicContextReadingProps = {
+  id: string;
+  locale: string;
+  context?: string | undefined;
+  realm?: string | undefined;
+  returnTo?: string | undefined;
+  via?: string | undefined;
+  transport: MusicContextTransport;
+  initial?: MusicContextRead | undefined;
+  initialStream?: string | undefined;
+  initialCursor?: string | undefined;
+  onAddressChange?: ((address: MusicContextAddressChange) => void) | undefined;
 };
 type HistoryCommit = { kind: 'initial' } | { kind: 'push' } | { kind: 'index'; index: number };
 type MusicContextAddressChange = MusicContextAddress & { stream: string };
@@ -54,11 +77,14 @@ function failureMessage(failure: MusicContextFailure, locale: string) {
   return m.music_context_unavailable({}, o);
 }
 
-function addressHref(id: string, label: string, locale: string, address: MusicContextAddress): string {
-  const target = new URL(catalogueEntries.musicContext({ id, label, locale }).href, 'https://rezics.invalid');
-  if (address.stream) target.searchParams.set('stream', address.stream);
-  if (address.cursor && address.stream) target.searchParams.set('cursor', address.cursor);
-  return `${target.pathname}${target.search}`;
+function addressHref(
+  id: string,
+  label: string,
+  locale: string,
+  address: MusicContextAddress,
+): string | undefined {
+  const base = catalogueEntries.musicContext({ id, label, locale }).href;
+  return musicContextAddressHref(base, address, locale, id);
 }
 
 function currentAddress(
@@ -67,30 +93,54 @@ function currentAddress(
   locale: string,
   displayAddress: MusicContextAddress | undefined,
   requestedAddress: MusicContextAddress,
-): string {
-  return addressHref(id, label, locale, displayAddress ?? requestedAddress);
+): string | undefined {
+  return addressHref(
+    id,
+    label,
+    locale,
+    displayAddress ? { ...requestedAddress, ...displayAddress } : requestedAddress,
+  );
 }
 
-export function MusicContextReading({
+export function MusicContextReading(props: MusicContextReadingProps) {
+  const transportIdentity = useRef({ value: props.transport, revision: 0 });
+  if (transportIdentity.current.value !== props.transport) {
+    transportIdentity.current = {
+      value: props.transport,
+      revision: transportIdentity.current.revision + 1,
+    };
+  }
+  const binding = useCatalogueLifetime(
+    JSON.stringify([
+      'music-context-binding',
+      props.id,
+      props.locale,
+      props.context ?? '',
+      props.realm ?? '',
+      props.returnTo ?? '',
+      props.via ?? '',
+      transportIdentity.current.revision,
+    ]),
+  );
+  return <MusicContextReadingBound key={binding.generation} {...props} binding={binding} />;
+}
+
+function MusicContextReadingBound({
   id,
   locale,
+  context,
+  realm,
   returnTo,
+  via,
   transport,
   initial,
   initialStream,
   initialCursor,
   onAddressChange,
-}: {
-  id: string;
-  locale: string;
-  returnTo?: string | undefined;
-  transport: MusicContextTransport;
-  initial?: MusicContextRead | undefined;
-  initialStream?: string | undefined;
-  initialCursor?: string | undefined;
-  onAddressChange?: ((address: MusicContextAddressChange) => void) | undefined;
-}) {
+  binding,
+}: MusicContextReadingProps & { binding: ReturnType<typeof useCatalogueLifetime> }) {
   const o = { locale: locale as never };
+  const selectedContext = context ?? candidateContext;
   const seed = initial?.ok ? initial : undefined;
   const seedProfile = seed ? profileSnapshot(seed) : undefined;
   const [streamIntent, setStreamIntent] = useState(initialStream ?? seed?.stream);
@@ -120,16 +170,41 @@ export function MusicContextReading({
   const idRef = useRef(id);
   const localeRef = useRef(locale);
   const transportRef = useRef(transport);
+  const contextRef = useRef(selectedContext);
+  const realmRef = useRef(realm);
+  const returnToRef = useRef(returnTo);
+  const viaRef = useRef(via);
   const addressChangeRef = useRef(onAddressChange);
+  const routeAddressRef = useRef({ stream: initialStream, cursor: initialCursor });
+  const releaseRef = useRef(seed?.public.subject.release);
+  const [releaseEpoch, setReleaseEpoch] = useState(0);
+  const [freshReadRequired, setFreshReadRequired] = useState(false);
   streamRef.current = streamIntent;
   epochRef.current = selectionEpoch;
   idRef.current = id;
   localeRef.current = locale;
   transportRef.current = transport;
+  contextRef.current = selectedContext;
+  realmRef.current = realm;
+  returnToRef.current = returnTo;
+  viaRef.current = via;
   addressChangeRef.current = onAddressChange;
 
   const lifetime = useCatalogueLifetime(
-    JSON.stringify(['music-context', id, locale, streamIntent ?? '', selectionEpoch]),
+    JSON.stringify([
+      'music-context',
+      id,
+      locale,
+      context ?? '',
+      realm ?? '',
+      returnTo ?? '',
+      via ?? '',
+      transport,
+      streamIntent ?? '',
+      selectionEpoch,
+      releaseEpoch,
+    ]),
+    binding,
   );
 
   const writeDisplayed = useCallback((value: Extract<MusicContextRead, { ok: true }> | undefined) => {
@@ -145,10 +220,15 @@ export function MusicContextReading({
   const dispatch = useCallback(
     async (address: MusicContextAddress, commit: HistoryCommit, replace = false) => {
       if ((busyRef.current && !replace) || !lifetime.active()) return;
+      setFreshReadRequired(false);
       const sequence = ++requestSequence.current;
       const owner = {
         id,
         locale,
+        context: selectedContext,
+        realm,
+        returnTo,
+        via,
         stream: address.stream,
         transport,
         epoch: selectionEpoch,
@@ -158,6 +238,10 @@ export function MusicContextReading({
         requestSequence.current === sequence &&
         idRef.current === owner.id &&
         localeRef.current === owner.locale &&
+        contextRef.current === owner.context &&
+        realmRef.current === owner.realm &&
+        returnToRef.current === owner.returnTo &&
+        viaRef.current === owner.via &&
         transportRef.current === owner.transport &&
         epochRef.current === owner.epoch &&
         (streamRef.current === undefined || owner.stream === undefined || streamRef.current === owner.stream) &&
@@ -183,7 +267,12 @@ export function MusicContextReading({
       setFailure(undefined);
       setFailedAddress(undefined);
       try {
-        const result = await transport.read({ ...address, session: sessionRef.current });
+        const result = await transport.read({
+          context: selectedContext,
+          ...(address.stream ? { stream: address.stream } : {}),
+          ...(address.cursor ? { cursor: address.cursor } : {}),
+          session: sessionRef.current,
+        });
         if (!isCurrent()) return;
         if (!result.ok) {
           if (result.reason === 'denied' || result.reason === 'stale') sessionRef.current = undefined;
@@ -200,6 +289,29 @@ export function MusicContextReading({
           setFailedCommit(commit);
           return;
         }
+        const sourceRelease = result.public.subject.release;
+        if (releaseRef.current !== undefined && releaseRef.current !== sourceRelease) {
+          releaseRef.current = sourceRelease;
+          sessionRef.current = undefined;
+          requestSequence.current += 1;
+          busyRef.current = false;
+          setBusy(false);
+          setFreshReadRequired(true);
+          setFailure({ ok: false, reason: 'stale' });
+          setFailedAddress({ stream: address.stream });
+          setFailedCommit({ kind: 'initial' });
+          setCursorIntent(undefined);
+          setPageAddresses([undefined]);
+          setPageIndex(0);
+          setDisplayAddress(undefined);
+          writeProfile(undefined);
+          writeDisplayed(undefined);
+          setSelectionEpoch((current) => current + 1);
+          setReleaseEpoch((current) => current + 1);
+          return;
+        }
+        releaseRef.current = sourceRelease;
+        setFreshReadRequired(false);
         sessionRef.current = result.session;
         writeProfile(result);
         writeDisplayed(result);
@@ -207,8 +319,13 @@ export function MusicContextReading({
         setCursorIntent(address.cursor);
         setFailure(undefined);
         setFailedAddress(undefined);
-        if (streamIntent && result.stream)
-          addressChangeRef.current?.({ stream: result.stream, ...(address.cursor ? { cursor: address.cursor } : {}) });
+        if ((address.stream || address.cursor || commit.kind !== 'initial') && result.stream)
+          addressChangeRef.current?.({
+            ...(context !== undefined ? { context } : {}),
+            ...(realm !== undefined ? { realm } : {}),
+            stream: result.stream,
+            ...(address.cursor ? { cursor: address.cursor } : {}),
+          });
         if (!result.streamUnavailable) finishHistory();
       } catch {
         if (!isCurrent()) return;
@@ -222,23 +339,53 @@ export function MusicContextReading({
         }
       }
     },
-    [id, lifetime, locale, pageIndex, selectionEpoch, streamIntent, transport, writeDisplayed, writeProfile],
+    [context, id, lifetime, locale, pageIndex, realm, returnTo, selectionEpoch, selectedContext, streamIntent, transport, via, writeDisplayed, writeProfile],
   );
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
+
+  useEffect(() => {
+    const previous = routeAddressRef.current;
+    routeAddressRef.current = { stream: initialStream, cursor: initialCursor };
+    if (previous.stream === initialStream && previous.cursor === initialCursor) return;
+    const stateMatchesRoute = streamIntent === initialStream && cursorIntent === initialCursor;
+    const displayedMatchesRoute = displayAddress?.stream === initialStream && displayAddress?.cursor === initialCursor;
+    if (stateMatchesRoute || displayedMatchesRoute) return;
+    requestSequence.current += 1;
+    busyRef.current = false;
+    setBusy(false);
+    lifetime.retire();
+    const nextEpoch = epochRef.current + 1;
+    epochRef.current = nextEpoch;
+    streamRef.current = initialStream;
+    setSelectionEpoch(nextEpoch);
+    setStreamIntent(initialStream);
+    setCursorIntent(initialCursor);
+    setPageAddresses([initialCursor]);
+    setPageIndex(0);
+    setFailure(undefined);
+    setFailedAddress(undefined);
+    setDisplayAddress(undefined);
+    writeDisplayed(undefined);
+  }, [cursorIntent, displayAddress, initialCursor, initialStream, lifetime, streamIntent, writeDisplayed]);
 
   useEffect(() => {
     if (!booted.current) {
       booted.current = true;
       if (initial !== undefined) return () => lifetime.retire();
     }
-    void dispatchRef.current({ stream: streamIntent, cursor: cursorIntent }, { kind: 'initial' }, true);
+    if (realm && context === undefined) {
+      setFreshReadRequired(true);
+      return () => lifetime.retire();
+    }
+    if (!freshReadRequired)
+      void dispatchRef.current({ stream: streamIntent, cursor: cursorIntent }, { kind: 'initial' }, true);
     return () => {
       requestSequence.current += 1;
       busyRef.current = false;
       lifetime.retire();
     };
-  }, [lifetime.generation]);
+  }, [context, lifetime.generation, realm]);
 
   const selectStream = (nextStream: string) => {
     if (!nextStream || nextStream === (streamIntent ?? displayed?.stream)) return;
@@ -247,7 +394,11 @@ export function MusicContextReading({
     setBusy(false);
     lifetime.retire();
     if (onAddressChange) {
-      onAddressChange({ stream: nextStream });
+      onAddressChange({
+        ...(context !== undefined ? { context } : {}),
+        ...(realm !== undefined ? { realm } : {}),
+        stream: nextStream,
+      });
       return;
     }
     const nextEpoch = epochRef.current + 1;
@@ -264,20 +415,37 @@ export function MusicContextReading({
     writeDisplayed(undefined);
   };
 
-  const page = displayed && (streamIntent === undefined || displayed.stream === streamIntent) ? displayed : undefined;
+  const routeAddressMatches =
+    !onAddressChange ||
+    (streamIntent === initialStream && cursorIntent === initialCursor) ||
+    (displayAddress?.stream === initialStream && displayAddress?.cursor === initialCursor);
+  const page =
+    routeAddressMatches && displayed && (streamIntent === undefined || displayed.stream === streamIntent)
+      ? displayed
+      : undefined;
   const selectedStream = streamIntent ?? page?.stream ?? profile?.stream;
   const streamAdmitted = profile?.streams.some((stream) => stream.id === selectedStream) ?? false;
   const pageHasRetainedData = !!page && !!(busy || failure);
   const title = profile ? pickText(profile.public.subject.labels, locale).text : '';
-  const safeReturn = subjectVisitReturn(returnTo, locale);
-  const profileReturn = safeReturn ?? subjectHref({ id, label: title }, locale).href;
+  const safeVia = via
+    ? musicContextRouteSearch({ context: selectedContext, via }, locale, { subjectId: id })?.via
+    : undefined;
+  const safeReturn = validatedMusicContextReturn(returnTo, locale, id, selectedContext, realm);
   const visibleAddress = currentAddress(id, title, locale, page ? displayAddress : undefined, {
+    ...(context !== undefined ? { context } : {}),
+    ...(realm !== undefined ? { realm } : {}),
     stream: selectedStream,
     cursor: cursorIntent,
   });
-  const canCorrect = !!profile && profile.kind !== 'unsupported';
+  const currentReturn = safeVia ??
+    (!realm && selectedContext === candidateContext ? safeReturn ?? subjectHref({ id, label: title }, locale).href : undefined);
+  const canCorrect =
+    routeAddressMatches && !!profile && profile.kind !== 'unsupported' && !realm && selectedContext === candidateContext;
   const correction = catalogueEntries.facts({ id, label: title, locale }).href;
-  const correctionHref = `${correction}?${new URLSearchParams({ returnTo: visibleAddress })}`;
+  const correctionCandidate = visibleAddress
+    ? `${correction}?${new URLSearchParams({ returnTo: visibleAddress })}`
+    : correction;
+  const correctionHref = fitsRetainedAddress(correctionCandidate) ? correctionCandidate : undefined;
   const nextCursor = page?.streamUnavailable ? null : page?.next;
 
   return (
@@ -288,6 +456,16 @@ export function MusicContextReading({
     >
       <ViewHeading label={m.music_context_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.music_context_intro({}, o)}</p>
+      {(!realm || context !== undefined) && (
+        <p data-context={selectedContext}>{m.music_context_selected_context({ context: selectedContext }, o)}</p>
+      )}
+      {title && <h2 className="text-xl font-semibold">{title}</h2>}
+      {realm && <p role="status">{m.music_context_realm_unsupported({}, o)}</p>}
+      {realm && (
+        <a className={linkClass} href={catalogueEntries.musicContext({ id, label: title, locale }).href}>
+          {m.music_context_fresh_global({}, o)}
+        </a>
+      )}
       {busy && <p role="status">{m.music_context_page_loading({}, o)}</p>}
       {failure && (
         <p role="alert" tabIndex={-1}>
@@ -374,18 +552,64 @@ export function MusicContextReading({
                   {link.unreadable ? (
                     <span>{m.music_context_unreadable_endpoint({}, o)}</span>
                   ) : (
-                    <a
-                      className={linkClass}
-                      href={withSubjectVisitReturn(
-                        subjectHref({ id: link.id, label: link.label }, locale).href,
-                        visibleAddress,
-                        locale,
-                      )}
-                    >
-                      {link.label || m.subject_value_unlabelled({}, o)}
-                    </a>
+                    (() => {
+                      const target = subjectHref({ id: link.id, label: link.label }, locale).href;
+                      const exactMusicTarget = !!link.targetKind && !realm;
+                      const targetBase = exactMusicTarget
+                        ? catalogueEntries.musicContext({
+                            id: link.id,
+                            label: link.label,
+                            locale,
+                            context: selectedContext,
+                          }).href
+                        : target;
+                      const exactTargetWithReturn =
+                        exactMusicTarget && link.id !== id && visibleAddress
+                          ? musicContextTargetHref(targetBase, visibleAddress, locale, link.id)
+                          : undefined;
+                      const generalTargetWithReturn =
+                        !exactMusicTarget && !realm && visibleAddress
+                          ? withSubjectVisitReturn(target, visibleAddress, locale)
+                          : target;
+                      const generalTargetFits = fitsRetainedAddress(generalTargetWithReturn);
+                      const href = exactMusicTarget
+                        ? link.id === id || !visibleAddress
+                          ? targetBase
+                          : exactTargetWithReturn ?? targetBase
+                        : realm || !visibleAddress
+                          ? target
+                          : generalTargetFits
+                            ? generalTargetWithReturn
+                            : target;
+                      const needsExactNotice =
+                        !!realm || (selectedContext !== candidateContext && !link.targetKind);
+                      const needsReturnNotice =
+                        (exactMusicTarget && link.id !== id && !!visibleAddress && !exactTargetWithReturn) ||
+                        (!exactMusicTarget && !realm && !!visibleAddress && !generalTargetFits);
+                      return (
+                        <>
+                          <a className={linkClass} href={href}>
+                            {exactMusicTarget
+                              ? link.label || m.subject_value_unlabelled({}, o)
+                              : needsExactNotice
+                                ? m.music_context_open_general_target({}, o)
+                                : link.label || m.subject_value_unlabelled({}, o)}
+                          </a>
+                          {needsExactNotice && (
+                            <span className="ms-2 text-muted-foreground">
+                              {m.music_context_exact_target_unsupported({}, o)}
+                            </span>
+                          )}
+                          {needsReturnNotice && (
+                            <span className="ms-2 text-muted-foreground">
+                              {m.music_context_visit_return_unavailable({}, o)}
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()
                   )}
-                  {link.date && (
+                  {!link.unreadable && link.date && (
                     <span className="ms-2">
                       {link.date.label}:{' '}
                       {link.date.time.state === 'supported' && link.date.time.structuredDate ? (
@@ -395,7 +619,7 @@ export function MusicContextReading({
                       )}
                     </span>
                   )}
-                  {link.role && (
+                  {!link.unreadable && link.role && (
                     <span className="ms-2">
                       {link.role.label}:{' '}
                       {link.role.unknown === 'novalue'
@@ -461,9 +685,11 @@ export function MusicContextReading({
           </div>
 
           {canCorrect && (
-            <a className={linkClass} href={correctionHref}>
-              {m.music_context_correct({}, o)}
-            </a>
+            correctionHref && (
+              <a className={linkClass} href={correctionHref}>
+                {m.music_context_correct({}, o)}
+              </a>
+            )
           )}
         </div>
       )}
@@ -478,9 +704,18 @@ export function MusicContextReading({
           {m.music_context_retry_page({}, o)}
         </Button>
       )}
-      <a className={linkClass} href={profileReturn}>
-        {m.music_context_return_source({}, o)}
-      </a>
+      {routeAddressMatches && currentReturn ? (
+        <a className={linkClass} href={currentReturn}>
+          {m.music_context_return_source({}, o)}
+        </a>
+      ) : routeAddressMatches ? (
+        <div className="space-y-2">
+          <p role="status">{m.music_context_exact_return_unsupported({}, o)}</p>
+          <a className={linkClass} href={subjectHref({ id, label: title }, locale).href}>
+            {m.music_context_open_general_subject({}, o)}
+          </a>
+        </div>
+      ) : null}
     </article>
   );
 }

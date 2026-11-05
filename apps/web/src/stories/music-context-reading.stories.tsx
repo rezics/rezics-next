@@ -3,21 +3,24 @@ import type { SubjectRead } from '@rezics/client';
 import { MusicContextProfile } from '../features/pages/music-context-profile';
 import type { MusicContextRead } from '../features/catalogue/music-context-profile';
 import { getLocale } from '../paraglide/runtime.js';
+import { candidateContext } from '../subject/candidates';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
 const anchor = '00000000-0000-4000-8000-00000000c101';
 const venue = '00000000-0000-4000-8000-00000000c102';
 const event = '00000000-0000-4000-8000-00000000c103';
+const selectedContext = '00000000-0000-4000-8000-000000000002';
+const selectedRealm = '00000000-0000-4000-8000-000000000003';
 
-function subject(): SubjectRead {
+function subject(context = candidateContext): SubjectRead {
   return {
     subject: {
       id: anchor,
       type: 'schema:Place',
       revision: 3,
       release: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      context: '00000000-0000-4000-8000-000000000001',
+      context,
       labels: { en: 'Harbor Stage' },
       descriptions: {},
       aliases: {},
@@ -32,10 +35,13 @@ function subject(): SubjectRead {
   };
 }
 
-function successful(state: 'populated' | 'empty' | 'removed'): Extract<MusicContextRead, { ok: true }> {
+function successful(
+  state: 'populated' | 'empty' | 'removed',
+  context = candidateContext,
+): Extract<MusicContextRead, { ok: true }> {
   return {
     ok: true,
-    public: subject(),
+    public: subject(context),
     kind: 'place',
     facts: [
       {
@@ -61,6 +67,7 @@ function successful(state: 'populated' | 'empty' | 'removed'): Extract<MusicCont
             {
               id: venue,
               label: 'Harbor Hall',
+              targetKind: 'place',
               property: 'schema:location',
               position: 1,
               occurrence: '00000000-0000-4000-8000-00000000c111',
@@ -88,20 +95,38 @@ function successful(state: 'populated' | 'empty' | 'removed'): Extract<MusicCont
   };
 }
 
-function ReadingStory({ state }: { state: 'populated' | 'empty' | 'failed' | 'removed' }) {
+function ReadingStory({
+  state,
+}: {
+  state: 'populated' | 'empty' | 'failed' | 'removed' | 'selected' | 'realm' | 'unavailable-return';
+}) {
   const locale = getLocale();
-  const initial: MusicContextRead =
-    state === 'failed' ? { ok: false, reason: 'unavailable' } : successful(state === 'removed' ? 'removed' : state);
+  const initial: MusicContextRead | undefined =
+    state === 'realm'
+      ? undefined
+      : state === 'failed'
+      ? { ok: false, reason: 'unavailable' }
+      : successful(
+          state === 'removed' ? 'removed' : state === 'empty' ? 'empty' : 'populated',
+          state === 'selected' || state === 'unavailable-return' ? selectedContext : candidateContext,
+        );
+  const hasContext = state === 'selected' || state === 'unavailable-return';
+  const hasRealm = state === 'realm';
   return (
     <PatternStory path={`/subjects/${anchor}/harbor-stage/music-context`}>
       <AppShell>
         <MusicContextProfile
           id={anchor}
           locale={locale}
+          {...(hasContext ? { context: selectedContext } : {})}
+          {...(hasRealm ? { realm: selectedRealm } : {})}
+          {...(state === 'unavailable-return'
+            ? { returnTo: `/en/subjects/${anchor}/harbor-stage` }
+            : {})}
           initial={initial}
           initialStream={state === 'removed' ? 'schema:removed' : 'schema:location'}
           transport={{
-            read: async () => successful('populated'),
+            read: async () => successful('populated', hasContext ? selectedContext : candidateContext),
           }}
         />
       </AppShell>
@@ -117,11 +142,10 @@ const meta = {
     docs: {
       description: {
         component:
-          'The actual admitted music-context reader with a finite relation selector, recorded facts, unreadable endpoints, an empty page, a recoverable failure and a removed stream address.',
+          'The actual music-context reader with selected Context, unsupported Realm and unavailable exact-return states. Check every story in all eight locale toolbar settings and both themes; use keyboard navigation at the phone and desktop viewport sizes.',
       },
     },
   },
-  globals: { locale: 'en' },
   args: { state: 'populated' },
 } satisfies Meta<typeof ReadingStory>;
 export default meta;
@@ -130,3 +154,6 @@ export const Populated: Story = {};
 export const Empty: Story = { args: { state: 'empty' } };
 export const Failed: Story = { args: { state: 'failed' } };
 export const RemovedStream: Story = { args: { state: 'removed' } };
+export const SelectedContext: Story = { args: { state: 'selected' } };
+export const UnsupportedRealm: Story = { args: { state: 'realm' } };
+export const UnavailableReturn: Story = { args: { state: 'unavailable-return' } };
