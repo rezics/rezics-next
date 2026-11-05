@@ -54,10 +54,8 @@ function queryClient(client: Client): Client {
 
 async function assertCopyProfileRead(client: Client, accountId: string): Promise<void> {
   const route = routeOf(accountId)!;
-  await executeCopyStatementWork(
-    'copy.profile-migration',
-    sessionProfileMigrationWork(route, accountId),
-    () => assertPreProfileLibraryRead(client, accountId),
+  await executeCopyStatementWork('copy.profile-migration', sessionProfileMigrationWork(route, accountId), () =>
+    assertPreProfileLibraryRead(client, accountId),
   );
 }
 

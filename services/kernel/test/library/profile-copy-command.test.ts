@@ -242,18 +242,24 @@ test('copy commands retain one deadline and compare source and profile before a 
             // One Source observation prepares original, terminal and current Type disclosure.
             if (++observations === 4) {
               if (change === 'profile') await native.activate(replacementDigest);
-              else expect((await native.send('steward', 'POST', `/v1/subjects/${subjectId}:hide`, {
-                reason: 'Source changed during copy preparation',
-              })).status).toBe(200);
+              else
+                expect(
+                  (
+                    await native.send('steward', 'POST', `/v1/subjects/${subjectId}:hide`, {
+                      reason: 'Source changed during copy preparation',
+                    })
+                  ).status,
+                ).toBe(200);
             }
           }
           return native.access.prepare?.(actor, action, resource, context);
         },
       });
       const changed = createCopyCommands({ pool: native.pool, access, tokens: native.tokens });
-      const request = operation === 'create'
-        ? changed.createCopy(owner.actor, input(subjectId), entryKey())
-        : changed.updateCopy(owner.actor, originalCopy.value.id, { revision: 1, location: 'Desk' }, entryKey());
+      const request =
+        operation === 'create'
+          ? changed.createCopy(owner.actor, input(subjectId), entryKey())
+          : changed.updateCopy(owner.actor, originalCopy.value.id, { revision: 1, location: 'Desk' }, entryKey());
       await expect(request).rejects.toMatchObject({ code: 'semantic_not_ready' });
       expect(observations).toBeGreaterThanOrEqual(4);
       expect(new Set(deadlines).size).toBe(1);
