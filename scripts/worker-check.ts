@@ -1198,10 +1198,8 @@ export async function runWorkerCheck(
   const declaredReturns = validateArtifactDeclarations(returnPaths);
   returnPaths.splice(0, returnPaths.length, ...declaredReturns);
   const root = resolve(cwd);
-  const cancellation = workerCheckCancellation(
-    recordedCheckId ?? (/^[0-9a-f-]{36}$/i.test(logicalCheckId ?? '') ? logicalCheckId! : randomUUID()),
-    root,
-  );
+  const checkId = recordedCheckId ?? (/^[0-9a-f-]{36}$/i.test(logicalCheckId ?? '') ? logicalCheckId! : randomUUID());
+  const cancellation = workerCheckCancellation(checkId, root);
   const cancelled = () => executionCancellation(cancellation);
   const cancelFromSignal = (signal: 1 | 2 | 15): void => {
     // A verified watchdog stop ends this incarnation; external cancellation ends the logical check.
@@ -1210,7 +1208,7 @@ export async function runWorkerCheck(
   };
   const initialIntent = cancelled();
   if (initialIntent) return 128 + initialIntent.signal;
-  const file = recordedLog ?? logPath(root);
+  const file = recordedLog ?? logPath(root, checkId);
   const descriptor = openSync(file, recordedLog ? 'a' : 'wx', 0o600);
   const wait = checkWaitRecorder(process.env.GOAL_CHECK_WAIT_FILE);
   wait.begin();
