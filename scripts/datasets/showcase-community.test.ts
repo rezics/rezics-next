@@ -117,7 +117,7 @@ test('native Board and authored thread resume unknown delivery and repeated seed
   const resumed = await seedDevelopmentCommunity({ result: imported, actor: { accountId, clientId: 'rezics-dev-showcase' }, client });
   const repeated = await seedDevelopmentCommunity({ result: imported, actor: { accountId, clientId: 'rezics-dev-showcase' }, client });
 
-  expect(resumed).toMatchObject({ state: 'published', source: { subjectId }, board: { id: boardId }, thread: { id: threadId } });
+  expect(resumed).toMatchObject({ state: 'published', source: { subjectId }, board: { id: boardId }, thread: { threadId } });
   expect(repeated).toEqual(resumed);
   expect(effects).toEqual({ board: 1, thread: 1 });
   const boardCommands = calls.filter((call) => call.path === '/v1/boards');
