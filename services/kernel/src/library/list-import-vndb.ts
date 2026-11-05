@@ -1152,7 +1152,8 @@ export function createVndbImport(config: Config) {
         (pending?.patch && (!pending.outcome || pending.outcome.status === 'failed'))
       )
         throw new ProblemError('conflict');
-      const next = { ...current, consumptionDateReview: reviewed, consumptionDateIntent: undefined };
+      const { consumptionDateIntent: _intent, ...retained } = current;
+      const next = { ...retained, consumptionDateReview: reviewed };
       await save(tx, account, id, input.ordinal, next);
       return publicImportConsumptionDateReview(reviewed);
     });

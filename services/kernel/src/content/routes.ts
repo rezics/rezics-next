@@ -1382,7 +1382,18 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             }
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
             const { anchors: _anchors, ...response } = page;
-            return response satisfies Static<typeof BoardPageResponseSchema>;
+            const wireCard = (card: BoardOpeningPage['threads'][number]) => ({
+              ...card,
+              media: {
+                ...card.media,
+                images: card.media.images.map((image) => ({ ...image, variants: [...image.variants] })),
+              },
+            });
+            return {
+              ...response,
+              pinnedThreads: response.pinnedThreads.map(wireCard),
+              threads: response.threads.map(wireCard),
+            } satisfies Static<typeof BoardPageResponseSchema>;
           }),
         );
       },

@@ -5,7 +5,6 @@ import {
   hasLiveOperationalTransaction,
   type OperationalTransaction,
 } from '../command/operational.ts';
-import { deadlineClient } from '../access/authenticate.ts';
 import { accessRoot } from '../access/derived-access.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';

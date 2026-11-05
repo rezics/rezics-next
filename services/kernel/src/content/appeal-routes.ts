@@ -29,7 +29,7 @@ const sourceObservationSchema = t.Object(
   { appealId: t.String(), source: sourceSchema },
   { additionalProperties: false },
 );
-const appellantIdentitySchema = t.Union([
+export const appellantIdentitySchema = t.Union([
   t.Object(
     {
       state: t.Literal('available'),
@@ -40,11 +40,11 @@ const appellantIdentitySchema = t.Union([
     },
     { additionalProperties: false },
   ),
-  ...(['deleted', 'concealed', 'unavailable'] as const).map((state) =>
-    t.Object({ state: t.Literal(state) }, { additionalProperties: false }),
-  ),
+  t.Object({ state: t.Literal('deleted') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('concealed') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
 ]);
-const targetContextSchema = t.Union([
+export const targetContextSchema = t.Union([
   t.Object(
     {
       state: t.Literal('available'),
@@ -55,9 +55,8 @@ const targetContextSchema = t.Union([
     },
     { additionalProperties: false },
   ),
-  ...(['concealed', 'unavailable'] as const).map((state) =>
-    t.Object({ state: t.Literal(state) }, { additionalProperties: false }),
-  ),
+  t.Object({ state: t.Literal('concealed') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
 ]);
 const appealReviewProperties = {
   id: t.String(),

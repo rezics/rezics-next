@@ -836,10 +836,10 @@ export function createMembersPreparation(config: {
         !identity ||
         identity.route !== locator.route ||
         identity.collectionId !== locator.collectionId ||
+        identity.scope !== 'curated' ||
         identity.accountId !== locator.ownerAccountId ||
         identity.incarnation !== state.incarnation ||
         identity.generation !== state.generation ||
-        identity.scope !== 'curated' ||
         identity.ownerEpoch !== current.source.stamp.epoch ||
         !identity.receivingEpoch ||
         !identity.effectKey

@@ -202,7 +202,7 @@ function identityViews(ids: readonly string[], summaries: AccountSummaryMap) {
           state: 'available' as const,
           displayName: summary.displayName,
           handle: summary.handle,
-          avatar: summary.avatar,
+          avatar: summary.avatar && { ...summary.avatar, variants: [...summary.avatar.variants] },
         }
       : { id, state: 'concealed' as const };
   });
@@ -228,7 +228,9 @@ function mediaViews(ids: readonly string[], images: readonly DocumentImagePresen
   const byId = new Map(images.map((image) => [image.id, image]));
   return ids.map((id) => {
     const image = byId.get(id);
-    return image ? { id, state: 'available' as const, image } : { id, state: 'concealed' as const };
+    return image
+      ? { id, state: 'available' as const, image: { ...image, variants: [...image.variants] } }
+      : { id, state: 'concealed' as const };
   });
 }
 

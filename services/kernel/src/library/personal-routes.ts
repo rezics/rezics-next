@@ -181,6 +181,16 @@ const entryStateReviewSchema = t.Object(
   },
   closed,
 );
+export const copyConditionValueSchema = t.Union([
+  t.Literal('unknown'),
+  t.Literal('mint'),
+  t.Literal('near_mint'),
+  t.Literal('very_good_plus'),
+  t.Literal('very_good'),
+  t.Literal('good'),
+  t.Literal('fair'),
+  t.Literal('poor'),
+]);
 const copyFields = {
   status: t.Optional(statusInput),
   location: t.Optional(t.Union([t.String({ maxLength: 200 }), t.Null()])),
@@ -189,13 +199,12 @@ const copyFields = {
   disposedOn: t.Optional(nullable),
   note: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])),
   mediaCondition: t.Optional(
-    t.Union([t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value))), t.Null()]),
+    t.Union([copyConditionValueSchema, t.Null()]),
   ),
   packagingCondition: t.Optional(
-    t.Union([t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value))), t.Null()]),
+    t.Union([copyConditionValueSchema, t.Null()]),
   ),
 };
-const copyConditionValueSchema = t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value)));
 const copyConditionDisplaySchema = t.Union([
   t.Object({ state: t.Literal('not_recorded') }, closed),
   t.Object({ state: t.Literal('unavailable') }, closed),
@@ -270,7 +279,7 @@ const copyPresentationSchema = t.Object(
   closed,
 );
 const copyListContextIdentitySchema = t.Object({ id, labels: t.Record(t.String(), t.String()) }, closed);
-const copyListContextSchema = t.Union([
+export const copyListContextSchema = t.Union([
   t.Object(
     {
       state: t.Literal('available'),
@@ -286,9 +295,10 @@ const copyListContextSchema = t.Union([
     },
     closed,
   ),
-  ...(['scope', 'withheld', 'missing', 'unavailable'] as const).map((state) =>
-    t.Object({ state: t.Literal(state) }, closed),
-  ),
+  t.Object({ state: t.Literal('scope') }, closed),
+  t.Object({ state: t.Literal('withheld') }, closed),
+  t.Object({ state: t.Literal('missing') }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
 ]);
 const followSchema = t.Object(
   {
@@ -742,9 +752,10 @@ function loanView(
   boundary: LoanDueBoundary,
   people: ReadonlyMap<string, string | null>,
   copyAvailable = true,
-) {
+): Static<typeof loanResponse> {
   const state = loanState(loan, boundary);
-  const reason = state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
+  const reason: Static<typeof loanActionResponse>['reason'] =
+    state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
   const action = { allowed: reason === null, reason };
   const counterparty =
     loan.counterparty.kind === 'name'
@@ -815,7 +826,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     languages: readonly string[] | undefined,
     revalidate: () => Promise<void>,
   ) {
-    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, { languages, revalidate });
+    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, { ...(languages === undefined ? {} : { languages }), revalidate });
   }
   return app
     .post(
@@ -837,7 +848,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           correctionCommand(() => corrections().create(actor, body)),
         );
         set.status = 201;
-        return { review } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...review, items: [...review.items] } } satisfies Static<typeof correctionPageResponse>;
       },
     )
     .get(
@@ -855,7 +866,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         const review = await admission.run('normal', job, () =>
           correctionCommand(() => corrections().readPage(actor, params.reviewId, query.page)),
         );
-        return { review } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...review, items: [...review.items] } } satisfies Static<typeof correctionPageResponse>;
       },
     )
     .post(
@@ -882,7 +893,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           correctionCommand(() => corrections().confirmItem(actor, params.reviewId, body.epoch, body.position)),
         );
         if (result.commandOutcome) session.record(result.commandOutcome);
-        return { review: result.page } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...result.page, items: [...result.page.items] } } satisfies Static<typeof correctionPageResponse>;
       },
     )
     .post(
@@ -950,7 +961,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         shelfOwner(actor);
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, () =>
-          command(() => createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders))),
+          command(() => createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER]))),
         );
       },
     )
