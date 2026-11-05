@@ -315,7 +315,7 @@ function LabelShelfRead({
   };
   const write = origin.capture(...readGroups, 'library_label.unassign');
   const accepted = isCurrent() && query.data && matches(query.data, subject, source, locale) ? query.data : undefined;
-  if (accepted?.state === 'loaded') payload.value = accepted;
+  if (accepted?.state === 'loaded' || accepted?.state === 'cursor-rejected') payload.value = accepted;
   const page: LabelShelfPageData = accepted ?? { state: query.isError ? 'unavailable' : 'preparing' };
   const canUnassign = () => isCurrent() && page.state === 'loaded' && !!page.csrfToken?.trim() && write();
   // CSRF, revisions and command keys remain exactly those captured by this payload's originating read.
