@@ -753,7 +753,18 @@ export function formatConnectionRunSummary(
   return `PostgreSQL connections: peak ${peakTotal}/${maxConnections} max_connections; highest file peaks: ${highest.join(', ') || 'none'}`;
 }
 
-export function startPostgresContainer(dockerCommand: DockerCommand = docker): string {
+export type PostgresContainerOptions = {
+  /** Host directory bind-mounted so callers in a private network namespace can use the Unix socket. */
+  socketDirectory?: string;
+};
+
+export function startPostgresContainer(
+  dockerCommand: DockerCommand = docker,
+  options: PostgresContainerOptions = {},
+): string {
+  const socketDirectory = options.socketDirectory;
+  if (socketDirectory !== undefined && (!isAbsolute(socketDirectory) || /[:\n\r,]/.test(socketDirectory)))
+    throw new Error('PostgreSQL socket directory must be an absolute path without delimiters');
   return dockerCommand([
     'run',
     '-d',
@@ -765,6 +776,7 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
     '--mount',
     `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.check.pid=${pid}`,
+    ...(socketDirectory ? ['-v', `${socketDirectory}:/rezics-pg-socket`] : []),
     '-e',
     'POSTGRES_USER=rezics',
     '-e',
@@ -785,6 +797,7 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
     '-c',
     'log_line_prefix=%m [%p] [%e] ',
+    ...(socketDirectory ? ['-c', 'unix_socket_directories=/rezics-pg-socket'] : []),
   ]);
 }
 
