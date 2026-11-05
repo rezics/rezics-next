@@ -163,7 +163,17 @@ test('choice: exact received identities survive equal titles and shared Editions
         expect(operand.textContent).toContain(offer.contentEdition!.source.licence);
         expect(operand.querySelector('a')?.getAttribute('href')).toBe(`/fr/offers/${encodeURIComponent(offer.id)}`);
       }
-      expect(operands[0]!.querySelector('[data-offer-recorded-price]')?.textContent).toBe('12,99 $US');
+      expect(operands[0]!.querySelector('[data-offer-recorded-price]')?.textContent).toBe(
+        m.money_formatted_recorded_minor(
+          {
+            display: '12,99 $US',
+            amount: String(second.unitAmountMinor),
+            currency: second.currency.toUpperCase(),
+            exponent: '2',
+          },
+          { locale },
+        ),
+      );
       expect(comparison.textContent).toContain(m.subject_choice_same_edition({}, { locale }));
       await click(
         [...comparison.querySelectorAll('button')].find(
@@ -259,7 +269,12 @@ test('disclosure: fixed captures unknown mapping money units missing labels and 
     await click(rows[1]!.querySelector('button'));
     inspection = host.querySelector('[data-offer-inspection]')!;
     expect(inspection.textContent).toContain(m.subject_choice_unknown_meaning({}, { locale: 'fr' }));
-    expect(inspection.textContent).toContain(m.subject_choice_money_unknown({}, { locale: 'fr' }));
+    expect(inspection.textContent).toContain(
+      m.money_raw_minor_unknown_unit(
+        { amount: String(unknown.unitAmountMinor), currency: unknown.currency.toUpperCase() },
+        { locale: 'fr' },
+      ),
+    );
     expect(inspection.textContent).toContain(m.creator_inspect_unknown_quantity({}, { locale: 'fr' }));
     expect(inspection.querySelector('a[href*="/editions/"], form')).toBeNull();
     expect(inspection.textContent).not.toContain(supplied.contentEdition!.source.licence);
