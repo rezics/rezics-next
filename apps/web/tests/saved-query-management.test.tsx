@@ -222,7 +222,6 @@ test('metadata recovery admits once, retries the exact command, and retires deta
   expect(controller.getSnapshot().phase).toBe('closed');
   expect(nextVisit.getSnapshot().title).toBe('Current title');
 });
-
 test('delete requires review and retries the same revisioned request before returning success', async () => {
   const requests: unknown[] = [];
   let attempt = 0;
