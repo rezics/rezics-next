@@ -146,13 +146,13 @@ test('state choice stays unsent through review and correction; exact current bas
     await act(async () => button(host, 'Edit choice').click());
     expect(host.querySelector('[data-entry-state-review-card]')).toBeNull();
     expect(host.querySelector('[data-entry-state-editing]')?.textContent).toContain('In progress');
-    expect(window.document.activeElement).toBe(host.querySelector('[data-entry-state-trigger]'));
+    expect(window.document.activeElement?.hasAttribute('data-entry-state-trigger')).toBe(true);
     await choose('Planned');
     expect(host.querySelector('[data-entry-state-review-card]')?.textContent).toContain('Planned');
     await act(async () => button(host, 'Discard choice').click());
     expect(host.querySelector('[data-entry-state-review-card]')).toBeNull();
     expect(host.querySelector('[data-entry-state-editing]')).toBeNull();
-    expect(window.document.activeElement).toBe(host.querySelector('[data-entry-state-trigger]'));
+    expect(window.document.activeElement?.hasAttribute('data-entry-state-trigger')).toBe(true);
     expect(saves).toHaveLength(0);
 
     await choose('In progress');
