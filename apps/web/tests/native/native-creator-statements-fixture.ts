@@ -429,21 +429,28 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
         otherCreatorDetail: new URL(otherCreatorDetailAddress, stack.web).href,
       },
       async close() {
-        await auth!.stop();
-        await stack!.stop();
-        stripe.close();
+        const errors: unknown[] = [];
+        for (const action of [async () => auth?.stop(), async () => stack?.stop(), async () => stripe.stop()]) {
+          try {
+            await action();
+          } catch (error) {
+            errors.push(error);
+          }
+        }
+        if (errors.length) throw new AggregateError(errors, 'Native creator statements fixture cleanup failed');
       },
     };
   } catch (error) {
-    try {
-      await auth?.stop();
-    } finally {
+    const errors: unknown[] = [error];
+    for (const action of [async () => auth?.stop(), async () => stack?.stop(), async () => stripe.stop()]) {
       try {
-        await stack?.stop();
-      } finally {
-        stripe.close();
+        await action();
+      } catch (cleanup) {
+        errors.push(cleanup);
       }
     }
-    throw error;
+    throw errors.length === 1
+      ? error
+      : new AggregateError(errors, 'Native creator statements fixture startup and cleanup failed');
   }
 }
