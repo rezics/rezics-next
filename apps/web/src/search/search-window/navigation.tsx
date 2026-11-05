@@ -57,7 +57,8 @@ export function SearchWindowControls({
             : m.search_window_current({ number: new Intl.NumberFormat(locale).format(1) }, options)}
         {query && (
           <>
-            {' '}· <bdi>{query}</bdi>
+            {' '}
+            · <bdi>{query}</bdi>
           </>
         )}
       </p>
