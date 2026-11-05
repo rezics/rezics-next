@@ -1,5 +1,9 @@
 # Reaction caller lifetime
 
+Decision: Board and thread reaction counts, viewer selection, conversation activity and ranking remain Content read
+projections. Web retains the exact write intent and settles Board changes through its current native point read; it
+does not derive aggregate or ranking updates from rendered rows.
+
 `ThreadReactions` owns one mounted reader/target visit. Changing target kind or ID, withdrawing signed-in admission
 or personal readiness, unmounting, or observing loss/replacement of the browser session retires that visit. Account
 and CSRF token are both identity fields. Replacing the QueryClient also creates a new visit, even with identical
