@@ -10,7 +10,6 @@ import { createCipheriv, createHash, createHmac, hkdfSync, randomBytes, randomUU
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
@@ -20,7 +19,7 @@ import { createKernel, type KernelDependencies } from '../../src/http/kernel.ts'
 import { actionCatalogue } from '../../src/http/request.ts';
 import { createApp } from '../../src/http/app.ts';
 import { accessRoutes } from '../../src/access/routes.ts';
-import type { Access, AccountActor } from '../../src/request/access.ts';
+import { accessCheck, type Access, type AccountActor } from '../../src/request/access.ts';
 import type { GrantInput } from '../../src/access/grant-commands.ts';
 import { authTemplateName, createAuthDatabase } from '../support/auth-database.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
@@ -332,15 +331,7 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
     };
     // Built-in role definitions already come from createAccess. Expose their exact
     // resolved data for observation, without attempting to redefine built-ins.
-    const nativeAccess = createAccess({ actions, auth: accessConfig.auth! });
-    const authorizationChecks: { action: string; resource: string; allowed: boolean }[] = [];
-    const access = deriveAccess(nativeAccess, {
-      async authorize(client, actor, action, resource, evidence, time) {
-        const allowed = await nativeAccess.authorize(client, actor, action, resource, evidence, time);
-        authorizationChecks.push({ action, resource: resource.id, allowed });
-        return allowed;
-      },
-    });
+    const access = createAccess({ actions, auth: accessConfig.auth! });
     const proofs = createNativeWorkflowProofPorts({ database: authPool });
     const bindings = createNativeAccountBindings({
       pool: database.pool,
@@ -545,7 +536,6 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       }
     }
     async function grant(path: string, accountId: string, actions: readonly string[]) {
-      authorizationChecks.length = 0;
       const key = randomUUID();
       const send = () =>
         app.handle(
@@ -572,6 +562,13 @@ export async function openImportIdentity(options: ImportIdentityOptions): Promis
       }
       if (![200, 201].includes(response.status)) {
         const problem = await response.json();
+        const context = { pool: database.pool, deadline: Date.now() + 30_000 };
+        const actor = await access.authenticate(management.bearer, context);
+        const authorizationChecks = [];
+        for (const action of ['access:grant', ...actions]) {
+          const check = await accessCheck(access, actor, action, GLOBAL, context);
+          authorizationChecks.push({ action, allowed: await check(database.pool) });
+        }
         throw new Error(
           `Public ${path} ${actions}: HTTP ${response.status} ${JSON.stringify(problem)}; native checks ${JSON.stringify(authorizationChecks)}`,
         );
