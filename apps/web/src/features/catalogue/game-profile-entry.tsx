@@ -16,9 +16,10 @@ export type GameProfileEntryProps = {
 export function gameProfileEntry({ id, type, label = '', locale, context, realm, release }: GameProfileEntryProps) {
   const entry = catalogueEntries.gameProfile({ id, type, label, locale });
   if (!entry) return;
-  const href = id && type && context
-    ? gameCorrectionHref({ id, type, label, locale, context, realm, release })
-    : entry.href;
+  const href =
+    id && type && context
+      ? gameCorrectionHref({ id, type, label, locale, context, realm, release })
+      : entry.href;
   return href ? { ...entry, href } : undefined;
 }
 

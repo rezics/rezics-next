@@ -57,5 +57,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/game')({
 function GameRoute() {
   const { id, intent } = Route.useLoaderData();
   if (!intent.valid) return <GameVisitNotice locale={getLocale()} invalid />;
-  return <GameProfileSession id={id} locale={getLocale()} visit={intent.visit} address={gameVisitSearch(intent.visit)} />;
+  return (
+    <GameProfileSession id={id} locale={getLocale()} visit={intent.visit} address={gameVisitSearch(intent.visit)} />
+  );
 }

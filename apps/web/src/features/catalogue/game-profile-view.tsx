@@ -224,7 +224,11 @@ function GameProfileLive({
   };
   const o = { locale: locale as never };
   const admitted =
-    !query.isError && !query.isFetching && query.data?.ok && query.data.public && query.data.public.subject.id === id &&
+    !query.isError &&
+    !query.isFetching &&
+    query.data?.ok &&
+    query.data.public &&
+    query.data.public.subject.id === id &&
     query.data.public.subject.context === (visit?.context ?? candidateContext) &&
     (!visit?.type || query.data.public.subject.type === visit.type)
       ? { ...query.data, public: query.data.public }
@@ -234,8 +238,13 @@ function GameProfileLive({
   if (admitted && supported) privateReading.current = admitted;
   if (id && admitted && !supported) {
     const title = pickText(admitted.public.subject.labels, locale).text;
-    return <GameVisitNotice locale={locale} visit={visit}
-      globalHref={`${subjectHref({ id, label: title }, locale).href}/game`} />;
+    return (
+      <GameVisitNotice
+        locale={locale}
+        visit={visit}
+        globalHref={`${subjectHref({ id, label: title }, locale).href}/game`}
+      />
+    );
   }
   // Existing-subject recovery retains private holders, never display authority.
   if (id)
@@ -270,9 +279,11 @@ function GameProfileLive({
                 >
                   {m.game_profile_refresh({}, o)}
                 </Button>
-                {visit?.source && <a className="inline-flex min-h-11 items-center underline" href={visit.source}>
-                  {m.game_visit_return({}, o)}
-                </a>}
+                {visit?.source && (
+                  <a className="inline-flex min-h-11 items-center underline" href={visit.source}>
+                    {m.game_visit_return({}, o)}
+                  </a>
+                )}
               </>
             )}
           </article>
@@ -482,11 +493,15 @@ function GameCorrection({
             {type.text || m.guide_missing({}, o)}
           </p>
           <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
-          {visit && <p className="text-sm">
-            {m.game_visit_context({ context: visit.context }, o)}
-            {visit.realm ? ` · ${m.game_visit_realm({ realm: visit.realm }, o)}` : ''}
-          </p>}
-          <a className="inline-flex min-h-11 items-center underline" href={href}>{m.game_visit_return({}, o)}</a>
+          {visit && (
+            <p className="text-sm">
+              {m.game_visit_context({ context: visit.context }, o)}
+              {visit.realm ? ` · ${m.game_visit_realm({ realm: visit.realm }, o)}` : ''}
+            </p>
+          )}
+          <a className="inline-flex min-h-11 items-center underline" href={href}>
+            {m.game_visit_return({}, o)}
+          </a>
           <p className="text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
           <nav
             className="flex min-w-0 max-w-full flex-wrap gap-2 [overflow-wrap:anywhere]"
