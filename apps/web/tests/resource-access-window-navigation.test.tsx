@@ -33,7 +33,10 @@ test('three windows branch from the admitted predecessor and First deliberately 
   await recovery.next();
   await recovery.next();
   await recovery.next();
-  expect(recovery.snapshot().page).toMatchObject({ status: 'ready', page: { identities: [{}, { displayName: 'cursor-c' }] } });
+  expect(recovery.snapshot().page).toMatchObject({
+    status: 'ready',
+    page: { identities: [{}, { displayName: 'cursor-c' }] },
+  });
   next.set(opaqueCursor, 'branch');
   await recovery.previous();
   await recovery.next();
@@ -99,16 +102,7 @@ test('Previous and First keep their exact staged target through preparing, denia
   expect(recovery.snapshot().page.status).toBe('unavailable');
   await recovery.retryPage();
   expect(recovery.snapshot()).toMatchObject({ canPrevious: false, canFirst: false, page: { status: 'ready' } });
-  expect(reads).toEqual([
-    'cursor-a',
-    'cursor-b',
-    'cursor-a',
-    'cursor-a',
-    'cursor-a',
-    'cursor-a',
-    undefined,
-    undefined,
-  ]);
+  expect(reads).toEqual(['cursor-a', 'cursor-b', 'cursor-a', 'cursor-a', 'cursor-a', 'cursor-a', undefined, undefined]);
 });
 
 test('the retained predecessor stack is bounded to eight admitted coordinates', async () => {
