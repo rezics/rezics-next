@@ -48,6 +48,9 @@ evidence. Native and browser acceptance remains with integration execution.
 Decision: the local `AuthorContributionActionsWire` defaults to unavailable until the complete-input publisher
 installs the native method and DTO; the initial receiver retains only an immutable native selection per episode.
 
+Decision: resume installed row adaptation only when the public client includes both the callable and anonymous
+`actionSelection`; retain the prepared native compositions and existing focused host assertions until then.
+
 `contribution-actions/receiver.ts` validates the anonymous page's actual `actionSelection`, caps its cohort at twenty,
 retains the original author/view/cursor/proof, and coalesces refreshes. Failure keeps that exact input for retry.
 Retirement aborts the read, clears retained private state and guards late completion. It does not normalize missing
@@ -56,8 +59,8 @@ on page, read, record, publication, credential, locale, QueryClient and navigati
 native references from rendered rows. When the source selection or installed method is absent, the host stays
 unavailable and exposes no inferred controls.
 
-At declaration head `25f7c27445d37078c22b4066a7fe9f64396b53c4`, installed `@rezics/client` resolves to
-`packages/client` version `0.1.0`; `src/kernel/zones/http.d.ts` has no `author_contributions.actions` declaration.
+Installed `@rezics/client` resolves to `packages/client` version `0.1.0`. Its mounted Content declarations must
+include `author_contributions.actions` and the anonymous page's `actionSelection` before adaptation can begin.
 The production wire remains unavailable until the complete-input publisher supplies that public method and DTO.
 The closed response adapter and exact native command-owner connections require the admitted native mounted
 contract and official installed callable closure. Recorded adapters do not constitute that delivery. Existing
