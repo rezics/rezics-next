@@ -79,7 +79,7 @@ test('the installed Addon entry, canonical route and supported session keep orig
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test' + base, width: 390 });
   const names =
-    'window document navigator HTMLElement HTMLButtonElement HTMLInputElement HTMLSelectElement HTMLFormElement Element Node Document DocumentFragment ShadowRoot MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame matchMedia IS_REACT_ACT_ENVIRONMENT'.split(
+    'window document navigator HTMLElement HTMLButtonElement HTMLInputElement HTMLSelectElement HTMLFormElement Element Node Document DocumentFragment ShadowRoot MutationObserver ResizeObserver getComputedStyle requestAnimationFrame cancelAnimationFrame scrollTo matchMedia IS_REACT_ACT_ENVIRONMENT'.split(
       ' ',
     );
   const saved = new Map(names.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
@@ -202,6 +202,19 @@ test('the installed Addon entry, canonical route and supported session keep orig
     expect(host.textContent).toContain(m.addon_origin_unsupported());
     expect(host.querySelector('input, select')).toBeNull();
     expect(fixture.calls).toHaveLength(reads);
+    await render(
+      supported(
+        parse(
+          addonPublicCorrectionHref(base, {
+            ...observed,
+            realm: addonWorkId,
+            returnHref: `${observed.returnHref}?realm=${addonWorkId}`,
+          }),
+        ),
+      ),
+    );
+    expect(host.textContent).toContain(m.addon_origin_unsupported());
+    expect(fixture.calls).toHaveLength(reads);
     const globalHref = within(host).getByRole('link', { name: m.addon_origin_global() }).getAttribute('href')!;
     const globalUrl = new URL(globalHref, window.location.origin);
     expect(globalUrl.searchParams.has('origin')).toBe(false);
@@ -233,6 +246,16 @@ test('the installed Addon entry, canonical route and supported session keep orig
       expect(within(host).getByRole('heading', { name: m.addon_base_current_title() })).toBeDefined(),
     );
     expect(host.textContent).not.toContain(m.addon_origin_changed());
+    for (const subject of ['00000000-0000-4000-8000-00000000f102', reader]) {
+      const calls = fixture.calls.length;
+      await act(async () =>
+        client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject, csrfToken: 'second' }),
+      );
+      await waitFor(() =>
+        expect(within(host).getByRole('heading', { name: m.addon_base_current_title() })).toBeDefined(),
+      );
+      expect(fixture.calls.length).toBeGreaterThan(calls);
+    }
     await render(supported({ kind: 'invalid' }));
     expect(host.textContent).toContain(m.addon_origin_invalid());
     expect(host.querySelector('input, select')).toBeNull();
