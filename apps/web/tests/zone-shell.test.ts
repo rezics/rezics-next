@@ -1,13 +1,16 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 import { createKernelClient } from '@rezics/client';
-import { readZonePage, readZonePageForRoute } from '../src/zones/zone-read.ts';
-import { loadSubjectPage } from '../src/features/pages/subject';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+const { readZonePage, readZonePageForRoute } = await import('../src/zones/zone-read.ts');
+const { loadSubjectPage } = await import('../src/features/pages/subject');
 
 const app = join(import.meta.dir, '..');
 const desktop = { width: 1280, height: 860 };
