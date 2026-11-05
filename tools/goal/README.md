@@ -2649,10 +2649,9 @@ changing its environment configuration.
 `rezics-goal-host.service` runs `_manager-host` with `Restart=always` and a 60-second watchdog. The host signals
 readiness after binding its socket and sends heartbeats from its event loop every half watchdog interval. A crash,
 kill or stopped event loop therefore causes systemd to restart it. `KillMode=process` limits host termination to the
-main PID; worker scopes in `rezics-workers.slice` beneath `rezics.slice` and the merge train survive. The host keeps
-socket leasing, worker adoption, manager recovery and owned app-server cleanup. Host liveness journals, startup
-leases, supervisor processes and code-polling self-restarts are removed. An ordinary CLI can ask systemd to start an
-absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
+main PID; worker scopes in `rezics-workers.slice` beneath `rezics.slice` and the merge train survive.
+Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
+An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 
 The maintenance timer starts a bounded oneshot every minute. `goal maintenance reap` reaps recorded worker groups
 whose worktree has been deleted, checking process birth identity. `goal maintenance alarm` evaluates product-output
