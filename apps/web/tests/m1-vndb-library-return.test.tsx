@@ -410,7 +410,12 @@ test('prepared native read carries the exact opaque cursor and original order, a
   } as never;
   const request = () =>
     new Request('https://site.invalid/en/library/import-vndb', {
-      headers: { cookie: `__Host-rezics_session=${'A'.repeat(43)}` },
+      headers: {
+        cookie: `__Host-rezics_session=${'A'.repeat(43)}`,
+        'x-reader': targetId,
+        'x-csrf-token': 'original',
+        authorization: 'Bearer native-reader',
+      },
     });
   const expected = { expectedReader: targetId, expectedCredential: 'original' };
   expect((await loadImportLibrary(client, request(), env, expected, 'opaque+/=cursor')).state).toBe('current');
