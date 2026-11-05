@@ -6630,6 +6630,8 @@
   "library_progress_history_reader_units_page_empty": "No completed units on this page.",
   "library_dynamic_page_reader_empty": "No members on this page.",
   "library_dynamic_page_reader_first_page": "First members page",
+  "library_dynamic_page_reader_previous": "Previous members page",
+  "library_dynamic_page_reader_continue": "Continue to next page",
   "space_setup_details_heading": "More about setup",
   "space_setup_details_name_unavailable": "Name unavailable",
   "moderation_controls_details_summary": "Selected filters: {status}; {kind}; {order}.",

@@ -6561,6 +6561,8 @@
   "library_progress_history_reader_units_page_empty": "此頁沒有已完成的單位。",
   "library_dynamic_page_reader_empty": "此頁沒有成員。",
   "library_dynamic_page_reader_first_page": "成員首頁",
+  "library_dynamic_page_reader_previous": "上一頁成員",
+  "library_dynamic_page_reader_continue": "繼續前往下一頁",
   "space_setup_details_heading": "進一步瞭解設定",
   "space_setup_details_name_unavailable": "名稱暫不可用",
   "moderation_controls_details_summary": "目前篩選：{status}；{kind}；{order}。",

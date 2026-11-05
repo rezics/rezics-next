@@ -10,6 +10,15 @@ import {
   savedQueryResultsAddress,
   savedQueryRuleReturn,
 } from '../src/library/saved-query-results.tsx';
+import {
+  admitSavedQueryResultsWindow,
+  failSavedQueryResultsWindowMove,
+  hasPendingSavedQueryResultsWindowTarget,
+  readSavedQueryResultsWindow,
+  retireSavedQueryResultsWindows,
+  savedQueryResultsWindowBase,
+  stageSavedQueryResultsWindowMove,
+} from '../src/library/saved-query-results-windows';
 import { m } from '../src/paraglide/messages.js';
 import { locales } from '../src/paraglide/runtime.js';
 
@@ -140,6 +149,126 @@ test('rule returns retain the directory origin and reset only the result cursor 
   expect(savedQueryRuleReturn('/en/collections/other?cursor=unsafe', collection.id, 'en')).toBe(
     savedQueryResultsAddress('en', collection.id, undefined),
   );
+});
+
+test('saved result coordinates traverse, revisit, reset and abandon the old forward branch', () => {
+  const queries = new QueryClient();
+  const base = savedQueryResultsWindowBase({
+    id: 'saved',
+    search: { type: 'schema:Book', 'r.schema:wordCount': ['0,10', '2,20'] },
+    locale: 'en',
+    admission: 1,
+  });
+  const scope = 'session/owner/revision-1/release-a';
+  const admit = (cursor: string | undefined, restarted = false) =>
+    admitSavedQueryResultsWindow(queries, base, 'session', scope, cursor, restarted);
+  const move = (from: string | undefined, target: string | undefined, movement: 'continue' | 'previous' | 'first') => {
+    expect(stageSavedQueryResultsWindowMove(queries, base, 'session', scope, from, target, movement)).toBe(true);
+    expect(admit(target).changed).toBe(true);
+  };
+
+  expect(readSavedQueryResultsWindow(queries, base, 'session', scope, undefined).hasPrevious).toBe(false);
+  expect(admit(undefined).changed).toBe(true);
+  move(undefined, 'opaque/+==/二', 'continue');
+  move('opaque/+==/二', 'third-cursor', 'continue');
+  move('third-cursor', 'terminal-empty', 'continue');
+  let current = readSavedQueryResultsWindow(queries, base, 'session', scope, 'terminal-empty');
+  expect(current.hasPrevious).toBe(true);
+  expect(current.previous).toBe('third-cursor');
+
+  move('terminal-empty', 'third-cursor', 'previous');
+  current = readSavedQueryResultsWindow(queries, base, 'session', scope, 'third-cursor');
+  expect(current.previous).toBe('opaque/+==/二');
+  move('third-cursor', 'new-forward-branch', 'continue');
+  current = readSavedQueryResultsWindow(queries, base, 'session', scope, 'new-forward-branch');
+  expect(current.previous).toBe('third-cursor');
+  move('new-forward-branch', undefined, 'first');
+  expect(readSavedQueryResultsWindow(queries, base, 'session', scope, undefined).hasPrevious).toBe(false);
+
+  let cursor: string | undefined;
+  admit(undefined);
+  for (let index = 1; index <= 10; index++) {
+    const next = `bounded-${index}`;
+    move(cursor, next, 'continue');
+    cursor = next;
+  }
+  expect(readSavedQueryResultsWindow(queries, base, 'session', scope, cursor).previous).toBe('bounded-9');
+  for (let index = 0; index < 8; index++) {
+    const state = readSavedQueryResultsWindow(queries, base, 'session', scope, cursor);
+    expect(state.hasPrevious).toBe(true);
+    const previous = state.previous;
+    move(cursor, previous, 'previous');
+    cursor = previous;
+  }
+  expect(readSavedQueryResultsWindow(queries, base, 'session', scope, cursor).hasPrevious).toBe(false);
+
+  queries.clear();
+});
+
+test('failed exact targets stay staged, public reads cannot commit private moves, and scope changes retire paths', () => {
+  const queries = new QueryClient();
+  const base = savedQueryResultsWindowBase({ id: 'saved', locale: 'en', admission: 2 });
+  const sessionScope = 'session/owner/revision-2/release-b';
+  const publicScope = 'anonymous/public/revision-2/release-b';
+  admitSavedQueryResultsWindow(queries, base, 'session', sessionScope, undefined, false);
+  expect(stageSavedQueryResultsWindowMove(queries, base, 'session', sessionScope, undefined, 'first', 'continue')).toBe(
+    true,
+  );
+  admitSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'first', false);
+  expect(stageSavedQueryResultsWindowMove(queries, base, 'session', sessionScope, 'first', 'second', 'continue')).toBe(
+    true,
+  );
+  admitSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'second', false);
+  expect(
+    stageSavedQueryResultsWindowMove(
+      queries,
+      base,
+      'session',
+      sessionScope,
+      'second',
+      'failed/+==',
+      'continue',
+    ),
+  ).toBe(true);
+  expect(failSavedQueryResultsWindowMove(queries, base, 'session', sessionScope, 'failed/+==')).toBe(true);
+  expect(hasPendingSavedQueryResultsWindowTarget(queries, base, 'session', 'failed/+==')).toBe(true);
+
+  admitSavedQueryResultsWindow(queries, base, 'anonymous', publicScope, 'failed/+==', false);
+  expect(readSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'failed/+==')).toMatchObject({
+    pendingTarget: true,
+    failedTarget: true,
+    hasPrevious: false,
+  });
+  expect(admitSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'failed/+==', false).changed).toBe(
+    true,
+  );
+  expect(readSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'failed/+==')).toMatchObject({
+    previous: 'second',
+    hasPrevious: true,
+    failedTarget: false,
+  });
+  expect(stageSavedQueryResultsWindowMove(queries, base, 'session', sessionScope, 'failed/+==', 'second', 'previous')).toBe(
+    true,
+  );
+  admitSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'second', false);
+  expect(readSavedQueryResultsWindow(queries, base, 'session', sessionScope, 'second').previous).toBe('first');
+
+  const changedScope = 'session/owner/revision-3/release-c';
+  admitSavedQueryResultsWindow(queries, base, 'session', changedScope, 'direct-later-cursor', false);
+  expect(readSavedQueryResultsWindow(queries, base, 'session', changedScope, 'direct-later-cursor').hasPrevious).toBe(
+    false,
+  );
+  expect(
+    admitSavedQueryResultsWindow(queries, base, 'session', changedScope, 'expired-cursor', true).changed,
+  ).toBe(true);
+  expect(readSavedQueryResultsWindow(queries, base, 'session', changedScope, undefined).hasPrevious).toBe(false);
+
+  const otherBase = savedQueryResultsWindowBase({ id: 'other', locale: 'en', admission: 2 });
+  admitSavedQueryResultsWindow(queries, otherBase, 'session', 'other', 'unrelated', false);
+  expect(readSavedQueryResultsWindow(queries, base, 'session', changedScope, undefined).hasPrevious).toBe(false);
+  retireSavedQueryResultsWindows(queries);
+  expect(readSavedQueryResultsWindow(queries, base, 'session', changedScope, undefined).hasPrevious).toBe(false);
+  queries.clear();
 });
 
 test('a saved results page keeps unique subjects, omits counts, notes and the built-in rule copy', () => {

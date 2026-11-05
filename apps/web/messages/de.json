@@ -6553,6 +6553,8 @@
   "library_progress_history_reader_units_page_empty": "Keine abgeschlossenen Einheiten auf dieser Seite.",
   "library_dynamic_page_reader_empty": "Auf dieser Seite gibt es keine Einträge.",
   "library_dynamic_page_reader_first_page": "Erste Seite der Einträge",
+  "library_dynamic_page_reader_previous": "Vorherige Seite der Einträge",
+  "library_dynamic_page_reader_continue": "Weiter zur nächsten Seite",
   "space_setup_details_heading": "Mehr zur Einrichtung",
   "space_setup_details_name_unavailable": "Name nicht verfügbar",
   "moderation_controls_details_summary": "Ausgewählte Filter: {status}; {kind}; {order}.",

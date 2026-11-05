@@ -38,6 +38,11 @@ for (const [key, value] of Object.entries(globals))
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const {
+  admitSavedQueryResultsWindow,
+  savedQueryResultsWindowBase,
+  stageSavedQueryResultsWindowMove,
+} = await import('../src/library/saved-query-results-windows');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { DynamicCollectionPage } = await import('../src/library/dynamic-collection-page');
@@ -158,6 +163,7 @@ async function mount() {
     readMembers = reader('default'),
     viewerId: string | null = null,
     readRule?: (id: string) => Promise<RulePage>,
+    windowNavigation?: NonNullable<Parameters<typeof DynamicCollectionPage>[0]['windowNavigation']>,
   ) =>
     settle(() =>
       root.render(
@@ -171,6 +177,7 @@ async function mount() {
                   viewerId={viewerId}
                   search={{ type: 'schema:Book' }}
                   {...(readRule ? { readRule } : {})}
+                  {...(windowNavigation ? { windowNavigation } : {})}
                 />
               ) : null}
               <CommitSnapshot
@@ -347,6 +354,76 @@ test('Preparation keeps its originating reader, clamps delays and bounds each ma
     expect(h.calls).toHaveLength(5);
   } finally {
     await h.close();
+  }
+});
+
+test('A saved result target is admitted only after its exact preparing reader becomes ready', async () => {
+  const h = await mount();
+  const admitted: Array<string | undefined> = [];
+  const failed: Array<string | undefined> = [];
+  const windowNavigation: NonNullable<Parameters<typeof DynamicCollectionPage>[0]['windowNavigation']> = {
+    view: (current) => ({
+      current: current.cursor,
+      isCurrent: false,
+      hasPrevious: false,
+      pendingTarget: current.cursor === 'target/+==',
+      failedTarget: false,
+    }),
+    move: () => false,
+    admit: (current) => {
+      admitted.push(current.cursor);
+      return { changed: false };
+    },
+    fail: (current) => {
+      failed.push(current.cursor);
+      return false;
+    },
+    retireReplacement: () => undefined,
+  };
+  try {
+    await h.render(
+      page('saved', { builtinKind: undefined, cursor: 'target/+==' }),
+      h.reader('target-filter'),
+      null,
+      undefined,
+      windowNavigation,
+    );
+    expect(admitted).toEqual([]);
+    await h.advance();
+    expect(h.calls[0]).toMatchObject({ id: 'saved', cursor: 'target/+==', filter: 'target-filter' });
+    await settle(() => h.calls[0]!.resolve(preparing()));
+    expect(admitted).toEqual([]);
+    expect(failed).toEqual([]);
+    await h.advance();
+    await settle(() => h.calls[1]!.resolve(ready('Admitted member')));
+    expect(admitted).toEqual(['target/+==']);
+    expect(h.host.textContent).toContain('Admitted member');
+  } finally {
+    await h.close();
+  }
+});
+
+test('Independent focus cancels a pending saved-result keyboard handoff', async () => {
+  const client = new QueryClient();
+  const base = savedQueryResultsWindowBase({ id: 'saved', locale: 'en', admission: 1 });
+  const scope = 'session/owner/source';
+  const source = window.document.createElement('button');
+  const other = window.document.createElement('button');
+  window.document.body.append(source, other);
+  source.focus();
+  try {
+    admitSavedQueryResultsWindow(client, base, 'session', scope, undefined, false);
+    expect(
+      stageSavedQueryResultsWindowMove(client, base, 'session', scope, undefined, 'next', 'continue', source),
+    ).toBe(true);
+    other.focus();
+    const admitted = admitSavedQueryResultsWindow(client, base, 'session', scope, 'next', false);
+    expect(admitted).toMatchObject({ changed: true });
+    expect(admitted.focus).toBeUndefined();
+  } finally {
+    client.clear();
+    source.remove();
+    other.remove();
   }
 });
 

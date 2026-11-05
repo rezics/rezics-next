@@ -1,9 +1,10 @@
 import { createFileRoute, isNotFound } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import * as v from 'valibot';
 import { CollectionPage, collectionPageHead } from '../../library/collection-page';
 import { DynamicCollectionPage } from '../../library/dynamic-collection-page';
+import type { DynamicCollectionPage as DynamicCollectionPageData } from '../../library/dynamic-collection';
 import {
   collectionRenderPolicy,
   collectionRequestVariant,
@@ -23,10 +24,27 @@ import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import { pageHead, pageLinks } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import { useSession } from '../../session/query';
-import { useOperation } from '../../kernel/exposure';
+import { sessionQuery, useSession } from '../../session/query';
+import { useOperationAdmission } from '../../kernel/exposure';
+import { viewerExposureLifetime, viewerExposureQuery } from '../../kernel/viewer-exposure';
 import { CollectionAccessState } from '../../library/collection-access';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
+import { getLocale } from '../../paraglide/runtime.js';
+import {
+  admitSavedQueryResultsWindow,
+  cancelSavedQueryResultsWindowFocus,
+  failPendingSavedQueryResultsWindowMove,
+  failSavedQueryResultsWindowMove,
+  hasPendingSavedQueryResultsWindowTarget,
+  readSavedQueryResultsWindow,
+  retireSavedQueryResultsWindows,
+  retireSavedQueryResultsWindowReading,
+  savedQueryResultsWindowBase,
+  savedQueryResultsWindowScope,
+  stageSavedQueryResultsWindowMove,
+  type ResultsWindowMove,
+} from '../../library/saved-query-results-windows';
+import { isOrdinarySavedQuery } from '../../library/saved-query-results';
 
 export const Route = createFileRoute('/collections/$id')({
   staticData: { publicCache: true },
@@ -118,22 +136,89 @@ function PrivateCollectionRoute() {
 function CollectionContent({ initialPage }: { initialPage?: CollectionPageResult | undefined }) {
   const { id } = Route.useParams();
   const search = Route.useSearch();
+  const queryClient = useQueryClient();
+  const navigate = Route.useNavigate();
   const { state, subject, csrfToken } = useSession();
-  const getAdmitted = useOperation('collection.get');
-  const membersAdmitted = useOperation('collection_member.list');
+  const getAdmission = useOperationAdmission('collection.get');
+  const membersAdmission = useOperationAdmission('collection_member.list');
+  const getAdmitted = getAdmission === 'available';
+  const membersAdmitted = membersAdmission === 'available';
   const viewerId = state === 'signed-in' && subject ? subject : null;
   const canRead = state === 'signed-in' && viewerId !== null && Boolean(csrfToken) && getAdmitted && membersAdmitted;
+  const exposure = viewerExposureLifetime(queryClient).getSnapshot();
+  const exposureKey =
+    exposure.state === 'signed-in'
+      ? viewerExposureQuery(exposure.observation).queryKey
+      : (['exposure', 'anonymous'] as const);
+  const sessionUpdateCount = queryClient.getQueryState(sessionQuery.queryKey)?.dataUpdateCount ?? 0;
+  const exposureUpdateCount = queryClient.getQueryState(exposureKey)?.dataUpdateCount ?? 0;
   const identity = JSON.stringify([
     collectionRequestVariant({ id, cursor: search.cursor, search: search.filters }),
     state,
     viewerId,
     csrfToken ?? null,
-    getAdmitted,
-    membersAdmitted,
+    getAdmission,
+    membersAdmission,
   ]);
-  const [observed, setObserved] = useState({ identity, generation: 0 });
-  // Retire children before they render with a replacement viewer, address or admission.
-  if (observed.identity !== identity) setObserved({ identity, generation: observed.generation + 1 });
+  const windowIdentity = JSON.stringify([
+    id,
+    search.filters ?? null,
+    getLocale(),
+    state,
+    viewerId,
+    csrfToken ?? null,
+    getAdmission,
+    membersAdmission,
+    sessionUpdateCount,
+    exposureUpdateCount,
+  ]);
+  const [observed, setObserved] = useState({
+    identity,
+    windowIdentity,
+    queryClient,
+    generation: 0,
+    windowGeneration: 0,
+  });
+  const windowChanged = observed.windowIdentity !== windowIdentity || observed.queryClient !== queryClient;
+  // Retire replacement visits before they reach children; only a staged cursor destination continues this visit.
+  if (observed.identity !== identity || windowChanged) {
+    if (windowChanged) {
+      retireSavedQueryResultsWindows(observed.queryClient);
+      retireSavedQueryResultsWindows(queryClient);
+    } else {
+      const currentBase = savedQueryResultsWindowBase({
+        id,
+        ...(search.filters ? { search: search.filters } : {}),
+        locale: getLocale(),
+        admission: observed.windowGeneration,
+      });
+      const deliberateMove = (['anonymous', 'session'] as const).some((mode) =>
+        hasPendingSavedQueryResultsWindowTarget(queryClient, currentBase, mode, search.cursor),
+      );
+      if (!deliberateMove) retireSavedQueryResultsWindows(queryClient);
+    }
+    setObserved({
+      identity,
+      windowIdentity,
+      queryClient,
+      generation: observed.generation + 1,
+      windowGeneration: observed.windowGeneration + (windowChanged ? 1 : 0),
+    });
+  }
+  const windowGeneration = observed.windowGeneration + (windowChanged ? 1 : 0);
+  const windowBase = savedQueryResultsWindowBase({
+    id,
+    ...(search.filters ? { search: search.filters } : {}),
+    locale: getLocale(),
+    admission: windowGeneration,
+  });
+  useLayoutEffect(() => () => retireSavedQueryResultsWindows(queryClient), [queryClient]);
+  const navigateWindow = (cursor: string | undefined) =>
+    navigate({
+      to: '/collections/$id',
+      params: { id },
+      search: (previous) => ({ ...previous, cursor }),
+    });
   return (
     <CollectionContentLifetime
       key={observed.generation}
@@ -143,6 +228,10 @@ function CollectionContent({ initialPage }: { initialPage?: CollectionPageResult
       session={state}
       viewerId={viewerId}
       canRead={canRead}
+      queryClient={queryClient}
+      windowBase={windowBase}
+      navigateWindow={navigateWindow}
+      readerGeneration={observed.generation}
     />
   );
 }
@@ -154,6 +243,10 @@ function CollectionContentLifetime({
   session,
   viewerId,
   canRead,
+  queryClient,
+  windowBase,
+  navigateWindow,
+  readerGeneration,
 }: {
   id: string;
   search: {
@@ -166,8 +259,12 @@ function CollectionContentLifetime({
   session: ReturnType<typeof useSession>['state'];
   viewerId: string | null;
   canRead: boolean;
+  queryClient: ReturnType<typeof useQueryClient>;
+  windowBase: string;
+  navigateWindow: (cursor: string | undefined) => Promise<void>;
+  readerGeneration: number;
 }) {
-  const lifetime = useId();
+  const lifetime = `${readerGeneration}:${useId()}`;
   const active = useRef(false);
   useLayoutEffect(() => {
     active.current = true;
@@ -196,8 +293,36 @@ function CollectionContentLifetime({
     canRead && sessionPage.data && collectionResultMatches(sessionPage.data, input, 'session', viewerId)
       ? sessionPage.data
       : undefined;
-  if (canRead && sessionPage.error)
-    return <CollectionAccessState state={isNotFound(sessionPage.error) ? 'not-found' : 'unavailable'} />;
+  if (canRead && sessionPage.error) {
+    if (isNotFound(sessionPage.error)) {
+      retireSavedQueryResultsWindowReading(queryClient, windowBase, 'session');
+      return <CollectionAccessState state="not-found" />;
+    }
+    failPendingSavedQueryResultsWindowMove(queryClient, windowBase, 'session', search.cursor);
+    const retryPendingMove = hasPendingSavedQueryResultsWindowTarget(
+      queryClient,
+      windowBase,
+      'session',
+      search.cursor,
+    );
+    return (
+      <div className="space-y-3">
+        <CollectionAccessState state="unavailable" />
+        {retryPendingMove ? (
+          <button
+            className="mx-auto inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
+            type="button"
+            disabled={sessionPage.isFetching}
+            onClick={() =>
+              void queryClient.refetchQueries({ queryKey: privateQuery.queryKey, exact: true })
+            }
+          >
+            {m.library_dynamic_retry_unavailable()}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
   const page = privatePage ?? publicPage;
   if (!page) {
     const state =
@@ -229,6 +354,9 @@ function CollectionContentLifetime({
       mode={mode}
       viewerId={viewerId}
       canRead={canRead}
+      queryClient={queryClient}
+      windowBase={windowBase}
+      navigateWindow={navigateWindow}
       queryKey={
         mode === 'session'
           ? privateQuery.queryKey
@@ -247,6 +375,9 @@ function CollectionResultLifetime({
   viewerId,
   canRead,
   queryKey,
+  queryClient,
+  windowBase,
+  navigateWindow,
 }: {
   page: CollectionPageResult;
   input: CollectionReadAddress;
@@ -256,6 +387,9 @@ function CollectionResultLifetime({
   viewerId: string | null;
   canRead: boolean;
   queryKey: readonly unknown[];
+  queryClient: ReturnType<typeof useQueryClient>;
+  windowBase: string;
+  navigateWindow: (cursor: string | undefined) => Promise<void>;
 }) {
   const active = useRef(false);
   useLayoutEffect(() => {
@@ -311,6 +445,66 @@ function CollectionResultLifetime({
       throw new Error('Current dynamic Collection read does not match this viewer and page');
     return result;
   }
+  const saved = 'preparing' in page && isOrdinarySavedQuery(page);
+  if (!saved) retireSavedQueryResultsWindowReading(queryClient, windowBase, mode);
+  const windowNavigation = saved
+    ? {
+        view: (current: DynamicCollectionPageData) => {
+          const scope = savedQueryResultsWindowScope(windowBase, mode, viewerId, current);
+          const cursor = current.cursorRestarted ? undefined : current.cursor;
+          return readSavedQueryResultsWindow(queryClient, windowBase, mode, scope, cursor);
+        },
+        move: (
+          current: DynamicCollectionPageData,
+          target: string | undefined,
+          movement: ResultsWindowMove,
+          source?: HTMLElement,
+        ) => {
+          const scope = savedQueryResultsWindowScope(windowBase, mode, viewerId, current);
+          const from = current.cursorRestarted ? undefined : current.cursor;
+          const staged = stageSavedQueryResultsWindowMove(
+            queryClient,
+            windowBase,
+            mode,
+            scope,
+            from,
+            target,
+            movement,
+            source,
+          );
+          if (!staged) return false;
+          void navigateWindow(target);
+          return true;
+        },
+        admit: (current: DynamicCollectionPageData) => {
+          const scope = savedQueryResultsWindowScope(windowBase, mode, viewerId, current);
+          return admitSavedQueryResultsWindow(
+            queryClient,
+            windowBase,
+            mode,
+            scope,
+            current.cursorRestarted ? undefined : current.cursor,
+            current.cursorRestarted === true,
+          );
+        },
+        fail: (current: DynamicCollectionPageData) =>
+          failSavedQueryResultsWindowMove(
+            queryClient,
+            windowBase,
+            mode,
+            savedQueryResultsWindowScope(windowBase, mode, viewerId, current),
+            current.cursorRestarted ? input.cursor : current.cursor,
+          ),
+        retireReplacement: (next: DynamicCollectionPageData) => {
+          const cursor = next.cursorRestarted ? input.cursor : next.cursor;
+          const scope = savedQueryResultsWindowScope(windowBase, mode, viewerId, next);
+          const view = readSavedQueryResultsWindow(queryClient, windowBase, mode, scope, cursor);
+          if (view.pendingTarget)
+            cancelSavedQueryResultsWindowFocus(queryClient, windowBase, mode, scope, cursor);
+          else retireSavedQueryResultsWindowReading(queryClient, windowBase, mode);
+        },
+      }
+    : undefined;
   return 'preparing' in page ? (
     <DynamicCollectionPage
       page={page}
@@ -321,6 +515,7 @@ function CollectionResultLifetime({
       returnTo={returnTo}
       layout={layout}
       viewerId={mode === 'session' ? viewerId : null}
+      {...(windowNavigation ? { windowNavigation } : {})}
     />
   ) : (
     <CollectionPage
