@@ -328,6 +328,11 @@ export function forwardContributionWindow(input: {
     focus.href = input.toHref;
 }
 
+export function cancelContributionWindowFocus(host: Window = window): void {
+  const visit = liveVisits.get(host);
+  if (visit) releaseFocus(visit);
+}
+
 export function retireContributionWindow(host: Window = window): void {
   const visit = liveVisits.get(host);
   if (visit) retireVisit(host, visit);
