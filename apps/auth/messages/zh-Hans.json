@@ -851,5 +851,18 @@
   "auth_members_page_count": "本页账号数：{count}",
   "auth_members_previous_boundary": "已到达保留记录中最早的位置，无法再返回上一页。你可以主动返回第一页。",
   "auth_members_previous_page": "上一页",
-  "auth_members_reload_current": "重新加载当前页"
+  "auth_members_reload_current": "重新加载当前页",
+  "auth_security_passkey_rename": "重命名",
+  "auth_security_passkey_rename_label": "通行密钥名称",
+  "auth_security_passkey_rename_save": "保存名称",
+  "auth_security_passkey_rename_cancel": "取消重命名",
+  "auth_security_passkey_rename_invalid": "请输入 1–128 个字符的名称。",
+  "auth_security_passkey_rename_saved": "已保存通行密钥名称。",
+  "auth_security_passkey_rename_step_up": "请重新登录后再重命名此通行密钥。",
+  "auth_security_passkey_rename_failed": "名称未更改。请检查会话后再试。",
+  "auth_security_passkey_rename_unknown": "未确认重命名结果。请先查看当前名称，再决定下一步操作。",
+  "auth_security_passkey_rename_review": "查看当前名称",
+  "auth_security_passkey_rename_review_failed": "无法获取当前名称。之前的重命名仍未确认。",
+  "auth_security_passkey_rename_observed": "当前名称：{name}。这并不确认之前的重命名。",
+  "auth_security_passkey_rename_history": "之前的重命名可能已完成。查看当前名称并不能确认该次操作。"
 }

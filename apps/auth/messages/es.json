@@ -851,5 +851,18 @@
   "auth_members_page_count": "Cuentas en esta página: {count}",
   "auth_members_previous_boundary": "No se puede retroceder más en el historial conservado. Puedes volver expresamente a la primera página.",
   "auth_members_previous_page": "Página anterior",
-  "auth_members_reload_current": "Recargar la página actual"
+  "auth_members_reload_current": "Recargar la página actual",
+  "auth_security_passkey_rename": "Cambiar nombre",
+  "auth_security_passkey_rename_label": "Nombre de la clave de acceso",
+  "auth_security_passkey_rename_save": "Guardar nombre",
+  "auth_security_passkey_rename_cancel": "Cancelar cambio de nombre",
+  "auth_security_passkey_rename_invalid": "Introduce un nombre de 1 a 128 caracteres.",
+  "auth_security_passkey_rename_saved": "Nombre guardado.",
+  "auth_security_passkey_rename_step_up": "Vuelve a iniciar sesión para cambiar este nombre.",
+  "auth_security_passkey_rename_failed": "El nombre no cambió. Revisa tu sesión antes de intentarlo de nuevo.",
+  "auth_security_passkey_rename_unknown": "No se confirmó el cambio. Comprueba el nombre actual antes de otra decisión.",
+  "auth_security_passkey_rename_review": "Comprobar nombre actual",
+  "auth_security_passkey_rename_review_failed": "El nombre actual no está disponible. El cambio anterior sigue sin confirmarse.",
+  "auth_security_passkey_rename_observed": "Nombre actual: {name}. Esto no confirma el cambio anterior.",
+  "auth_security_passkey_rename_history": "Un cambio anterior puede haberse completado. Consultar el nombre actual no lo confirma."
 }

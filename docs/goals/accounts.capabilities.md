@@ -33,6 +33,21 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Worker focused evidence:** At head `7275db3bd2`, `bun test apps/auth/tests/recovery.test.ts` passed 21/21, `bun test apps/auth/tests/step-up.test.ts` passed 3/3, and `bun run --cwd apps/auth typecheck` reported no type errors in 228 files. At head `79815141d3`, `bun test apps/auth/tests/login.test.ts` passed 4/4 and `bun test apps/auth/tests/signup.test.ts` passed 8/8; Auth source and those test files are unchanged at `7275db3bd2`. Seeded persona acceptance and the full browser/native walk remain deferred to the verifier.
 
+## credential-session-consent
+
+**User job:** Replace a password, enroll/name/remove a passkey, review and revoke sessions, and explicitly approve
+or reduce connected-application scopes without attributing an uncertain response to a later session.
+
+**Implementation choice:** Retain catalogue-derived session/client/consent inventory bounds and fixed Security,
+enrollment and registration budgets. Passkey rename changes only the owned label and binds the reviewed account.
+Human retirement retains a password or passkey; reviewed consent writes refuse concurrent grant changes.
+
+**Native acceptance:** `bun run --cwd services/kernel check test/access/credential-effect-outcome.test.ts test/access/credential-effect-outcome-security.test.ts test/access/auth-session-capability.test.ts test/access/auth-credential-capability.test.ts test/access/auth-consent.test.ts`.
+The Security adapter uses `createAuthHost`, issued clients, migrated isolated Auth/Kernel databases and the production
+Kernel HTTP handler. It inspects persisted credentials, sessions and consent and exercises real bearer outcomes.
+Native evidence does not establish seeded mounted journey acceptance; those journeys remain held for infrastructure
+recovery. Auth response and page transport suites pin fixed RP receiving, exact acknowledgements and unknown sends.
+
 ## permission-formula
 
 **User job:** An actor performs an operation only when actor grants, consented client scopes and principal grants all permit it, subject to the anonymous floor and explicit denials.

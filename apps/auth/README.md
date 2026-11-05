@@ -1442,3 +1442,8 @@ without preload. Static assets, unknown paths and Auth forwarding retain their o
 The policy costs one 16-byte random nonce and one header set per response, with no reads. Run
 `bun test apps/auth/tests/security-headers.test.ts` from the repository root to build and preview the production
 bundle and check Chromium hydration, policy violations and the real Turnstile script URL with an offline widget.
+
+Passkey label rename uses the native own-human `/passkeys/rename` command, bound to the reviewed account and
+exact credential ID. Its single five-second send includes bounded acknowledgement receiving. Unknown sends offer
+a deliberate current-label read, without replay or an assertion that the earlier command completed. The shared
+Security operation boundary prevents concurrent writes; browser restoration retains only generic uncertainty.
