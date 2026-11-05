@@ -165,7 +165,7 @@ test('failed initial and review reads recover the exact identity and key through
     await p.click('Check current session');
     expect(p.requests.map((request) => request.path)).toEqual(['/operator-sessions/open', '/session']);
     await p.respond(1, Response.json(proof(true)));
-    expect(p.host.querySelector('[role=status]')!.textContent).toContain(subject);
+    expect(p.host.querySelector('#opening-current-state-heading')!.parentElement!.textContent).toContain(subject);
     expect(p.host.querySelector('a[href="https://rezics.com/en/"]')).not.toBeNull();
     expect(p.requests.filter((r) => r.path === '/operator-sessions/open')).toHaveLength(1);
   } finally {
@@ -249,11 +249,13 @@ for (const stage of ['review', 'approval', 'issuance', 'readback'] as const)
         );
       expect(p.requests).toHaveLength(count);
       expect(p.host.querySelector('#opening-confirm')).toBeNull();
-      expect(p.host.querySelector('[role=status]')).toBeNull();
+      expect(p.host.querySelector('#opening-current-state-heading')).toBeNull();
       expect(pending.readPendingManagementOperationStepUp()).toEqual(saved);
       if (stage === 'issuance' || stage === 'readback')
         await p.respond(count - 1, Response.json(proof(stage === 'issuance' || stage === 'readback')));
-      expect(p.host.querySelector('[role=status]') !== null).toBe(stage === 'issuance' || stage === 'readback');
+      expect(p.host.querySelector('#opening-current-state-heading') !== null).toBe(
+        stage === 'issuance' || stage === 'readback',
+      );
     } finally {
       await p.close();
     }
