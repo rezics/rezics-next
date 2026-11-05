@@ -16,8 +16,7 @@ test('the compiled board-game release retains launch data and publishes cited fa
       createKernel({
         ...dependencies,
         access(config) {
-          const access =
-            typeof dependencies.access === 'function' ? dependencies.access(config) : dependencies.access!;
+          const access = typeof dependencies.access === 'function' ? dependencies.access(config) : dependencies.access!;
           const prepare = access.prepare!.bind(access);
           access.prepare = async (...args) => {
             try {
