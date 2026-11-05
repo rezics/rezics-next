@@ -72,9 +72,10 @@ function ReviewerJourney({
       current.observation.id === readerId
     );
   }, [locale, observation, readerId, viewerId]);
+  const [readId, setReadId] = useState(0);
   const queryKey = useMemo(
-    () => ['account-verification', 'review', viewerId, readerId, locale] as const,
-    [locale, readerId, viewerId],
+    () => ['account-verification', 'review', viewerId, readerId, locale, readId] as const,
+    [locale, readId, readerId, viewerId],
   );
   const request = useRef<{ id: number; cursor: ReviewCoordinate } | null>(null);
   const requestId = useRef(0);
@@ -86,6 +87,7 @@ function ReviewerJourney({
   const [focusAfterRead, setFocusAfterRead] = useState<number | null>(null);
   const focusHandoff = useRef<FocusHandoff | null>(null);
   const active = useRef(true);
+  const activeQueryKey = useRef(queryKey);
   const queueRegion = useRef<HTMLDivElement>(null);
 
   const clearFocusHandoff = useCallback((id?: number) => {
@@ -130,50 +132,77 @@ function ReviewerJourney({
         verificationPageTimeout,
       ),
   });
-  const refetch = useRef(query.refetch);
-  refetch.current = query.refetch;
-
   useLayoutEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
       clearFocusHandoff();
-      queryClient.removeQueries({ queryKey, exact: true });
+      queryClient.removeQueries({ queryKey: activeQueryKey.current, exact: true });
     };
-  }, [clearFocusHandoff, queryClient, queryKey]);
+  }, [clearFocusHandoff, queryClient]);
 
-  const completeRead = useCallback(
-    (requested: { id: number; cursor: ReviewCoordinate }) => {
-      void refetch.current().then((result) => {
-        if (!active.current || request.current?.id !== requested.id || !isCurrentOwner()) return;
-        const admitted =
-          result.isSuccess && result.data?.viewerId === viewerId && result.data.page.state === 'ready';
-        if (!admitted) {
-          setMovementLoading(false);
-          clearFocusHandoff(requested.id);
-          return;
-        }
+  useLayoutEffect(() => {
+    const previousQueryKey = activeQueryKey.current;
+    if (previousQueryKey !== queryKey) queryClient.removeQueries({ queryKey: previousQueryKey, exact: true });
+    activeQueryKey.current = queryKey;
+  }, [queryClient, queryKey]);
 
-        const pendingMovement = movementRef.current;
-        if (pendingMovement?.direction === 'next') {
-          historyRef.current = [...historyRef.current, pendingMovement.source].slice(-8);
-          setHistory(historyRef.current);
-        } else if (pendingMovement?.direction === 'previous') {
-          historyRef.current = historyRef.current.slice(0, -1);
-          setHistory(historyRef.current);
-        } else if (pendingMovement?.direction === 'first') {
-          historyRef.current = [];
-          setHistory([]);
-        }
-        movementRef.current = null;
-        setMovement(null);
-        setMovementLoading(false);
-        if (focusHandoff.current?.id === requested.id && !focusHandoff.current.canceled)
-          setFocusAfterRead(requested.id);
-        else clearFocusHandoff(requested.id);
-      });
+  useEffect(() => {
+    const requested = request.current;
+    if (
+      !requested ||
+      requested.id !== readId ||
+      query.isPending ||
+      query.isFetching ||
+      !active.current ||
+      !isCurrentOwner()
+    )
+      return;
+    const admitted = query.isSuccess && query.data?.viewerId === viewerId && query.data.page.state === 'ready';
+    if (!admitted) {
+      setMovementLoading(false);
+      clearFocusHandoff(requested.id);
+      return;
+    }
+
+    const pendingMovement = movementRef.current;
+    if (pendingMovement?.direction === 'next') {
+      historyRef.current = [...historyRef.current, pendingMovement.source].slice(-8);
+      setHistory(historyRef.current);
+    } else if (pendingMovement?.direction === 'previous') {
+      historyRef.current = historyRef.current.slice(0, -1);
+      setHistory(historyRef.current);
+    } else if (pendingMovement?.direction === 'first') {
+      historyRef.current = [];
+      setHistory([]);
+    }
+    movementRef.current = null;
+    setMovement(null);
+    setMovementLoading(false);
+    if (focusHandoff.current?.id === requested.id && !focusHandoff.current.canceled)
+      setFocusAfterRead(requested.id);
+    else clearFocusHandoff(requested.id);
+  }, [clearFocusHandoff, isCurrentOwner, query.data, query.isFetching, query.isPending, query.isSuccess, readId, viewerId]);
+
+  const scheduleRead = useCallback(
+    (cursor: ReviewCoordinate, direction?: ReviewDirection, origin?: HTMLElement | null) => {
+      if (!isCurrentOwner()) return;
+      const id = ++requestId.current;
+      const requested = { id, cursor };
+      const nextMovement = direction ? { direction, source: request.current?.cursor } : undefined;
+      request.current = requested;
+      if (nextMovement) {
+        movementRef.current = nextMovement;
+        setMovement(nextMovement);
+        window.scrollTo(0, 0);
+      }
+      if (movementRef.current) setMovementLoading(true);
+      if (origin) beginFocusHandoff(id, origin);
+      else clearFocusHandoff();
+      setFocusAfterRead(null);
+      setReadId(id);
     },
-    [clearFocusHandoff, isCurrentOwner, viewerId],
+    [beginFocusHandoff, clearFocusHandoff, isCurrentOwner],
   );
   const scheduleRead = useCallback(
     (cursor: ReviewCoordinate, direction?: ReviewDirection, origin?: HTMLElement | null) => {
