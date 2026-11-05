@@ -80,7 +80,13 @@ test('The actual named-label Library renders private FULL assignments and remove
       headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
     });
   const start = await import('../.storybook/react-start');
-  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start', () => ({
+    ...start,
+    createIsomorphicFn: () => ({
+      server: <T extends (...args: never[]) => unknown>(handler: T) =>
+        Object.assign(handler, { client: () => handler }),
+    }),
+  }));
   const cacheHeaders: string[] = [];
   mock.module('@tanstack/react-start/server', () => ({
     getRequest: request,
