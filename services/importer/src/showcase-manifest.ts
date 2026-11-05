@@ -7,7 +7,8 @@ import type { SourceRecord } from '@rezics/conversion';
 import { bangumiRecordUrl, crossMediaCoverDigest, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
-import { sourceDigest, type VndbPublicTagCategory } from '../../../packages/conversion/src/support.ts';
+import { sourceDigest, vndbPublicTagTaxonomy, type VndbPublicTagCategory } from '../../../packages/conversion/src/support.ts';
+import { showcaseTagParentCommand } from './showcase-cross-provider-tags.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import type { CrossMediaGap, CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
@@ -48,6 +49,8 @@ export type ShowcaseAssertion = Readonly<{
   candidateDigest: string;
   /** Selected work owning an exact source-row assertion whose envelope has its own row key. */
   ownerKey?: string;
+  /** Exact selected source-parent row attached to a Concept assertion. */
+  tagParentPath?: string;
   property: string;
   source: BatchCommand['source'];
   statement: BatchStatement;
@@ -88,7 +91,7 @@ export type ShowcaseVocabularyRecord = Readonly<{
   nativeType: 'skos:ConceptScheme' | 'skos:Concept';
   schemeId: string | null;
   schemeUri?: string;
-  provenance?: 'reviewed-catalogue';
+  provenance?: 'reviewed-catalogue' | 'source-parent-binding';
   assertions: readonly ShowcaseAssertion[];
 }>;
 
@@ -117,6 +120,13 @@ export type ShowcaseTagAssociation = Readonly<{
   releaseDigest: string;
 }>;
 
+/** Exact selected COPY associations withheld by required source-parent admission. */
+export type ShowcaseTagAssociationWithdrawal = Readonly<{
+  workId: string;
+  sourceKey: string;
+  tagId: string;
+}>;
+
 /** Source parent evidence joined to exact current Concept and category Scheme identities, before hierarchy admission. */
 export type ShowcaseTagParentBinding = Readonly<{
   child: string;
@@ -131,6 +141,28 @@ export type ShowcaseTagParentBinding = Readonly<{
   parentUri: string;
   schemeUri: string;
   releaseDigest: string;
+}>;
+
+/** A complete selected dictionary row set that permits retiring stale source parent assertions. */
+export type ShowcaseTagParentRefresh = Readonly<{
+  category: VndbPublicTagCategory;
+  tagId: string;
+  childId: string;
+  schemeId: string;
+  childUri: string;
+  schemeUri: string;
+  releaseDigest: string;
+}>;
+
+export type ShowcaseTagParentPublication = Readonly<{
+  path: string;
+  childId: string;
+  parentId: string;
+  schemeId: string;
+  status: 'proposed' | 'public' | 'withheld';
+  candidateId?: string;
+  rights?: ShowcaseAssertion['rights'];
+  reason?: string;
 }>;
 
 export function showcaseVocabularyExternalId(sourceKey: string): string {
@@ -189,9 +221,12 @@ export type ShowcaseManifest = Readonly<{
   vocabulary: readonly ShowcaseVocabularyRecord[];
   media: readonly ShowcaseMediaRecord[];
   tagAssociations?: readonly ShowcaseTagAssociation[];
+  tagAssociationWithdrawals?: readonly ShowcaseTagAssociationWithdrawal[];
   tagAssociationRefreshes?: readonly string[];
   tagParentEvidence?: readonly ShowcaseTagParentBinding[];
   tagParentGaps?: readonly CrossMediaGap[];
+  tagParentRefreshes?: readonly ShowcaseTagParentRefresh[];
+  tagParentPublications?: readonly ShowcaseTagParentPublication[];
   tagWeightObservations: readonly VndbTagRatingObservation[];
   tagWeightRefreshes: readonly string[];
   omissions: readonly ShowcaseOmission[];
@@ -515,9 +550,13 @@ export function buildShowcaseManifest(input: {
   tagWeightObservations?: readonly VndbTagRatingObservation[];
   tagWeightRefreshes?: readonly string[];
   tagAssociations?: readonly ShowcaseTagAssociation[];
+  tagAssociationWithdrawals?: readonly ShowcaseTagAssociationWithdrawal[];
   tagAssociationRefreshes?: readonly string[];
   tagParentEvidence?: readonly ShowcaseTagParentBinding[];
   tagParentGaps?: readonly CrossMediaGap[];
+  tagParentAcknowledgements?: readonly ShowcaseAcknowledgement[];
+  tagParentRefreshes?: readonly ShowcaseTagParentRefresh[];
+  tagParentPublicationOutcomes?: readonly ShowcaseTagParentPublication[];
   workRelations?: readonly GraphEdgeEvidence[];
 }): ShowcaseManifest {
   const { plan, readings, acknowledgements, aliases } = input;
@@ -538,9 +577,12 @@ export function buildShowcaseManifest(input: {
   const bangumiGameGenreOwnerKeys = new Set(input.bangumiGameGenreOwnerKeys ?? []);
   const tagWeightObservations = input.tagWeightObservations ?? [];
   const tagAssociations = input.tagAssociations ?? [];
+  const tagAssociationWithdrawals = input.tagAssociationWithdrawals ?? [];
   const tagAssociationRefreshes = [...new Set(input.tagAssociationRefreshes ?? [])];
   const tagParentEvidence = input.tagParentEvidence ?? [];
   const tagParentGaps = input.tagParentGaps ?? [];
+  const tagParentRefreshes = input.tagParentRefreshes ?? [];
+  const parentAcknowledgements = input.tagParentAcknowledgements ?? [];
   const vndbCreditCandidateDigests = new Set(input.vndbCreditCandidateDigests ?? []);
   const tagWeightRefreshes = [...new Set(input.tagWeightRefreshes ?? [])].filter((id) =>
     /^v[1-9][0-9]{0,9}$/u.test(id),
@@ -922,6 +964,191 @@ export function buildShowcaseManifest(input: {
     vocabulary.push({ ...record, assertions });
   }
 
+  const sourceParentEndpoints = new Map<string, ShowcaseVocabularyRecord>();
+  const conflictingSourceParentEndpoints = new Set<string>();
+  const addSourceParentEndpoint = (record: ShowcaseVocabularyRecord) => {
+    const existing = vocabulary.find((entry) => entry.subjectId === record.subjectId);
+    if (existing) return;
+    if (conflictingSourceParentEndpoints.has(record.subjectId)) return;
+    const prior = sourceParentEndpoints.get(record.subjectId);
+    if (prior && (prior.sourceUri !== record.sourceUri || prior.nativeType !== record.nativeType || prior.schemeId !== record.schemeId)) {
+      sourceParentEndpoints.delete(record.subjectId);
+      conflictingSourceParentEndpoints.add(record.subjectId);
+      return;
+    }
+    if (vocabulary.length + sourceParentEndpoints.size >= showcaseLimits.vocabulary) {
+      omissions.push({ provider: 'vndb', sourceKey: record.sourceKey, code: 'candidate-limit' });
+      return;
+    }
+    sourceParentEndpoints.set(record.subjectId, record);
+  };
+  for (const refresh of tagParentRefreshes) {
+    const taxonomy = vndbPublicTagTaxonomy(refresh.category);
+    addSourceParentEndpoint({
+      provider: 'vndb',
+      sourceAlias: aliases.vndb,
+      sourceKey: `${taxonomy}:${refresh.tagId}`,
+      sourceUri: refresh.childUri,
+      subjectId: refresh.childId,
+      nativeType: 'skos:Concept',
+      schemeId: refresh.schemeId,
+      schemeUri: refresh.schemeUri,
+      provenance: 'source-parent-binding',
+      assertions: [],
+    });
+    addSourceParentEndpoint({
+      provider: 'vndb',
+      sourceAlias: aliases.vndb,
+      sourceKey: taxonomy,
+      sourceUri: refresh.schemeUri,
+      subjectId: refresh.schemeId,
+      nativeType: 'skos:ConceptScheme',
+      schemeId: null,
+      provenance: 'source-parent-binding',
+      assertions: [],
+    });
+  }
+  for (const binding of tagParentEvidence) {
+    const taxonomy = vndbPublicTagTaxonomy(binding.category);
+    const scheme = {
+      provider: 'vndb' as const,
+      sourceAlias: aliases.vndb,
+      sourceKey: taxonomy,
+      sourceUri: binding.schemeUri,
+      subjectId: binding.schemeId,
+      nativeType: 'skos:ConceptScheme' as const,
+      schemeId: null,
+      provenance: 'source-parent-binding' as const,
+      assertions: [],
+    };
+    addSourceParentEndpoint({
+      provider: 'vndb',
+      sourceAlias: aliases.vndb,
+      sourceKey: `${taxonomy}:${binding.child}`,
+      sourceUri: binding.childUri,
+      subjectId: binding.childId,
+      nativeType: 'skos:Concept',
+      schemeId: binding.schemeId,
+      schemeUri: binding.schemeUri,
+      provenance: 'source-parent-binding',
+      assertions: [],
+    });
+    addSourceParentEndpoint({
+      provider: 'vndb',
+      sourceAlias: aliases.vndb,
+      sourceKey: `${taxonomy}:${binding.parent}`,
+      sourceUri: binding.parentUri,
+      subjectId: binding.parentId,
+      nativeType: 'skos:Concept',
+      schemeId: binding.schemeId,
+      schemeUri: binding.schemeUri,
+      provenance: 'source-parent-binding',
+      assertions: [],
+    });
+    addSourceParentEndpoint(scheme);
+  }
+  vocabulary.push(...sourceParentEndpoints.values());
+
+  const parentPublications: ShowcaseTagParentPublication[] = [];
+  const parentOutcomeByPath = new Map((input.tagParentPublicationOutcomes ?? []).map((row) => [row.path, row]));
+  for (const binding of tagParentEvidence) {
+    const expected = showcaseTagParentCommand(binding);
+    const acknowledgement = parentAcknowledgements.find((entry) => entry.command.key === expected.key);
+    const assertion = acknowledgement ? candidateAssertion(acknowledgement) : null;
+    const child = vocabulary.find(
+      (record) =>
+        record.subjectId === binding.childId &&
+        record.nativeType === 'skos:Concept' &&
+        record.schemeId === binding.schemeId,
+    );
+    const parent = vocabulary.find(
+      (record) =>
+        record.subjectId === binding.parentId &&
+        record.nativeType === 'skos:Concept' &&
+        record.schemeId === binding.schemeId,
+    );
+    const scheme = vocabulary.find(
+      (record) => record.subjectId === binding.schemeId && record.nativeType === 'skos:ConceptScheme',
+    );
+    const exact = !!(
+      acknowledgement &&
+      assertion &&
+      acknowledgement.commandDigest === showcaseDigest(expected) &&
+      showcaseDigest(acknowledgement.command) === showcaseDigest(expected) &&
+      acknowledgement.command.op === 'propose' &&
+      acknowledgement.command.subject === binding.childId &&
+      assertion.property === 'skos:broader' &&
+      assertion.statement.value.type === 'value' &&
+      assertion.statement.value.content === binding.parentId &&
+      child &&
+      parent &&
+      scheme?.sourceUri === binding.schemeUri &&
+      child.sourceUri === binding.childUri &&
+      parent.sourceUri === binding.parentUri &&
+      assertion.commandKey === expected.key
+    );
+    const suppliedOutcome = parentOutcomeByPath.get(binding.path);
+    if (
+      suppliedOutcome &&
+      (suppliedOutcome.childId !== binding.childId ||
+        suppliedOutcome.parentId !== binding.parentId ||
+        suppliedOutcome.schemeId !== binding.schemeId ||
+        (exact && suppliedOutcome.candidateId !== assertion!.candidateId))
+    )
+      throw new TypeError('VNDB tag parent publication outcome changed its exact binding');
+    let status: ShowcaseTagParentPublication;
+    if (!exact || !acknowledgement || !assertion || !child) {
+      status =
+        suppliedOutcome ??
+        {
+          path: binding.path,
+          childId: binding.childId,
+          parentId: binding.parentId,
+          schemeId: binding.schemeId,
+          status: 'withheld',
+          reason: 'parent proposal was not acknowledged exactly',
+        };
+      omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'source-claim-withheld' });
+    } else {
+      if (child.assertions.length >= showcaseLimits.candidatesPerRecord || remainingCandidates === 0) {
+        status = {
+          path: binding.path,
+          childId: binding.childId,
+          parentId: binding.parentId,
+          schemeId: binding.schemeId,
+          status: 'withheld',
+          candidateId: assertion.candidateId,
+          reason: 'candidate limit exceeded',
+        };
+        omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'candidate-limit' });
+      } else {
+        const parentAssertion = {
+          ...assertion,
+          ownerKey: child.sourceKey,
+          tagParentPath: binding.path,
+        };
+        const index = vocabulary.indexOf(child);
+        vocabulary[index] = { ...child, assertions: [...child.assertions, parentAssertion] };
+        remainingCandidates -= 1;
+        status = {
+          path: binding.path,
+          childId: binding.childId,
+          parentId: binding.parentId,
+          schemeId: binding.schemeId,
+          status: 'proposed',
+          candidateId: assertion.candidateId,
+          ...(assertion.rights ? { rights: assertion.rights } : {}),
+        };
+      }
+    }
+    if (suppliedOutcome) {
+      if (suppliedOutcome.status === 'public' && status.status === 'withheld')
+        throw new TypeError('VNDB tag parent cannot be public without an exact accepted proposal');
+      status = { ...status, ...suppliedOutcome };
+    }
+    parentPublications.push(status);
+  }
+
   for (const row of records) {
     if (!row.subjectId)
       omissions.push({ provider: row.provider, sourceKey: row.sourceKey, code: 'source-read-missing' });
@@ -949,13 +1176,20 @@ export function buildShowcaseManifest(input: {
       schemeId: record.schemeId,
       schemeUri: record.schemeUri ?? null,
       provenance: record.provenance ?? null,
-      assertions: record.assertions.map(({ candidateId, candidateDigest }) => ({ candidateId, candidateDigest })),
+      assertions: record.assertions.map(({ candidateId, candidateDigest, rights }) => ({
+        candidateId,
+        candidateDigest,
+        ...(rights ? { rights } : {}),
+      })),
     })),
     media,
     tagAssociations,
+    tagAssociationWithdrawals,
     tagAssociationRefreshes,
     tagParentEvidence,
     tagParentGaps,
+    tagParentRefreshes,
+    tagParentPublications: parentPublications,
     tagWeightObservations,
     tagWeightRefreshes,
   });
@@ -966,9 +1200,12 @@ export function buildShowcaseManifest(input: {
     vocabulary,
     media,
     tagAssociations,
+    tagAssociationWithdrawals,
     tagAssociationRefreshes,
     tagParentEvidence,
     tagParentGaps,
+    tagParentRefreshes,
+    tagParentPublications: parentPublications,
     tagWeightObservations,
     tagWeightRefreshes,
     omissions,

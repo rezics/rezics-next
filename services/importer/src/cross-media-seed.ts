@@ -144,7 +144,7 @@ import {
   type BangumiCreditRoleBinding,
   type BangumiCreditVocabularyResolution,
 } from './showcase-bangumi-credits.ts';
-import { showcaseLimits, type ShowcaseManifest } from './showcase-manifest.ts';
+import { showcaseLimits, type ShowcaseAcknowledgement, type ShowcaseManifest } from './showcase-manifest.ts';
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -3429,6 +3429,7 @@ export async function runCrossMediaSeedCli(
       knownShowcaseTagBindings,
       parseShowcaseTagKnownBindings,
       prepareShowcaseTags,
+      prepareShowcaseTagParentPublications,
       prepareShowcaseVndbPublicTagVocabulary,
       readShowcaseVndbPublicTagVocabulary,
     } = await import('./showcase-tags.ts');
@@ -3746,6 +3747,34 @@ export async function runCrossMediaSeedCli(
         ...(journal ? { journal } : {}),
         destination: { origin: api },
       });
+    }
+    let tagParentAcknowledgements: ShowcaseAcknowledgement[] = [];
+    let tagParentPublicationGaps: CrossMediaGap[] = [];
+    let tagParentRefreshes = publicTags.tagParentRefreshes;
+    if (journal && publicClient) {
+      const parentPublication = await prepareShowcaseTagParentPublications({
+        evidence: publicTags.tagParentEvidence,
+        port,
+        journal,
+      });
+      tagParentAcknowledgements = parentPublication.acknowledgements;
+      tagParentPublicationGaps = parentPublication.gaps;
+      if (parentPublication.gaps.length) tagParentRefreshes = [];
+      if (parentPublication.unavailableTagCodes.length) {
+        const unavailable = new Set(parentPublication.unavailableTagCodes);
+        publicTags = {
+          ...publicTags,
+          associationBindings: publicTags.associationBindings.filter((item) => !unavailable.has(item.tagId)),
+          tagAssociationWithdrawals: [
+            ...publicTags.tagAssociationWithdrawals,
+            ...publicTags.associationBindings
+              .filter((item) => unavailable.has(item.tagId))
+              .map((item) => ({ workId: item.workId, sourceKey: item.sourceKey, tagId: item.tagId })),
+          ],
+          gaps: [...publicTags.gaps, ...parentPublication.gaps],
+          status: publicTags.gaps.length || parentPublication.gaps.length ? 'imported-with-gaps' : publicTags.status,
+        };
+      }
     }
     if (journal && publicClient && !explicitCreditBindingsPath) {
       const schemes = await prepareShowcaseVndbCreditVocabulary({
@@ -4286,9 +4315,12 @@ export async function runCrossMediaSeedCli(
         tagWeightObservations: publicTags.tagWeightObservations,
         tagWeightRefreshes: publicTags.tagWeightRefreshes,
         tagAssociations: publicTags.associationBindings,
+        tagAssociationWithdrawals: publicTags.tagAssociationWithdrawals,
         tagAssociationRefreshes: publicTags.associationRefreshes,
         tagParentEvidence: publicTags.tagParentEvidence,
-        tagParentGaps: publicTags.parentBindingGaps,
+        tagParentGaps: [...publicTags.parentBindingGaps, ...tagParentPublicationGaps],
+        tagParentAcknowledgements,
+        tagParentRefreshes,
       });
     const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResultFields } = combinedResult;
     const publicCombinedResult = {
