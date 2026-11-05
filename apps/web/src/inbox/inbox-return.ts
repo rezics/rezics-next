@@ -1,6 +1,6 @@
 import type { InboxSelection } from './inbox-read';
 
-type ReturnLocation = { pathname: string; state: unknown };
+type ReturnLocation = { pathname: string; href?: string; state: unknown };
 type ReturnRouter = {
   subscribe: (
     event: 'onBeforeNavigate',
@@ -53,8 +53,10 @@ function routePath(pathname: string) {
 
 function historyKey(location: ReturnLocation | undefined): string | null {
   if (!location?.state || typeof location.state !== 'object') return null;
-  const key = (location.state as { key?: unknown }).key;
-  return typeof key === 'string' && key.length > 0 ? key : null;
+  const state = location.state as { key?: unknown; __TSR_key?: unknown };
+  const key = typeof state.key === 'string' ? state.key : state.__TSR_key;
+  if (typeof key === 'string' && key.length > 0) return key;
+  return typeof location.href === 'string' && location.href.length > 0 ? location.href : null;
 }
 
 function publish(slot: ReturnSlot, receipt: InboxReturnReceipt | null) {
