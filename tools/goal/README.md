@@ -422,6 +422,9 @@ minutes; the attempt records the refusal and the primary and secondary windows i
 one pool within an hour temporarily exclude its allowance for one hour. Other native quota failures exclude all
 aliases of that allowance immediately. There is no credit purchase or reset-card redemption path.
 
+Decision: each pool selection indexes current readings and reverse-array history predecessors once by allowance key,
+then reuses that projection across profile fallbacks.
+
 Control-plane processes reload only the `pools` entries from their startup local settings file whenever they choose a
 pool. An unchanged file is not reparsed; the rest of the process settings retain their startup values. If a changed
 file cannot be read or its pool entries are invalid, the process keeps the pools of the last valid version and sends one
