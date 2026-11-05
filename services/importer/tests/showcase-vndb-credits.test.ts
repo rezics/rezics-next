@@ -47,8 +47,8 @@ function selectedVn() {
       { id: 'v3', revision: '9', lastmod: '2026-10-25 00:00:00+00' },
     ],
     vn_staff: [
-      { id: 'v1', aid: '10', role: 'scenario', note: 'Writer Alias' },
-      { id: 'v1', aid: '20', role: 'chardesign', note: 'Artist Alias' },
+      { id: 'v1', aid: '10', role: 'scenario', note: 'Common route, After Story routes' },
+      { id: 'v1', aid: '20', role: 'chardesign', note: 'Original character designs' },
     ],
     vn_seiyuu: [{ id: 'v1', aid: '10', cid: 'c3', note: 'Voice Alias' }],
     staff_alias: [
@@ -283,7 +283,7 @@ test('the selected-family seed qualifies staff and voice credits without alias i
     expect(qualifiers(voice)).toEqual(
       expect.arrayContaining([
         { property: { id: 'wdt:P453' }, value: { type: 'value', content: character } },
-        { property: { id: 'wdt:P1932' }, value: { type: 'value', content: 'Voice Alias' } },
+        { property: { id: 'wdt:P1932' }, value: { type: 'value', content: 'Writer Alias' } },
       ]),
     );
     expect(

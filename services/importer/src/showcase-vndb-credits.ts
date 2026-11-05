@@ -451,8 +451,7 @@ export function planShowcaseVndbCredits(plan: CrossMediaPlan): {
       if (diagnostics.length < DIAGNOSTIC_LIMIT) diagnostics.push(gap(path ?? '/vn_staff', 'invalid_row'));
       continue;
     }
-    const spelling =
-      row.note === undefined || row.note === null || row.note === '' ? aliasNames.get(aliasId) : row.note;
+    const spelling = aliasNames.get(aliasId);
     if (spelling !== undefined && !validSpelling(spelling)) {
       if (diagnostics.length < DIAGNOSTIC_LIMIT) diagnostics.push(gap(path, 'invalid_source_value'));
       continue;
