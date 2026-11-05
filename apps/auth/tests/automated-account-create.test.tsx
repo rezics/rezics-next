@@ -80,7 +80,11 @@ for (const stage of ['review', 'approval', 'signin'] as const)
       await page.render(<AutomatedAccountCreatePage key="resume" />);
       await confirm(page.host);
       if (stage === 'signin') {
-        await flush(() => page.calls[0]!.resolve(Response.json({ error: 'step_up_required' }, { status: 401 })));
+        await flush(() =>
+          page.calls[0]!.resolve(
+            Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
+          ),
+        );
         await authenticate(page.host);
       }
     }
@@ -169,7 +173,6 @@ test('oversized retained attempt stays untouched and cannot allocate a new key o
 });
 
 test('approval and execute preserve the maximum escaped opaque reference within the producer-derived request ceiling', async () => {
-  const page = await open(<AutomatedAccountCreatePage />, { ...body });
   const handle = `a${'b'.repeat(62)}c`;
   const base = createAutomatedAttempt(human, operator, handle)!;
   const operationKey = '\u0002'.repeat(128);
@@ -179,6 +182,7 @@ test('approval and execute preserve the maximum escaped opaque reference within 
     operation: { ...base.operation, operationKey },
   };
   expect(saveAutomatedAttempt(attempt)).toBe(true);
+  const page = await open(<AutomatedAccountCreatePage />, { ...body });
   await confirm(page.host);
   const reference = '\u0001'.repeat(4096);
   const raw = JSON.stringify({ reference, expiresAt: new Date(Date.now() + 60000).toISOString() });
@@ -200,6 +204,7 @@ test('approval and execute preserve the maximum escaped opaque reference within 
 });
 
 test('approval overflow is rejected before JSON parsing even with a lying small Content-Length', async () => {
+  saveAutomatedAttempt(createAutomatedAttempt(human, operator, 'robot-one')!);
   const page = await open(<AutomatedAccountCreatePage />, { ...body });
   await confirm(page.host);
   const raw = JSON.stringify({ reference: '\u0001'.repeat(4097), expiresAt: new Date(Date.now() + 60000).toISOString() });
@@ -215,9 +220,9 @@ test('approval overflow is rejected before JSON parsing even with a lying small 
 });
 
 test('split UTF-8 approval bytes without Content-Length remain opaque and exact success completes this attempt', async () => {
-  const page = await open(<AutomatedAccountCreatePage />, { ...body });
   const attempt = createAutomatedAttempt(human, operator, 'robot-one')!;
   saveAutomatedAttempt(attempt);
+  const page = await open(<AutomatedAccountCreatePage />, { ...body });
   await confirm(page.host);
   const raw = JSON.stringify({ reference: 'opaque/é', expiresAt: new Date(Date.now() + 60000).toISOString() });
   const bytes = new TextEncoder().encode(raw);
@@ -349,6 +354,7 @@ test('newer exact native approval and execution refusals cannot clear an earlier
 });
 
 test('approval classifies exact platform closure and step-up envelopes only', async () => {
+  saveAutomatedAttempt(createAutomatedAttempt(human, operator, 'closed-robot')!);
   const closed = await open(<AutomatedAccountCreatePage />, { ...body });
   await confirm(closed.host);
   await flush(() =>
@@ -360,6 +366,7 @@ test('approval classifies exact platform closure and step-up envelopes only', as
   expect(closed.host.textContent).toContain('Creation was refused');
   await closed.render(<></>);
 
+  saveAutomatedAttempt(createAutomatedAttempt(human, operator, 'stepup-robot')!);
   const stepUp = await open(<AutomatedAccountCreatePage />, { ...body });
   await confirm(stepUp.host);
   await flush(() =>

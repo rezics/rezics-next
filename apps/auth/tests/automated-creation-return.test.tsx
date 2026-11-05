@@ -177,7 +177,7 @@ test('missing or malformed continuation and later refusal cannot erase unknown h
   globalThis.fetch = ((input, init) => {
     if (String(input) === '/account-management/automated/operator') {
       pageReads++;
-      if (pageReads === 1) return Promise.resolve(new Response(null, { status: 403 }));
+      if (pageReads === 1) return Promise.resolve(Response.json({}, { status: 403 }));
       return Promise.resolve(
         Response.json({
           viewer: { accountId: human },
@@ -336,7 +336,7 @@ test('retirement between approval and execute aborts the later caller read witho
   let laterSessionSignal: AbortSignal | undefined;
   let releaseLaterSession: ((response: Response) => void) | undefined;
   globalThis.fetch = ((input, init) => {
-    if (String(input) === '/session' && ++sessionReads === 3) {
+    if (new URL(String(input), 'https://auth.test').pathname === '/session' && ++sessionReads === 3) {
       laterSessionSignal = init?.signal as AbortSignal;
       return new Promise<Response>((resolve) => {
         releaseLaterSession = resolve;

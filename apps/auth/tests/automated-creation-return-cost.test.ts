@@ -32,7 +32,7 @@ test('entry, persisted return and visible Retry charge bounded reads and issue n
   const requests: string[] = [];
   let failPage = false;
   globalThis.fetch = (async (input) => {
-    const path = String(input);
+    const path = new URL(String(input), 'https://auth.test').pathname;
     requests.push(path);
     if (path === '/session') return Response.json(session);
     if (path === '/account-management/automated/operator')
@@ -81,7 +81,7 @@ test('fresh creation keeps the existing eleven sessions, two advice reads and tw
   };
   const created = '33333333-3333-4333-8333-333333333333';
   globalThis.fetch = (async (input, init) => {
-    const path = String(input);
+    const path = new URL(String(input), 'https://auth.test').pathname;
     requests.push({ path, init });
     if (path === '/session') return Response.json(session);
     if (path === '/account-management/automated/operator') {
