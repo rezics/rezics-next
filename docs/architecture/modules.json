@@ -449,6 +449,7 @@
         "services/kernel/src/semantic/identity-adapters/index.ts",
         "services/kernel/src/semantic/identity-adapters/read.ts",
         "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+        "services/kernel/src/semantic/identity-adapters/identity-epoch-library-inputs.ts",
         "services/kernel/src/semantic/work-module.ts",
         "services/kernel/src/semantic/definition-catalogue-types.ts",
         "services/kernel/src/semantic/character-public-reading-documents.ts",
