@@ -1,7 +1,7 @@
-import { lazy, Suspense, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { creditDestinationHref } from '../catalogue/credit-inspection/destinations';
 import { CreditInspectionAction, CreditVisitReturn } from '../catalogue/credit-inspection/return';
-import { m } from '../../paraglide/messages.js';
+import { CreditInspectionSession } from '../catalogue/credit-inspection/session';
 import type { CreditAssertion, CreditVisit } from '../catalogue/credit-inspection/model';
 import {
   fallbackListFactProperties,
@@ -23,12 +23,6 @@ import { SpoilerGate } from './values';
 import type { LinkProps } from './shared';
 import { CatalogueSecondary, CatalogueTargetLink } from './catalogue-list-context/secondary';
 import { catalogueText, type CatalogueRowContext } from './catalogue-list-context/model';
-
-const CreditInspectionSession = lazy(() =>
-  import('../catalogue/credit-inspection/session').then((module) => ({
-    default: module.CreditInspectionSession,
-  })),
-);
 
 export function ExactEditionLink({ href, lang, className, children }: LinkProps) {
   return (
@@ -264,22 +258,20 @@ export function CoverList({
     if (trigger.isConnected) trigger.focus();
   }
   const inspector = liveInspection ? (
-    <Suspense fallback={<p role="status">{m.candidate_loading({}, { locale: value.locale as never })}</p>}>
-      <CreditInspectionSession
-        key={liveInspection.identity}
-        id={liveInspection.visit.person}
-        address={visitIdentity}
-        credit={liveInspection.credit}
-        visit={liveInspection.visit}
-        title={liveInspection.title}
-        propertyLabel={liveInspection.visit.propertyLabel}
-        locale={value.locale}
-        onClose={closeInspection}
-        returnFocus={() =>
-          visitOwner.current === owner && liveInspection.trigger.isConnected ? liveInspection.trigger : null
-        }
-      />
-    </Suspense>
+    <CreditInspectionSession
+      key={liveInspection.identity}
+      id={liveInspection.visit.person}
+      address={visitIdentity}
+      credit={liveInspection.credit}
+      visit={liveInspection.visit}
+      title={liveInspection.title}
+      propertyLabel={liveInspection.visit.propertyLabel}
+      locale={value.locale}
+      onClose={closeInspection}
+      returnFocus={() =>
+        visitOwner.current === owner && liveInspection.trigger.isConnected ? liveInspection.trigger : null
+      }
+    />
   ) : null;
   const credits = !!creditVisit || items.some((item) => (item.qualified?.length ?? 0) > 0);
   const occurrences = new Map<string, number>();
