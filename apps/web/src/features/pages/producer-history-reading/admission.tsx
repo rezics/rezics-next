@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { browserObservation } from '../../../session';
 import { CandidateReaderBoundary, useCatalogueLifetime } from '../../../subject/candidate-lifetime';
@@ -19,6 +19,16 @@ export function ProducerHistoryAdmission({
   const client = useQueryClient();
   const store = browserObservation(client);
   const parent = useCatalogueLifetime('producer-exposure');
+  const queries = useRef(new WeakMap<object, number>());
+  const nextQuery = useRef(0);
+  const identity = useCallback((query: object) => {
+    let identity = queries.current.get(query);
+    if (identity === undefined) {
+      identity = ++nextQuery.current;
+      queries.current.set(query, identity);
+    }
+    return identity;
+  }, []);
   const snapshot = useCallback(
     () =>
       JSON.stringify(
@@ -26,6 +36,7 @@ export function ProducerHistoryAdmission({
           .getQueryCache()
           .findAll({ queryKey: ['exposure', 'viewer'] })
           .map((query) => [
+            identity(query),
             query.queryHash,
             query.state.status,
             query.state.fetchStatus,
@@ -34,7 +45,7 @@ export function ProducerHistoryAdmission({
             query.state.errorUpdateCount,
           ]),
       ),
-    [client],
+    [client, identity],
   );
   const exposure = useSyncExternalStore(store.subscribeCache, snapshot, snapshot);
   const admission = useMemo(
