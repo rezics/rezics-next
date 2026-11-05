@@ -501,7 +501,10 @@ test('Independent archive readers commit exact windows and keep choices and ackn
     await f.journey.results('refresh');
     expect(f.journey.snapshot().state!.results!.context.next).toBe(0);
     await f.journey.results('next');
-    expect(f.journey.snapshot().state!.results!.rows).toMatchObject([{ ordinal: 1, status: 'acknowledged', labelId }]);
+    expect(f.journey.snapshot().state!.results!.rows).toMatchObject([
+      { ordinal: 0, status: 'acknowledged', subjectId },
+      { ordinal: 1, status: 'acknowledged', labelId },
+    ]);
     await f.journey.results('next');
     expect(f.journey.snapshot().state!.results!.context.next).toBeNull();
     f.failResultsOnce(1);
@@ -540,7 +543,7 @@ test('Independent archive readers commit exact windows and keep choices and ackn
     expect(JSON.parse(reviewCalls[1]!.body).items.map(({ ordinal }: { ordinal: number }) => ordinal)).toEqual([2]);
     expect(f.journey.snapshot().state!.pageNavigation.current).toBe(1);
     expect(f.calls.filter((call) => call.path.endsWith('/results')).map(({ after }) => after)).toEqual([
-      -1, 0, 1, 0, -1, 0, -1, -1, 0, 1, 1, 1,
+      -1, 0, 1, 0, -1, -1, 0, 1, 1, 1,
     ]);
   } finally {
     f.journey.retire();
