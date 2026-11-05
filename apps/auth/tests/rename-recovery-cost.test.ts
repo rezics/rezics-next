@@ -21,12 +21,18 @@ if (!process.env.RENAME_COST_CHILD) {
   let currentSignal: AbortSignal | undefined;
   mock.module('@tanstack/react-start', () => ({
     createServerOnlyFn: (fn: unknown) => fn,
-    createServerFn: () => ({
-      handler: (fn: (input: unknown) => unknown) => (options?: { signal?: AbortSignal }) => {
-        currentSignal = options?.signal;
-        return fn({ signal: currentSignal });
-      },
-    }),
+    createServerFn: () => {
+      const builder = {
+        validator() {
+          return builder;
+        },
+        handler: (fn: (input: unknown) => unknown) => (options?: { signal?: AbortSignal; data?: unknown }) => {
+          currentSignal = options?.signal;
+          return fn({ signal: currentSignal, data: options?.data });
+        },
+      };
+      return builder;
+    },
   }));
   mock.module('cloudflare:workers', () => ({ env: { AUTH_SECURITY_SCOPE_CONFIGURATION: 'catalogue:4' } }));
   mock.module('@tanstack/react-start/server', () => ({

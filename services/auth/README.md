@@ -1124,11 +1124,10 @@ Each POST independently keeps five seconds through headers/body, releases abort-
 bytes before fatal decoding/parsing. Retirement before dispatch is unsent; later abort cannot undo native work.
 Key/descriptor, live-only reference/expiry, fresh proof, expectedHandle, profile, Access deadline/preparation and
 workflow CAS/replay remain. No native call, permission or automatic retry is added.
-Current review costs session GET + rename-page POST: entry/return/read Retry cost two and send zero commands.
+Review costs session GET + rename-page POST: entry/return/read Retry cost two and send zero commands.
 Fresh acknowledged submit costs six; unknown four. Exact live-reference retry costs three while unknown or five
 with acknowledgement; expiry renewal adds one. Supported 409 uses the second pair as advice instead of readback.
-Step-up return needs same-account review and confirmation, with zero commands. Local tests qualify receiving;
-Native/browser acceptance and integration remain pending.
+Step-up return needs same-account review and confirmation, with zero commands. Native/browser acceptance and integration remain pending.
 
 `apps/auth/src/management-operations.ts` exports the closed `ManagementOperation`,
 `loadManagementSession()`, `managementOperationProfile(kind)` and
