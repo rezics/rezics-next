@@ -130,6 +130,8 @@ const nativeAuthTestIssuer = process.env.NATIVE_AUTH_TEST_ISSUER;
 
 function ownedPostgresUrl(port: number, database: string, socketDirectory?: string): string {
   const url = `postgres://rezics:rezics@127.0.0.1:${port}/${database}?sslmode=disable`;
+  // Keep the TCP hostname so Auth identity and workflow same-database checks still have a host.
+  // libpq's host query selects the bind-mounted Unix socket inside a private net namespace.
   return socketDirectory ? `${url}&host=${encodeURIComponent(socketDirectory)}` : url;
 }
 
