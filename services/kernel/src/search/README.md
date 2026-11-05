@@ -1818,10 +1818,9 @@ current disclosure and summary hydration precede the final execution-joined stat
 arbitrary continuation are exposed. Missing native binding prepares or fails unavailable before engine execution.
 
 `public-preparation.ts` runs locator-only maintenance workflows under the existing Search WorkModule and DBOS owner.
-It retains one scalar population frontier and at most one interrupted key page, charges a 64-key owner page, chunks
-ordinary Source reads at 256, and invokes the ordinary indexer's serializer and actual versions. The delivered
-`SearchWriterGuard` caps its native write chunks at 100 keys for both cold population and replay. Replay remains on
-the ordinary log/checkpoint path, at most one envelope per preparation step. Claims advance their native revision,
+It retains one scalar scheduling locator; the native publication job owns complete key traversal and invokes
+the ordinary writer's serializer and actual versions. The delivered `SearchWriterGuard` caps its native
+write chunks at 100 keys. Claims advance their native revision,
 so an expired attempt cannot overwrite a successor frontier. Due discovery re-enqueues the current unleased
 revision; only a claim, an advance, or expired-lease recovery changes that dispatchable frontier. Maintenance locators expire after 24 hours; this does
 not allocate a public output slot or extend its native quota grant. Only the consumer producer owns current/building
@@ -1832,7 +1831,7 @@ Its `preparePublication` adapter resolves the native full-population binding and
 then passes the returned consumer to `prepare`. It retains only the publication job ID between steps.
 Cold population and ordinary replay both use the delivered native writer's admission gate; no publication
 callback supplies authority. Maintenance resumes the stored job and its original consumer directly; it does
-not repeat the retired fixed-cut scan or register a replacement consumer on restart. Native complete key
+not repeat the retired fixed-cut scan or register a replacement consumer on restart.
 Job recovery also covers interruption after native prepare commits and before maintenance saves its locator.
 Native complete key pages may retain their terminal cursor or advance past only filtered rows; the next home starts without
 that cursor. The publication's finite passes own population, repair, reconciliation and activation through
