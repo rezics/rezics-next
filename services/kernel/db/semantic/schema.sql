@@ -6936,6 +6936,47 @@ CREATE TABLE semantic.identity_public_writer (
 
 
 --
+-- Name: identity_rating_repair_journal; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_rating_repair_journal (
+    partition_no integer NOT NULL,
+    scope_key text NOT NULL,
+    scope jsonb NOT NULL,
+    owner_node text NOT NULL,
+    owner_epoch integer NOT NULL,
+    checkpoint jsonb,
+    reclaimed boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_rating_repair_journal_check CHECK (((NOT reclaimed) OR (NOT ((checkpoint ->> 'phase'::text) IS DISTINCT FROM 'complete'::text)))),
+    CONSTRAINT identity_rating_repair_journal_checkpoint_check CHECK ((octet_length((checkpoint)::text) <= 32768)),
+    CONSTRAINT identity_rating_repair_journal_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT identity_rating_repair_journal_owner_node_check CHECK (((octet_length(owner_node) >= 1) AND (octet_length(owner_node) <= 256))),
+    CONSTRAINT identity_rating_repair_journal_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_rating_repair_journal_scope_check CHECK ((octet_length((scope)::text) <= 4096)),
+    CONSTRAINT identity_rating_repair_journal_scope_key_check CHECK ((scope_key ~ '^[a-f0-9]{64}$'::text))
+);
+
+
+--
+-- Name: identity_rating_repair_page; Type: TABLE; Schema: semantic; Owner: -
+--
+
+CREATE TABLE semantic.identity_rating_repair_page (
+    partition_no integer NOT NULL,
+    scope_key text NOT NULL,
+    selection_digest text NOT NULL,
+    selected_page jsonb NOT NULL,
+    binding jsonb NOT NULL,
+    receipt jsonb NOT NULL,
+    acknowledged boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_rating_repair_page_binding_check CHECK ((octet_length((binding)::text) <= 16384)),
+    CONSTRAINT identity_rating_repair_page_receipt_check CHECK ((octet_length((receipt)::text) <= 8192)),
+    CONSTRAINT identity_rating_repair_page_selected_page_check CHECK ((octet_length((selected_page)::text) <= 131072)),
+    CONSTRAINT identity_rating_repair_page_selection_digest_check CHECK ((selection_digest ~ '^[a-f0-9]{64}$'::text))
+);
+
+
+--
 -- Name: identity_receiving_capture_pending; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -10062,6 +10103,22 @@ ALTER TABLE ONLY semantic.identity_public_writer
 
 
 --
+-- Name: identity_rating_repair_journal identity_rating_repair_journal_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_rating_repair_journal
+    ADD CONSTRAINT identity_rating_repair_journal_pkey PRIMARY KEY (partition_no, scope_key);
+
+
+--
+-- Name: identity_rating_repair_page identity_rating_repair_page_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_rating_repair_page
+    ADD CONSTRAINT identity_rating_repair_page_pkey PRIMARY KEY (partition_no, scope_key, selection_digest);
+
+
+--
 -- Name: identity_receiving_capture_pending identity_receiving_capture_pending_pkey; Type: CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -11648,6 +11705,13 @@ CREATE INDEX identity_epoch_topology_open_home ON semantic.identity_epoch_bootst
 --
 
 CREATE INDEX identity_public_dirty_revision ON semantic.identity_public_dirty USING btree (partition_no, revision, original);
+
+
+--
+-- Name: identity_rating_repair_page_unacknowledged; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_rating_repair_page_unacknowledged ON semantic.identity_rating_repair_page USING btree (partition_no, scope_key) WHERE (NOT acknowledged);
 
 
 --
@@ -15376,6 +15440,14 @@ ALTER TABLE ONLY semantic.identity_public_output_transition
 
 
 --
+-- Name: identity_rating_repair_page identity_rating_repair_page_partition_no_scope_key_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
+--
+
+ALTER TABLE ONLY semantic.identity_rating_repair_page
+    ADD CONSTRAINT identity_rating_repair_page_partition_no_scope_key_fkey FOREIGN KEY (partition_no, scope_key) REFERENCES semantic.identity_rating_repair_journal(partition_no, scope_key);
+
+
+--
 -- Name: identity_scope_consumer_fence identity_scope_consumer_fence_partition_no_source_key_scop_fkey; Type: FK CONSTRAINT; Schema: semantic; Owner: -
 --
 
@@ -15765,35 +15837,6 @@ ALTER TABLE ONLY semantic.statement_disclosure
 
 ALTER TABLE ONLY semantic.term_head
     ADD CONSTRAINT term_head_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
-
-
--- Domain replay evidence, independent of the producer's vote/provenance inventory.
-CREATE TABLE semantic.identity_rating_repair_journal (
-  partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
-  scope_key text NOT NULL CHECK (scope_key ~ '^[a-f0-9]{64}$'),
-  scope jsonb NOT NULL CHECK (octet_length(scope::text) <= 4096),
-  owner_node text NOT NULL CHECK (octet_length(owner_node) BETWEEN 1 AND 256),
-  owner_epoch integer NOT NULL CHECK (owner_epoch > 0),
-  checkpoint jsonb CHECK (octet_length(checkpoint::text) <= 32768),
-  reclaimed boolean NOT NULL DEFAULT false,
-  PRIMARY KEY (partition_no, scope_key),
-  CHECK (NOT reclaimed OR (checkpoint->>'phase') IS NOT DISTINCT FROM 'complete')
-);
-
-CREATE TABLE semantic.identity_rating_repair_page (
-  partition_no integer NOT NULL,
-  scope_key text NOT NULL,
-  selection_digest text NOT NULL CHECK (selection_digest ~ '^[a-f0-9]{64}$'),
-  selected_page jsonb NOT NULL CHECK (octet_length(selected_page::text) <= 131072),
-  binding jsonb NOT NULL CHECK (octet_length(binding::text) <= 16384),
-  receipt jsonb NOT NULL CHECK (octet_length(receipt::text) <= 8192),
-  acknowledged boolean NOT NULL DEFAULT false,
-  PRIMARY KEY (partition_no, scope_key, selection_digest),
-  FOREIGN KEY (partition_no, scope_key)
-    REFERENCES semantic.identity_rating_repair_journal(partition_no, scope_key)
-);
-CREATE UNIQUE INDEX identity_rating_repair_page_unacknowledged
-  ON semantic.identity_rating_repair_page(partition_no, scope_key) WHERE NOT acknowledged;
 
 
 --
