@@ -2784,8 +2784,6 @@ canonical equivalence.
   and sealed replay. `services/kernel/test/imports/bangumi-person-careers.test.ts`
   covers default review/adoption, current reads and ordinary source proposals;
   broader acceptance remains integration-owned.
-=======
-
 ### Bangumi TVAnime official websites
 
 The official-website projection runs through ordinary `bangumi@14` and the

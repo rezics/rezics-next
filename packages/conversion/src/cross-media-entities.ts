@@ -10,7 +10,6 @@ import {
   type BatchStatement,
   type FieldGroup,
 } from '@rezics/definitions/bulk';
-<<<<<<< HEAD
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
@@ -41,7 +40,6 @@ import {
 } from './bangumi-character-measurements.ts';
 import { projectBangumiPersonBirthDate, type BangumiPersonBirthDate } from './bangumi-person-birth-date.ts';
 
-<<<<<<< HEAD
 export const converter_revision = 'cross-media-entities@14';
 export const bangumiCharacterNameCommandLimit =
   2 +
