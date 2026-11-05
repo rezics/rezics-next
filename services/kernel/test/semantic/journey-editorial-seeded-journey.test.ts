@@ -1,14 +1,15 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { setupContent } from '../../src/content/setup.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { setupSemantic } from '../../src/semantic/setup.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
@@ -186,7 +187,7 @@ async function inspectRevisions(subjectId: string) {
 }
 
 beforeAll(async () => {
-  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
+  await setupSemantic(pool, bundledRelease);
   await setupPresentation(pool);
   await setupContent(pool);
   for (const account of Object.values(accounts))
