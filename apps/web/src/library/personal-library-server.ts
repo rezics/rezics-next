@@ -57,7 +57,7 @@ export async function prepareShelfTitleStep(
   authorization: string,
   key: string,
 ): Promise<ShelfTitlePreparationReceipt> {
-  const response = await client.libraryShelfTitlePreparation.post({
+  const response = await client.libraryShelfTitlePreparation.post(undefined, {
     headers: { authorization, 'idempotency-key': key },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
