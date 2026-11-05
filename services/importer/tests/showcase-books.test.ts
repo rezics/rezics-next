@@ -315,7 +315,7 @@ function reviewWorld(journal: ShowcaseJournal) {
       return Response.json(read(id));
     }) as typeof fetch,
   });
-  return { port, review, publicClient, subjects, receipts };
+  return { port, rawPort: basePort, review, publicClient, subjects, receipts };
 }
 
 test('fresh book seed publishes current authors and keeps grain, membership and source names', async () => {
@@ -576,7 +576,12 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
 
     journal.close();
     journal = new ShowcaseJournal(journalPath);
-    const reopened = await importShowcaseBooks({ ...input, journal, prior: publication });
+    const reopened = await importShowcaseBooks({
+      ...input,
+      port: captureShowcaseCommands(world.rawPort, journal),
+      journal,
+      prior: publication,
+    });
     expect(reopened.selected).toEqual(first.selected);
     for (const key of [
       '499', '26', '2815', '5329', '10862', '233',
