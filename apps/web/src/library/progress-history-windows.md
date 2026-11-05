@@ -19,10 +19,13 @@ Router/QueryClient; no old DTO, arrays, snapshot, command, credentials or browse
 Keyboard movement may focus its admitted heading once; independent focus, cancellation or replacement cancels it.
 
 After ordinary preparation, one detail read composes four native requests: one session, one at-most-100-row changes
-page, one at-most-100-row completed-units page and one published-log page. The existing batched Subject labels/types
-remain additional metadata work. A stale changes/units cursor adds exactly its existing one cursorless native page
+page, one at-most-100-row completed-units page and one at-most-100-row published-log page. Labels arrive embedded
+in these native responses. One existing `nameSubjectTypes` batch names the session Subject, optional version Subject
+and the log page Subjects (at most 102 inputs, with type descriptor deduplication/cache owned by that reader).
+A stale changes/units cursor adds exactly its existing one cursorless native page
 retry; both stale sections add two. Each section replaces its one page; nothing prefetches, refills, scans totals,
-requests per row or reads automatically. Log pagination remains separate and preserves its exact address.
+requests per row or reads automatically. Log pagination and its existing stale-cursor retry remain separate and
+preserve its exact address.
 
 Historical facts preserve raw text, unknown measures, native ordering and duplicate unit occurrences. Disclosure
 identity is scoped to native page replacement. These pages imply neither totals nor terminal state nor canonical
