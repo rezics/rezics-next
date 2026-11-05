@@ -53,7 +53,7 @@ function selectedPlan(releaseDate: string) {
 }
 
 test('selected Bangumi Game date is independently adopted, read at source precision, refreshed on the same UUID and fenced', async () => {
-  expect(converter_revision).toBe('bangumi@14');
+  expect(converter_revision).toBe('bangumi@15');
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
   const directory = await mkdtemp(join(tmpdir(), 'bangumi-game-publication-native-'));
   const importPath = join(directory, 'import.sqlite');

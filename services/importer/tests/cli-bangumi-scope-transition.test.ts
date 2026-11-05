@@ -45,7 +45,7 @@ test('ordinary Bangumi registration converts named 3/6 records and keeps identit
   }
   expect(seen).toEqual([]);
   const returned = convert({ id: 71001, type: 1, name: 'The Cartographer’s Book: Revised' });
-  expect(registration.converter_revision).toBe('bangumi@14');
+  expect(registration.converter_revision).toBe('bangumi@15');
   expect(returned.digest).not.toBe(initial.digest);
   expect(returned.proposals).toHaveLength(2);
   expect(convert(JSON.parse(JSON.stringify(returned.normalized)))).toEqual(returned);
@@ -54,7 +54,7 @@ test('ordinary Bangumi registration converts named 3/6 records and keeps identit
     expect(proposal.source).toMatchObject({
       source: 'bangumi',
       external_id: '71001',
-      converter_revision: 'bangumi@14',
+      converter_revision: 'bangumi@15',
     });
   }
 });
@@ -105,7 +105,7 @@ test('ordinary Bangumi CLI seals the whole transition input before any Auth or p
         }) as unknown as typeof fetch,
       },
     );
-    expect(revisions).toEqual(['bangumi@14']);
+    expect(revisions).toEqual(['bangumi@15']);
     expect(result.code).toBe(2);
     expect(result.openHandles).toBe(0);
     expect(requests).toEqual([]);

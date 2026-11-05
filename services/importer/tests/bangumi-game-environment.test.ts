@@ -143,7 +143,7 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
     { kind: 'engine' as const, item: 'Unity', conceptId: unity, sourceUri: 'https://bgm.tv/info/engine/Unity' },
   ];
   try {
-    expect(converter_revision).toBe('bangumi@14');
+    expect(converter_revision).toBe('bangumi@15');
     const selected = selectedPlan();
     expect(selected.records.bangumi.map((row) => row.key)).toContain(String(targetId));
     const first = await seedCrossMedia(selected, join(stateDir, 'state.sqlite'), port, undefined, {
@@ -182,7 +182,7 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
         },
       },
     );
-    expect(ordinary.converter_revision).toBe('bangumi@14');
+    expect(ordinary.converter_revision).toBe('bangumi@15');
     expect(ordinary.diagnostics).toContainEqual({ pointer: '/platform', code: 'catalogue_has_no_platform_property' });
     expect(ordinary.diagnostics).toContainEqual({
       pointer: '/infobox/游戏类型/0',

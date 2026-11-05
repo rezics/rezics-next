@@ -54,7 +54,7 @@ test('Bangumi Game destinations retain exact native properties and withhold unsa
   );
 
   expect(registration.converter_revision).toBe(converter_revision);
-  expect(registration.converter_revision).toBe('bangumi@14');
+  expect(registration.converter_revision).toBe('bangumi@15');
   expect(destinations.map((command) => [command.statement.property.id, value(command)])).toEqual([
     ['schema:url', 'https://Official.Game.example/portal?region=global#home'],
     ['wdt:P973', 'https://guide.example/story?chapter=2#walkthrough'],

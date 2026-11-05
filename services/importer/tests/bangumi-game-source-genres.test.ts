@@ -33,7 +33,7 @@ const emptyReviewedCandidates = async (): Promise<ReviewedCandidatePage> =>
   ({ candidates: [], next: null }) as unknown as ReviewedCandidatePage;
 
 test('ordinary Game conversion preserves the exact infobox literal and withholds unavailable or wrong-scheme bindings', async () => {
-  expect(converter_revision).toBe('bangumi@14');
+  expect(converter_revision).toBe('bangumi@15');
   expect(bangumiGameSourceGenres(record).requirements.map((item) => item.literal)).toEqual([literal]);
   const tooMany = bangumiGameSourceGenres({
     type: 4,
@@ -86,7 +86,7 @@ test('ordinary Game conversion preserves the exact infobox literal and withholds
   );
   expect(proposal).toMatchObject({
     subject: gameId,
-    source: { external_id: String(record.id), converter_revision: 'bangumi@14' },
+    source: { external_id: String(record.id), converter_revision: 'bangumi@15' },
     statement: {
       property: { id: 'schema:genre' },
       value: { type: 'value', content: conceptId },
