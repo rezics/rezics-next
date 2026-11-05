@@ -156,3 +156,5 @@ Decision: encode each logical caller key as a structured-field string once at th
 Unknown acknowledgements retain the original transport and encrypted sender through the existing private-command
 credential owner; current viewer/CSRF, mounted reader, address and exposure still fence replay and disclosure.
 A result read never clears an uncertain command. No new receipt store or automatic retry is introduced.
+The receiver's mounted-route journey is `services/kernel/test/library/label-consolidation-native-web.test.ts`:
+Kernel's native runner supplies SQL compilation and database custody; Web's focused runner retains the visit tests.
