@@ -297,7 +297,7 @@ function AuthorErasureEntryVisit({
                 variant: 'outline',
                 className: 'h-auto min-h-11 max-w-full whitespace-normal text-left',
               })}
-              href={`/${getLocale()}/operations/${encodeURIComponent(result.operationId)}`}
+              href={`/${browser.locale}/operations/${encodeURIComponent(result.operationId)}`}
             >
               {m.author_erasure_view_progress()}
             </a>
