@@ -10,7 +10,7 @@ import {
 import { CANONICAL_SOURCE_RECEIVING_COST } from '../../src/library/canonical-source-bounds.ts';
 import { MEMBERS_DEFINITION_QUERY_BOUNDS } from '../../src/search/scope-members-work-cost.ts';
 import { MEMBERS_SELECTED_CHILDREN } from '../../src/library/members-preparation-work.ts';
-import { NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING } from '../../src/library/native-public-output-work.ts';
+import { NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING } from '../../src/library/native-public-output-bounds.ts';
 
 test('the selected Members Source has a complete static bound for the declared call paths', () => {
   expect(MEMBERS_PREPARATION_SOURCE_AXES()).toEqual([
