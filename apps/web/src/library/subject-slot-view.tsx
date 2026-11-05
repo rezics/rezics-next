@@ -29,11 +29,7 @@ import {
 import { CollectionChooserPanel } from './subject-collection-journey/chooser';
 import { PublicCollectionsPanel } from './subject-collection-journey/public';
 import { publicCountOf, type CapturedChooserTarget } from './subject-collection-journey';
-import type {
-  SubjectLibraryMutation,
-  SubjectLibraryMutationResponse,
-  SubjectLibrarySlotData,
-} from './subject-slot';
+import type { SubjectLibraryMutation, SubjectLibraryMutationResponse, SubjectLibrarySlotData } from './subject-slot';
 import {
   SubjectEntryStateReview,
   captureEntryStateBasis,

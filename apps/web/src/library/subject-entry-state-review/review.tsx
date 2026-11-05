@@ -236,7 +236,11 @@ function ConflictReview({
         <p className="mt-2 mb-0">{m.library_entry_review_conflict_unavailable()}</p>
       )}
       {canReview ? (
-        <button type="button" className={`${secondaryClass} mt-3 max-w-full whitespace-normal ${focusClass}`} onClick={onReview}>
+        <button
+          type="button"
+          className={`${secondaryClass} mt-3 max-w-full whitespace-normal ${focusClass}`}
+          onClick={onReview}
+        >
           {m.library_entry_review_conflict_review()}
         </button>
       ) : null}
@@ -288,7 +292,10 @@ export function SubjectEntryStateReview({
     restoreControlFocus.current = false;
     focusReviewHeading.current = false;
   }
-  if (draft && (draft.originKey !== originKey || draft.lifetime !== lifetime || !entryStateBasisMatches(draft.basis, entry))) {
+  if (
+    draft &&
+    (draft.originKey !== originKey || draft.lifetime !== lifetime || !entryStateBasisMatches(draft.basis, entry))
+  ) {
     setDraft(null);
     setStage(null);
     setNotice(null);
@@ -304,11 +311,7 @@ export function SubjectEntryStateReview({
       heading.current?.focus();
       return;
     }
-    if (
-      !restoreControlFocus.current ||
-      (draft !== null && stage !== 'edit') ||
-      (draft === null && stage !== null)
-    )
+    if (!restoreControlFocus.current || (draft !== null && stage !== 'edit') || (draft === null && stage !== null))
       return;
     restoreControlFocus.current = false;
     if (lifetime.current('library_entry.get', 'library_entry.put'))
@@ -323,7 +326,12 @@ export function SubjectEntryStateReview({
     entryStateBasisMatches(currentBasis, entry);
 
   function captureChoice(choice: Extract<Draft, { kind: 'state' }>['state'], label: string, language: string) {
-    if (!current() || !stateOptions.some((option) => option.id === choice && option.label.text === label && option.label.lang === language))
+    if (
+      !current() ||
+      !stateOptions.some(
+        (option) => option.id === choice && option.label.text === label && option.label.lang === language,
+      )
+    )
       return;
     setNotice(null);
     setDraft({
@@ -435,7 +443,8 @@ export function SubjectEntryStateReview({
     )
       return;
     const choice = stateOptions.find(({ id }) => id === conflict.state);
-    if (!choice || choice.label.text !== conflict.stateLabel || choice.label.lang !== conflict.stateLabelLanguage) return;
+    if (!choice || choice.label.text !== conflict.stateLabel || choice.label.lang !== conflict.stateLabelLanguage)
+      return;
     captureChoice(choice.id as LibraryEntryStateWrite, choice.label.text, choice.label.lang);
   }
 
@@ -443,19 +452,23 @@ export function SubjectEntryStateReview({
     conflict?.originKey === originKey &&
     conflict.hasAcceptedBasis &&
     entryStateBasisMatches(captureEntryStateBasis(conflict.acceptedEntry ?? null), entry);
-  const conflictChoice = conflict && stateOptions.find(({ id, label }) =>
-    id === conflict.state && label.text === conflict.stateLabel && label.lang === conflict.stateLabelLanguage,
-  );
+  const conflictChoice =
+    conflict &&
+    stateOptions.find(
+      ({ id, label }) =>
+        id === conflict.state && label.text === conflict.stateLabel && label.lang === conflict.stateLabelLanguage,
+    );
   const canReviewConflict =
-    !!conflict && !!conflictCurrent && !!conflictChoice && !disabled && !busy && !uncertain &&
+    !!conflict &&
+    !!conflictCurrent &&
+    !!conflictChoice &&
+    !disabled &&
+    !busy &&
+    !uncertain &&
     lifetime.current('library_entry.get', 'library_entry.put');
 
   return (
-    <div
-      data-library-entry
-      data-entry-state-review
-      className="flex min-w-0 max-w-full flex-wrap items-start gap-2"
-    >
+    <div data-library-entry data-entry-state-review className="flex min-w-0 max-w-full flex-wrap items-start gap-2">
       {draft && stage === 'review' ? (
         <section
           aria-labelledby={headingId}
@@ -475,10 +488,14 @@ export function SubjectEntryStateReview({
             <button
               type="button"
               className={`${primaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
-              disabled={disabled || busy || uncertain || saving || !lifetime.current('library_entry.get', 'library_entry.put')}
+              disabled={
+                disabled || busy || uncertain || saving || !lifetime.current('library_entry.get', 'library_entry.put')
+              }
               onClick={() => void saveChoice()}
             >
-              {saving || busy ? <Loader2Icon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" /> : null}
+              {saving || busy ? (
+                <Loader2Icon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" />
+              ) : null}
               {draft.kind === 'keep-current' || (entry && draft.state === entry.state)
                 ? m.library_entry_review_no_change_confirm()
                 : m.library_entry_review_save()}
@@ -528,7 +545,11 @@ export function SubjectEntryStateReview({
                 className={`${primaryClass} min-h-[44px] max-w-full whitespace-normal ${focusClass}`}
                 disabled={disabled || busy || uncertain || saving}
                 onClick={() => {
-                  if (draft.originKey !== originKey || draft.lifetime !== lifetime || !entryStateBasisMatches(draft.basis, entry))
+                  if (
+                    draft.originKey !== originKey ||
+                    draft.lifetime !== lifetime ||
+                    !entryStateBasisMatches(draft.basis, entry)
+                  )
                     return discardChoice();
                   setStage('review');
                   focusReviewHeading.current = true;

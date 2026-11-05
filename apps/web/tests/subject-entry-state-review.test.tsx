@@ -56,7 +56,9 @@ function lifetime(seed: string, active = { value: true }): SlotLifetime {
   return { seed, active: true, current: (..._operations) => active.value };
 }
 function button(host: HTMLElement, label: string): HTMLButtonElement {
-  const found = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === label);
+  const found = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent?.trim() === label,
+  );
   expect(found).toBeDefined();
   return found!;
 }

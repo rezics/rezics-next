@@ -707,7 +707,9 @@ test(
       expect(await review.innerText()).toContain(subject.labels.en);
       expect(await review.innerText()).toContain(subjectId);
       expect(await review.innerText()).toContain('In progress');
-      expect(calls.filter((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`)).toHaveLength(0);
+      expect(
+        calls.filter((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`),
+      ).toHaveLength(0);
       await page.setViewportSize({ width: 390, height: 844 });
       expect(await review.getByRole('button', { name: 'Save state', exact: true }).isVisible()).toBe(true);
       expect(await review.getByRole('button', { name: 'Discard choice', exact: true }).isVisible()).toBe(true);
