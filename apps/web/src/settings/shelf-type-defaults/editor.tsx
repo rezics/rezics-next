@@ -95,12 +95,14 @@ function OwnerShelfTypeDefaults({
     };
   }, []);
   const current = () => lifetime.current.active && isCurrent();
+  const renderedRevision = lifetime.current.revision;
+  const currentChoice = () => current() && renderedRevision === lifetime.current.revision;
   useLayoutEffect(() => {
     if (focus.current && page?.state === 'loaded' && current()) heading.current?.focus();
     focus.current = false;
   });
   async function read(movement: 'read' | 'next' | 'previous' | 'first' | 'retry' = 'read', cursor?: string) {
-    if (!current() || !subject || inFlight.current) return;
+    if (!currentChoice() || !subject || inFlight.current) return;
     const target = navigation.current.stage(movement, cursor);
     if (!target) return;
     const next = target.cursor;
@@ -158,7 +160,7 @@ function OwnerShelfTypeDefaults({
         type="button"
         variant="outline"
         className="min-h-11 max-w-full whitespace-normal"
-        disabled={!subject || busy || !current()}
+        disabled={!subject || busy || !currentChoice()}
         onClick={() => void read(page && page.state !== 'loaded' ? 'retry' : 'read')}
       >
         {page && page.state !== 'loaded' ? m.library_types_retry() : m.settings_shelf_types_load()}
@@ -184,9 +186,9 @@ function OwnerShelfTypeDefaults({
           <select
             className="min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2"
             value={knownScope ? selected : ''}
-            disabled={!current() || busy}
+            disabled={!currentChoice() || busy}
             onChange={(event) => {
-              if (current()) setSelected(event.currentTarget.value);
+              if (currentChoice()) setSelected(event.currentTarget.value);
             }}
           >
             <option value="">{m.settings_shelf_type_choose()}</option>
@@ -214,10 +216,10 @@ function OwnerShelfTypeDefaults({
               <select
                 className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
                 value={override ?? ''}
-                disabled={disabled || !current()}
+                disabled={disabled || !currentChoice()}
                 onChange={(event) => {
                   const value = event.currentTarget.value;
-                  if (!current() || (atLimit && value)) return;
+                  if (!currentChoice() || (atLimit && value)) return;
                   const layout = supportedLayouts.find((candidate) => candidate === value);
                   if (!value || layout) onChange(selected, layout);
                 }}
@@ -242,9 +244,9 @@ function OwnerShelfTypeDefaults({
               type="button"
               variant="outline"
               className="min-h-11 max-w-full whitespace-normal"
-              disabled={disabled || !current()}
+              disabled={disabled || !currentChoice()}
               onClick={() => {
-                if (current()) onChange(selected, undefined);
+                if (currentChoice()) onChange(selected, undefined);
               }}
             >
               {m.settings_shelf_type_remove()}
@@ -255,7 +257,7 @@ function OwnerShelfTypeDefaults({
               className={`${buttonVariants({ variant: 'outline' })} min-h-11 max-w-full whitespace-normal`}
               href={shelfHref(locale, { type: selected })}
               onClick={(event) => {
-                if (!current()) event.preventDefault();
+                if (!currentChoice()) event.preventDefault();
               }}
             >
               {m.settings_shelf_type_visit()}
@@ -268,7 +270,7 @@ function OwnerShelfTypeDefaults({
           type="button"
           variant="outline"
           className="min-h-11 max-w-full whitespace-normal"
-          disabled={busy || !current()}
+          disabled={busy || !currentChoice()}
           onClick={() => void read('next', page.next!)}
         >
           {m.library_types_next()}
@@ -279,7 +281,7 @@ function OwnerShelfTypeDefaults({
           type="button"
           variant="outline"
           className="min-h-11 max-w-full whitespace-normal"
-          disabled={busy || !current()}
+          disabled={busy || !currentChoice()}
           onClick={() => void read('previous')}
         >
           {m.library_collections_previous()}
@@ -290,7 +292,7 @@ function OwnerShelfTypeDefaults({
           type="button"
           variant="outline"
           className="min-h-11 max-w-full whitespace-normal"
-          disabled={busy || !current()}
+          disabled={busy || !currentChoice()}
           onClick={() => void read('first')}
         >
           {m.library_types_first()}
