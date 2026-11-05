@@ -5,7 +5,7 @@ import * as start from '../.storybook/react-start';
 import type { FollowControlProps } from '../src/library/follow-control';
 import type { FollowState, FollowWriteInput, FollowWriteResult } from '../src/library/follow-records';
 
-// UNRUN: mounted regressions for integration. Puck's installed DOM is reused without new dependencies.
+// Mounted regressions for integration. Puck's installed DOM is reused without new dependencies.
 // These controlled transports do not prove native authorization or browser/session integration.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -46,6 +46,15 @@ const writes: (ReturnType<typeof deferred<FollowWriteResult>> & { input: FollowW
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/library/follow-actions', () => ({
+  readCurrentFollowState: ({ data }: { data: { targetId: string } }) => {
+    const call = { ...deferred<FollowState>(), targetId: data.targetId };
+    reads.push(call);
+    return call.promise.then((edge) => ({
+      subject: client.getQueryData<{ subject: string | null }>(sessionQuery.queryKey)?.subject ?? null,
+      targetId: data.targetId,
+      edge,
+    }));
+  },
   readFollowState: ({ data }: { data: { targetId: string } }) => {
     const call = { ...deferred<FollowState>(), targetId: data.targetId };
     reads.push(call);
