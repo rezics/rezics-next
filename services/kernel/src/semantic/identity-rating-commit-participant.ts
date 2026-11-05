@@ -306,8 +306,8 @@ function validateEvidenceString(
     sourceLocators.length !== locatorKeys.length ||
     sourceLocators.some((key, index) => key !== locatorKeys[index]) ||
     !unique(sources, (row) => row.subject_id as string) ||
-    !unique(owners, (row) => row.partition_no as number) ||
-    !unique(controls, (row) => row.partition_no as number) ||
+    !unique(owners, (row) => String(row.partition_no)) ||
+    !unique(controls, (row) => String(row.partition_no)) ||
     !unique(pendingRows, (row) => `${row.partition_no}:${row.terminal}`) ||
     !unique(currentRows, (row) => `${row.partition_no}:${row.terminal}:${row.requested_original}`) ||
     !unique(disclosureRows, (row) => row.subject_id as string) ||
@@ -475,7 +475,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         throw new IdentityRatingCommitUnavailableError('foreign-control');
 
       const client = deadlineClient(tx, deadline);
-      const owner = (await lockOwner.run(client, { partition_no: command.partition }))[0];
+      const owner = await lockOwner.run(client, { partition_no: command.partition });
       if (!owner || owner.writeState !== 'active')
         throw new IdentityRatingCommitUnavailableError(owner?.writeState === 'moved' ? 'moved' : 'unavailable', command.partition);
       const native = await readIdentityRatingEvidenceInTransaction(client, {
