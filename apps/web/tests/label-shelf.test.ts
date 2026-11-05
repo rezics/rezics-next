@@ -19,6 +19,7 @@ const sessionId = 'b'.repeat(43);
 type Captured = { method: string; path: string; query: Record<string, string>; authorization: string | null };
 const requests: Captured[] = [];
 let pageSize = 10;
+let assignmentOverride: { status: number; body: unknown; cursorOnly?: boolean } | null = null;
 
 const fakeKernel = Bun.serve({
   hostname: '127.0.0.1',
@@ -37,6 +38,8 @@ const fakeKernel = Bun.serve({
       const requestedLabelId = url.searchParams.get('labelId');
       if (requestedLabelId && requestedLabelId !== labelId)
         return Response.json({ code: 'not_found' }, { status: 404 });
+      if (assignmentOverride && (!assignmentOverride.cursorOnly || url.searchParams.has('cursor')))
+        return Response.json(assignmentOverride.body, { status: assignmentOverride.status });
       const assignments = Array.from({ length: pageSize }, (_, index) => {
         const id = `0192f3a0-6c1e-7b2a-9d4e-${String(900 + index).padStart(12, '0')}`;
         if (index === 2)
@@ -175,6 +178,72 @@ test('one FULL label-assignment read supplies the whole tile page, name and curs
       }),
     ]);
     expect(requests).toHaveLength(2);
+  }
+});
+
+test('rejected native Label cursors offer a deliberate same-Label first page without changing other outcomes', async () => {
+  const rejected = [
+    { status: 400, code: 'invalid_cursor', recover: true },
+    { status: 409, code: 'stale_cursor', recover: true },
+    { status: 409, code: 'invalid_cursor', recover: false },
+    { status: 400, code: 'stale_cursor', recover: false },
+  ];
+  try {
+    for (const outcome of rejected) {
+      requests.length = 0;
+      assignmentOverride = { status: outcome.status, body: { code: outcome.code }, cursorOnly: true };
+      const page = await loadLabelShelfPage(client() as never, request(), env, {
+        labelId,
+        cursor: 'opaque-page-token',
+        limit: 100,
+      });
+      expect(page.state).toBe(outcome.recover ? 'cursor-rejected' : 'unavailable');
+      expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toEqual([
+        expect.objectContaining({
+          query: { labelId, view: 'FULL', limit: '100', cursor: 'opaque-page-token' },
+          authorization: 'Bearer native-web-token',
+        }),
+      ]);
+      if (!outcome.recover) continue;
+      expect(page).toEqual({ state: 'cursor-rejected', labelId });
+      const html = renderToStaticMarkup(
+        createElement(LabelShelfPage, {
+          page,
+          locale: 'ja',
+          display: {
+            layout: 'table',
+            size: 'l',
+            columns: 'title',
+            layoutExplicit: true,
+            sizeExplicit: true,
+            columnsExplicit: true,
+          },
+        }),
+      );
+      expect(html).toContain('このラベルの続きのページを読み込めませんでした。');
+      expect(html).toContain(`/ja/library?label=${labelId}&amp;layout=table&amp;size=l&amp;columns=title`);
+      expect(html).not.toContain('opaque-page-token');
+      expect(html).not.toContain('Reading list');
+      expect(html).not.toContain('<form');
+      expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toHaveLength(1);
+    }
+
+    for (const outcome of [
+      { status: 403, code: 'permission_denied', state: 'denied' },
+      { status: 403, code: 'platform_closed', state: 'closed' },
+      { status: 500, code: 'service_unavailable', state: 'unavailable' },
+    ]) {
+      assignmentOverride = { status: outcome.status, body: { code: outcome.code } };
+      expect(
+        await loadLabelShelfPage(client() as never, request(), env, {
+          labelId,
+          cursor: 'opaque-page-token',
+          limit: 100,
+        }),
+      ).toMatchObject({ state: outcome.state });
+    }
+  } finally {
+    assignmentOverride = null;
   }
 });
 

@@ -1172,6 +1172,7 @@
   "library_following_spaces": "Espacios",
   "library_following_subjects": "Fichas",
   "library_heading": "Biblioteca",
+  "library_label_cursor_rejected": "No se pudo cargar la continuación de esta etiqueta.",
   "library_label_shelf_closed": "Esta estantería no está disponible en este momento.",
   "library_label_shelf_empty": "Todavía no hay obras con esta etiqueta.",
   "library_label_shelf_remove": "Quitar esta etiqueta de la obra",

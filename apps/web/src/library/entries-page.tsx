@@ -336,6 +336,19 @@ export function LabelShelfPage({
   isCurrent?: () => boolean;
   canUnassign?: () => boolean;
 }) {
+  if (page.state === 'cursor-rejected') {
+    const firstPageView: ShelfPresentationIntent = presentation?.intent ?? {
+      label: page.labelId,
+      ...explicitShelfDisplay(display),
+    };
+    return (
+      <div className="max-w-6xl space-y-6 text-foreground">
+        <PageHeading>{m.library_labels_heading()}</PageHeading>
+        <p role="alert">{m.library_label_cursor_rejected()}</p>
+        <EntriesFirstPage locale={locale} view={firstPageView} />
+      </div>
+    );
+  }
   if (page.state === 'unavailable' || page.state === 'denied' || page.state === 'preparing')
     return (
       <div className="max-w-6xl space-y-6 text-foreground">

@@ -1172,6 +1172,7 @@
   "library_following_spaces": "Bereiche",
   "library_following_subjects": "Einträge",
   "library_heading": "Bibliothek",
+  "library_label_cursor_rejected": "Die Fortsetzung dieses Labels konnte nicht geladen werden.",
   "library_label_shelf_closed": "Dieses Regal ist derzeit nicht verfügbar.",
   "library_label_shelf_empty": "Dieses Label ist noch keinem Werk zugeordnet.",
   "library_label_shelf_remove": "Label von diesem Werk entfernen",
