@@ -646,7 +646,7 @@ test('a missing returned notice names the changed result, focuses the heading, a
     await act(async () => view.router.history.back());
     await view.settle(() => view.host.textContent?.includes(m.inbox_return_notice_missing()) === true);
 
-    expect(view.host.textContent).toContain('current-neighbor');
+    expect(view.host.textContent).toContain('Fresh selected page');
     expect(view.host.textContent).not.toContain('Original unread notice');
     expect(document.activeElement).toBe(view.host.querySelector('h1'));
     expect(document.activeElement).not.toBe(
