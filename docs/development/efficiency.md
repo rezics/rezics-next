@@ -148,6 +148,9 @@ admission are separate controls. More workers are useful only when journey throu
 Keep routing policy in tracked configuration and private allowance settings locally. Compare profiles on representative
 accepted work before changing defaults.
 
+Decision: This cross-module imports seed and franchise journey keeps the routed default because it requires debugging
+unknown causes and cross-module contract and security judgment.
+
 A model pin changes routing, not authorization to exceed an operating budget. Pause and pacing policy must be enforced
 by the controller.
 
