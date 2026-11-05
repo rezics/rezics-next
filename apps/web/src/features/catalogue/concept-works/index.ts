@@ -140,12 +140,7 @@ function hasFixedConcept(value: unknown): boolean {
 
 function boundedFixedConceptRequest(request: DiscoveryRequest): boolean {
   const filter = request.filter as unknown;
-  if (
-    !isRecord(filter) ||
-    !Array.isArray(filter.and) ||
-    filter.and.length !== 2 ||
-    request.kindCountLeaf !== 1
-  )
+  if (!isRecord(filter) || !Array.isArray(filter.and) || filter.and.length !== 2 || request.kindCountLeaf !== 1)
     return false;
   const [condition, kind] = filter.and;
   if (

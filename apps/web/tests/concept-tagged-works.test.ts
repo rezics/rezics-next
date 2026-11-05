@@ -208,7 +208,12 @@ test('builds one admitted Concept statement with released work kinds and the des
   );
   const leaf = descendants?.filter ? conceptLeaf(descendants.filter as FilterDocument) : undefined;
   expect(leaf?.statement.concept).toEqual({ scheme: schemeId, includeChildren: true });
-  expect(descendants?.filter).toMatchObject({ and: [{ statement: { concept: { scheme: schemeId } } }, { kind: { in: admission.properties.find((property) => property.id === 'schema:genre')?.types } }] });
+  expect(descendants?.filter).toMatchObject({
+    and: [
+      { statement: { concept: { scheme: schemeId } } },
+      { kind: { in: admission.properties.find((property) => property.id === 'schema:genre')?.types } },
+    ],
+  });
   expect(
     conceptWorksRequest({ conceptId, property: 'schema:genre', scheme: schemeId }, admission, [], 'en'),
   ).toBeUndefined();

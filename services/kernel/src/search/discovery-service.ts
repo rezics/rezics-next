@@ -116,13 +116,15 @@ type DiscoveryConfiguration = {
   }>;
   now(): number;
   asOf(queried: PublicFilterQueriedObservation): Promise<string | import('./search-context.ts').SearchObservation>;
-  prepareConceptFilter?(input: Readonly<{
-    principal: string;
-    request: unknown;
-    filter: import('@rezics/filter').DiscoveryFilterDocument;
-    limit: number;
-    countCandidateLimit: number;
-  }>): Promise<ConceptFilterExecution | undefined>;
+  prepareConceptFilter?(
+    input: Readonly<{
+      principal: string;
+      request: unknown;
+      filter: import('@rezics/filter').DiscoveryFilterDocument;
+      limit: number;
+      countCandidateLimit: number;
+    }>,
+  ): Promise<ConceptFilterExecution | undefined>;
   prepare?(job: PublicFilterConsumerJob): Promise<void>;
 };
 
@@ -387,9 +389,7 @@ function executeDiscoverySearch(
               filter: admitted.filter,
               limit: admitted.limit,
               countCandidateLimit:
-                admitted.kindCountLeaf === undefined
-                  ? 0
-                  : Math.min(200, discoveryCandidateScanBound(admitted.limit)),
+                admitted.kindCountLeaf === undefined ? 0 : Math.min(200, discoveryCandidateScanBound(admitted.limit)),
             });
       currentContext = {
         ...context,
@@ -598,16 +598,10 @@ function executeDiscoverySearch(
                   inSpace.has(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`),
                 )
               : result.hits;
-            const current = await currentDiscoveryCandidates(
-              registry,
-              selected,
-              admitted.countFilter,
-              release,
-              {
-                ...currentContext,
-                ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
-              },
-            );
+            const current = await currentDiscoveryCandidates(registry, selected, admitted.countFilter, release, {
+              ...currentContext,
+              ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
+            });
             const distinct = new Map<string, Set<string>>();
             for (const candidate of selected) {
               const hit = current.get(candidate);

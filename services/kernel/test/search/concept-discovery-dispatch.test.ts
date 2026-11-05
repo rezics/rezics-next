@@ -86,9 +86,7 @@ const filter = (includeChildren: boolean, metric = 'vndbTagsRating'): FilterDocu
     in: [root],
     concept: { scheme, ...(includeChildren ? { includeChildren: true } : {}) },
     qualifiers: qualifiers.map((qualifier) =>
-      qualifier.property === 'rezics:sourceTagWeightMetric'
-        ? { ...qualifier, in: [metric] }
-        : qualifier,
+      qualifier.property === 'rezics:sourceTagWeightMetric' ? { ...qualifier, in: [metric] } : qualifier,
     ),
   },
 });

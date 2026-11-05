@@ -68,17 +68,19 @@ type ConceptBrowseCut = ConceptStatementCut;
  * evaluates candidates. The same complete cut serves exact and descendant statements; the shared
  * native matcher still decides exactness, qualifiers, Boolean logic and current disclosure.
  */
-export async function prepareConceptDiscoveryFilter(input: Readonly<{
-  pool: Pool;
-  prefix: string;
-  routeKey: Uint8Array;
-  principal: string;
-  request: unknown;
-  filter: DiscoveryFilterDocument;
-  limit: number;
-  countCandidateLimit: number;
-  now?: () => number;
-}>): Promise<ConceptFilterExecution | undefined> {
+export async function prepareConceptDiscoveryFilter(
+  input: Readonly<{
+    pool: Pool;
+    prefix: string;
+    routeKey: Uint8Array;
+    principal: string;
+    request: unknown;
+    filter: DiscoveryFilterDocument;
+    limit: number;
+    countCandidateLimit: number;
+    now?: () => number;
+  }>,
+): Promise<ConceptFilterExecution | undefined> {
   const selections = conceptSelections(input.filter);
   if (!selections.length) return undefined;
 
@@ -91,8 +93,7 @@ export async function prepareConceptDiscoveryFilter(input: Readonly<{
   // Each matched statement page observes the hierarchy before and after its retained membership
   // probes; the final retained-primary cut check does so once more. Statement reads have their
   // separate replay allowance below.
-  const maximumObservations =
-    maximumCandidates * (2 * CONCEPT_STATEMENT_PREFIX_LIMITS.windows + 2) * selections.length;
+  const maximumObservations = maximumCandidates * (2 * CONCEPT_STATEMENT_PREFIX_LIMITS.windows + 2) * selections.length;
   const reserveNative = boundedReservation(
     {
       keys: maximumObservations,
@@ -126,7 +127,11 @@ export async function prepareConceptDiscoveryFilter(input: Readonly<{
   const cuts = new Map<string, ConceptBrowseCut>();
   for (const selected of selections) {
     const selection: ConceptDescendantSelection = { ...selected, includeChildren: true };
-    const browse = source.conceptBrowse(selection, { principal: input.principal, request: requestBinding }, reserveNative);
+    const browse = source.conceptBrowse(
+      selection,
+      { principal: input.principal, request: requestBinding },
+      reserveNative,
+    );
     const observed = await browse.observe();
     if (observed.status !== 'current') {
       if (observed.status === 'preparing')
@@ -160,4 +165,3 @@ export async function prepareConceptDiscoveryFilter(input: Readonly<{
     },
   };
 }
-

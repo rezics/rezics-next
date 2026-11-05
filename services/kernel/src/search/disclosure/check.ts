@@ -206,13 +206,19 @@ export async function checkHits(
                   const value = values[index];
                   if (value === undefined) return null;
                   const match = Array.isArray(value)
-                    ? anyCurrentMatch(value.map((point) => {
-                        if (point.result === undefined) throw new TypeError('Relation evidence was not resolved');
-                        return point.result;
-                      }))
+                    ? anyCurrentMatch(
+                        value.map((point) => {
+                          if (point.result === undefined) throw new TypeError('Relation evidence was not resolved');
+                          return point.result;
+                        }),
+                      )
                     : value;
                   return {
-                    read: async () => ({ status: 'current' as const, match, revalidate: async () => 'current' as const }),
+                    read: async () => ({
+                      status: 'current' as const,
+                      match,
+                      revalidate: async () => 'current' as const,
+                    }),
                   };
                 },
               );
