@@ -390,7 +390,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
       if (observation.state === 'signed-in')
         client.setQueryData(['exposure', 'viewer', observation.subject, observation.id], {
           subject: observation.subject,
-          admitted
+          admitted: admitted
             ? ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign']
             : [],
           state: admitted ? 'ready' : 'denied',
