@@ -628,3 +628,12 @@ locale, route, connection or source replacement. Anonymous SSR remains anonymous
 DTO closure and consumer behavior only; Content's native disclosure/growth cases and rendered acceptance remain deferred.
 The page loader passes the incoming request's abort signal to selected location, slug, reading-page and Board reads;
 an ended request cannot publish a page or start later hydration from a late reading response.
+
+## Current-page mention reading
+
+Decision: disclosed mention occurrences use the existing References reader and its occurrence return positions;
+unresolved mentions retain the document codec's `@` text. Identity links and ordinary links share one return host,
+with independent ordinal spaces so equal identities and link marks cannot overwrite each other's targets.
+The native ReadingPage projection must enter through the sole complete-input publisher before replacing Web's
+existing hydration. The receiver derives its identity and exact source binding types from that installed result;
+no local wire declaration substitutes for missing publication. Accounts retains identity admission.
