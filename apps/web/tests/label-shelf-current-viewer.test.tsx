@@ -582,10 +582,33 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(host.textContent).toContain('Refreshed bounded shelf');
     expect(host.textContent).not.toContain(m.library_consolidation_refresh_failed());
     expect(workspace!.page.next).toContain(`private-next-${B}`);
-    await refresh(() => { throw new Error('Refresh unavailable'); });
+    await refresh(() => {
+      throw new Error('Refresh unavailable');
+    });
     expect(host.textContent).toContain(m.library_consolidation_refresh_failed());
-    expect(reads.every((req) => req.method === 'GET')).toBe(true);
     receive = (page) => page;
+    hold = B;
+    await act(async () => {
+      workspace!.refreshAssignments(labelId, targetId);
+      workspace!.refreshAssignments(labelId, targetId);
+    });
+    expect(held).toHaveLength(2); // One pair in flight; the second refresh is pending.
+    observe('unknown', null);
+    absent();
+    hold = null;
+    credentialSubject = C;
+    observe('signed-in', C);
+    await settle();
+    visible(C);
+    const cForms = fields();
+    const beforeLateRefresh = reads.length;
+    await act(async () => {
+      for (const pending of held.splice(0)) pending.resolve(pending.response);
+    });
+    visible(C);
+    expect(fields()).toEqual(cForms);
+    expect(reads).toHaveLength(beforeLateRefresh); // The retired pending refresh cannot start another pair.
+    expect(reads.every((req) => req.method === 'GET')).toBe(true);
   } finally {
     hold = null;
     for (const pending of held.splice(0)) pending.resolve(pending.response);
