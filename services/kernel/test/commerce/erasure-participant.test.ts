@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { bootstrapLocalShowcaseBoardCreation, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
@@ -197,11 +197,13 @@ beforeAll(async () => {
   personas = await createPersonas(kernel, { version: 1, pool, auth });
   grants = createGrantCommands({ pool, access: kernel.testAccess, managementAction: 'access:grant' });
   const seller = personas.orgOwner;
-  await bootstrapLocalShowcaseBoardCreation(pool, personas.staff.accountId);
+  // The existing native Commerce fixtures seed these two Global creation capabilities;
+  // the seller, edition, offer, order, and payment still come through their real commands.
   await seedGovernanceAuthority(pool, PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, seller.accountId, [
     'offer:create',
+    'board:create',
   ]);
-  await grant(seller, PLATFORM_RESOURCE, ['board:create', 'subject:create']);
+  await grant(seller, PLATFORM_RESOURCE, ['subject:create']);
   for (const group of ['purchases', 'selling'])
     await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
   const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) =>
