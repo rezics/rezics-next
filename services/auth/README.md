@@ -3181,7 +3181,7 @@ with currentness.
 
 Full-call ceiling: one `withFreshHuman`, five `accessTokenForProof` (three transport/two native), one native
 `authenticate`, one read-time query, two two-account/home snapshots (four points), one Access preparation/formula
-and one Auth user primary-key read. Finite operand caps; no population scan/runtime price. Failures short-circuit. Native I/O/disclosure
+and one Auth user primary-key read. Finite caps; no scan/runtime price. Failures short-circuit. Native I/O/disclosure
 share three seconds; browser reads five, without retry. Security inventories stay separate.
 
 Decision: deletion shares rename approval: exact `{reference,expiresAt}`, nonempty
