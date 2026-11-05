@@ -86,7 +86,7 @@ export function reviewedPersonMergeInput(value: unknown): ReviewedPersonMerge {
   };
 }
 
-/** Native GET review query and POST merge 202 operation admission. */
+/** Transport seam until emit-client can publish the native 202 merge signatures. */
 export function reviewedPersonRequests(client: KernelClient) {
   return {
     read(
@@ -101,13 +101,13 @@ export function reviewedPersonRequests(client: KernelClient) {
           reviewIdentityExternalId: source.externalId,
           includeViewerActions: true,
         },
-      });
+      } as never);
     },
     merge(
       body: ReviewedPersonMerge,
       options: { headers: Record<string, string> & { 'idempotency-key': string }; fetch?: { signal?: AbortSignal } },
     ) {
-      return client.subjects.$merge.post(body, options);
+      return client.subjects.$merge.post(body as never, options);
     },
   };
 }
