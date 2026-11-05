@@ -73,9 +73,10 @@ function assessPool(
       : false,
   );
   if (
-    fresh.some(({ reading }) =>
-      reading.exhausted ||
-      reading.windows.some((window) => window.usedPercent >= 100 - effectiveReserve(pool, window, now)),
+    fresh.some(
+      ({ reading }) =>
+        reading.exhausted ||
+        reading.windows.some((window) => window.usedPercent >= 100 - effectiveReserve(pool, window, now)),
     )
   )
     return null;
@@ -96,9 +97,7 @@ function selectPool(
 ): Pool | undefined {
   const candidates = pools.filter(
     (pool) =>
-      pool.cli === profile.cli &&
-      pool.classes.includes(profile.poolClass) &&
-      !options.exclude?.includes(pool.name),
+      pool.cli === profile.cli && pool.classes.includes(profile.poolClass) && !options.exclude?.includes(pool.name),
   );
   const ranked = candidates
     .map((pool) => {
