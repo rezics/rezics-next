@@ -11406,5 +11406,7 @@
   "library_mal_retry_source_evidence": "Retry source evidence admission",
   "library_mal_score_zero_source": "{value} (zero means unrated)",
   "library_mal_score_source_details": "Value: {value}; MAL scale: {scale}",
-  "library_mal_score_source_scale": "MAL scale from {min} to {max}, step {step}"
+  "library_mal_score_source_scale": "MAL scale from {min} to {max}, step {step}",
+  "subject_rating_control_uncertain": "The result is unknown. Retry the same request, or discard it and reload your current answer.",
+  "subject_rating_control_discard": "Discard request and reload answer"
 }

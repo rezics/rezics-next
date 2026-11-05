@@ -11238,5 +11238,7 @@
   "library_mal_retry_source_evidence": "重試來源證據接納",
   "library_mal_score_zero_source": "{value}（0 表示未評分）",
   "library_mal_score_source_details": "數值：{value}；MAL 評分範圍：{scale}",
-  "library_mal_score_source_scale": "MAL 範圍 {min} 至 {max}，間距 {step}"
+  "library_mal_score_source_scale": "MAL 範圍 {min} 至 {max}，間距 {step}",
+  "subject_rating_control_uncertain": "結果尚未確定。你可以重試同一筆請求，或捨棄請求並重新載入目前的評分。",
+  "subject_rating_control_discard": "捨棄請求並重新載入評分"
 }
