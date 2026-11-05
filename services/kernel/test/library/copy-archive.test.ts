@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { isDeepStrictEqual } from 'node:util';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import {
+  LIBRARY_LOCALES,
   fixture,
   libraryLabels,
   libraryProfile,
@@ -37,6 +38,9 @@ type ArchiveTestManifest = {
 };
 type ArchiveTestRecord = { section: string; [key: string]: unknown };
 type ArchiveTestArtifact = { manifest: ArchiveTestManifest; records: ArchiveTestRecord[] };
+type ArchiveInspectionRow = { resolution: string };
+type ArchiveOccurrence = { evidence: { subject_id: string; amount: string } };
+type ArchiveProgressMeasure = { unit: string; amount: string; total: string };
 let f: NativeProfileFixture, owner: Awaited<ReturnType<NativeProfileFixture['identity']>>, other: typeof owner;
 let artifact: ArchiveTestArtifact;
 let subjectId: string;
@@ -64,6 +68,32 @@ const path = '/v1/libraryCopyArchives';
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function archiveInspectionRows(value: unknown): ArchiveInspectionRow[] {
+  const isInspectionRow = (row: unknown): row is ArchiveInspectionRow =>
+    isRecord(row) && typeof row.resolution === 'string';
+  if (!Array.isArray(value) || !value.every(isInspectionRow))
+    throw new Error('Copy archive inspection rows are invalid');
+  return value.filter(isInspectionRow);
+}
+function archiveOccurrences(value: unknown): ArchiveOccurrence[] {
+  const isOccurrence = (row: unknown): row is ArchiveOccurrence =>
+    isRecord(row) &&
+    isRecord(row.evidence) &&
+    typeof row.evidence.subject_id === 'string' &&
+    typeof row.evidence.amount === 'string';
+  if (!Array.isArray(value) || !value.every(isOccurrence)) throw new Error('Copy archive occurrences are invalid');
+  return value.filter(isOccurrence);
+}
+function archiveProgressMeasures(value: unknown): ArchiveProgressMeasure[] {
+  const isProgressMeasure = (measure: unknown): measure is ArchiveProgressMeasure =>
+    isRecord(measure) &&
+    typeof measure.unit === 'string' &&
+    typeof measure.amount === 'string' &&
+    typeof measure.total === 'string';
+  if (!Array.isArray(value) || !value.every(isProgressMeasure))
+    throw new Error('Copy archive progress measures are invalid');
+  return value.filter(isProgressMeasure);
 }
 function isArchiveTestRecord(value: unknown): value is ArchiveTestRecord {
   return isRecord(value) && typeof value.section === 'string';
@@ -158,7 +188,8 @@ function archiveRelease(statuses: string[], legacyUnit = false, changedProfile =
   sources.schemas['fixture.yaml'] = JSON.stringify(schema);
   for (const [key, source] of Object.entries(sources.presentation)) {
     const labels = JSON.parse(source);
-    const locale = key.slice('fixture/'.length) as Parameters<typeof libraryLabels>[1];
+    const locale = LIBRARY_LOCALES.find((candidate) => key === `fixture/${candidate}`);
+    if (!locale) throw new Error(`Unsupported fixture presentation locale: ${key}`);
     labels.types['schema:Episode'] = 'episode';
     labels.properties = { ...(labels.properties ?? {}), 'schema:isPartOf': 'part of' };
     labels.libraryProfiles[profile.id] = libraryLabels(profile, locale);
@@ -517,8 +548,9 @@ test('private paged inspection, original upload replay, cancellation, expiry and
   expect(await denied.text()).not.toContain('gift');
   const first = await json(await send('GET', suffix));
   expect(first).toMatchObject({ holdings: 12, fullRestoration: false, effectsSupported: false, state: 'inspecting' });
-  expect(first.rows).toHaveLength(10);
-  expect(first.rows.every((r: any) => r.resolution === 'unresolved')).toBe(true);
+  const firstRows = archiveInspectionRows(first.rows);
+  expect(firstRows).toHaveLength(10);
+  expect(firstRows.every((row) => row.resolution === 'unresolved')).toBe(true);
   const last = await json(await send('GET', `${suffix}?after=${first.next}`));
   expect(last.rows).toHaveLength(2);
   expect(last.next).toBeNull();
@@ -536,9 +568,10 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
   expect(uploaded.progressRecords).toBe(6);
   const suffix = `/${uploaded.uploadId}`;
   const page = await json(await send('GET', `${suffix}/progress`));
-  expect(page.occurrences).toHaveLength(4);
-  expect(new Set(page.occurrences.map((row: any) => row.evidence.subject_id)).size).toBe(1);
-  expect(page.occurrences.filter((row: any) => row.evidence.amount === '0')).toHaveLength(2);
+  const occurrences = archiveOccurrences(page.occurrences);
+  expect(occurrences).toHaveLength(4);
+  expect(new Set(occurrences.map((row) => row.evidence.subject_id)).size).toBe(1);
+  expect(occurrences.filter((row) => row.evidence.amount === '0')).toHaveLength(2);
   const source = sourceSessions[0]!;
   now += 60_000;
   const reviewBody = {
@@ -582,18 +615,19 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
     amount: '0',
     total: '999999999999.999999',
   });
-  expect(result.progressSession.measures).toHaveLength(8);
-  expect(result.progressSession.measures.find((measure: any) => measure.unit === 'chapter')).toMatchObject({
+  const measures = archiveProgressMeasures(result.progressSession.measures);
+  expect(measures).toHaveLength(8);
+  expect(measures.find((measure) => measure.unit === 'chapter')).toMatchObject({
     amount: '0',
     total: '999999999999.999999',
   });
-  expect(new Set(result.progressSession.measures.map((measure: any) => measure.unit))).toEqual(
+  expect(new Set(measures.map((measure) => measure.unit))).toEqual(
     new Set(['chapter', ...additionalUnits]),
   );
   expect(
-    result.progressSession.measures
-      .filter((measure: any) => additionalUnits.includes(measure.unit))
-      .every((measure: any) => measure.amount === '4.125000' && measure.total === '5.000001'),
+    measures
+      .filter((measure) => additionalUnits.includes(measure.unit))
+      .every((measure) => measure.amount === '4.125000' && measure.total === '5.000001'),
   ).toBe(true);
   expect(applied.sessionId).not.toBe(source.id);
   expect(new Date(result.progressSession.startedAt).getTime()).toBeGreaterThanOrEqual(now);
