@@ -132,7 +132,7 @@ function reyloAnalysisIdentity(repository: string, workspace: string): string {
     .update('\0')
     .update(process.versions.node ?? '')
     .update('\0');
-  const inputs = [
+  const inputs: readonly (readonly [string, string])[] = [
     ['package.json', join(repository, 'package.json')],
     ['bun.lock', join(repository, 'bun.lock')],
     ['scripts/typecheck.ts', join(repository, 'scripts/typecheck.ts')],
