@@ -11024,5 +11024,20 @@
   "library_selected_correction_fresh_review": "この項目は変更されたか、利用できません。一覧に戻り現在の項目を改めて確認してください。再作成された項目にはこの修正を適用しません。",
   "library_selected_correction_current": "現在のネイティブ値（別の観測）",
   "library_selected_correction_confirm": "この確認済み項目を確定",
-  "library_selected_correction_note_error": "空でないメモをUTF-8で4,096バイト以内で入力してください。"
+  "library_selected_correction_note_error": "空でないメモをUTF-8で4,096バイト以内で入力してください。",
+  "library_mal_label_adoption": "Adopt tags as private labels",
+  "library_mal_label_help": "Select exact source values and deliberately choose an owned label identity and revision or propose a new name. Save to see native normalization and conflicts before confirming.",
+  "library_mal_label_duplicate": "Duplicate of source index {index}",
+  "library_mal_label_select": "Adopt source index {index}",
+  "library_mal_label_target": "Native label target",
+  "library_mal_label_new": "Propose a new name",
+  "library_mal_label_existing": "Choose owned label identity",
+  "library_mal_label_name": "Proposed label name",
+  "library_mal_label_id": "Owned label ID",
+  "library_mal_label_revision": "Current label revision",
+  "library_mal_label_results": "Label results",
+  "library_mal_label_remaining": "Remaining source indices: {values}",
+  "library_mal_label_current": "Current native assignments",
+  "library_mal_label_none": "No current assignments",
+  "library_mal_label_cancel": "Stop further import effects"
 }

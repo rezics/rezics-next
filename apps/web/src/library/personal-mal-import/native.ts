@@ -31,23 +31,7 @@ type NativeResult = {
   status: number;
 };
 
-type PreviewResource = {
-  post: (body: { xml: string }, options: { headers: Record<string, string> }) => Promise<NativeResult>;
-};
-type IdResource = {
-  get: (options: { query?: { after?: number }; headers: Record<string, string> }) => Promise<NativeResult>;
-  source: { get: (options: { headers: Record<string, string> }) => Promise<NativeResult> };
-  review: { post: (body: MalReviewInput, options: { headers: Record<string, string> }) => Promise<NativeResult> };
-  apply: { post: (body: MalApplyBody, options: { headers: Record<string, string> }) => Promise<NativeResult> };
-  cancel: {
-    post: (body: Record<string, never>, options: { headers: Record<string, string> }) => Promise<NativeResult>;
-  };
-  delete: (body: undefined, options: { headers: Record<string, string> }) => Promise<NativeResult>;
-};
-type MalSurface = ((params: { id: string }) => IdResource) & {
-  $preview?: PreviewResource;
-  preview?: PreviewResource;
-};
+type MalSurface = KernelClient['libraryImports']['mal'];
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -55,11 +39,7 @@ function record(value: unknown): value is Record<string, unknown> {
 
 /** Bind the mounted MAL methods when present. Do not invent a path or a successful body. */
 export function nativeMalImport(client: KernelClient): MalSurface | undefined {
-  const mal = (client.libraryImports as typeof client.libraryImports & { mal?: MalSurface }).mal;
-  if (typeof mal !== 'function') return undefined;
-  const preview = mal.$preview ?? mal.preview;
-  if (!preview || typeof preview.post !== 'function') return undefined;
-  return mal;
+  return client.libraryImports.mal;
 }
 
 function publicDetail(detail: unknown): string | undefined {
@@ -163,10 +143,11 @@ export function kernelMalPort(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   originConfigured: boolean,
+  originalAuthorization?: string,
 ): MalImportPort {
   const headers = (authorization: string, key?: string) => ({
     authorization,
-    ...(key ? { 'idempotency-key': key } : {}),
+    ...(key ? { 'idempotency-key': JSON.stringify(key) } : {}),
   });
   async function call<T>(
     command: MalCommand,
@@ -178,7 +159,7 @@ export function kernelMalPort(
     const mal = nativeMalImport(client);
     if (!mal) return { kind: 'unavailable' };
     try {
-      const result = await send(mal, session.authorization);
+      const result = await send(mal, originalAuthorization ?? session.authorization);
       if (result.error) return outcomeOf(result.status, result.error.value, command);
       const value = read(result.data);
       if (!value) return { kind: 'unavailable' };
@@ -189,11 +170,21 @@ export function kernelMalPort(
     }
   }
   return {
+    async assignments(subjectId) {
+      const session = await withSession(request, sessionEnv, originConfigured);
+      if ('kind' in session) return session;
+      const result = await client.libraryLabelAssignments.get({
+        query: { subjectId, limit: 32 },
+        headers: headers(session.authorization),
+      });
+      if (result.error) return failure(result.status, result.error.value);
+      return { kind: 'assignments', assignments: result.data.assignments };
+    },
     async preview(command) {
       const result = await call(
         command,
         (mal, authorization) => {
-          const preview = mal.$preview ?? mal.preview;
+          const preview = mal.$preview;
           if (!preview) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
           return preview.post({ xml: command.xml }, { headers: headers(authorization, command.key) });
         },

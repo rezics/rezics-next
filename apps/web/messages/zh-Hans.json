@@ -10942,5 +10942,20 @@
   "library_selected_correction_fresh_review": "此条目已变化或不可用。请返回列表并重新检查当前条目。重新创建的条目不会继承此更正。",
   "library_selected_correction_current": "当前原生值（独立观察）",
   "library_selected_correction_confirm": "确认此已检查条目",
-  "library_selected_correction_note_error": "请输入非空备注，最多4,096个UTF-8字节。"
+  "library_selected_correction_note_error": "请输入非空备注，最多4,096个UTF-8字节。",
+  "library_mal_label_adoption": "Adopt tags as private labels",
+  "library_mal_label_help": "Select exact source values and deliberately choose an owned label identity and revision or propose a new name. Save to see native normalization and conflicts before confirming.",
+  "library_mal_label_duplicate": "Duplicate of source index {index}",
+  "library_mal_label_select": "Adopt source index {index}",
+  "library_mal_label_target": "Native label target",
+  "library_mal_label_new": "Propose a new name",
+  "library_mal_label_existing": "Choose owned label identity",
+  "library_mal_label_name": "Proposed label name",
+  "library_mal_label_id": "Owned label ID",
+  "library_mal_label_revision": "Current label revision",
+  "library_mal_label_results": "Label results",
+  "library_mal_label_remaining": "Remaining source indices: {values}",
+  "library_mal_label_current": "Current native assignments",
+  "library_mal_label_none": "No current assignments",
+  "library_mal_label_cancel": "Stop further import effects"
 }

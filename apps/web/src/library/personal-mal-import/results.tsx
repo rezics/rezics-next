@@ -1,7 +1,8 @@
 import { m } from '../../paraglide/messages.js';
 import type { SourceAdmissionOutcome } from '../rich-private-entry/admission';
 import { ImportSourceOutcome } from '../rich-private-entry/source-confirm';
-import type { MalApplyPage, MalOutcome } from './contract';
+import type { MalApplyPage, MalOutcome, MalPreviewRow } from './contract';
+import { MalCurrentAssignments } from './labels';
 import { MalAction } from './controls';
 import { malOutcomeLabel } from './meaning';
 
@@ -28,6 +29,21 @@ function Outcome({
         </details>
       ) : null}
       {outcome.reason ? <p className="text-sm text-muted-foreground">{outcome.reason}</p> : null}
+      {outcome.labels ? (
+        <ul className="space-y-2 [overflow-wrap:anywhere]" aria-label={m.library_mal_label_results()}>
+          {outcome.labels.map((label) => (
+            <li key={label.value}>
+              #{label.value}: {label.status} · {label.reason}
+              <p>
+                {label.labelId} · {label.assignment?.id} · {label.assignment?.revision}
+              </p>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {outcome.remainingLabels?.length ? (
+        <p>{m.library_mal_label_remaining({ values: outcome.remainingLabels.join(', ') })}</p>
+      ) : null}
       <ImportSourceOutcome outcome={admission} />
     </li>
   );
@@ -35,6 +51,7 @@ function Outcome({
 
 export function MalResultPage({
   result,
+  rows = [],
   titles,
   admissions,
   busy,
@@ -44,6 +61,7 @@ export function MalResultPage({
   onRefresh,
 }: {
   result: MalApplyPage;
+  rows?: MalPreviewRow[];
   titles: Map<number, string>;
   admissions: Map<number, SourceAdmissionOutcome | null | undefined>;
   busy: boolean;
@@ -71,6 +89,14 @@ export function MalResultPage({
           </li>
         ))}
       </ul>
+      {rows
+        .filter(
+          (row) => row.outcome?.labels?.length || result.outcomes.some((o) => o.row === row.index && o.labels?.length),
+        )
+        .map((row) => {
+          const subjectId = row.review?.target ?? row.target;
+          return subjectId ? <MalCurrentAssignments key={`${row.index}:${subjectId}`} subjectId={subjectId} /> : null;
+        })}
       <div className="flex flex-wrap gap-3">
         <MalAction type="button" variant="outline" disabled={busy} onClick={onReview}>
           {m.library_mal_return_review()}

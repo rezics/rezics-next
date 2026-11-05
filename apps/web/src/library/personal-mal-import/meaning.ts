@@ -72,5 +72,7 @@ export function malProgressEntries(row: MalPreviewRow): { key: string; label: st
 }
 
 export function admittedFields(row: MalPreviewRow): string[] {
-  return row.review?.skip ? [] : row.state ? ['status'] : [];
+  return row.review?.skip
+    ? []
+    : [...(row.state ? ['status'] : []), ...(row.review?.labels?.selections.length ? ['tags'] : [])];
 }

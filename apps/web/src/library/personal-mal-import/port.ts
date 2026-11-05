@@ -5,6 +5,14 @@ import type { MalImportPort } from './contract';
 export const MalImportPortContext = createContext<MalImportPort | null>(null);
 
 const productionPort: MalImportPort = {
+  async captureApply(command) {
+    const { captureMalApply } = await import('./server');
+    return captureMalApply({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
+  },
+  async assignments(subjectId) {
+    const { readMalAssignments } = await import('./server');
+    return readMalAssignments({ data: { subjectId } });
+  },
   async preview(command) {
     const { previewMalImport } = await import('./server');
     return previewMalImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });

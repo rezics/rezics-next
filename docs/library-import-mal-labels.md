@@ -138,3 +138,20 @@ History, events and index maintenance must remain in total statement/row/buffer/
 case must retain their full plans without subtracting them or declaring failed preparation a zero-cost sample.
 Any document batching optimization must preserve committed original operands, per-value acknowledgement,
 currentness fences and partial cancellation; it needs a separate measured D-axis comparison before adoption.
+
+## Web receiving composition
+
+Decision: extend the existing MAL port, mounted visit, review, confirmation and result owners with exact native
+source indices and an independent `tags` field selection. Omitted labels preserve the original status journey.
+The page displays the native grammar/raw segments/duplicate indices without parsing XML or display tags. Target
+identity and revision are deliberate inputs; native review owns normalization, collisions and live ownership.
+Confirmation displays the exact version and normalized selections. Results distinguish per-value receipts from a
+separate exact-Subject `libraryLabelAssignments` current read. Cancellation never removes accepted assignments.
+The original encrypted credential is captured before apply and reused with the original reviewed operands.
+Only one page and bounded command custody are retained; replacing the page drops its title metadata.
+
+Sources read before implementation: this owner, the existing Web receiving guide, native MAL tag/review owners,
+generated `list-import-mal` declarations and mounted route snapshot, generated label-assignment routes, and the
+read-only main checkout's `.reference/INDEX.md`. The mounted generated MAL snapshot lacks label operands despite
+native owner declarations containing them; Content owns serial publication and the mounted generated acceptance
+continuation. No replacement route, XML parser, label writer or schema is introduced here.

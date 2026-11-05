@@ -17,7 +17,7 @@ import {
 import { MalConfirmPage } from './confirm';
 import { MalAction } from './controls';
 import { MalDeparture } from './departure';
-import { malFailureLabel } from './meaning';
+import { admittedFields, malFailureLabel } from './meaning';
 import { useMalImportPort } from './port';
 import { MalResultPage } from './results';
 import { MalReviewPage } from './review';
@@ -146,7 +146,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     );
     if (!response || response.kind !== 'page' || !live()) return;
     const rows = withPreview(response.page.rows);
-    for (const row of rows) titles.current.set(row.index, row.title);
+    titles.current = new Map(rows.map((row) => [row.index, row.title]));
+    const reopened = rows.flatMap((row) => (row.outcome ? [row.outcome] : []));
+    setResult(reopened.length ? { id, outcomes: reopened, remaining: [], stopped: response.page.canceled } : null);
     setPage({ ...response.page, rows });
     setAfter(cursor);
     setStage('review');
@@ -181,7 +183,13 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       kind: 'review',
       key: newCommandKey(),
       id,
-      input: { row: draft.row, target: draft.target, skip: draft.skip, replace: draft.replace },
+      input: {
+        row: draft.row,
+        target: draft.target,
+        skip: draft.skip,
+        replace: draft.replace,
+        ...(draft.labels === undefined ? {} : { labels: draft.labels }),
+      },
     };
     const response = await run(command, () => port.review(command));
     if (!response || response.kind !== 'reviewed' || !live()) return;
@@ -252,7 +260,16 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       return [{ row: row.index, version: review.version, fields: review.skip ? [] : draftFields(row) }];
     });
     if (!rows.length) return;
-    const command: Extract<MalCommand, { kind: 'apply' }> = { kind: 'apply', id, body: { confirm: true, rows } };
+    let command: Extract<MalCommand, { kind: 'apply' }> = { kind: 'apply', id, body: { confirm: true, rows } };
+    if (port.captureApply) {
+      const captured = await port.captureApply(command);
+      if (!live()) return;
+      if (captured.kind !== 'apply') {
+        setNotice(captured);
+        return;
+      }
+      command = captured;
+    }
     applyCommand.current = command;
     const response = await run(command, () => port.apply(command));
     if (!response || response.kind !== 'applied' || !live()) return;
@@ -311,7 +328,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
         <MalReviewPage
           page={page}
           after={after}
-          busy={busy}
+          busy={locked}
           onSave={(draft) => void saveReview(draft)}
           onNext={() => page.next !== null && uploadId.current && void loadPage(uploadId.current, page.next)}
           onConfirm={() => {
@@ -325,7 +342,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       {stage === 'confirm' && page ? (
         <MalConfirmPage
           rows={page.rows}
-          busy={busy}
+          busy={locked}
           confirmPrivacy={confirmPrivacy}
           confirmTimestamps={confirmTimestamps}
           onBack={() => setStage('review')}
@@ -347,8 +364,14 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
           result={result}
           titles={titles.current}
           admissions={new Map(page?.rows.map((row) => [row.index, row.sourceAdmission]) ?? [])}
+          rows={page?.rows ?? []}
           busy={busy}
-          canRetry={!!applyCommand.current && result.outcomes.some((item) => item.status === 'failed')}
+          canRetry={
+            !!applyCommand.current &&
+            result.outcomes.some(
+              (item) => item.status === 'failed' || item.labels?.some((label) => label.status === 'failed'),
+            )
+          }
           onRetry={() => {
             const command = applyCommand.current;
             if (!command) return;
@@ -360,9 +383,29 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
               }
             });
           }}
-          onReview={() => setStage('review')}
+          onReview={() => uploadId.current && void loadPage(uploadId.current, after)}
           onRefresh={() => uploadId.current && void loadPage(uploadId.current, after)}
         />
+      ) : null}
+      {stage === 'review' && result ? (
+        <MalAction type="button" onClick={() => setStage('results')}>
+          {m.library_mal_label_results()}
+        </MalAction>
+      ) : null}
+      {uploadId.current ? (
+        <MalAction
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={async () => {
+            const id = uploadId.current!;
+            const command = { kind: 'cancel' as const, id, key: newCommandKey() };
+            const response = await run(command, () => port.cancel(command));
+            if (response?.kind === 'done') await loadPage(id, after);
+          }}
+        >
+          {m.library_mal_label_cancel()}
+        </MalAction>
       ) : null}
       {uploadId.current ? (
         <MalAction type="button" variant="outline" disabled={locked} onClick={() => void discard()}>
@@ -375,5 +418,5 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
 }
 
 function draftFields(row: NonNullable<MalPage['rows'][number]>): string[] {
-  return row.review?.skip || !row.state ? [] : ['status'];
+  return admittedFields(row);
 }

@@ -31,7 +31,7 @@ export function MalReviewPage({
       {page.canceled ? <p role="status">{m.library_mal_canceled()}</p> : null}
       <ul className="space-y-6">
         {page.rows.map((row) => (
-          <li key={`${row.kind}:${row.identifier.value}:${row.index}`}>
+          <li key={`${row.kind}:${row.identifier.value}:${row.index}:${row.review?.version ?? 'new'}`}>
             <MalRowReview row={row} busy={busy || page.canceled} onSave={onSave} />
           </li>
         ))}
