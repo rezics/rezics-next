@@ -65,7 +65,10 @@ function ReadingVisit({
   const namespace = `reading-${useId().replaceAll(':', '')}`;
   const focusBoundaryRef = useRef<HTMLDivElement | null>(null);
   const [disclosed, setDisclosed] = useState<ReadonlySet<number>>(() => new Set());
-  const projection = useMemo(() => projectPostReading(props.document, disclosed), [props.document, disclosed]);
+  const projection = useMemo(
+    () => projectPostReading(props.document, disclosed, { mentions: props.mentions ?? {}, locale }),
+    [props.document, props.mentions, disclosed, locale],
+  );
   const outline = projection.outline;
   useLayoutEffect(() => position.connect(), [position]);
   const attributes = useMemo(() => {
@@ -100,6 +103,10 @@ function ReadingVisit({
     },
     [namespace, position, projection.references.byPosition],
   );
+  const mentionAttributes = useCallback(
+    (occurrence: number) => linkAttributes(-1 - occurrence),
+    [linkAttributes],
+  );
   const setRoot = useCallback(
     (element: HTMLDivElement | null) => {
       focusBoundaryRef.current = element;
@@ -115,6 +122,7 @@ function ReadingVisit({
       locale,
       headingAttributes: attributes,
       linkAttributes,
+      mentionAttributes,
       onDisclosureChange: disclosure,
       className: `post-reading-document ${className ?? ''}`,
     };
@@ -140,6 +148,7 @@ function ReadingVisit({
     locale,
     attributes,
     linkAttributes,
+    mentionAttributes,
     disclosure,
     className,
     wideVisitKey,

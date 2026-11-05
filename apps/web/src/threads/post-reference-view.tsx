@@ -15,7 +15,7 @@ const activeReferences = new WeakMap<Document, () => void>();
 const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 
 function webLocation(entry: PostReferenceEntry) {
-  return new URL(entry.href).hostname;
+  return entry.href.startsWith('/') ? entry.label : new URL(entry.href).hostname;
 }
 
 export function PostReferenceView({

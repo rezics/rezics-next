@@ -1,5 +1,5 @@
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
-import { safeDocumentUrl } from '@rezics/ui/document-body';
+import { type DocumentMentions, safeDocumentUrl } from '@rezics/ui/document-body';
 
 export const readingOutlineLimit = 100;
 export const readingOutlineLabelLimit = 120;
@@ -117,6 +117,7 @@ function referenceDestination(value: unknown) {
 export function projectPostReading(
   document: DocumentSnapshot,
   revealed: ReadonlySet<number> = new Set(),
+  identities?: { mentions: DocumentMentions; locale: string },
 ): PostReadingProjection {
   const outlineEntries: ReadingOutlineEntry[] = [];
   const outlineByPosition = new Map<number, ReadingOutlineEntry>();
@@ -125,6 +126,7 @@ export function projectPostReading(
   let headingEligible = 0;
   let headingPosition = 0;
   let linkPosition = 0;
+  let mentionPosition = 0;
   let referenceEligible = 0;
   let spoilerPosition = 0;
   const hierarchy: number[] = [];
@@ -188,7 +190,30 @@ export function projectPostReading(
       if (node.type === 'hardBreak' && !hidden) append(heading.label, ' ', readingOutlineLabelLimit);
     }
 
-    // Mention nodes have an independent account disclosure and never become references.
+    // Negative positions keep identity occurrences separate from link-mark positions in the same return host.
+    if (node.type === 'mention') {
+      const position = -1 - mentionPosition++;
+      const accountId = node.attrs?.accountId;
+      const account =
+        identities && typeof accountId === 'string' && Object.hasOwn(identities.mentions, accountId)
+          ? identities.mentions[accountId]
+          : undefined;
+      if (!hidden && account) {
+        referenceEligible++;
+        if (referenceEntries.length < postReferenceLimit) {
+          const entry: PostReferenceEntry = {
+            position,
+            ordinal: referenceEligible,
+            label: `@${account.handle}`,
+            href: `/${encodeURIComponent(identities!.locale)}/@${encodeURIComponent(account.handle)}`,
+            destination: 'web',
+          };
+          referenceEntries.push(entry);
+          referencesByPosition.set(position, entry);
+        }
+      }
+    }
+
     if (node.type === 'text' && !hidden && linkMarks.length) {
       for (const link of linkMarks) {
         const destination = referenceDestination(link.readHref());

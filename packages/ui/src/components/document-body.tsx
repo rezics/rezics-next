@@ -88,6 +88,8 @@ type Props = {
   headingAttributes?: (nodeId: string) => DocumentHeadingAttributes | undefined;
   /** Optional occurrence-indexed attributes; omitted consumers keep their ordinary anchor markup. */
   linkAttributes?: (occurrence: number) => DocumentLinkAttributes | undefined;
+  /** Mention node ordinals, including unresolved and concealed occurrences. */
+  mentionAttributes?: (occurrence: number) => DocumentLinkAttributes | undefined;
   /** Spoiler mark positions in document order, from the renderer's live disclosure authority. */
   onDisclosureChange?: (revealed: ReadonlySet<number>) => void;
   /** Reader-owned key for retiring disclosure state when an equal snapshot changes source or revision. */
@@ -112,6 +114,7 @@ export function DocumentBody({
   renderTable,
   headingAttributes,
   linkAttributes,
+  mentionAttributes,
   onDisclosureChange,
 }: Props) {
   // Published readers admit immutable snapshots; ordinary consumers retain semantic replacement detection.
@@ -154,6 +157,7 @@ export function DocumentBody({
     },
   };
   let linkOccurrence = 0;
+  let mentionOccurrence = 0;
   const content = renderToReactElement({
     extensions: documentExtensions,
     content: document.doc,
@@ -179,11 +183,17 @@ export function DocumentBody({
             }
           : {}),
         mention: ({ node }: any) => {
+          const occurrence = mentionOccurrence++;
           const account = Object.hasOwn(mentions ?? {}, node.attrs?.accountId)
             ? mentions?.[node.attrs.accountId]
             : undefined;
           return account ? (
-            <a href={`/${encodeURIComponent(locale)}/@${encodeURIComponent(account.handle)}`}>@{account.handle}</a>
+            <a
+              href={`/${encodeURIComponent(locale)}/@${encodeURIComponent(account.handle)}`}
+              {...mentionAttributes?.(occurrence)}
+            >
+              @{account.handle}
+            </a>
           ) : (
             <>@</>
           );
