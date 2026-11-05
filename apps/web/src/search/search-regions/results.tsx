@@ -66,18 +66,6 @@ const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start 
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
 }
-function searchHref(
-  locale: string,
-  query: string,
-  type: string | undefined,
-  facets: Record<string, string[]>,
-  cursor?: string,
-  sort?: 'rating',
-  state?: SearchLoaderDeps,
-): string {
-  return hrefFor({ ...state, query, type, facets, cursor, sort });
-}
-
 /** Presentation consumes the host's executed page and retired reader-owned actions. */
 export function SearchResultsRegion({
   query,
@@ -174,15 +162,14 @@ export function SearchResultsRegion({
             : m.search_reader_facets_unavailable({}, options)}{' '}
           <a
             className={linkClass}
-            href={searchHref(
-              locale,
+            href={hrefFor({
+              ...data.queryState,
               query,
               type,
-              selectedFacets,
-              undefined,
-              data.sort === 'rating' ? 'rating' : undefined,
-              data.queryState,
-            )}
+              facets: selectedFacets,
+              cursor: undefined,
+              sort: data.sort === 'rating' ? 'rating' : undefined,
+            })}
           >
             {m.search_facet_retry({}, options)}
           </a>
