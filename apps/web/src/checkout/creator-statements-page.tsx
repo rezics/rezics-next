@@ -79,22 +79,16 @@ export function StatementNotice({
       role={kind === 'preparing' ? 'status' : 'alert'}
     >
       <p>{label}</p>
-      {kind !== 'preparing' && (
-        onRetry ? (
+      {kind !== 'preparing' &&
+        (onRetry ? (
           <Button type="button" variant="outline" className="min-h-11 min-w-11" onClick={onRetry}>
             {m.statements_retry()}
           </Button>
         ) : (
-          <Button
-            variant="outline"
-            className="min-h-11 min-w-11"
-            nativeButton={false}
-            render={<a href={retryHref} />}
-          >
+          <Button variant="outline" className="min-h-11 min-w-11" nativeButton={false} render={<a href={retryHref} />}>
             {m.statements_retry()}
           </Button>
-        )
-      )}
+        ))}
     </div>
   );
 }

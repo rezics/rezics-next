@@ -10,7 +10,10 @@ import {
   type CreatorStatementsAddress,
   type CreatorStatementsData,
 } from '../src/checkout/creator-statements';
-import { CreatorStatementWindows, CREATOR_STATEMENT_PREDECESSOR_LIMIT } from '../src/checkout/creator-statement-windows';
+import {
+  CreatorStatementWindows,
+  CREATOR_STATEMENT_PREDECESSOR_LIMIT,
+} from '../src/checkout/creator-statement-windows';
 import {
   creatorLineFixture,
   creatorStatementFixture,
@@ -67,11 +70,13 @@ test('admitted cursor windows stay bounded, branch from a returned page, and iso
     payoutStatements: [creatorStatementFixture],
     next,
   });
-  const detailAddress = (
-    id: string,
-    cursor: string | null,
-    from: string | null,
-  ): CreatorStatementsAddress => ({ kind: 'detail', locale: 'en', id, cursor, from });
+  const detailAddress = (id: string, cursor: string | null, from: string | null): CreatorStatementsAddress => ({
+    kind: 'detail',
+    locale: 'en',
+    id,
+    cursor,
+    from,
+  });
   const detailPage = (id: string, next: string | null): CreatorStatementData => ({
     kind: 'ready',
     statement: { ...creatorStatementFixture, id },

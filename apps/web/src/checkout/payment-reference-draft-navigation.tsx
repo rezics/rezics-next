@@ -142,7 +142,8 @@ export function PaymentReferenceDraftNavigation({
         !protectedNow() &&
         departure &&
         router &&
-        (new URL(destination).pathname !== window.location.pathname || new URL(destination).search !== window.location.search)
+        (new URL(destination).pathname !== window.location.pathname ||
+          new URL(destination).search !== window.location.search)
       ) {
         event.preventDefault();
         void router.navigate({ href: destination });
@@ -166,11 +167,7 @@ export function PaymentReferenceDraftNavigation({
   return (
     <>
       {router ? (
-        <RouterDraftBoundary
-          protectedNow={protectedNow}
-          confirm={() => confirmRef.current()}
-          departure={departure}
-        />
+        <RouterDraftBoundary protectedNow={protectedNow} confirm={() => confirmRef.current()} departure={departure} />
       ) : null}
       <AlertDialog open={open && protectedNow()} onOpenChange={(value) => !value && pending.current && choose(false)}>
         {open && protectedNow() ? (

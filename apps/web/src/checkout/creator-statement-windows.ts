@@ -1,8 +1,4 @@
-import type {
-  CreatorStatementData,
-  CreatorStatementsAddress,
-  CreatorStatementsData,
-} from './creator-statements';
+import type { CreatorStatementData, CreatorStatementsAddress, CreatorStatementsData } from './creator-statements';
 
 export const CREATOR_STATEMENT_PREDECESSOR_LIMIT = 8;
 type Position = string | null;
@@ -20,7 +16,12 @@ type Movement =
   | 'line-restore'
   | 'open'
   | 'return';
-type Pending = { movement: Movement; source: CreatorStatementsAddress; target: CreatorStatementsAddress; focus: boolean };
+type Pending = {
+  movement: Movement;
+  source: CreatorStatementsAddress;
+  target: CreatorStatementsAddress;
+  focus: boolean;
+};
 type Candidate = { targetId: string; cancel(): void };
 
 function sameStatementsAddress(a: CreatorStatementsAddress, b: CreatorStatementsAddress) {
@@ -67,8 +68,7 @@ function parseAddress(href: string, locale: string): CreatorStatementsAddress | 
   const cursor = search.get('cursor') || null;
   const from = search.get('from') || null;
   const root = `/${locale}/creator/statements`;
-  if (url.pathname === root || url.pathname === '/creator/statements')
-    return { kind: 'list', locale, cursor };
+  if (url.pathname === root || url.pathname === '/creator/statements') return { kind: 'list', locale, cursor };
   const prefix = `${root}/`;
   const plainPrefix = '/creator/statements/';
   const id = url.pathname.startsWith(prefix)
@@ -79,7 +79,11 @@ function parseAddress(href: string, locale: string): CreatorStatementsAddress | 
   return id ? { kind: 'detail', locale, id, cursor, from } : null;
 }
 
-function previous(path: Path | undefined, address: CreatorStatementsAddress, pending: Pending | null): Position | undefined {
+function previous(
+  path: Path | undefined,
+  address: CreatorStatementsAddress,
+  pending: Pending | null,
+): Position | undefined {
   if (pending && sameStatementsAddress(pending.target, address)) {
     if (pending.movement === 'list-next' && address.kind === 'list') return pending.source.cursor ?? undefined;
     if (pending.movement === 'line-next' && address.kind === 'detail') return pending.source.cursor ?? undefined;
@@ -141,7 +145,8 @@ export class CreatorStatementWindows {
       current: address.kind === 'list' ? address.cursor : address.from,
       previous: [],
     };
-    this.lines = address.kind === 'detail' ? { statementId: address.id, current: address.cursor, previous: [] } : undefined;
+    this.lines =
+      address.kind === 'detail' ? { statementId: address.id, current: address.cursor, previous: [] } : undefined;
     this.publish();
   }
 
@@ -283,15 +288,20 @@ export class CreatorStatementWindows {
       return {
         ...(prior !== undefined ? { previous: prior } : {}),
         restart: address.cursor !== null || !!path?.previous.length,
-      ...(page.kind === 'ready' && 'payoutStatements' in page && page.next ? { next: page.next } : {}),
+        ...(page.kind === 'ready' && 'payoutStatements' in page && page.next ? { next: page.next } : {}),
       };
     }
-    const path = this.lines?.statementId === address.id && this.lines.current === address.cursor ? this.lines : undefined;
+    const path =
+      this.lines?.statementId === address.id && this.lines.current === address.cursor ? this.lines : undefined;
     const prior = previous(path, address, this.pending);
     return {
       ...(prior !== undefined ? { previous: prior } : {}),
       restart: address.cursor !== null || !!path?.previous.length,
-      ...(page.kind === 'ready' && 'statement' in page && page.statement.id === address.id && page.lines.kind === 'ready' && page.lines.next
+      ...(page.kind === 'ready' &&
+      'statement' in page &&
+      page.statement.id === address.id &&
+      page.lines.kind === 'ready' &&
+      page.lines.next
         ? { next: page.lines.next }
         : {}),
     };
@@ -360,8 +370,14 @@ export class CreatorStatementWindows {
         'payoutStatements' in page &&
         page.payoutStatements.some((statement) => statement.id === target.id);
       if (rowIsCurrent && target.cursor === null && target.from === source.cursor) movement = 'open';
-    } else if (source.kind === 'detail' && target.kind === 'detail' && source.id === target.id && source.from === target.from) {
-      const path = this.lines?.statementId === source.id && this.lines.current === source.cursor ? this.lines : undefined;
+    } else if (
+      source.kind === 'detail' &&
+      target.kind === 'detail' &&
+      source.id === target.id &&
+      source.from === target.from
+    ) {
+      const path =
+        this.lines?.statementId === source.id && this.lines.current === source.cursor ? this.lines : undefined;
       if (
         linesReady(page, source) &&
         page.kind === 'ready' &&
@@ -385,8 +401,7 @@ export class CreatorStatementWindows {
     }
     const targetId = encodeAddress(target);
     const focus =
-      (movement.startsWith('list-') || movement.startsWith('line-')) &&
-      this.candidate?.targetId === targetId;
+      (movement.startsWith('list-') || movement.startsWith('line-')) && this.candidate?.targetId === targetId;
     this.pending = { movement, source, target, focus: !!focus };
     this.route = source;
     this.source = sourceToken;

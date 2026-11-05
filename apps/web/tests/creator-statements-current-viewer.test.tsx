@@ -386,11 +386,7 @@ test('mounted actual routes keep only current viewer/address data across hydrati
             client.setQueryData(options.queryKey, value);
         }
         client.setQueryData(['exposure', 'anonymous'], []);
-        window.history.replaceState(
-          null,
-          '',
-          `/${locale}/creator/statements${mode === 'detail' ? `/${pointId}` : ''}`,
-        );
+        window.history.replaceState(null, '', `/${locale}/creator/statements${mode === 'detail' ? `/${pointId}` : ''}`);
         setLocale(locale, { reload: false });
         root?.render(tree());
       }),

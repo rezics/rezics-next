@@ -106,11 +106,7 @@ export function CreatorStatementPage({
       {page.kind !== 'ready' ? (
         <>
           <StatementNotice kind={page.kind} retryHref={href} {...noticeRetry} />
-          <StatementLinePagination
-            id={id}
-            page={page}
-            {...pagination}
-          />
+          <StatementLinePagination id={id} page={page} {...pagination} />
         </>
       ) : (
         <>
@@ -149,11 +145,7 @@ export function CreatorStatementPage({
             {page.lines.kind !== 'ready' ? (
               <>
                 <StatementNotice kind={page.lines.kind} retryHref={href} {...noticeRetry} />
-                <StatementLinePagination
-                  id={id}
-                  page={page}
-                  {...pagination}
-                />
+                <StatementLinePagination id={id} page={page} {...pagination} />
               </>
             ) : (
               <>
@@ -264,11 +256,7 @@ export function CreatorStatementPage({
                     ))}
                   </ul>
                 )}
-                <StatementLinePagination
-                  id={id}
-                  page={page}
-                  {...pagination}
-                />
+                <StatementLinePagination id={id} page={page} {...pagination} />
               </>
             )}
           </section>

@@ -16,7 +16,10 @@ import { CreatorStatementPage } from './creator-statement-page';
 import { CreatorStatementsPage } from './creator-statements-page';
 import { CreatorPaymentAttestation } from './creator-payment-attestation-form';
 import type { CreatorPaymentAttempt } from './creator-payment-attestation-state';
-import { PaymentReferenceDraftNavigation, PaymentReferenceDepartureProvider } from './payment-reference-draft-navigation';
+import {
+  PaymentReferenceDraftNavigation,
+  PaymentReferenceDepartureProvider,
+} from './payment-reference-draft-navigation';
 import { creatorStatementWindows } from './creator-statement-windows';
 import type { StatementWindowControls } from './creator-statement-windows';
 
@@ -153,10 +156,7 @@ function StatementsRead({
 }) {
   const queryClient = useQueryClient();
   const attemptMemory = useCreatorIntent<CreatorPaymentAttempt>(origin, 'payment-attestation');
-  const windows = creatorStatementWindows(
-    queryClient,
-    JSON.stringify([origin.visitIdentity, address.locale]),
-  );
+  const windows = creatorStatementWindows(queryClient, JSON.stringify([origin.visitIdentity, address.locale]));
   useSyncExternalStore(windows.subscribe, windows.snapshot, windows.snapshot);
   const [initialData] = useState<Outcome | undefined>(() => {
     const value = (origin.workspace.read as CurrentRead | undefined) ?? (seed ? initial : undefined);
