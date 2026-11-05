@@ -307,9 +307,11 @@ export async function loadSecurityPage(signal?: AbortSignal): Promise<NativeSecu
 const readPasskeys = createServerFn({ method: 'POST' }).handler(
   async (): Promise<{ ok: true; body: { passkeys: PublicPasskey[] } } | { ok: false }> => {
     try {
-      const response = await issuerSecurityRequest('/passkeys');
+      const { response, body } = await issuerSecurityJsonRequest(
+        '/passkeys',
+        securityFixedResponseByteBudgets.passkeys,
+      );
       if (response.status !== 200) return { ok: false };
-      const body: unknown = await response.json();
       if (!record(body) || !Array.isArray(body.passkeys)) return { ok: false };
       const passkeys = [];
       for (const row of body.passkeys) {
