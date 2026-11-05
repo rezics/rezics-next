@@ -13,7 +13,7 @@ import {
   type FieldGroup,
 } from '@rezics/definitions/bulk';
 import { checkBatch, checkResult } from './accepted-checks.ts';
-import type { ImportBatchRequest, ImportBatchResult, ImportSourceRecord } from './import-contract.ts';
+import type { ImportBatchRequest, ImportBatchResult, ImportSourceRecord, ImportSourceStatistic, ImportSourceStatisticClear } from './import-contract.ts';
 import {
   SOURCE_OBSERVATION_PAGE_MAX,
   type AggregateOperationStatus,
@@ -56,6 +56,9 @@ export type SourceProjection = {
   /** Reviewed descriptor snapshot, separate from semantic revisions and envelopes. */
   sourceRecordMetadata?: ImportSourceRecord;
   sourceClassification?: SourceClassificationProjection;
+  /** Acquisition-derived intent must survive replacement input and converter reopening. */
+  sourceStatistic?: ImportSourceStatistic;
+  sourceStatisticClear?: ImportSourceStatisticClear;
 };
 export type Staged<Projection = BatchStatement[]> = { row: RecordRow; projection: Projection };
 export type Omission = { field_group: FieldGroup; disposition: 'fenced'; securityRevision: string };
@@ -1262,7 +1265,7 @@ export class RunStore<Projection = BatchStatement[]> {
       exact(
         sourceProjection,
         ['sourceKind', 'normalizedRecord'],
-        ['sourceRecordMetadata', 'sourceClassification', 'sourceVocabulary'],
+        ['sourceRecordMetadata', 'sourceClassification', 'sourceVocabulary', 'sourceStatistic', 'sourceStatisticClear'],
       );
       if (!['bangumi', 'vndb', 'openlibrary', 'wikidata'].includes(sourceProjection.sourceKind as string)) fail();
       // Only the caller's sanitized converter input is retained; row metadata stays separate.
@@ -1282,7 +1285,10 @@ export class RunStore<Projection = BatchStatement[]> {
         sourceProjection.sourceVocabulary === undefined
           ? ''
           : `,"sourceVocabulary":${boundedJson(sourceProjection.sourceVocabulary, MAX_DUMP_RECORD_BYTES)}`;
-      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}${metadata}${classification}${sourceVocabulary}}`;
+      const statistics = ['sourceStatistic', 'sourceStatisticClear'].map((field) =>
+        sourceProjection[field] === undefined ? '' : `,${JSON.stringify(field)}:${boundedJson(sourceProjection[field], 8192)}`,
+      ).join('');
+      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}${metadata}${classification}${sourceVocabulary}${statistics}}`;
     } else {
       if (!Array.isArray(record.projection)) fail();
       projection = boundedJson(record.projection);
@@ -1397,6 +1403,8 @@ export class RunStore<Projection = BatchStatement[]> {
         projection.normalizedRecord,
         projection.sourceClassification ?? null,
         projection.sourceVocabulary ?? null,
+        projection.sourceStatistic ?? null,
+        projection.sourceStatisticClear ?? null,
       ]);
     };
     return semantic(left) === semantic(right);
@@ -1461,9 +1469,9 @@ export class RunStore<Projection = BatchStatement[]> {
    * outcome or an exact current candidate lookup can establish no owned effects.
    * This is neither a receipt nor fence evidence; every refresh must still check all tuple fences.
    */
-  acknowledgeNoEffects(run: Run, key: string, input: { reason: 'converter-ignored' | 'no-owned-candidates' }): void {
+  acknowledgeNoEffects(run: Run, key: string, input: { reason: 'converter-ignored' | 'no-owned-candidates' | 'retained-candidates' }): void {
     exact(input, ['reason']);
-    if (input.reason !== 'converter-ignored' && input.reason !== 'no-owned-candidates') fail();
+    if (input.reason !== 'converter-ignored' && input.reason !== 'no-owned-candidates' && input.reason !== 'retained-candidates') fail();
     this.acknowledgeEmpty(run, key, false);
   }
   /** Trusted coordinator proof: a confirmed VNDB statistic write/removal or source-specific omission, and exhaustive
@@ -2378,6 +2386,7 @@ export class RunStore<Projection = BatchStatement[]> {
   ): {
     baseline: RecordRow | null;
     acknowledged: RecordRow | null;
+    acknowledgedProjection: Projection | null;
     staged: Staged<Projection> | null;
     omissions: Omission[];
     coverPending: boolean;
@@ -2388,8 +2397,8 @@ export class RunStore<Projection = BatchStatement[]> {
     keyId(key);
     const s = this.source(source);
     const baseline = s.generation ? this.entry({ source, id: s.generation, lease: '' }, key) : null;
-    const ack = this.get<{ row_json: string }>(
-      'SELECT row_json FROM run_acknowledged WHERE source=? AND record_key=?',
+    const ack = this.get<{ row_json: string; projection_json: string }>(
+      'SELECT row_json,projection_json FROM run_acknowledged WHERE source=? AND record_key=?',
       source,
       key,
     );
@@ -2402,6 +2411,7 @@ export class RunStore<Projection = BatchStatement[]> {
     return {
       baseline: baseline ? JSON.parse(baseline.row_json) : null,
       acknowledged: ack ? JSON.parse(ack.row_json) : null,
+      acknowledgedProjection: ack ? JSON.parse(ack.projection_json) : null,
       staged: e ? { row: JSON.parse(e.row_json), projection: JSON.parse(e.projection_json) } : null,
       omissions: e ? JSON.parse(e.omissions_json) : [],
       coverPending: e?.cover_pending === 1,

@@ -158,25 +158,23 @@ function validateSourceField(field: SourceField, value: unknown): asserts value 
     throw new TypeError(`Invalid source ${field}`);
 }
 
-function addAliases(
-  result: NativeConversion,
+/** Project statistics only with the acquisition's admitted snapshot date. */
+export function vndbSourceStatistics(
+  normalized: unknown,
   sourceAlias: string,
-  sourceKind: SourceId,
-  context: ConversionContext,
   sourceSnapshotAsOf?: string,
-): ImportConversion<SourceAssets> {
-  const coverAssets = 'coverAssets' in result ? result.coverAssets : [];
-  const mediaImportIntents = 'mediaImportIntents' in result ? result.mediaImportIntents : [];
+): Pick<ImportConversion, 'sourceStatistic' | 'sourceStatisticClear'> {
+  const record = normalized as { vn?: { id: string; c_votecount?: number; c_average?: number | null } };
   let sourceStatistic: ImportSourceStatistic | undefined;
   let sourceStatisticClear: ImportSourceStatisticClear | undefined;
-  if (result.source === 'vndb' && sourceSnapshotAsOf !== undefined && 'vn' in result.normalizedRecord) {
-    const count = result.normalizedRecord.vn.c_votecount;
-    const average = result.normalizedRecord.vn.c_average;
+  if (sourceSnapshotAsOf !== undefined && record.vn) {
+    const count = record.vn.c_votecount;
+    const average = record.vn.c_average;
     if (count === 0 && average !== undefined) {
       sourceStatisticClear = {
         source: 'vndb',
         ...(sourceAlias === 'vndb' ? {} : { sourceAlias }),
-        sourceRecordId: result.normalizedRecord.vn.id,
+        sourceRecordId: record.vn.id,
         count: 0,
         asOf: sourceSnapshotAsOf,
       };
@@ -185,7 +183,7 @@ function addAliases(
       sourceStatistic = {
         source: 'vndb',
         ...(sourceAlias === 'vndb' ? {} : { sourceAlias }),
-        sourceRecordId: result.normalizedRecord.vn.id,
+        sourceRecordId: record.vn.id,
         scale: { min: 1, max: 10 },
         mean: average / 100,
         count,
@@ -195,6 +193,19 @@ function addAliases(
       };
     }
   }
+  return { ...(sourceStatistic ? { sourceStatistic } : {}), ...(sourceStatisticClear ? { sourceStatisticClear } : {}) };
+}
+
+function addAliases(
+  result: NativeConversion,
+  sourceAlias: string,
+  sourceKind: SourceId,
+  context: ConversionContext,
+  sourceSnapshotAsOf?: string,
+): ImportConversion<SourceAssets> {
+  const coverAssets = 'coverAssets' in result ? result.coverAssets : [];
+  const mediaImportIntents = 'mediaImportIntents' in result ? result.mediaImportIntents : [];
+  const statistics = sourceKind === 'vndb' ? vndbSourceStatistics(result.normalizedRecord, sourceAlias, sourceSnapshotAsOf) : {};
   const vocabulary =
     context.sourceVocabulary && (sourceKind === 'bangumi' || sourceKind === 'vndb')
       ? sourceVocabularyResult(result, sourceAlias, sourceKind, context.sourceVocabulary, context)
@@ -215,8 +226,7 @@ function addAliases(
     normalized: result.normalizedRecord,
     coverAssets: [...coverAssets],
     mediaImportIntents: [...mediaImportIntents],
-    ...(sourceStatistic === undefined ? {} : { sourceStatistic }),
-    ...(sourceStatisticClear === undefined ? {} : { sourceStatisticClear }),
+    ...statistics,
     ...(context.sourceClassification === undefined
       ? {}
       : { sourceClassification: projectSourceClassification(context.sourceClassification) }),
@@ -315,6 +325,7 @@ export function createSourceRegistration(
           const base: ImportConversion<SourceAssets> = {
             ...entity,
             normalized: entity.normalizedRecord,
+            ...(sourceKind === 'vndb' ? vndbSourceStatistics(entity.normalizedRecord, source, options?.sourceSnapshotAsOf) : {}),
             coverAssets: [...entity.coverAssets],
             mediaImportIntents: [...entity.mediaImportIntents],
           };

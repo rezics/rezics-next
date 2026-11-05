@@ -417,9 +417,17 @@ export class Importer {
     const registered = staged.projection.sourceClassification;
     if (produced !== undefined && !isDeepStrictEqual(produced, registered))
       throw new Error('Persisted source classification differs from its registered projection');
-    return produced === undefined && registered !== undefined
+    const converted = produced === undefined && registered !== undefined
       ? { ...result, sourceClassification: registered }
       : result;
+    // A sealed generation owns its observation date and body even when today's
+    // caller has admitted a different archive or no longer supplies provenance.
+    const { sourceStatistic: _write, sourceStatisticClear: _clear, ...semantic } = converted;
+    return {
+      ...semantic,
+      ...(staged.projection.sourceStatistic ? { sourceStatistic: staged.projection.sourceStatistic } : {}),
+      ...(staged.projection.sourceStatisticClear ? { sourceStatisticClear: staged.projection.sourceStatisticClear } : {}),
+    };
   }
 
   private async stageCapture(
@@ -548,6 +556,8 @@ export class Importer {
           projection: {
             sourceKind: registration.sourceKind,
             normalizedRecord: conversion.normalized,
+            ...(conversion.sourceStatistic ? { sourceStatistic: conversion.sourceStatistic } : {}),
+            ...(conversion.sourceStatisticClear ? { sourceStatisticClear: conversion.sourceStatisticClear } : {}),
             ...(conversion.sourceClassification === undefined
               ? {}
               : { sourceClassification: conversion.sourceClassification }),
@@ -1896,6 +1906,11 @@ export class Importer {
     let omissions = await this.fences(owner, signal);
     const recordState = store.key(row.source, row.recordKey, run);
     const acknowledged = recordState.acknowledged;
+    const previousProjection = recordState.acknowledgedProjection;
+    const sameAdmission = isDeepStrictEqual(
+      [previousProjection?.sourceVocabulary, previousProjection?.sourceStatistic, previousProjection?.sourceStatisticClear],
+      [staged.projection.sourceVocabulary, staged.projection.sourceStatistic, staged.projection.sourceStatisticClear],
+    );
     const unsubmittedMedia = this.session.bindings.hasUnsubmittedMedia(owner, row.digest);
     // Disappearance has no source projection or references to resolve. Its exact
     // owner still supplies the candidates to retract through ordinary reconciliation.
@@ -1910,8 +1925,12 @@ export class Importer {
       if (recordState.resolved) return { kind: recordState.kind ?? 'unchanged', deferredCover: false };
       if (
         isDeepStrictEqual(acknowledged, row) &&
+        sameAdmission &&
         prior === ownReferences.signature &&
         !unsubmittedMedia &&
+        !staged.projection.sourceStatistic &&
+        !staged.projection.sourceStatisticClear &&
+        !staged.projection.sourceVocabulary &&
         !this.options.classificationAdmission &&
         !this.options.vocabularyAdmission
       ) {
@@ -1920,7 +1939,11 @@ export class Importer {
       store.stageReferenceSignature(run, row.recordKey, ownReferences.signature);
     } else if (
       isDeepStrictEqual(acknowledged, row) &&
+      sameAdmission &&
       !unsubmittedMedia &&
+      !staged.projection.sourceStatistic &&
+      !staged.projection.sourceStatisticClear &&
+      !staged.projection.sourceVocabulary &&
       !this.options.classificationAdmission &&
       !this.options.vocabularyAdmission &&
       !this.options.identifierLookup
@@ -2146,12 +2169,13 @@ export class Importer {
         // replacing any acknowledged semantic candidate or its immutable journal.
         if (!store.key(run.source, row.recordKey, run).resolved) store.acknowledgeStatisticRefresh(run, row.recordKey);
       } else if (
-        (this.options.vocabularyAdmission || this.options.identifierLookup || unavailableCover) &&
+        (this.options.vocabularyAdmission || staged.projection.sourceVocabulary || this.options.identifierLookup || ownReferences || unavailableCover) &&
         conversion &&
         retainedCandidates.size === candidates.length &&
         conversion.proposals.every((command) => command.op === 'create' || retainedProposals.has(command))
       ) {
         // Binding availability was re-read; the justified proposals are unchanged.
+        if (!recordState.resolved) store.acknowledgeNoEffects(run, row.recordKey, { reason: 'retained-candidates' });
       } else if (lookupUnavailable && preservedCandidates.size > 0) {
         // The source binding read was unavailable. Keep its exact acknowledged candidates for retry.
       } else throw new Error('Conversion has no justified final plan');
