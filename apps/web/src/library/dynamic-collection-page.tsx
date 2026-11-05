@@ -104,6 +104,7 @@ function DynamicCollectionPageLifetime({
   layout,
   viewerId = null,
   readRule: propsReadRule,
+  windowNavigation,
   pins,
   pinActions,
   collections,
@@ -227,11 +228,11 @@ function DynamicCollectionPageLifetime({
   const incompleteFilter = (current.filterIgnored?.length ?? 0) > 0;
   const membersReady = !current.preparing && !current.unavailable && !current.filterStatus && !incompleteFilter;
   const laterPage = current.cursor !== undefined;
-  const windows = props.windowNavigation?.view(current);
+  const windows = windowNavigation?.view(current);
   useLayoutEffect(() => {
-    if (!props.windowNavigation) return;
+    if (!windowNavigation) return;
     if (membersReady) {
-      const admitted = props.windowNavigation.admit(current);
+      const admitted = windowNavigation.admit(current);
       if (admitted.changed) setWindowObservation((value) => value + 1);
       if (admitted.focus?.keyboard && admitted.focus.eligible()) resultsHeading.current?.focus();
     } else if (
@@ -240,16 +241,16 @@ function DynamicCollectionPageLifetime({
       current.filterStatus === 'failed' ||
       incompleteFilter
     ) {
-      if (props.windowNavigation.fail(current)) setWindowObservation((value) => value + 1);
+      if (windowNavigation.fail(current)) setWindowObservation((value) => value + 1);
     }
-  }, [current, membersReady, incompleteFilter, props.windowNavigation, windowObservation]);
+  }, [current, membersReady, incompleteFilter, windowNavigation, windowObservation]);
   function activateWindow(
     event: MouseEvent<HTMLAnchorElement>,
     target: ResultsCursor,
     movement: ResultsWindowMove,
   ) {
     if (
-      !props.windowNavigation ||
+      !windowNavigation ||
       event.defaultPrevented ||
       event.button !== 0 ||
       event.metaKey ||
@@ -258,7 +259,7 @@ function DynamicCollectionPageLifetime({
       event.altKey
     )
       return;
-    if (props.windowNavigation.move(current, target, movement, event.detail === 0 ? event.currentTarget : undefined))
+    if (windowNavigation.move(current, target, movement, event.detail === 0 ? event.currentTarget : undefined))
       event.preventDefault();
   }
   async function copyLink(href: string) {

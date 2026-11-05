@@ -174,7 +174,7 @@ export function readSavedQueryResultsWindow(
       ? { previous: reading.predecessors[reading.predecessors.length - 1] }
       : {}),
     hasPrevious: isCurrent && reading.predecessors.length > 0,
-    pendingTarget: reading.staged?.target === routeCursor,
+    pendingTarget: reading.staged !== undefined && reading.staged.target === routeCursor,
     failedTarget: reading.staged?.failed === true && reading.staged.target === routeCursor,
   };
 }
@@ -221,7 +221,7 @@ export function admitSavedQueryResultsWindow(
     delete reading.staged;
     return { changed, ...(focus ? { focus } : {}) };
   }
-  if (reading.staged?.target === cursor) {
+  if (reading.staged !== undefined && reading.staged.target === cursor) {
     const staged = reading.staged;
     const focus = staged.focus?.eligible() ? staged.focus : undefined;
     staged.focus?.release();
@@ -284,7 +284,7 @@ export function hasPendingSavedQueryResultsWindowTarget(
 ): boolean {
   const visit = visits.get(client);
   const reading = visit?.base === base ? visit.readings[mode] : undefined;
-  return reading?.staged?.target === cursor;
+  return reading?.staged !== undefined && reading.staged.target === cursor;
 }
 
 export function failPendingSavedQueryResultsWindowMove(
