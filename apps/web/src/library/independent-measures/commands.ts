@@ -102,7 +102,18 @@ export async function submitIndependentEdits(
     try {
       result = await dispatchMeasureCommand(command, current);
     } catch {
-      return { outcome: uncertainOutcome(command), commands };
+      return {
+        outcome: lastSnapshot
+          ? {
+              state: 'partial',
+              revision: lastSnapshot.revision,
+              snapshot: lastSnapshot,
+              remaining: edits.slice(index),
+              failed: command,
+            }
+          : uncertainOutcome(command),
+        commands,
+      };
     }
     if (!result) return { outcome: uncertainOutcome(command), commands };
     if (!result.ok) {

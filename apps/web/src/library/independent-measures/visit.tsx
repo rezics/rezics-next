@@ -115,7 +115,15 @@ export function IndependentMeasuresVisit({
       setValidationSubmitted(false);
       setVisit((latest) => {
         if (latest.sessionId !== sessionId || latest.kind === 'submitting') return latest;
-        return refreshIndependentVisit(latest, page.session.revision, projectIndependentMeasures(page.session));
+        const refreshed = refreshIndependentVisit(
+          latest,
+          page.session.revision,
+          projectIndependentMeasures(page.session),
+          undefined,
+          true,
+        );
+        if (latest.retry && !refreshed.retry) commands.current = [];
+        return refreshed;
       });
     } finally {
       if (refreshCycle.current === cycle) {

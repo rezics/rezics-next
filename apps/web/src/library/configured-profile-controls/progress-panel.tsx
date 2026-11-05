@@ -142,7 +142,8 @@ export function ConfiguredProgressPanel({
           recordIntent.current ??
           createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
             sessionId: started.id,
-            revision: 0,
+            revision: 1,
+            measureId: progress.measure.unit.id,
             amount: draft.trim(),
             idempotencyKey: crypto.randomUUID(),
           });
@@ -158,6 +159,7 @@ export function ConfiguredProgressPanel({
         createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
           sessionId: progress.session.id,
           revision: progress.session.revision,
+          measureId: progress.session.unit,
           amount: draft.trim(),
           idempotencyKey: crypto.randomUUID(),
         });
@@ -180,6 +182,7 @@ export function ConfiguredProgressPanel({
         createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
           sessionId: progress.session.id,
           revision: progress.session.revision,
+          measureId: progress.session.unit,
           clear: true,
           idempotencyKey: crypto.randomUUID(),
         });

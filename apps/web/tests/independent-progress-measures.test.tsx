@@ -19,6 +19,7 @@ import {
 } from '../src/library/independent-measures/contract';
 import {
   acknowledgeIndependentRetry,
+  applyIndependentOutcome,
   editMeasure,
   readyVisit,
   refreshIndependentVisit,
@@ -35,6 +36,7 @@ import {
   submitIndependentEdits,
   type MeasureSender,
 } from '../src/library/independent-measures/commands';
+import { captureMeasureCommand } from '../src/library/independent-measures/commands';
 import { independentActionClass } from '../src/library/independent-measures/recovery';
 import { newCsrfToken } from '../src/session/csrf';
 
@@ -202,6 +204,36 @@ test('new, withdrawn and unsupported measures keep their own saved values withou
     ['page', '6'],
   ]);
   expect(unsupported.edits).toEqual([]);
+  const clear = editMeasure(unsupported, 'page', { clear: true });
+  const refreshed = refreshIndependentVisit(
+    clear,
+    6,
+    unsupported.measures.map((measure) => ({ ...measure, recording: 'historical' })),
+  );
+  expect(stageIndependentReview(refreshed).edits).toEqual([{ unit: 'page', kind: 'clear' }]);
+  expect(refreshed.measures.find((measure) => measure.unit === 'chapter')?.amount).toBe('12');
+});
+
+test('only deliberate refresh retires a conflict; uncertain commands keep their original operands', () => {
+  const command = captureMeasureCommand(
+    { 'X-CSRF-Token': 'original' },
+    {
+      sessionId,
+      revision: 3,
+      measureId: 'volume',
+      amount: '2',
+      idempotencyKey: 'original-key',
+    },
+  );
+  const draft = editMeasure(readyVisit(sessionId, 3, [chapter, volume]), 'volume', { text: '2' });
+  const conflict = applyIndependentOutcome(draft, { state: 'conflict', command, revision: 3 });
+  const automatic = refreshIndependentVisit(conflict, 4, [chapter, volume]);
+  expect(automatic.retry).toBe(command);
+  const deliberate = refreshIndependentVisit(automatic, 4, [chapter, volume], undefined, true);
+  expect(deliberate.retry).toBeNull();
+  expect(deliberate.edits).toEqual([{ unit: 'volume', kind: 'amount', amount: '2' }]);
+  const uncertain = applyIndependentOutcome(draft, { state: 'uncertain', command });
+  expect(refreshIndependentVisit(uncertain, 4, [chapter, volume], undefined, true).retry).toBe(command);
 });
 
 test('an acknowledged original retry resets its unit while preserving other measure intent', () => {
@@ -252,9 +284,13 @@ test('an acknowledged original retry resets its unit while preserving other meas
 
 test('a dual save sequences native records on the shared returned revision and stops as partial', async () => {
   const calls: ProgressRecordInput[] = [];
+  let lost = false;
   const sender: MeasureSender = async ({ data }) => {
     calls.push(data);
-    if (data.measureId === 'volume') return { ok: false, reason: 'conflict' } satisfies ProgressFailure;
+    if (data.measureId === 'volume') {
+      if (lost) throw new Error('lost acknowledgement');
+      return { ok: false, reason: 'conflict' } satisfies ProgressFailure;
+    }
     return {
       ok: true,
       session: {
@@ -309,6 +345,25 @@ test('a dual save sequences native records on the shared returned revision and s
   expect(result.outcome.failed.key).toBe('22222222-2222-4222-8222-222222222222');
   expect(result.outcome.failed.operands.measureId).toBe('volume');
   expect(result.commands[1]?.operands).toBe(result.outcome.failed.operands);
+  lost = true;
+  const uncertain = await submitIndependentEdits(
+    sessionId,
+    3,
+    [
+      { unit: 'chapter', kind: 'amount', amount: '11' },
+      { unit: 'volume', kind: 'amount', amount: '4' },
+    ],
+    { 'X-CSRF-Token': 'original' },
+    () => true,
+    sender,
+  );
+  expect(uncertain.outcome).toMatchObject({
+    state: 'partial',
+    revision: 4,
+    snapshot: { amount: '11' },
+    remaining: [{ unit: 'volume', kind: 'amount', amount: '4' }],
+    failed: { operands: { revision: 4, measureId: 'volume', amount: '4' } },
+  });
 });
 
 test('uncertain retry keeps sender, credentials, key and operands', async () => {

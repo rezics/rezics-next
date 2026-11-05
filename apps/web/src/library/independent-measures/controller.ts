@@ -124,6 +124,7 @@ export function refreshIndependentVisit(
   revision: number,
   measures: IndependentMeasure[],
   snapshot?: ProgressSnapshot,
+  resolveConflict = false,
 ): IndependentVisit {
   if (visit.kind === 'submitting' || revision < visit.revision) return visit;
   const nextMeasures = snapshot ? applySnapshot(measures, snapshot) : measures;
@@ -131,13 +132,13 @@ export function refreshIndependentVisit(
     const previous = visit.measures.find((item) => item.unit === measure.unit);
     const draft = visit.drafts.find((item) => item.unit === measure.unit);
     const hasLocalChoice =
-      previous?.recording === 'supported' &&
-      measure.recording === 'supported' &&
       draft !== undefined &&
-      (draft.clear || draftDirty(previous, draft));
+      (draft.clear ||
+        (previous?.recording === 'supported' && measure.recording === 'supported' && draftDirty(previous, draft)));
     return hasLocalChoice ? { ...draft, unit: measure.unit } : draftFor(measure);
   });
-  const retry = visit.retry;
+  const recovered = resolveConflict && visit.outcome?.state === 'conflict';
+  const retry = recovered ? null : visit.retry;
   return {
     ...visit,
     kind: retry ? 'review' : 'ready',
@@ -145,7 +146,7 @@ export function refreshIndependentVisit(
     measures: nextMeasures,
     drafts,
     edits: collectEdits(nextMeasures, drafts),
-    outcome: visit.outcome?.state === 'conflict' ? null : visit.outcome,
+    outcome: recovered ? null : visit.outcome,
     retry,
   };
 }

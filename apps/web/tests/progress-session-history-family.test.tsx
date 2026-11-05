@@ -2,6 +2,8 @@ import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, Fragment, StrictMode, useState, type ReactNode } from 'react';
 import type { ProgressChange, ProgressSessionPage as Page } from '../src/library/progress-reads';
+import { progressHistoryRecord } from '../src/library/progress-history-restore';
+import { independentSessionHref } from '../src/library/independent-measures/history';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -205,6 +207,51 @@ async function mount(
 function definitions(row: Element) {
   return [...row.querySelectorAll('dt')].map((term) => [term.textContent, term.nextElementSibling?.textContent]);
 }
+
+test('one historical measure is reviewed with its exact operand and the current session revision', async () => {
+  const original = page({
+    revision: 9,
+    changes: [change('volume-zero', { measureId: 'volume', amount: '0.000' })],
+    measures: [
+      {
+        unit: 'historic-unit-x',
+        amount: '4.750000',
+        total: '100',
+        primary: true,
+        meaning: 'known',
+        recordingState: 'supported',
+      },
+      { unit: 'volume', amount: '2', total: null, primary: false, meaning: 'known', recordingState: 'supported' },
+    ],
+  });
+  const intent = progressHistoryRecord(original.session, original.session.changes[0]!);
+  expect(intent).toEqual({ measureId: 'volume', amount: '0.000' });
+  expect(progressHistoryRecord(original.session, change('absent'))).toBeUndefined();
+  expect(progressHistoryRecord(original.session, change('finish', { action: 'complete' }))).toBeUndefined();
+  expect(
+    progressHistoryRecord({ ...original.session, recordingState: 'unsupported' }, change('clear', { cleared: true })),
+  ).toEqual({ clear: true });
+  const h = await mount(original);
+  try {
+    await act(async () =>
+      h.user.click(within(h.history()).getByRole('button', { name: m.library_progress_review(), exact: true })),
+    );
+    const dialog = h.body.getByRole('dialog');
+    expect(dialog.textContent).toContain('volume');
+    expect(dialog.textContent).toContain('0.000');
+    expect(
+      within(dialog).getByRole('button', { name: m.library_progress_confirm_correction(), exact: true }),
+    ).toBeDefined();
+    expect(unexpectedRequest).not.toHaveBeenCalled();
+    const href = new URL(
+      independentSessionHref(original.session.id, { changes: 'changes/+?=', units: 'units/+?=', logs: 'log' }),
+      window.location.href,
+    );
+    expect(href.searchParams.get('units')).toBe('units/+?=');
+  } finally {
+    await h.close();
+  }
+});
 
 test('Amount history uses ordered shared documents and retains exact original decimals, locators, timestamps and lifecycle actions', async () => {
   const original = page({

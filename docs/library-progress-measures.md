@@ -102,8 +102,15 @@ the single-measure path.
 Decision: Native `:record` addresses one `measureId`. Saving more than one dirty unit sequences those records
 against the shared returned revision. There is no combined multi-measure payload in the installed producer.
 
+Decision: History restores one selected supported intent as a reviewed new correction against the current occurrence
+revision, preserving its exact decimal or sparse keys; it does not restore lifecycle actions or reconstruct a snapshot.
+Explicit retained clears remain available when recording support changes. Configured scalar controls address their
+exact unit, so their clear preserves sibling measures; a completed occurrence starts a separate reread.
+
 Unknown commands keep the original sender, credentials, idempotency key and operands. A stale revision needs an
-explicit refresh before a new key. Partial success keeps remaining drafts. Missing `KernelClient.progressSessions({ sessionId }).$record.post` with `measureId` stays unavailable at that seam. Historical or unsupported
+explicit refresh before a new key. Only that deliberate refresh releases a rejected conflict command; an uncertain
+command retains its captured operands through refresh. Partial success keeps remaining drafts, including when a later
+acknowledgement is lost. Missing `KernelClient.progressSessions({ sessionId }).$record.post` with `measureId` stays unavailable at that seam. Historical or unsupported
 descriptors are shown as supplied; Web does not invent labels or a new profile.
 
 Mounted UI: `apps/web/src/library/independent-measures/` with the session page caller in

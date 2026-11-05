@@ -139,16 +139,6 @@ export function IndependentMeasuresEditor({
                     disabled={busy}
                     onChange={(event) => onDraft(measure.unit, event.target.value)}
                   />
-                  <Exposure operation="progress_session.record">
-                    <button
-                      type="button"
-                      className={independentActionClass}
-                      disabled={busy || measure.amount === null}
-                      onClick={() => onClear(measure.unit)}
-                    >
-                      {m.library_progress_measure_clear()}
-                    </button>
-                  </Exposure>
                 </>
               ) : measure.recording === 'historical' ? (
                 <p className="text-sm text-muted-foreground">{m.library_progress_measure_historical()}</p>
@@ -157,6 +147,16 @@ export function IndependentMeasuresEditor({
               ) : (
                 <p className="text-sm text-muted-foreground">{m.library_progress_measure_recording_unavailable()}</p>
               )}
+              <Exposure operation="progress_session.record">
+                <button
+                  type="button"
+                  className={independentActionClass}
+                  disabled={busy || measure.amount === null}
+                  onClick={() => onClear(measure.unit)}
+                >
+                  {m.library_progress_measure_clear()}
+                </button>
+              </Exposure>
             </fieldset>
           );
         })}
