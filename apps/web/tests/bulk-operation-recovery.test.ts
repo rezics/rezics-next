@@ -17,6 +17,7 @@ const operation: BulkOperation = {
   state: 'planned',
   collectionId: null,
   selectionKind: 'explicit',
+  selectionSource: null,
   phase: 'applying',
   selectionComplete: true,
   occurrencesComplete: true,
@@ -118,8 +119,8 @@ test('expired, forbidden, unavailable and invalid pages cannot become an empty c
       await readNativeOperation(
         native((r) =>
           json(
-            r.url.endsWith('/outcomes') ? { code: 'refused' } : { operation },
-            r.url.endsWith('/outcomes') ? status : 200,
+            new URL(r.url).pathname.endsWith('/outcomes') ? { code: 'refused' } : { operation },
+            new URL(r.url).pathname.endsWith('/outcomes') ? status : 200,
           ),
         ),
         'Bearer a',
@@ -137,7 +138,7 @@ test('expired, forbidden, unavailable and invalid pages cannot become an empty c
   const completed = await readNativeOperation(
     native((r) =>
       json(
-        r.url.endsWith('/outcomes')
+        new URL(r.url).pathname.endsWith('/outcomes')
           ? { outcomes: [], next: null }
           : { operation: { ...operation, phase: 'completed' } },
       ),

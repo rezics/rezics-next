@@ -18,8 +18,12 @@ mock.module('../src/kernel/exposure', () => ({ prepareExposure: async () => {} }
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
-const window = new Window({ url: 'https://site.test/library/operations/op' });
+const operationId = '12345678-1234-4234-8234-123456789abc';
+const otherId = '22345678-1234-4234-8234-123456789abc';
+const window = new Window({ url: `https://site.test/library/operations/${operationId}` });
+window.document.head.innerHTML = '<link rel="canonical" href="https://site.test">';
 const globals = {
+  scrollTo: window.scrollTo.bind(window),
   window,
   document: window.document,
   navigator: window.navigator,
@@ -50,6 +54,7 @@ function operation(id: string): LibraryBulkOperation {
     state: 'planned',
     collectionId: null,
     selectionKind: 'explicit',
+    selectionSource: null,
     phase: 'applying',
     selectionComplete: true,
     occurrencesComplete: true,
@@ -120,7 +125,7 @@ mock.module('../src/library/bulk-operation-recovery-server', () => ({
     state: 'ready',
     csrfToken: 'csrf',
     intent: {
-      operationId: 'op',
+      operationId,
       sender: 'viewer',
       idempotencyKey: 'exact-key',
       locale: 'en',
@@ -129,7 +134,7 @@ mock.module('../src/library/bulk-operation-recovery-server', () => ({
   }),
   cancelBulkOperationRecovery: async (input: unknown) => {
     commands.push(input);
-    return { state: 'uncertain', operationId: 'op' };
+    return { state: 'uncertain', operationId };
   },
 }));
 const { Route } = await import('../src/routes/library/operations/$id');
@@ -173,7 +178,7 @@ test('production route replaces three windows, retries exact reads independently
   const router = createRouter({
     routeTree: parent.addChildren([route]),
     context: { queryClient: client },
-    history: createMemoryHistory({ initialEntries: ['/library/operations/op'] }),
+    history: createMemoryHistory({ initialEntries: [`/library/operations/${operationId}`] }),
   });
   const host = window.document.createElement('div');
   window.document.body.append(host);
@@ -223,13 +228,13 @@ test('production route replaces three windows, retries exact reads independently
     await click(m.library_vndb_browse_refresh());
     expect(host.textContent).toContain(m.library_bulk_recovery_outcome_success());
     await click(m.library_window_first());
-    expect(reads.at(-1)).toEqual({ operationId: 'op' });
+    expect(reads.at(-1)).toEqual({ operationId });
     await click(m.library_bulk_recovery_cancel_retry());
     expect(commands).toHaveLength(2);
     expect(commands[1]).toEqual(commands[0]);
     invalid = true;
     await click(m.library_bulk_recovery_read_more());
-    expect(reads.at(-1)).toEqual({ operationId: 'op' });
+    expect(reads.at(-1)).toEqual({ operationId });
     let resolve!: () => void;
     const pending = new Promise<void>((r) => {
       resolve = r;
@@ -246,10 +251,10 @@ test('production route replaces three windows, retries exact reads independently
     expect(host.textContent).not.toContain('subject-b-');
     late = undefined;
     await act(async () => {
-      await router.navigate({ to: '/library/operations/$id', params: { id: 'other' } });
+      await router.navigate({ to: '/library/operations/$id', params: { id: otherId } });
       await settle();
     });
-    expect(reads.at(-1)?.operationId).toBe('other');
+    expect(reads.at(-1)?.operationId).toBe(otherId);
     expect(host.textContent).not.toContain('subject-b-');
   } finally {
     await act(async () => root.unmount());

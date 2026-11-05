@@ -26,6 +26,7 @@ function operation(phase: 'completed' | 'applying' | 'preview' = 'completed') {
     route: 1,
     action: 'remove_from_library' as const,
     selectionKind: 'explicit' as const,
+    selectionSource: null,
     state: null,
     collectionId: null,
     phase,
