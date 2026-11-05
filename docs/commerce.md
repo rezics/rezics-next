@@ -120,8 +120,11 @@ an active row on the received page.
 
 A current own entitlement is the only purchase path into the captured Content edition. The buyer reads
 `GET /v1/contentEditions/{id}` and `GET /v1/contentEditions/{id}/revision` with the live session; revision ID and
-SHA-256 must match the captured terms. The creator's ordinary edition authority stays independent of that purchase.
+SHA-256 must match the captured terms. The served order reader link and edition details must show those same
+identifiers. The creator's ordinary edition authority stays independent of that purchase.
 Anonymous and unrelated accounts receive the same concealment as an unknown edition. A refund or dispute removes
 current use without rewriting the receipt. Offer review and checkout follow the current origin after sign-in,
 refresh and return. Queued `order.reconcile` replies `202` with `cache-control: private, no-store`; that receipt
-schedules repair and does not grant bytes.
+schedules repair and does not grant bytes. Hosted Checkout in provider test mode remains an operator operand
+(`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_MANAGED_PAYMENTS`, `CHECKOUT_SUCCESS_URL`,
+`CHECKOUT_CANCEL_URL`); signed fixtures prove native settlement without that live account.

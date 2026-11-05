@@ -330,3 +330,86 @@ test('the buyer pages captured order history; Bob and anonymous cannot enumerate
   await anonymousPage.close();
   expect(pending.length).toBe(19);
 });
+
+test('paid Alice opens the captured edition; unrelated, anonymous and refunded viewers stay concealed', async () => {
+  const orderId = fixture.paidOrderId;
+  const entitlementId = fixture.paidEntitlementId;
+  expect(orderId).toEqual(expect.any(String));
+  expect(entitlementId).toEqual(expect.any(String));
+  const paidOrder = await orderFromApi(orderId!);
+  const current = await fixture.orderFor(orderId!);
+  const terms = paidOrder.contentEdition as {
+    benefit: { resource: { id: string }; version: { revisionId: string; sha256: string } };
+  };
+  const editionId = terms.benefit.resource.id;
+  const revisionId = terms.benefit.version.revisionId;
+  const sha256 = terms.benefit.version.sha256;
+  expect(editionId).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(revisionId).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(sha256).toMatch(/^[0-9a-f]{64}$/);
+
+  const metadata = await fixture.stack.kernel(`/v1/contentEditions/${editionId}`, {}, 'alice');
+  expect(metadata.status).toBe(200);
+  expect(metadata.headers.get('cache-control')).toBe('private, no-store');
+  expect(await metadata.json()).toMatchObject({ editionId, revisionId, sha256, state: 'published' });
+  const used = await fixture.stack.kernel(`/v1/contentEditions/${editionId}/revision`, {}, 'alice');
+  expect(used.status).toBe(200);
+  expect(await used.json()).toMatchObject({ editionId, revisionId, sha256, body: expect.any(Object) });
+  expect((await fixture.stack.kernel(`/v1/contentEditions/${editionId}/revision`)).status).toBeGreaterThanOrEqual(400);
+  expect(
+    (await fixture.stack.kernel(`/v1/contentEditions/${editionId}/revision`, {}, 'bob')).status,
+  ).toBeGreaterThanOrEqual(400);
+  expect(
+    (await fixture.stack.kernel(`/v1/contentEditions/${editionId}/revision`, {}, 'outsider')).status,
+  ).toBeGreaterThanOrEqual(400);
+
+  const reader = await alice.context.newPage();
+  reader.setDefaultTimeout(20_000);
+  await reader.goto(`${fixture.stack.web}/en/orders/${orderId}`, { waitUntil: 'domcontentloaded' });
+  await reader.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  await reader.getByRole('link', { name: 'Open edition reader' }).click();
+  await reader.waitForURL((location) => location.pathname === `/en/editions/${editionId}`);
+  await reader.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  await reader.getByText('Edition details').click();
+  expect(await reader.getByText(revisionId).count()).toBeGreaterThan(0);
+  expect(await reader.getByText(sha256).count()).toBe(1);
+
+  const outsider = await fixture.auth.signIn('outsider');
+  const unrelated = await outsider.context.newPage();
+  await unrelated.goto(`${fixture.stack.web}/en/editions/${editionId}`, { waitUntil: 'domcontentloaded' });
+  await unrelated.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  expect(await unrelated.getByText(sha256).count()).toBe(0);
+  expect(await unrelated.getByText('Edition details').count()).toBe(0);
+
+  const anonymousContext = await fixture.auth.context('anonymous');
+  const anonymousReader = await anonymousContext.newPage();
+  await anonymousReader.goto(`${fixture.stack.web}/en/editions/${editionId}`, { waitUntil: 'domcontentloaded' });
+  expect(await anonymousReader.getByText(sha256).count()).toBe(0);
+  expect(await anonymousReader.getByText('Edition details').count()).toBe(0);
+
+  const refund = fixture.stripe.refundRemaining(current.sessionId, 'remaining');
+  expect((await fixture.deliver(await fixture.stripe.event('refund.created', refund.id))).status).toBe(200);
+  const deadline = Date.now() + 30_000;
+  let revoked = false;
+  while (Date.now() < deadline) {
+    const entitlement = await fixture.stack.kernel(`/v1/entitlements/${entitlementId}`, {}, 'alice');
+    expect(entitlement.status).toBe(200);
+    if (((await entitlement.json()) as { entitlement: { active: boolean } }).entitlement.active === false) {
+      revoked = true;
+      break;
+    }
+    await Bun.sleep(50);
+  }
+  expect(revoked).toBe(true);
+  expect(
+    (await fixture.stack.kernel(`/v1/contentEditions/${editionId}/revision`, {}, 'bob')).status,
+  ).toBeGreaterThanOrEqual(400);
+  expect((await fixture.stack.kernel(`/v1/contentEditions/${editionId}/revision`, {}, 'alice')).status).toBe(200);
+  await reader.goto(`${fixture.stack.web}/en/orders/${orderId}`, { waitUntil: 'domcontentloaded' });
+  await reader.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  expect(await reader.getByRole('link', { name: 'Open edition reader' }).count()).toBe(0);
+
+  await reader.close();
+  await unrelated.close();
+  await anonymousReader.close();
+});
