@@ -274,7 +274,7 @@ test('a disclosed later-page visit returns to its exact current window without s
     return found!;
   };
   const button = (label: string) => {
-    const found = [...host.querySelectorAll('button')].find((item) => item.textContent === label);
+    const found = [...window.document.querySelectorAll('button')].find((item) => item.textContent === label);
     expect(found).toBeDefined();
     return found!;
   };
@@ -308,7 +308,7 @@ test('a disclosed later-page visit returns to its exact current window without s
     await act(async () => button(m.settings_watches_stop()).click());
     expect(host.textContent).toContain(m.settings_watches_uncertain_text());
     await act(async () => link('Later thread').click());
-    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain(m.settings_watches_leave_title());
+    expect(window.document.querySelector('[role="alertdialog"]')?.textContent).toContain(m.settings_watches_leave_title());
     await act(async () => button(m.settings_profile_stay()).click());
     expect(router.state.location.pathname).toBe('/settings');
     expect((window.history.state as Record<string, unknown>).__rezicsSettingsWatchReturn).toBeUndefined();

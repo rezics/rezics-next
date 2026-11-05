@@ -263,30 +263,38 @@ function OwnedWatches({
                           {row.kind === 'thread' ? m.settings_watches_thread() : m.settings_watches_board()}
                         </p>
                         {row.target ? (
-                          <Link
-                            to={row.target.href as never}
-                            onClick={(event) => {
-                              if (
-                                !onVisitTarget ||
-                                event.defaultPrevented ||
-                                event.button !== 0 ||
-                                event.metaKey ||
-                                event.ctrlKey ||
-                                event.altKey ||
-                                event.shiftKey ||
-                                (event.currentTarget.target && event.currentTarget.target !== '_self')
-                              )
-                                return;
-                              const receipt = controller.captureReturn(
-                                row.subscriptionId,
-                                event.detail === 0 && document.activeElement === event.currentTarget,
-                              );
-                              if (receipt && !onVisitTarget(receipt, row.target.href)) event.preventDefault();
-                            }}
-                            className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
-                          >
-                            {row.target.title}
-                          </Link>
+                          onVisitTarget ? (
+                            <Link
+                              to={row.target.href as never}
+                              onClick={(event) => {
+                                if (
+                                  event.defaultPrevented ||
+                                  event.button !== 0 ||
+                                  event.metaKey ||
+                                  event.ctrlKey ||
+                                  event.altKey ||
+                                  event.shiftKey ||
+                                  (event.currentTarget.target && event.currentTarget.target !== '_self')
+                                )
+                                  return;
+                                const receipt = controller.captureReturn(
+                                  row.subscriptionId,
+                                  event.detail === 0 && document.activeElement === event.currentTarget,
+                                );
+                                if (receipt && !onVisitTarget(receipt, row.target.href)) event.preventDefault();
+                              }}
+                              className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+                            >
+                              {row.target.title}
+                            </Link>
+                          ) : (
+                            <a
+                              href={row.target.href}
+                              className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+                            >
+                              {row.target.title}
+                            </a>
+                          )
                         ) : (
                           <>
                             <p className="font-medium">{m.settings_watches_target_unavailable()}</p>
