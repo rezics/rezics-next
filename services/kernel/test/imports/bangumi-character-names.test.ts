@@ -1,3 +1,4 @@
+import { fixtureFetch } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -110,10 +111,10 @@ test('default selected Bangumi character names publish, retain adoption, and ref
     }
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     const state = join(directory, 'import.sqlite');
     async function run(input: CrossMediaTables) {
@@ -197,7 +198,7 @@ test('default selected Bangumi character names publish, retain adoption, and ref
     expect(sourced.status).toBe(200);
     const sourcedBody = sourced.body as {
       candidates: {
-        statement: { references?: { parts: { property: { id: string }; value: { content: unknown } }[] }[] };
+        statement: { references?: { parts: { property: { id: string }; value: { type: 'value'; content: unknown } }[] }[] };
       }[];
     };
     const citation = sourcedBody.candidates.find((candidate) => candidate.statement.references?.length)?.statement

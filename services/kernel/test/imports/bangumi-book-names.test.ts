@@ -1,3 +1,4 @@
+import { fixtureFetch, retainedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -63,10 +64,10 @@ test('Book names move through explicit publication and same-UUID refresh without
   const editor = await openApiObserver(runtime);
   const publicClient = createPublicBulkClient({
     origin: runtime.origin,
-    fetch: async (input) => {
+    fetch: fixtureFetch(async (input) => {
       const url = new URL(String(input));
       return runtime.request(`${url.pathname}${url.search}`);
-    },
+    }),
   });
   const seed = async (state: 'malformed' | 'corrected' | 'fenced') => {
     const plan = await planFor(record(state));
@@ -90,19 +91,19 @@ test('Book names move through explicit publication and same-UUID refresh without
       context: GLOBAL_CONTEXT,
       limit: 100,
     });
-    expect(firstPage.candidates.map((candidate) => candidate.statement.value.content)).toContainEqual({
+    expect(retainedCandidates(firstPage.candidates).map((candidate) => candidate.statement.value.content)).toContainEqual({
       language: 'zh',
       text: 'Source Chinese title',
     });
     expect(
-      firstPage.candidates.some((candidate) =>
+      retainedCandidates(firstPage.candidates).some((candidate) =>
         JSON.stringify(candidate.statement.value.content).includes('Must not leak'),
       ),
     ).toBe(false);
     expect(
       await runtime.importTransport
         .reviewedCandidates(id, { property: 'schema:alternateName', context: GLOBAL_CONTEXT, limit: 100 })
-        .then((page) => page.candidates),
+        .then((page) => retainedCandidates(page.candidates)),
     ).toEqual([]);
 
     const notAuthorized = await publishShowcase({
@@ -152,7 +153,7 @@ test('Book names move through explicit publication and same-UUID refresh without
       context: GLOBAL_CONTEXT,
       limit: 100,
     });
-    expect(hasTitleCandidate(correctedCandidates.candidates, 'und', 'New alias')).toBe(true);
+    expect(hasTitleCandidate(retainedCandidates(correctedCandidates.candidates), 'und', 'New alias')).toBe(true);
     expect(
       titleValues((await publicClient.readSubject(id)).subject?.statements?.['schema:name'] as BatchStatement[]),
     ).toEqual(titleValues(publicSubject.statements['schema:name']));
@@ -172,7 +173,7 @@ test('Book names move through explicit publication and same-UUID refresh without
       limit: 100,
     });
     expect(
-      afterFence.candidates.some((candidate) =>
+      retainedCandidates(afterFence.candidates).some((candidate) =>
         JSON.stringify(candidate.statement.value.content).includes('Fenced alias'),
       ),
     ).toBe(false);

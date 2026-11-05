@@ -1,8 +1,9 @@
+import { valueContent } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
-import { converter_revision as bangumiRevision } from '@rezics/conversion/bangumi';
+import { converter_revision as bangumiRevision } from '../../../../packages/conversion/src/bangumi.ts';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openProviderCli, type Candidate } from './provider-cli-native-fixture.ts';
@@ -137,14 +138,14 @@ test('ordinary Bangumi import proposes, adopts and refreshes Game names on the a
     await acceptAndAdopt(cli, id, 'schema:name', names);
     await acceptAndAdopt(cli, id, 'schema:alternateName', aliases);
     const adopted = await cli.runtime.importTransport.readReviewedSubject(id);
-    expect(adopted.subject?.statements['schema:name']?.map((item) => item.value.content)).toEqual(
+    expect(adopted.subject?.statements['schema:name']?.map((item) => valueContent(item.value))).toEqual(
       expect.arrayContaining([
         { language: 'und', text: 'CLANNAD' },
         { language: 'zh', text: '古典中文题名' },
         { language: 'zh', text: 'CLANNAD 中文名' },
       ]),
     );
-    expect(adopted.subject?.statements['schema:alternateName']?.map((item) => item.value.content)).toEqual(
+    expect(adopted.subject?.statements['schema:alternateName']?.map((item) => valueContent(item.value))).toEqual(
       expect.arrayContaining([
         { language: 'und', text: '星海之旅' },
         { language: 'und', text: 'クラナド' },

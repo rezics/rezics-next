@@ -1,3 +1,4 @@
+import { fixtureFetch } from './native-observations.ts';
 import { expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
@@ -187,7 +188,7 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
               };
             },
           },
-          fetch: (async (input: Request | string | URL, init?: RequestInit) => {
+          fetch: fixtureFetch(async (input: Request | string | URL, init?: RequestInit) => {
             const request = input instanceof Request ? input : new Request(input, init);
             const url = new URL(request.url);
             if (url.origin === auth) {
@@ -225,7 +226,7 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
               throw new DOMException('Interrupted after native commit before local ACK', 'AbortError');
             }
             return response;
-          }) as typeof fetch,
+          }),
         },
       );
       return result;
@@ -361,9 +362,9 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
           calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
         },
       });
-      await selectDate(workId, firstCandidate, (await datePage(workId)).adoption);
+      await selectDate(workId, firstCandidate!, (await datePage(workId)).adoption);
       firstSelected = await currentDate(workId);
-      expect(firstSelected).toEqual(firstCandidate.statement);
+      expect(firstSelected).toEqual(firstCandidate!.statement);
       const unchanged = await invoke(own, firstManifest);
       expect(unchanged.code).toBe(0);
       expect(claim(own, currentWork.key)).toBe(workId);
@@ -421,9 +422,9 @@ export async function runOpenLibraryDumpSetJourney(options: { firstPublication?:
             }),
       );
       expect(refreshedCandidate).toBeDefined();
-      expect(refreshedCandidate!.id).not.toBe(firstCandidate.id);
+      expect(refreshedCandidate!.id).not.toBe(firstCandidate!.id);
       expect(refreshedCandidate!.statement.references[0]!.parts).toContainEqual({
-        property: { id: 'schema:version' },
+        property: { id: 'schema:version', data_type: 'string' },
         value: { type: 'value', content: '121' },
       });
       await selectDate(workId, refreshedCandidate!, page.adoption);

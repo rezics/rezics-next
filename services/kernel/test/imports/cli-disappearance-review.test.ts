@@ -93,9 +93,9 @@ test('an operator reviews a native mass-disappearance stop, repairs the capture,
       if (expected === undefined) throw new Error('Missing expected native subject');
       expect(row.claim.subject).toBe(expected);
     }
-    const first = records[0];
-    if (!first) throw new Error('Missing corrected catalogue record');
-    const selected = await f.editor.read('bangumi', String(first.id));
+    const correctedRecord = records[0];
+    if (!correctedRecord) throw new Error('Missing corrected catalogue record');
+    const selected = await f.editor.read('bangumi', String(correctedRecord.id));
     const firstSubject = bound[0];
     if (firstSubject === undefined) throw new Error('Missing expected native subject');
     expect(selected.subject?.id).toBe(firstSubject);

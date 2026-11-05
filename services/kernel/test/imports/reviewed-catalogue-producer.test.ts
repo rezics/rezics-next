@@ -1,3 +1,5 @@
+import { isUnavailableIdentifierResolution } from '../../../importer/src/importer.ts';
+import { fixtureFetch } from './native-observations.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -81,7 +83,7 @@ test('actual reviewed platform seed producer obtains native metadata ACK before 
   const denied = createImportTransport({
     origin: 'https://reviewed.discovery.test',
     tokenProvider: async () => f.personas.outsider.bearer,
-    fetch: (async (input, init) => {
+    fetch: fixtureFetch(async (input, init) => {
       const request = new Request(input, init);
       const url = new URL(request.url);
       const bytes = await request.text();
@@ -93,7 +95,7 @@ test('actual reviewed platform seed producer obtains native metadata ACK before 
         Object.fromEntries(request.headers),
       );
       return Response.json(response.body, { status: response.status, headers: response.headers });
-    }) as typeof fetch,
+    }),
   });
   await expect(
     seedReviewedCatalogue({
@@ -312,6 +314,7 @@ test('normalization and current native binding validation stay bounded through r
             conversion,
             signal: new AbortController().signal,
           });
+          if (isUnavailableIdentifierResolution(references)) throw new Error('Expected resolved identifiers');
           expect(Object.values(references)).toEqual([binding!.sourceConcept]);
           const output = convertBangumi(
             { external_id: '498', record_revision: null, record: pinned },

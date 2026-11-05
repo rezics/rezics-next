@@ -1,3 +1,4 @@
+import { fixtureFetch } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -91,10 +92,10 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     expect(grant.status).toBe(201);
     const publicClient = createPublicBulkClient({
       origin,
-      fetch: (async (input: RequestInfo | URL) => {
+      fetch: fixtureFetch(async (input: RequestInfo | URL) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      }) as typeof fetch,
+      }),
     });
     const port = captureShowcaseCommands(runtime.importTransport, journal);
     const first = await importShowcaseBooks({
@@ -112,6 +113,9 @@ test('reader keeps book, volume and author identities after accept, adopt and on
       volumes: ['26', '27'],
       editions: [],
       authors: ['person:6023'],
+      illustrators: [],
+      publishers: [],
+      anime: [],
     });
     expect(first.identities['499']?.type).toBe('schema:BookSeries');
     expect(first.identities['26']?.type).toBe('schema:Book');

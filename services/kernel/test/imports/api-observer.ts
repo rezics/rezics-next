@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { BatchWriteResult, Rights, Source as SourceEnvelope } from '@rezics/definitions/bulk';
 import { parseDocument, serializeDocument } from '@rezics/document';
-import type { ImportApiDriver, Proposal, RecordView, Effects } from '../../../../specs/imports-api-driver.ts';
+import type { ImportApiDriver, Proposal, RecordView, Effects, Source } from '../../../../specs/imports-api-driver.ts';
 import type { Json, Statement, Subject, HttpResponse } from '../../../../specs/semantic-driver.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import { identitySupport } from './identity-fixture.ts';

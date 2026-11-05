@@ -1,3 +1,4 @@
+import { fixtureFetch, retainedCandidates, adoptedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -100,10 +101,10 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
   const editor = await openApiObserver(runtime);
   const publicClient = createPublicBulkClient({
     origin: runtime.origin,
-    fetch: async (input) => {
+    fetch: fixtureFetch(async (input) => {
       const url = new URL(String(input));
       return runtime.request(`${url.pathname}${url.search}`);
-    },
+    }),
   });
 
   async function importSelected(sourceInfobox: string) {
@@ -137,8 +138,8 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
       context: globalContext,
       limit: 100,
     });
-    const heightCandidate = initialHeight.candidates.find((candidate) => candidate.source?.external_id === characterId);
-    const weightCandidate = initialWeight.candidates.find((candidate) => candidate.source?.external_id === characterId);
+    const heightCandidate = retainedCandidates(initialHeight.candidates).find((candidate) => candidate.source?.external_id === characterId);
+    const weightCandidate = retainedCandidates(initialWeight.candidates).find((candidate) => candidate.source?.external_id === characterId);
     if (!heightCandidate || !weightCandidate) throw new Error('Selected physical candidates are missing');
     expect(heightCandidate.source).toMatchObject({
       source: crossMediaAliases.bangumi,
@@ -196,7 +197,7 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
         context: globalContext,
         limit: 100,
       });
-      expect(adopted.adoption?.selection?.map((entry) => entry.candidate)).toContain(candidate.id);
+      expect(adoptedCandidates(adopted)?.map((entry) => entry.candidate)).toContain(candidate.id);
     }
     expect(values(await publicClient.readSubject(first.id), 'schema:height')).toContainEqual({
       amount: '+172',

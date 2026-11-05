@@ -1,3 +1,4 @@
+import { fixtureFetch } from './native-observations.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -106,7 +107,7 @@ test('admitted classification uses the mounted client, retains provenance separa
     const ballots = await fixture.database.admin.query(
       'SELECT count(*)::text AS n FROM rating.classification_ballot_actor',
     );
-    return [votes[0]?.n, ballots[0]?.n];
+    return [votes.rows[0]?.n, ballots.rows[0]?.n];
   };
   const ballotsBefore = await ballotCounts();
   let loseNextPutResponse = false;
@@ -127,7 +128,7 @@ test('admitted classification uses the mounted client, retains provenance separa
     origin: 'https://kernel.test',
     tokenProvider: async () => fixture.bearer,
     maxAttempts: 1,
-    fetch: (async (input, init) => {
+    fetch: fixtureFetch(async (input, init) => {
       const request = new Request(input, init);
       const path = new URL(request.url).pathname;
       if (path.endsWith(':put'))
@@ -139,7 +140,7 @@ test('admitted classification uses the mounted client, retains provenance separa
         throw new TypeError('classification response lost after commit');
       }
       return response;
-    }) as typeof fetch,
+    }),
   });
   const transport: ImportTransport = {
     batchWrite: (request) => Promise.resolve(resultFor(request, association.subjectId)),
@@ -204,7 +205,9 @@ test('admitted classification uses the mounted client, retains provenance separa
     });
     expect(await ballotCounts()).toEqual(ballotsBefore);
 
-    const digest = current[0]!.state === 'available' ? current[0].value.observation.digest : '';
+    const currentRow = current[0]!;
+    if (currentRow.state !== 'available') throw new Error('Expected published classification');
+    const digest = currentRow.value.observation.digest;
     facts = {
       ...facts,
       value: { kind: 'observation', confidence: 2.8, lie: false },

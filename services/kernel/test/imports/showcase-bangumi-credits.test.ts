@@ -1,3 +1,4 @@
+import { fixtureFetch, retainedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -84,10 +85,10 @@ test('default anime staff and voice publication adopts exact cited endpoints and
     const plan = await planCrossMediaSeed(tables);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     let resolution: BangumiCreditVocabularyResolution | undefined;
     async function importAndPublish(prior?: ShowcasePublicationResult) {
@@ -271,13 +272,13 @@ test('default anime staff and voice publication adopts exact cited endpoints and
       ],
     });
     const candidateId = (wrongScheme.results[0] as { value: { candidate: string } }).value.candidate;
-    const candidate = (
+    const candidate = retainedCandidates((
       await runtime.importTransport.reviewedCandidates(role.conceptId, {
         property: 'skos:inScheme',
         context: globalContext,
         limit: 100,
       })
-    ).candidates.find((item) => item.id === candidateId)!;
+    ).candidates).find((item) => item.id === candidateId)!;
     const accept = await runtime.importTransport.acceptReviewedCandidate(
       role.conceptId,
       candidateId,

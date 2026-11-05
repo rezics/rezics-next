@@ -1,10 +1,12 @@
+import { valueContent } from './native-observations.ts';
+import { fixtureFetch, retainedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import type { SourceVocabularyBindings } from '@rezics/conversion';
+import type { SourceVocabularyBindings } from '../../../../packages/conversion/src/index.ts';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import {
   crossMediaAliases,
@@ -121,10 +123,10 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     expect(grant.status).toBe(201);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: (async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      }) as typeof fetch,
+      }),
     });
     let port = captureShowcaseCommands(runtime.importTransport, journal);
     const personBytes = JSON.stringify({
@@ -135,10 +137,10 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     });
     let plan = await acquireBangumiPersonCareerSources(planFor('星見', 'archive-v1'), {
       journal,
-      fetch: (async (input) => {
+      fetch: fixtureFetch(async (input) => {
         expect(String(input)).toBe('https://api.bgm.tv/v0/persons/8101');
         return new Response(personBytes, { headers: { etag: '"person-8101-v1"' } });
-      }) as typeof fetch,
+      }),
       sleep: async () => {},
     });
     expect(plan.personCareerSources?.[0]?.responseDigest).toBe(createHash('sha256').update(personBytes).digest('hex'));
@@ -210,13 +212,13 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
         (command) => command.op === 'propose' && command.statement.property.id === 'wdt:P106',
       ),
     ).toBe(false);
-    const proposedNames = (
+    const proposedNames = retainedCandidates((
       await runtime.importTransport.reviewedCandidates(personId, {
         property: 'schema:name',
         context: GLOBAL_CONTEXT,
         limit: 100,
       })
-    ).candidates.map(({ statement }) => statement.value.content);
+    ).candidates).map(({ statement }) => valueContent(statement.value));
     expect(proposedNames).toEqual([
       { language: 'und', text: '星見' },
       { language: 'zh', text: '星見中文' },
@@ -334,7 +336,7 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     const careerBodies = capturedWriteBodies(runtime, 'wdt:P106', careerCaptureStart);
     expect(careerBodies).toHaveLength(2);
     expect(careerBodies[0]).toBe(careerBodies[1]);
-    expect(replayedCareerCommands[0]?.op === 'propose' ? replayedCareerCommands[0].statement.value.content : null).toBe(
+    expect(replayedCareerCommands[0]?.op === 'propose' ? valueContent(replayedCareerCommands[0].statement.value) : null).toBe(
       producer?.id,
     );
     await publishShowcase({
@@ -347,13 +349,13 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       vocabularyRequirements: concepts.requirements,
     });
 
-    const stableCandidates = (
+    const stableCandidates = retainedCandidates((
       await runtime.importTransport.reviewedCandidates(personId, {
         property: 'wdt:P106',
         context: GLOBAL_CONTEXT,
         limit: 100,
       })
-    ).candidates;
+    ).candidates);
     const restarted = await seedCrossMedia(
       plan,
       importPath,
@@ -363,19 +365,19 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     );
     expect(idOf(restarted, 'person:8101')).toBe(personId);
     expect(
-      (
+      retainedCandidates((
         await runtime.importTransport.reviewedCandidates(personId, {
           property: 'wdt:P106',
           context: GLOBAL_CONTEXT,
           limit: 100,
         })
-      ).candidates.map(({ id }) => id),
+      ).candidates).map(({ id }) => id),
     ).toEqual(stableCandidates.map(({ id }) => id));
 
     const changedBytes = JSON.stringify({ id: 8101, type: 1, career: ['actor'] });
     const changedPlan = await acquireBangumiPersonCareerSources(planFor('星見 改訂', 'archive-v2'), {
       journal,
-      fetch: (async () => new Response(changedBytes, { headers: { etag: '"person-8101-v2"' } })) as typeof fetch,
+      fetch: fixtureFetch(async () => new Response(changedBytes, { headers: { etag: '"person-8101-v2"' } })),
       sleep: async () => {},
     });
     const withheldAdmission = bangumiPersonCareerAdmission(
@@ -408,11 +410,11 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
         command.op === 'propose' && command.statement.property.id === 'schema:name',
     );
-    expect(changedNameCandidates.map(({ statement }) => statement.value.content)).toContainEqual({
+    expect(changedNameCandidates.map(({ statement }) => valueContent(statement.value))).toContainEqual({
       language: 'und',
       text: '星見 改訂',
     });
-    expect(changedNameCandidates.map(({ statement }) => statement.value.content)).not.toContainEqual({
+    expect(changedNameCandidates.map(({ statement }) => valueContent(statement.value))).not.toContainEqual({
       language: 'zh',
       text: '星見中文',
     });
@@ -464,14 +466,14 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     expect(publicRead['wdt:P6298']?.[0]?.value.content).toBe('8101');
     expect(publicRead['schema:abstract']).toHaveLength(1);
     expect(publicRead['wdt:P106']?.map(({ value }) => value.content)).toContain(actor?.id);
-    const occupation = (
+    const occupation = retainedCandidates((
       await runtime.importTransport.reviewedCandidates(personId, {
         property: 'wdt:P106',
         context: GLOBAL_CONTEXT,
         limit: 100,
       })
-    ).candidates.find(
-      (candidate) => candidate.statement.value.type === 'value' && candidate.statement.value.content === actor?.id,
+    ).candidates).find(
+      (candidate) => candidate.statement.value.type === 'value' && valueContent(candidate.statement.value) === actor?.id,
     );
     expect(occupation?.source).toMatchObject({
       source: crossMediaAliases.bangumi,
@@ -486,14 +488,14 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       ),
     ).toBe(true);
     expect(createHash('sha256').update(changedBytes).digest('hex')).toBe(
-      changedPlan.personCareerSources?.[0]?.responseDigest,
+      changedPlan.personCareerSources![0]!.responseDigest!,
     );
 
     await editor.takedown(crossMediaAliases.bangumi, 'person:8101', 'facts');
     const fencedBytes = JSON.stringify({ id: 8101, type: 1, career: ['actor'] });
     const fencedPlan = await acquireBangumiPersonCareerSources(planFor('星見 fencing', 'archive-v3'), {
       journal,
-      fetch: (async () => new Response(fencedBytes, { headers: { etag: '"person-8101-v3"' } })) as typeof fetch,
+      fetch: fixtureFetch(async () => new Response(fencedBytes, { headers: { etag: '"person-8101-v3"' } })),
       sleep: async () => {},
     });
     const fenceCaptureStart = runtime.captures.length;

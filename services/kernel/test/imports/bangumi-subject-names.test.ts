@@ -1,3 +1,4 @@
+import { valueContent } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
@@ -121,11 +122,11 @@ test('ordinary Bangumi CLI proposes, adopts, reopens and facts-fences TVAnime na
     await acceptAndAdopt(cli, id, 'schema:name', [chinese]);
     await acceptAndAdopt(cli, id, 'schema:alternateName', [alternate]);
     const adopted = await cli.runtime.importTransport.readReviewedSubject(id);
-    expect(adopted.subject?.statements['schema:name']?.map((item) => item.value.content)).toContainEqual({
+    expect(adopted.subject?.statements['schema:name']?.map((item) => valueContent(item.value))).toContainEqual({
       language: 'zh',
       text: '中文题名',
     });
-    expect(adopted.subject?.statements['schema:alternateName']?.map((item) => item.value.content)).toContainEqual({
+    expect(adopted.subject?.statements['schema:alternateName']?.map((item) => valueContent(item.value))).toContainEqual({
       language: 'und',
       text: 'クラナド',
     });
@@ -154,7 +155,7 @@ test('ordinary Bangumi CLI proposes, adopts, reopens and facts-fences TVAnime na
       [alternate],
     );
     const recoveredAdopted = await cli.runtime.importTransport.readReviewedSubject(id);
-    expect(recoveredAdopted.subject?.statements['schema:alternateName']?.map((item) => item.value.content)).toEqual(
+    expect(recoveredAdopted.subject?.statements['schema:alternateName']?.map((item) => valueContent(item.value))).toEqual(
       expect.arrayContaining([
         { language: 'und', text: 'クラナド' },
         { language: 'und', text: 'Recovered scalar' },

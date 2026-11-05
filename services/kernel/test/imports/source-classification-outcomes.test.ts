@@ -40,7 +40,7 @@ test('importer classification digests are the mounted classificationObservation 
 
 test('generated KernelClient mounts source-classifications read, put and clear', () => {
   type Client = ReturnType<KernelClient['subjects']>['source-classifications'];
-  expectTypeOf<keyof Client>().toEqualTypeOf<'$read' | '$put' | '$clear'>();
+  expectTypeOf<keyof Client>().toEqualTypeOf<'$read' | '$put' | '$clear' | '~path'>();
   expectTypeOf<Parameters<Client['$put']['post']>[0]['expectedObservation']>().toEqualTypeOf<string | null>();
   expectTypeOf<Parameters<Client['$put']['post']>[0]['association']>().toEqualTypeOf<ClassificationAssociation>();
 });

@@ -1,3 +1,4 @@
+import { fixtureFetch, adoptedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -78,7 +79,7 @@ test('synthetic selected Person and Organization images use the common authorize
     const sourcePlan = await acquireBangumiCoverSources(rawPlan, {
       journal,
       sleep: async () => {},
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         if (url.pathname.startsWith('/v0/persons/')) {
           const id = Number(url.pathname.split('/').at(-1));
@@ -106,7 +107,7 @@ test('synthetic selected Person and Organization images use the common authorize
           }),
           { status: 200, headers: { etag: '"native-subject-101"', 'content-type': 'application/json' } },
         );
-      },
+      }),
     });
     const batch = runtime.importTransport.batch.bind(runtime.importTransport);
     const mediaPort = {
@@ -169,7 +170,7 @@ test('synthetic selected Person and Organization images use the common authorize
       sourceUrl: organizationImageUrl,
       mediaId: mediaIds.get('person:27'),
     });
-    for (const [key, outcome] of outcomes) expect(outcome.containerId).toBe(initialSubjects.get(key));
+    for (const [key, outcome] of outcomes) expect(outcome.containerId).toBe(initialSubjects.get(key)!);
     expect(mediaRequests).toBe(3);
     expect(statusReads).toBe(3);
     const subjects = new Map([...outcomes].map(([key, outcome]) => [key, outcome.containerId!]));
@@ -190,10 +191,10 @@ test('synthetic selected Person and Organization images use the common authorize
     expect(grant.status).toBe(201);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     const publication = await publishShowcase({
       plan: sourcePlan,
@@ -224,7 +225,7 @@ test('synthetic selected Person and Organization images use the common authorize
         context: GLOBAL_CONTEXT,
         limit: 100,
       });
-      expect(imagePage.adoption?.selection?.some((item) => item.candidate === mediaRecord.candidateId)).toBe(true);
+      expect(adoptedCandidates(imagePage)?.some((item) => item.candidate === mediaRecord.candidateId)).toBe(true);
       const publicRead = await publicClient.readSubject(subjectId);
       const statements = (publicRead.subject as { statements: Record<string, { value: { content: unknown } }[]> })
         .statements;
@@ -474,8 +475,8 @@ test('default finite Bangumi selection imports a direct Character image through 
     expect(recovered.mediaOutcomes.find((outcome) => outcome.externalId === 'character:11546')?.status).toBe('pending');
     expect(characterAttempts).toHaveLength(2);
     expect(characterAttempts[1]).toEqual({
-      body: originalCharacterBody,
-      key: originalCharacterKey,
+      body: originalCharacterBody!,
+      key: originalCharacterKey!,
       mediaId: characterId,
     });
     expect(mediaRequests).toBe(3);
@@ -533,10 +534,10 @@ test('default finite Bangumi selection imports a direct Character image through 
     expect(grant.status).toBe(201);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     const publication = await publishShowcase({
       plan: resumedPlan,
@@ -571,7 +572,7 @@ test('default finite Bangumi selection imports a direct Character image through 
       context: GLOBAL_CONTEXT,
       limit: 100,
     });
-    expect(imagePage.adoption?.selection?.some((item) => item.candidate === characterMediaRecord.candidateId)).toBe(
+    expect(adoptedCandidates(imagePage)?.some((item) => item.candidate === characterMediaRecord.candidateId)).toBe(
       true,
     );
     for (const [subjectId, externalId] of [

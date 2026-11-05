@@ -1,3 +1,4 @@
+import { valueContent } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
@@ -135,11 +136,11 @@ test('ordinary Bangumi import reviews and adopts cited TVAnime work evidence wit
     await acceptAndAdopt(cli, id, 'schema:copyrightNotice', notices);
     const adopted = await cli.runtime.importTransport.readReviewedSubject(id);
     expect(adopted.subject?.type).toBe('schema:TVSeries');
-    expect(adopted.subject?.statements['wdt:P973']?.map((item) => item.value.content)).toEqual([workUrl]);
-    expect(adopted.subject?.statements['schema:copyrightNotice']?.map((item) => item.value.content)).toEqual([notice]);
+    expect(adopted.subject?.statements['wdt:P973']?.map((item) => valueContent(item.value))).toEqual([workUrl]);
+    expect(adopted.subject?.statements['schema:copyrightNotice']?.map((item) => valueContent(item.value))).toEqual([notice]);
     for (const property of evidenceProperties) {
       expect(adopted.subject?.statements[property]?.[0]?.references?.[0]?.parts).toContainEqual({
-        property: { id: 'schema:url' },
+        property: { id: 'schema:url', data_type: 'url' },
         value: { type: 'value', content: `https://bgm.tv/subject/${externalId}` },
       });
     }

@@ -1,3 +1,4 @@
+import { valueContent } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -208,7 +209,7 @@ function importerTransport(port: CrossMediaPort): ImportTransport {
   return {
     batchWrite: (request) => port.batch(request),
     setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),
-    readFence: (tuple) => port.fence(tuple),
+    readFence: (tuple) => port.fence({source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group}),
     writeSourceStatistic: (request, signal) => port.writeSourceStatistic(request, signal),
     clearSourceStatistic: (request, signal) => port.clearSourceStatistic(request, signal),
   };
@@ -388,7 +389,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
       obligations: ['cc:Attribution', 'cc:ShareAlike'],
       attribution: 'Bangumi contributors (https://bgm.tv/person/8101)',
     });
-    const sentBiography = personBiography.statement.value.content as {
+    const sentBiography = valueContent(personBiography.statement.value) as {
       language: string;
       document: { doc: { content: { content?: { text: string }[] }[] } };
     };
@@ -426,7 +427,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
         fieldGroup: source.field_group,
         kind: 'value',
         statement: candidate.statement as unknown as Statement,
-        references: candidate.statement.references ?? [],
+        references: (candidate.statement.references ?? []).map(reference => ({parts: reference.parts.map(part => ({property: part.property, value: {...part.value, type: 'value' as const}}))})),
       };
       expect(proposal.references[0]?.parts).toContainEqual({
         property: { id: 'schema:url' },
@@ -573,14 +574,14 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     );
     expect(fencedFacts?.op).toBe('propose');
     if (!fencedFacts || fencedFacts.op !== 'propose') throw new Error('Facts did not refresh behind the summary fence');
-    expect(fencedFacts.statement.value.content).toEqual({ language: 'und', text: '星見 改訂' });
+    expect(valueContent(fencedFacts.statement.value)).toEqual({ language: 'und', text: '星見 改訂' });
     expect(
       fencedCommands.some(
         (command) =>
           command.op === 'propose' &&
           command.source.external_id === 'person:8101' &&
           command.statement.property.id === 'schema:name' &&
-          (command.statement.value.content as { language?: string }).language === 'zh',
+          (valueContent(command.statement.value) as { language?: string }).language === 'zh',
       ),
     ).toBe(false);
     expect(await publicNames(editor, personId)).toContainEqual({ language: 'zh', text: '星見中文 改' });

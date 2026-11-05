@@ -22,7 +22,6 @@ import {
   planShowcaseTags,
   prepareShowcaseVndbPublicTagVocabulary,
   readShowcaseVndbPublicTagVocabulary,
-  showcaseTagWeightProperty,
 } from '../../../importer/src/showcase-tags.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
@@ -306,7 +305,7 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
       destination: { origin: 'https://kernel.import.test' },
     });
     expect(first.bindings.releaseDigest).toBe(bundledDigest);
-    expect(first.weightGap?.property).toBe(showcaseTagWeightProperty);
+    expect(first.tagWeightObservations).toContainEqual(expect.objectContaining({workId: 'v410', state: 'unavailable'}));
     const work = first.readings.find((row) => row.externalId === 'v410');
     expect(work).toBeTruthy();
     const workId = (work!.subject as { subject?: { id: string } }).subject?.id ?? (work!.subject as { id?: string }).id;

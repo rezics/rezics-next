@@ -84,18 +84,18 @@ test('ordinary Bangumi person JSON is selected and read independently of a later
     const publicRead = await cli.anonymous(id);
     expect(publicRead.subject.type).toBe('schema:Person');
     expect(
-      (publicRead.subject.statements as Record<string, { value: { content: unknown } }[]>)['schema:birthDate']?.[0]
-        ?.value.content,
-    ).toEqual(gregorian);
+      publicRead.subject.statements['schema:birthDate']?.[0]
+        ?.value,
+    ).toEqual({type: 'value', content: gregorian});
 
     const reopened = await cli.invoke(initial);
     expect(reopened.code).toBe(0);
     expect(reopened.writes).toEqual([]);
     expect(
-      ((await cli.anonymous(id)).subject.statements as Record<string, { value: { content: unknown } }[]>)[
+      (await cli.anonymous(id)).subject.statements[
         'schema:birthDate'
-      ]?.[0]?.value.content,
-    ).toEqual(gregorian);
+      ]?.[0]?.value,
+    ).toEqual({type: 'value', content: gregorian});
 
     const changed = await cli.invoke(feed(person({ birth_day: 9 })));
     expect(changed.code, JSON.stringify(changed)).toBe(0);
@@ -104,10 +104,10 @@ test('ordinary Bangumi person JSON is selected and read independently of a later
       time: '+1974-11-09T00:00:00Z',
     });
     expect(
-      ((await cli.anonymous(id)).subject.statements as Record<string, { value: { content: unknown } }[]>)[
+      (await cli.anonymous(id)).subject.statements[
         'schema:birthDate'
-      ]?.[0]?.value.content,
-    ).toEqual(gregorian);
+      ]?.[0]?.value,
+    ).toEqual({type: 'value', content: gregorian});
 
     const organization = await cli.invoke(
       `${feed(person({ birth_day: 9 }))}${feed({

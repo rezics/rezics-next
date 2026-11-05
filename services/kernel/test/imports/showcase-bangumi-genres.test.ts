@@ -1,3 +1,5 @@
+import { valueContent } from './native-observations.ts';
+import { fixtureFetch } from './native-observations.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -26,7 +28,7 @@ let fixture: ReleasedDiscoveryFixture;
 let database: GrowthDatabase;
 let directory: string;
 let statePath: string;
-let cataloguePort: ReviewedCataloguePort;
+let cataloguePort: Awaited<ReturnType<ReleasedDiscoveryFixture['reviewedCatalogueOperator']>>;
 let journal: ShowcaseJournal;
 
 beforeAll(async () => {
@@ -66,11 +68,11 @@ function planFor(record: typeof payload) {
 function publicReader() {
   return createPublicBulkClient({
     origin: 'https://reviewed.discovery.test',
-    fetch: (async (input) => {
+    fetch: fixtureFetch(async (input) => {
       const url = new URL(String(input));
       const response = await fixture.request('anonymous', 'GET', url.pathname + url.search);
       return Response.json(response.body, { status: response.status });
-    }) as typeof fetch,
+    }),
   });
 }
 
@@ -113,7 +115,7 @@ test('default seed publishes the reviewed source Concept publicly and retracts o
   const publicSubject = (await publicClient.readSubject(workId)).subject as {
     statements: Record<string, BatchStatement[]>;
   };
-  expect(publicSubject.statements['schema:keywords']?.map((statement) => statement.value.content)).toContain(
+  expect(publicSubject.statements['schema:keywords']?.map((statement) => valueContent(statement.value))).toContain(
     sourceConcept,
   );
 
@@ -128,11 +130,11 @@ test('default seed publishes the reviewed source Concept publicly and retracts o
         (assertion) =>
           assertion.property === 'schema:keywords' &&
           assertion.statement.value.type === 'value' &&
-          assertion.statement.value.content === sourceConcept,
+          valueContent(assertion.statement.value) === sourceConcept,
       ),
   ).toBe(false);
   const after = (await publicClient.readSubject(workId)).subject as { statements: Record<string, BatchStatement[]> };
-  expect(after.statements['schema:keywords']?.map((statement) => statement.value.content) ?? []).not.toContain(
+  expect(after.statements['schema:keywords']?.map((statement) => valueContent(statement.value)) ?? []).not.toContain(
     sourceConcept,
   );
   expect(after.statements['schema:name']?.length).toBeGreaterThan(0);

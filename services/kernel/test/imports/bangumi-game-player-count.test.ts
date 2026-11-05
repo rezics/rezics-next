@@ -1,3 +1,4 @@
+import { fixtureFetch, retainedCandidates, adoptedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -84,10 +85,10 @@ test('selected Game player-count range is independently adopted and current, and
   const editor = await openApiObserver(runtime);
   const publicClient = createPublicBulkClient({
     origin: runtime.origin,
-    fetch: async (input) => {
+    fetch: fixtureFetch(async (input) => {
       const url = new URL(String(input));
       return runtime.request(`${url.pathname}${url.search}`);
-    },
+    }),
   });
 
   async function importSelected(infobox: string) {
@@ -113,7 +114,7 @@ test('selected Game player-count range is independently adopted and current, and
       context: globalContext,
       limit: 100,
     });
-    expect(missing.candidates.filter((candidate) => candidate.source?.external_id === gameId)).toEqual([]);
+    expect(retainedCandidates(missing.candidates).filter((candidate) => candidate.source?.external_id === gameId)).toEqual([]);
     expect(playerStatement(await publicClient.readSubject(first.id))).toBeUndefined();
 
     const corrected = await importSelected(rangeInfobox);
@@ -123,7 +124,7 @@ test('selected Game player-count range is independently adopted and current, and
       context: globalContext,
       limit: 100,
     });
-    const candidate = listing.candidates.find((item) => item.source?.external_id === gameId);
+    const candidate = retainedCandidates(listing.candidates).find((item) => item.source?.external_id === gameId);
     if (!candidate) throw new Error('Corrected player-count candidate is missing');
     expect(candidate.source).toMatchObject({
       source: crossMediaAliases.bangumi,
@@ -182,7 +183,7 @@ test('selected Game player-count range is independently adopted and current, and
       context: globalContext,
       limit: 100,
     });
-    expect(adopted.adoption?.selection?.map((entry) => entry.candidate)).toContain(candidate.id);
+    expect(adoptedCandidates(adopted)?.map((entry) => entry.candidate)).toContain(candidate.id);
     const current = playerStatement(await publicClient.readSubject(first.id));
     expect(current?.value?.content).toEqual({ amount: '+4', unit: '1' });
     expect(current?.qualifiers).toContainEqual({

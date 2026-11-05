@@ -1,3 +1,5 @@
+import { valueContent } from './native-observations.ts';
+import { retainedCandidates, fixtureFetch, adoptedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -47,7 +49,7 @@ test('local publication accepts only its acknowledged plan after authorization a
       context: globalContext,
       limit: 100,
     });
-    const selectedName = selectedPage.candidates.find((candidate) => candidate.source?.external_id === '101');
+    const selectedName = retainedCandidates(selectedPage.candidates).find((candidate) => candidate.source?.external_id === '101');
     if (!selectedName) throw new Error('Selected source name candidate is missing');
     const unrelated = await editor.http(`/v1/subjects/${workId}/candidates`, {
       statement: {
@@ -60,10 +62,10 @@ test('local publication accepts only its acknowledged plan after authorization a
     const unrelatedId = (unrelated.body as { candidate: string }).candidate;
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     expect(
       (await publicClient.readSubject(workId).then((read) => read.subject as { statements: Record<string, unknown[]> }))
@@ -88,7 +90,7 @@ test('local publication accepts only its acknowledged plan after authorization a
           context: globalContext,
           limit: 100,
         })
-        .then((page) => page.adoption?.selection?.map((entry) => entry.candidate)),
+        .then((page) => adoptedCandidates(page)?.map((entry) => entry.candidate)),
     ).toBeUndefined();
 
     journal.close();
@@ -119,14 +121,14 @@ test('local publication accepts only its acknowledged plan after authorization a
     const publicRead = await publicClient.readSubject(workId);
     const subject = publicRead.subject as { id: string; type: string; statements: Record<string, BatchStatement[]> };
     expect(subject.id).toBe(workId);
-    expect(subject.type).toBe(published.manifest.records[0]?.nativeType);
+    expect(subject.type).toBe(published.manifest.records[0]!.nativeType!);
     const expected = published.manifest.records[0]!.assertions.map(({ property, statement }) => ({
       property,
-      value: statement.value.content,
+      value: valueContent(statement.value),
     }));
     const actual = expected.map(({ property }) => ({
       property,
-      value: subject.statements[property]?.map((statement) => statement.value.content),
+      value: subject.statements[property]?.map((statement) => valueContent(statement.value)),
     }));
     for (const fact of expected)
       expect(actual.find((row) => row.property === fact.property)?.value).toContain(fact.value);
@@ -135,7 +137,7 @@ test('local publication accepts only its acknowledged plan after authorization a
       context: globalContext,
       limit: 100,
     });
-    expect(after.adoption?.selection?.some((entry) => entry.candidate === unrelatedId)).toBe(false);
+    expect(adoptedCandidates(after)?.some((entry) => entry.candidate === unrelatedId)).toBe(false);
     expect(runtime.captures.some((capture) => capture.request.url.endsWith(`/candidates/${unrelatedId}:accept`))).toBe(
       false,
     );
@@ -201,10 +203,10 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
     runtime.captures.filter((capture) => capture.body.includes('wdt:P155')).map(({ body }) => body);
   const publicClient = createPublicBulkClient({
     origin: runtime.origin,
-    fetch: async (input) => {
+    fetch: fixtureFetch(async (input) => {
       const url = new URL(String(input));
       return runtime.request(`${url.pathname}${url.search}`);
-    },
+    }),
   });
 
   try {
@@ -274,12 +276,12 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
 
     const unavailableTargetClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         if (url.pathname.endsWith(`/${relation.targetSubjectId}`))
           return Response.json({ title: 'Unavailable' }, { status: 503 });
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     const withheld = await publishShowcase({
       plan,
