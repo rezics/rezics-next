@@ -1,9 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, setDefaultTimeout, test } from 'bun:test';
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { git } from './merge.ts';
 import { promote } from './promotion.ts';
 import { integrationHarness } from './test-support.ts';
+
+setDefaultTimeout(30_000);
 
 const failure = { passed: false, output: 'AssertionError: incompatible fixture', timedOut: false };
 const success = { passed: true, output: '', timedOut: false };

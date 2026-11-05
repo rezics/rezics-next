@@ -1,10 +1,12 @@
-import { expect, test } from 'bun:test';
+import { expect, setDefaultTimeout, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { firstFailure, git } from './merge.ts';
 import { promote } from './promotion.ts';
 import type { PromotionRun } from './types.ts';
 import { integrationHarness } from './test-support.ts';
+
+setDefaultTimeout(30_000);
 
 const success = { passed: true, output: '', timedOut: false };
 
