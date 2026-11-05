@@ -440,6 +440,14 @@ test('owner-only, mixed and catalogue populations retain predicates while exposi
   expect(retainedHtml).toContain('name="type" value="schema:Book"');
   expect(retainedHtml).toContain('name="f.schema:author" value="writer-1"');
   expect(retainedHtml).toContain(m.search_refinement_not_applicable({}, options.en));
+  const repair = new window.DOMParser()
+    .parseFromString(retainedHtml, 'text/html')
+    .querySelector('[role="status"] a');
+  expect(repair).not.toBeNull();
+  const repairUrl = new URL(repair!.getAttribute('href')!, 'https://search.test');
+  expect(repairUrl.searchParams.has('kinds')).toBe(false);
+  expect(repairUrl.searchParams.get('type')).toBe('schema:Book');
+  expect(repairUrl.searchParams.get('f.schema:author')).toBe('writer-1');
 
   for (const [kinds, applicability] of [
     [['collection', 'schema:Book'], { type: 'partial', statement: 'partial' }],
