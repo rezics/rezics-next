@@ -252,7 +252,7 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     }
     expect(host.textContent).toContain('current Global catalogue');
     expect(host.textContent).not.toContain('selected Context or Realm');
-    expect([...host.querySelectorAll('a')].some((link) => link.getAttribute('href') === publicReturn)).toBe(true);
+    expect([...host.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toContain(publicReturn);
 
     const beforeSignIn = calls.length;
     await act(async () => {
