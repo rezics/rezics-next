@@ -101,6 +101,13 @@ CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.stat
     version: 9,
     sql: `CREATE INDEX worker_events_kind_at ON worker_events(kind, at);`,
   },
+  {
+    module: 'worker',
+    version: 10,
+    sql: `CREATE INDEX worker_tasks_wait_current ON worker_tasks(id, current_attempt)
+      WHERE COALESCE(json_extract(body, '$.state'), '') NOT IN
+        ('integrated', 'merged', 'stopped', 'cancelled', 'verified');`,
+  },
   checkResultsMigration(),
   {
     module: 'dev-verifier',

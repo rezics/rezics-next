@@ -231,51 +231,71 @@ const queueActions: Record<string, { start: string[]; end: string[] }> = {
 };
 
 function pendingQueueWaits(db: Database, nowMs: number): LifecycleMetricEntry[] {
+  if (!hasTable(db, 'worker_tasks')) return [];
+  const actions = Object.entries(queueActions).flatMap(([stage, stageActions]) => [
+    ...stageActions.start.map((action) => [stage, action, 1] as const),
+    ...stageActions.end.map((action) => [stage, action, 0] as const),
+  ]);
+  const actionValues = actions.map(() => '(?, ?, ?)').join(', ');
+  const actionParameters = actions.flatMap(([stage, action, isStart]) => [stage, action, isStart]);
+  // The latest recognized transition for each action is enough to recover the latest transition per stage.
   const rows = db
-    .query('SELECT task_id, attempt, stage, action, at, sequence FROM flow_events ORDER BY at, sequence')
-    .all() as {
+    .query(`
+      WITH current_tasks AS (
+        SELECT id, current_attempt
+        FROM worker_tasks INDEXED BY worker_tasks_wait_current
+        WHERE COALESCE(json_extract(body, '$.state'), '') NOT IN
+          ('integrated', 'merged', 'stopped', 'cancelled', 'verified')
+      ), wait_actions(stage, action, is_start) AS (
+        VALUES ${actionValues}
+      ), latest_by_action AS (
+        SELECT task.id AS task_id, task.current_attempt AS attempt, action.stage, action.is_start,
+               (
+                 SELECT latest.sequence
+                 FROM flow_events AS latest INDEXED BY flow_events_wait_action
+                 WHERE latest.task_id = task.id
+                   AND latest.attempt = task.current_attempt
+                   AND latest.stage = action.stage
+                   AND latest.action = action.action
+                 ORDER BY latest.at DESC, latest.sequence DESC
+                 LIMIT 1
+               ) AS sequence
+        FROM current_tasks AS task
+        CROSS JOIN wait_actions AS action
+      ), latest_events AS (
+        SELECT candidate.task_id, candidate.attempt, event.stage, event.action, event.at, event.sequence,
+               candidate.is_start
+        FROM latest_by_action AS candidate
+        JOIN flow_events AS event ON event.sequence = candidate.sequence
+      ), ranked AS (
+        SELECT *, ROW_NUMBER() OVER (
+          PARTITION BY task_id, attempt, stage ORDER BY at DESC, sequence DESC
+        ) AS stage_rank
+        FROM latest_events
+      )
+      SELECT task_id, attempt, stage, at
+      FROM ranked
+      WHERE stage_rank = 1 AND is_start = 1
+      ORDER BY at, sequence
+    `)
+    .all(...actionParameters) as {
     task_id: string;
     attempt: number;
     stage: string;
-    action: string;
     at: string;
-    sequence: number;
   }[];
-  const open = new Map<string, { taskId: string; attempt: number; stage: string; at: string }>();
-  for (const row of rows) {
-    const actions = queueActions[row.stage];
-    if (!actions) continue;
-    const key = `${row.task_id}\0${row.attempt}\0${row.stage}`;
-    if (actions.start.includes(row.action)) {
-      // A repeated request starts the current wait again; it does not leave two pending entries.
-      open.set(key, { taskId: row.task_id, attempt: row.attempt, stage: row.stage, at: row.at });
-    } else if (actions.end.includes(row.action)) {
-      const wait = open.get(key);
-      if (wait && row.at >= wait.at) open.delete(key);
-    }
-  }
-  const pending = [...open.values()].filter((wait) => {
-    if (!hasTable(db, 'worker_tasks')) return false;
-    const current = db
-      .query("SELECT current_attempt, json_extract(body, '$.state') AS state FROM worker_tasks WHERE id=?")
-      .get(wait.taskId) as { current_attempt: number; state: string } | null;
-    if (
-      !current ||
-      current.current_attempt !== wait.attempt ||
-      ['integrated', 'merged', 'stopped', 'cancelled', 'verified'].includes(current.state)
-    )
-      return false;
+  const pending = rows.filter((wait) => {
     if (wait.stage === 'landing' && hasTable(db, 'landing_queue')) {
       const queue = db
         .query('SELECT delivered FROM landing_queue WHERE task=? AND attempt=?')
-        .get(wait.taskId, wait.attempt) as { delivered: number } | null;
+        .get(wait.task_id, wait.attempt) as { delivered: number } | null;
       if (queue?.delivered === 1) return false;
     }
     return true;
   });
   return pending
     .map((wait) => ({
-      taskId: wait.taskId,
+      taskId: wait.task_id,
       attempt: wait.attempt,
       kind: 'queue' as const,
       stage: wait.stage,

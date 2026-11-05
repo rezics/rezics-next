@@ -238,6 +238,61 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
   });
 });
 
+test('pending queue waits stay identical as settled event history grows', () => {
+  const { db } = database('pending-history.sqlite');
+  const now = Date.UTC(2026, 9, 30, 12, 0);
+  const at = (offsetMs: number) => stamp(now, offsetMs);
+  insertTask(db, 'pending', 1, 'running');
+
+  const insertEvent = db.query(
+    'INSERT INTO flow_events(task_id, attempt, stage, action, at) VALUES (?, ?, ?, ?, ?)',
+  );
+  // Insertion order differs from event time; the latest transition is the five-minute-old request.
+  insertEvent.run('pending', 1, 'check', 'requested', at(-5 * 60_000));
+  insertEvent.run('pending', 1, 'check', 'acquired', at(-15 * 60_000));
+  insertEvent.run('pending', 1, 'check', 'requested', at(-25 * 60_000));
+
+  const expected = [
+    {
+      taskId: 'pending',
+      attempt: 1,
+      kind: 'queue',
+      stage: 'check',
+      enteredAt: at(-5 * 60_000),
+      ageMs: 5 * 60_000,
+    },
+  ];
+  const before = lifecycleMetrics(db, now).waiting.queues;
+  expect(before).toEqual(expected);
+
+  const insertTaskRow = db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
+  const insertSettledEvent = db.query(
+    'INSERT INTO flow_events(task_id, attempt, stage, action, at) VALUES (?, ?, ?, ?, ?)',
+  );
+  db.transaction(() => {
+    for (let i = 0; i < 3_000; i++) {
+      const id = `settled-${i}`;
+      insertTaskRow.run(
+        id,
+        i + 2,
+        1,
+        JSON.stringify({
+          id,
+          sequence: i + 2,
+          currentAttempt: 1,
+          state: 'integrated',
+          createdAt: '2026-10-01T00:00:00.000Z',
+          brief: { goal: 'fixture', manager: 'fixture', after: [] },
+        }),
+      );
+      insertSettledEvent.run(id, 1, 'check', 'requested', at(-40 * 60_000));
+      insertSettledEvent.run(id, 1, 'check', 'acquired', at(-39 * 60_000));
+    }
+  }).immediate();
+
+  expect(lifecycleMetrics(db, now).waiting.queues).toEqual(before);
+});
+
 test('orphaned landings require an undelivered queue record for the current task and attempt, without request events', () => {
   const { db } = database('orphan-identity.sqlite');
   const now = Date.UTC(2026, 9, 30, 12, 0);
