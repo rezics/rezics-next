@@ -207,7 +207,7 @@ test('production label controls preserve positive source evidence, normalized na
         onReview={() => void f.journey.reviewLabels(0).then(setSnap)}
         onConfirm={() => void f.journey.confirmLabels(0).then(setSnap)}
         onRead={() => void f.journey.readLabels(0).then(setSnap)}
-        onSearch={f.port.labelTargets}
+        onSearch={f.journey.labelTargets}
       />
     );
   }

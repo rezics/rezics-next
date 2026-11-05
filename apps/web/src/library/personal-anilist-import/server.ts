@@ -246,25 +246,31 @@ async function labelPort(custody: import('./contract').AniListLabelCustody) {
 
 export const readAniListLabels = createServerFn({ method: 'GET' })
   .validator((input: unknown): Extract<AniListCommand, { kind: 'read-labels' }> => {
-    if (!record(input)) throw new Error('Invalid AniList assignment read');
+    if (!record(input) || !validExpectedReader(input.custody)) throw new Error('Invalid AniList assignment read');
     return {
       kind: 'read-labels',
       importId: requireId(input.importId),
       ordinal: requireOrdinal(input.ordinal),
       subjectId: requireId(input.subjectId),
+      custody: labelCustody(input.custody),
     };
   })
-  .handler(async ({ data }) => port().readLabels(data));
+  .handler(async ({ data }) => (await labelPort(data.custody)).readLabels(data));
 
 export const searchAniListLabelTargets = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     if (
       !record(input) ||
+      !validExpectedReader(input.custody) ||
       typeof input.query !== 'string' ||
       input.query.length > 1000 ||
       (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096))
     )
       throw new Error('Invalid AniList label search');
-    return { query: input.query, ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}) };
+    return {
+      query: input.query,
+      custody: labelCustody(input.custody),
+      ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
+    };
   })
-  .handler(async ({ data }) => port().labelTargets(data.query, data.cursor));
+  .handler(async ({ data }) => (await labelPort(data.custody)).labelTargets(data.query, data.cursor, data.custody));
