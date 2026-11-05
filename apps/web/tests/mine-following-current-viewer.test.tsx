@@ -395,11 +395,6 @@ test('the mounted default Following composition retires viewer, cursor and row l
       await tick();
     });
     expect(host.textContent).toContain('A private title');
-    await act(async () => {
-      void client.refetchQueries({ queryKey: ['mine-following', 'A'] });
-      await tick();
-    });
-    expect(reads).toHaveLength(1);
     await remove();
     expect(writes).toHaveLength(0);
     await act(async () => {
@@ -408,8 +403,13 @@ test('the mounted default Following composition retires viewer, cursor and row l
     });
     expect(writes).toHaveLength(0);
     await remove();
-    const aRead = reads[0]!;
     const aRemoval = writes[0]!;
+    await act(async () => {
+      void client.refetchQueries({ queryKey: ['mine-following', 'A'] });
+      await tick();
+    });
+    expect(reads).toHaveLength(1);
+    const aRead = reads[0]!;
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, viewer('B'));
       await tick();
