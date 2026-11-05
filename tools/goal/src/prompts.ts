@@ -248,7 +248,10 @@ export function selectConditions(input: {
   const authorization = input.authorization ?? task.proofAuthorization;
   if (proofProtocolAuthorized(brief, proofRun)) selected.push('proof-run');
   else if (registeredProof(brief, authorization)) selected.push('registered-proof');
-  else if (minimalVerification(input.stateDirectory)) selected.push('minimal-verification');
+  // A brief that names its own native or browser acceptance (a seeded walk, for example) runs it in this attempt;
+  // minimal mode defers only checks a brief does not ask for.
+  else if (minimalVerification(input.stateDirectory) && !brief.acceptance?.requires?.length)
+    selected.push('minimal-verification');
   else {
     const { runner, local } = wrapperRunner(task.worktree, brief);
     if (local) selected.push('local-placement');
