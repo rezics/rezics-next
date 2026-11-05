@@ -7,14 +7,11 @@ test('the unchanged bangumi source outcomes pass with the production converter',
   const driver = resolve(import.meta.dir, 'bangumi-driver.ts');
   const names = readFileSync(suite, 'utf8').match(/^test\(/gm)?.length ?? 0;
   expect(names).toBeGreaterThan(0);
-  const child = Bun.spawn(
-    ['env', 'IMPORT_BANGUMI_DRIVER=' + driver, process.execPath, 'test', '--timeout', '30000', suite],
-    {
-      env: { ...process.env, IMPORT_BANGUMI_DRIVER: driver },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-  );
+  const child = Bun.spawn([process.execPath, 'test', '--timeout', '30000', suite], {
+    env: { ...process.env, IMPORT_BANGUMI_DRIVER: driver },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
   const [stdout, stderr, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),

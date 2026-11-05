@@ -7,7 +7,7 @@ import * as promises from 'node:fs/promises';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import * as net from 'node:net';
-import { isAbsolute } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import fixture from './fixtures/imports/bangumi/subject.json';
 import type { BangumiDriver, CommandProposal, ConversionInput, ProposedField } from './imports-bangumi-driver';
@@ -39,8 +39,9 @@ const input = (record: unknown = structuredClone(fixture)): ConversionInput => (
 
 async function scenario(run: (driver: BangumiDriver) => void | Promise<void>) {
   // Deliberately loaded inside every scenario so the full missing-driver run executes.
-  const location = process.env.IMPORT_BANGUMI_DRIVER;
-  if (!location) throw new Error('IMPORT_BANGUMI_DRIVER is required: bind the production bangumi converter');
+  const location =
+    process.env.IMPORT_BANGUMI_DRIVER ??
+    resolve(import.meta.dir, '../packages/conversion/tests/bangumi-driver.ts');
   if (!isAbsolute(location) && !location.startsWith('file:'))
     throw new Error('Expected an absolute driver path or file URL');
   const url = isAbsolute(location) ? pathToFileURL(location) : new URL(location);
