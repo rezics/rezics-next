@@ -23,7 +23,7 @@ test('the editor edits link lists and type lists', () => {
     ],
   };
   const back = toComposition(fromComposition(document));
-  expect(back.content[0]!.props.links).toEqual([{ label: { en: 'Books' }, href: '/search?type=schema%3ABook' }]);
+  expect(back.content[0]!.props.links).toEqual(document.content[0]!.props.links);
   expect(back.content[1]).toEqual(document.content[1]);
   expect(validateComposition(platformRegistry, back)).toEqual([]);
 });
