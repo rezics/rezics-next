@@ -180,9 +180,12 @@ export function useManagementWindow<T extends Inventory | Detail>({
   const navigation: WindowNavigation = {
     previous: (field) => visit.history.previous(field),
     move: (event, field, cursor, movement) => {
+      if (!visit.attached || !current()) {
+        event.preventDefault();
+        return;
+      }
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
-      if (!visit.attached || !current()) return;
       if (event.detail === 0 && document.activeElement === event.currentTarget) handoff(event.currentTarget, field);
       else {
         visit.handoff?.cancel();
