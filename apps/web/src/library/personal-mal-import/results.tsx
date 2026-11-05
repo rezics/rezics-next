@@ -70,6 +70,21 @@ function Outcome({
         </details>
       ) : null}
       {outcome.reason ? <p className="text-sm text-muted-foreground">{outcome.reason}</p> : null}
+      {outcome.labels ? (
+        <ul className="space-y-2 [overflow-wrap:anywhere]" aria-label={m.library_mal_label_results()}>
+          {outcome.labels.map((label) => (
+            <li key={label.value}>
+              #{label.value}: {label.status} · {label.reason}
+              <p>
+                {label.labelId} · {label.assignment?.id} · {label.assignment?.revision}
+              </p>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {outcome.remainingLabels?.length ? (
+        <p>{m.library_mal_label_remaining({ values: outcome.remainingLabels.join(', ') })}</p>
+      ) : null}
       {score ? (
         <section className="space-y-2 rounded-md bg-muted/40 p-3" aria-label={m.library_mal_score_receipt_label()}>
           <p className="font-medium">
