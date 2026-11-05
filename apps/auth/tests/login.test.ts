@@ -208,18 +208,20 @@ async function submit(page: Page) {
   await controls.address.fill(email);
   await controls.secret.fill(password);
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/signin').catch(async (cause) => {
-      throw new Error(
-        `Sign-in response missing: ${JSON.stringify({
-          url: page.url(),
-          alerts: await page.getByRole('alert').allTextContents(),
-          status: await page.getByRole('status').allTextContents(),
-          browserUrl: page.url(),
-          issuerRoutes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
-        })}`,
-        { cause },
-      );
-    }),
+    page
+      .waitForResponse((response) => new URL(response.url()).pathname === '/signin')
+      .catch(async (cause) => {
+        throw new Error(
+          `Sign-in response missing: ${JSON.stringify({
+            url: page.url(),
+            alerts: await page.getByRole('alert').allTextContents(),
+            status: await page.getByRole('status').allTextContents(),
+            browserUrl: page.url(),
+            issuerRoutes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+          })}`,
+          { cause },
+        );
+      }),
     controls.submit.click(),
   ]);
   return controls;
@@ -343,19 +345,20 @@ test(
           await review.waitFor({ state: 'visible' });
           await Promise.all([
             page.waitForResponse(
-              (response) => new URL(response.url()).pathname === '/signin/page' && response.request().method() === 'POST',
+              (response) =>
+                new URL(response.url()).pathname === '/signin/page' && response.request().method() === 'POST',
             ),
             review.click(),
           ]);
           await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
-          await choice.getByText('The sign-in outcome could not be confirmed.', { exact: false }).waitFor({ state: 'visible' });
+          await choice
+            .getByText('The sign-in outcome could not be confirmed.', { exact: false })
+            .waitFor({ state: 'visible' });
           expect(await page.getByLabel(/^email$/i).inputValue()).toBe('');
           expect(await page.getByLabel(/^password$/i).inputValue()).toBe('');
           expect(await alert.count()).toBe(0);
           expect(signIns()).toHaveLength(1);
-          expect(
-            calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin/page'),
-          ).toHaveLength(2);
+          expect(calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin/page')).toHaveLength(2);
         } else {
           await alert.waitFor({ state: 'visible' });
           // Browser updates are asynchronous after the network response; wait for the resulting focus and clearing.

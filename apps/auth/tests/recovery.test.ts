@@ -305,10 +305,17 @@ test(
         const focused = await page.evaluate(() => {
           const active = document.activeElement;
           return active instanceof HTMLElement
-            ? { tag: active.tagName, id: active.id, role: active.getAttribute('role'), text: active.textContent?.trim() }
+            ? {
+                tag: active.tagName,
+                id: active.id,
+                role: active.getAttribute('role'),
+                text: active.textContent?.trim(),
+              }
             : null;
         });
-        expect(await alert.evaluate((element) => element === document.activeElement), JSON.stringify(focused)).toBe(true);
+        expect(await alert.evaluate((element) => element === document.activeElement), JSON.stringify(focused)).toBe(
+          true,
+        );
         expect(await page.getByLabel(/new password/i).count()).toBe(0);
         expect(await page.getByRole('button', { name: 'Update password', exact: true }).count()).toBe(0);
         expect(recoveryCalls('start')).toHaveLength(0);
@@ -424,9 +431,7 @@ test(
         form.submit.click(),
       ]);
       await page.waitForURL(`${origin}/login`);
-      const passwordChanged = page
-        .getByRole('status')
-        .filter({ hasText: /password (?:has been )?changed|reset/i });
+      const passwordChanged = page.getByRole('status').filter({ hasText: /password (?:has been )?changed|reset/i });
       await passwordChanged.waitFor({ state: 'visible' });
 
       expect(
