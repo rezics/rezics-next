@@ -2,10 +2,10 @@ import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient, type KernelClient } from '@rezics/client';
-import { createFakeKernelFetch, createStoryRecordedKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { createFakeKernelFetch, createStoryRecordedKernelFetch } = await import('../src/kernel/fake.ts');
 const { loadRoutePage } = await import('../src/features/pages/route.tsx');
 const { HomeCatalogue } = await import('../src/features/pages/home-catalogue');
 const { m } = await import('../src/paraglide/messages.js');
