@@ -358,9 +358,9 @@ test('The actual named-label Library renders private FULL assignments and remove
         address.searchParams.get('cursor'),
         address.searchParams.get('layout'),
       ]).toEqual(['/en/library', labelId, null, 'list']);
-      expect(Array.from(host.querySelectorAll('a')).some((link) => link.textContent === m.library_label_previous_page())).toBe(
-        false,
-      );
+      expect(
+        Array.from(host.querySelectorAll('a')).some((link) => link.textContent === m.library_label_previous_page()),
+      ).toBe(false);
       expect(reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments')).toHaveLength(
         before + 1,
       );
@@ -378,9 +378,7 @@ test('The actual named-label Library renders private FULL assignments and remove
       expect(reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments')).toHaveLength(
         beforeRetry + 1,
       );
-      expect(
-        new URL(reads.at(-1)!.url).searchParams.get('cursor'),
-      ).toBe('source-one');
+      expect(new URL(reads.at(-1)!.url).searchParams.get('cursor')).toBe('source-one');
       const otherSource = {
         ...recovery,
         provenance: { ...recovery.provenance, source: { ...recovery.provenance.source, cursor: 'source-two' } },
@@ -750,7 +748,9 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(host.textContent).toContain(`${name(C)} entry`);
     expect(
       Array.from(host.querySelectorAll<HTMLAnchorElement>('a')).some(
-        (link) => link.textContent === m.library_label_previous_page() && new URL(link.href).searchParams.get('cursor') === 'source-one',
+        (link) =>
+          link.textContent === m.library_label_previous_page() &&
+          new URL(link.href).searchParams.get('cursor') === 'source-one',
       ),
     ).toBe(true);
     expect(fields().some((form) => form.intent === 'restore')).toBe(false);
@@ -777,12 +777,12 @@ test('The actual named-label Library renders private FULL assignments and remove
     await settle();
     const replacementPage = currentQuery().state.data as CurrentLabelShelfData;
     expect(replacementPage.provenance.source).toMatchObject({ labelId: replacementLabel, cursor: 'window-three' });
-    expect(Array.from(host.querySelectorAll('a')).some((link) => link.textContent === m.library_label_previous_page())).toBe(
-      false,
-    );
-    expect(Array.from(host.querySelectorAll('a')).some((link) => link.textContent === m.library_label_first_page())).toBe(
-      true,
-    );
+    expect(
+      Array.from(host.querySelectorAll('a')).some((link) => link.textContent === m.library_label_previous_page()),
+    ).toBe(false);
+    expect(
+      Array.from(host.querySelectorAll('a')).some((link) => link.textContent === m.library_label_first_page()),
+    ).toBe(true);
     await act(async () => {
       for (const pending of held.splice(0)) pending.resolve(pending.response);
     });

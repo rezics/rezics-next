@@ -236,9 +236,10 @@ function LabelShelfVisit(props: {
   ) => {
     clearFocusHandoff();
     setWindows((state) => {
-      const ready = move === 'next' && state.pending === null && state.current !== current
-        ? admitLabelShelfWindow(state, current)
-        : state;
+      const ready =
+        move === 'next' && state.pending === null && state.current !== current
+          ? admitLabelShelfWindow(state, current)
+          : state;
       return stageLabelShelfWindow(ready, move, target);
     });
     if (event.detail !== 0) return;
@@ -274,15 +275,7 @@ function LabelShelfVisit(props: {
       return emptyLabelShelfWindow();
     });
   };
-  return (
-    <LabelShelfRead
-      {...props}
-      windows={windows}
-      onStage={stage}
-      onAdmitted={admit}
-      onFailed={fail}
-    />
-  );
+  return <LabelShelfRead {...props} windows={windows} onStage={stage} onAdmitted={admit} onFailed={fail} />;
 }
 
 function internalLibraryHref(href: string, locale: string): string {
@@ -459,8 +452,7 @@ function LabelShelfRead({
   }, [accepted, current, isCurrent, onAdmitted, onFailed, query.isFetching, query.isError, source.cursor, windows]);
   const canUnassign = () => isCurrent() && page.state === 'loaded' && !!page.csrfToken?.trim() && write();
   const view = presentation?.intent ?? { label: source.labelId, ...explicitShelfDisplay(display) };
-  const hrefAt = (cursor: string | null) =>
-    shelfHref(locale, { ...view, cursor: cursor ?? undefined });
+  const hrefAt = (cursor: string | null) => shelfHref(locale, { ...view, cursor: cursor ?? undefined });
   const action = (move: LabelShelfWindowMove, target: string | null) => ({
     href: hrefAt(target),
     onClick: (event: MouseEvent<HTMLAnchorElement>) => {
@@ -474,7 +466,10 @@ function LabelShelfRead({
   const prior = previousLabelShelfWindow(windows);
   const windowLinks: LabelShelfWindowLinks = {
     ...(hasPreviousLabelShelfWindow(windows) && prior !== undefined ? { previous: action('previous', prior) } : {}),
-    ...(source.cursor !== null || windows.current !== null || windows.predecessors.length > 0 || windows.pending?.move === 'first'
+    ...(source.cursor !== null ||
+    windows.current !== null ||
+    windows.predecessors.length > 0 ||
+    windows.pending?.move === 'first'
       ? { first: action('first', null) }
       : {}),
     ...(shown.state === 'loaded' && shown.next ? { next: action('next', shown.next) } : {}),

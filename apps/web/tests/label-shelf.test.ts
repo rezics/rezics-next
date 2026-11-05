@@ -235,7 +235,9 @@ test('rejected native Label cursors offer a deliberate same-Label first page wit
       expect(html).toContain('This Label continuation could not be loaded.');
       expect(html).toContain(`/ja/library?label=${labelId}&amp;layout=table&amp;size=l&amp;columns=title`);
       expect(html).toContain('Retry this page');
-      expect(html).toContain(`href="/ja/library?label=${labelId}&amp;cursor=opaque-page-token&amp;layout=table&amp;size=l&amp;columns=title"`);
+      expect(html).toContain(
+        `href="/ja/library?label=${labelId}&amp;cursor=opaque-page-token&amp;layout=table&amp;size=l&amp;columns=title"`,
+      );
       expect(html).not.toContain('Reading list');
       expect(html).not.toContain('<form');
       expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toHaveLength(2);
