@@ -518,12 +518,12 @@ test('the StrictMode Settings page retires synchronous away/back callbacks and r
         ),
       );
     });
-    expect(host.querySelector('#privacy')).not.toBeNull();
+    expect(host.querySelector('a[href="#privacy"]')).not.toBeNull();
     expect(host.textContent).not.toContain(m.settings_sections_loading());
     await act(async () => {
       client.setQueryData(currentExposureKey, { subject: 'alice', admitted: [], state: 'denied' });
     });
-    expect(host.querySelector('#privacy')).toBeNull();
+    expect(host.querySelector('a[href="#privacy"]')).toBeNull();
     expect(host.textContent).toContain(m.settings_closed_title());
     await act(async () => {
       client.setQueryData(currentExposureKey, { subject: 'alice', admitted: [], state: 'unavailable' });
