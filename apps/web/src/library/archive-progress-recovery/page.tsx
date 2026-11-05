@@ -44,6 +44,11 @@ export function ArchiveProgressRecoveryPage() {
 function RecoveryJourney({ journey, snap }: { journey: ProgressRecoveryJourney; snap: Snapshot }) {
   const [consent, setConsent] = useState('');
   const locked = snap.busy || snap.pending;
+  useEffect(() => {
+    if (!snap.upload || snap.notice === 'expired') return;
+    const timer = setTimeout(() => journey.expire(), Math.max(0, Date.parse(snap.upload.expiresAt) - Date.now()));
+    return () => clearTimeout(timer);
+  }, [journey, snap.upload, snap.notice === 'expired']);
   const notices = {
     ready: m.library_archive_progress_ready,
     uncertain: m.library_archive_progress_uncertain,

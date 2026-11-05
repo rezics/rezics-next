@@ -47,12 +47,21 @@ export class ProgressRecoveryJourney {
     if (cancellation) { this.#state.pending = true; this.#state.upload = cancellation.upload; this.#state.notice = 'uncertain'; }
   }
   #live() { return !this.#retired && this.current(); }
-  snapshot(): Snapshot { return this.#live() ? this.#state : empty(); }
+  snapshot(): Snapshot {
+    if (!this.#live()) return empty();
+    if (this.#state.upload && Date.now() >= Date.parse(this.#state.upload.expiresAt)) this.#expire();
+    return this.#state;
+  }
+  #expire() {
+    Object.assign(this.#state, { holdings: null, occurrences: null, units: null, unitSupport: [], selected: null,
+      choices: undefined, mappedSubject: null, review: null, operands: null, application: null, result: null, notice: 'expired' });
+  }
+  expire() { if (this.#live()) { this.#expire(); this.#emit(); } }
   #emit() { if (this.#live()) this.changed(); }
   retire() { this.#retired = true; this.#selection++; this.#state = empty(); }
   #accept<T>(reply: Reply<T>): T | null {
     if (!this.#live()) return null;
-    if (reply.kind === 'ok') { this.#state.refusal = null; return reply.value; }
+    if (reply.kind === 'ok') { this.#state.refusal = null; this.#state.notice = this.#state.cancelled ? 'cancelled' : 'ready'; return reply.value; }
     this.#state.notice = reply.kind === 'uncertain' ? 'uncertain' : reply.status === 404 ? 'expired' : 'refused';
     this.#state.refusal = reply.kind === 'refused' ? reply.status : null;
     return null;
@@ -203,10 +212,12 @@ export class ProgressRecoveryJourney {
       cancellations.delete(this.binding); this.#state.cancelled = true; this.#state.notice = 'cancelled';
       this.#state.result = null;
     }
+    this.#state.pending = unresolved.has(this.binding) || cancellations.has(this.binding);
   }
   async cancel() {
     if (!this.#live() || !this.#state.upload || this.#state.removing) return;
     cancellations.set(this.binding, { port: this.port, upload: this.#state.upload });
+    this.#state.pending = true; this.#emit();
     await this.#cancel(); this.#emit();
     // An in-flight original apply is allowed to finish its receipt. No replacement command is started.
     if (!this.#working && unresolved.has(this.binding)) await this.retry();
@@ -216,6 +227,8 @@ export class ProgressRecoveryJourney {
     const id = this.#state.upload.uploadId;
     await this.#work(async () => {
       this.#state.removing = true;
+      Object.assign(this.#state, { holdings: null, occurrences: null, units: null, unitSupport: [], selected: null, choices: undefined, mappedSubject: null, review: null, operands: null, application: null, result: null });
+      this.#emit();
       let complete = false;
       while (this.#live() && !complete) {
         const reply = await this.port.remove(id);
