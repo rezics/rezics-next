@@ -2738,13 +2738,9 @@ with null object prototypes retain the same provenance; prototype identity is ne
 
 ## Explicit local showcase publication
 
-Decision: the built-in `task seed:dev` path explicitly publishes a sealed finite intent of current source and candidate digests; ordinary imports remain proposal-only.
+Decision: `task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
 
-Decision: seed HTTP diagnostics capture the first native 401/403 per transport under the importer journal's
-`diagnostics/` directory. A private response body preserves exact problem bytes with status, request method/path
-and SHA-256 metadata. Structured stderr reports only the HTTP operation stage, status, Subject and artifact path;
-it never reports remote text, headers or credentials. This identifies the denied HTTP boundary, not an internal
-authorization decision. Denials remain refusals; diagnosis changes neither grants nor replay commands.
+[Seed denial diagnostics](seed-diagnostics.md) owns private HTTP refusal evidence.
 
 Decision: the local seed stores finite reviewed-catalogue journal identities in the same importer state file, then validates native bindings on every run; a transient unavailable read preserves only the exact prior keyword candidate.
 
