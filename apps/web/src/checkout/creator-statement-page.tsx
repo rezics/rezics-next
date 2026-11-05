@@ -248,6 +248,12 @@ export function CreatorStatementPage({
                                     </div>
                                   ))}
                                 </dl>
+                                <a
+                                  href={`/${locale}/offers/${line.offerId}`}
+                                  className="inline-flex min-h-11 items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                                >
+                                  {m.creator_sale_open_offer()}
+                                </a>
                               </AccordionContent>
                             </AccordionItem>
                           </Accordion>

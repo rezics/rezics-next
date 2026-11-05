@@ -98,6 +98,13 @@ test('admitted cursor windows stay bounded, branch from a returned page, and iso
     let current = listAddress(null);
     let page = listPage('list-1+/=');
     windows.admit(current, 'list-origin', page, true);
+    const failedFirstNext = listAddress('list-1+/=');
+    windows.prepareDeparture(current, page, 'list-origin', href(failedFirstNext), true);
+    windows.failed(failedFirstNext, 'list-failed', true);
+    expect(windows.controls(failedFirstNext, { kind: 'unavailable' }).previous).toBeNull();
+    windows.prepareDeparture(failedFirstNext, { kind: 'unavailable' }, 'list-failed', href(current), true);
+    windows.admit(current, 'list-restored', page, true);
+    expect(windows.controls(current, page).previous).toBeUndefined();
     for (let index = 1; index <= CREATOR_STATEMENT_PREDECESSOR_LIMIT + 2; index++) {
       const target = listAddress(`list-${index}+/=`);
       expect(windows.prepareDeparture(current, page, `list-source-${index}`, href(target), true)).toBe(true);
@@ -134,6 +141,12 @@ test('admitted cursor windows stay bounded, branch from a returned page, and iso
     let details = detailPage(detail.id, 'line-1+/=');
     windows.admit(detail, 'detail-direct', details, true);
     const lineOne = detailAddress(detail.id, 'line-1+/=', from);
+    windows.prepareDeparture(detail, details, 'detail-direct', href(lineOne), true);
+    windows.failed(lineOne, 'line-failed', true);
+    expect(windows.controls(lineOne, { kind: 'unavailable' }).previous).toBeNull();
+    windows.prepareDeparture(lineOne, { kind: 'unavailable' }, 'line-failed', href(detail), true);
+    windows.admit(detail, 'line-restored', details, true);
+    expect(windows.controls(detail, details).previous).toBeUndefined();
     windows.prepareDeparture(detail, details, 'line-one-source', href(lineOne), true);
     detail = lineOne;
     details = detailPage(detail.id, 'line-2+/=');
