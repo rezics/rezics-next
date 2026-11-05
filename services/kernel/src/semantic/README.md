@@ -16,7 +16,7 @@ while `identity-adapters/read.ts` is the lightweight native mapping entry and `i
 is the native store entry of the existing `kernel-semantic` adapter module. The existing
 `identity-adapters/identity-epoch-binding.ts` implementation is the exact public binding entry; callers retain the
 same named binding functions, proof objects and WeakMaps.
-Read-only callers use `read.ts`, which re-exports only `readIdentityMappings` and never loads the store or binding graph.
+Read-only callers use `read.ts` for `readIdentityMappings` and `readIdentityRatingReview`; both avoid loading the store or binding graph. Rating's exact reviewed identity operand and same-home COMMIT participant are documented in [identity-rating-currentness.md](identity-rating-currentness.md).
 The current static edges are `retention -> binding -> retention`, `binding -> index -> binding`,
 `binding -> identity -> retention`, and `reversal -> binding`. Deferred edges are `identity -> binding` for undo and
 lookup and `binding -> identity` for reversal verification. Declaring the existing file adds no node or value edge,
