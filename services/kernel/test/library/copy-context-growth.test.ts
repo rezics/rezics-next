@@ -23,6 +23,45 @@ test('FULL Copies page growth includes 64/512/4096 unrelated Semantic facts and 
     const semantic = collectionListFactsPopulation(f, book);
     const account = f.accounts.reader;
     const route = routeOf(account)!;
+    const loanAccount = f.accounts.editor;
+    const loanRoute = routeOf(loanAccount)!;
+    const addressedLoan = newId(loanRoute);
+    await f.pool.query(
+      `INSERT INTO library.copy_loan
+        (route,loan_id,account_id,copy_id,direction,counterparty_kind,counterparty_name,counterparty_person_id,
+         started_on,due_on,returned_on,revision,created_at,updated_at,transaction_id)
+       VALUES ($1,$2,$3,$4,'lent','name','  Native loan counterparty 🐈  ',NULL,
+               '2026-10-20','9999-12-31',NULL,1,now(),now(),$5)`,
+      [loanRoute, addressedLoan, loanAccount, copy.id, randomUUID()],
+    );
+    const returnedHistory: Population = {
+      name: 'copy-loan-returned-history',
+      hotPartition: partitionOf(loanRoute),
+      hotShare: 1,
+      rows() {
+        return {
+          'library.copy_loan': [
+            {
+              route: loanRoute,
+              loan_id: newId(loanRoute),
+              account_id: loanAccount,
+              copy_id: copy.id,
+              direction: 'lent',
+              counterparty_kind: 'name',
+              counterparty_name: 'retained history',
+              counterparty_person_id: null,
+              started_on: '2018-01-01',
+              due_on: '2018-02-01',
+              returned_on: '2019-01-01',
+              revision: 2,
+              created_at: '2018-01-01T00:00:00.000Z',
+              updated_at: '2019-01-01T00:00:00.000Z',
+              transaction_id: randomUUID(),
+            },
+          ],
+        };
+      },
+    };
     const copies: Population = {
       name: 'copy-list-context-unrelated-reader-copies',
       hotPartition: partitionOf(route),
@@ -61,6 +100,7 @@ test('FULL Copies page growth includes 64/512/4096 unrelated Semantic facts and 
       async grow(_database, scale, previous) {
         await seed(db, semantic, { from: previous, to: scale });
         await seed(db, copies, { from: previous, to: scale });
+        await seed(db, returnedHistory, { from: previous, to: scale });
       },
       async operation() {
         const response = await f.page(f.ownerToken);
@@ -76,6 +116,16 @@ test('FULL Copies page growth includes 64/512/4096 unrelated Semantic facts and 
         expect(result.copies.find(({ id }) => id === copy.id)?.subjectId).toBe(book);
         expect(result.copies.find(({ id }) => id === sparseCopy.id)?.subjectId).toBe(sparse);
         expect(JSON.stringify(result.copies.find(({ id }) => id === hiddenCopy.id)?.context)).not.toContain(hidden);
+        const loansResponse = await f.send(f.ownerToken, 'GET', '/v1/copy-loans?filter=open&limit=100');
+        expect(loansResponse.status).toBe(200);
+        const loans = (await loansResponse.json()) as {
+          items: { loan: { id: string; counterparty: { kind: string; name: string } }; copy: { id: string } }[];
+        };
+        expect(loans.items).toHaveLength(1);
+        expect(loans.items[0]).toMatchObject({
+          loan: { id: addressedLoan, counterparty: { kind: 'name', name: '  Native loan counterparty 🐈  ' } },
+          copy: { id: copy.id },
+        });
         expect(f.maximumHeldBackends()).toBeLessThanOrEqual(1);
         return {};
       },

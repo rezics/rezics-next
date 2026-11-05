@@ -3,15 +3,16 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createCopyCommands } from '../../src/library/copies.ts';
 import { createEntryCommands } from '../../src/library/entries.ts';
 import { createFollowCommands } from '../../src/library/follows.ts';
+import { createLoanCommands } from '../../src/library/loan-commands.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, costOf, GrowthBoundError, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { testAccess, testTokens } from '../support/test-kernel.ts';
+import { testAccess, testRouteKey, testTokens } from '../support/test-kernel.ts';
 
-type Kind = 'session' | 'entry' | 'copy' | 'follow';
+type Kind = 'session' | 'entry' | 'copy' | 'follow' | 'loan';
 const time = '2026-10-26T12:00:00.000Z';
-const scopes = ['progress_session:read', 'progress_session:list', 'library_entry:read', 'copy:read'];
-const relation = { session: 'progress_session', entry: 'entry', copy: 'copy', follow: 'follow' } as const;
+const scopes = ['progress_session:read', 'progress_session:list', 'library_entry:read', 'copy:read', 'copy:list'];
+const relation = { session: 'progress_session', entry: 'entry', copy: 'copy', follow: 'follow', loan: 'copy_loan' } as const;
 
 function id(route: number, ordinal: number): string {
   return `10000000-0000-7000-8000-${route.toString(16).padStart(4, '0')}${ordinal.toString(16).padStart(8, '0')}`;
@@ -74,6 +75,7 @@ async function prepareGrowth(route: number, kind: Kind, page: boolean) {
     const entries = createEntryCommands(dependencies);
     const copies = createCopyCommands(dependencies);
     const follows = createFollowCommands(dependencies);
+    const loans = createLoanCommands({ ...dependencies, routeKey: testRouteKey() });
 
     // The page always has the same first 21 neighbours, including its lookahead row.
     const probeSource = `WITH source AS (
@@ -107,6 +109,10 @@ async function prepareGrowth(route: number, kind: Kind, page: boolean) {
           subjectId,
           status: 'owned',
         });
+      } else if (kind === 'loan') {
+        const result = await loans.listLoans(actor, { filter: 'open', limit: 20 });
+        expect(result.items.map(({ loan }) => loan.id)).toEqual(Array.from({ length: 20 }, (_, n) => id(route, n + 1)));
+        expect(result.nextCursor).toBeString();
       } else {
         expect(await follows.readFollow(actor, subjectId)).toMatchObject({
           accountId,
@@ -153,6 +159,12 @@ function libraryInsert(kind: Kind): string {
       (route, copy_id, account_id, subject_id, status, location, source, acquired_on, disposed_on, note,
        revision, created_at, updated_at, transaction_id)
       SELECT route, row_id, account_id, subject_id, 'owned', NULL, NULL, NULL, NULL, NULL, 1, at, at, row_id FROM source`;
+  if (kind === 'loan')
+    return `INSERT INTO library.copy_loan
+      (route, loan_id, account_id, copy_id, direction, counterparty_kind, counterparty_name,
+       counterparty_person_id, started_on, due_on, returned_on, revision, created_at, updated_at, transaction_id)
+      SELECT route, row_id, account_id, row_id, 'lent', 'name', 'growth reader', NULL,
+        '2026-10-20', '9999-12-31', NULL, 1, at, at, row_id FROM source`;
   return `INSERT INTO library.follow
     (route, account_id, target_id, target_type, state, reason, created_at, updated_at, transaction_id)
     SELECT route, account_id, subject_id, 'subject', 'following', 'explicit', at, at, row_id FROM source`;
@@ -190,7 +202,15 @@ async function grow(
      SELECT route, row_id, 'actor', 'active', row_id, false, 1, true FROM source`,
     parameters,
   );
-  await database.admin.query(`${source} ${libraryInsert(kind)}`, parameters);
+  const growInsert =
+    kind === 'loan'
+      ? `INSERT INTO library.copy_loan
+          (route, loan_id, account_id, copy_id, direction, counterparty_kind, counterparty_name,
+           counterparty_person_id, started_on, due_on, returned_on, revision, created_at, updated_at, transaction_id)
+         SELECT route, row_id, account_id, row_id, 'lent', 'name', 'retained history', NULL,
+           '2018-01-01', '2018-02-01', '2019-01-01', 2, at, at, row_id FROM source`
+      : libraryInsert(kind);
+  await database.admin.query(`${source} ${growInsert}`, parameters);
   await database.admin.query(
     `${source} INSERT INTO core.receipt
       (partition_no, principal_kind, principal_id, command_kind, idempotency_key, request_digest,
@@ -278,4 +298,8 @@ test('Copy read has constant rows and statements as copies grow', async () => {
 
 test('Follow read has constant rows and statements as follows grow', async () => {
   await check('Follow read has constant rows and statements as follows grow', 'follow', 0x51f0);
+}, 60_000);
+
+test('Open loan page at a fixed limit ignores unrelated retained history growth', async () => {
+  await check('Open loan page ignores returned history growth', 'loan', 0x51a0, true);
 }, 60_000);

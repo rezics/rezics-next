@@ -1,39 +1,63 @@
 # Private physical-copy loans
 
-Decision: retain the existing loan journey and owner, consume immutable local SQL plans through the existing
-command work association, and preserve one absolute preparation deadline; extend the mounted journey suite.
+Decision: Preserve authenticated generation-bound cursor meaning by resolving legacy sentinel cursors against
+their exact retained loan; newly emitted cursors carry an explicit due-state discriminator and seek raw dated/null
+index branches.
 
-`loan-operation-bounds.ts` owns the literal copy/loan lock, copy locator, unique open-loan probe, generation
-read/advance and loan insert/update declarations. Each plan freezes its positional scalar binds before dispatch
-and uses public nine-axis arithmetic. `loan-commands.ts` executes those same operands on its original client.
-An existing command association consumes each declaration before SQL and retains its dispatched charge on
-failure. Ordinary calls keep their native runner and connection ownership. No plan supplies authorization,
-receipt evidence, an additional allowance or an independent transaction.
+`loan-operation-bounds.ts` owns immutable declarations for copy and loan locks, loan-to-copy location, open-copy
+uniqueness, generation read/advance, writes, copy/loan point reads, ambiguous legacy-cursor resolution and all
+first/continuation pages. It freezes the exact scalar bind array used on the caller's live client. The public
+`declareBound`, `sumBounds` and `repeatBound` arithmetic includes literal SQL bytes, JSON-serialized original
+binds and schema-valid returned projections. When the existing command work association is active, it consumes
+each declaration before dispatch; the charge remains on misses, negative probes, failed CAS and rollback. No
+production HTTP path currently creates that association or supplies its original funded envelope for these loan
+routes; the manager-owned root composition is recorded in the continuation. These leaves do not establish
+authority, receipt success or a new allowance. Their eight-axis `WorkDimensions` translation explicitly drops only
+`engineRequests`, which is zero for SQL-only leaves, from the declared public nine-axis vector.
 
-Point projections use UUID text and int32 generation widths. Input bytes include the original escaped private
-name and original dates, revision, command time and transaction ID. The open-copy partial unique index proves
-at most one row independently of LIMIT; its point and LIMIT node are both counted. Local write bounds include
-heap and index work: fresh loans reach primary/open-copy/due/owner indexes, extension retains those indexes,
-and return replaces open-copy/due with history. Generation upsert includes its conflicting old tuple and new
-tuple. These tables have no foreign keys, deferred constraints or mutation triggers. Misses, negative probes
-and failed CAS retain their declarations. These SQL leaves construct no identity witness or Search request;
-their ninth axis is explicitly zero when translated into the existing eight-axis command accounting port.
+Copy and joined-copy projection widths come from the existing admitted copy writer: kind and status IDs are
+1–64 ASCII characters. The schema has no maximum width, so bounds use the writer's admitted vocabulary and do
+not truncate stored text. Private names keep their exact Unicode and whitespace and admit at most 300 Unicode
+scalars; the projection example uses four UTF-8 bytes per scalar. Loan dates, IDs and revisions use the existing
+date-only Gregorian, UUID and int32 contracts. Original command SQL operands include the original name, dates,
+revision, command time and transaction ID. No name lookup is performed.
 
-These local leaves are **not complete enclosing operation plans**. Account/action/group admission, original
-and current source/profile evidence, both Person mapping reads and summary/disclosure, copy/loan projections,
-command receipt/replay, partition/floor/epoch, shelf effects, History/outbox and worker controls, transaction
-controls/retries/cleanup and mounted response serialization still need composition at their existing owners.
-Person coalescing does not reduce raw loan/copy projection work. In particular, the current open-page
-`COALESCE(due_on, …)` continuation filter cannot derive examined rows from LIMIT, and joined copy vocabulary
-columns do not have schema width limits. A finite result page alone does not settle either derivation.
+The open-copy probe counts the partial unique-index result and the separate LIMIT node. Fresh insert work counts
+the heap row and primary/open-copy/due/owner index entries; extension counts old and new heap/index tuples; return
+replaces the open-copy and due entries with history. Generation upsert includes both the conflicting old tuple
+and inserted/updated tuple. These relations have no foreign keys, deferred constraints or mutation triggers.
+The local leaf formulas keep logical rows, examined candidates, points, statements and bytes separate; empty
+seeks retain the bounded miss slot. No leaf builds an identity witness or invokes Search.
 
-The retained limits are open 100/history 50/presentation 100, generation 2147483647 and a generation-bound
-15-minute cursor. Listing captures the original cursor before its first await, reads generation before decoding,
-and rejects changed generations. Due dates remain ascending/nulls last for open loans and return dates descending
-for history, with loan ID breaking ties. Command preparation, including retries, shares the original native
-deadline. Current authorization still precedes receipt replay; a replayed return receipt differs from a fresh
-return against an already returned loan. Copy-before-loan locking, private-name fidelity, exact revision CAS,
-open uniqueness, disposal conflicts and retained history remain with the existing command owner.
+Open pages are capped at 100, history pages at 50, and presentation at 100. First-page and history continuation
+use their existing partial ordered indexes. Open continuation uses raw `(due_on, loan_id)` seeks for dated rows
+and a separate bounded null-due seek. Each branch reads at most `page limit + 1` candidates, the union is ordered
+and limited again, and current copies are joined by their exact routed primary keys only after the page is chosen.
+The branch candidates, final page, copy probes, sentinel and repeated page reads are all charged. `LIMIT` is not
+treated as an examined-row bound. History continuation uses the raw descending `(returned_on, loan_id)` key.
+
+New open cursors retain the same account/filter/order binding, generation and 15-minute lifetime, with a third
+`dated`/`undated` field to distinguish a real `9999-12-31` due date from NULL. Existing two-field tokens remain
+valid. A sentinel token is normalized with one exact loan point read after the existing generation check; a
+missing generation-current loan is an internal invariant error, not a new stale-cursor refusal. The resulting
+raw index branches preserve due-ascending/nulls-last order without a restart or wider page. History order stays
+returned-date descending then loan ID. Listing captures the supplied token before awaiting and revalidates the
+same generation at each mounted presentation read.
+
+The surrounding journey keeps its current owners: account/action/group and Entry admission, original/current
+Library profile/source and copy revision evidence, Person mapping-before/after plus summary disclosure, command
+receipt lookup/write/replay, partition/floor/epoch, Shelf effects, History/outbox events, native transaction,
+checkout, time and terminal cleanup, and HTTP serialization. Person IDs are deduplicated only where the caller
+already coalesces them; raw loan and current-copy page projections remain separately bounded. Current Person
+disclosure can conceal `semantic_not_ready` or semantic `dependency_unavailable` while preserving the loan, but
+overload, partition, retry-exhaustion and deadline failures retain their classification. Authorization precedes
+receipt replay; replaying a return receipt remains distinct
+from issuing a fresh return against an already-returned loan. Original parsed operands and the one absolute
+request/attempt deadline survive retries and uncertain outcomes. Native composition remains at existing command
+and source roots, not in an alternate scheduler or a receipt-derived plan.
+
+Choice summary: The only cursor normalization change is the exact due-state discriminator and point lookup needed
+to preserve the existing signed cursor while making dated-sentinel and null-due traversal complete.
 
 # Native Entry operation bounds
 
