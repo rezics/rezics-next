@@ -350,6 +350,27 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await act(async () => writes[3]!.work.resolve({ ok: true, revision: 8 }));
     expect(cache).toHaveBeenCalledWith({ queryKey: navigation.pinsOrigin.queryKey, exact: true });
     expect(control.pending).toBe(false);
+
+    const beforeRefusal = response('C', ['a', 'x', 'b', 'c']);
+    const refusalRead = pendingReads.length;
+    await refetch();
+    await settle(refusalRead, {
+      ...beforeRefusal,
+      pins: { state: 'denied', origin: beforeRefusal.origin },
+    });
+    expect(navigation.data.pins).toMatchObject({ state: 'denied' });
+    expect(navigation.data.collections).toEqual(beforeRefusal.collections);
+    expect(host.textContent).toContain(m.library_pin_denied());
+    expect(host.textContent).toContain('Private C');
+    expect(host.querySelectorAll('[data-library-pin]')).toHaveLength(0);
+    expect(navigation.pinsOrigin.isCurrent()).toBe(false);
+    expect(control.entries).toHaveLength(0);
+    expect(control.canUpdate).toBe(false);
+
+    const restoredRead = pendingReads.length;
+    await refetch();
+    await settle(restoredRead, response('C', ['a', 'x', 'b', 'c']));
+
     // Unrelated owner Collections admission cannot revoke this same-viewer removal of a null target.
     await act(async () => client.setQueryData(exposureQuery.queryKey, ['personal_library']));
     await tick();

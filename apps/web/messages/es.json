@@ -1241,6 +1241,7 @@
   "library_nav_sidebar_label": "Navegación de la biblioteca",
   "library_pin_actions": "Acciones de la colección fijada",
   "library_pin_conflict": "Las colecciones fijadas cambiaron en otro lugar. Revisa la lista actual antes de volver a intentarlo.",
+  "library_pin_denied": "No tienes acceso a tus colecciones fijadas.",
   "library_pin_limit": "Has alcanzado el límite de 100 colecciones fijadas.",
   "library_pin_more": "Todas las colecciones",
   "library_pin_move_down": "Mover hacia abajo",

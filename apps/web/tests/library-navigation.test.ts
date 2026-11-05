@@ -236,3 +236,30 @@ test('Collection overflow keeps every real Library destination and unavailable p
     setLocale(previousLocale, { reload: false });
   }
 });
+
+test('Pins permission denial and platform closure stay visible without pin destinations in every locale', () => {
+  const previousLocale = getLocale();
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      const denied = renderToStaticMarkup(
+        createElement(LibraryNavigation, { current: 'collections', pins: { state: 'denied' }, collections: [] }),
+      );
+      expect(denied).toContain(m.library_pin_denied());
+      expect(denied).not.toContain('data-library-pin=');
+      expect(denied).not.toContain(m.library_pin_pinned_section());
+
+      const closed = renderToStaticMarkup(
+        createElement(LibraryNavigation, {
+          current: 'collections',
+          pins: { state: 'closed', platformClosed: true },
+          collections: [],
+        }),
+      );
+      expect(closed).toContain(m.library_subject_closed());
+      expect(closed).not.toContain('data-library-pin=');
+    }
+  } finally {
+    setLocale(previousLocale, { reload: false });
+  }
+});

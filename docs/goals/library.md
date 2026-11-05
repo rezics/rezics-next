@@ -72,6 +72,7 @@ Decision: Personal Shelf removal classifies native and recognized thrown refusal
 
 Decision: Continue preserves exact native `platform_closed` and recognized `PlatformClosedError` refusals as a closed region, separate from permission denial and unavailability; closure clears retained rows and does not retry.
 Decision: Commerce owns Library diagnosis and receiving of Pin mutations; Accounts owns ordinary website scope alignment. Native Library permissions, preparations and gates remain authoritative; an actual denied mutation conveys no write authority.
+Decision: Commerce receives a current Pins-list 403 as denied and exact `platform_closed` as visibly closed; either refusal clears Pins rows, preserves independent Collection reads and exposes no Pin commands.
 
 ## Dependencies
 

@@ -4,6 +4,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import { personalRead, readQueryKey } from '../kernel/query';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
@@ -26,8 +27,9 @@ export type LibraryPinsOrigin = {
   requestedLimit: 8 | 100;
 };
 export type LibraryPinsRead = (
-  | { state: 'closed' }
+  | { state: 'closed'; platformClosed?: true }
   | { state: 'preparing' }
+  | { state: 'denied' }
   | { state: 'unavailable' }
   | ({ state: 'loaded'; canUpdate?: boolean; canRemove?: boolean } & LibraryPinsPage)
 ) & { origin?: LibraryPinsOrigin };
@@ -40,6 +42,21 @@ type Result<T> = {
 
 function resultStatus(result: Result<unknown>): number | undefined {
   return result.status ?? result.error?.status;
+}
+
+function resultRefusal(result: Result<unknown>): LibraryPinsRead | undefined {
+  const status = resultStatus(result);
+  if (isPlatformClosedProblem(status, result.error?.value)) return { state: 'closed', platformClosed: true };
+  if (status === 403) return { state: 'denied' };
+  if (status === 202) return { state: 'preparing' };
+  return undefined;
+}
+
+function isTransportFailure(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError'))
+  );
 }
 
 export function libraryPinsListExposed(document: unknown): boolean {
@@ -115,6 +132,8 @@ export async function readLibraryPins(
       fetch: { cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(2_000) },
     });
     if (!isCurrent()) return { state: 'closed' };
+    const openApiRefusal = resultRefusal(exposed);
+    if (openApiRefusal) return openApiRefusal;
     if (exposed.error || !exposed.data) return { state: 'unavailable' };
     if (!libraryPinsListExposed(exposed.data)) return { state: 'closed' };
 
@@ -123,8 +142,9 @@ export async function readLibraryPins(
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(2_000) },
     });
+    const listRefusal = resultRefusal(result);
+    if (listRefusal) return listRefusal;
     const status = resultStatus(result);
-    if (status === 202) return { state: 'preparing' };
     if (result.error || (status !== undefined && status >= 400) || !result.data) return { state: 'unavailable' };
     return {
       state: 'loaded',
@@ -132,8 +152,10 @@ export async function readLibraryPins(
       canUpdate: pinOperationExposed(exposed.data, 'put'),
       canRemove: pinOperationExposed(exposed.data, 'delete'),
     };
-  } catch {
-    return { state: 'unavailable' };
+  } catch (error) {
+    if (isPlatformClosedError(error)) return { state: 'closed', platformClosed: true };
+    if (isTransportFailure(error)) return { state: 'unavailable' };
+    throw error;
   }
 }
 
