@@ -661,7 +661,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     )!;
     const noteField = document.getElementById(noteLabel.htmlFor)!;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(
         noteField,
         'Edited after uncertainty',
       );
