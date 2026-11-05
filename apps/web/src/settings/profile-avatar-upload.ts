@@ -359,8 +359,9 @@ export class ProfileAvatarUpload {
           reason: error.reason,
           ...(error.retryAfter !== undefined ? { retryAfter: error.retryAfter } : {}),
         };
-        if (error.reason === 'rate-limited') {
-          this.retryAt = preferenceRetryDeadline(error.retryAfter?.toString());
+        const observed = preferenceRetryDeadline(error.retryAfterHeader, error.responseTime ?? Date.now());
+        if (observed > 0) {
+          this.retryAt = Math.max(this.retryAt, observed);
           this.rateFailure = failure;
         }
         this.update({

@@ -92,7 +92,19 @@ function parseRetryAfter(value: string | null): number | undefined {
   return Math.min(3600, Math.max(0, Math.ceil((date - Date.now()) / 1000)));
 }
 
+function attachRefusalMetadata(
+  refusal: UploadRefusal,
+  retryAfterHeader: string | undefined,
+  responseTime: number,
+): UploadRefusal {
+  if (retryAfterHeader !== undefined) refusal.retryAfterHeader = retryAfterHeader;
+  refusal.responseTime = responseTime;
+  return refusal;
+}
+
 async function refusalFrom(response: Response): Promise<UploadRefusal> {
+  const responseTime = Date.now();
+  const retryAfterHeader = response.headers.get('retry-after') ?? undefined;
   if (response.status === 403) {
     const body = await response
       .clone()
@@ -100,18 +112,22 @@ async function refusalFrom(response: Response): Promise<UploadRefusal> {
       .catch(() => undefined);
     if (isPlatformClosedProblem(response.status, body)) {
       await response.body?.cancel().catch(() => {});
-      return new UploadRefusal('closed');
+      return attachRefusalMetadata(new UploadRefusal('closed'), retryAfterHeader, responseTime);
     }
   }
   await response.body?.cancel().catch(() => {});
-  if (response.status === 415) return new UploadRefusal('type');
-  if (response.status === 413) return new UploadRefusal('too-large');
+  if (response.status === 415) return attachRefusalMetadata(new UploadRefusal('type'), retryAfterHeader, responseTime);
+  if (response.status === 413)
+    return attachRefusalMetadata(new UploadRefusal('too-large'), retryAfterHeader, responseTime);
   if (response.status === 429) {
-    const retryAfter = parseRetryAfter(response.headers.get('retry-after'));
-    if (retryAfter === undefined) return new UploadRefusal('rate-limited');
-    return new UploadRefusal('rate-limited', retryAfter);
+    const retryAfter = parseRetryAfter(retryAfterHeader ?? null);
+    return attachRefusalMetadata(
+      retryAfter === undefined ? new UploadRefusal('rate-limited') : new UploadRefusal('rate-limited', retryAfter),
+      retryAfterHeader,
+      responseTime,
+    );
   }
-  return new UploadRefusal('unavailable');
+  return attachRefusalMetadata(new UploadRefusal('unavailable'), retryAfterHeader, responseTime);
 }
 
 function siteFetch(path: string, init: RequestInit & { method: string }): Promise<Response> {

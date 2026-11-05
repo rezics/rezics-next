@@ -176,8 +176,12 @@ export function ProfileAvatar({
           <p role="status" aria-live="polite" aria-atomic="true">
             {adviceStatus(state.advice)}
           </p>
-          {waiting && state.failure?.retryAfter !== undefined ? (
-            <p role="status">{m.settings_profile_avatar_retry_after({ seconds: state.failure.retryAfter })}</p>
+          {waiting && state.retryAt ? (
+            <p role="status">
+              {m.settings_profile_avatar_retry_after({
+                seconds: Math.max(1, Math.ceil((state.retryAt - Date.now()) / 1000)),
+              })}
+            </p>
           ) : null}
           {adviceWaiting && state.adviceRetryAt ? (
             <p role="status">
