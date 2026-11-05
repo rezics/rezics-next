@@ -286,7 +286,7 @@ export async function readRatings(
   signal?: AbortSignal,
 ): Promise<RatingSources> {
   signal?.throwIfAborted();
-  const fetch = { signal };
+  const fetch = signal ? { signal } : {};
   const subject = client.subjects({ id });
   const requested = (source: RatingSource) => only === undefined || only === source;
   async function settle<T>(source: RatingSource, read: () => Promise<RatingOutcome<T>>): Promise<RatingOutcome<T>> {

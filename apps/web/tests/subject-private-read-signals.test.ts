@@ -96,19 +96,6 @@ const factories = [
 ] as const;
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test('every remaining Subject Query carries its observation signal outside data through BFF to native GET', async () => {
-  for (const factory of factories) {
-    calls.length = serverSignals.length = 0;
-    const client = new QueryClient();
-    const options = factory();
-    await client.fetchQuery(options as ReturnType<typeof subjectRatingQuery>);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.signal).toBe(serverSignals[0]!);
-    expect(calls[0]!.signal.aborted).toBe(false);
-    client.clear();
-  }
-});
-
 test('retiring during private preparation prevents native scheduling and produces no successful empty outcome', async () => {
   for (const factory of factories.slice(2)) {
     calls.length = 0;
@@ -131,7 +118,7 @@ test('retiring during private preparation prevents native scheduling and produce
 
 test('an exact live observer retains shared work; a fresh return replaces abandoned ignored-abort work', async () => {
   for (const factory of factories) {
-    calls.length = 0;
+    calls.length = serverSignals.length = 0;
     const gate = deferred<void>();
     response = gate.promise;
     const client = new QueryClient();
@@ -142,6 +129,7 @@ test('an exact live observer retains shared work; a fresh return replaces abando
     const detachSecond = second.subscribe(() => {});
     await tick();
     expect(calls).toHaveLength(1);
+    expect(calls[0]!.signal).toBe(serverSignals[0]!);
     detachFirst();
     expect(calls[0]!.signal.aborted).toBe(false);
     detachSecond();

@@ -493,8 +493,8 @@ export type SubjectPersonalReadTransport = {
 };
 
 const defaultSubjectPersonalTransport: SubjectPersonalReadTransport = {
-  readReader: (data, signal) => readSubjectReader({ data, signal }),
-  readOwnRating: (data, signal) => readSubjectOwnRating({ data, signal }),
+  readReader: (data, signal) => readSubjectReader(signal ? { data, signal } : { data }),
+  readOwnRating: (data, signal) => readSubjectOwnRating(signal ? { data, signal } : { data }),
 };
 
 const emptySubjectPersonalScope: SubjectPersonalQueryScope = {

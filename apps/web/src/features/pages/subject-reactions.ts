@@ -23,7 +23,7 @@ export async function readReactionCounts(
   signal?.throwIfAborted();
   const counts = await client
     .subjects({ id })
-    .reactions.get({ fetch: { signal } })
+    .reactions.get(signal ? { fetch: { signal } } : {})
     .catch(() => {
       signal?.throwIfAborted();
       return null;

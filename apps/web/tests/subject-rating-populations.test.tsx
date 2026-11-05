@@ -275,7 +275,14 @@ async function tick() {
 }
 async function until(predicate: () => boolean) {
   for (let index = 0; index < 40 && !predicate(); index++) await act(tick);
-  expect(predicate()).toBe(true);
+  expect(
+    predicate(),
+    JSON.stringify({
+      text: host.textContent,
+      queries: directoryQueries().map((query) => ({ key: query.queryKey, state: query.state })),
+      requests: requests.map((request) => request.url),
+    }),
+  ).toBe(true);
 }
 function PopulationOwner({
   id = subjectId,
