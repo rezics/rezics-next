@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
-import { completedUtcHour, parseUtcHour } from './efficiency-report-time.ts';
+import { completedUtcHour, parseUtcHour, type UtcHour } from './efficiency-report-time.ts';
 import { ensureFlow } from './flow.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
