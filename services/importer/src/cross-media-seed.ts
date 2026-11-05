@@ -58,7 +58,6 @@ import {
   type VndbCreditVocabularyReferences,
   type VndbCreditVocabularyRequirement,
 } from './showcase-vndb-credits.ts';
-import { vndbStaffCreditConverterRevision } from './vndb-staff-credits.ts';
 import type { VndbCreditVocabularyReadFailure } from './vndb-staff-credits.ts';
 import {
   parseVndbCharacterProfileReferences,
@@ -2070,7 +2069,7 @@ export type CrossMediaSeedResult = {
   vndbCreditDiagnostics: SourceVocabularyGap[];
   vndbCreditVocabularyRequirements: VndbCreditVocabularyRequirement[];
   vndbCreditVocabularyUnavailable: VndbCreditVocabularyReadFailure[];
-  vndbCreditCandidateKeys?: readonly string[];
+  vndbCreditCandidateDigests?: readonly string[];
   creditRoles?: readonly BangumiCreditRoleBinding[];
   creditVocabularyRequirements?: BangumiCreditVocabularyResolution['requirements'];
   vndbCharacterProfileRequirements: ReturnType<typeof planVndbCharacterProfile>['requirements'];
@@ -2188,7 +2187,6 @@ export async function seedCrossMedia(
   const vndbCredits = providers.includes('vndb')
     ? await prepareShowcaseVndbCredits(plan, port, extras?.vndbCreditReferences, extras?.readPublicSubject)
     : undefined;
-  const vndbCreditCandidateKeys = new Set<string>();
   const characterProfile = providers.includes('vndb') ? planVndbCharacterProfile(plan) : undefined;
   const characterProfileAdmission =
     characterProfile === undefined
@@ -2272,19 +2270,7 @@ export async function seedCrossMedia(
         ? {}
         : { recordConcurrency: extras.recordConcurrency }),
     ...(extras?.mediaDeadlineMs === undefined ? {} : { mediaDeadlineMs: extras.mediaDeadlineMs }),
-    ...((vndbCredits || extras?.onConversionOutput)
-      ? {
-          onConversionOutput(output) {
-            for (const proposal of output.proposals)
-              if (
-                proposal.op === 'propose' &&
-                proposal.source.converter_revision === vndbStaffCreditConverterRevision
-              )
-                vndbCreditCandidateKeys.add(proposal.key);
-            extras?.onConversionOutput?.(output);
-          },
-        }
-      : {}),
+    ...(extras?.onConversionOutput === undefined ? {} : { onConversionOutput: extras.onConversionOutput }),
     transport: {
       batchWrite: (request) => port.batch(request),
       setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),
@@ -2746,7 +2732,7 @@ export async function seedCrossMedia(
       vndbCreditDiagnostics: vndbCredits?.diagnostics ?? [],
       vndbCreditVocabularyRequirements: vndbCredits?.requirements ?? [],
       vndbCreditVocabularyUnavailable: vndbCredits?.vocabularyUnavailable ?? [],
-      ...(vndbCredits ? { vndbCreditCandidateKeys: [...vndbCreditCandidateKeys].sort() } : {}),
+      ...(vndbCredits ? { vndbCreditCandidateDigests: [...vndbCredits.candidateDigests].sort() } : {}),
       vndbCharacterProfileRequirements: characterProfile?.requirements ?? [],
       vndbCharacterProfileOmissions: characterProfile?.omissions ?? [],
       characterDiagnostics: fidelity?.gaps ?? [],
@@ -2959,7 +2945,7 @@ export async function seedCrossMedia(
       vndbCreditDiagnostics: vndbCredits?.diagnostics ?? [],
       vndbCreditVocabularyRequirements: vndbCredits?.requirements ?? [],
       vndbCreditVocabularyUnavailable: vndbCredits?.vocabularyUnavailable ?? [],
-      ...(vndbCredits ? { vndbCreditCandidateKeys: [...vndbCreditCandidateKeys].sort() } : {}),
+      ...(vndbCredits ? { vndbCreditCandidateDigests: [...vndbCredits.candidateDigests].sort() } : {}),
       ...(vocabulary ? { creditRoles: vocabulary.roles, creditVocabularyRequirements: vocabulary.requirements } : {}),
       vndbCharacterProfileRequirements: characterProfile?.requirements ?? [],
       vndbCharacterProfileOmissions: characterProfile?.omissions ?? [],

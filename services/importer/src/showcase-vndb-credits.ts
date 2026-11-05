@@ -62,6 +62,7 @@ export type ShowcaseVndbCredits = {
   requirements: VndbCreditVocabularyRequirement[];
   diagnostics: SourceVocabularyGap[];
   vocabularyUnavailable: VndbCreditVocabularyReadFailure[];
+  candidateDigests: Set<string>;
   vocabularyAdmission: Admission;
   deliveryEdges(edges: CrossMediaPlan['edges']): CrossMediaPlan['edges'];
 };
@@ -550,6 +551,7 @@ export async function prepareShowcaseVndbCredits(
     : { bindings: emptyBindings, unavailable: [] as VndbCreditVocabularyReadFailure[] };
   const bindings = current.bindings;
   const diagnostics = [...selected.diagnostics];
+  const candidateDigests = new Set<string>();
   const pushDiagnostic = (entry: SourceVocabularyGap) => {
     if (diagnostics.length >= DIAGNOSTIC_LIMIT) return;
     if (!diagnostics.some((prior) => prior.path === entry.path && prior.reason === entry.reason))
@@ -581,6 +583,9 @@ export async function prepareShowcaseVndbCredits(
       for (const row of request.rows) {
         const preview = mapVndbVocabulary({ metadata, bindings: request.bindings, rows: [row], commandLimit });
         commandLimit = Math.max(0, commandLimit - preview.proposals.length);
+        for (const proposal of preview.proposals)
+          if (proposal.op === 'propose')
+            candidateDigests.add(showcaseDigest({ source: proposal.source, statement: proposal.statement }));
         for (const entry of preview.gaps) pushDiagnostic(entry);
       }
       return request;
@@ -590,6 +595,7 @@ export async function prepareShowcaseVndbCredits(
     ...selected,
     diagnostics,
     vocabularyUnavailable: current.unavailable,
+    candidateDigests,
     vocabularyAdmission,
     deliveryEdges(edges) {
       return edges.filter(

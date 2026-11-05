@@ -14,7 +14,7 @@ import {
   prepareShowcaseVndbCreditVocabulary,
   publishedShowcaseVndbCreditReferences,
 } from '../src/showcase-vndb-credits.ts';
-import { buildShowcaseManifest } from '../src/showcase-manifest.ts';
+import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
 import {
   captureShowcaseCommands,
   ShowcaseJournal,
@@ -389,7 +389,11 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
     );
     if (!author || author.op !== 'propose' || !voice || voice.op !== 'propose')
       throw new Error('Expected selected VNDB author and voice proposals');
-    expect(current.vndbCreditCandidateKeys).toEqual(expect.arrayContaining([author.key, voice.key]));
+    expect(current.vndbCreditCandidateDigests).toEqual(
+      expect.arrayContaining(
+        [author, voice].map((proposal) => showcaseDigest({ source: proposal.source, statement: proposal.statement })),
+      ),
+    );
     expect(author?.op === 'propose' ? author.statement.value : undefined).toEqual({
       type: 'value',
       content: readings.get('s4'),
@@ -411,7 +415,7 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       readings: current.readings,
       acknowledgements: journal.acknowledgedCommands(),
       aliases: crossMediaAliases,
-      vndbCreditCandidateKeys: current.vndbCreditCandidateKeys,
+      vndbCreditCandidateDigests: current.vndbCreditCandidateDigests,
       vocabularyRequirements: concepts.requirements,
     });
     const work = creditManifest.records.find((record) => record.sourceKey === 'v1')!;
@@ -435,7 +439,7 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       readings: current.readings,
       acknowledgements: journal.acknowledgedCommands(),
       aliases: crossMediaAliases,
-      vndbCreditCandidateKeys: current.vndbCreditCandidateKeys,
+      vndbCreditCandidateDigests: current.vndbCreditCandidateDigests,
       vocabularyRequirements: concepts.requirements,
     });
     expect(afterStale.records.find((record) => record.sourceKey === 'v1')?.assertions).not.toContainEqual(

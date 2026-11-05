@@ -467,7 +467,7 @@ export function buildShowcaseManifest(input: {
   acknowledgements: readonly ShowcaseAcknowledgement[];
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
   mediaOutcomes?: readonly CrossMediaMediaOutcome[];
-  vndbCreditCandidateKeys?: readonly string[];
+  vndbCreditCandidateDigests?: readonly string[];
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
   reviewedVocabulary?: readonly ShowcaseVocabularyRecord[];
   currentBangumiGenreCandidateIds?: readonly string[];
@@ -494,7 +494,7 @@ export function buildShowcaseManifest(input: {
   const currentBangumiGameGenreCandidateIds = new Set(input.currentBangumiGameGenreCandidateIds ?? []);
   const bangumiGameGenreOwnerKeys = new Set(input.bangumiGameGenreOwnerKeys ?? []);
   const tagWeightObservations = input.tagWeightObservations ?? [];
-  const vndbCreditCandidateKeys = new Set(input.vndbCreditCandidateKeys ?? []);
+  const vndbCreditCandidateDigests = new Set(input.vndbCreditCandidateDigests ?? []);
   const tagWeightRefreshes = [...new Set(input.tagWeightRefreshes ?? [])].filter((id) =>
     /^v[1-9][0-9]{0,9}$/u.test(id),
   );
@@ -526,10 +526,11 @@ export function buildShowcaseManifest(input: {
   const mediaOutcomes = input.mediaOutcomes ?? [];
   const allowedSources = selectedEnvelopes(plan, aliases, vocabularyRequirements, mediaOutcomes, tagWeightObservations);
   for (const acknowledgement of acknowledgements) {
+    const assertion = candidateAssertion(acknowledgement);
     if (
-      acknowledgement.command.op === 'propose' &&
+      assertion &&
       acknowledgement.command.source.converter_revision === vndbStaffCreditConverterRevision &&
-      vndbCreditCandidateKeys.has(acknowledgement.command.key)
+      vndbCreditCandidateDigests.has(assertion.candidateDigest)
     )
       allowedSources.add(envelopeKey(acknowledgement.command.source));
   }
@@ -645,12 +646,13 @@ export function buildShowcaseManifest(input: {
     let candidateOverflow = false;
     for (const ack of acknowledgements) {
       const source = ack.command.source;
+      const assertion = candidateAssertion(ack);
       if (
         source.source !== alias ||
         (source.external_id !== row.key && appearanceOwners.get(envelopeKey(source)) !== row.key) ||
         !allowedSources.has(envelopeKey(source)) ||
         (source.converter_revision === vndbStaffCreditConverterRevision &&
-          !vndbCreditCandidateKeys.has(ack.command.key)) ||
+          (!assertion || !vndbCreditCandidateDigests.has(assertion.candidateDigest))) ||
         (graphEnvelopeKeys.has(envelopeKey(source)) && !eligibleGraphCommandKeys.has(ack.command.key)) ||
         (subject && ack.command.op === 'propose' && ack.command.subject !== subject.id)
       )
@@ -671,7 +673,6 @@ export function buildShowcaseManifest(input: {
         !currentBangumiGameGenreCandidateIds.has(ack.candidateId ?? '')
       )
         continue;
-      const assertion = candidateAssertion(ack);
       if (!assertion) continue;
       if (provider === 'vndb' && !currentTagWeight(row, alias, assertion, tagWeightObservations)) continue;
       const ownerKey = appearanceOwners.get(envelopeKey(source));
