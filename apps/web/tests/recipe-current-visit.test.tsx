@@ -136,7 +136,16 @@ test('mounted recipe intent selects the exact duplicate occurrence and explains 
   const duplicate = { ...structuredClone(original), id: statement };
   initial.public.subject.statements[property] = [original, duplicate];
   let failedRead = false;
-  const transport = { ...fixture.corrections, load: async () => (failedRead ? fixture.corrections.load() : initial) };
+  const transport = {
+    ...fixture.corrections,
+    load: async () => (failedRead ? fixture.corrections.load() : initial),
+    propose: async (...input: Parameters<typeof fixture.corrections.propose>) => {
+      const result = await fixture.corrections.propose(...input);
+      fixture.setScenario('reader-unavailable');
+      failedRead = true;
+      return result;
+    },
+  };
   const show = (missing = false) =>
     act(async () =>
       root.render(
@@ -190,8 +199,6 @@ test('mounted recipe intent selects the exact duplicate occurrence and explains 
     await act(async () => {
       await user.click(canvas.getByRole('button', { name: m.recipe_review() }));
     });
-    fixture.setScenario('reader-unavailable');
-    failedRead = true;
     await act(async () => {
       await user.click(canvas.getByRole('button', { name: m.correction_submit() }));
     });
