@@ -55,6 +55,7 @@ test('native evidence indices and reviewed identities survive explicit selection
   await act(() => save.click());
   expect(saved?.labels).toEqual(row.review!.labels!.selections.map((s) => ({ value: s.value, target: s.target! })));
   expect(admittedFields(row)).toEqual(['status', 'tags']);
+  expect(admittedFields({ ...row, selectedFields: ['tags'] })).toEqual(['tags']);
   expect(admittedFields({ ...row, review: (({ labels, ...review }) => review)(row.review!) })).toEqual(['status']);
   expect(admittedFields({ ...row, review: { ...row.review!, skip: true } })).toEqual([]);
 });

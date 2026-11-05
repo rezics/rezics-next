@@ -79,6 +79,7 @@ export type MalPreviewRow = {
   source: MalReview['source'];
   review: MalReview | null;
   outcome: MalOutcome | null;
+  selectedFields?: string[];
   sourcePreview?: SourceAdmissionPreview;
   sourceAdmission?: SourceAdmissionOutcome | null;
 };

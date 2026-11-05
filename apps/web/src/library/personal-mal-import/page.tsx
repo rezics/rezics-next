@@ -199,6 +199,17 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     const response = await run(command, () => port.review(command));
     if (!response || response.kind !== 'reviewed' || !live()) return;
     await loadPage(id, after);
+    if (live())
+      setPage((current) =>
+        current
+          ? {
+              ...current,
+              rows: current.rows.map((row) =>
+                row.index === draft.row ? { ...row, selectedFields: draft.fields } : row,
+              ),
+            }
+          : current,
+      );
   }
 
   function queueSourceAdmissions(currentPage: MalPage, outcomes: MalOutcome[]) {
