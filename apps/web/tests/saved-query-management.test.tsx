@@ -278,11 +278,19 @@ test('a built-in or another owner cannot enter saved-query management', async ()
 });
 
 test('delete returns retain admitted opaque cursors and both layouts through the logical bound', () => {
-  for (const cursor of ['next+/page==', 'a'.repeat(2049), 'a'.repeat(4096), '%+/?&=#'.repeat(585) + '%', '界'.repeat(4096)]) {
+  for (const cursor of [
+    'next+/page==',
+    'a'.repeat(2049),
+    'a'.repeat(4096),
+    '%+/?&=#'.repeat(585) + '%',
+    '界'.repeat(4096),
+  ]) {
     for (const layout of ['rows', 'previews']) {
       const directory = `/en/library/collections?${new URLSearchParams({ cursor, layout })}`;
       expect(savedQueryReturnTo(directory, 'en')).toBe(directory);
-      expect(new URL(savedQueryReturnTo(directory, 'en'), 'https://rezics.invalid').searchParams.get('cursor')).toBe(cursor);
+      expect(new URL(savedQueryReturnTo(directory, 'en'), 'https://rezics.invalid').searchParams.get('cursor')).toBe(
+        cursor,
+      );
     }
   }
 });
@@ -290,11 +298,19 @@ test('delete returns retain admitted opaque cursors and both layouts through the
 test('invalid delete returns fall back to the locale directory', () => {
   const path = '/en/library/collections';
   for (const value of [
-    `https://outside.test${path}`, '/fr/library/collections?layout=rows', `${path}?layout=rows&extra=1`,
-    `${path}?cursor=a&cursor=b`, `${path}?layout=rows&layout=previews`, `${path}?layout=grid`,
-    `${path}?cursor=`, `${path}#`, `${path}#fragment`,
-    `${path}?${new URLSearchParams({ cursor: '界'.repeat(4097) })}`, `${path}?cursor=${'a'.repeat(40000)}`,
-  ]) expect(savedQueryReturnTo(value, 'en')).toBe(path);
+    `https://outside.test${path}`,
+    '/fr/library/collections?layout=rows',
+    `${path}?layout=rows&extra=1`,
+    `${path}?cursor=a&cursor=b`,
+    `${path}?layout=rows&layout=previews`,
+    `${path}?layout=grid`,
+    `${path}?cursor=`,
+    `${path}#`,
+    `${path}#fragment`,
+    `${path}?${new URLSearchParams({ cursor: '界'.repeat(4097) })}`,
+    `${path}?cursor=${'a'.repeat(40000)}`,
+  ])
+    expect(savedQueryReturnTo(value, 'en')).toBe(path);
 });
 
 test('mounted manager callbacks keep their originating controller state and ports', async () => {

@@ -7,8 +7,8 @@ export function savedQueryReturnTo(value: string | undefined, locale: string): s
   const path = `/${encodeURIComponent(locale)}/library/collections`;
   // URLSearchParams needs at most nine ASCII characters per UTF-16 cursor unit
   // (three percent-encoded UTF-8 bytes), plus the origin, path and fixed operands.
-  const encodedLimit = returnOrigin.length + path.length + '?cursor='.length +
-    mineCollectionsCursorLimit * 9 + '&layout=previews'.length;
+  const encodedLimit =
+    returnOrigin.length + path.length + '?cursor='.length + mineCollectionsCursorLimit * 9 + '&layout=previews'.length;
   if (!value || value.length > encodedLimit) return path;
   let destination: URL;
   try {
