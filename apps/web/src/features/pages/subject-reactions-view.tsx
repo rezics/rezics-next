@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { PublicReactionRecovery } from './public-reaction-recovery';
 import { m } from '../../paraglide/messages.js';
+import { locales } from '../../paraglide/runtime.js';
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 import { ThreadReactions } from '../../threads/thread-reactions';
@@ -39,6 +40,7 @@ export function SubjectHeaderActions({
   locale?: string;
   children?: ReactNode;
 }) {
+  const options = { locale: locales.find((item) => item === locale) ?? 'en' };
   return (
     <>
       <div
@@ -50,7 +52,12 @@ export function SubjectHeaderActions({
           available={reactions !== null}
           pending={publicRecovery?.pending ?? false}
           retry={publicRecovery?.retry}
-          locale={locale}
+          labels={{
+            group: m.subject_reaction_counts_group({}, options),
+            pending: m.subject_reaction_counts_pending({}, options),
+            unavailable: m.subject_reactions_unavailable({}, options),
+            retry: m.subject_reaction_counts_retry({}, options),
+          }}
         >
           {reactions && (
             <ThreadReactions

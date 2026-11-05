@@ -581,7 +581,7 @@
       "owner": "search",
       "paths": ["apps/web/src/features/pages/public-reaction-recovery/**"],
       "publicEntries": ["apps/web/src/features/pages/public-reaction-recovery/index.tsx"],
-      "allowedDependencies": ["web-app"],
+      "allowedDependencies": [],
       "capabilities": ["subject-public-reaction-recovery"]
     },
     {

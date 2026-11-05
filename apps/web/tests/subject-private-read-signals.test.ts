@@ -28,23 +28,13 @@ const native = createKernelClient('https://kernel.test', {
     return new Response(null, { status: 404 });
   },
 });
-const env = {
-  AUTH_ISSUER: 'https://auth.test',
-  API_RESOURCE: 'https://kernel.test',
-  WEBSITE_SCOPES: 'openid',
-  WEBSITE_CLIENT_ID: 'web',
-  WEBSITE_CLIENT_KEY: '{}',
-  SESSIONS: {
-    idFromName: (id: string) => id,
-    get: () => ({
-      signedIn: async () => ({ signedIn: true, subject: 'reader', csrfToken: 'csrf' }),
-      credential: async () => {
-        await preparation;
-        return { status: 'active', subject: 'reader', accessToken: 'token', csrfToken: 'csrf' };
-      },
-    }),
-  },
-};
+const session = await import('../src/session/request');
+mock.module('../src/session/request', () => ({
+  ...session,
+  prepareSession: () => preparation,
+  sessionSubject: () => 'reader',
+  viewerCredential: () => 'Bearer token',
+}));
 mock.module('@tanstack/react-start', () => ({
   ...start,
   createServerFn: () => {
@@ -58,7 +48,6 @@ mock.module('@tanstack/react-start', () => ({
         return (input: { data: unknown; signal: AbortSignal }) => {
           const request = new Request('https://site.test/subject', {
             signal: input.signal,
-            headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
           });
           serverSignals.push(request.signal);
           return requests.run(request, () => handler({ data: validate(input.data) }));
@@ -69,7 +58,7 @@ mock.module('@tanstack/react-start', () => ({
   },
 }));
 mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => requests.getStore()! }));
-mock.module('cloudflare:workers', () => ({ env }));
+mock.module('cloudflare:workers', () => ({ env: {} }));
 const kernel = await import('../src/kernel/client');
 mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => native }));
 const {
