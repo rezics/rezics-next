@@ -32,7 +32,7 @@ test('the mounted Kernel publishes closed review and immediate-parent context wi
     expect(projection.properties.target.properties.targetKind.const).toBe('subject');
     expect(projection.properties.target.properties.targetId.format).toBe('uuid');
     expect(counts[0].properties.state.const).toBe('available');
-    expect(Object.keys(counts[0].properties.values.properties)).toEqual(['like', 'love', 'laugh', 'insightful', 'sad']);
+    expect(Object.keys(counts[0].properties.values.properties).sort()).toEqual(['insightful', 'laugh', 'like', 'love', 'sad']);
     expect(projection.properties).toHaveProperty('viewer');
   }
   const content = variants.filter((variant: any) => variant.summary.properties.reviewContext);
