@@ -18,6 +18,7 @@ import { deadlineClient } from './authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import accountRead from './account-read.sql';
+import { lockZoneGrantWriterTarget } from './zone-grant-cleanup.ts';
 
 /** Only kernel-authenticated actor objects belong in this context; request JSON
  * supplies the command input, never this context or an authorization decision.
@@ -71,6 +72,8 @@ export async function grantCommand<T>(
     /** A transfer's new direct holder must be a real active native account.
      * Checked on its source connection before target checkout, including replay. */
     recipientAccountId?: string;
+    /** Exact Zone grant target and identity recipient, when the mutation writes grant rows. */
+    zoneGrantTarget?: Readonly<{ subjectAccountId?: string; addsGrant: boolean }>;
   },
   mutate: (tx: CommandTransaction, transactionId: string) => Promise<T>,
 ) {
@@ -182,6 +185,17 @@ export async function grantCommand<T>(
       async (tx, { transactionId }) => {
         if (conflict !== undefined) throw conflict;
         requireAccessDeadline(context.deadline);
+        if (
+          options.zoneGrantTarget &&
+          !(await lockZoneGrantWriterTarget(tx, {
+            resource: options.resource,
+            ...('subjectAccountId' in options.zoneGrantTarget
+              ? { subjectAccountId: options.zoneGrantTarget.subjectAccountId }
+              : {}),
+            addsGrant: options.zoneGrantTarget.addsGrant,
+          }))
+        )
+          throw options.denied();
         const value = await mutate(tx, transactionId);
         requireAccessDeadline(context.deadline);
         return {

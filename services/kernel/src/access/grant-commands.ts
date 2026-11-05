@@ -114,6 +114,10 @@ export function createGrantCommands(config: {
       {
         resource: input.resource,
         actions: [...(selfRenunciation ? [] : [config.managementAction]), ...actions, ...oldActions],
+        zoneGrantTarget: {
+          ...(subject.kind === 'identity' && subject.role === '' ? { subjectAccountId: subject.id } : {}),
+          addsGrant: operation !== 'revoke',
+        },
         ...(selfRenunciation ? { consentedActions: actions } : {}),
         kind: `access.grant.${operation}`,
         key: input.key,
@@ -189,6 +193,10 @@ export function createGrantCommands(config: {
       {
         resource: input.resource,
         actions: [config.managementAction, ...actions, ...(oldActions ?? [])],
+        zoneGrantTarget: {
+          ...(subject.kind === 'identity' && subject.role === '' ? { subjectAccountId: subject.id } : {}),
+          addsGrant: operation !== 'revoke',
+        },
         kind: `access.role-grant.${operation}`,
         key: input.key,
         input,
@@ -259,6 +267,7 @@ export function createGrantCommands(config: {
         resource: input.resource,
         actions: [config.managementAction, ...actions],
         recipientAccountId: to.id,
+        zoneGrantTarget: { subjectAccountId: to.id, addsGrant: true },
         // The existing change event identifies the resulting explicit holder.
         // The receipt digest also binds the former holder and exact old interval.
         kind: 'access.role-grant.change',
