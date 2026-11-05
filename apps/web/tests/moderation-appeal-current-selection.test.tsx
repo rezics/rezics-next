@@ -391,6 +391,8 @@ test('mounted keyboard appeal return restores the activator only after exact que
           revision: input.page.readerBinding.revision,
           retired: input.page.readerBinding.retired,
         },
+        expected: input.page.readerBinding?.expected,
+        origin: input.page.readerOrigin,
       },
     };
     return accepted;
