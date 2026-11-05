@@ -280,7 +280,7 @@ function parseRanges(
 export function searchInputFingerprint(search: Record<string, unknown>): string {
   return JSON.stringify(
     Object.keys(search)
-      .filter(knownSearchKey)
+      .filter((key) => knownSearchKey(key) && search[key] !== undefined)
       .sort()
       .map((key) => [key, search[key]]),
   );
@@ -376,7 +376,7 @@ export function searchUrlIntake(
       : canonicalRealmRatingPopulationId(populationValue);
   const fingerprint = JSON.stringify(
     Object.keys(search)
-      .filter(knownSearchKey)
+      .filter((key) => knownSearchKey(key) && search[key] !== undefined)
       .sort()
       .map((key) => [key, rawParams ? rawParams.getAll(key) : search[key]]),
   );
