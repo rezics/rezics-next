@@ -287,6 +287,18 @@ export function SubjectFrame({
         returnHref: contextHref(base, realm),
       }
     : undefined;
+  const termsReturn = new URL(contextHref(base, realm), 'https://rezics.invalid');
+  if (observedContext) termsReturn.searchParams.set('context', observedContext);
+  termsReturn.hash = 'connections';
+  const termsOrigin = observedContext
+    ? {
+        subject: frame.id,
+        context: observedContext,
+        ...(realm ? { realm } : {}),
+        locale,
+        returnHref: `${termsReturn.pathname}${termsReturn.search}${termsReturn.hash}`,
+      }
+    : undefined;
   const facts = [typeLabel, frame.date].filter((fact): fact is string => !!fact);
   return (
     <div data-slot="subject-frame" className="flex min-w-0 flex-col gap-4">
@@ -387,7 +399,7 @@ export function SubjectFrame({
               {!realm && observedContext === candidateContext && frame.type === 'schema:MusicAlbum' && (
                 <AlbumProfileEntry id={frame.id} label={title} locale={locale} />
               )}
-              <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
+              <SubjectTermsEntry id={frame.id} label={title} locale={locale} origin={termsOrigin} />
               <ReleaseFidelityEntry
                 id={frame.id}
                 type={frame.type}

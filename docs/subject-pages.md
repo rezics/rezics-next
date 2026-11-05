@@ -2755,21 +2755,37 @@ Decision: Person/Character names preserve the native selected Context in the val
 Realm from the installed page link's final address. Sources and Terms remain unsupported for a non-Global selected
 Context; the names stay readable and no Global visit opens implicitly.
 
-The original address fields are locale, Subject UUID/slug, native `context`, final `realm` when selected, and
-`#supplied-names`. Destination `via` contains that address, without a nested return or copied spellings. Sources
-accepts `realm` and `via`, but no selected-Context input; Terms accepts `via` and reads Global with fresh authority.
-The entry explains that limit. The installed `NamesHandoff` and `PeopleNamesView.captureSourcesVisit` carry the
-query (250 UTF-16 units), page, expansion, at most eight group descriptors and exact-name or Sources/Terms focus through ordinary
-history. The whole closed descriptor is charged in UTF-8 by `namesReturn` against 8,192 bytes, tighter than the
-shared return address's 32,768-character limit; the destination search budget adds encoded `via` to its fixed
-2,048-character allowance. The final Realm is included in real hrefs before modifier/new-tab activation.
+Decision: the generic SubjectFrame Terms entry carries a separate bounded public origin and heading return;
+unsupported Context or Realm requires an explicit fresh Global visit, while `NamesTermsReturn` retains its existing
+exact-name restoration.
+
+The names-specific address remains locale, Subject UUID/slug, native `context`, final `realm` when selected, and
+`#supplied-names`. Its destination `via` contains that address, without a nested return or copied spellings. The
+generic Terms entry carries a separate closed `origin` containing only locale, Subject UUID, actual Context, admitted
+Realm when present and one immediate public Subject return. Its return restores the current Subject heading and never
+supplies an exact-name locator. `origin` and deliberate `publicReturn` are mutually exclusive; incompatible, duplicate,
+malformed, foreign, wrong-locale, wrong-Subject, recursive and over-budget intent is refused. The complete encoded
+Terms search is limited to 2,048 characters and 2,048 UTF-8 bytes. A supported Global observation mounts the original
+Terms session. Unsupported Context or Realm displays its public return and a separately named fresh Global choice
+before Definitions, Terms reads, authority reads or commands mount. The fresh choice retains only the compatible
+public return; it does not carry selected assertions, continuation, reveal state or supplied spellings. Existing
+`via`, `returnTo=changes`, `NamesTermsReturn` and `NamesHandoff` retain their current grammar and owners; a generic
+heading return never replaces a specialized names return. The entry and menu perform no reads.
+
+The installed `NamesHandoff` and `PeopleNamesView.captureSourcesVisit` carry the query (250 UTF-16 units), page,
+expansion, at most eight group descriptors and exact-name or Sources/Terms focus through ordinary history. The whole
+closed descriptor is charged in UTF-8 by `namesReturn` against 8,192 bytes, tighter than the shared return address's
+32,768-character limit; its destination search budget adds encoded `via` to its fixed 2,048-character allowance.
+The final Realm is included in real hrefs before modifier/new-tab activation.
 
 Fresh native admission precedes restoration. Subject/type, actual Context, release/revision, locale and observed
 caller bind the visit; reading/release/reader replacements retire old controls permanently. Changed bindings show
 current names and recovery, while missing history metadata explicitly restarts the local view. No provider,
 spelling or old authorized payload enters a locator. Filtering/copying adds no read; supported advice retains its
 single independent explicit retry. Advice always observes the reader in Global, independently of source
-provenance; the unsupported-Context notice identifies that scope rather than inventing a native denial.
+provenance; the unsupported-Context notice identifies that scope rather than inventing a native denial. Generic Terms
+origin admission adds no native request; only a chosen original Terms session or public return performs its existing
+bounded reads.
 
 The Person/Character consumer supplies its fresh finite projection to the shared focus grammar and connects the
 shared presentation targets. Sources explicit return preserves only the already validated closed history state;
