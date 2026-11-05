@@ -21,9 +21,9 @@ fail at our rate of change:
    snapshotted from the cyclic graph, so 18 of 49 modules sit on allowed-dependency cycles. The rule "the module
    graph is acyclic" holds only on paper.
 2. **The unit of modularity is too coarse to verify.** Each Kernel domain is one manifest module of kind `adapter`
-   (Access alone is about 390 files). Purity and effect rules therefore constrain almost nothing. A typical Kernel
-   file loads 610 production files when imported (45% of the Kernel). 71% of Kernel test files load the largest
-   cycle.
+   (Access alone is 156 TypeScript and 334 SQL files). Purity and effect rules therefore constrain almost nothing. A
+   typical Kernel file loads 610 production files when imported (45% of the Kernel). 71% of Kernel test files load
+   the largest cycle.
 3. **Effects, state and time have no representation besides "call it".** Registrations happen by mounting functions
    on a shared Elysia app, constants are computed at module load from other modules, and the clock and randomness are
    called directly in 257 and 81 files. Nothing a module does to its environment is declared, so nothing can be
@@ -393,7 +393,7 @@ The adopted rules are in [architecture](../architecture.md#modules-and-boundarie
    graph must be declared as a DAG and the existing back edges moved into the baseline, where they can only shrink.
 3. **Granularity.** Every Kernel domain is one `adapter` module. Purity rules apply to 13 small `core` modules; 95% of
    the code is in modules where anything is allowed. Lakos's unit of levelization is the _component_, a file pair, not a
-   400-file directory. The kinds must apply inside domains: `access/contract`, `access/core`, `access/application`,
+   directory of hundreds of files. The kinds must apply inside domains: `access/contract`, `access/core`, `access/application`,
    `access/adapters`, and so on.
 4. **No rule about evaluation at load.** The rules govern _what_ may be imported, not _what may run when imported_.
    Cross-module top-level computation is what turns a cycle into a boot failure; it has no rule, no check, no count.
@@ -414,7 +414,7 @@ The adopted rules are in [architecture](../architecture.md#modules-and-boundarie
 
 - _A baseline that is not gated_ grows faster than any owner can shrink it: about 65 an hour against 90 removed in a
   day.
-- _Coarse modules_ hide new cycles inside them. With a 400-file `adapter`, rule 2 (public entries) cannot see
+- _Coarse modules_ hide new cycles inside them. With a domain-sized `adapter`, rule 2 (public entries) cannot see
   intra-domain deep imports, and every new file is free to import any other file of its domain.
 - _Snapshotted allowed dependencies_ teach agents that whatever compiles is allowed: once a module pair is allowed,
   new file edges in either direction pass rule 2.
