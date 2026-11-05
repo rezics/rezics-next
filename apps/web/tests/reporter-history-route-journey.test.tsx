@@ -207,7 +207,11 @@ test('served operands, exact own status and recovery form one fresh private rout
     expect(reads.slice(1, 3)).toEqual([{ cursor }, { cursor }]);
     await click('Load more');
     expect(router.state.location.search).toEqual({ cursor: third });
+    failNext = true;
     await click('Previous');
+    expect(host.textContent).toContain('next page could not be loaded');
+    await click('Try again');
+    expect(reads.slice(-2)).toEqual([{ cursor }, { cursor }]);
     expect(reads.at(-1)).toEqual({ cursor });
     await click('First page');
     expect(reads.at(-1)).toEqual({});
