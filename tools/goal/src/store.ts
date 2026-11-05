@@ -588,11 +588,15 @@ export class WorkerStore implements AttemptFence {
   ): number {
     const states = includeWaiting ? "attempt_state IN ('running', 'waiting')" : "attempt_state='running'";
     const lane = urgent === undefined ? '' : ` AND urgent=${urgent ? 1 : 0}`;
-    const excludeCurrent =
-      taskId !== undefined && attempt !== undefined ? ' AND NOT (task_id=? AND current_attempt=?)' : '';
+    let excludeCurrent = '';
+    let bindings: (string | number)[] = [];
+    if (taskId !== undefined && attempt !== undefined) {
+      excludeCurrent = ' AND NOT (task_id=? AND current_attempt=?)';
+      bindings = [taskId, attempt];
+    }
     const row = this.db
       .query(`SELECT count(*) AS count FROM worker_current_attempts WHERE ${states}${lane}${excludeCurrent}`)
-      .get(...(excludeCurrent ? [taskId, attempt] : [])) as { count: number };
+      .get(...bindings) as { count: number };
     return row.count;
   }
   /** Retained unbound UUID evidence. Classification affects only logical admission, never physical custody. */
