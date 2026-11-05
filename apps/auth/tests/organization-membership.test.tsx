@@ -561,3 +561,22 @@ test('recovery labels are available in all eight Auth locales', async () => {
   }
   overwriteGetLocale(() => 'en');
 });
+
+test('malformed selected receiving retains mounted unknown custody and explicit retry without command effects', async () => {
+  const saved = saveUnknown();
+  await mount();
+  const admittedReply = reply;
+  reply = (path) =>
+    path.endsWith('/member') ? Response.json({ organizationId, memberAccountId, membership: {} }) : admittedReply(path);
+  await click(m.auth_members_recovery_retry());
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.querySelector('#membership-confirmation')).toBeNull();
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  expect(calls.filter(({ path }) => path.endsWith('/member'))).toHaveLength(1);
+  reply = admittedReply;
+  await click(m.auth_members_recovery_retry());
+  expect(host.querySelector('#membership-confirmation')).not.toBeNull();
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  expect(calls.filter(({ path }) => path.endsWith('/member'))).toHaveLength(2);
+  expect(calls.some(({ path }) => /\/(approve|execute)$/.test(path))).toBe(false);
+});

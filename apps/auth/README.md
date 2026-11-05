@@ -898,6 +898,7 @@ counted before JSON parsing regardless of Content-Length. The selected read keep
 POST and result mapping under one five-second whole-call lifetime and installed cancellation.
 Refusal adds zero command effects, point reads or implicit retries. Native authority and real
 browser transport qualifications remain for integrated acceptance; focused fixtures prove receiving.
+Mounted fixtures adapt the predecessor session BFF seam while preserving their native call and custody assertions.
 
 The browser sends only the organization and cursor to Auth. Auth binds the fresh human management proof to the
 dedicated Kernel page source. The roster and its action advice are observations only. Before a selected change, the

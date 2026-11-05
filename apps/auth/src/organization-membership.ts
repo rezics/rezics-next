@@ -260,7 +260,8 @@ const readPage = createServerFn({ method: 'POST' })
       const sessionBody = await readJsonBounded(sessionResponse, configuration.sessionBytes, signal);
       if (sessionResponse.status !== 200) return readFailure(sessionResponse.status);
       const session = parseAccountSession(sessionBody, configuration.scopeLimit);
-      if (session.kind !== 'ready' || session.accountId !== data.accountId) return { kind: 'denied' };
+      if (session.kind !== 'ready') return { kind: 'unavailable' };
+      if (session.accountId !== data.accountId) return { kind: 'denied' };
       signal.throwIfAborted();
       // Auth binds the fresh management proof to its trusted native page port.
       // The caller cannot supply a principal, client, scope or kernel target.
