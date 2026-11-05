@@ -14,7 +14,7 @@ test('local setup and launch carry the complete real mounted host scope composit
   const code = await stackRun(
     {
       label: 'mounted development website composition',
-      root: root,
+      root,
       cwd: root,
       command: [process.execPath, 'test', 'services/auth/scripts/dev-stack.test.ts'],
     },

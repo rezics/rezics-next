@@ -6,6 +6,16 @@ import { resolve } from 'node:path';
 import { origins, root } from '../scripts/dev-stack.ts';
 
 export async function verifyFreshCheckoutSignIn(): Promise<void> {
+  // Repeat the same setup against the existing migrated stack, as dev:infra did twice.
+  const bindings = await Bun.file(resolve(root, 'apps/web/.dev.vars')).text();
+  const setup = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'setup'], {
+    cwd: root,
+    env: process.env,
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+  assert.equal(await setup.exited, 0);
+  assert.equal(await Bun.file(resolve(root, 'apps/web/.dev.vars')).text(), bindings);
   const require = createRequire(resolve(root, 'apps/web/package.json'));
   const { web, issuer, native, kernel } = origins;
   const suffix = randomUUID();

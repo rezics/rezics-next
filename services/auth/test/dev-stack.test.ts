@@ -9,6 +9,7 @@ import { walkStackDirectory } from '../../../scripts/stack-run.ts';
 test('fresh checkout starts native loopback Auth and signs a person into and out of Web without an external service', async () => {
   await mkdir(resolve(root, '.temp'), { recursive: true });
   const checkout = await mkdtemp(resolve(root, '.temp/dev-stack-'));
+  let walk: ReturnType<typeof Bun.spawn> | undefined;
   try {
     const archive = Bun.spawn(['git', 'archive', 'HEAD'], { cwd: root, stdout: 'pipe' });
     const extract = Bun.spawn(['tar', '-x', '-C', checkout], { stdin: archive.stdout });
@@ -16,7 +17,7 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
     expect(await extract.exited).toBe(0);
     for (const workspace of ['', 'services/auth', 'services/kernel', 'apps/auth', 'apps/web'])
       await symlink(resolve(root, workspace, 'node_modules'), resolve(checkout, workspace, 'node_modules'));
-    const walk = Bun.spawn(
+    walk = Bun.spawn(
       [
         process.execPath,
         'services/auth/scripts/dev-stack.ts',
@@ -39,6 +40,10 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
     );
     expect(await walk.exited).toBe(0);
   } finally {
+    if (walk && walk.exitCode === null) {
+      walk.kill('SIGTERM');
+      await walk.exited;
+    }
     await rm(checkout, { recursive: true, force: true });
   }
 }, 1_800_000);
