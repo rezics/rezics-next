@@ -86,7 +86,7 @@ export function reviewedPersonMergeInput(value: unknown): ReviewedPersonMerge {
   };
 }
 
-/** Additive transport seam until the generated producer signatures include the adopted expectation. */
+/** Native GET review query and POST merge 202 operation admission. */
 export function reviewedPersonRequests(client: KernelClient) {
   return {
     read(
@@ -101,13 +101,13 @@ export function reviewedPersonRequests(client: KernelClient) {
           reviewIdentityExternalId: source.externalId,
           includeViewerActions: true,
         },
-      } as never);
+      });
     },
     merge(
       body: ReviewedPersonMerge,
       options: { headers: Record<string, string> & { 'idempotency-key': string }; fetch?: { signal?: AbortSignal } },
     ) {
-      return client.subjects.$merge.post(body as never, options);
+      return client.subjects.$merge.post(body, options);
     },
   };
 }

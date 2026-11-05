@@ -41,6 +41,8 @@ import type {
 } from '../../command/command.ts';
 import type { mergeSubjects } from '../merges.ts';
 import type { verifyAccountAgent, unverifyAccountAgent } from '../account-agents.ts';
+import type { Release } from '@rezics/definitions';
+import type { ReviewedPersonExpectation } from '../reviewed-person-identity.ts';
 
 export type MergeSubjects = typeof mergeSubjects;
 export type VerifyAccountAgent = typeof verifyAccountAgent;
@@ -68,7 +70,16 @@ export type IdentityJob = Readonly<{
  * Every mutation uses currentCommand(tx), its real owner and native time.
  * Pool methods release each home before acquiring another home or engine.
  */
-export type IdentityAdmissionInput = Readonly<{ intent: IdentityIntent; receipt: IdentityReceipt }>;
+export type IdentityAdmissionInput = Readonly<{
+  intent: IdentityIntent;
+  receipt: IdentityReceipt;
+  /** Ordinary merge only; AccountAgent admission never supplies this. */
+  reviewedPerson?: Readonly<{
+    expected: ReviewedPersonExpectation;
+    routeKey: Uint8Array;
+    release: Release;
+  }>;
+}>;
 export type IdentityAdmissionAuthority = Readonly<{
   basis?: CommandBasis;
   authorization?: CommandAuthorization;
@@ -118,11 +129,7 @@ export type IdentityEpochStore = Readonly<{
    */
   admit(
     tx: CommandTransaction,
-    input: Readonly<{
-      intent: IdentityIntent;
-      receipt: IdentityReceipt;
-      binding?: IdentityReceiptBinding;
-    }>,
+    input: IdentityAdmissionInput & Readonly<{ binding?: IdentityReceiptBinding }>,
   ): Promise<CommandResult<IdentityJobRef>>;
   /** Exact self mapping atomically with actual fresh revision-1 creation; never lazy or bootstrap. */
   initializeSubject(tx: CommandTransaction, original: string): Promise<void>;

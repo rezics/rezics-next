@@ -74,6 +74,7 @@ import {
   prepareIdentityEpochAdmission,
   bindIdentityEpochReceipt,
   admitBoundIdentityEpoch,
+  guardIdentityAdmissionReviewedPerson,
 } from '../identity-epoch-admission.ts';
 import { withConnection } from '../../database/pool.ts';
 import { readPartition } from '../../partition/partition.ts';
@@ -415,16 +416,17 @@ export const identityEpochStore: IdentityEpochStore = {
   async readMapping(pool, original) {
     return (await readIdentityMappings(pool, [original]))[0]!;
   },
-  async admit(tx, { intent, receipt, binding }) {
-    if (binding) return admitBoundIdentityEpoch(tx, { intent, receipt, binding }, true);
+  async admit(tx, admission) {
+    const { intent, receipt, binding } = admission;
+    if (binding) return admitBoundIdentityEpoch(tx, { ...admission, binding }, true);
     if (currentCommand(tx).partition !== identityReceiptPartition(receipt)) {
       await authorizeIdentityAdmission(tx, receipt);
       throw new TypeError('Cross-home receipt admission requires a released native binding proof');
     }
     const command = control(tx);
     const accountSource = await authorizeIdentityAdmission(tx, receipt, undefined, intent);
-    const claimed = await readIdentityBinding(tx, { intent, receipt });
-    if (claimed) return admitBoundIdentityEpoch(tx, { intent, receipt, binding: claimed }, true);
+    const claimed = await readIdentityBinding(tx, admission);
+    if (claimed) return admitBoundIdentityEpoch(tx, { ...admission, binding: claimed }, true);
     const prior = (await tx.query(storeSelectJob3.sql, [receiptKey(receipt), command.partition])).rows[0];
     if (prior) {
       if (
@@ -435,6 +437,7 @@ export const identityEpochStore: IdentityEpochStore = {
       if (prior.state !== 'pending' && prior.state !== 'published') throw unavailable();
       return noEffect({ jobId: prior.job_id, epoch: BigInt(prior.epoch) });
     }
+    await guardIdentityAdmissionReviewedPerson(tx, admission);
     const ids =
       intent.kind === 'merge'
         ? [intent.redirected, intent.survivor]

@@ -166,8 +166,54 @@ const rawQueries = Object.freeze({
   output: rawOutput,
 });
 
+/** Explicit Query names so the producer declaration does not leak pg protocol types. */
+type NativeSourceCustodyQueries = Readonly<{
+  partition: Query;
+  source: Query;
+  account: Query;
+  output: Query;
+  ensure: Query;
+  fences: Query;
+  read: Query;
+  start: Query;
+  advance: Query;
+  identityCapture: Query;
+  proof: Query;
+  finish: Query;
+  hold: Query;
+  held: Query;
+  retained: Query;
+  release: Query;
+  terminalScope: Query;
+  raw: Readonly<{
+    member: Query;
+    entry: Query;
+    entry_deleted: Query;
+    label: Query;
+    assignment: Query;
+    session: Query;
+    unit: Query;
+    change: Query;
+    copy: Query;
+    output: Query;
+  }>;
+  rawExplicitOutput: Query;
+  retirement: Readonly<{
+    partition: Query;
+    source: Query;
+    receipt: Query;
+    active: Query;
+    holds: Query;
+    children: Query;
+    proof: Query;
+    capture: Query;
+    identityRetention: Query;
+    nextCapture: Query;
+  }>;
+}>;
+
 /** The canonical SQL objects used by the native adapter and the executable plan. */
-export const nativeSourceCustodyQueries = Object.freeze({
+export const nativeSourceCustodyQueries: NativeSourceCustodyQueries = Object.freeze({
   partition: nativeIdentityPartitionQuery,
   source: sourceQuery,
   account: accountQuery,

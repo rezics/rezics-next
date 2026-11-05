@@ -1,7 +1,7 @@
 import { t } from 'elysia';
 import type { Release } from '@rezics/definitions';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
@@ -117,11 +117,21 @@ export async function observeReviewedPersonIdentity(
   if (claim?.subject !== subject) return null;
   const latest = await readLatestRevision.run(tx, { route, subject_id: subject });
   if (!latest) return null;
-  const selected = await effectiveGlobalSlotFacts(tx, subject, identity.property, undefined, lockSelected);
+  let selected: Awaited<ReturnType<typeof effectiveGlobalSlotFacts>>;
+  try {
+    selected = await effectiveGlobalSlotFacts(tx, subject, identity.property, undefined, lockSelected);
+  } catch (error) {
+    if (lockSelected && error instanceof AccessUnavailableError)
+      throw new ReviewedPersonGuardUnavailableError(currentCommand(tx).partition);
+    throw error;
+  }
   // Hidden or missing selected rows cannot be filtered into an apparently agreeing identity.
   const basis = selected.basis as { selection: unknown[] } | unknown[] | null;
   const count = Array.isArray(basis) ? basis.length : (basis?.selection.length ?? 0);
-  if (count === 0 || count > 32 || selected.facts.length !== count) return null;
+  if (count === 0 || count > 32 || selected.facts.length !== count) {
+    if (lockSelected) throw new ReviewedPersonGuardUnavailableError(currentCommand(tx).partition);
+    return null;
+  }
   let strings = 0;
   for (const fact of selected.facts) {
     const statement = fact.body as { rank?: string; value: { type: string; content?: unknown } };

@@ -2,8 +2,10 @@ import { guardReviewedPersonIdentity, type ReviewedPersonExpectation } from './r
 import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { retainSubjectPageContinuation } from './subject-page-publication-store.ts';
 import { invalidateSubjectPage } from './subject-page-publication-native.ts';
+import { identityEpochStore, identityJobPartition } from './identity-adapters/index.ts';
+import selectJobById from './identity-epoch-store-select-job-by-id.sql';
 import type { Pool } from 'pg';
-import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -106,6 +108,164 @@ export async function mergeSubjects(
   return {
     ...command.value,
     component: { partition: command.partition, epoch: command.epoch, position: command.position },
+  };
+}
+
+export type SubjectMergeAdmission = { operation: { id: string } };
+
+/** Ordinary HTTP admission. Completes the catalogue redirect in the persist command;
+ * callers observe publication through GET /v1/subjectIdentityOperations/{id}. */
+export async function admitMergeSubjects(
+  pool: Pool,
+  options: {
+    subjects: string[];
+    survivor?: string;
+    actor: AccountActor;
+    idempotencyKey: string;
+    digest: Uint8Array;
+    release: { digest: string; release: Release };
+    authorization: CommandAuthorization;
+    deadline?: number;
+    clock?: () => Date;
+  } & (
+    | { expectedIdentity: ReviewedPersonExpectation; routeKey: Uint8Array }
+    | { expectedIdentity?: undefined; routeKey?: Uint8Array }
+  ),
+) {
+  const requestedSurvivor = options.survivor;
+  if (requestedSurvivor !== undefined && !options.subjects.includes(requestedSurvivor))
+    throw new EditorialConflictError();
+  const [defaultSurvivor, defaultRedirected] = [...options.subjects].sort() as [string, string];
+  const survivor = requestedSurvivor ?? defaultSurvivor;
+  const redirected = options.subjects.find((subject) => subject !== survivor) ?? defaultRedirected;
+  if (survivor === redirected) throw new EditorialConflictError();
+  const kept = await withConnection(pool, (client) => mergeSubject(client, survivor));
+  const gone = await withConnection(pool, (client) => mergeSubject(client, redirected));
+  if (kept.type !== gone.type) throw new EditorialConflictError();
+  const route = routeOf(redirected);
+  if (route === null) throw new SubjectNotFoundError();
+  const receipt = {
+    kind: 'subject.merge' as const,
+    command: {
+      actorAccountId: options.actor.accountId,
+      kind: 'subject.merge',
+      key: options.idempotencyKey,
+      digest: options.digest,
+    },
+  };
+  const job = await identityEpochStore.prepareAdmission(
+    pool,
+    {
+      basis: {
+        actorAccountId: options.actor.accountId,
+        clientId: options.actor.clientId,
+        requestedBy: options.actor.requestedBy,
+      },
+      authorization: options.authorization,
+      deadline: options.deadline,
+      clock: options.clock,
+    },
+    {
+      intent: { kind: 'merge', survivor, redirected, release: options.release.digest },
+      receipt,
+      ...(options.expectedIdentity
+        ? {
+            reviewedPerson: {
+              expected: options.expectedIdentity,
+              routeKey: options.routeKey,
+              release: options.release.release,
+            },
+          }
+        : {}),
+    },
+  );
+  const command = await runIdentityTerminalCommand(
+    pool,
+    {
+      partition: partitionOf(route),
+      ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
+      receipt: receipt.command,
+      basis: {
+        actorAccountId: options.actor.accountId,
+        clientId: options.actor.clientId,
+        requestedBy: options.actor.requestedBy,
+      },
+      authorization: options.authorization,
+      clock: options.clock,
+    },
+    async (tx, { transactionId }) => {
+      if (options.expectedIdentity)
+        await guardReviewedPersonIdentity(tx, options.expectedIdentity, options.routeKey, options.release.release);
+      const merged = await mergeSubjectsInCommand(tx, transactionId, {
+        survivor,
+        redirected,
+        release: options.release,
+      });
+      return { value: { operation: { id: job.jobId } }, events: merged.events };
+    },
+  );
+  return {
+    ...command.value,
+    component: { partition: command.partition, epoch: command.epoch, position: command.position },
+  };
+}
+
+export type SubjectIdentityOperation =
+  | { id: string; done: false }
+  | { id: string; done: true; result: { survivor: string; redirected: string; revision: number } };
+
+/** Effects-free observation of one ordinary merge job. Caller already authorized merge and disclosure. */
+export async function observeSubjectIdentityOperation(
+  tx: CommandTransaction,
+  id: string,
+): Promise<
+  | {
+      operation: SubjectIdentityOperation;
+      original: string;
+      terminal: string;
+    }
+  | null
+> {
+  const route = routeOf(id);
+  if (route === null) return null;
+  const found = (await tx.query(selectJobById.sql, [partitionOf(route), id])).rows[0] as
+    | { job_id: string; epoch: string }
+    | undefined;
+  if (!found) return null;
+  const job = await identityEpochStore.readJob(tx, { jobId: found.job_id, epoch: BigInt(found.epoch) });
+  if (!job || identityJobPartition(job.ref) !== partitionOf(route)) return null;
+  if (job.intent.kind !== 'merge' || job.receipt.kind !== 'subject.merge') return null;
+  const complete =
+    job.state === 'published' &&
+    job.mapping?.state === 'complete' &&
+    job.participants['search-canonical-index']?.state === 'complete' &&
+    job.participants['library-private-follow-counts']?.state === 'complete';
+  if (!complete) {
+    return {
+      operation: { id: job.ref.jobId, done: false },
+      original: job.intent.redirected,
+      terminal: job.intent.survivor,
+    };
+  }
+  const redirectedRoute = routeOf(job.intent.redirected);
+  if (redirectedRoute === null) return null;
+  const latest = await readLatestRevision.run(tx, {
+    route: redirectedRoute,
+    subject_id: job.intent.redirected,
+  });
+  if (!latest) return null;
+  return {
+    operation: {
+      id: job.ref.jobId,
+      done: true,
+      result: {
+        survivor: job.intent.survivor,
+        redirected: job.intent.redirected,
+        revision: latest.revision,
+      },
+    },
+    original: job.intent.redirected,
+    terminal: job.intent.survivor,
   };
 }
 

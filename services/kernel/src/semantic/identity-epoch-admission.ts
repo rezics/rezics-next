@@ -84,6 +84,7 @@ import type {
 
 export type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
 import type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
+import { guardReviewedPersonIdentity } from './reviewed-person-identity.ts';
 export type IdentityAdmissionProgress = Readonly<{
   job: IdentityJobRef;
   state: 'preparing' | 'pending' | 'cancelling' | 'cancelled' | 'published';
@@ -370,6 +371,20 @@ async function lookupLocalBinding(
   return data;
 }
 
+/** Ordinary merge only. Replay returns before this comparison. */
+export async function guardIdentityAdmissionReviewedPerson(
+  tx: CommandTransaction,
+  input: IdentityAdmissionInput,
+): Promise<void> {
+  if (!input.reviewedPerson) return;
+  await guardReviewedPersonIdentity(
+    tx,
+    input.reviewedPerson.expected,
+    input.reviewedPerson.routeKey,
+    input.reviewedPerson.release,
+  );
+}
+
 /** The supplied proof was committed and verified before this command acquired its connection. */
 export async function admitBoundIdentityEpoch(
   tx: CommandTransaction,
@@ -395,6 +410,7 @@ export async function admitBoundIdentityEpoch(
     ])
   ).rows[0];
   if (closed?.state === 'closed') throw stale();
+  await guardIdentityAdmissionReviewedPerson(tx, input);
   const groups = [...new Map(data.sources.map((s) => [s.terminal, s])).values()];
   const localSources = data.sources
     .filter((s) => s.source_route >> 4 === home)

@@ -90,8 +90,10 @@ redirect seeks and two slots. Compact slots have at most 32 assertions (33rd exp
 32 candidate points. Up to 64 selected-row plus two head locks yield 70 locks. Oversized/incomplete evidence
 is unavailable, never sliced. Evidence is 4KiB, digest 32 bytes, no ledger. Logical bounds are not measured Cost.
 
-The first-effect runtime covers unpending legacy self mappings in one partition; installed closure
-incarnations require concurrent admission composition. Guard success proves no publication. Imports retains
+Ordinary HTTP merge admits the native identity job and answers 202 `{operation:{id}}` with Location polling;
+`mergeSubjects` keeps the completed callable DTO for AccountAgent and unguarded callers. The Person guard runs
+in the admission first-effect after authorization and replay. Legacy-only coverage refusal remains until
+incarnation/fence exclusion is separately proved. Guard success proves no publication. Imports retains
 original bindings and withholds credits until independent current canonical Person and mapping/Search/Library
 publication. Content keeps its sole publisher; Rating/Content retain original COMMIT/ROLLBACK obligations.
 Native races/growth and integration remain required.

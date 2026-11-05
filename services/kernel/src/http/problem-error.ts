@@ -30,6 +30,7 @@ export const PROBLEMS = {
   copy_restore_occupied: { status: 409, title: 'Copy Restore Occupied', retryable: false },
   copy_restore_expired: { status: 409, title: 'Copy Restore Expired', retryable: false },
   conflict: { status: 409, title: 'Conflict', retryable: false },
+  identity_group_overflow: { status: 409, title: 'Identity Group Overflow', retryable: false },
   realm_last_owner: { status: 409, title: 'Realm Ownership Transfer Required', retryable: false },
   library_label_restore_stale: { status: 409, title: 'Stale Library Label Restore', retryable: false },
   library_label_restore_expired: { status: 409, title: 'Library Label Restore Expired', retryable: false },
