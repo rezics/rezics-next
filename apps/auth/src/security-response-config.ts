@@ -22,9 +22,7 @@ export function parseSecurityResponseConfiguration(value: unknown): SecurityResp
   try {
     const budgets = securityResponseByteBudgets(scopeLimit, 20);
     const sessionBytes = budgets.session;
-    return Number.isSafeInteger(sessionBytes) && sessionBytes > 0
-      ? Object.freeze({ scopeLimit, sessionBytes })
-      : null;
+    return Number.isSafeInteger(sessionBytes) && sessionBytes > 0 ? Object.freeze({ scopeLimit, sessionBytes }) : null;
   } catch (error) {
     if (error instanceof RangeError) return null;
     throw error;
@@ -72,41 +70,39 @@ function raceAbort<T>(signal: AbortSignal, promise: Promise<T>): Promise<T> {
 }
 
 /** One private Auth issuer transport, shared by Security inventory and account-session receiving. */
-export const readSecurityIssuerResponse = createServerOnlyFn(async <T>(
-  path: string,
-  body: unknown | undefined,
-  read: SecurityResponseReader<T>,
-): Promise<T> => {
-  const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
-  const request = getRequest();
-  setResponseHeader('Cache-Control', 'private, no-store');
-  const origin = new URL(request.url).origin;
-  const issuer = import.meta.env.DEV && __AUTH_ORIGIN__ ? new URL(__AUTH_ORIGIN__).origin : origin;
-  const signal = request.signal;
-  if (
-    (request.headers.get('origin') !== origin && request.headers.get('origin') !== issuer) ||
-    request.headers.get('sec-fetch-site') === 'cross-site'
-  )
-    return read(new Response(null, { status: 403 }), signal);
+export const readSecurityIssuerResponse = createServerOnlyFn(
+  async <T>(path: string, body: unknown | undefined, read: SecurityResponseReader<T>): Promise<T> => {
+    const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
+    const request = getRequest();
+    setResponseHeader('Cache-Control', 'private, no-store');
+    const origin = new URL(request.url).origin;
+    const issuer = import.meta.env.DEV && __AUTH_ORIGIN__ ? new URL(__AUTH_ORIGIN__).origin : origin;
+    const signal = request.signal;
+    if (
+      (request.headers.get('origin') !== origin && request.headers.get('origin') !== issuer) ||
+      request.headers.get('sec-fetch-site') === 'cross-site'
+    )
+      return read(new Response(null, { status: 403 }), signal);
 
-  // The originating privateAuthRead signal bounds headers, body consumption and delivery.
-  signal.throwIfAborted();
-  const response = await raceAbort(
-    signal,
-    fetch(new URL(path, issuer), {
-      method: body === undefined ? 'GET' : 'POST',
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      headers: {
-        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        Accept: 'application/json',
-        Origin: request.headers.get('origin')!,
-        Cookie: request.headers.get('cookie') ?? '',
-      },
-      redirect: 'manual',
-      cache: 'no-store',
+    // The originating privateAuthRead signal bounds headers, body consumption and delivery.
+    signal.throwIfAborted();
+    const response = await raceAbort(
       signal,
-    }),
-  );
-  if (response.status >= 300 && response.status < 400) throw new Error('Unexpected issuer redirect');
-  return raceAbort(signal, read(response, signal));
-});
+      fetch(new URL(path, issuer), {
+        method: body === undefined ? 'GET' : 'POST',
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        headers: {
+          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          Accept: 'application/json',
+          Origin: request.headers.get('origin')!,
+          Cookie: request.headers.get('cookie') ?? '',
+        },
+        redirect: 'manual',
+        cache: 'no-store',
+        signal,
+      }),
+    );
+    if (response.status >= 300 && response.status < 400) throw new Error('Unexpected issuer redirect');
+    return raceAbort(signal, read(response, signal));
+  },
+);

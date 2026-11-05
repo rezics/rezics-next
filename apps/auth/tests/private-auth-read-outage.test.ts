@@ -39,9 +39,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 afterAll(() => clock.mockRestore());
-const readers = [
-  ['management', loadManagementSession, 'unavailable', '/session'],
-] as const;
+const readers = [['management', loadManagementSession, 'unavailable', '/session']] as const;
 for (const [name, read, kind, target] of readers) {
   for (const phase of ['headers', 'body'] as const)
     test(`${name} stalled ${phase} becomes unavailable, then a fresh read can recover`, async () => {

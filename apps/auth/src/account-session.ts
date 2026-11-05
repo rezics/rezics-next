@@ -10,11 +10,7 @@ type SessionObservation = Exclude<AccountSessionResult, { kind: 'failure' }> | {
 export function parseAccountSession(body: unknown, scopeLimit: number): SessionObservation {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { kind: 'failure' };
   const value = body as Record<string, unknown>;
-  if (
-    typeof value.account_id !== 'string' ||
-    !value.account_id ||
-    value.account_id.length > securityResponseLimits.id
-  )
+  if (typeof value.account_id !== 'string' || !value.account_id || value.account_id.length > securityResponseLimits.id)
     return { kind: 'failure' };
   const clientId = value.client_id;
   const scopes = value.scope;
