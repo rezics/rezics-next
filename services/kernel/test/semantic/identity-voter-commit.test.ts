@@ -3,16 +3,19 @@ import { noEffect, runCommand, withSingleCommandAttempt } from '../../src/comman
 import type { PoolClient } from 'pg';
 import { randomUUID } from 'node:crypto';
 import { createProfileEntryFixture } from '../library/support/profile-entry-fixture.ts';
+import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { STANDARD_QUESTION_ID, createVoteCommands } from '../../src/rating/votes.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createSubject } from '../../src/semantic/subject.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochMapping } from '../../src/semantic/identity-epoch-mapping.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { drainIdentityTerminalClosure } from '../../src/semantic/identity-terminal-closure.ts';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readIdentityRatingReview } from '../../src/semantic/identity-adapters/read.ts';
 import { createIdentityRatingCommitParticipant } from '../../src/semantic/identity-rating-commit-participant.ts';
 import { createIdentityMappingFixture } from './support/identity-epoch-mapping.ts';
-import { release } from './support/identity-epoch.ts';
+import { digest, release } from './support/identity-epoch.ts';
 
 async function reviewedSelf(f: Awaited<ReturnType<typeof createIdentityMappingFixture>>, route: number) {
   const subjectId = (await f.create('Rating reviewed identity', route)).subject.id;
@@ -86,139 +89,167 @@ test('reviewed identity admission returns the native owner and published head an
   }
 }, 180_000);
 
-test('four real provider review/apply paths retain their requested, canonical, voter and persisted foreign homes', async () => {
+test('four real provider review/apply paths retain eligible and foreign requested, canonical, voter and control homes', async () => {
   const f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
   try {
     await installIdentityEpochBootstrap(f.pool);
     const votes = createVoteCommands({ pool: f.pool, access: f.access });
     const tuples = [];
     for (const provider of ['vndb', 'bangumi', 'mal', 'anilist'] as const) {
-      const requested = await f.createSubject('game');
+      const key = randomUUID();
+      const requested = (
+        await createSubject(f.pool, {
+          actor: f.owner.actor,
+          target: { route: 1, id: newId(1) },
+          item: { type: 'ex:Child', labels: { en: `${provider} native score target` } },
+          idempotencyKey: key,
+          digest: digest(key),
+          release: { digest: f.originalDigest, release: f.original },
+          authorization: await accessCommandAuthorization(
+            f.access,
+            f.owner.actor,
+            'subject:create',
+            { route: 0, id: GLOBAL_CONTEXT },
+            { pool: f.pool, deadline: Date.now() + 5000 },
+            () => new Error('Native Subject creation denied'),
+          ),
+        })
+      ).subject.id;
       const sourceHome = partitionOf(routeOf(requested)!);
-      const caller = await f.identity(f.owner.actor.scopes, (sourceHome + 1) % 4096);
-      await f.grantLibraryGate(caller.actor.accountId);
       for (let n = 0; n < 1000; n++) {
         if ((await stepIdentityEpochBootstrap(f.pool, sourceHome)).state === 'caught-up') break;
         if (n === 999) throw new Error('Provider source bootstrap did not finish');
       }
-      const request = async (path: string, body: unknown, key = randomUUID()) => {
-        const response = await f.send(caller.bearer, 'POST', `/v1/libraryImports/${provider}${path}`, body, key);
-        const data = await response.json();
-        expect({ status: response.status, data }).toMatchObject({ status: 200 });
-        return data;
-      };
-      let outcome: unknown;
-      if (provider === 'vndb') {
-        const upload = await request(':preview', {
-          xml: '<vndb-export version="1.0" uid="u1"><vns><vn id="v42"><vote>8</vote></vn></vns></vndb-export>',
-        });
-        const review = await request(`/${upload.uploadId}:review`, {
-          ordinal: 0,
-          action: 'score',
-          targetId: requested,
-          questionId: STANDARD_QUESTION_ID,
-          questionRevision: 1,
-          selection: { kind: 'vote', units: 16 },
-          consent: 'adopt-native-vote',
-        });
-        expect(review).toMatchObject({ status: 'reviewed', units: 16 });
-        outcome = (
-          await request(`/${upload.uploadId}:apply`, { rows: [{ ordinal: 0, scoreReviewId: review.reviewId }] })
-        ).outcomes[0];
-      } else if (provider === 'bangumi') {
-        const upload = await request(':preview', {
-          upload: JSON.stringify({
-            format: 'rezics.bangumi-collection.v1',
-            collections: [{ subject_id: 42, subject_type: 4, type: 1, rate: 8 }],
-          }),
-        });
-        const { review } = await request(`/${upload.uploadId}:review`, {
-          ordinal: 0,
-          target: requested,
-          score: { action: 'set', units: 16 },
-        });
-        expect(review.score.native.questionId).toBe(STANDARD_QUESTION_ID);
-        outcome = (
-          await request(`/${upload.uploadId}:apply`, {
-            rows: [
-              {
-                ordinal: 0,
-                reviewToken: review.token,
-                state: 'omit',
-                skip: false,
-                score: { action: 'set', units: 16, consent: true },
-              },
-            ],
-          })
-        ).outcomes[0].score;
-      } else if (provider === 'mal') {
-        const upload = await request(':preview', {
-          xml: '<myanimelist><anime><series_animedb_id>42</series_animedb_id><my_status>Completed</my_status><my_score>8</my_score></anime></myanimelist>',
-        });
-        const version = randomUUID();
-        await request(
-          `/${upload.id}/review`,
-          {
-            row: 0,
+      for (const callerHome of [sourceHome, (sourceHome + 1) % 4096]) {
+        const caller = await f.identity(f.owner.actor.scopes, callerHome);
+        await f.grantLibraryGate(caller.actor.accountId);
+        const request = async (path: string, body: unknown, key = randomUUID()) => {
+          const response = await f.send(caller.bearer, 'POST', `/v1/libraryImports/${provider}${path}`, body, key);
+          const data = await response.json();
+          expect({ status: response.status, data }).toMatchObject({ status: 200 });
+          return data;
+        };
+        let outcome: unknown;
+        if (provider === 'vndb') {
+          const upload = await request(':preview', {
+            xml: '<vndb-export version="1.0" uid="u1"><vns><vn id="v42"><vote>8</vote></vn></vns></vndb-export>',
+          });
+          const review = await request(`/${upload.uploadId}:review`, {
+            ordinal: 0,
+            action: 'score',
+            targetId: requested,
+            questionId: STANDARD_QUESTION_ID,
+            questionRevision: 1,
+            selection: { kind: 'vote', units: 16 },
+            consent: 'adopt-native-vote',
+          });
+          expect(review).toMatchObject({ status: 'reviewed', units: 16 });
+          outcome = (
+            await request(`/${upload.uploadId}:apply`, { rows: [{ ordinal: 0, scoreReviewId: review.reviewId }] })
+          ).outcomes[0];
+        } else if (provider === 'bangumi') {
+          const upload = await request(':preview', {
+            upload: JSON.stringify({
+              format: 'rezics.bangumi-collection.v1',
+              collections: [{ subject_id: 42, subject_type: 4, type: 1, rate: 8 }],
+            }),
+          });
+          const { review } = await request(`/${upload.uploadId}:review`, {
+            ordinal: 0,
             target: requested,
-            skip: false,
+            score: { action: 'set', units: 16 },
+          });
+          expect(review.score.native.questionId).toBe(STANDARD_QUESTION_ID);
+          outcome = (
+            await request(`/${upload.uploadId}:apply`, {
+              rows: [
+                {
+                  ordinal: 0,
+                  reviewToken: review.token,
+                  state: 'omit',
+                  skip: false,
+                  score: { action: 'set', units: 16, consent: true },
+                },
+              ],
+            })
+          ).outcomes[0].score;
+        } else if (provider === 'mal') {
+          const upload = await request(':preview', {
+            xml: '<myanimelist><anime><series_animedb_id>42</series_animedb_id><my_status>Completed</my_status><my_score>8</my_score></anime></myanimelist>',
+          });
+          const version = randomUUID();
+          await request(
+            `/${upload.id}/review`,
+            {
+              row: 0,
+              target: requested,
+              skip: false,
+              replace: false,
+              score: { action: 'adopt', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 16 },
+            },
+            version,
+          );
+          outcome = (
+            await request(`/${upload.id}/apply`, { confirm: true, rows: [{ row: 0, version, fields: ['score'] }] })
+          ).outcomes[0].score;
+        } else {
+          const upload = await request(':preview', {
+            upload: JSON.stringify([{ mediaId: 42, score: 8 }]),
+            scoreFormat: 'POINT_10',
+          });
+          const { review } = await request(`/${upload.id}:review`, {
+            ordinal: 0,
+            subjectId: requested,
+            fields: [],
             replace: false,
-            score: { action: 'adopt', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 16 },
-          },
-          version,
-        );
-        outcome = (
-          await request(`/${upload.id}/apply`, { confirm: true, rows: [{ row: 0, version, fields: ['score'] }] })
-        ).outcomes[0].score;
-      } else {
-        const upload = await request(':preview', {
-          upload: JSON.stringify([{ mediaId: 42, score: 8 }]),
-          scoreFormat: 'POINT_10',
+            score: { action: 'vote', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 16 },
+          });
+          expect(review.score.native.guard.subject.canonicalId).toBe(requested);
+          outcome = (
+            await request(`/${upload.id}:apply`, {
+              confirmations: [{ ordinal: 0, reviewId: review.id, confirmNativeVoteEffects: true }],
+            })
+          ).outcomes[0].score;
+        }
+        expect(outcome).toMatchObject({ status: 'unavailable' });
+        const native = await votes.readVoteReview(caller.actor, STANDARD_QUESTION_ID, requested);
+        const review = await readIdentityRatingReview(f.pool, {
+          requestedOriginalId: requested,
+          canonicalTerminalId: native.guard.subject.canonicalId,
+          deadline: Date.now() + 5000,
         });
-        const { review } = await request(`/${upload.id}:review`, {
-          ordinal: 0,
-          subjectId: requested,
-          fields: [],
-          replace: false,
-          score: { action: 'vote', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 16 },
+        if (review.state !== 'reviewed') throw new Error(`Provider ${provider}: ${review.state}`);
+        const commandHome = partitionOf(routeOf(caller.actor.accountId)!);
+        const participant = createIdentityRatingCommitParticipant();
+        const admission = () =>
+          runCommand(f.pool, { partition: commandHome }, async (tx) =>
+            noEffect(await participant.admit(tx, participant.prepare(review.operand))),
+          );
+        if (commandHome === sourceHome) {
+          expect(commandHome).toBe(partitionOf(routeOf(STANDARD_QUESTION_ID)!));
+          expect(await admission()).toMatchObject({ value: { subjectId: requested, ownerId: expect.any(String) } });
+        } else {
+          await expect(admission()).rejects.toMatchObject({
+            reason: 'atomic_guard_unavailable',
+            identityState: 'foreign-control',
+          });
+        }
+        tuples.push({
+          provider,
+          requested,
+          canonical: native.guard.subject.canonicalId,
+          question: STANDARD_QUESTION_ID,
+          questionHome: partitionOf(routeOf(STANDARD_QUESTION_ID)!),
+          voter: caller.actor.accountId,
+          commandHome,
+          sourceHomes: review.operand.sourceHomes,
+          controls: review.operand.controlLocators,
         });
-        expect(review.score.native.guard.subject.canonicalId).toBe(requested);
-        outcome = (
-          await request(`/${upload.id}:apply`, {
-            confirmations: [{ ordinal: 0, reviewId: review.id, confirmNativeVoteEffects: true }],
-          })
-        ).outcomes[0].score;
+        expect(await votes.readOwnVote(caller.actor, STANDARD_QUESTION_ID, requested)).toBeNull();
       }
-      expect(outcome).toMatchObject({ status: 'unavailable' });
-      const native = await votes.readVoteReview(caller.actor, STANDARD_QUESTION_ID, requested);
-      const review = await readIdentityRatingReview(f.pool, {
-        requestedOriginalId: requested,
-        canonicalTerminalId: native.guard.subject.canonicalId,
-        deadline: Date.now() + 5000,
-      });
-      if (review.state !== 'reviewed') throw new Error(`Provider ${provider}: ${review.state}`);
-      const commandHome = partitionOf(routeOf(caller.actor.accountId)!);
-      const participant = createIdentityRatingCommitParticipant();
-      await expect(
-        runCommand(f.pool, { partition: commandHome }, async (tx) =>
-          noEffect(await participant.admit(tx, participant.prepare(review.operand))),
-        ),
-      ).rejects.toMatchObject({ reason: 'atomic_guard_unavailable', identityState: 'foreign-control' });
-      tuples.push({
-        provider,
-        requested,
-        canonical: native.guard.subject.canonicalId,
-        question: STANDARD_QUESTION_ID,
-        questionHome: partitionOf(routeOf(STANDARD_QUESTION_ID)!),
-        voter: caller.actor.accountId,
-        commandHome,
-        sourceHomes: review.operand.sourceHomes,
-        controls: review.operand.controlLocators,
-      });
-      expect(await votes.readOwnVote(caller.actor, STANDARD_QUESTION_ID, requested)).toBeNull();
     }
     console.info('Native provider Rating caller tuples', tuples);
-    expect(tuples).toHaveLength(4);
+    expect(tuples).toHaveLength(8);
   } finally {
     await f.close();
   }
