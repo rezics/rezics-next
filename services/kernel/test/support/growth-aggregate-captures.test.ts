@@ -207,7 +207,7 @@ test.serial(
               plans: aggregated.capture.plans,
               requestBytes: aggregated.capture.statements.map(() => 0),
               responseBytes: aggregated.capture.statements.map(() => 0),
-              backgroundStatements: aggregated.capture.backgroundStatements,
+              backgroundStatements: aggregated.capture.backgroundStatements ?? [],
             },
             databases: aggregated.databases,
           };
