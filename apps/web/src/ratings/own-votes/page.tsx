@@ -185,7 +185,7 @@ export function CurrentViewerOwnVotesPage({
       returnOutcome={admittedReturn?.outcome ?? null}
       {...(admittedReturn ? { returnIndex: admittedReturn.index } : {})}
       onDeparturePair={returnVisit.inspect}
-      onNavigate={origin.isCurrent() ? (destination) => void move(destination) : undefined}
+      {...(origin.isCurrent() ? { onNavigate: (destination: OwnVotesCoordinateMove) => void move(destination) } : {})}
       hasPrevious={coordinates.hasPrevious}
       previousCursor={coordinates.previousCursor}
       firstAvailable={cursor !== null || invalidAddress}
