@@ -21,6 +21,7 @@ const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 50 });
 afterAll(async () => {
   await relays.stop();
+  await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [subjectIdentityOpening]);
   await pool.end();
   await admin.end();
 });
@@ -38,15 +39,24 @@ const actions = [
   'context:accept',
   'context:adopt',
   'subject:merge',
+  'gate:subject_identity',
 ];
 const realAccess = await createRealAccess(admin, accounts, actions);
+const subjectIdentityOpening = newId(0);
 beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:batch_write');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'gate:subject_identity');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:accept');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:merge');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'gate:subject_identity');
+  await pool.query(
+    `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+     VALUES ('subject_identity', tstzrange('2000-01-01', NULL, '[)'), $1)`,
+    [subjectIdentityOpening],
+  );
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
 });
 
@@ -114,11 +124,26 @@ const edition = (title: string, workId: string) =>
     statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', workId)] },
   });
 const byId = (a: Record<string, any>, b: Record<string, any>) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-const linkOf = (source: Record<string, any>, property: string) => ({
-  subject: source.id as string,
-  property,
-  statement: source.statements[property][0].id as string,
-});
+const linkOf = (source: Record<string, any>, property: string) => {
+  const type = source.type as string;
+  const types = (source.types as string[] | undefined) ?? [type, 'schema:Thing'];
+  const label = source.labels.en as string;
+  return {
+    subject: source.id as string,
+    property,
+    statement: source.statements[property][0].id as string,
+    label,
+    type,
+    summary: {
+      cover: null,
+      creativeWork: types.includes('schema:CreativeWork') || type === 'schema:Book',
+      id: source.id as string,
+      label: { language: 'en', value: label },
+      type,
+      types,
+    },
+  };
+};
 const sorted = (links: { subject: string }[]) =>
   [...links].sort((a, b) => (a.subject < b.subject ? -1 : a.subject > b.subject ? 1 : 0));
 const fresh = { consistency: 'eventual', target_seconds: 10, caught_up: true };
