@@ -39,20 +39,14 @@ export function PeopleNamesVisit(props: Visit) {
   return (
     <div ref={host} className="min-w-0 space-y-3">
       <NamesHandoff {...{ binding }} returnHref={address.returnHref} locale={reading.locale} current={lifetime.current}>
-        {(restored, returnStatus) =>
-          address.supported ? (
-            <SupportedVisit {...props} {...{ restored, returnStatus }} />
-          ) : (
-            <CurrentNames {...props} {...{ restored, returnStatus }} advice="denied" />
-          )
-        }
+        {(restored, returnStatus) => <AdvisedVisit {...props} {...{ restored, returnStatus }} />}
       </NamesHandoff>
     </div>
   );
 }
 
 type Restoration = { restored: NamesWindow | undefined; returnStatus: NamesReturnStatus };
-function SupportedVisit(props: Visit & Restoration) {
+function AdvisedVisit(props: Visit & Restoration) {
   const { lifetime, adviceLoader } = props;
   const advice = useNamesAdvice(lifetime.observation, lifetime.current, adviceLoader);
   return <CurrentNames {...props} {...advice} />;

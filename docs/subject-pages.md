@@ -2556,7 +2556,8 @@ Fresh native admission precedes restoration. Subject/type, actual Context, relea
 caller bind the visit; reading/release/reader replacements retire old controls permanently. Changed bindings show
 current names and recovery, while missing history metadata explicitly restarts the local view. No provider,
 spelling or old authorized payload enters a locator. Filtering/copying adds no read; supported advice retains its
-single independent explicit retry. Unsupported Contexts make no Global advice read.
+single independent explicit retry. Advice always observes the reader in Global, independently of source
+provenance; the unsupported-Context notice identifies that scope rather than inventing a native denial.
 
 The installed shared focus grammar is only `terms | sources`; exact surviving-name focus and protection against
 stealing an already connected control's focus require its original owner's additive hook. The Sources owner's

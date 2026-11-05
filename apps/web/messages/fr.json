@@ -9489,7 +9489,7 @@
   "producer_history_retired_explanation": "Cette correction n’a plus de lecture à jour. Une commande déjà envoyée peut avoir pris effet ; son résultat peut être inconnu. Rien ne sera renvoyé depuis cette correction retirée.",
   "producer_history_slice_lost": "La tranche d’origine n’est plus disponible ici. Relisez l’historique avant de commencer volontairement une autre correction.",
   "producer_history_retired_close": "Fermer la correction retirée",
-  "people_names_context_unsupported": "Les sources et la modification des noms ne prennent pas en charge ce contexte. Les noms actuels restent lisibles ; aucune vue globale distincte n’a été ouverte.",
+  "people_names_context_unsupported": "Les sources et la modification des noms ne prennent pas en charge ce contexte. Les noms actuels restent lisibles ; aucune vue globale distincte n’a été ouverte. Les indications de modification ci-dessous concernent uniquement la vue globale et ne donnent aucun droit dans ce contexte.",
   "people_names_destination_scope": "La modification des noms ouvre une vue globale distincte et y vérifie les droits actuels. Les sources lisent le Realm sélectionné sans attribuer une graphie à un fournisseur.",
   "people_names_heading": "Noms et alias fournis",
   "people_names_selected": "Libellé choisi pour la page :",
