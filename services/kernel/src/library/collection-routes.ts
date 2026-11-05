@@ -23,6 +23,7 @@ import { collectionReadView, createCollectionReads } from './collection-reads.ts
 import { viewerPersonalActionsResponseSchema } from './viewer-personal-actions-schema.ts';
 import type { ViewerPersonalActionsReader } from './viewer-personal-actions.ts';
 import { createCollectionPublicationEpisodes } from './collection-publication-episodes.ts';
+import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { createCollectionCommands } from './collections.ts';
 import { createCollectionStructureHistory } from './collection-structure-history.ts';
 import { createCollectionPublications } from './collection-publication.ts';
@@ -535,7 +536,12 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       access: dependencies.access(),
       clock,
       routeKey: dependencies.routeKey,
-      publication: createCollectionPublicationEpisodes({ pool, access: dependencies.access(), clock }),
+      publication: createCollectionPublicationEpisodes({
+        pool,
+        access: dependencies.access(),
+        clock,
+        readBuiltin: createBuiltinRuntime({ pool }).read,
+      }),
     }));
   const read = () =>
     (reads ??= createCollectionReads({

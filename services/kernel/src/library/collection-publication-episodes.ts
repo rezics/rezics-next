@@ -38,7 +38,11 @@ import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { stageHistoryWork } from '../work/history-enqueue.ts';
 import { initializeCanonicalCollectionSource, nativeSourceFence } from './canonical-source-store.ts';
-import { prepareBuiltinMaterialization, readBuiltinPublicationRule } from './builtin-materialization.ts';
+import {
+  prepareBuiltinMaterialization,
+  readBuiltinPublicationRule,
+  type BuiltinCollectionRead,
+} from './builtin-materialization.ts';
 import type { BuiltinCollectionKey } from './builtin-identity.ts';
 import { readCollection } from './collection-store.ts';
 import type { Collection } from './collection-model.ts';
@@ -414,6 +418,7 @@ export function createCollectionPublicationEpisodes(config: {
   pool: Pool;
   access: Access;
   clock?: KernelClock;
+  readBuiltin: BuiltinCollectionRead;
 }): CollectionPublicationEpisodes {
   const { pool, access } = config;
   return {

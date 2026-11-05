@@ -6,6 +6,7 @@ import {
   type CollectionDiscoverySnapshot,
 } from '../../src/library/collection-discovery-source.ts';
 import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
+import { createBuiltinRuntime } from '../../src/library/builtin-runtime.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
 
@@ -158,6 +159,7 @@ test('native public hints exclude hidden/incomplete sources, retain selected A d
   const begun = await createCollectionPublicationEpisodes({
     pool: f.database.pool,
     access: f.runtime.identity.access,
+    readBuiltin: createBuiltinRuntime({ pool: f.database.pool }).read,
   }).begin(
     actor,
     { collectionId: dynamic.id, revision: output.collection.revision, visibility: 'public' },

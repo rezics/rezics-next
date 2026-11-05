@@ -6,6 +6,7 @@ import {
   createCollectionPublicationEpisodes,
   readCollectionPublicationEpisode,
 } from '../../src/library/collection-publication-episodes.ts';
+import { createBuiltinRuntime } from '../../src/library/builtin-runtime.ts';
 import {
   admitCollectionPublicationStep,
   readCollectionPublicationWorkDefinition,
@@ -55,6 +56,7 @@ test('publication admission binds a real live episode to its complete current pr
     const begun = await createCollectionPublicationEpisodes({
       pool: native.db.pool,
       access: native.kernel.testAccess,
+      readBuiltin: createBuiltinRuntime({ pool: native.db.pool }).read,
     }).begin(actor, { collectionId: collection.id, revision: collection.revision, visibility: 'public' }, randomUUID());
     const locator = begun.value.locator;
     const deadline = Date.now() + 30000;

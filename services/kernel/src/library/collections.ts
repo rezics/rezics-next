@@ -387,7 +387,10 @@ export function createCollectionCommands(config: {
 
   return {
     createCollection,
-    beginCollectionPublication: createCollectionPublicationEpisodes(config).begin,
+    beginCollectionPublication: createCollectionPublicationEpisodes({
+      ...config,
+      readBuiltin: createBuiltinRuntime({ pool }).read,
+    }).begin,
     updateCollection,
     updateCollectionRule,
     deleteCollection,

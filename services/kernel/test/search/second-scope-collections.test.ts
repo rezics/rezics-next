@@ -11,6 +11,7 @@ import {
 import type { CollectionDiscoveryItem } from '../../src/library/collection-discovery-source.ts';
 import { publicCollectionDiscoverySource } from '../../src/library/index.ts';
 import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
+import { createBuiltinRuntime } from '../../src/library/builtin-runtime.ts';
 import { createNativeDiscoveryRegistry, hydrateOwnerDiscoveryHits } from '../../src/search/discovery-hydration.ts';
 import { mintReadTime, releaseOperationalTime, authoritativeTimeValue } from '../../src/command/command.ts';
 import { withConnection } from '../../src/database/pool.ts';
@@ -142,6 +143,7 @@ describe('connected native Collection reader journey', () => {
     pool: f.database.pool,
     access: f.runtime.identity.access,
     routeKey: f.runtime.identity.routeKey,
+    readBuiltin: createBuiltinRuntime({ pool: f.database.pool }).read,
   });
   const context = (id: string) => ({
     actor: { kind: 'anonymous' } as const,

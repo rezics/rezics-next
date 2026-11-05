@@ -16,6 +16,7 @@ import {
   createCollectionPublicationEpisodes,
   type CollectionPublicationBeginResult,
 } from './collection-publication-episodes.ts';
+import { createBuiltinRuntime } from './builtin-runtime.ts';
 import type {
   CollectionPublicationBeginInput,
   CollectionPublicationEpisode,
@@ -60,7 +61,12 @@ function account(actor: Actor): AccountActor {
 /** HTTP-facing begin and owner-private status operations; native readers remain the source of truth. */
 export function createCollectionPublicationService(dependencies: Dependencies) {
   const { pool, access, clock } = dependencies;
-  const episodes = createCollectionPublicationEpisodes({ pool, access, ...(clock ? { clock } : {}) });
+  const episodes = createCollectionPublicationEpisodes({
+    pool,
+    access,
+    ...(clock ? { clock } : {}),
+    readBuiltin: createBuiltinRuntime({ pool }).read,
+  });
 
   async function locate(publicationId: string, deadline: number): Promise<CollectionPublicationLocator | null> {
     const route = routeOf(publicationId);

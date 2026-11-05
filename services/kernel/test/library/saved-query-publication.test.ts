@@ -13,6 +13,7 @@ import {
   createCollectionPublicationEpisodes,
   readCollectionPublicationEpisode,
 } from '../../src/library/collection-publication-episodes.ts';
+import { createBuiltinRuntime } from '../../src/library/builtin-runtime.ts';
 import { createCollectionPublicationFinalActivation } from '../../src/library/collection-publication-final.ts';
 import { stageCollectionPublicationStep } from '../../src/library/collection-publication-staging.ts';
 import { partitionOf } from '../../src/route/route.ts';
@@ -86,7 +87,11 @@ for (const visibility of ['public', 'unlisted'] as const)
     const { collection } = await created.json();
     const actor = await n.actor(owner);
     if (actor.kind !== 'account') throw new Error('Native owner required');
-    const episodes = createCollectionPublicationEpisodes({ pool: n.db.pool, access: n.kernel.testAccess });
+    const episodes = createCollectionPublicationEpisodes({
+      pool: n.db.pool,
+      access: n.kernel.testAccess,
+      readBuiltin: createBuiltinRuntime({ pool: n.db.pool }).read,
+    });
     const input = { collectionId: collection.id, revision: collection.revision, visibility };
     const key = randomUUID();
     const begun = await episodes.begin(actor, input, key);

@@ -10,6 +10,7 @@ import {
   createCollectionPublicationEpisodes,
   readCollectionPublicationEpisode,
 } from '../../src/library/collection-publication-episodes.ts';
+import { createBuiltinRuntime } from '../../src/library/builtin-runtime.ts';
 import { createCollectionPublicationFinalActivation } from '../../src/library/collection-publication-final.ts';
 import { admitCollectionPublicationStep } from '../../src/library/collection-publication-work-admission.ts';
 import { readNativeCollectionMetadata } from '../../src/library/collection-source-native.ts';
@@ -94,7 +95,11 @@ async function paused() {
       };
     },
   );
-  const episodes = createCollectionPublicationEpisodes({ pool: f.db.pool, access: f.kernel.testAccess });
+  const episodes = createCollectionPublicationEpisodes({
+    pool: f.db.pool,
+    access: f.kernel.testAccess,
+    readBuiltin: createBuiltinRuntime({ pool: f.db.pool }).read,
+  });
   const input = { collectionId: id, revision: 2, visibility: 'public' as const },
     key = randomUUID();
   const b = (await episodes.begin(actor, input, key)).value.locator;

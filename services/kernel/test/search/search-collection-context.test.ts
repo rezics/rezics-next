@@ -4,6 +4,7 @@ import { discoveryHttpPage } from '../../src/search/discovery-http.ts';
 import { readPublicCollectionDiscoverySummaries as hydrate } from '../../src/library/collection-discovery-summaries.ts';
 import { readFollowDiscovery } from '../../src/library/follow-discovery.ts';
 import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
+import { createBuiltinRuntime } from '../../src/library/builtin-runtime.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import {
   createCollectionRulesFixture,
@@ -21,6 +22,7 @@ const dependencies = () => ({
   pool: f.database.pool,
   access: f.runtime.identity.access,
   routeKey: f.runtime.identity.routeKey,
+  readBuiltin: createBuiltinRuntime({ pool: f.database.pool }).read,
 });
 async function cards(id: string, native = true) {
   const deps = dependencies();

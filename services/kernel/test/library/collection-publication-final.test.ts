@@ -12,6 +12,7 @@ import {
   createCollectionPublicationEpisodes,
   readCollectionPublicationEpisode,
 } from '../../src/library/collection-publication-episodes.ts';
+import { createBuiltinRuntime } from '../../src/library/builtin-runtime.ts';
 import {
   createCollectionPublicationFinalActivation,
   readCollectionPublicationFinalResult,
@@ -73,7 +74,11 @@ afterAll(async () => {
 });
 
 const episodes = () =>
-  createCollectionPublicationEpisodes({ pool: f.database.pool, access: f.runtime.identity.access });
+  createCollectionPublicationEpisodes({
+    pool: f.database.pool,
+    access: f.runtime.identity.access,
+    readBuiltin: createBuiltinRuntime({ pool: f.database.pool }).read,
+  });
 
 async function pendingWithSelectedA() {
   const subject = await f.subject('Private whole-query source');

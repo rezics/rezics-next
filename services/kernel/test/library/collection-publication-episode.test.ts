@@ -20,6 +20,7 @@ import {
   readCollectionPublicationInitiator,
   readCollectionPublicationRule,
 } from '../../src/library/collection-publication-episodes.ts';
+import { createBuiltinRuntime } from '../../src/library/builtin-runtime.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
@@ -72,7 +73,11 @@ afterAll(async () => {
   await f?.close();
 });
 const episodes = () =>
-  createCollectionPublicationEpisodes({ pool: f.database.pool, access: f.runtime.identity.access });
+  createCollectionPublicationEpisodes({
+    pool: f.database.pool,
+    access: f.runtime.identity.access,
+    readBuiltin: createBuiltinRuntime({ pool: f.database.pool }).read,
+  });
 async function prepared() {
   const subject = await f.subject('Native episode original');
   await f.entry(subject);

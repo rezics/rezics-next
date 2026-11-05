@@ -13,11 +13,10 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
-import type { Access, AccountActor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { builtinCollectionId, type BuiltinCollectionKey } from './builtin-identity.ts';
-import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { readBuiltinStateReference } from './builtin-reference-store.ts';
 import type { SavedCollectionRule } from './collection-rules.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
@@ -111,9 +110,16 @@ async function stateSupported(
   );
 }
 
+/** Consumer-declared port: the owner-scoped builtin read this materialization needs. builtin-runtime implements it. */
+export type BuiltinCollectionRead = (
+  actor: Actor,
+  collectionId: string,
+  scope: 'collection:update',
+  deadline: number,
+) => Promise<{ revision: number } | null>;
 /** Select only a real logical native owner descriptor. No caller tuple hints or historical release walk. */
 export async function prepareBuiltinMaterialization(
-  config: Readonly<{ pool: Pool; access: Access }>,
+  config: Readonly<{ pool: Pool; access: Access; readBuiltin: BuiltinCollectionRead }>,
   actor: AccountActor,
   input: Readonly<{ collectionId: string; revision: number }>,
   deadline: number,
@@ -133,12 +139,7 @@ export async function prepareBuiltinMaterialization(
     if (!reference || reference.accountId !== actor.accountId) return null;
     key = reference.key;
   }
-  const logical = await createBuiltinRuntime({ pool: config.pool }).read(
-    actor,
-    input.collectionId,
-    'collection:update',
-    deadline,
-  );
+  const logical = await config.readBuiltin(actor, input.collectionId, 'collection:update', deadline);
   if (!logical || logical.revision !== 0 || input.revision !== 0) throw new ProblemError('conflict');
   // Everything has no profile tuple. Pin its compiler release on the first actual write, just as state meaning is pinned.
   const releaseDigest =

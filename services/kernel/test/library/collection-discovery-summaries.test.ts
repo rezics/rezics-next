@@ -5,6 +5,7 @@ import { withConnection } from '../../src/database/pool.ts';
 import { publicCollectionDiscoverySource } from '../../src/library/collection-discovery-source.ts';
 import { readPublicCollectionDiscoverySummaries as hydrate } from '../../src/library/collection-discovery-summaries.ts';
 import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
+import { createBuiltinRuntime } from '../../src/library/builtin-runtime.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { Access, Actor } from '../../src/request/access.ts';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
@@ -26,7 +27,11 @@ const context = (id: string, viewer: Actor = { kind: 'anonymous' }) => ({
   partition: partitionOf(routeOf(id)!),
   deadline: Date.now() + 120000,
 });
-const deps = (access = f.runtime.identity.access) => ({ pool: f.database.pool, access });
+const deps = (access = f.runtime.identity.access) => ({
+  pool: f.database.pool,
+  access,
+  readBuiltin: createBuiltinRuntime({ pool: f.database.pool }).read,
+});
 const publicDeps = (access = f.runtime.identity.access) => ({ ...deps(access), routeKey: f.runtime.identity.routeKey });
 async function saved() {
   const response = await f.send('POST', '/v1/collections', {
