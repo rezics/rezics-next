@@ -189,7 +189,9 @@ test('viewer exposure retires each mounted reader observation without leaking or
     expect(nativeReads).toHaveLength(0);
     expect(await client.getQueryData(['exposure', 'anonymous'])).toEqual({ state: 'ready', admitted: publicGroups });
 
-    const preview = renderToStaticMarkup(createElement(Controls, { name: 'preview' }));
+    const preview = renderToStaticMarkup(
+      createElement(QueryClientProvider, { client }, createElement(Controls, { name: 'preview' })),
+    );
     expect(preview).not.toContain('data-private="preview"');
     expect(preview).not.toContain('data-public="preview"');
     expect(credentialReads).toBe(0);

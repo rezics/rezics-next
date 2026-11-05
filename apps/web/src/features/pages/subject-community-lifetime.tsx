@@ -71,7 +71,6 @@ export function useSubjectCommunityReading(input: {
   const [binding, setBinding] = useState(() => initialBinding(input, environment));
 
   if (binding.source !== input.source) {
-    console.log('community binding source', binding.source, input.source);
     setBinding({ ...initialBinding(input, environment), generation: binding.generation + 1 });
   } else if (
     !binding.retired &&
@@ -79,16 +78,15 @@ export function useSubjectCommunityReading(input: {
       binding.reader !== input.reader ||
       binding.environment !== environment)
   ) {
-    console.log('community binding replacement', binding.descriptor === input.descriptor, binding.reader, input.reader, binding.environment === environment);
     setBinding({ ...binding, retired: true, generation: binding.generation + 1 });
   } else if (!binding.retired && input.reader !== null) {
     if (binding.observation) {
       if (
-        observation.state !== 'signed-in' ||
-        observation.observation.id !== binding.observation.id ||
-        observation.observation.subject !== binding.observation.subject
+        !binding.privateRetired &&
+        (observation.state !== 'signed-in' ||
+          observation.observation.id !== binding.observation.id ||
+          observation.observation.subject !== binding.observation.subject)
       ) {
-        console.log('community binding private retire', observation, binding.observation);
         setBinding({ ...binding, privateRetired: true, generation: binding.generation + 1 });
       }
     } else if (
@@ -101,7 +99,6 @@ export function useSubjectCommunityReading(input: {
       observation.state === 'signed-in' &&
       observation.observation.subject === input.reader
     ) {
-      console.log('community binding bind', observation, binding.observation);
       setBinding({
         ...binding,
         observation: observation.observation,
