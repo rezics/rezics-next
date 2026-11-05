@@ -830,10 +830,14 @@ test('growth at 20, 100 and 200 rows stays within native page, apply and retaine
     const journey = createAniListJourney({ port, visit: visit() });
     await journey.preview(envelope(total), 'POINT_10');
     let snap = journey.snapshot();
-    while (snap.next !== null) snap = await journey.nextPage();
-    for (let ordinal = 0; ordinal < total; ordinal += 1) {
-      snap = await journey.review(ordinal, ordinal === 0 ? subject : undefined);
-      journey.choose(ordinal, { skip: false, replace: false, applyStatus: true });
+    while (true) {
+      const ordinals = snap.page.map((row) => row.ordinal);
+      for (const ordinal of ordinals) {
+        snap = await journey.review(ordinal, ordinal === 0 ? subject : undefined);
+        journey.choose(ordinal, { skip: false, replace: false, applyStatus: true });
+      }
+      if (snap.next === null) break;
+      snap = await journey.nextPage();
     }
     snap = await journey.confirm();
     expect(snap.page.length).toBeLessThanOrEqual(ANILIST_PAGE);
