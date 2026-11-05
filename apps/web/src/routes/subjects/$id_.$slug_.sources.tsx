@@ -20,6 +20,14 @@ import { subjectVisitReturn } from '../../features/pages/subject-visit-navigatio
 const inspectSourceObservation = (request: SourceObservationRequest) =>
   inspectSubjectSourceObservation({ data: request });
 
+/** Bind loader output without serializing the private comparison operands again. */
+async function requestKey(request: { realm?: string | undefined; via?: string | undefined; locale: string }) {
+  const bytes = new TextEncoder().encode(JSON.stringify([request.realm ?? null, request.via ?? null, request.locale]));
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+}
+
 export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
   staticData: { publicCache: false },
   staleTime: 0,
@@ -47,7 +55,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
       if (result.page.id !== params.id || canonical.params.slug !== params.slug)
         throw redirect(canonicalRedirect(result.page.sourcesHref.split('?', 1)[0]!, location.searchStr, location.hash));
     }
-    return { result, reader, visit: crypto.randomUUID(), request: { ...deps, locale: getLocale() } };
+    return { result, reader, visit: crypto.randomUUID(), request: await requestKey({ ...deps, locale: getLocale() }) };
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -66,47 +74,42 @@ function SourcesRoute() {
   const { result, reader, visit, request } = Route.useLoaderData();
   const { realm, via } = Route.useSearch();
   const locale = getLocale();
+  // Capture the original attempt, then verify it against the loader's fingerprint.
+  const original = useMemo(() => ({ realm, via, locale }), [visit]);
   const session = useSession();
   const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, session));
   const scope = useMemo(() => ({}), [visit, realm, via, locale, session.state, session.subject, session.csrfToken]);
-  const ownsRequest = request.realm === realm && request.via === via && request.locale === locale;
+  const ownsRequest = original.realm === realm && original.via === via && original.locale === locale;
   const [current, setCurrent] = useState<{ source: SourcesResult; scope: object; result: SourcesResult }>();
   useEffect(() => {
     let live = true;
     setCurrent(undefined);
-    if (
-      ownsRequest &&
-      !realm &&
-      result.kind === 'ready' &&
-      (session.state === 'signed-out' || (session.state === 'signed-in' && session.subject))
-    ) {
-      const resultSource = result;
-      void readCurrentSubjectSources({
-        data: {
-          id: result.kind === 'ready' ? result.page.id : '',
-          locale: request.locale,
-          expectedReader: session.subject ?? null,
-          via: request.via,
-        },
-        headers: csrfHeaders(),
-      })
-        .then((result) => {
-          if (live) setCurrent({ source: resultSource, scope, result });
-        })
-        .catch(() => {
-          if (live) setCurrent({ source: resultSource, scope, result: { kind: 'unavailable' } });
-        });
-    }
+    if (ownsRequest)
+      void (async () => {
+        if ((await requestKey(original)) !== request || !live) return;
+        const refreshed =
+          !realm && result.kind === 'ready' &&
+          (session.state === 'signed-out' || (session.state === 'signed-in' && session.subject))
+            ? await readCurrentSubjectSources({
+                data: {
+                  id: result.page.id,
+                  locale: original.locale,
+                  expectedReader: session.subject ?? null,
+                  via: original.via,
+                },
+                headers: csrfHeaders(),
+              })
+            : result;
+        if (live) setCurrent({ source: result, scope, result: refreshed });
+      })().catch(() => {
+        if (live) setCurrent({ source: result, scope, result: { kind: 'unavailable' } });
+      });
     return () => {
       live = false;
     };
-  }, [result, scope, realm, ownsRequest, request]);
+  }, [result, scope, realm, ownsRequest, request, original]);
   const selected =
-    !realm && result.kind === 'ready' && (session.state === 'signed-in' || session.state === 'signed-out')
-      ? current?.scope === scope && current.source === result
-        ? current.result
-        : { kind: 'loading' as const }
-      : result;
+    current?.scope === scope && current.source === result ? current.result : { kind: 'loading' as const };
   return (
     <SourcesPresentation
       result={currentReader && ownsRequest ? selected : { kind: 'loading' }}

@@ -271,6 +271,8 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     expect(host.textContent).toContain(m.sources_no_citations());
     expect(host.textContent).not.toContain('The exact second synopsis.');
     expect(host.textContent).not.toContain(content.document);
+    expect(host.innerHTML).not.toContain(content.document);
+    expect(host.innerHTML).not.toContain(content.digest);
     await click([...host.querySelectorAll('a')].find((link) => link.textContent === m.subject_synopsis_return())!);
     expect((host.querySelector('select') as HTMLSelectElement).value).toBe(second.id);
     expect(window.document.activeElement?.id).toBe('subject-summary-evidence');

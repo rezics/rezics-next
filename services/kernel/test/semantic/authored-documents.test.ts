@@ -136,7 +136,10 @@ const recipe = (value: unknown) => ({
 async function book() {
   const answer = await call('POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'A cookbook' } });
   expect(answer.status).toBe(201);
-  return answer.body.subject.id as string;
+  const id = answer.body.subject.id as string;
+  for (const action of ['subject:read', 'statement:propose'])
+    await realAccess.grant({ route: routeOf(id)!, id }, 'editor', action);
+  return id;
 }
 async function stored(
   subject: string,
@@ -203,6 +206,7 @@ test('an editor creates a subject with a document value in one command', async (
   const answer = await call('POST', '/v1/subjects', recipe(value));
   expect(answer.status).toBe(201);
   const subject = answer.body.subject;
+  await realAccess.grant({ route: routeOf(subject.id)!, id: subject.id }, 'editor', 'subject:read');
   const read = await call('GET', `/v1/subjects/${subject.id}`);
   expect(read.status).toBe(200);
   expect(read.body.subject).toEqual(subject);
@@ -234,6 +238,7 @@ test('native exact Sources admits the second same-language document and loses it
   expect(answer.status).toBe(201);
   const subject = answer.body.subject;
   const second = subject.statements['schema:abstract'][1];
+  await realAccess.grant({ route: routeOf(subject.id)!, id: subject.id }, 'editor', 'subject:read');
   const reference = second.value.content;
   const input = {
     statement: second.id,
