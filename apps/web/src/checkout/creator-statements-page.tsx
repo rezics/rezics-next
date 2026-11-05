@@ -143,6 +143,12 @@ export function CreatorStatementsPage({
   onRetry?: () => void;
 }) {
   const href = statementsHref(locale, cursor);
+  const noticeRetry = onRetry ? { onRetry } : {};
+  const pagination = {
+    ...(cursor !== undefined ? { cursor } : {}),
+    ...(navigation ? { navigation } : {}),
+    ...(onMovement ? { onMovement } : {}),
+  };
   return (
     <section className="max-w-4xl min-w-0 space-y-6 text-foreground" aria-labelledby="statements-heading">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -158,8 +164,8 @@ export function CreatorStatementsPage({
       <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.statements_intro()}</p>
       {page.kind !== 'ready' ? (
         <>
-          <StatementNotice kind={page.kind} retryHref={href} onRetry={onRetry} />
-          <StatementListPagination cursor={cursor} page={page} navigation={navigation} onMovement={onMovement} />
+          <StatementNotice kind={page.kind} retryHref={href} {...noticeRetry} />
+          <StatementListPagination page={page} {...pagination} />
         </>
       ) : (
         <>
@@ -198,7 +204,7 @@ export function CreatorStatementsPage({
               ))}
             </ul>
           )}
-          <StatementListPagination cursor={cursor} page={page} navigation={navigation} onMovement={onMovement} />
+          <StatementListPagination page={page} {...pagination} />
         </>
       )}
     </section>
