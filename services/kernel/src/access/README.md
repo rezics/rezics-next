@@ -431,6 +431,10 @@ actions they do not hold. Operator session and credential capabilities also requ
 so a management grant to a non-member is inert. Revocation removes management authority at command time T,
 including when consuming a previously approved opening.
 
+A newly registered account receives `access:delegate` on its own account resource for native principal
+assignments. Assignment creation still requires the principal as the authenticated actor, its consented scope and
+the current grant; this default grants no authority on another account.
+
 Who may delete an account (`account:delete`):
 
 - A person's account is deleted only by that person.

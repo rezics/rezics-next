@@ -294,7 +294,14 @@ test('indexed native local cleanup resumes committed pages and remains idle pend
         WHERE p.route=$1 AND p.account_id=$2`,
         [routeOf(author.accountId), author.accountId],
       );
-      if (completion.rows[0]?.state === 'pending-shared-custody' && completion.rows[0]?.status === 'SUCCESS') break;
+      const ballotCleanup = await f.db.admin.query(
+        `SELECT tombstoned,cleanup_pending FROM rating.classification_ballot_actor WHERE route=$1 AND actor_id=$2`,
+        [routeOf(author.accountId), author.accountId],
+      );
+      if (
+        completion.rows[0]?.state === 'pending-shared-custody' && completion.rows[0]?.status === 'SUCCESS' &&
+        ballotCleanup.rows[0]?.tombstoned && !ballotCleanup.rows[0].cleanup_pending
+      ) break;
       if (Date.now() > deadline) throw new Error('Default Semantic local work did not converge');
       await Bun.sleep(20);
     }
@@ -604,7 +611,6 @@ test('native Context publication and transferred custody minimize private bodies
   const context = await f.call(author, 'POST', '/v1/contexts', { labels: { en: 'Private extension payload' } });
   expect(context.status, JSON.stringify(context.body)).toBe(201);
   const publishExtension = async (id: string, publisher = author) => {
-    await f.grant(id, publisher, ['definitions:publish', 'definitions:activate']);
     const extension = {
       format: EXTENSION_FORMAT,
       context: id,

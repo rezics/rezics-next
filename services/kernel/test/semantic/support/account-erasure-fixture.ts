@@ -111,7 +111,6 @@ export async function accountErasureFixture() {
     expect(result.status, JSON.stringify({ resource: id, actions: granted, response: result.body })).toBe(201);
   }
   async function delegated(principal: Person, delegate: Person) {
-    await grant(principal.accountId, principal, ['access:delegate']);
     const context = { pool: db.pool, deadline: Date.now() + 30_000 };
     const actor = await native.access.authenticate(principal.bearer, context);
     const requestId = Bun.randomUUIDv7();

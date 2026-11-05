@@ -19,11 +19,13 @@ import {
   type Resource,
 } from '../../src/request/access.ts';
 import { newId } from '../../src/route/route.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 // A single connection also detects any nested checkout during final authorization.
 const pool = new pg.Pool({ connectionString: url, max: 1 });
+configureTestReceiptKeys(pool);
 afterAll(() => pool.end());
 const id = (route: string, suffix: string) => `00000000-0000-7000-8000-${route}${suffix.padStart(8, '0')}`;
 const actorId = id('1234', '1');
@@ -110,12 +112,13 @@ async function context(actor: Actor = identity(), deadline = Date.now() + 5000) 
     account: actor.kind === 'account' ? await readAccount(pool, routeOf(actor.accountId), actor.accountId) : null,
   };
 }
+const resourceRoles = {
+  roles: { 'fixture.subject.reader': [action] },
+  types: { subject: { owner: 'fixture.subject.reader', standing: [] } },
+};
 const access = createAccess({
   actions,
-  resourceRoles: {
-    roles: { 'fixture.subject.reader': [action] },
-    types: { subject: { owner: 'fixture.subject.reader', standing: [] } },
-  },
+  resourceRoles,
   accountEvidence: (_actor, ctx) => ctx.account,
 });
 async function prepare(actor: Actor = identity(), verb = action, target = resource, deadline?: number) {
@@ -326,7 +329,7 @@ test('exact own-account and registered Global profiles retain their native ceili
   ).rejects.toBeInstanceOf(RangeError);
   expect(
     await ownBatch.decide(pool, { action: ownAccountAction, resourceType: 'access.account', ids: [actorId] }),
-  ).toEqual({ [actorId]: { allowed: true, explicit: false } });
+  ).toEqual({ [actorId]: { allowed: true, explicit: true } });
 
   const governor = identity({ scopes: ['post:erase'], requestedBy: null });
   await grant(actorId, 'post:erase', PLATFORM_RESOURCE);
@@ -365,7 +368,7 @@ test('the already-read actor state and epoch fail closed without an actor reread
     expect(await check(pool)).toBe(true);
   });
   expect(await access.authorize(pool, actor, action, resource)).toBe(false);
-  const missing = createAccess({ actions, accountEvidence: () => null });
+  const missing = createAccess({ actions, resourceRoles, accountEvidence: () => null });
   expect(await (await accessCheck(missing, actor, action, resource, ctx))(pool)).toBe(false);
 });
 
@@ -374,6 +377,7 @@ test('unresolved account, grant, assignment and membership reads deny at the pro
   await unavailable('account', async () => {
     const missing = createAccess({
       actions,
+      resourceRoles,
       accountEvidence: () => {
         throw new Error('unresolved account');
       },

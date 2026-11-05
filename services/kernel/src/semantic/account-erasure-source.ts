@@ -90,6 +90,8 @@ class BudgetEnded extends Error {}
 function meteredPool(pool: Pool, cost: PublicFilterCost, limit: number, deadline: number): Pool {
   let bytes = 0;
   const mutable = cost as { -readonly [K in keyof PublicFilterCost]: PublicFilterCost[K] };
+  const wireBytes = (value: unknown) =>
+    Buffer.byteLength(JSON.stringify(value, (_key, part) => (typeof part === 'bigint' ? part.toString() : part)));
   return new Proxy(pool, {
     get(target, key) {
       if (key !== 'connect') {
@@ -99,29 +101,36 @@ function meteredPool(pool: Pool, cost: PublicFilterCost, limit: number, deadline
       return async () => {
         if (Date.now() >= deadline || mutable.inputKeys >= limit) throw new BudgetEnded();
         const client = await target.connect();
+        const nativeQuery = client.query.bind(client);
+        // Accounting adapters may replace query while they hold this checkout.
+        // Keep those replacements on this facade, never on the pooled client.
+        let query = (async (...args: [string, unknown[]?]) => {
+          const rollback = typeof args[0] === 'string' && args[0] === 'ROLLBACK';
+          const control = typeof args[0] === 'string' && /^(BEGIN|COMMIT|ROLLBACK|SET\b)/.test(args[0]);
+          if (!rollback && (Date.now() >= deadline || mutable.inputKeys >= limit)) throw new BudgetEnded();
+          mutable.dependencyPoints++;
+          bytes += wireBytes(args);
+          const fenceRows = control ? 0 : typeof args[0] === 'string' && args[0].includes('basis_write AS') ? 4 : 1;
+          if (!rollback && mutable.inputKeys + fenceRows > limit) throw new BudgetEnded();
+          const result = await nativeQuery(args[0], args[1]);
+          mutable.inputKeys += control ? 0 : Math.max(result.rows.length, result.rowCount ?? 0, fenceRows);
+          bytes += wireBytes(result.rows);
+          if (!rollback && (mutable.inputKeys > limit || bytes > 65536 || Date.now() >= deadline))
+            throw new BudgetEnded();
+          return result;
+        }) as typeof client.query;
         return new Proxy(client, {
           get(native, field) {
-            if (field !== 'query') {
-              const value = Reflect.get(native, field);
-              return typeof value === 'function' ? value.bind(native) : value;
+            if (field === 'query') return query;
+            const value = Reflect.get(native, field);
+            return typeof value === 'function' ? value.bind(native) : value;
+          },
+          set(native, field, value) {
+            if (field === 'query') {
+              query = value;
+              return true;
             }
-            return async (...args: [string, unknown[]?]) => {
-              // ROLLBACK must remain possible after budget exhaustion.
-              const rollback = typeof args[0] === 'string' && args[0] === 'ROLLBACK';
-              const control = typeof args[0] === 'string' && /^(BEGIN|COMMIT|ROLLBACK|SET\b)/.test(args[0]);
-              if (!rollback && (Date.now() >= deadline || mutable.inputKeys >= limit)) throw new BudgetEnded();
-              mutable.dependencyPoints++;
-              bytes += Buffer.byteLength(JSON.stringify(args));
-              // A native commit writes partition/outbox/basis as well as its returned fence row.
-              const fenceRows = control ? 0 : typeof args[0] === 'string' && args[0].includes('basis_write AS') ? 4 : 1;
-              if (!rollback && mutable.inputKeys + fenceRows > limit) throw new BudgetEnded();
-              const result = await native.query(args[0], args[1]);
-              mutable.inputKeys += control ? 0 : Math.max(result.rows.length, result.rowCount ?? 0, fenceRows);
-              bytes += Buffer.byteLength(JSON.stringify(result.rows));
-              if (!rollback && (mutable.inputKeys > limit || bytes > 65536 || Date.now() >= deadline))
-                throw new BudgetEnded();
-              return result;
-            };
+            return Reflect.set(native, field, value);
           },
         });
       };

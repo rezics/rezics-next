@@ -249,6 +249,14 @@ async function applyCleanup(pool: Pool, event: CloudEvent, envelope: Envelope, c
         });
       } else {
         await cleanupDone.run(tx, { route, actor_id: data.actorId, generation: data.generation });
+        // Even an empty final page commits the cleanup state. Its follow-up
+        // observes cleanup_pending=false and completes without another write.
+        if (events.length === 0)
+          events.push({
+            type: CLASSIFICATION_BALLOT_CLEANUP,
+            subject: data.actorId,
+            data: { actorId: data.actorId, generation: data.generation },
+          });
       }
       return { value: null, events };
     },

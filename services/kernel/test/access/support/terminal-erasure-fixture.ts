@@ -182,5 +182,3 @@ export async function createTerminalErasureFixture() {
     throw error;
   }
 }
-
-type QueryResultRow = Record<string, unknown>;

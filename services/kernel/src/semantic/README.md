@@ -1314,7 +1314,8 @@ object. Neither route has an If-Match contract. Successful responses contain onl
 a fresh request already in the requested state is a genuine noEffect and emits no event.
 
 The existing `semantic.context.owner` role includes `context:delete` and `context:restore` alongside
-`context:accept`, `context:adopt` and `access:grant`. The moderator role remains acceptance-only. Both lifecycle
+`context:accept`, `context:adopt`, `access:grant`, `definitions:publish` and `definitions:activate`. Extension
+publication and activation remain scoped to that Context and their publication gate. The moderator role remains acceptance-only. Both lifecycle
 actions require real Access authorization on the stable Context anchor and the exact direct current owner grant,
 read through the shared lifecycle reader on the same prepared client at native command T. Creation history and
 individual action grants do not establish ownership. Transferred owners can act; revoked owners cannot execute

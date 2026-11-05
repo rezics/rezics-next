@@ -238,6 +238,11 @@ acceptance remain deferred to integration; this consumer check does not establis
 
 **Acceptance decision:** Bind all eight frozen scenarios to the production Kernel HTTP handler, native Auth and DBOS in an isolated migrated database; provision fixture grants through the mounted grant API and its composed Access catalogue. Cover mounted pages on the ordinary seeded dev stack.
 
+Native setup uses each principal's provisioned self-delegation grant and each Context owner's extension rights;
+Global governance does not substitute for authority on those resources. Cleanup accounting keeps its query
+adapters local to each checkout and includes native bigint results. An empty classification cleanup page still
+commits its durable completion with the existing cleanup event.
+
 **Personas:** Deleting owner; old-token owner; anonymous reader; Bob or other affected user; owner-specific data producers; ordinary restore attempt.
 
 **Released fixture data:** `privacy` and `lifecycle/commerce` (accounts plus each owner); private and public data graph and terminal account records are produced by their owning stores.
