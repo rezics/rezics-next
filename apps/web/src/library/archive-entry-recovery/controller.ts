@@ -4,6 +4,7 @@ import {
   type ArchiveRecoveryPort,
   type ArchiveReply,
   type ArchiveReviewItem,
+  type ArchiveReply,
   type ArchiveRow,
   type NativeArchivePreview,
   type NativeArchiveReview,
@@ -24,10 +25,22 @@ type Visit = ArchiveRecoveryVisit<
   Omit<NativeArchivePreview, 'records'>,
   ResultPage['context']
 >;
-const sectionOf = (choice: ArchiveReviewItem): RecoverySection =>
-  choice.kind === 'entry' ? 'entries' : choice.kind === 'label' ? 'labels' : 'assignments';
+const sectionOf = (choice: ArchiveReviewItem): RecoverySection => {
+  switch (choice.kind) {
+    case 'entry':
+      return 'entries';
+    case 'label':
+      return 'labels';
+    case 'assignment':
+      return 'assignments';
+    case 'annotation':
+      return 'annotations';
+    case 'journal':
+      return 'journals';
+  }
+};
 export const supportedRecoverySection = (section: string): section is RecoverySection =>
-  ['entries', 'labels', 'assignments'].includes(section);
+  ['entries', 'labels', 'assignments', 'annotations', 'journals'].includes(section);
 
 export class ArchiveEntryRecoveryJourney {
   readonly visit: Visit;
@@ -291,10 +304,33 @@ export class ArchiveEntryRecoveryJourney {
     const row = this.visit.state!.results!.rows.find((row) => row.ordinal === ordinal)!;
     const uploadId = this.visit.state!.upload?.id;
     await this.#run(async () => {
-      const reply = row.subjectId ? await this.#port.entry(row.subjectId) : await this.#port.label(row.labelId!);
-      if (!this.#current() || this.visit.state!.upload?.id !== uploadId) return;
-      this.#feedback(reply);
-      if (reply.kind === 'ok') this.#readback = { ordinal, value: reply.value };
+      const accept = async <T>(replyPromise: Promise<ArchiveReply<T>>, select: (value: T) => unknown) => {
+        const reply = await replyPromise;
+        if (!this.#current() || this.visit.state!.upload?.id !== uploadId) return;
+        this.#feedback(reply);
+        if (reply.kind === 'ok') this.#readback = { ordinal, value: select(reply.value) };
+      };
+      switch (row.section) {
+        case 'entries':
+        case 'assignments':
+          await accept(this.#port.entry(row.subjectId!), (value) => value);
+          break;
+        case 'annotations':
+          await accept(this.#port.personal(row.subjectId!), (value) => value.personalEntry);
+          break;
+        case 'provenance':
+          await accept(this.#port.personal(row.subjectId!), (value) =>
+            value.personalEntry.sourceObservations.find(
+              (observation) => observation.provider === row.provider && observation.recordId === row.recordId,
+            ) ?? null,
+          );
+          break;
+        case 'journals':
+          await accept(this.#port.journal(row.sessionId!), (value) => value.journal);
+          break;
+        default:
+          await accept(this.#port.label(row.labelId!), (value) => value);
+      }
       // Current facts never checkpoint the original archive command.
     });
   }

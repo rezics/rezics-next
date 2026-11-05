@@ -142,6 +142,7 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
           {m.library_archive_scope_title()}
         </h2>
         <p>{m.library_archive_entry_scope()}</p>
+        <p>{m.library_archive_personal_help()}</p>
         <p>{m.library_archive_deliberate()}</p>
         <p>{m.library_archive_history()}</p>
       </section>
@@ -199,16 +200,34 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                     </>
                   )}
                   {supportedRecoverySection(row.section) && !['applying', 'acknowledged'].includes(row.status) ? (
-                    <MappingForm
-                      key={`${row.ordinal}:${state.upload!.id}`}
-                      row={row}
-                      disabled={
-                        busy ||
-                        locked ||
-                        (state.choices.length >= 20 && !state.choices.some((choice) => choice.ordinal === row.ordinal))
-                      }
-                      onChoose={(choice) => journey!.choose(choice)}
-                    />
+                    row.section === 'annotations' ? (
+                      <AnnotationMappingForm
+                        key={`${row.ordinal}:${state.upload!.id}`}
+                        row={row}
+                        disabled={busy || locked || (state.choices.length >= 20 && !state.choices.some((c) => c.ordinal === row.ordinal))}
+                        onChoose={(choice) => journey!.choose(choice)}
+                      />
+                    ) : row.section === 'journals' ? (
+                      <JournalMappingForm
+                        key={`${row.ordinal}:${state.upload!.id}`}
+                        row={row}
+                        disabled={busy || locked || (state.choices.length >= 20 && !state.choices.some((c) => c.ordinal === row.ordinal))}
+                        onChoose={(choice) => journey!.choose(choice)}
+                      />
+                    ) : row.section === 'provenance' ? (
+                      <p>{m.library_archive_entry_retained()}</p>
+                    ) : (
+                      <MappingForm
+                        key={`${row.ordinal}:${state.upload!.id}`}
+                        row={row}
+                        disabled={
+                          busy ||
+                          locked ||
+                          (state.choices.length >= 20 && !state.choices.some((choice) => choice.ordinal === row.ordinal))
+                        }
+                        onChoose={(choice) => journey!.choose(choice)}
+                      />
+                    )
                   ) : (
                     <p>{m.library_archive_entry_retained()}</p>
                   )}
@@ -518,6 +537,119 @@ function MappingForm({
         <button type="submit" className={control}>
           {m.library_archive_entry_select({ ordinal: row.ordinal })}
         </button>
+      </fieldset>
+    </form>
+  );
+}
+
+function FieldChoiceSelect({
+  id,
+  name,
+  label,
+  disabled,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  disabled: boolean;
+}) {
+  return (
+    <label htmlFor={id} className="block space-y-1">
+      <span className="font-medium">{label}</span>
+      <select id={id} className={`${control} block w-full`} name={name} defaultValue="preserve" disabled={disabled}>
+        <option value="preserve">{m.library_archive_entry_preserve()}</option>
+        <option value="set">{m.library_archive_personal_set()}</option>
+        <option value="clear">{m.library_archive_personal_clear()}</option>
+      </select>
+    </label>
+  );
+}
+
+function fieldChoice(values: FormData, name: string): 'preserve' | 'set' | 'clear' {
+  const value = values.get(name);
+  if (value === 'preserve' || value === 'set' || value === 'clear') return value;
+  throw new Error('invalid_archive_field_choice');
+}
+
+function AnnotationMappingForm({
+  row,
+  disabled,
+  onChoose,
+}: {
+  row: ArchiveRow;
+  disabled: boolean;
+  onChoose: (choice: ArchiveReviewItem) => void;
+}) {
+  const prefix = `archive-annotation-${row.ordinal}`;
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const values = new FormData(event.currentTarget);
+        onChoose({
+          ordinal: row.ordinal,
+          kind: 'annotation',
+          subjectId: String(values.get('subjectId')),
+          incarnationId: String(values.get('incarnationId')),
+          fields: {
+            note: fieldChoice(values, 'note'),
+            priority: fieldChoice(values, 'priority'),
+          },
+        });
+      }}
+    >
+      <fieldset disabled={disabled} className="space-y-3">
+        <label htmlFor={`${prefix}-subject`}>{m.library_archive_entry_subject_id()}</label>
+        <input id={`${prefix}-subject`} className={`${control} block w-full`} name="subjectId" required pattern={uuidPattern} autoComplete="off" />
+        <label htmlFor={`${prefix}-incarnation`}>{m.library_archive_personal_incarnation()}</label>
+        <input id={`${prefix}-incarnation`} className={`${control} block w-full`} name="incarnationId" required pattern={uuidPattern} autoComplete="off" />
+        <FieldChoiceSelect id={`${prefix}-note`} name="note" label={m.library_archive_personal_note()} disabled={disabled} />
+        <FieldChoiceSelect id={`${prefix}-priority`} name="priority" label={m.library_archive_personal_priority()} disabled={disabled} />
+        <button type="submit" className={control}>{m.library_archive_entry_select({ ordinal: row.ordinal })}</button>
+      </fieldset>
+    </form>
+  );
+}
+
+function JournalMappingForm({
+  row,
+  disabled,
+  onChoose,
+}: {
+  row: ArchiveRow;
+  disabled: boolean;
+  onChoose: (choice: ArchiveReviewItem) => void;
+}) {
+  const prefix = `archive-journal-${row.ordinal}`;
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const values = new FormData(event.currentTarget);
+        onChoose({
+          ordinal: row.ordinal,
+          kind: 'journal',
+          subjectId: String(values.get('subjectId')),
+          sessionId: String(values.get('sessionId')),
+          fields: {
+            startDate: fieldChoice(values, 'startDate'),
+            finishDate: fieldChoice(values, 'finishDate'),
+            reflection: fieldChoice(values, 'reflection'),
+          },
+        });
+      }}
+    >
+      <fieldset disabled={disabled} className="space-y-3">
+        <label htmlFor={`${prefix}-subject`}>{m.library_archive_entry_subject_id()}</label>
+        <input id={`${prefix}-subject`} className={`${control} block w-full`} name="subjectId" required pattern={uuidPattern} autoComplete="off" />
+        <label htmlFor={`${prefix}-session`}>{m.library_archive_personal_session()}</label>
+        <input id={`${prefix}-session`} className={`${control} block w-full`} name="sessionId" required pattern={uuidPattern} autoComplete="off" />
+        <FieldChoiceSelect id={`${prefix}-start`} name="startDate" label={m.library_archive_personal_start_date()} disabled={disabled} />
+        <FieldChoiceSelect id={`${prefix}-finish`} name="finishDate" label={m.library_archive_personal_finish_date()} disabled={disabled} />
+        <FieldChoiceSelect id={`${prefix}-reflection`} name="reflection" label={m.library_archive_personal_reflection()} disabled={disabled} />
+        <button type="submit" className={control}>{m.library_archive_entry_select({ ordinal: row.ordinal })}</button>
       </fieldset>
     </form>
   );

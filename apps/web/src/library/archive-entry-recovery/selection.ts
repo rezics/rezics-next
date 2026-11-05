@@ -1,5 +1,5 @@
 /** Local intent only. These types do not describe or replace a native HTTP DTO. */
-export type RecoverySection = 'entries' | 'labels' | 'assignments';
+export type RecoverySection = 'entries' | 'labels' | 'assignments' | 'annotations' | 'journals' | 'provenance';
 export type RecoveryChoice<T> = Readonly<{ ordinal: number; section: RecoverySection; choice: T }>;
 
 export const recoverySelectionLimit = 20;
@@ -46,7 +46,11 @@ export class RecoverySelection<T> {
   }
 
   set(ordinal: number, section: RecoverySection, choice: T): void {
-    if (!Number.isSafeInteger(ordinal) || ordinal < 0 || !['entries', 'labels', 'assignments'].includes(section))
+    if (
+      !Number.isSafeInteger(ordinal) ||
+      ordinal < 0 ||
+      !['entries', 'labels', 'assignments', 'annotations', 'journals', 'provenance'].includes(section)
+    )
       throw new Error('invalid_selection');
     if (!this.#choices.has(ordinal) && this.#choices.size >= recoverySelectionLimit) throw new Error('selection_limit');
     this.#choices.set(ordinal, ownRecoveryValue({ ordinal, section, choice }));

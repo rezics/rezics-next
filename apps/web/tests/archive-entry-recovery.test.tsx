@@ -40,6 +40,7 @@ test('Every locale mounts native file admission and explains the supported branc
       for (const text of [
         m.library_archive_entry_upload_help(),
         m.library_archive_entry_scope(),
+        m.library_archive_personal_help(),
         m.library_archive_deliberate(),
       ])
         expect(html).toContain(escaped(text));

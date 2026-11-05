@@ -2,6 +2,8 @@ import type { KernelClient } from '@rezics/client';
 
 export type GeneratedArchiveRecoveryMethod = Extract<keyof KernelClient, 'libraryArchiveMerges'>;
 type ArchiveOwner = ReturnType<KernelClient['libraryArchiveMerges']>;
+type PersonalEntryOwner = ReturnType<KernelClient['libraryEntries']>;
+type ProgressSessionOwner = ReturnType<KernelClient['progressSessions']>;
 type Data<Call extends (...args: never[]) => unknown> = NonNullable<
   Awaited<ReturnType<Call>> extends { data: infer T } ? T : never
 >;
@@ -10,12 +12,11 @@ export type NativeArchivePreview = Data<ArchiveOwner['preview']['get']>;
 export type NativeArchiveResults = Data<ArchiveOwner['results']['get']>;
 export type NativeArchiveReview = Data<ArchiveOwner['review']['patch']>;
 export type NativeArchiveApply = Data<ArchiveOwner['apply']['post']>;
-export type ArchiveReviewItem = Extract<
-  Parameters<ArchiveOwner['review']['patch']>[0]['items'][number],
-  { kind: 'entry' | 'label' | 'assignment' }
->;
+export type ArchiveReviewItem = Parameters<ArchiveOwner['review']['patch']>[0]['items'][number];
 export type ArchiveConfirmation = Parameters<ArchiveOwner['apply']['post']>[0];
 export type ArchiveRow = NativeArchivePreview['records'][number];
+export type NativePersonalEntry = Data<PersonalEntryOwner['personal']['get']>;
+export type NativeJournal = Data<ProgressSessionOwner['journal']['get']>;
 export type ArchiveReply<T> =
   | { kind: 'ok'; value: T }
   | { kind: 'refused'; status: number; code: string }
@@ -87,6 +88,12 @@ export function archiveRecoveryNative(client: KernelClient, authorization: strin
     },
     entry(subjectId: string, signal?: AbortSignal) {
       return receive(() => client.libraryEntries({ subjectId }).get({ ...options(signal), query: { view: 'FULL' } }));
+    },
+    personal(subjectId: string, signal?: AbortSignal) {
+      return receive(() => client.libraryEntries({ subjectId }).personal.get(options(signal)));
+    },
+    journal(sessionId: string, signal?: AbortSignal) {
+      return receive(() => client.progressSessions({ sessionId }).journal.get(options(signal)));
     },
     label(labelId: string, signal?: AbortSignal) {
       return receive(() =>
