@@ -404,6 +404,15 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
       kind: 'current',
       visit: { context: contextId, realm: realmId },
     });
+    const formerSlug = new URL(
+      contract.screenCurrentVisitHref(entry.pathname.replace('/the-observatory/', '/former-title/'), visit)!,
+      'https://site.invalid',
+    );
+    formerSlug.searchParams.set('realm', realmId);
+    await go(formerSlug.pathname + formerSlug.search);
+    expect(router.state.location.pathname).toBe(entry.pathname);
+    expect(router.state.location.searchStr).toBe(formerSlug.search);
+    expect(contract.screenCurrentRouteVisit(router.state.location.searchStr)).toEqual({ kind: 'current', visit });
     await go(contract.screenCurrentVisitHref(entry.pathname, visit)!);
     expect(ui.host.textContent).toContain(ui.m.screen_visit_unsupported());
     expect(ui.host.querySelector('input, textarea')).toBeNull();
@@ -440,7 +449,40 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
     expect(router.state.location.searchStr).toContain(`realm=${realmId}`);
     expect(ui.window.document.activeElement?.id).toBe(contract.screenCurrentInspectionId(statement.id));
 
+    // The same statement ID under another property does not preserve the exact occurrence.
+    nativeSubject = structuredClone(nativeSubject);
+    nativeSubject.subject.statements[property] = [];
+    nativeSubject.subject.statements['schema:dateCreated'] = [
+      { ...structuredClone(statement), property: { ...statement.property, id: 'schema:dateCreated' } },
+    ];
+    await go(contract.screenCurrentVisitHref(entry.pathname, visit)!);
+    expect(ui.host.textContent).toContain(ui.m.screen_visit_occurrence_missing());
+    expect(ui.host.querySelector(`#${contract.screenCurrentInspectionId(statement.id)}`)).toBeNull();
+    expect(ui.host.innerHTML).not.toContain(statement.id);
+
+    // A fresh read with the exact occurrence still withholds its identity behind the spoiler gate.
+    await go(source);
+    nativeSubject.subject.statements['schema:dateCreated'] = [];
+    nativeSubject.subject.statements[property] = [
+      {
+        ...structuredClone(statement),
+        qualifiers: [
+          ...statement.qualifiers,
+          {
+            property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+            value: { type: 'value', content: { amount: '+2', unit: '1' } },
+          },
+        ],
+      },
+    ];
+    await go(contract.screenCurrentVisitHref(entry.pathname, visit)!);
+    expect(ui.host.textContent).toContain(ui.m.screen_visit_occurrence_missing());
+    expect(ui.host.querySelector(`#${contract.screenCurrentInspectionId(statement.id)}`)).toBeNull();
+    expect(ui.host.innerHTML).not.toContain(statement.id);
+    expect(link(ui.m.screen_visit_inspect())).toBeUndefined();
+
     // Withheld evidence cannot be reconstructed from a previously valid locator.
+    await go(source);
     nativeSubject = structuredClone(nativeSubject);
     nativeSubject.subject.statements[property] = [];
     await go(contract.screenCurrentVisitHref(entry.pathname, visit)!);
