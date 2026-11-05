@@ -83,7 +83,7 @@ There is no synchronous membership materialization, publication barrier, qualifi
 
 ## Event production and finite rebuilds
 
-Register `com.rezics.subject.relation_facet_changed.v1` in `semantic/events.ts` through `events/catalogue.ts` before
+Register `com.rezics.subject.relation_facet_changed.v1` in `events/contracts/semantic.ts` through `events/catalogue.ts` before
 any emitting command. An unproven point read uses a bounded source-home `runCommand` to atomically upsert the dirty
 job and emit one source-only changed event when a logical request first becomes pending. Its subject is the SOURCE
 subject and its partition is that source's partition; it never asks Search to rebuild the target. Duplicate probes,

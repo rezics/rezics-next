@@ -57,7 +57,7 @@ authorization stay unchanged. They add no Access or SQL calls. The read sends `c
 action/scope `exposure:manage_read`. It checks that exact action directly on the fixed Global Context, before reading
 configuration and again before disclosure. The additive `platform.governance` role supplies this action; neither
 `gate:any` nor discovery admission supplies management authority. This action has no Global reach or default grant.
-The role's native definition is `access/platform-governance.json`; `resource-roles.json` does not define it.
+The role's native definition is `events/contracts/access-platform-governance.json`; `resource-roles.json` does not define it.
 
 The native export is
 `readExposureManagementPage({ pool, access, clock?, cursorKeys, routes }, actor, { cursor?, limit? }, { deadline })`.

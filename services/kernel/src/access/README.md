@@ -140,7 +140,7 @@ authorization prerequisite. Pre-I/O quotes, prepaid/no-refill ledgers and per-pr
 not adopted admission requirements. This does not relax permissions, isolation, native identity/proofs,
 replay/deadlines, store entry or bounded progress. [History/Work](../history/README.md) owns execution.
 
-`access/work.ts` retains optional accounting metadata with dimensions
+`work/access-work.ts` retains optional accounting metadata with dimensions
 `{keys, points, witnesses, rows, bytes, emptySeeks}`. Its existing capture/reservation APIs are implementation
 instrumentation, not another permission operand. Retained metered adapters still have source-level declaration
 refusals; this adoption does not claim their static-bound migration or native acceptance. A missing foreign

@@ -513,7 +513,7 @@ selection tokens. Latest captions come from a head point join, without history s
 Decision: a native question-home epoch change returns `409 stale_cursor`, while same-epoch caption appends preserve
 the captured ceiling.
 
-`rating/events.ts` changes outside the declared paths to register the caption event; `test/kernel.test.ts`
+`events/contracts/rating.ts` changes outside the declared paths to register the caption event; `test/kernel.test.ts`
 adds the three mounted paths to the exhaustive typed native route contract. No existing behavior assertion is
 removed. `library/collection-reads.ts` removes an identical duplicate import already present on the base, solely
 to unblock the required workspace type-check; library behavior is unchanged. `db/rating/schema.sql` records the additive migration snapshot.

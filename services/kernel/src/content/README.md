@@ -1303,7 +1303,7 @@ Responses are private/no-store and the history is not a public feed or search so
   capped by `MEMBERSHIP_LIMIT=1000` plus one coverage row), at most two selected-target/Global candidate formulas,
   and at most D=2000 matched organization/Realm role readers. Each final formula is one SQL statement. For I≤2
   identities, R≤2I×1000 role records and K configured grant roles for the action, the owner declaration in
-  `access/work.ts:accessNativeDeclaration` expands candidate/formula native probes as
+  `work/access-work.ts:accessNativeDeclaration` expands candidate/formula native probes as
   `P=T×(R+2I)×J`, `N=P×(K+4)`, and rows as
   `N+assignment+1+T+(R+2I)+J+P+T×J+6T`, with T≤2 and J=1 here. Organization role dependencies are one
   statement/five native rows each; Realm dependencies use the registered owner's finite current-role producer.

@@ -216,7 +216,7 @@ No callback into Search internals and no edit to `search-source.ts` is needed fo
 Implementation-ready paths:
 
 - New `src/semantic/relation-facet-rebuilds.ts`, typed registration/page/plan/request/backfill SQL and focused unit tests.
-- `src/semantic/bulk.ts`, its exact candidate metadata SQL, `src/semantic/subject.ts`, and `src/semantic/events.ts`.
+- `src/semantic/bulk.ts`, its exact candidate metadata SQL, `src/semantic/subject.ts`, and `src/events/contracts/semantic.ts`.
 - Lifecycle sweep integration in `src/semantic/merges.ts` and `src/semantic/moderation.ts`, with independently durable
   cleanup/backfill continuations; do not turn merge into a source-degree synchronous command.
 - A new semantic migration, regenerated `db/semantic/schema.sql`, and placement tests for every statement.

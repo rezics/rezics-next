@@ -219,7 +219,7 @@ The audit contains only the governance account, Global resource and role. Repeat
 another account refuses. The marker survives grant revocation, so rerunning the command cannot restore rights.
 Concurrent invocations select one winner, and a failed commit leaves none of these effects.
 
-The role expands from `src/access/platform-governance.json`, intersected once at app composition with its trusted
+The role expands from `src/events/contracts/access-platform-governance.json`, intersected once at app composition with its trusted
 mounted action catalogue. Missing modules contribute no callable actions. All other role validation stays strict.
 Later delegation and revocation use ordinary grant commands: the grantor needs management and every delegated
 action on Global, with actual client scopes as a separate ceiling. Governance grants imply no rights on other
@@ -898,7 +898,7 @@ the owning eligibility callback and H-hop costs remain additional.
 
 ### Native Auth current consent: usage, security and cost
 
-`src/access/auth-consent.ts` exports `CurrentConsentReader` and
+`src/request/auth-consent.ts` exports `CurrentConsentReader` and
 `createAuthConsentReader({ url, serviceTokenId, serviceTokenSecret, fetch? })`.
 Trusted server composition supplies the exact private HTTPS
 `/internal/v1/consents:read` URL and the existing kernel worker's Cloudflare Access
