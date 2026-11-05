@@ -353,9 +353,14 @@ test('a saved selection retains its accepted release through fresh publication a
   const digest = releaseDigest(release);
   await f.grant(f.manager.accountId, ['definitions:publish', 'definitions:activate']);
   expect((await f.send('POST', '/v1/definitions/releases', { release }, f.manager.bearer)).status).toBe(201);
-  const activated = await f.send('POST', `/v1/definitions/releases/${digest}:activate`, {
-    expected_head: original.head,
-  }, f.manager.bearer);
+  const activated = await f.send(
+    'POST',
+    `/v1/definitions/releases/${digest}:activate`,
+    {
+      expected_head: original.head,
+    },
+    f.manager.bearer,
+  );
   expect(activated.status).toBe(200);
   try {
     const input = { revision: collection.revision, subjectIds: [subject] };
@@ -371,8 +376,17 @@ test('a saved selection retains its accepted release through fresh publication a
     expect(beforeReplay.members).toEqual([subject]);
     expect((await f.send('POST', path(collection.id), input, f.reduced, key)).status).toBe(403);
   } finally {
-    expect((await f.send('POST', `/v1/definitions/releases/${original.digest}:activate`, {
-      expected_head: (await activated.json()).head,
-    }, f.manager.bearer)).status).toBe(200);
+    expect(
+      (
+        await f.send(
+          'POST',
+          `/v1/definitions/releases/${original.digest}:activate`,
+          {
+            expected_head: (await activated.json()).head,
+          },
+          f.manager.bearer,
+        )
+      ).status,
+    ).toBe(200);
   }
 }, 120_000);

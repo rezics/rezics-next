@@ -200,13 +200,7 @@ async function prepareSelection(
       throw error;
     }
   });
-  const admission = await admitSavedCollectionMemberQuery(
-    deps,
-    actor,
-    saved.rule,
-    {},
-    deadline,
-  );
+  const admission = await admitSavedCollectionMemberQuery(deps, actor, saved.rule, {}, deadline);
   if (!admission.filter || admission.releaseDigest !== saved.rule.releaseDigest) throw unavailable();
   const checks = await prepareCollectionRuleAuthority(deps, actor, admission.filter, attempt, deadline);
   const bound = await bindOwnerFilterRead(deps, actor, collectionId, admission, deadline, attempt, undefined, {

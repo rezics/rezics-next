@@ -566,7 +566,16 @@ export async function admitSavedCollectionMemberQuery(
       invalidFilter(error);
     }
   }
-  return finishCollectionMemberAdmission(deps, viewer, filter, release, rule.releaseDigest, deadline, true, rule.source);
+  return finishCollectionMemberAdmission(
+    deps,
+    viewer,
+    filter,
+    release,
+    rule.releaseDigest,
+    deadline,
+    true,
+    rule.source,
+  );
 }
 
 async function finishCollectionMemberAdmission(
