@@ -211,6 +211,14 @@ their obsolete Continue guidance at that writer's cutover; those files are inten
 
 The Web destination admits absent or nonempty opaque cursors of at most 4096 UTF-16 code units; malformed and native invalid/stale positions require explicit newest-page navigation that preserves other URL fields. Loading and retry retain the requested position; neither denial nor unavailability is an empty resume list.
 
+### Window navigation
+
+Decision: Keep the cursor trail in one memory-only QueryClient record for the Router history visit; only an exact successful native page read commits a staged move, and reader identity replacement or newest recovery retires that trail.
+
+Next stages the supplied native `next` cursor. Previous returns to the latest accepted predecessor, and First deliberately reads the native first window. A fresh direct visit to a later cursor has no invented Previous, but can choose First. A staged target becomes current only when that exact address returns a loaded native result; preparing, denied, signed-out, unavailable, malformed and stale results do not advance history. Retry repeats the same staged address. Stale recovery removes only `cursor`, preserves other query fields and the fragment, and starts without the retired trail.
+
+The route visit retains at most eight accepted predecessor cursors, the current cursor and one staged target. Each cursor stays within the existing 4096 UTF-16 code-unit address bound. Store coordinates only: keep at most the current six FULL native rows in the existing reader, with no copied page bodies, sessions or historical Subject cache. One deliberate movement makes one existing native read; there is no prefetch, refill, second reader or durable storage. Keyboard heading focus returns only while the initiating intent remains eligible and still owns focus.
+
 - Touches: owner-local indexed active-role/session candidates, accepted meaning/current disclosure, canonical
   epoch and bounded BASIC session projection. Indexes remain derived discovery, never personal truth or permission.
 - Bound: [filtered-list](filtered-lists.md#cost) direct/ready/preparation and useful-page budgets, including actual
