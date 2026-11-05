@@ -359,7 +359,8 @@ test('the first-page pins read remains one request for 0, 8, and 100 pins', asyn
                 delete: { operationId: 'library_pin.delete' },
               },
             },
-          }),
+          },
+        }),
       },
       libraryPins: {
         get: async ({ query }: { query: { limit: number } }) => {
@@ -445,7 +446,8 @@ test('the library navigation reads one first page of pins and owner Collections,
                 delete: { operationId: 'library_pin.delete' },
               },
             },
-          }),
+          },
+        }),
       },
       libraryPins: {
         get: async ({ query }: { query: { limit: number } }) => {
