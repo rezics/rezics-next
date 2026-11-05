@@ -67,7 +67,7 @@ describe('Creator offer publication consumes exact native terms and existing own
     });
     expect(
       await loadCreatorEditor(editionApi(metadata), nativeMoneySchemaApi, 'Bearer seller', metadata.editionId),
-    ).toEqual({ kind: 'unavailable' });
+    ).toEqual({ kind: 'price-unavailable', edition: metadata });
     expect(await nativeOwnedOffersApi.list('Bearer seller', { limit: 20 })).toEqual({ kind: 'unavailable' });
     expect(await loadCreatorEditor(editionApi(metadata), schemaApi, 'Bearer seller')).toEqual({
       kind: 'choose-edition',
@@ -86,7 +86,10 @@ describe('Creator offer publication consumes exact native terms and existing own
       'canSell',
     ])
       expect(() => validateCreatorOfferMutation({ ...create, [key]: true })).toThrow();
-    expect(() => validateCreatorOfferMutation({ ...create, unitAmountMinor: 49 })).toThrow();
+    expect(validateCreatorOfferMutation({ ...create, unitAmountMinor: 49 })).toEqual({
+      ...create,
+      unitAmountMinor: 49,
+    });
     expect(() => validateCreatorOfferMutation({ ...create, unitAmountMinor: 12.99 })).toThrow();
   });
   test('create forwards only the current native body; uncertain retries retain the exact body and key', async () => {

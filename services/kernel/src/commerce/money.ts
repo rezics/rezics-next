@@ -1,9 +1,12 @@
+import {
+  decodeRecordedMoneyUnit,
+  sameMoneyUnit as equalRecordedMoneyUnits,
+  validateMinorAmount,
+  type RecordedMoneyUnit,
+} from '@rezics/money';
+
 /** Adopted Stripe field units; this evidence never admits a sale or qualifies an account. */
-export type StripeMoneyUnit = Readonly<{
-  system: 'stripe-api';
-  exponent: 0 | 2;
-  factsVersion: 'stripe-money-v1';
-}>;
+export type StripeMoneyUnit = RecordedMoneyUnit<'stripe-api', 0 | 2, 'stripe-money-v1'>;
 export type MoneyFieldContext =
   | 'integration_price'
   | 'checkout_integration'
@@ -12,9 +15,9 @@ export type MoneyFieldContext =
 export type ConfiguredSaleCurrencyRule = Readonly<{
   currency: 'usd' | 'eur';
   unit: StripeMoneyUnit;
-  minAmountMinor: 50;
-  maxAmountMinor: 99999999;
-  chargeMultiple: 1;
+  minAmountMinor: number;
+  maxAmountMinor: number;
+  chargeMultiple: number;
 }>;
 export type CommerceMoneyPolicy = Readonly<{
   configuredSaleCurrencies: readonly ConfiguredSaleCurrencyRule[];
@@ -37,6 +40,14 @@ export const stripeMoneyFacts = Object.freeze([
     .split(' ')
     .map((currency) => Object.freeze({ currency, contexts: chargeContexts, unit: scale2 })),
 ]);
+/** Recognized recorded descriptors are derived from field facts, never from the current currency alone. */
+export const stripeRecordedMoneyUnits: readonly StripeMoneyUnit[] = Object.freeze(
+  Array.from(
+    new Map(
+      stripeMoneyFacts.map(({ unit }) => [`${unit.system}:${unit.exponent}:${unit.factsVersion}`, unit] as const),
+    ).values(),
+  ),
+);
 export function readStripeMoneyUnit(currency: string, context: MoneyFieldContext): StripeMoneyUnit | null {
   return (
     stripeMoneyFacts.find((row) => row.currency === currency && (row.contexts as readonly string[]).includes(context))
@@ -91,16 +102,14 @@ export function validateOfferAmount(
   taxBehavior: 'exclusive';
 }> {
   const rule = policy.configuredSaleCurrencies.find((row) => row.currency === input.currency);
-  if (
-    (input.currency !== 'usd' && input.currency !== 'eur') ||
-    !rule ||
-    !Number.isSafeInteger(input.amountMinor) ||
-    input.amountMinor <= 0 ||
-    input.amountMinor < rule.minAmountMinor ||
-    input.amountMinor > rule.maxAmountMinor ||
-    input.amountMinor % rule.chargeMultiple !== 0
-  )
-    throw new RangeError('Invalid configured sale amount');
+  if ((input.currency !== 'usd' && input.currency !== 'eur') || !rule)
+    throw new RangeError('unsupported-currency');
+  const amount = validateMinorAmount(input.amountMinor, {
+    minimumMinor: rule.minAmountMinor,
+    maximumMinor: rule.maxAmountMinor,
+    incrementMinor: rule.chargeMultiple,
+  });
+  if (!amount.ok) throw new RangeError(amount.error.code);
   return Object.freeze({ moneyUnit: scale2, taxBehavior: 'exclusive' });
 }
 
@@ -116,18 +125,13 @@ export function stripeEvidenceMoneyUnit(currency: string, context: StripeMoneyCo
 }
 
 export function sameMoneyUnit(a: StripeMoneyUnit | null | undefined, b: StripeMoneyUnit | null | undefined): boolean {
-  return !!a && !!b && a.system === b.system && a.exponent === b.exponent && a.factsVersion === b.factsVersion;
+  return !!a && !!b && equalRecordedMoneyUnits(a, b);
 }
 
 /** Validates serialized recorded meaning; never fills missing historical metadata. */
 export function recordedMoneyUnit(value: unknown): StripeMoneyUnit | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const unit = value as Record<string, unknown>;
-  return unit.system === 'stripe-api' &&
-    (unit.exponent === 0 || unit.exponent === 2) &&
-    unit.factsVersion === 'stripe-money-v1'
-    ? { system: 'stripe-api', exponent: unit.exponent, factsVersion: 'stripe-money-v1' }
-    : null;
+  const reading = decodeRecordedMoneyUnit(value, stripeRecordedMoneyUnits);
+  return reading.kind === 'known' ? (reading.unit as StripeMoneyUnit) : null;
 }
 
 /** Lineage of the actual API operation, excluding credentials, tokens and provider bodies. */
