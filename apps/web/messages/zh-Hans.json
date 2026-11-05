@@ -1114,6 +1114,7 @@
   "library_entry_review_retry": "重试状态更新",
   "library_entry_review_save": "保存状态",
   "library_entry_review_subject": "条目",
+  "discovery_collection_follow_uncertain": "无法确认发送结果。重试此操作会发送同一个原始请求。",
   "library_follow": "关注",
   "library_follow_more_actions": "{title}的更多操作",
   "library_follow_reason_library": "从你的书架添加",

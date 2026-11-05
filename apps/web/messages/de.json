@@ -1114,6 +1114,7 @@
   "library_entry_review_retry": "Statusänderung erneut versuchen",
   "library_entry_review_save": "Status speichern",
   "library_entry_review_subject": "Subject",
+  "discovery_collection_follow_uncertain": "Die Übermittlung ist ungewiss. Wiederhole diese Aktion, um dieselbe ursprüngliche Anfrage zu senden.",
   "library_follow": "Folgen",
   "library_follow_more_actions": "Weitere Aktionen für {title}",
   "library_follow_reason_library": "Aus deiner Bibliothek hinzugefügt",

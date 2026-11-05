@@ -1125,6 +1125,7 @@
   "library_entry_review_retry": "Retry state update",
   "library_entry_review_save": "Save state",
   "library_entry_review_subject": "Subject",
+  "discovery_collection_follow_uncertain": "Delivery is uncertain. Retry this action to send the same original request.",
   "library_follow": "Follow",
   "library_follow_more_actions": "More actions for {title}",
   "library_follow_reason_library": "Added from your library",

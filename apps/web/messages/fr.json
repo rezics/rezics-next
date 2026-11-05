@@ -1114,6 +1114,7 @@
   "library_entry_review_retry": "Réessayer la mise à jour de l’état",
   "library_entry_review_save": "Enregistrer l’état",
   "library_entry_review_subject": "Sujet",
+  "discovery_collection_follow_uncertain": "La transmission est incertaine. Réessayez cette action pour renvoyer la même demande initiale.",
   "library_follow": "Suivre",
   "library_follow_more_actions": "Plus d’actions pour {title}",
   "library_follow_reason_library": "Ajouté depuis votre bibliothèque",

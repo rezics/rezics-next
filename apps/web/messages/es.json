@@ -1114,6 +1114,7 @@
   "library_entry_review_retry": "Reintentar actualización del estado",
   "library_entry_review_save": "Guardar estado",
   "library_entry_review_subject": "Ficha",
+  "discovery_collection_follow_uncertain": "La entrega es incierta. Reintenta esta acción para enviar la misma solicitud original.",
   "library_follow": "Seguir",
   "library_follow_more_actions": "Más acciones para {title}",
   "library_follow_reason_library": "Añadido desde tu biblioteca",

@@ -1114,6 +1114,7 @@
   "library_entry_review_retry": "상태 업데이트 재시도",
   "library_entry_review_save": "상태 저장",
   "library_entry_review_subject": "Subject",
+  "discovery_collection_follow_uncertain": "전송 결과를 확인할 수 없습니다. 이 작업을 다시 시도하면 원래 요청을 그대로 보냅니다.",
   "library_follow": "팔로우",
   "library_follow_more_actions": "{title}의 추가 작업",
   "library_follow_reason_library": "내 라이브러리에서 추가됨",
