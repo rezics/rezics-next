@@ -11,7 +11,7 @@ import { createImportTransport } from '../src/import-client.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 
 const subject = '00000000-0000-4000-8000-000000000101';
-const registration = createSourceRegistration('vndb');
+const registration = createSourceRegistration('vndb', { sourceSnapshotAsOf: '2026-10-25' });
 function record(count?: number, average?: number | null): SourceRecord {
   return {
     source: 'vndb',
@@ -31,8 +31,8 @@ function record(count?: number, average?: number | null): SourceRecord {
     },
   };
 }
-function convert(row: SourceRecord) {
-  return registration.convert(
+function convert(row: SourceRecord, source = registration) {
+  return source.convert(
     { external_id: row.key, record_revision: row.revision!, record: row.payload },
     { source: 'vndb' },
   );
@@ -61,6 +61,9 @@ test('only sanitized explicit VNDB zero produces removal without changing conver
     expect(convert(row).sourceStatisticClear).toBeUndefined();
     expect(convert(row).sourceStatistic).toBeUndefined();
   }
+  const unpinned = createSourceRegistration('vndb');
+  expect(convert(record(10, 700), unpinned).sourceStatistic).toBeUndefined();
+  expect(convert(record(0, null), unpinned).sourceStatisticClear).toBeUndefined();
   expect(() => convert(record(0))).toThrow('supplied together');
   expect(() => convert(record(undefined, null))).toThrow('supplied together');
 });
@@ -283,7 +286,7 @@ test('other registered sources never derive a clear from source rating fields', 
 });
 
 test('registered VNDB aliases use the generated positive and clear client bodies without changing native identity', async () => {
-  const alias = createSourceRegistration('vndb', { source: 'feed-two' });
+  const alias = createSourceRegistration('vndb', { source: 'feed-two', sourceSnapshotAsOf: '2026-10-25' });
   const converted = (row: SourceRecord) =>
     alias.convert(
       { external_id: row.key, record_revision: row.revision!, record: row.payload },

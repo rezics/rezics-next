@@ -182,6 +182,9 @@ export async function runDevelopmentSeed(
     episodeCatalogueSubjects: reviewedCatalogue.subjects,
     reviewedCatalogueSubjects: reviewedCatalogue.subjects,
     selection: developmentShowcaseSelection,
+    ...(dumps.sourceSnapshots.vndb.timestamp === undefined
+      ? {}
+      : { sourceSnapshotAsOf: dumps.sourceSnapshots.vndb.timestamp.slice(0, 10) }),
     composePersona: (context) => seedDevelopmentShowcase({ ...context, accountId: account, request }),
   });
   if (!importedResult) throw new TypeError('Cross-media seed did not return its native result handoff');

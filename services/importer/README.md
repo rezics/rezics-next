@@ -52,6 +52,30 @@ Descriptors are at most 8 KiB. A run adds at most one intent per bound record, o
 
 ## Shared showcase and media
 
+### Bangumi people, TVAnime, games and characters
+
+For an actual type-1 Person, name is und and name_cn or the exact PersonDetail infobox key 简体中文名 is zh. Biography, names, careers and credits remain independent. A career proposal requires the actual Person/source key, source-owned careers Scheme, current bound Concept, released P106 and exact citation. Pure conversion emits no P106; source Concepts do not claim canonical occupation or cross-provider equivalence. A malformed, missing or empty career cannot erase valid sibling facts. PersonDetail career and Chinese-name acquisition shares one selected response and receipt.
+
+TVAnime official websites remain separate schema:url statements; descriptive links remain cited P973; copyright notices remain verbatim and grant no licence. Source links are not fetched. Game Chinese names, aliases, publication dates, environments, genres, websites and work evidence remain independent, exact and cited. Type-4 source genres stay literal and unsplit; platforms and engines require current exact Concept bindings. Creator and voice credits follow Game environment/genres, then Character identity/appearance; Game cast follows Character. Each association cites its exact selected work/person or work/Character source relation and released role. Character identity, appearance, names and explicit-unit measurements stay on Character; units and blood-type Concepts are never guessed.
+
+Only admitted source-site rows with a parsed public Bangumi /subject/N URL yield that exact numeric P5732 identifier. Person/Character URLs, other websites, titles and adaptations do not resolve identity. Game website and descriptive work-link fields retain exact URL bytes and separate properties. Open Library Work first_publish_date stays on Work; Edition dates, page counts and ISBNs remain on Edition.
+
+### VNDB facts, tags and releases
+
+Decision: derive VNDB source-statistic dates from verified dump snapshot timestamps; imports without snapshot provenance emit no positive or zero-vote observations, and reopened operations retain their sealed date and request bytes.
+
+COPY conversion retains exact table origins and native keys. Null, empty and missing optional Latin cells remain distinct in the digest: exactly empty omits only the Romanized alias; whitespace, missing and wrong-type values remain errors. Selected release names do not rank from translation flags. Dates retain year/month/day precision; TBA, unknown and absent remain distinct. Producer parent/subsidiary directions and release supersession use only their admitted outgoing source rows; no reciprocal or chronology-based edge is invented. Completeness remains a qualifier gap where no released status property exists.
+
+The local showcase keeps `vn_relations.side` and `par` as addressable gaps until the typed work-relations result supplies the mapped direction, current endpoint identities and citation. It does not emit a generic property from those inventory strings.
+
+The `sourceParents` projection retains child/parent keys, category, path and `main`. Missing, cyclic or cross-category ancestry withholds dependent associations. Resolved edges enter native publication only through the exact current-category reviewed flow described below; `main` remains bookkeeping and does not set a native qualifier.
+
+Public tags need COPY rows and current reviewed Scheme/Concept bindings. Kana weights need an exact current /vn response for the selected work/tag, retaining decimal rating, response digest and endpoint. Exclude user IDs, notes and votes; COPY votes are never weights, confidence or ratings. Changed or missing bindings withhold only their association.
+
+Selected-family release seeds read only selected works/releases and current reviewed development-status/platform/medium groups. Reseeds reuse the current seed result, latest verified groups, released states and exact keys. Changed bindings reseed the same plan; missing/retracted classification gaps withhold only that association. Dates, names and editorial choices survive; TBA/unknown never means unreleased.
+
+### Wikidata exact values
+
 ### Selected release context
 
 Only finite selected records and their direct, admitted graph relations enter a showcase plan. Release facts stay on their exact Release or Work identities, and current platform or medium bindings are reread for the selected plan. Source-keyed work links and showcase publication are separate results; neither title matching nor a work-link result establishes publication.

@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CrossMediaReading } from '../../services/importer/src/cross-media-seed.ts';
+import type { CrossMediaSeedCliOptions } from '../../services/importer/src/cross-media-seed.ts';
 import { ShowcaseJournal } from '../../services/importer/src/showcase-publication.ts';
+import { runDevelopmentSeed } from './cross-media-seed.ts';
 import {
   createDevelopmentShowcaseRequest,
   seedDevelopmentShowcase,
@@ -17,6 +19,71 @@ const roots = [
   { source: 'bangumi' as const, externalId: '10380', type: 'rezics:TVAnime', property: 'wdt:P5732' },
   { source: 'bangumi' as const, externalId: '84148', type: 'schema:Book', property: 'wdt:P5732' },
 ];
+
+async function captureSeedOptions(timestamp?: string): Promise<CrossMediaSeedCliOptions> {
+  const tempRoot = join(process.cwd(), '.temp');
+  await mkdir(tempRoot, { recursive: true });
+  const root = await mkdtemp(join(tempRoot, 'seed-provenance-'));
+  const stop = new Error('captured seed options');
+  let captured: CrossMediaSeedCliOptions | undefined;
+  let thrown: unknown;
+  try {
+    await runDevelopmentSeed({
+      root,
+      env: {
+        REZICS_DEV_PERSONA_ACCOUNT_KEY: 'persona.key',
+        REZICS_DEV_PERSONA_ACCOUNT: owner,
+        REZICS_DEV_PERSONA_CLIENT: 'persona-client',
+        REZICS_DEV_SHOWCASE_ACCOUNT_KEY: 'showcase.key',
+        REZICS_DEV_SHOWCASE_CLIENT: 'showcase-client',
+        AUTH_ORIGIN: 'https://auth.seed.test',
+      },
+      fetchDumps: async () => ({
+        cacheRoot: root,
+        bangumi: join(root, 'bangumi'),
+        vndb: join(root, 'vndb'),
+        bangumiArchive: join(root, 'bangumi.zip'),
+        vndbArchive: join(root, 'vndb.tar.zst'),
+        sourceSnapshots: {
+          bangumi: {
+            file: 'bangumi.zip',
+            url: 'https://archive.seed.test/bangumi.zip',
+            sha256: '0'.repeat(64),
+            licences: ['CC-BY-SA-3.0'],
+          },
+          vndb: {
+            file: 'vndb.tar.zst',
+            url: 'https://archive.seed.test/vndb.tar.zst',
+            sha256: '1'.repeat(64),
+            ...(timestamp === undefined ? {} : { timestamp }),
+            licences: ['ODbL-1.0', 'DbCL-1.0'],
+          },
+        },
+      }),
+      createTokenProvider: async () => async () => 'seed-token',
+      seedCatalogue: async () => ({ subjects: {}, facts: [] }),
+      runSeed: async (_args, options) => {
+        captured = options;
+        throw stop;
+      },
+    });
+  } catch (error) {
+    thrown = error;
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+  expect(thrown).toBe(stop);
+  expect(captured).toBeDefined();
+  return captured!;
+}
+
+test('development seed carries the verified VNDB generation date and omits an unproven date', async () => {
+  const pinned = await captureSeedOptions('2026-11-04 08:00:24+00');
+  expect(pinned.sourceSnapshotAsOf).toBe('2026-11-04');
+  const unpinned = await captureSeedOptions();
+  expect(unpinned).not.toHaveProperty('sourceSnapshotAsOf');
+});
+
 function fixture() {
   const subjects = roots.map((root) => ({
     id: crypto.randomUUID(),

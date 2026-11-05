@@ -59,6 +59,8 @@ export interface VndbStatisticsDriver {
     input: AsyncIterable<Uint8Array>,
     options?: {
       credential?: ImportCredential;
+      /** Date of the historical fixture generation, when its acquisition is known. */
+      sourceSnapshotAsOf?: string;
       /** Drop first successful statistic response after commit, then normal transport retry. */
       loseStatisticResponse?: boolean;
       disappearanceThreshold?: number;

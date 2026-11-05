@@ -274,7 +274,6 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
     directory = await mkdtemp(join(tmpdir(), 'vndb-statistics-'));
     const path = join(directory, 'import.sqlite');
     const capture = captureVndbStatistics(runtime);
-    const registration = createSourceRegistration('vndb');
     const support = identitySupport(runtime.identity);
     let credential = runtime.identity.bulk;
     const transport = createImportTransport({
@@ -300,6 +299,9 @@ export async function createVndbStatisticsDriver(): Promise<VndbStatisticsDriver
       issue: (scopes) => support.issue(runtime.identity.bulk.accountId, scopes),
       setStatisticGrant: (enabled) => support.setStatisticGrant(enabled),
       async run(input, options = {}) {
+        const registration = createSourceRegistration('vndb', {
+          ...(options.sourceSnapshotAsOf === undefined ? {} : { sourceSnapshotAsOf: options.sourceSnapshotAsOf }),
+        });
         credential = options.credential ?? runtime.identity.bulk;
         const exchanges = capture.begin(options.loseStatisticResponse);
         const sourceRecords: Awaited<ReturnType<VndbStatisticsDriver['run']>>['sourceRecords'] = [];
