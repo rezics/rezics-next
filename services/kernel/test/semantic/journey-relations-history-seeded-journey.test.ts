@@ -284,7 +284,7 @@ beforeAll(async () => {
     type: 'ex:Work',
     labels: { en: 'Journey work', ja: '旅程の作品' },
     statements: {
-      'ex:appearance': people.map((target, index) => appearance(target, index + 1, index === 3, index < 2)),
+      'ex:appearance': people.slice(0, 4).map((target, index) => appearance(target, index + 1, index === 3, index < 2)),
       'ex:credit': [
         {
           property: { id: 'ex:credit' },
@@ -298,8 +298,34 @@ beforeAll(async () => {
   work = created.subject.id;
   partitions.add(partitionOf(routeOf(work)!));
   await real.grant({ route: routeOf(work)!, id: work }, 'editor', 'subject:read');
+  for (const [index, target] of people.entries()) {
+    if (index < 4) continue;
+    const proposed = await handle('POST', `/v1/subjects/${work}/candidates`, 'editor', {
+      statement: appearance(target, index + 1),
+    });
+    expect(proposed.status).toBe(201);
+    const accepted = await handle(
+      'POST',
+      `/v1/subjects/${work}/candidates/${proposed.body.candidate}:accept`,
+      'acceptor',
+      {
+        context: GLOBAL_CONTEXT,
+        expected_head: null,
+      },
+    );
+    expect(accepted.status).toBe(200);
+    const adopted = await handle('POST', `/v1/subjects/${work}:adopt`, 'acceptor', {
+      context: GLOBAL_CONTEXT,
+      property: 'ex:appearance',
+      target,
+      mode: 'replace',
+      selection: [{ candidate: proposed.body.candidate, rank: 'normal' }],
+      expected_head: null,
+    });
+    expect(adopted.status).toBe(200);
+  }
   await drain();
-}, 60_000);
+}, 120_000);
 
 afterAll(async () => {
   await relays.stop();
