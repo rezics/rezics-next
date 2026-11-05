@@ -403,6 +403,18 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
     expect(current.vndbCreditDiagnostics).toContainEqual(
       expect.objectContaining({ code: 'chardesign', reason: 'missing_concept' }),
     );
+    const manifest = buildShowcaseManifest({
+      plan,
+      readings: current.readings,
+      acknowledgements: journal.acknowledgedCommands(),
+      aliases: crossMediaAliases,
+      vocabularyRequirements: concepts.requirements,
+    });
+    const work = manifest.records.find((record) => record.sourceKey === 'v1')!;
+    expect(work.assertions.map((assertion) => assertion.property)).toEqual(
+      expect.arrayContaining(['schema:author', 'wdt:P725']),
+    );
+    expect(work.assertions.map((assertion) => assertion.property)).not.toContain('schema:illustrator');
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
