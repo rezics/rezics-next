@@ -299,9 +299,12 @@ test('indexed native local cleanup resumes committed pages and remains idle pend
         [routeOf(author.accountId), author.accountId],
       );
       if (
-        completion.rows[0]?.state === 'pending-shared-custody' && completion.rows[0]?.status === 'SUCCESS' &&
-        ballotCleanup.rows[0]?.tombstoned && !ballotCleanup.rows[0].cleanup_pending
-      ) break;
+        completion.rows[0]?.state === 'pending-shared-custody' &&
+        completion.rows[0]?.status === 'SUCCESS' &&
+        ballotCleanup.rows[0]?.tombstoned &&
+        !ballotCleanup.rows[0].cleanup_pending
+      )
+        break;
       if (Date.now() > deadline) throw new Error('Default Semantic local work did not converge');
       await Bun.sleep(20);
     }
