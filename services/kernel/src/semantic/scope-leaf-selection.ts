@@ -419,7 +419,7 @@ export class LeafNativeWork {
       await this.query(
         client,
         provenance,
-        { routes: [route], subjects: [subject], candidates: [witness], max_bytes: maximum },
+        { routes: [route], subjects: [subject], candidates: [witness], slots: [row.slot_id], max_bytes: maximum },
         { keys: 0, points: 4, rows: 12, outputBytes: maximum + 512 },
       )
     )[0];

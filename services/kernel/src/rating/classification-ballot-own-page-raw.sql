@@ -4,8 +4,8 @@ WITH page_args AS MATERIALIZED (
          :generation::bigint AS arg_generation,
          :after_subject::uuid AS arg_after_subject,
          :after_association::uuid AS arg_after_association,
-         :selected_subject::uuid AS arg_selected_subject,
-         :selected_association::uuid AS arg_selected_association
+         :selected_subject::nullable(uuid) AS arg_selected_subject,
+         :selected_association::nullable(uuid) AS arg_selected_association
 )
 SELECT ballot.subject_id AS "subjectId", ballot.association_id AS "associationId",
        ballot.binding_hash AS "bindingHash", ballot.assessment,
