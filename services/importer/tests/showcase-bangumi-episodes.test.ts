@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BATCH_LIMIT, type BatchCommand } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
+import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import type { CrossMediaPort, CrossMediaTables } from '../src/cross-media-seed.ts';
 import { planCrossMediaSeed, seedCrossMedia } from '../src/cross-media-seed.ts';
@@ -100,6 +101,7 @@ function port(commands: BatchCommand[]): CrossMediaPort {
   const metadata = sourceRecordMetadataFixture();
   const ids = new Map<string, string>();
   const types = new Map<string, string>();
+  const sourceKeys = new Map<string, string>();
   const catalog = new Map<string, unknown>([
     [
       schemeId,
@@ -136,6 +138,7 @@ function port(commands: BatchCommand[]): CrossMediaPort {
             const id = ids.get(owner) ?? randomUUID();
             ids.set(owner, id);
             types.set(id, command.subject.type);
+            sourceKeys.set(id, command.source.external_id);
             return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
           }
           if (command.op === 'propose')
@@ -153,7 +156,27 @@ function port(commands: BatchCommand[]): CrossMediaPort {
     },
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
-      return (catalog.get(id) ?? { subject: { id, type: types.get(id) ?? 'schema:Thing', statements: {} } }) as Awaited<
+      const existing = catalog.get(id);
+      if (existing) return existing as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+      const key = sourceKeys.get(id);
+      const identity = key
+        ? key.startsWith('episode:')
+          ? { property: 'schema:url', value: bangumiRecordUrl(key) }
+          : { property: 'wdt:P5732', value: key }
+        : undefined;
+      return ({
+        subject: {
+          id,
+          type: types.get(id) ?? 'schema:Thing',
+          statements: identity
+            ? {
+                [identity.property]: [
+                  { property: { id: identity.property }, value: { type: 'value', content: identity.value } },
+                ],
+              }
+            : {},
+        },
+      }) as Awaited<
         ReturnType<CrossMediaPort['readReviewedSubject']>
       >;
     },
