@@ -100,7 +100,7 @@ export async function insertPersonalLabel(
     transactionId: context.transactionId, time: context.time });
   const plan = operation.leaves[0]!;
   const rows = await executeLabelOperation(operation, () =>
-    executeLabelSql(plan, (operands) => insertLabel.run(queryClient(client), operands)),
+    executeLabelSql(plan, (operands) => insertLabel.run(queryClient(client), operands as Parameters<typeof insertLabel.run>[1])),
   );
   const row = rows[0];
   if (!row) throw new Error('Personal label insert returned no row');
@@ -144,7 +144,7 @@ export async function renamePersonalLabel(
     name: normalizedName, transactionId: context.transactionId, time: context.time, includeRead: false });
   const plan = operation.leaves[0]!;
   const rows = await executeLabelOperation(operation, () =>
-    executeLabelSql(plan, (operands) => renameLabel.run(queryClient(client), operands)),
+    executeLabelSql(plan, (operands) => renameLabel.run(queryClient(client), operands as Parameters<typeof renameLabel.run>[1])),
   );
   return rows[0] ? asRecord(rows[0]) : null;
 }
@@ -162,7 +162,7 @@ async function lifecycle(
     transactionId: context.transactionId, time: context.time, restore, includeRead: false });
   const plan = operation.leaves[0]!;
   const rows = await executeLabelOperation(operation, () =>
-    executeLabelSql(plan, (operands) => lifecycleLabel.run(queryClient(client), operands)),
+    executeLabelSql(plan, (operands) => lifecycleLabel.run(queryClient(client), operands as Parameters<typeof lifecycleLabel.run>[1])),
   );
   return rows[0] ? asRecord(rows[0]) : null;
 }

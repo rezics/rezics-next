@@ -53,6 +53,14 @@ type ExpectedTarget =
   | { id: string; revision: number; effective: boolean }
   | null
   | { labelId: string; assignmentId: string; revision: number; labelRevision: number };
+type AssignmentPageRow = {
+  id: string | null;
+  labelId: string;
+  subjectId: string;
+  revision: number;
+  slotNo: number | null;
+  deletedAt?: string | null;
+};
 export type AssignmentReviewGuard = { subjectId: string; identityEpoch: string; labelRevision: number };
 type ListOptions = { labelId?: string; subjectId?: string; limit?: number; cursor?: string; view?: 'BASIC' | 'FULL' };
 const invalid = () => new ProblemError('invalid_request');
@@ -512,17 +520,19 @@ export function createLabelAssignmentCommands(deps: {
         const pagePlan = labelAssignmentPagePlan({
           route,
           accountId: account.accountId,
-          ...(labelId ? { labelId, after } : { subjectId }),
+          ...(labelId ? { labelId, after } : { subjectId: subjectId! }),
           limit,
           view: full ? 'FULL' : 'BASIC',
         });
         const pageLeaf = pagePlan.leaves[0]!;
         return executeLabelOperation(pagePlan, async () => {
-          const rawRows = await executeLabelSql(pageLeaf, (operands) =>
-            labelId
-              ? labelPage.run(db, operands as Parameters<typeof labelPage.run>[1])
-              : subjectPage.run(db, operands as Parameters<typeof subjectPage.run>[1]),
-          );
+          const rawRows: AssignmentPageRow[] = labelId
+            ? await executeLabelSql(pageLeaf, (operands) =>
+                labelPage.run(db, operands as Parameters<typeof labelPage.run>[1]),
+              )
+            : await executeLabelSql(pageLeaf, (operands) =>
+                subjectPage.run(db, operands as Parameters<typeof subjectPage.run>[1]),
+              );
           const rows = labelId
             ? rawRows
             : rawRows
