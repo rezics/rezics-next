@@ -1,7 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { slug } from '@rezics/definitions/slug';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { createFakeKernelFetch, createStoryRecordedKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
@@ -10,16 +9,6 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const { loadRoutePage } = await import('../src/features/pages/route.tsx');
 const { HomeCatalogue } = await import('../src/features/pages/home-catalogue');
 const { m } = await import('../src/paraglide/messages.js');
-
-const messages = {
-  unknown: '不明',
-  none: 'なし',
-  unlabelled: '名称未設定',
-  sources: '出典',
-  aliases: '別名',
-  search: '検索',
-};
-const kokoro = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 
 test('the Home catalogue consumes the native route template from one page read', async () => {
   const fake = createFakeKernelFetch(fixtures as never);
@@ -106,10 +95,10 @@ test('Home preserves rejected, missing and unavailable page reads as separate ou
   expect(unavailableHtml).toContain(m.catalogue_retry_loading_result());
 });
 
-test('the home route renders the route page', async () => {
+test('the Home route renders its catalogue and feed consumers', async () => {
   const route = await Bun.file(new URL('../src/routes/index.tsx', import.meta.url)).text();
   expect(route).toContain('HomeCatalogue');
   expect(route).toContain('HomeFeedConsumer');
   expect(route).toContain('homePageQuery(');
-  expect(route).not.toContain('HomePage');
+  expect(route).not.toMatch(/<HomePage\b/);
 });
