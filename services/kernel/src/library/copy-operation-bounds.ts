@@ -359,4 +359,3 @@ export function copyPrivateReadStatementPlan(input: CopyPrivateReadInput) {
     6,
   );
 }
-
