@@ -157,11 +157,11 @@ test('account compatibility is closed and the optional submitted marker stays op
   const unknown = data.get(accountStorageKey);
   expect(pendingAccountOperationStepUpState()).toEqual({ kind: 'invalid' });
   expect(data.get(accountStorageKey)).toBe(unknown);
+  const stringify = spyOn(JSON, 'stringify');
   const invalidAccount = { kind: 'delete', accountId: 'account', operationKey: 'a'.repeat(32), operation: { kind: 'delete', accountId: 'account' }, authorization: 'private' } as never;
   expect(storePendingAccountOperationStepUp(invalidAccount)).toBe(false);
   expect(data.get(accountStorageKey)).toBe(unknown);
   data.set(managementStorageKey, 'previous-management-value');
-  const stringify = spyOn(JSON, 'stringify');
   const invalidManagement = { accountId: 'human', operationKey: 'key', operation: { kind: 'opening', operatorAccountId: 'operator', subjectAccountId: 'subject' }, authorization: 'private' } as never;
   expect(storePendingManagementOperationStepUp(invalidManagement)).toBe(false);
   expect(stringify).not.toHaveBeenCalled();
