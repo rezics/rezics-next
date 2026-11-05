@@ -121,6 +121,11 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/account-public-views.test.ts test/access/account-profile-read.test.ts test/access/account-profile-http.test.ts test/access/agent-profile-outcomes.test.ts`.
 
+**Web consumer regressions:** `accounts-profile-editor.test.ts`, `managed-profile-confirmation-presentation.test.tsx`
+and `upload-stream-lifetime.test.ts` under `apps/web/tests/` cover delegated viewer/target binding, exact retry-key
+encoding, visible acknowledgement after failed readback and retained bytes after unknown avatar completion. A matching
+GET does not acknowledge an unknown command. Seeded native and mounted browser acceptance remain deferred to integration.
+
 ## follow-owner-counts
 
 **User job:** A person follows an eligible subject, agent, Space or Collection and sees only their own outgoing count or the incoming count they own.

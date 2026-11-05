@@ -1,8 +1,15 @@
 import { withProfileDeadline } from '../../settings/profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
-import { EditableProfileReadError } from '../../settings/editable-profile-source';
-import { loadProfileRecord, type ProfilePatch, type ProfileValues } from '../../settings/profile-data';
+import {
+  createEditableProfileSource,
+  EditableProfileReadError,
+  nativeProfileFailure,
+  parseProfilePatchAck,
+  type EditableProfileFailure,
+} from '../../settings/editable-profile-source';
+import { settingsCommandKeyHeader } from '../../settings/command-headers';
+import { loadProfileRecord, type ObservedProfile, type ProfilePatch } from '../../settings/profile-data';
 import { profileFieldErrors } from '../../settings/profile-write';
 
 const id = v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
@@ -32,7 +39,14 @@ const submission = v.strictObject({
 export type Selection = v.InferOutput<typeof selection>;
 export type Submission = v.InferOutput<typeof submission>;
 export type Failure = 'signed-out' | 'denied' | 'missing' | 'unavailable';
-export type ProfilePage = { state: 'ready'; viewerId: string; profile: ProfileValues } | { state: Failure };
+export type ProfilePage =
+  | { state: 'ready'; viewerId: string; profile: ObservedProfile }
+  | { state: Failure; failure?: EditableProfileFailure };
+
+export function profilePageReadError(page: Extract<ProfilePage, { state: Failure }>) {
+  const status = { 'signed-out': 401, denied: 403, missing: 404, unavailable: 503 }[page.state];
+  return new EditableProfileReadError(status, page.failure);
+}
 
 export function parseSubmission(input: unknown): Submission {
   const parsed = v.parse(submission, input);
@@ -68,10 +82,18 @@ export async function readTarget(
   signal?: AbortSignal,
 ): Promise<ProfilePage> {
   try {
-    const profile = await loadProfileRecord(client, authorization, target.accountId, undefined, signal);
+    const profile = await loadProfileRecord(
+      client,
+      authorization,
+      target.accountId,
+      createEditableProfileSource(client, target.viewerId),
+      signal,
+    );
     return { state: 'ready', viewerId: target.viewerId, profile };
   } catch (error) {
-    return { state: error instanceof EditableProfileReadError ? profileFailure(error.status) : 'unavailable' };
+    return error instanceof EditableProfileReadError
+      ? { state: profileFailure(error.status), ...(error.failure ? { failure: error.failure } : {}) }
+      : { state: 'unavailable' };
   }
 }
 
@@ -83,23 +105,23 @@ export async function writeTarget(
   signal?: AbortSignal,
 ) {
   const current = await readTarget(client, authorization, input, signal);
-  if (current.state !== 'ready')
+  if (current.state !== 'ready') {
+    const error = profilePageReadError(current);
     return {
       ok: false as const,
-      status:
-        current.state === 'denied'
-          ? 403
-          : current.state === 'missing'
-            ? 404
-            : current.state === 'signed-out'
-              ? 401
-              : 503,
+      status: error.status,
       message: '',
+      ...(error.failure ? { failure: error.failure } : {}),
     };
+  }
   if (current.profile.kind !== 'organization' && input.patch.speakersListed !== undefined)
     return { ok: false as const, status: 400, message: '' };
   // PATCH evaluates current actor/principal/assignment/floor, grants, operator and consent natively at command T.
-  const headers = { authorization, 'idempotency-key': input.idempotencyKey, 'cache-control': 'no-store' };
+  const headers = {
+    authorization,
+    'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey),
+    'cache-control': 'no-store',
+  };
   const result = await withProfileDeadline(
     (bounded) =>
       client.accounts({ accountId: input.accountId }).patch(input.patch as ProfilePatch, {
@@ -113,8 +135,9 @@ export async function writeTarget(
       ok: false as const,
       status: [400, 401, 403, 404, 409, 412, 422, 429].includes(result.status) ? result.status : 503,
       message: '',
+      failure: nativeProfileFailure(result.status, result.error?.value, result.headers),
     };
-  if (result.data.accountId !== input.accountId) throw new Error('Profile acknowledgement mismatch');
+  if (!parseProfilePatchAck(result.data, input.accountId)) return { ok: false as const, status: 503, message: '' };
   // This is only an acknowledgement; ProfileEditor must perform a fresh private CURRENT GET.
   return { ok: true as const, profile: current.profile };
 }

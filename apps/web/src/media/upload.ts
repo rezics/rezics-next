@@ -209,7 +209,9 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
       transferSettled = true;
     }
     releaseDigestWriter(true);
-    if (writeBegan) {
+    // Native completion may have committed even when its response is lost. Keep the
+    // completed transfer for native observation and exact-command recovery.
+    if (writeBegan && !transferComplete) {
       try {
         await env.MEDIA.delete(media.key);
       } catch {

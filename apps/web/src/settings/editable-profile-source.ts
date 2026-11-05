@@ -197,11 +197,15 @@ export function officialProfileRead(
   return { profile, editing: closedProfileEditing(profile, viewerAccountId) };
 }
 
-export function parseEditableProfileRead(body: unknown, accountId: string): EditableProfileRead {
+export function parseEditableProfileRead(
+  body: unknown,
+  accountId: string,
+  viewerAccountId = accountId,
+): EditableProfileRead {
   const { profile, editing } = v.parse(response, body);
   if (
     profile.id !== accountId ||
-    editing.viewer.accountId !== accountId ||
+    editing.viewer.accountId !== viewerAccountId ||
     editing.target.accountId !== accountId ||
     editing.target.kind !== profile.kind
   )
@@ -214,7 +218,7 @@ export function parseProfilePatchAck(body: unknown, accountId: string): { accoun
   return parsed.success && parsed.output.accountId === accountId ? parsed.output : undefined;
 }
 
-export function createEditableProfileSource(client: KernelClient): EditableProfileSource {
+export function createEditableProfileSource(client: KernelClient, viewerAccountId?: string): EditableProfileSource {
   return {
     async read(authorization, accountId, signal) {
       const result = await withProfileDeadline(
@@ -229,7 +233,7 @@ export function createEditableProfileSource(client: KernelClient): EditableProfi
         const failure = nativeProfileFailure(result.status, result.error?.value, result.headers);
         throw new EditableProfileReadError(result.status, Object.keys(failure).length > 1 ? failure : undefined);
       }
-      return parseEditableProfileRead(result.data, accountId);
+      return parseEditableProfileRead(result.data, accountId, viewerAccountId);
     },
   };
 }

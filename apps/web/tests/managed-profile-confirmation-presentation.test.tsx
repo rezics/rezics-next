@@ -1,7 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { AccountProfileEditor } from '../src/accounts/profile-editor/editor';
 import type { ProfileAttempt } from '../src/settings/profile-write';
 import type { ProfileValues, ProfileSaveResult } from '../src/settings/profile-data';
+import { EditableProfileReadError } from '../src/settings/editable-profile-source';
+import { m } from '../src/paraglide/messages.js';
 
 const profile: ProfileValues = {
   accountId: '00000000-0000-7000-8000-000000000002',
@@ -51,6 +55,11 @@ test('review captures the exact draft, recoverable refusal keeps it, and unknown
   expect(writes).toHaveLength(2);
   current = unresolved!.after;
   await editor.reload();
+  expect(editor.snapshot().phase).toBe('uncertain');
+  expect(editor.snapshot().attempt).toBe(unresolved);
+  response = { ok: true, profile: current };
+  await editor.retry();
+  expect(writes[2]).toBe(unresolved);
   expect(editor.snapshot().phase).toBe('saved');
   expect(editor.snapshot().attempt).toBeNull();
 });
@@ -96,4 +105,30 @@ test('a retired target or session cancels approval and ignores an old save respo
   await completion;
   expect(pending.snapshot().phase).toBe('unavailable');
   expect(pending.snapshot().draft).toBeNull();
+});
+
+test('failed managed readback preserves visible acknowledgement separately from unknown delivery', async () => {
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { AccountProfileView } = await import('../src/accounts/profile-editor/page');
+  for (const acknowledged of [true, false]) {
+    const editor = new AccountProfileEditor(
+      {
+        read: async () => {
+          throw new EditableProfileReadError(503);
+        },
+        save: async () => (acknowledged ? { ok: true, profile } : { ok: false, status: 503, message: '' }),
+      },
+      profile,
+    );
+    editor.edit({ biography: 'Private retained draft' });
+    await editor.submit('profile');
+    await editor.confirm();
+    const html = renderToStaticMarkup(
+      createElement(AccountProfileView, { accountId: profile.accountId, editor, page: { state: 'unavailable' } }),
+    );
+    expect(html.includes(m.settings_profile_acknowledged_stale())).toBe(acknowledged);
+    expect(html.includes(m.settings_profile_retry_save())).toBe(!acknowledged);
+    expect(html).not.toContain('Private retained draft');
+    expect(editor.snapshot().attempt).not.toBeNull();
+  }
 });
