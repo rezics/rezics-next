@@ -1,4 +1,4 @@
-import { consumeMemberRetention, memberRetentionControl, memberRetentionPartitionPlan, memberRetentionContinuationPlan, MEMBER_RETENTION_LIMITS } from './member-retention-bounds.ts';
+import { consumeMemberRetention, memberRetentionControl, memberRetentionPartitionPlan, memberRetentionContinuationPlan, MEMBER_RETENTION_LIMITS, serializeMemberRetention } from './member-retention-bounds.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -73,7 +73,7 @@ export async function registerLibraryMemberRetentionWork({ pool, client, clock }
         }
         result.cursor = { partition, after: found.key };
       }
-      return result;
+      return serializeMemberRetention('page-output', result);
     },
     { name: 'library.memberRetentionPage', ...COMMAND_STEP_RETRIES },
   );
