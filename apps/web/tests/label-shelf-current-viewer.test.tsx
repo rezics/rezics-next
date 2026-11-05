@@ -386,7 +386,9 @@ test('The actual named-label Library renders private FULL assignments and remove
         provenance: { ...recovery.provenance, source: { ...recovery.provenance.source, cursor: 'source-two' } },
       };
       flushSync(() => client.setQueryData(query.queryKey, otherSource));
-      expect(host.querySelector('a[href*="/library?label="]')).toBeNull();
+      const firstPage = host.querySelector<HTMLAnchorElement>('a[href*="/library?label="]');
+      expect(firstPage?.textContent).toBe(m.library_label_first_page());
+      expect(new URL(firstPage!.href).searchParams.get('cursor')).toBeNull();
       flushSync(() => client.setQueryData(query.queryKey, recovery));
     }
     assignmentOverride = null;
