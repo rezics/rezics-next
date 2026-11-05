@@ -42,7 +42,7 @@ frontier.
 
 Slow mode and watch keep their existing owners. Settings watch and Inbox stay Performance-owned.
 
-Decision: The production selected-advice receiver stays unavailable until retained complete-input publication exposes the installed root-derived KernelClient callable; a method-shaped runtime bridge does not establish that client contract.
+Decision: Production selected-advice receiving starts only after generated `@rezics/client` output includes both the observed `pinRevision` on the Board page response and the registered `pin-advice` callable. Until then, keep the production receiver unavailable and do not mirror declarations or call the route directly.
 
 `BoardPinProducer.inspectSelected` remains unavailable until that callable is published. The bounded input and
 response validators remain ready for the existing private no-store native advice route. The mounted manager now
