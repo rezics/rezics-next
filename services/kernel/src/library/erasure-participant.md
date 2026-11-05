@@ -74,10 +74,12 @@ Logs, caches, exports, replicas, legacy ownership and backup custody remain unkn
 
 ## Locator closure and acknowledgement admission
 
-Identity source invalidation additionally retains `identity_epoch_participant_work`, `identity_epoch_source_basis`
-and `owner_identity_scope`. Their account-leading local probes and the participant blocker inventory expose
-these copies without treating local exhaustion as Source/receiving/control closure. Exact minimizer and late-item
-custody remain required before their private links/bases can be discarded or Library can acknowledge erasure.
+Identity epoch receiving additionally retains `identity_epoch_participant_work`,
+`identity_epoch_participant_scope`, `identity_epoch_participant_handoff`, `identity_epoch_source_basis`,
+`owner_identity_scope`, `owner_identity_candidate_support` and `owner_identity_candidate`. Their account-leading
+local probes and participant blocker inventory expose these copies without treating local exhaustion as
+Source/receiving/control closure. Exact minimizer and late-item custody remain required before their private
+links/bases can be discarded or Library can acknowledge erasure.
 
 `work.ts` listing effects and `listing.ts` commit subject-home derived copies. They do not currently write an
 account-home exact locator. Access now supplies `recordLateErasureItem(tx, {accountId, participant, locator})`,

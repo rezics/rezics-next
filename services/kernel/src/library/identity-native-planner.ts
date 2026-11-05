@@ -191,6 +191,33 @@ export async function readLibraryIdentityPlan(
     throw stale('Native Source plan key collision');
   return row;
 }
+
+/** Exact sealed manifest operation; callers cannot supply or rewrite the raw owner fact. */
+export async function readLibraryIdentityEffectOperationWithWork(
+  pool: Pool,
+  key: LibraryScopeEffectsKey,
+  locator: Readonly<{ effectKey: string; disposition: IdentityReceivingDisposition }>,
+  work: NativeCollectionWork,
+): Promise<unknown | null> {
+  const source = key.sourceIdentity;
+  validateLibraryIdentityPlanKey(key);
+  if (source.scope === 'public_output' || identityJobPartition(key.job) !== partitionOf(source.route)) return null;
+  return libraryIdentityCommand(pool, work, partitionOf(source.route), async (tx) => {
+    const plan = await readLibraryIdentityPlan(tx, key, true);
+    if (!plan || plan.state !== 'sealed' || !(await currentLibraryIdentityPlan(tx, key, plan, work)))
+      return noEffect(null);
+    const operation = (
+      await tx.query<{ operation: unknown }>(libraryIdentitySQL.readEffect, [
+        source.route,
+        source.collectionId,
+        plan.plan_key,
+        locator.effectKey,
+        locator.disposition,
+      ])
+    ).rows[0]?.operation;
+    return noEffect(operation ?? null);
+  });
+}
 async function query<R extends QueryResultRow>(tx: CommandTransaction, sql: string, values: unknown[]): Promise<R[]> {
   return (await tx.query<R>(sql, values)).rows;
 }
