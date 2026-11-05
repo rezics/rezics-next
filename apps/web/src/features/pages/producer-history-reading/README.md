@@ -6,7 +6,6 @@ Decision: any deliberate replacement retires the open correction through the exi
 
 Recovery and the generic producer origin remain visible without old relation facts. A retired correction cannot restore its former slice, even if a later read has equal labels or identifiers. The reader offers fresh admission and requires a new deliberate correction selection. Private navigation descriptors remain in this mount only.
 
-
 Decision: one eligible visit keeps eight admitted predecessor coordinates, current, and one staged destination;
 Previous rereads the captured native context, First and Restart request the cursorless/sessionless beginning, and
 More discards the old forward branch. Movement commits only on admission; unavailable Retry repeats the exact
