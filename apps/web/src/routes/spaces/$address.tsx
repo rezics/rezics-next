@@ -1,4 +1,5 @@
 import { realmReadingSearch } from '../../community/realm-reading-return';
+import { realmCataloguePageSearch } from '../../community/realm-catalogue-entry';
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
@@ -32,7 +33,7 @@ type SpaceLoaderData = { page: SpacePageData; admission: SpacePageAdmission };
 
 export const Route = createFileRoute('/spaces/$address')({
   staticData: { publicCache: true },
-  validateSearch: realmReadingSearch,
+  validateSearch: realmCataloguePageSearch,
   loaderDeps: ({ search }) => realmReadingSearch(search),
   loader: async ({ params, context, abortController }): Promise<SpaceLoaderData> => {
     const locale = getLocale();

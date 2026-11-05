@@ -13,6 +13,7 @@ const searchPath = new RegExp(`^/(${locales.join('|')})/search$`);
 const realmPath = new RegExp(
   `^/(${locales.join('|')})/realms/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`,
 );
+const spacePath = new RegExp(`^/(${locales.join('|')})/spaces/[A-Za-z0-9_-]{1,128}$`);
 const searchIntentKeys = new Set([
   'q',
   'type',
@@ -40,7 +41,9 @@ export function realmCatalogueReturnHref(value: unknown, locale?: string): strin
     const url = new URL(value, origin);
     const search = searchPath.exec(url.pathname);
     const realm = realmPath.exec(url.pathname);
-    const path = search ?? realm;
+    const space = spacePath.exec(url.pathname);
+    const community = realm ?? space;
+    const path = search ?? community;
     if (
       url.origin !== origin ||
       !path ||
@@ -50,8 +53,8 @@ export function realmCatalogueReturnHref(value: unknown, locale?: string): strin
       return;
     const params: Record<string, unknown> = Object.create(null);
     for (const key of new Set(url.searchParams.keys())) {
-      const shelfKey = realm && (key === 'node' || key === 'cursor');
-      const realmSearchCursor = realm && key === 'searchCursor';
+      const shelfKey = community && (key === 'node' || key === 'cursor');
+      const realmSearchCursor = community && key === 'searchCursor';
       if (
         !shelfKey &&
         !realmSearchCursor &&
@@ -64,9 +67,9 @@ export function realmCatalogueReturnHref(value: unknown, locale?: string): strin
       params[key] = values.length === 1 ? values[0] : values;
     }
     if (search && ('searchCursor' in params || 'node' in params)) return;
-    const shelf = realm ? realmReadingSearch(params) : undefined;
+    const shelf = community ? realmReadingSearch(params) : undefined;
     if (
-      realm &&
+      community &&
       ((params.node !== undefined && params.node !== shelf?.node) ||
         (params.cursor !== undefined && params.cursor !== shelf?.cursor))
     )
@@ -75,7 +78,7 @@ export function realmCatalogueReturnHref(value: unknown, locale?: string): strin
     if (!parsed.success) return;
     const deps = searchLoaderDeps({
       ...(parsed.output as Record<string, unknown>),
-      cursor: realm ? params.searchCursor : params.cursor,
+      cursor: community ? params.searchCursor : params.cursor,
     });
     if (deps.invalidInput || !isSearchResourceScope(deps.resourceScope) || deps.resourceScope.kind !== 'realm') return;
     if (realm && deps.resourceScope.id.toLowerCase() !== realm[2]!.toLowerCase()) return;

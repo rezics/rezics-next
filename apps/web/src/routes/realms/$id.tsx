@@ -1,6 +1,5 @@
 import { realmReadingSearch } from '../../community/realm-reading-return';
-import { searchParams } from '../../search/search-params';
-import * as v from 'valibot';
+import { realmCataloguePageSearch } from '../../community/realm-catalogue-entry';
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
@@ -28,22 +27,11 @@ import type { SpacePageAdmission, SpacePageTarget } from '../../community/space-
 
 type RealmLoaderData = { page: SpacePageData; admission: SpacePageAdmission };
 
-/** Preserve Search intent beside the independent shelf cursor without reloading the Realm page. */
-function realmRouteSearch(value: Record<string, unknown>) {
-  const search = { ...v.parse(searchParams, value) };
-  delete search.node;
-  delete search.cursor;
-  return {
-    ...search,
-    ...realmReadingSearch(value),
-  };
-}
-
 export const Route = createFileRoute('/realms/$id')({
   staticData: { publicCache: true },
-  validateSearch: realmRouteSearch,
+  validateSearch: realmCataloguePageSearch,
   loaderDeps: ({ search }) => realmReadingSearch(search),
-  loader: async ({ params, context, abortController }) => {
+  loader: async ({ params, context, abortController, location }) => {
     const locale = getLocale();
     const target: SpacePageTarget = { kind: 'realm', id: params.id };
     const signal = abortController.signal;
@@ -78,7 +66,10 @@ export const Route = createFileRoute('/realms/$id')({
           if (!spacePageQueryResultIsCurrent(original, context.queryClient, query.queryKey, result))
             throw new ObsoleteSpacePageReadError();
           releaseSpacePageRead(original);
-          throw redirect({ href: `/${locale}/spaces/${encodeURIComponent(located.address)}`, statusCode: 307 });
+          throw redirect({
+            href: `/${locale}/spaces/${encodeURIComponent(located.address)}${location.searchStr}${location.hash ? `#${location.hash}` : ''}`,
+            statusCode: 307,
+          });
         }
         const data = { page: located.page, admission } satisfies RealmLoaderData;
         if (!spacePageQueryResultIsCurrent(original, context.queryClient, query.queryKey, result))

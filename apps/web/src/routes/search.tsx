@@ -185,7 +185,7 @@ function SearchResults({
   const sessionState = useSession();
   const reader = searchSessionOwner(sessionState);
   const page =
-    searchRequiresCurrentReader(deps) && (sessionState.state !== 'signed-in' || reader === null) ? (
+    searchRequiresCurrentReader(deps) && reader === null ? (
       <SearchPage
         query={deps.query}
         data={{ ...searchUnavailablePage(deps), recovery: { status: 'session' } }}

@@ -84,6 +84,7 @@ test('Realm Search requests retain the Realm and released predicates while trans
   );
 
   expect(request).toMatchObject({
+    limit: 20,
     text: 'Mira',
     cursor: 'opaque/search-cursor',
     languages: ['en'],
@@ -134,4 +135,11 @@ test('Realm catalogue return rejects global, cross-locale, private, and oversize
   expect(realmCatalogueReturnHref(scopedVisit.replace('/en/search', '/ja/search'), 'en')).toBeUndefined();
   expect(realmCatalogueReturnHref(`${scopedVisit}&reader=private`, 'en')).toBeUndefined();
   expect(realmCatalogueReturnHref(`${scopedVisit}&layout=${'x'.repeat(2048)}`, 'en')).toBeUndefined();
+});
+
+test('canonical Space returns retain the Realm predicate and independent shelf/works cursors', () => {
+  const visit = `/en/spaces/anime?filter=${encodeURIComponent(JSON.stringify({ realm: { id: realm } }))}&node=boards&cursor=shelf&searchCursor=works&kinds=schema%3AVisualNovel`;
+  expect(realmCatalogueReturnHref(visit, 'en')).toBe(`${visit}#search-results`);
+  expect(realmCatalogueReturnHref('/en/spaces/anime?searchCursor=works', 'en')).toBeUndefined();
+  expect(realmCatalogueReturnHref(visit.replace('/en/', '/ja/'), 'en')).toBeUndefined();
 });
