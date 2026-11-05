@@ -23,9 +23,9 @@ Each durable request keeps its original tuple, command key and bytes. If deliver
 
 ## Command line and recovery
 
-Run `bun services/importer/src/cli.ts` with --source, --dump, --state, --api, --account-key, --account, --client and --auth, plus API/Auth origins. --help needs no credentials, SQLite or network. Sources: bangumi, vndb, openlibrary, wikidata.
+Run `bun services/importer/src/cli.ts` with --source, --dump, --state, --api, --account-key, --account, --client and --auth, plus one source/dump/state file and API/Auth origins. --help needs no credentials, SQLite or network. Sources: bangumi, vndb, openlibrary, wikidata.
 
---dump - accepts plain stdin. Compression is explicit: gzip is supported for Open Library and Wikidata streamed dumps; zstd is supported for VNDB archives and Wikidata dumps. It is not inferred from the filename. zstd requires one local regular file and a trusted executable. The decoded-byte ceiling defaults to 256 GiB; source records default to 256 KiB with a hard 1 MiB maximum, subject to tighter native limits. API and Auth values must be HTTPS origins with no path, query, fragment or credentials. The disappearance threshold is from zero through one. Progress is opt-in and goes to stderr.
+`--dump -` reads plain stdin. Compression is explicit: gzip for streamed Open Library/Wikidata dumps; zstd for VNDB archives/Wikidata dumps, never inferred from filenames. zstd requires one local regular file and trusted executable. Decoded bytes default to a 256 GiB ceiling; records default to 256 KiB, hard maximum 1 MiB (native limits may be lower). API/Auth must be HTTPS origins without path, query, fragment or credentials. Disappearance threshold is 0–1; optional progress goes to stderr.
 
 - `preview`: decode and compare with a completed baseline; no public writes.
 - `compare` / `capture-comparison`: compare bounded plans or pages of two complete captures.
@@ -36,7 +36,7 @@ Run `bun services/importer/src/cli.ts` with --source, --dump, --state, --api, --
 - `retention` / `staging-retirement`: review/retire the exact eligible generation or unpublished capture.
 - `backup` / `validate-snapshot`: preserve/verify SQLite with committed WAL state.
 
-Ordinary interrupted, unsealed acquisition is discarded and starts again. Optional staging checkpoints support large Bangumi, Open Library and Wikidata files; VNDB COPY acquisition has its own explicit checkpoint. Resume verifies the same source and bytes before continuing. A sealed generation is resumed from its journal; replacement input is never substituted for an unknown-delivery request. Concurrent operators use the same state file with exact alias ownership; one live operator cannot take another's lease.
+Interrupted unsealed acquisition is discarded; optional checkpoints cover large Bangumi/Open Library/Wikidata files and VNDB COPY. Resume verifies the same source and bytes. Sealed generations resume from the journal; unknown delivery never substitutes input. Concurrent operators share exact alias ownership, so one live operator cannot take another's lease.
 
 ## Retained source metadata
 
@@ -96,21 +96,21 @@ Only the Work's optional top-level first_publish_date produces an independently 
 
 ## Explicit local showcase publication
 
-Ordinary import remains proposal-only. The explicit local seed uses the common publication journal and public API: it records finite source/candidate intent, reviews exact native candidates, accepts and adopts them under current authority, then checks current returned facts. A local plan or acknowledgement alone is not public visibility. Source Concept/Scheme proposals are not canonical mappings; current source URI, type and scheme membership must be reread before a dependent assertion is admitted.
+Ordinary import is proposal-only. The explicit local seed uses the common journal/public API to record finite intent, review exact native candidates, accept/adopt under current authority, then check current returned facts. A plan or acknowledgement alone is not publication. Source Concept/Scheme proposals are not canonical mappings; reread URI, type and membership before admitting dependent assertions.
 
-Selected showcase inputs are bounded by their selected work/person graph. The seed does not perform label or catalogue scans. If an exact binding is missing, retracted, concealed or changed, only dependent facts are withheld; independent names, biography, identity and credits remain usable.
+Showcase inputs are bounded by the selected work/person graph, with no label/catalogue scans. Missing, retracted, concealed or changed exact bindings withhold only dependent facts; independent names, biography, identity and credits remain usable.
 
 ### Bangumi Person career acquisition
 
-Archive career data has precedence, including an empty or malformed field. PersonDetail is fetched only for a selected actual Person missing career or a birth-date field; the same request can supply either. There is at most one request for each of at most 64 selected Persons. Requests are sequential with 250 ms spacing, share the existing import deadline, and each response is capped at 64 KiB. A response must identify the requested person and contain no more than seven bounded career strings. No archive revision is invented.
+Archive careers, including empty or malformed values, win. Fetch PersonDetail only for a selected actual Person missing career or birth date; one response may supply both. At most one request for each of at most 64 Persons, sequentially spaced 250 ms, sharing the import deadline; responses are ≤64 KiB, identify the requested Person and contain ≤7 bounded careers. Invent no archive revision.
 
-The immutable journal receipt binds the exact GET https://api.bgm.tv/v0/persons/{id}, the archive digest, response SHA-256 and optional ETag. Restart reuses the sealed response without fetching it again. Missing, malformed or unavailable response data withholds only dependent P106 or birth-date facts; identity, biography and credits remain independent. The public-source admission is exact to the Person, Scheme, Concept and P106 mapping described above.
+The immutable journal receipt binds exact GET `https://api.bgm.tv/v0/persons/{id}`, archive digest, response SHA-256 and optional ETag. Restart reuses the sealed response. Missing, malformed or unavailable data withholds only dependent P106/birth-date facts; identity, biography and credits stay independent. Admission uses the exact Person, Scheme, Concept and P106 mapping above.
 
 ### Media rights and replay
 
-Converters return media intent, not fetched image bytes. Media acquisition requires an explicit provider-supported source and a valid current subject. A 202 reserved receipt is not an available media ID; the importer records the exact request, observed receipt and status separately. Unknown delivery reuses original bytes and key. Only confirmed available media can enter the separately reviewed cover candidate.
+Converters return media intent only. Acquisition needs a supported provider source and current subject. A 202 reservation is not an available media ID: the journal records request, receipt and status. Unknown delivery reuses original bytes/key; only confirmed media enters a separately reviewed cover candidate.
 
-Bangumi cover bytes keep the rights-holder credit, “via Bangumi” source attribution, unknown image licence and cover-only use. Originals remain private; public output is re-encoded. Summary prose is not made public by a cover permission or metadata descriptor. Rejected or missing covers remain addressable gaps without suppressing independent metadata. Source withdrawal, media takedown and deletion are governed by the common [deletion policy](../../docs/deletion.md); refresh may not reintroduce fenced material.
+Bangumi covers retain rights-holder credit, “via Bangumi” attribution, unknown image licence and cover-only use. Originals stay private; public output is re-encoded. Cover permission/metadata does not license summary prose. Rejected or missing covers remain addressable gaps without suppressing metadata. The [deletion policy](../../docs/deletion.md) fences withdrawal/takedown against refresh.
 
 Selected Bangumi Person/Organization images use only GET `/v0/persons/{id}` `PersonDetail.images.large` under schema `2026-07-24`, after exact response-ID/archive-type match. Missing, null, blank or placeholder images are absent; alternate sizes/redirects are excluded. Immutable receipts bind archive revision/digest, response SHA-256 and optional ETag; missing revisions stay unversioned. Changed digests append journal entries; pending, unknown and fenced outcomes replay prior evidence. Acquisition stays within the selected graph and shared deadline/pacing.
 
@@ -120,7 +120,7 @@ Imports owns its source-backed candidates and retained local acquisition state. 
 
 ## Cost
 
-Costs are finite functions of supplied input, selected rows, bounded pages and bounded command count. R is retained records, B is binding/journal rows, N is input records, M is one record/request/response bytes, q is commands for one record, r is one page, and K is concurrent records. Indexed point work is O(log R) or O(log B); keyset pages add only their bounded results. No operation scans unrelated source history or catalogue state.
+For R retained records, B binding/journal rows, N input records, M one record/request/response bytes, q per-record commands, r page size and K concurrent records, costs are finite in supplied input, selected rows, bounded pages and commands. Indexed point work is O(log R/B); keyset pages add only bounded results. No operation scans unrelated history or catalogue state.
 
 ### Import authored Bangumi television original-run and episode count
 
