@@ -56,8 +56,8 @@ function train(h: ReturnType<typeof integrationHarness>): MergeTrain {
 
 function resolverAdapter(
   write: string,
-  started?: () => void,
-  marker?: string,
+  started?: (call: number) => void,
+  marker?: string | readonly string[],
   targets: readonly string[] = [dev],
   expectedFile = file,
   inspectPrompt?: (prompt: string, data: any) => void,
@@ -84,11 +84,12 @@ function resolverAdapter(
             targetLine,
           );
         inspectPrompt?.(options.prompt, data);
-        started?.();
+        started?.(calls);
+        const callMarker = typeof marker === 'string' ? marker : marker?.[Math.min(calls - 1, marker.length - 1)];
         const promptBytes = Buffer.byteLength(options.prompt);
         const promptHash = createHash('sha256').update(options.prompt).digest('hex');
         const delivery = `const crypto=require('node:crypto');let prompt='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>prompt+=chunk);process.stdin.on('end',()=>{if(Buffer.byteLength(prompt)!==${promptBytes}||crypto.createHash('sha256').update(prompt).digest('hex')!==${JSON.stringify(promptHash)})process.exit(3);${writeDirectly ? '' : `require('node:fs').writeFileSync(${JSON.stringify(expectedFile)},${JSON.stringify(write)})`}});`;
-        const args = ['-e', `${waitForMarker(marker)}${delivery}`];
+        const args = ['-e', `${waitForMarker(callMarker)}${delivery}`];
         expect(args.join('\0')).not.toContain(options.prompt);
         if (writeDirectly) {
           writeFileSync(join(options.worktree, expectedFile), write);
@@ -197,6 +198,64 @@ test('a resolution that conflicts with a moved dev head runs the resolver again 
     h.dispose();
   }
 }, 45_000);
+
+test('separate dev moves during resolver passes replay and land the same accepted worker attempt', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.devLandingChecks = false;
+    const task = await startConflict(h);
+    const workerCommit = git(task.worktree, 'rev-parse', 'HEAD');
+    const firstMove = 'export const value = "dev2";\nexport const fromDev = true;\n';
+    const lateFile = 'packages/fixture/dev-late.ts';
+    const firstMarker = join(h.settings.stateDirectory, 'release-first-dev-resolver');
+    const secondMarker = join(h.settings.stateDirectory, 'release-second-dev-resolver');
+    let releaseFirstStarted!: () => void;
+    let releaseSecondStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => (releaseFirstStarted = resolve));
+    const secondStarted = new Promise<void>((resolve) => (releaseSecondStarted = resolve));
+    const mocked = resolverAdapter(
+      resolved,
+      (call) => {
+        if (call === 1) releaseFirstStarted();
+        if (call === 2) releaseSecondStarted();
+      },
+      [firstMarker, secondMarker],
+      [dev, firstMove],
+    );
+    const resolving = withAgentAdapter(mocked.adapter, () => train(h).run());
+    await firstStarted;
+
+    const firstTarget = h.advanceDev(file, firstMove);
+    writeFileSync(firstMarker, 'continue');
+    const secondBoundary = await Promise.race([
+      secondStarted.then(() => 'second resolver started'),
+      resolving.then(() => 'train finished before second resolver'),
+    ]);
+    expect(secondBoundary).toBe('second resolver started');
+    expect(mocked.calls()).toBe(2);
+
+    const secondTarget = h.advanceDev(lateFile, 'export const devLate = true;\n');
+    writeFileSync(secondMarker, 'continue');
+    await resolving;
+    await h.job.drain();
+
+    const outcome = h.outcomes.find((item) => item.taskId === task.id)!;
+    const finalHead = h.head();
+    expect(h.outcomes.filter((item) => item.taskId === task.id)).toHaveLength(1);
+    expect(outcome).toMatchObject({ passed: true, conflictResolution: { method: 'resolver', attempts: 2 } });
+    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
+    expect(h.store.events(task.id, 1).filter((event) => event.kind === 'dev-conflict-landed')).toHaveLength(1);
+    expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
+    expect(git(h.root, 'show', `dev:${lateFile}`)).toBe('export const devLate = true;');
+    expect(git(h.root, 'rev-parse', `${finalHead}^1`)).toBe(secondTarget);
+    expect(git(h.root, 'rev-parse', `${finalHead}^2`)).toBe(workerCommit);
+    expect(git(h.root, 'merge-base', '--is-ancestor', firstTarget, finalHead)).toBe('');
+    expect(git(h.root, 'merge-base', '--is-ancestor', secondTarget, finalHead)).toBe('');
+    expect(readFileSync(outcome.logPath, 'utf8')).toContain('Train resolution replayed cleanly');
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
 
 test('a 300 KB resolver prompt is delivered over stdin and the resolution lands', async () => {
   const h = integrationHarness();

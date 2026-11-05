@@ -1577,6 +1577,8 @@ integration head.
 
 Dev landing conflicts that rerere and the mechanical resolvers do not settle go to the bounded `TrainResolver` in its own worktree with the task brief, base and both sides. The train releases the dev lease while it runs; a resolved commit returns to the front of the dev queue. `policy.trainResolver.devAttempts` bounds repeated resolution (default `3`). If resolution fails, times out or reaches that bound, the same attempt returns to its worker. The landing outcome and log record the method (`rerere`, `mechanical`, `resolver` or `worker`) and resolver token totals.
 
+Decision: Keep the accepted worker source fixed across dev movement; retry composition after a replay conflict, then replay a clean resolution onto the newest dev head before the existing landing publishes it.
+
 Resolver prompts include conflict hunks with context, source contracts and instructions for reading each Git stage; long compiler output includes its first and last lines plus the full log path.
 
 After rebasing a single or batched landing, the train checks every path changed by that task against the current dev tree. If the task changed a path but the landing leaves that path's dev content unchanged, the train returns the task to its worker at the merge stage and names the path; a task diff already empty against dev is treated as already represented. Markdown and configured JSON message conflict resolution also stays with the worker when the resolved file keeps only dev's content and discards a worker change. A landing with no net tree change against dev is never reported as integrated on an existing commit.
