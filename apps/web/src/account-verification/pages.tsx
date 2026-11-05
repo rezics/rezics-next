@@ -248,6 +248,7 @@ function ReviewPageViewContent({
               ref={queueRegionRef}
               role="region"
               aria-label={m.av_review_title()}
+              aria-busy={page.state === 'loading'}
               tabIndex={-1}
               className="space-y-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-solid focus-visible:outline-ring"
             >
