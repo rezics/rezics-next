@@ -144,7 +144,7 @@ test('a selected Context and exact dated Organization assertion survive target, 
     await render('initial', structuredClone(organization), {}, true);
     const returned = host.querySelector('[role="region"]')!;
     expect(returned.textContent).toContain(second.id);
-    expect(window.document.activeElement).toBe(returned);
+    expect(window.document.activeElement === returned).toBe(true);
 
     const hidden = structuredClone(organization);
     hidden.subject.statements['wdt:P749']![1]!.qualifiers.push({
@@ -163,14 +163,18 @@ test('a selected Context and exact dated Organization assertion survive target, 
         (row) => row !== concealedRow && row.querySelector(`a[href*="${parent}"]`),
       ),
     ).toBe(true);
-    expect(window.document.activeElement).toBe(host.querySelector('h3'));
+    expect(
+      window.document.activeElement === host.querySelector('h3[data-organization-field="wdt:P749"]'),
+    ).toBe(true);
 
     const replaced = structuredClone(organization);
     replaced.subject.statements['wdt:P749']![1] = { ...second, id: '00000000-0000-4000-8000-00000000d816' };
     await render('initial', replaced, {});
     expect(host.querySelector('[role="region"]')).toBeNull();
     expect(host.textContent).toContain(m.organization_reader_changed());
-    expect(window.document.activeElement).toBe(host.querySelector('h3'));
+    expect(
+      window.document.activeElement === host.querySelector('h3[data-organization-field="wdt:P749"]'),
+    ).toBe(true);
   } finally {
     await act(async () => root.unmount());
     client.clear();

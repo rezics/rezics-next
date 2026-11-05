@@ -550,6 +550,7 @@ function OrganizationFacts({
               if (node) fieldHeadings.current.set(field.id, node);
               else fieldHeadings.current.delete(field.id);
             }}
+            data-organization-field={field.id}
             tabIndex={-1}
             lang={field.label.lang ?? undefined}
             className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-ring"
