@@ -248,7 +248,7 @@ export const readPresentationPreview = createServerFn({ method: 'POST', strict: 
     const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
     // No fixture fallback can claim to be the current native public page.
     if (!origin) return { ok: false, reason: 'unavailable' };
-    return loadPresentationPreview(presentationPreviewClient(origin, globalThis.fetch), data);
+    return loadPresentationPreview(presentationPreviewClient(origin, globalThis.fetch), data, getRequest().signal);
   });
 
 function candidateAddress(input: unknown) {

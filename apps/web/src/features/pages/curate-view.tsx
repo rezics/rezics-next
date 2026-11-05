@@ -3,7 +3,7 @@ import { m } from '../../paraglide/messages.js';
 import { candidateSession } from '../../subject/candidate-lifetime';
 import { useLocation } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useContext, useLayoutEffect, useRef } from 'react';
+import { useContext, useLayoutEffect, useRef, useCallback } from 'react';
 import { getLocale } from '../../paraglide/runtime';
 import { csrfHeaders } from '../../threads/composer';
 import {
@@ -24,6 +24,7 @@ import { PresentationViewEditor, type CurationEditorTransport } from './curate-v
 import { PresentationPreviewPanel, PresentationPreviewContext } from './presentation-preview-view';
 import { readPresentationPreview } from './curate-actions';
 import { CurationReaderAdmission } from './curation-reader-admission';
+import type { PresentationPreviewRead } from './presentation-preview';
 
 const publicationTransport: CurationEditorTransport = {
   previewDraft: (input, signal) => readDraftPreview({ data: input, headers: csrfHeaders(), signal }),
@@ -115,20 +116,17 @@ export function CurationView({
   const admission = admissionRef.current;
   useLayoutEffect(() => admission.attach(), [admission]);
   const locale = getLocale();
+  const readPublished = useCallback<PresentationPreviewRead>(
+    (input, signal) => readPresentationPreview({ data: input, signal, headers: csrfHeaders() }),
+    [],
+  );
   return (
     <PresentationViewEditor
       initial={initial}
       locale={locale}
       admission={admission}
       transport={transport}
-      preview={
-        <PresentationPreviewPanel
-          key={locale}
-          locale={locale}
-          read={(input) => readPresentationPreview({ data: input, headers: csrfHeaders() })}
-          {...preview}
-        />
-      }
+      preview={<PresentationPreviewPanel key={locale} locale={locale} read={readPublished} {...preview} />}
     />
   );
 }

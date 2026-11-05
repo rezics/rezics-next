@@ -11,14 +11,14 @@ import { accountHref } from '../../subject/subject-href';
 import { dataComponents, PageData } from './data';
 import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout';
 import { usePreviewCloseFocus } from './presentation-preview-focus';
-import type { PresentationPreview, PresentationPreviewInput } from './presentation-preview';
+import type { PresentationPreview, PresentationPreviewInput, PresentationPreviewRead } from './presentation-preview';
 import { CompositionRender } from './render';
 import { subjectPageMessages } from './route-support';
 
 export type PresentationPreviewProps = {
   locale: string;
   /** Injection is for connected workflow stories; production always uses the prepared BFF. */
-  read: (input: PresentationPreviewInput) => Promise<PresentationPreview>;
+  read: PresentationPreviewRead;
   initial?: PresentationPreview;
 };
 
@@ -134,20 +134,27 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
     initial ? { status: 'complete', context: { locale, read }, result: initial } : { status: 'idle' },
   );
   const request = useRef(0);
+  const lifetime = useRef<AbortController | null>(null);
+
+  function retire() {
+    request.current += 1;
+    lifetime.current?.abort();
+    lifetime.current = null;
+  }
   const mounted = useRef(false);
   const requestContext = useRef<PreviewRequestContext>({ locale, read });
   useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      request.current += 1;
+      retire();
     };
   }, []);
   useLayoutEffect(() => {
     const nextContext = { locale, read };
     if (samePreviewRequestContext(requestContext.current, nextContext)) return;
     requestContext.current = nextContext;
-    request.current += 1;
+    retire();
     setInspection({ status: 'idle' });
   }, [locale, read]);
   const currentInspection =
@@ -161,7 +168,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
 
   function clear() {
     if (!mounted.current) return;
-    request.current += 1;
+    retire();
     setInspection({ status: 'idle' });
   }
 
@@ -174,7 +181,10 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
     event.preventDefault();
     if (!mounted.current) return;
     const context = { locale, read };
-    const serial = ++request.current;
+    retire();
+    const serial = request.current;
+    const controller = new AbortController();
+    lifetime.current = controller;
     setInspection({ status: 'loading', context });
     const input: PresentationPreviewInput = {
       target:
@@ -189,7 +199,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
     const isCurrent = () =>
       mounted.current && serial === request.current && samePreviewRequestContext(requestContext.current, context);
     try {
-      const next = await context.read(input);
+      const next = await context.read(input, controller.signal);
       if (isCurrent()) setInspection({ status: 'complete', context, result: next });
     } catch {
       if (isCurrent()) {

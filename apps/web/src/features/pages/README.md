@@ -307,3 +307,12 @@ Connections keeps its existing bounded history and exact reading checks. Target 
 window plus the validated work-region opener. A replacement of the mounted source consumes the prior URL intent
 and requires restart before reading again, rather than replaying its old continuation. No new native call, grouping
 model, evidence renderer, continuation host, source projection or inferred target is introduced by the outer journey.
+
+## Anonymous published inspection
+
+One inspection owns one cancellation lifetime through the prepared BFF Request and all anonymous native reads.
+Close, target edits, locale/read-adapter replacement and unmount retire it; reopening starts a fresh lifetime.
+An aborted aggregate starts no profile controls. The two fixed concurrent controls share its signal and retain the
+immutable digest/template witness and separately observed active-head checks. Abort is best effort: serial and
+current-context fences still discard retired results, and native failure semantics remain unchanged. The transport
+strips credentials at the boundary with omit/manual/no-store; inspection never shares viewer or page query caches.
