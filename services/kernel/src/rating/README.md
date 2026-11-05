@@ -1377,6 +1377,10 @@ Decision: growth fixtures compose native Access directly so unrelated Kernel HTT
 
 ### My ratings
 
+Decision: own-votes imports the shared native question/vote response schemas from the pure
+`vote-response-schemas.ts` leaf; `schemas.ts` re-exports the same objects. This keeps Web page/action validation
+independent of Content runtime initialization; Content validation and Accounts scope composition retain their owners.
+
 `GET /v1/me/rating-votes` (`rating.own_votes_page`) mounts the account-home native inventory under
 `rating:vote`, authenticated bearer access and the existing `personal_library` exposure gate. Its sole optional
 query field is `cursor`; unknown fields, including voter, selection, search, sort and limit, are rejected.

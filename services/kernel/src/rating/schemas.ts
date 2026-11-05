@@ -1,4 +1,6 @@
 import { t } from 'elysia';
+import { RatingQuestionLifecycleSchema, RatingQuestionResponseSchema } from './vote-response-schemas.ts';
+export { RatingQuestionResponseSchema, RatingVoteResponseSchema } from './vote-response-schemas.ts';
 import { SourceFiguresSchema } from './source-figures.ts';
 import { SourceFenceQuerySchema, strictContentSchema } from '../content/schemas.ts';
 
@@ -52,43 +54,6 @@ export const ClassificationBallotAggregateResponseSchema = t.Union([
     closed,
   ),
 ]);
-
-export const RatingVoteResponseSchema = t.Object(
-  {
-    units: t.Integer(),
-    revision,
-    at: t.String({ format: 'date-time' }),
-  },
-  closed,
-);
-
-const RatingQuestionLifecycleSchema = t.Object(
-  { state: t.Union([t.Literal('active'), t.Literal('retired')]), revision },
-  closed,
-);
-
-export const RatingQuestionResponseSchema = t.Object(
-  {
-    id,
-    revision,
-    realmId: t.Optional(id),
-    canonicalLabel: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
-    labelRevision: t.Optional(revision),
-    meaning: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
-    label: t.String({ minLength: 1, maxLength: 200 }),
-    grain,
-    lifecycle: t.Optional(RatingQuestionLifecycleSchema),
-    scale: t.Object(
-      {
-        min: t.Integer(),
-        max: t.Integer(),
-        displayStep: t.Integer({ minimum: 1 }),
-      },
-      closed,
-    ),
-  },
-  closed,
-);
 
 export const RatingQuestionLifecycleInputSchema = strictContentSchema(
   t.Object({ expectedLifecycleRevision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }) }, closed),

@@ -1,6 +1,6 @@
 import { t } from 'elysia';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
-import { RatingQuestionResponseSchema, RatingVoteResponseSchema } from './schemas.ts';
+import { RatingQuestionResponseSchema, RatingVoteResponseSchema } from './vote-response-schemas.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
