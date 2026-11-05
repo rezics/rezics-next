@@ -84,7 +84,11 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
   };
   const canonicalPerson = '00000000-0000-4000-8000-000000000018';
   const current = new Map<string, unknown>([
-    [bound['1']!, { subject: { id: bound['1'], type: 'schema:TVSeries', statements: {} } }],
+    [bound['1']!, { subject: {
+      id: bound['1'],
+      type: 'schema:TVSeries',
+      statements: { 'wdt:P5732': [{ value: { type: 'value', content: '1' } }] },
+    } }],
     [bound['person:8']!, { subject: {
       id: canonicalPerson,
       type: 'schema:Person',
