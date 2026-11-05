@@ -209,7 +209,7 @@ test('each quotation assertion owns its evidence, language choice, inspection an
     expect(host.querySelector('h2')?.textContent).not.toContain(quote);
     expect(host.querySelector('[data-action-state="unavailable"]')).toBeTruthy();
     expect(host.textContent).not.toContain(m.quotation_correct());
-    expect(host.textContent).toContain(m.quotation_authoring());
+    expect(host.textContent).not.toContain(m.quotation_authoring());
     await reveal(0);
     expect(host.textContent).toContain('The exact authored quotation');
     expect(host.querySelector(`a[href="${source}"]`)).toBeTruthy();
