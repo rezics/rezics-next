@@ -161,7 +161,7 @@ export async function grantCommand<T>(
         throw options.denied();
       for (const [index, check] of prepared.checks.entries())
         if (!(await check.check(tx, attempt.time))) {
-          console.error('[dbg-grant] authorize denied', options.kind, index, prepared.checks[index]!.action);
+          console.error('[dbg-grant] authorize denied', options.kind, index, prepared.checks[index]!.action, 'inScopes', actor.scopes.includes(prepared.checks[index]!.action), 'scopeCount', actor.scopes.length, JSON.stringify(actor.scopes.filter((scope) => /create|grant/.test(scope))));
           throw options.denied();
         }
       requireAccessDeadline(context.deadline);
