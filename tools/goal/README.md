@@ -984,6 +984,8 @@ records. Missing source history is `unknown`; an empty counter is not inferred f
 are task outcomes, not changed-line volume. Worker diff churn is labeled separately and is not presented as delivered
 product work.
 
+Decision: Guard-ending buckets use each worker record's own `endedAt` through a bounded index, independently of attempt timestamps, while retaining historical classifications and exact report text.
+
 Set `integration.hourlyReportNotifier` in untracked local settings to an argv array to enable one report per completed
 UTC hour. Goal appends the report as the final argument, runs without a shell, discards notifier output, and stops the
 notifier after `integration.hourlyReportTimeoutMs` (default `20000`, maximum from `policy.validation.hourlyReportMaxTimeoutMs`). Keep credentials in the
