@@ -556,7 +556,7 @@ test('an acknowledged own-vote result is reused while the affected Entry is read
   expect(inspected.cost.calls['vote-read']).toBe(0);
 });
 
-test('expired evidence retires score controls and replacement upload deletes the former private document', async () => {
+test('expired evidence retires score controls before a replacement upload', async () => {
   const base = recordingPort(1);
   let pages = 0;
   let previews = 0;
@@ -584,9 +584,18 @@ test('expired evidence retires score controls and replacement upload deletes the
   expect(removed.page).toEqual([]);
   expect(removed.meta).toEqual([]);
   const next = await journey.preview(envelope(1));
-  expect(base.deletions).toEqual([id]);
+  expect(base.deletions).toEqual([]);
   expect(next.meta[0]?.title).toBe('Replacement');
   expect(next.meta[0]?.scoreReview).toBeNull();
+});
+
+test('replacement upload deletes the previous live native document', async () => {
+  const { port, deletions } = recordingPort(1);
+  const journey = createBangumiJourney({ port, visit: visit() });
+  await journey.preview(envelope(1));
+  await journey.preview(envelope(1));
+  expect(deletions).toEqual([id]);
+  expect(journey.snapshot().stage).toBe('review');
 });
 
 test('a changed account retires the upload and former-account callbacks', async () => {
@@ -625,6 +634,7 @@ test('growth at 10, 50 and 100 rows stays within native page, apply and retained
       snap = await journey.review(ordinal, ordinal === 0 ? subject : undefined);
       journey.choose(ordinal, { state: 'preserve', skip: false });
     }
+    journey.openConfirm();
     snap = await journey.confirm();
     expect(snap.page.length).toBeLessThanOrEqual(BANGUMI_PAGE);
     expect(snap.meta.length).toBe(total);
