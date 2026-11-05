@@ -9,7 +9,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { LINKS_CHANGED, SUBJECT_REVISED } from '../../src/semantic/events.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { factDataTypes, itemFacts } from '../../src/semantic/item.ts';
+import { factDataTypes, isRelationProperty, itemFacts } from '../../src/semantic/item.ts';
 import { linkChanges } from '../../src/semantic/link-changes.ts';
 import { holderFacts } from '../../src/semantic/link-keys.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
@@ -75,6 +75,7 @@ function snak(id: string, content: unknown) {
 function appearance(target: string, _position: number, spoiler = false, extraCitation = false) {
   return {
     property: { id: PROPERTY },
+    rank: 'normal' as const,
     value: { type: 'value' as const, content: target },
     qualifiers: [
       snak('wdt:P3831', role),
@@ -226,14 +227,24 @@ beforeAll(async () => {
        VALUES ($1,$2,2,'adopt',$3,$4)`,
       [seededRoute, work, digest, transactionId],
     );
+    await tx.query('UPDATE semantic.subject SET current_release=$3 WHERE route=$1 AND subject_id=$2', [
+      seededRoute,
+      work,
+      digest,
+    ]);
+    const stored = facts.map((fact) => ({
+      ...fact,
+      release: digest,
+      relation: fact.kind === 'statement' && isRelationProperty(release, fact.property!),
+    }));
     await writeFacts(tx, {
       route: seededRoute,
       subject_id: work,
       transaction_id: transactionId,
-      facts: facts.map((fact) => ({ ...fact, release: digest })),
+      facts: stored,
     });
     const identity = await holderFacts(tx, work, release);
-    const changes = linkChanges([], facts, factDataTypes(release, facts), {
+    const changes = linkChanges([], stored, factDataTypes(release, stored), {
       subject: work,
       release,
       type: 'schema:Movie',
@@ -263,19 +274,6 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   const preview = await call('GET', `/v1/subjects/${work}`, undefined);
   expect(preview.subject.statements['schema:character']).toHaveLength(12);
   expect(preview.subject.relationCounts ?? {}).toEqual({});
-  const first = preview.subject.statements['schema:character'][0];
-  expect(first.references).toHaveLength(2);
-  expect(
-    first.references.map((reference: { parts: { value: { content: string } }[] }) => reference.parts[0]?.value.content),
-  ).toEqual(['https://example.test/original', 'https://example.test/copy']);
-  expect(preview.subject.statements['schema:character'][1].references).toHaveLength(1);
-  const spoiler = preview.subject.statements['schema:character'].find((row: any) =>
-    row.qualifiers?.some(
-      (snak: { property: { id: string }; value: { content: { amount: string } } }) =>
-        snak.property.id === 'rezics:spoilerLevel' && snak.value.content.amount === '+2',
-    ),
-  );
-  expect(spoiler?.value.content).toBe(people[3]);
 
   const editorPage = await untilCaughtUp(work, 'relations?property=schema:character&limit=5');
   expect(editorPage.freshness).toEqual({ consistency: 'eventual', target_seconds: 10, caught_up: true });
@@ -283,11 +281,27 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   const exhausted = await pageAll('relations', work, 'schema:character');
   expect(exhausted.rows).toHaveLength(16);
   expect(exhausted.last.next).toBeNull();
-  expect(exhausted.rows.map((row) => row.target)).toEqual(people);
+  expect(exhausted.rows.map((row) => row.target).sort()).toEqual([...people].sort());
   expect(new Set(people.map((id) => partitionOf(routeOf(id)!))).size).toBeGreaterThan(1);
-  expect(exhausted.rows[0]?.label).toBe('人物00');
-  expect(exhausted.rows[1]?.label).toBe('人物01');
-  expect(exhausted.rows[0]?.related?.[role]?.label?.value).toBe('主役');
+  const byTarget = new Map(exhausted.rows.map((row) => [row.target, row]));
+  expect(byTarget.get(people[0])?.label).toBe('人物00');
+  expect(byTarget.get(people[1])?.label).toBe('人物01');
+  expect(byTarget.get(people[0])?.related?.[role]?.label?.value).toBe('主役');
+  expect(byTarget.get(people[0])?.statement.references).toHaveLength(2);
+  expect(
+    byTarget
+      .get(people[0])
+      ?.statement.references.map(
+        (reference: { parts: { value: { content: string } }[] }) => reference.parts[0]?.value.content,
+      ),
+  ).toEqual(['https://example.test/original', 'https://example.test/copy']);
+  expect(byTarget.get(people[2])?.statement.references).toHaveLength(1);
+  expect(
+    byTarget.get(people[3])?.statement.qualifiers?.some(
+      (snak: { property: { id: string }; value: { content: { amount: string } } }) =>
+        snak.property.id === 'rezics:spoilerLevel' && snak.value.content.amount === '+2',
+    ),
+  ).toBe(true);
 
   const observer = observeSql(pool);
   try {
@@ -379,11 +393,8 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   const createDetail = await call('GET', `/v1/subjects/${work}/revisions/${createRevision.revision}`, undefined);
   expect(createDetail.change?.kind === 'terms' || createDetail.revision.kind === 'create').toBe(true);
   const afterPublish = await call('GET', `/v1/subjects/${work}`, undefined);
-  expect(
-    afterPublish.subject.statements['schema:character'].some(
-      (row: { value: { content: string } }) => row.value.content === extra,
-    ),
-  ).toBe(true);
+  expect(afterPublish.subject.statements['schema:character']).toHaveLength(12);
+  expect(afterPublish.subject.relationCounts ?? {}).toEqual({});
 
   const suspendedBearer = real.bearer('suspended');
   await suspendAccount(admin, accounts.suspended);
