@@ -364,9 +364,18 @@ export function evaluatePolicyResidual(
   const names = residualOperandNames(normalized.root);
   const unknownName = names.find((name) => {
     const fact = isPlainObject(resourceFacts) ? ownData(resourceFacts, name) : { present: false as const };
-    return !fact || !fact.present || fact.value === null;
+    return (
+      !fact ||
+      !fact.present ||
+      (fact.value !== true && fact.value !== false && fact.value !== null)
+    );
   });
   const fact = unknownName && isPlainObject(resourceFacts) ? ownData(resourceFacts, unknownName) : null;
-  const reason = !fact || !fact.present ? 'missing-evidence' : fact.value === null ? 'unknown-evidence' : 'malformed-evidence';
+  const reason =
+    !fact || !fact.present
+      ? 'missing-evidence'
+      : fact.value === null
+        ? 'unknown-evidence'
+        : 'malformed-evidence';
   return Object.freeze({ decision: 'unavailable', reason, explanation });
 }
