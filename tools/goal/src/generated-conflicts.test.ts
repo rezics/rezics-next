@@ -87,6 +87,39 @@ test('a generated conflict in the stabilize-to-dev merge regenerates and commits
   }
 }, 30_000);
 
+test('a stabilize-to-dev candidate resolves import and generated conflicts together', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    const imports = 'src/conflict-fixture.ts';
+    const generatedFile = 'services/kernel/db/content/schema.sql';
+    mkdirSync(dirname(join(h.root, imports)), { recursive: true });
+    writeFileSync(join(h.root, imports), "import './base.ts';\nexport {};\n");
+    git(h.root, 'add', '--', imports);
+    git(h.root, 'commit', '-m', 'Add import conflict fixture');
+    git(h.root, 'branch', '-f', 'dev', 'HEAD');
+    git(h.root, 'branch', 'stabilize', 'HEAD');
+
+    const command = regeneration(h, 'regenerated from dev\n');
+    generatedSettings(h, command);
+    const task = await dispatch(h, generatedFile, true);
+    writeFileSync(join(task.worktree, imports), "import './worker.ts';\nexport {};\n");
+    git(task.worktree, 'add', '--', imports);
+    git(task.worktree, 'commit', '--amend', '--no-edit');
+    h.advanceDev(imports, "import './dev.ts';\nexport {};\n");
+    h.advanceDev(generatedFile, 'new dev schema\n');
+
+    await h.train();
+
+    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(git(h.root, 'show', `dev:${imports}`)).toContain("import './worker.ts';");
+    expect(git(h.root, 'show', `dev:${imports}`)).toContain("import './dev.ts';");
+    expect(git(h.root, 'show', `dev:${generatedFile}`)).toBe('regenerated from dev');
+  } finally {
+    h.dispose();
+  }
+}, 30_000);
+
 test('a rebase with any non-generated conflict remains with the worker', async () => {
   const h = integrationHarness();
   try {
