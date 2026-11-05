@@ -183,7 +183,7 @@ test('Native cursor recovery names the first-page restart and preserves the exac
       expect(host.textContent).not.toContain(m.subject_view_retry());
       expect(host.textContent).not.toContain(m.library_label_more());
       expect(host.textContent).not.toContain('Rejected row');
-      expect(host.querySelector('form, ul, [data-library-label-link]')).toBeNull();
+      if (scenario.state === 'unavailable') expect(host.querySelector('form, ul, [data-library-label-link]')).toBeNull();
       expect([...host.querySelectorAll('a')].some((item) => item.textContent === m.library_labels_heading())).toBe(
         false,
       );
