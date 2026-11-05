@@ -474,13 +474,13 @@ test('review transport keeps original source observations, decimal security revi
     fetch: Object.assign(
       async () => {
         synchronousMergeCalls++;
-        return Response.json({ operation: { id: original } }, { status: 202 });
+        return Response.json({ survivor: original, redirected: other, revision: 2 }, { status: 200 });
       },
       { preconnect() {} },
     ),
   });
   await expect(synchronousMerge.mergeReviewedPersons(body, 'synchronous-result')).rejects.toMatchObject({
-    status: 202,
+    status: 200,
   });
   expect(synchronousMergeCalls).toBe(1);
 
@@ -499,7 +499,7 @@ test('review transport keeps original source observations, decimal security revi
           reviewedIdentity: endpoint,
         });
       if (++attempt === 1) return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
-      return Response.json({ survivor: original, redirected: other, revision: 10 });
+      return Response.json({ operation: { id: currentPersonId } }, { status: 202 });
     }) as typeof fetch,
   });
   const observed = await transport.readReviewedPersonIdentity(original, { source: 'bangumi', externalId: 'person:8' });
@@ -507,11 +507,7 @@ test('review transport keeps original source observations, decimal security revi
   expect(requests[0]!.url.searchParams.get('reviewIdentitySource')).toBe('bangumi');
   expect(requests[0]!.url.searchParams.get('reviewIdentityExternalId')).toBe('person:8');
   await expect(transport.mergeReviewedPersons(body, 'review-intent')).rejects.toBeInstanceOf(ImportTransportError);
-  expect(await transport.mergeReviewedPersons(body, 'review-intent')).toEqual({
-    survivor: original,
-    redirected: other,
-    revision: 10,
-  });
+  expect(await transport.mergeReviewedPersons(body, 'review-intent')).toEqual({ operation: { id: currentPersonId } });
   expect(requests[1]!.url.pathname).toBe('/v1/subjects:merge');
   expect(requests[2]!.body).toBe(requests[1]!.body);
   expect(JSON.parse(requests[2]!.body)).toEqual(body);

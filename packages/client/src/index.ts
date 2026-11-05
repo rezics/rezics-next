@@ -294,6 +294,7 @@ export type {
   ReviewedPersonRead,
   ReviewedPersonMerge,
   ReviewedPersonAdmission,
+  ReviewedPersonOperation,
 } from './reviewed-person-identity.ts';
 
 export type OwnVotesPage = Routes['me']['rating-votes']['get']['response'][200];
