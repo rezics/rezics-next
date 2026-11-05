@@ -52,9 +52,9 @@ test('historical changed disclosure facts do not block verified generation maint
   });
 
   expect(isVerifiedNativeGenerationPublicationCompletion(result, publication, start)).toBe(true);
-  expect((result as Extract<NativePublicFilterPublicationCompletion, { status: 'complete' }>).observation.changed).toEqual(
-    changed,
-  );
+  expect(
+    (result as Extract<NativePublicFilterPublicationCompletion, { status: 'complete' }>).observation.changed,
+  ).toEqual(changed);
 });
 
 test('generation maintenance still requires a complete Source result and the exact original execution', () => {
