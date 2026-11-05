@@ -347,11 +347,16 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     let typesMode: 'unavailable' | 'loaded' | 'empty' | 'late' = 'unavailable';
     let resolveTypes: ((value: import('../src/library/shelf-types-read').ShelfTypesCurrentRead) => void) | undefined;
     let browsing = false;
+    let wrong: 'subject' | 'locale' | 'cursor' | undefined;
     const typeCursors: (string | undefined)[] = [];
     const typeResult = (cursor?: string) => ({
-      sessionSubject: accountId,
+      sessionSubject: wrong === 'subject' ? 'other-owner' : accountId,
       authorizationAgrees: true,
-      requested: { cursor: cursor ?? null, limit: 20 as const, locale: 'en' },
+      requested: {
+        cursor: wrong === 'cursor' ? 'wrong' : (cursor ?? null),
+        limit: 20 as const,
+        locale: wrong === 'locale' ? 'ja' : 'en',
+      },
       page:
         typesMode === 'unavailable'
           ? { state: 'unavailable' as const }
@@ -534,8 +539,14 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       await click(m.library_collections_previous());
       expect(host.textContent).toContain(m.library_types_unavailable());
       typesMode = 'loaded';
+      for (wrong of ['subject', 'locale', 'cursor'] as const) {
+        await click(m.library_types_retry());
+        expect(host.textContent).toContain(m.library_types_unavailable());
+        expect(typeCursors.at(-1)).toBe('second');
+      }
+      wrong = undefined;
       await click(m.library_types_retry());
-      expect(typeCursors.slice(-4)).toEqual(['second', 'third', 'second', 'second']);
+      expect(typeCursors.slice(-7)).toEqual(['second', 'third', 'second', 'second', 'second', 'second', 'second']);
       expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
       expect((host.querySelectorAll('select')[8] as HTMLSelectElement).value).toBe(book);
       expect(patches).toHaveLength(patchCount);
