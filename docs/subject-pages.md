@@ -896,6 +896,16 @@ Classification correction feedback links unknown or withdrawn pointers to the ne
 
 Generic fact corrections protect pathname and search-address departure and browser unload for all changed private drafts, including excluded drafts and drafts retained during read recovery, and pending or unknown proposals; Stay preserves exact retries and siblings, while Leave retires local recovery without undoing sent proposals. Confirmed results alone do not block departure, and their inline candidate review remains available without leaving the workspace.
 
+### Facts correction public origin and return
+
+Decision: a public Facts entry retains one bounded Subject observation; non-Global Context and Realm origins stop before Global correction reads, with a separately named fresh Global choice that retains only a validated public return.
+
+The direct entry and collected editorial menu carry the observed Subject Context, any admitted Realm and one same-locale immediate public Subject return. The closed `origin` observation is distinct from exact review's existing `context`; it never selects an assertion, holder, property or statement. An origin combined with exact-review or deep-correction operands is refused. The return uses the installed Subject return validator, names the current public heading and carries no nested return, locator, cursor, session or editor state. The complete retained editor search is limited to 2,048 characters and 2,048 UTF-8 bytes. Duplicate, malformed, recursive, external, wrong-Subject, wrong-locale, Realm-mismatched and overbudget input is refused without truncation. A canonical identity redirect retires the incompatible origin.
+
+Only an observed Global Context without a Realm may enter the existing Facts editor. A non-Global Context or Realm explains that the Global correction address is unsupported before its correction read or inner Facts transport mounts, while offering the compatible public return and a separately named fresh Global choice. The fresh choice drops the observation and reads current Global facts and advice; it retains only the validated public return and never submits or retries a command. A public overview observation does not alter exact candidate review, queue, Changes or separately named general Sources return behavior. Existing sign-in, public type/population and no-Realm menu eligibility remain in force.
+
+The existing caller, Subject, locale, Context/Realm, source and route-replacement lifetime owns the new outer descriptor, including A/B/A replacement. Equivalent rerenders remain stable; return and browser history reacquire through the public reader and its existing focus owner. With no exact assertion receipt, return names the current heading. Removed or refused intent explains recovery without restoring cached evidence as current. Cost is one bounded local address check and the existing selected Global correction or public return read; menu construction adds no producer reads.
+
 The workspace reuses the scalar editor's native value, qualifier and grouped-citation controls and validators.
 Invalid scalar feedback reuses the single-statement correction guidance and stable control associations; editing clears the
 submitted violations, and unresolved nested targets link to their matching section fallback.
