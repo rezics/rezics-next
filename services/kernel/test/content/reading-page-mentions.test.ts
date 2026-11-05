@@ -90,7 +90,11 @@ test('empty, unavailable, active, concealed and erased identity states stay dist
   const post = mentionPost(newId(0), []);
   const empty = selectReadingPageMentions([post]);
   expect(currentReadingPageMentions(empty, [])).toMatchObject({ state: 'current', retryable: false, overflow: false });
-  expect(unavailableReadingPageMentions(empty)).toMatchObject({ state: 'unavailable', retryable: true, identities: [] });
+  expect(unavailableReadingPageMentions(empty)).toMatchObject({
+    state: 'unavailable',
+    retryable: true,
+    identities: [],
+  });
 
   const activeId = newId(0);
   const deletedId = newId(0);
@@ -123,19 +127,15 @@ test('first, continued and exact-selected-post pages contain only their readable
     if (index === 0 || index === 21) {
       const ids = index === 0 ? [f.author.actor.accountId, missingAccountId] : [selectedReply];
       await f.setTime(Date.now() + ++window * 60_000);
-      const value = await f.checked(
-        'POST',
-        `/v1/threads/${thread.id}/posts`,
-        {
-          bearer: f.author.bearer,
-          body: {
-            body: mentionBody(ids),
-            licence: 'CC0-1.0',
-            subjectIds: [],
-            visibility: 'published',
-          },
+      const value = await f.checked('POST', `/v1/threads/${thread.id}/posts`, {
+        bearer: f.author.bearer,
+        body: {
+          body: mentionBody(ids),
+          licence: 'CC0-1.0',
+          subjectIds: [],
+          visibility: 'published',
         },
-      );
+      });
       if (index === 0) firstMention = value.post;
       else lastReply = value.post;
     } else await f.post(thread.id, `Reply ${index}`);
@@ -149,7 +149,9 @@ test('first, continued and exact-selected-post pages contain only their readable
     missingAccountId,
   ]);
   expect(first.value.mentions.identities[1]).toEqual({ id: missingAccountId, state: 'concealed' });
-  expect(first.value.mentions.sources.find((source: { postId: string }) => source.postId === firstMention?.id)).toMatchObject({
+  expect(
+    first.value.mentions.sources.find((source: { postId: string }) => source.postId === firstMention?.id),
+  ).toMatchObject({
     pageIndex: 1,
     references: [f.author.actor.accountId, missingAccountId],
   });
@@ -157,18 +159,15 @@ test('first, continued and exact-selected-post pages contain only their readable
 
   const continued = await f.page(thread.id, undefined, first.value.replies.next);
   expect(continued.response.status, continued.text).toBe(200);
-  expect(continued.value.mentions.sources.find((source: { postId: string }) => source.postId === lastReply?.id)).toMatchObject({
+  expect(
+    continued.value.mentions.sources.find((source: { postId: string }) => source.postId === lastReply?.id),
+  ).toMatchObject({
     pageIndex: 2,
     revisionId: lastReply?.revisionId,
     references: [selectedReply],
   });
 
-  const location = await f.checked(
-    'GET',
-    `/v1/threads/${thread.id}/posts/${lastReply!.id}/location`,
-    {},
-    200,
-  );
+  const location = await f.checked('GET', `/v1/threads/${thread.id}/posts/${lastReply!.id}/location`, {}, 200);
   const exact = await f.page(thread.id, undefined, location.cursor);
   expect(exact.response.status, exact.text).toBe(200);
   expect(exact.value.query.cursor).toBe(location.cursor);

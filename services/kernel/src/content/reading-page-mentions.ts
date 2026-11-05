@@ -25,7 +25,10 @@ const ReadingPageMentionSourceSchema = t.Object(
 );
 
 const ReadingPageMentionIdentitySchema = t.Union([
-  t.Object({ id: mentionId, state: t.Literal('active'), handle: t.Union([t.String({ maxLength: 64 }), t.Null()]) }, closed),
+  t.Object(
+    { id: mentionId, state: t.Literal('active'), handle: t.Union([t.String({ maxLength: 64 }), t.Null()]) },
+    closed,
+  ),
   t.Object({ id: mentionId, state: t.Literal('concealed') }, closed),
   t.Object({ id: mentionId, state: t.Literal('erased') }, closed),
 ]);
@@ -70,7 +73,9 @@ function visitMentions(node: DocumentNode, visit: (id: string) => void): void {
 }
 
 /** Select only current readable bodies, preserving their page and document order. */
-export function selectReadingPageMentions(posts: readonly ReadingPageMentionPost[]): SelectedReadingPageMentionInventory {
+export function selectReadingPageMentions(
+  posts: readonly ReadingPageMentionPost[],
+): SelectedReadingPageMentionInventory {
   const identities: string[] = [];
   const selected = new Set<string>();
   const sources: SelectedReadingPageMentionSource[] = [];
@@ -122,9 +127,7 @@ export function currentReadingPageMentions(
   };
 }
 
-export function unavailableReadingPageMentions(
-  selection: SelectedReadingPageMentionInventory,
-): ReadingPageMentions {
+export function unavailableReadingPageMentions(selection: SelectedReadingPageMentionInventory): ReadingPageMentions {
   return {
     state: 'unavailable',
     retryable: true,
@@ -148,7 +151,10 @@ export async function readReadingPageMentions(pool: Pool, posts: readonly PostEn
     const accounts = await readPublicIdentities(pool, routes, selection.identities);
     return currentReadingPageMentions(selection, accounts);
   } catch (error) {
-    if (classifyUnavailability(error) === undefined && !(error instanceof ProblemError && error.code === 'dependency_unavailable'))
+    if (
+      classifyUnavailability(error) === undefined &&
+      !(error instanceof ProblemError && error.code === 'dependency_unavailable')
+    )
       throw error;
     return unavailableReadingPageMentions(selection);
   }
