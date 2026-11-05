@@ -585,7 +585,13 @@ test('Complete Manga correction groups and deliberate submission family retains 
       const snapshot = structuredClone(current.public);
       const calls = structuredClone(growth.calls);
       await ui.render(
-        <CorrectionsInEditor read={current} locale="en" disabled={false} ports={ports} reload={async () => undefined} />,
+        <CorrectionsInEditor
+          read={current}
+          locale="en"
+          disabled={false}
+          ports={ports}
+          reload={async () => undefined}
+        />,
       );
       const membership = field(ui.host, 'part of the series');
       expect(membership.querySelectorAll('a')).toHaveLength(size);
