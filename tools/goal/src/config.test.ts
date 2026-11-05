@@ -162,7 +162,7 @@ test('createRuntime keeps landing, control-plane and compiler runner behavior ob
     process.env.REMOTE_CHECK_PRIORITY = 'inherited';
     runtime = createRuntime({ settings });
 
-    const snapshot = runtime.refreshTrainConfiguration!();
+    const snapshot = await runtime.refreshTrainConfiguration!();
     const capture = join(settings.stateDirectory, 'runner-environments.jsonl');
     const script = [
       `import { appendFileSync } from 'node:fs';`,

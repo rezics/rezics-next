@@ -253,8 +253,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const checkRuntime = createCheckRuntime({
     settings,
     results: store.checkResults,
-    derivedFiles: options.train?.derivedFiles,
-    runGate: options.runGate,
+    ...(options.train?.derivedFiles ? { derivedFiles: options.train.derivedFiles } : {}),
+    ...(options.runGate ? { runGate: options.runGate } : {}),
     deliverReuseAlert: (managerId, summary) => inbox.deliver({ managerId, kind: 'instruction', summary }),
   });
   const {
