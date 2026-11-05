@@ -135,11 +135,15 @@ function WorkNamesVisit({
 }) {
   const advice = useNamesAdvice(lifetime.observation, lifetime.current, adviceLoader, termsAuthority);
   return (
-    <NamesHandoff {...{ binding, returnHref, locale }} current={lifetime.current}>
-      {(restored, returnStatus) => (
+    <NamesHandoff
+      {...{ binding, returnHref, locale }}
+      current={lifetime.current}
+      names={names.state === 'ready' ? names.groups : []}
+    >
+      {(restored, returnStatus, focusTargets) => (
         <WorkNamesView
           key={restored ? 'returned' : 'initial'}
-          {...{ names, locale, sourcesHref, termsHref, restored, returnStatus }}
+          {...{ names, locale, sourcesHref, termsHref, restored, returnStatus, focusTargets }}
           retired={lifetime.retired}
           current={lifetime.current}
           {...advice}

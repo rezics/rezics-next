@@ -38,14 +38,26 @@ export function PeopleNamesVisit(props: Visit) {
     : undefined;
   return (
     <div ref={host} className="min-w-0 space-y-3">
-      <NamesHandoff {...{ binding }} returnHref={address.returnHref} locale={reading.locale} current={lifetime.current}>
-        {(restored, returnStatus) => <AdvisedVisit {...props} {...{ restored, returnStatus }} />}
+      <NamesHandoff
+        {...{ binding }}
+        returnHref={address.returnHref}
+        locale={reading.locale}
+        current={lifetime.current}
+        names={props.names.state === 'ready' ? props.names.groups : []}
+      >
+        {(restored, returnStatus, focusTargets) => (
+          <AdvisedVisit {...props} {...{ restored, returnStatus, focusTargets }} />
+        )}
       </NamesHandoff>
     </div>
   );
 }
 
-type Restoration = { restored: NamesWindow | undefined; returnStatus: NamesReturnStatus };
+type Restoration = {
+  restored: NamesWindow | undefined;
+  returnStatus: NamesReturnStatus;
+  focusTargets: import('../work-names/navigation').NamesFocusTargets;
+};
 function AdvisedVisit(props: Visit & Restoration) {
   const { lifetime, adviceLoader } = props;
   const advice = useNamesAdvice(lifetime.observation, lifetime.current, adviceLoader);
@@ -59,6 +71,7 @@ function CurrentNames({
   address,
   restored,
   returnStatus,
+  focusTargets,
   advice,
   retryAdvice,
 }: Visit & Restoration & { advice: NamesAdvice; retryAdvice?: (() => void) | undefined }) {
@@ -81,7 +94,7 @@ function CurrentNames({
       )}
       <PeopleNamesView
         key={restored ? 'returned' : returnStatus}
-        {...{ names, restored, returnStatus, advice, retryAdvice }}
+        {...{ names, restored, returnStatus, advice, retryAdvice, focusTargets }}
         locale={reading.locale}
         retired={lifetime.retired}
         current={lifetime.current}

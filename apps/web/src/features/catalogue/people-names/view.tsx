@@ -4,7 +4,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../../../paraglide/messages.js';
 import { languageName } from '../../../subject/language';
 import { PlainLink, type PageLink } from '../../pages/shared';
-import type { NamesReturnStatus, NamesWindow } from '../work-names/navigation';
+import type { NamesFocusTargets, NamesReturnStatus, NamesWindow } from '../work-names/navigation';
 import type { WorkNameGroup } from '../work-names/model';
 import {
   filterPeopleNames,
@@ -34,6 +34,7 @@ export function PeopleNamesView({
   metadata,
   captureSourcesVisit = false,
   returnStatus = 'none',
+  focusTargets,
 }: {
   names: PeopleNames;
   locale: string;
@@ -49,6 +50,7 @@ export function PeopleNamesView({
   metadata?: ReactNode;
   captureSourcesVisit?: boolean;
   returnStatus?: NamesReturnStatus;
+  focusTargets?: NamesFocusTargets | undefined;
 }) {
   const o = { locale: locale as never };
   const id = useId();
@@ -147,6 +149,7 @@ export function PeopleNamesView({
                           current={current}
                           index={offset + index}
                           restored={restored?.groups.find((g) => g.index === offset + index)}
+                          focusTargets={focusTargets}
                         />
                       ))}
                     </div>
@@ -239,12 +242,14 @@ function NameGroup({
   current,
   index,
   restored,
+  focusTargets,
 }: {
   group: WorkNameGroup;
   locale: string;
   current: () => boolean;
   index: number;
   restored?: NamesWindow['groups'][number] | undefined;
+  focusTargets?: NamesFocusTargets | undefined;
 }) {
   const o = { locale: locale as never };
   const summary = useRef<HTMLElement>(null);
@@ -259,7 +264,13 @@ function NameGroup({
       data-name-page={offset / PEOPLE_NAME_ROW_WINDOW}
       open={restored?.open}
     >
-      <summary ref={summary} className={control}>
+      <summary
+        ref={(element) => {
+          summary.current = element;
+          return focusTargets?.group(group.language)(element);
+        }}
+        className={control}
+      >
         <span lang={group.language} dir="auto">
           {languageName(group.language, group.language) ?? group.language}
         </span>
@@ -275,7 +286,12 @@ function NameGroup({
                 .map((role) => (role === 'title' ? m.people_names_label({}, o) : m.work_names_alias({}, o)))
                 .join(' · ')}
             </span>{' '}
-            <CopyName text={name.text} locale={locale} current={current} />
+            <CopyName
+              text={name.text}
+              locale={locale}
+              current={current}
+              focusTarget={focusTargets?.name(group.language, name)}
+            />
           </li>
         ))}
       </ul>
@@ -319,7 +335,17 @@ function NameGroup({
   );
 }
 
-function CopyName({ text, locale, current }: { text: string; locale: string; current: () => boolean }) {
+function CopyName({
+  text,
+  locale,
+  current,
+  focusTarget,
+}: {
+  text: string;
+  locale: string;
+  current: () => boolean;
+  focusTarget?: ReturnType<NamesFocusTargets['name']> | undefined;
+}) {
   const o = { locale: locale as never };
   const id = useId();
   const [status, setStatus] = useState<'idle' | 'pending' | 'copied' | 'failed'>('idle');
@@ -328,7 +354,10 @@ function CopyName({ text, locale, current }: { text: string; locale: string; cur
   return (
     <span className="inline-flex max-w-full flex-wrap items-center gap-2" lang={locale} dir="auto">
       <Button
-        ref={control}
+        ref={(element) => {
+          control.current = element;
+          return focusTarget?.(element);
+        }}
         size="sm"
         variant="outline"
         aria-describedby={id}

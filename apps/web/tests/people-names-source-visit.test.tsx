@@ -145,6 +145,18 @@ for (const kind of ['Person', 'Character'] as const)
       expect(host.querySelector<HTMLInputElement>('input')?.value).toBe('Mél');
       expect(host.textContent).toContain('Mél—旅人 39');
       expect(document.activeElement).toBe(host.querySelector('[data-names-sources] a'));
+      await act(async () => {
+        history.forward();
+        await router.load();
+      });
+      expect(host.querySelector('input')).toBeNull();
+      expect(namesReturn(Reflect.get(history.location.state, 'namesReturn'), 'en')?.window.query).toBe('Mél');
+      current = structuredClone(current);
+      await act(async () => host.querySelector<HTMLAnchorElement>('a')!.click());
+      await act(async () => router.load());
+      expect(host.querySelector<HTMLInputElement>('input')?.value).toBe('Mél');
+      expect(host.textContent).toContain('Mél—旅人 39');
+      expect(document.activeElement).toBe(host.querySelector('[data-names-sources] a'));
       await act(async () => host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!.click());
       await act(async () => router.load());
       const nextSaved = namesReturn(Reflect.get(history.location.state, 'namesReturn'), 'en')!;
@@ -227,4 +239,109 @@ test('Context and release replacement permanently retire actions and late copy/a
     await render(fresh);
     expect(host.textContent).toContain('retired');
   });
+});
+
+for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'connected'] as const)
+  test(`fresh exact-name Sources return: ${outcome}`, async () => {
+    await mounted(async (host, draw) => {
+      let current = personReaderExample().read;
+      const spelling = 'Exact—Mél/旅 24';
+      current.subject.labels = { en: 'Selected', ja: '旅人' };
+      current.subject.aliases = { en: Array.from({ length: 48 }, (_, i) => `Exact—Mél/旅 ${i}`) };
+      let returning = false;
+      const history = createMemoryHistory({
+        initialEntries: [`/en/subjects/${current.subject.id}/selected?realm=${realm}`],
+      });
+      const root = createRootRoute({ component: Outlet });
+      const route = createRoute({ getParentRoute: () => root, path: '/$', component: Visit });
+      const router = createRouter({ routeTree: root.addChildren([route]), history });
+      function Visit() {
+        const location = useRouterState({ select: (state) => state.location });
+        if (location.pathname.endsWith('/sources'))
+          return h(SubjectSourcesPage, {
+            result: { kind: 'unavailable' },
+            locale: 'en',
+            returnTo: new URLSearchParams(location.searchStr).get('via')!,
+          });
+        return h(
+          'div',
+          {},
+          returning && outcome === 'connected' && h('button', { autoFocus: true, id: 'visitor-focus' }, 'Keep focus'),
+          h(PeopleNamesEntry, {
+            reading: {
+              public: current,
+              locale: 'en',
+              link: ({ href, ...props }) => h('a', { ...props, href: contextHref(href, realm) }),
+            },
+            adviceLoader: async () => ({ viewer: 'signed-in', actions: { state: 'ready', actions: [] } }),
+          }),
+        );
+      }
+      await act(async () => router.load());
+      await draw(h(RouterProvider, { router }));
+      host.querySelector('details')!.open = true;
+      const group = host.querySelector<HTMLDetailsElement>('[data-name-language="en"]')!;
+      group.open = true;
+      await act(async () => [...group.querySelectorAll('button')].find((b) => b.textContent === 'More names')!.click());
+      const copy = group.querySelector<HTMLButtonElement>('button')!;
+      expect(copy.closest('li')?.textContent).toContain(spelling);
+      await act(async () => copy.focus());
+      await act(async () => host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!.click());
+      await act(async () => router.load());
+      const saved = namesReturn(Reflect.get(history.location.state, 'namesReturn'), 'en')!;
+      expect(saved.focus).toMatchObject({
+        kind: 'name',
+        language: 'en',
+        role: 'alias',
+        identity: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      expect(JSON.stringify(saved)).not.toContain(spelling);
+      current = structuredClone(current);
+      if (outcome === 'surviving')
+        current.subject.aliases.en = [
+          ...current.subject.aliases.en!.slice(0, 24),
+          ...current.subject.aliases.en!.slice(24).reverse(),
+        ];
+      if (outcome === 'removed' || outcome === 'language' || outcome === 'role')
+        current.subject.aliases.en = current.subject.aliases.en!.filter((text) => text !== spelling);
+      if (outcome === 'language') current.subject.aliases.ja = [spelling];
+      if (outcome === 'role') current.subject.labels.en = spelling;
+      if (outcome === 'window')
+        current.subject.aliases.en!.unshift(...Array.from({ length: 24 }, (_, i) => `New ${i}`));
+      returning = true;
+      // Exercise the actual Sources return adapter, with the same history value as Back/Forward.
+      await act(async () => host.querySelector<HTMLAnchorElement>('a')!.click());
+      await act(async () => router.load());
+      await draw(h(RouterProvider, { router }));
+      if (outcome === 'connected') expect(document.activeElement?.id).toBe('visitor-focus');
+      else if (outcome === 'surviving') {
+        expect(document.activeElement?.closest('li')?.querySelector('[data-supplied-name]')?.textContent).toBe(
+          spelling,
+        );
+        expect(host.textContent).not.toContain('The names reading changed');
+      } else {
+        expect(document.activeElement).toBe(host.querySelector('[data-name-language="en"] summary'));
+        expect(host.textContent).toContain('The names reading changed');
+      }
+      expect(copy.isConnected).toBe(false);
+      history.destroy();
+    });
+  });
+
+test('history focus accepts only a bounded language, role and opaque identity', () => {
+  const base = {
+    binding: 'current',
+    href: `/en/subjects/${personReaderExample().read.subject.id}/selected#supplied-names`,
+    window: { query: '', page: 0, expanded: true, groups: [] },
+  };
+  const focus = { kind: 'name', language: 'ja', role: 'alias', identity: 'a'.repeat(64) };
+  expect(namesReturn({ ...base, focus: { ...focus, spelling: 'not carried' } }, 'en')?.focus).toEqual(focus);
+  for (const patch of [
+    { language: 'bad_tag' },
+    { language: 'x'.repeat(2049) },
+    { role: 'legal' },
+    { identity: 'copied spelling' },
+    { kind: 'row' },
+  ])
+    expect(namesReturn({ ...base, focus: { ...focus, ...patch } }, 'en')).toBeUndefined();
 });
