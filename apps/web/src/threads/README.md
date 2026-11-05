@@ -634,8 +634,8 @@ an ended request cannot publish a page or start later hydration from a late read
 
 ## Current-page mention reading
 
-The final-admitted installed projection binds each document to post/thread/revision/SHA256/pageIndex; a page holds at most 21
-documents, 32 image references and 100 mention identities. Preserve active/concealed/erased and
-zero/unavailable/overflow; unresolved mentions keep `@` fallback. References retain exact occurrence/page/cursor
+The final-admitted installed projection binds each document to `postId`, `threadId`, `revisionId`, `sha256` and
+`pageIndex`; a page holds at most 21 documents, 32 image references and 100 mention identities. Keep
+active/concealed/erased, zero/unavailable/overflow and unresolved `@` text distinct. References retain exact occurrence/page/cursor
 return with separate mention/link ordinals. Keep separate hydration until the official callable is installed;
 viewer, revision or cache changes retire output. No refill or second renderer. Accounts admits identities.

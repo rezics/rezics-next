@@ -2552,13 +2552,12 @@ then the existing uploader/new-media initializer, reservation receipt and reserv
 an exact route/home. It adds no `media:create` grant on a Realm and no account-avatar reuse.
 Reservation status includes the native purpose. The existing `/v1/media` request schema remains unchanged.
 
-Completion is website-only through the existing server-side uploader BFF using `private_key_jwt` website tokens.
-`media:complete` checks uploader, container, reservation identity, measured bytes and declared hash under the existing
-20 MiB limit. For Realm purposes it also checks the active Realm and current `realm:manage` at each command attempt's
-T, before receipt replay. Accounts owns registration and scope mapping; Web owns transport. Missing mapping denies.
-The existing image job publishes reencoded AVIF/WebP,
-with its 40-million-pixel ceiling, width ladder, at most twelve variants and normal rejected outcome. Unclaimed
-media follows the existing 24-hour collector.
+Completion is website-only through the server-side uploader BFF with `private_key_jwt` tokens. `media:complete`
+checks uploader, container, reservation, measured bytes and declared hash under 20 MiB. Realm completion also checks
+the active Realm and current `realm:manage` at each attempt's authoritative T before receipt replay. Accounts owns
+registration/scope and Web owns transport; missing mapping denies, and no client scope widens. Sharp re-encodes
+AVIF/WebP under 40 million pixels and
+the current width ladder, with at most twelve variants; rejected state and 24-hour collection remain.
 
 `claimRealmPresentationMedia(tx, { realmId, author, avatarMediaId, bannerMediaId })` is called by the native Realm
 settings command **after** appending its revision and moving the head with CAS, in the same transaction. It requires

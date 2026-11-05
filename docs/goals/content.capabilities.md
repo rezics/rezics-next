@@ -80,8 +80,9 @@ and boards, and enforce protected admission and participation immediately when s
 Decision: one official-client publisher owns source compiler/construction/schema/module/bootstrap/dependency inputs,
 generation and named OpenAPI/client exports, and publishes independently of consumer completion. Web uses the
 installed Home and boardShelf callables without a local DTO, cast or native import. The connected visitor journey
-shows at most three newest admitted ordinary threads per Board, preserves exact/lower-bound/unavailable reply counts
-and empty/unavailable state, and uses the existing Realm-return and shelf-cursor navigation slots.
+shows at most three newest admitted ordinary threads per Board in one receiver, preserves
+exact/lower-bound/unavailable reply counts and empty/unavailable state, and uses existing Realm-return and
+shelf-cursor navigation slots.
 
 Personas: anonymous, creator, manager, moderator, Realm member, banned member and outsider, including a banned
 member with an independent read grant. Fixtures: the bound community suite's native Space/Realm fixtures and the
