@@ -224,7 +224,7 @@ function RenameReview({
       }
       const stored = state.kind === 'valid' ? state.value : null;
       const saved = stored && expected && sameRenameContinuation(stored, expected) ? stored : null;
-      const candidate = attempt.current ?? retainedCommand.current;
+      const candidate: RenameAttempt | null = attempt.current ?? retainedCommand.current;
       const live = !stored || (candidate && sameRenameContinuation(stored, candidate)) ? candidate : null;
       if (live?.submitted || stored?.submitted) remember(live?.acknowledged ? 'acknowledged' : 'unknown');
       const recovered =

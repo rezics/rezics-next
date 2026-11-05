@@ -230,6 +230,7 @@ test('closed approval and original-bound acknowledgement reject incompatible out
     { ...approvalReply(), extra: true },
     { ...approvalReply(), reference: 'arbitrary' },
     { ...approvalReply(), expiresAt: 'tomorrow' },
+    { ...approvalReply(), expiresAt: new Date(0).toISOString() },
   ]) {
     const selected = createRenameAttempt({ accountId, handle: null }, 'after')!;
     let sends = 0;
@@ -313,9 +314,9 @@ test('actual byte limits precede parsing with absent/lying lengths, split UTF-8 
 });
 
 test('retirement releases abort-ignoring approval/execute and late replies cannot install or settle replacement work', async () => {
-  for (const phase of ['approve', 'execute']) {
+  for (const phase of ['approve', 'execute', 'replacement']) {
     const selected = createRenameAttempt({ accountId, handle: null }, 'after')!;
-    if (phase === 'execute') selected.reference = nativeReference;
+    if (phase !== 'approve') selected.reference = nativeReference;
     const controller = new AbortController(),
       started = Promise.withResolvers<void>(),
       reply = Promise.withResolvers<Response>();
@@ -325,12 +326,15 @@ test('retirement releases abort-ignoring approval/execute and late replies canno
     }) as typeof fetch;
     const pending = runRenameAttempt(selected, current(), () => true, controller.signal);
     await started.promise;
-    controller.abort();
-    expect((await pending).kind).toBe(phase === 'execute' ? 'unknown' : 'unavailable');
     const replacement = createRenameAttempt({ accountId: 'replacement', handle: null }, 'other')!;
+    if (phase !== 'replacement') {
+      controller.abort();
+      expect((await pending).kind).toBe(phase === 'execute' ? 'unknown' : 'unavailable');
+    }
     storage.clear();
     saveRenameContinuation(replacement);
     reply.resolve(Response.json(phase === 'approve' ? approvalReply() : { accountId }));
+    if (phase === 'replacement') expect((await pending).kind).toBe('unknown');
     await Promise.resolve();
     expect(selected.acknowledged).toBeUndefined();
     if (phase === 'approve') expect(selected.reference).toBeUndefined();

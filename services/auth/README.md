@@ -1091,7 +1091,7 @@ alone never authorizes disclosure. The closed response is `{profile:{id,kind:'ac
 handleless accounts. Failed bindings, authority or reads disclose no profile. Authentication, scope and native
 account:update admission remain unchanged; request/proof/cache rules below cover both routes.
 
-Decision: rename-page uses public `RENAME_PAGE_MAX_RESPONSE_BYTES`, independently of scope catalogues.
+Decision: rename-page uses public `RENAME_PAGE_MAX_RESPONSE_BYTES`, apart from scope catalogues.
 SessionProof permits opaque securityId1024; excess is unavailable. The bound counts syntax, two escaped IDs, nullable
 ASCII handle64, exact client/scope, safe epoch/time,
 one pwd/pop and eight rename/account:update entries with UUID36 resource IDs and signed safe routes. Retained
@@ -1100,7 +1100,7 @@ within five seconds including body; common `/session` uses `AUTH_SECURITY_SCOPE_
 Native proof revalidation and its three-second deadline remain.
 
 Rename-page accepts only `{}`. Without the exact management profile it returns only management-auth-required plus
-fixed continuation. `readRenameAccountPage` composes private profile and `readManagedAuthActions`: matching rename
+continuation. `readRenameAccountPage` composes private profile and `readManagedAuthActions`: matching rename
 advice enables review, empty advice refuses, dependency loss is unavailable. Failed profile/proof/floor discloses no
 identity or reason; action loss may retain an admitted profile. Both require same-issuer Origin, JSON, no query/bearer, revalidated human cookie proof and private/no-store. Stale review is allowed; approval
 requires freshness. Cost: exact profile read, full-key current-account seek, bounded self action advice (one candidate,
