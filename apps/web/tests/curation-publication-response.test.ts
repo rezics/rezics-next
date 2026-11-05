@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
-import { publishProfile } from '../src/features/pages/curate';
+import { activatePublishedProfile, publishProfile, publishProfileOnly } from '../src/features/pages/curate';
 import { admittedActivationResult, admittedPublishDigest } from '../src/features/pages/curation-publication-response';
 import { CurationPublication } from '../src/features/pages/curation-publish';
 
@@ -33,6 +33,20 @@ const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const publish = (client: ReturnType<typeof kernel>['client']) =>
   publishProfile(client, { profile, expectedHead: 7, authorization: 'Bearer t', keys });
+
+test('separate publication commands preserve unknown outcomes when Eden loses the response', async () => {
+  const client = createKernelClient('https://kernel.invalid', {
+    fetch: async () => {
+      throw new TypeError('connection lost');
+    },
+  });
+  expect(await publishProfileOnly(client, { profile, expectedHead: 7, authorization: 'Bearer t', keys })).toEqual(
+    unknownPublish,
+  );
+  expect(
+    await activatePublishedProfile(client, { digest, expectedHead: 7, authorization: 'Bearer t', key: keys.activate }),
+  ).toEqual(unknownActivate);
+});
 
 test('native envelopes admit only the submitted digest and a nonnegative head', () => {
   expect(admittedPublishDigest({ digest, extra: true }, digest)).toBe(digest);

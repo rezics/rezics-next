@@ -275,6 +275,8 @@ export async function publishProfile(
       { profile },
       { headers: { authorization, 'idempotency-key': keys.publish } as { 'idempotency-key': string } },
     );
+    // Eden represents a lost connection as an error without an HTTP response.
+    if (published.error && !published.response) return unknown();
     if (published.status >= 400)
       return { ...curationFailure(published.status, published.error?.value, published.headers), phase };
     if (!admittedPublishDigest(published.data, digest)) return unknown();
@@ -285,6 +287,7 @@ export async function publishProfile(
         { expected_head: expectedHead },
         { headers: { authorization, 'idempotency-key': keys.activate } as { 'idempotency-key': string } },
       );
+    if (activated.error && !activated.response) return unknown();
     if (activated.status >= 400)
       return { ...curationFailure(activated.status, activated.error?.value, activated.headers), phase };
     const admitted = admittedActivationResult(activated.data, digest);
@@ -305,6 +308,8 @@ export async function publishProfileOnly(
       { profile },
       { headers: { authorization, 'idempotency-key': keys.publish } as { 'idempotency-key': string } },
     );
+    if (result.error && !result.response)
+      return { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'publish' };
     if (result.status >= 400)
       return { ...curationFailure(result.status, result.error?.value, result.headers), phase: 'publish' };
     return admittedPublishDigest(result.data, digest)
@@ -328,6 +333,7 @@ export async function activatePublishedProfile(
         { expected_head: expectedHead },
         { headers: { authorization, 'idempotency-key': key } as { 'idempotency-key': string } },
       );
+    if (result.error && !result.response) return unknown();
     if (result.status >= 400)
       return { ...curationFailure(result.status, result.error?.value, result.headers), phase: 'activate' };
     const admitted = admittedActivationResult(result.data, digest);
