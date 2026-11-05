@@ -15,6 +15,7 @@ import {
   type SlowModeChange,
   type SlowModeInterval,
   type SlowModePolicy,
+  type SlowModeVisitOwner,
 } from './contract';
 import { rememberSlowModeRead, useSlowModePort, useSlowModeRead, type SlowModeVisit } from './caller';
 
@@ -86,10 +87,13 @@ type EligibilityProps = {
   refusal: WriteFailure | null;
   scopeKey?: string;
   credentialMode?: string;
+  source?: SlowModeVisitOwner;
+  selection?: SlowModeVisitOwner;
   advice?: import('../thread-page').ThreadPageObservation['slowMode'] | undefined;
 };
 
 export function SlowModeEligibility(props: EligibilityProps) {
+  if ((props.source && !props.source.current()) || (props.selection && !props.selection.current())) return null;
   return props.advice ? (
     <ComposedEligibility advice={props.advice} refusal={props.refusal} />
   ) : (
@@ -138,8 +142,8 @@ function ComposedEligibility({
   );
 }
 
-function PointEligibility({ boardId, refusal, scopeKey, credentialMode }: EligibilityProps) {
-  const { visit, read, preparing, reload } = useSlowModeRead(boardId, scopeKey, credentialMode);
+function PointEligibility({ boardId, refusal, scopeKey, credentialMode, source, selection }: EligibilityProps) {
+  const { visit, read, preparing, reload } = useSlowModeRead(boardId, scopeKey, credentialMode, source, selection);
   const receivedAt = useRef({ refusal, at: Date.now() });
   if (receivedAt.current.refusal !== refusal) receivedAt.current = { refusal, at: Date.now() };
   const policy = read?.kind === 'available' ? read.policy : undefined;
@@ -184,14 +188,16 @@ export function SlowModeSetting({
   boardId,
   scopeKey,
   credentialMode,
+  source,
   onApplied,
 }: {
   boardId: string;
   scopeKey?: string;
   credentialMode?: string;
+  source?: SlowModeVisitOwner;
   onApplied?: () => void;
 }) {
-  const { visit, read, preparing, reload } = useSlowModeRead(boardId, scopeKey, credentialMode);
+  const { visit, read, preparing, reload } = useSlowModeRead(boardId, scopeKey, credentialMode, source);
   if (!visit) return null;
   if (read?.kind === 'denied') return null;
   if (read?.kind === 'available' && !read.policy.canChange) return null;

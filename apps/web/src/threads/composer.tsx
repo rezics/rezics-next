@@ -39,6 +39,7 @@ import { ReplyIntent, type ReplyCommand } from './reply-context-intent';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from './authoring-departure';
 import { EditConflictRecovery } from './edit-conflict-recovery';
 import { SlowModeEligibility } from './slow-mode';
+import type { SlowModeVisitOwner } from './slow-mode/contract';
 import { writingScope } from './local-writing-draft';
 import { LocalWritingDraftControls, useLocalWritingDraft } from './local-writing-draft-controls';
 import { PortableWritingControls, PortableWritingToolbar, usePortableWriting } from './portable-writing-controls';
@@ -536,6 +537,8 @@ type PostComposerProps<T, Context> = {
   boardId?: string;
   slowModeScopeKey?: string;
   slowModeCredentialMode?: string;
+  slowModeSource?: SlowModeVisitOwner;
+  slowModeSelection?: SlowModeVisitOwner;
   replyTargetId?: string | null;
   replyContext?: ReactNode;
   slowModeAdvice?: import('./thread-page').ThreadPageObservation['slowMode'] | undefined;
@@ -568,6 +571,8 @@ function PostComposerContent<T, Context = undefined>({
   boardId,
   slowModeScopeKey,
   slowModeCredentialMode,
+  slowModeSource,
+  slowModeSelection,
   replyTargetId,
   replyContext,
   slowModeAdvice,
@@ -1140,6 +1145,8 @@ function PostComposerContent<T, Context = undefined>({
           refusal={failure}
           {...(slowModeScopeKey === undefined ? {} : { scopeKey: slowModeScopeKey })}
           {...(slowModeCredentialMode === undefined ? {} : { credentialMode: slowModeCredentialMode })}
+          {...(slowModeSource === undefined ? {} : { source: slowModeSource })}
+          {...(slowModeSelection === undefined ? {} : { selection: slowModeSelection })}
           advice={slowModeAdvice}
         />
       ) : null}

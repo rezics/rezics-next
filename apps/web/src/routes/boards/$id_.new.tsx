@@ -131,6 +131,20 @@ function NewThreadEditor({
   );
   const { lifetime, ticket, current, bound } = visit;
   const { credentialMode } = Route.useRouteContext();
+  const slowModeSource = useMemo(() => {
+    const identity = board;
+    let admitted = false;
+    let retired = false;
+    return {
+      identity,
+      current: () => {
+        const isCurrent = board === identity && lifetime.isCurrent(ticket, false);
+        if (isCurrent) admitted = true;
+        else if (admitted) retired = true;
+        return isCurrent && !retired;
+      },
+    };
+  }, [board, lifetime, ticket]);
   const [destinationReader] = useState(() => createCompositionDestinationReader());
   const destinationBinding = useRef<{ boardId: string; projection: CompositionDestinationProjection } | null>(null);
   const destination = current && bound && board.id === origin.boardId ? destinationReader.read(board) : undefined;
@@ -284,6 +298,7 @@ function NewThreadEditor({
                   credentialMode,
                 ])}
                 slowModeCredentialMode={credentialMode}
+                slowModeSource={slowModeSource}
                 submissionContext={submissionContext}
                 onIntentLockChange={handleIntentLockChange}
                 onSubmit={async ({
