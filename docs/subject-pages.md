@@ -476,6 +476,8 @@ An admitted keyboard Add focuses the first usable control in the exact new Recip
 Decision: Recipe keyboard Add language uses the shared specialist handoff to the exact stable term ID's language control, admitted against the same current read and workspace; pointer additions and cancelled or retired intent stay quiet.
 An admitted keyboard Correct focuses the first usable control in the exact source-backed Recipe row, with its heading as fallback; pointer or refused corrections, moved focus, removed targets and retired reads never replay orientation.
 
+Decision: the seeded Recipe and Quotation reading and correction journeys are native host tests (`apps/web/tests/semantic-journey-recipe-seeded-journey.host.test.ts` and `apps/web/tests/semantic-journey-quotation-seeded-journey.host.test.ts`) on the owned native harness, because a worker cannot start the persistent local stack; their acceptance evidence comes only from a native run on check hosts.
+
 ## Correct names and descriptions
 
 The subject header and compact view frame link to `/{locale}/subjects/{id}/{slug}/terms`. This private companion
