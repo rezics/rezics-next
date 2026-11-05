@@ -203,7 +203,7 @@ export async function minimizeZoneGrantPage(
 
   let removedRows = 0;
   if (eligible.length > 0) {
-    const [result] = await deletePage.run(tx, {
+    const result = await deletePage.run(tx, {
       route: source.zone.route,
       zone_id: source.zone.zoneId,
       store: cursor.store,
@@ -249,7 +249,7 @@ export async function lockZoneGrantWriterTarget(
   }>,
 ): Promise<boolean> {
   const subjectRoute = input.subjectAccountId === undefined ? null : routeOf(input.subjectAccountId);
-  const [row] = await writerLock.run(tx, {
+  const row = await writerLock.run(tx, {
     route: input.resource.route,
     zone_id: input.resource.id,
     subject_route: subjectRoute,

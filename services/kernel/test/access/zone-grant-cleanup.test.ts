@@ -138,10 +138,9 @@ async function withZonePage(
       async (tx) => {
         const head = await lockZoneHead(tx, route, zoneId);
         if (!head) throw new Error('Fixture Zone disappeared');
-        const home = await tx.query<{ epoch: string }>(
-          'SELECT epoch::text FROM core.partition WHERE partition_no=$1',
-          [partitionOf(route)],
-        );
+        const home = await tx.query<{ epoch: string }>('SELECT epoch::text FROM core.partition WHERE partition_no=$1', [
+          partitionOf(route),
+        ]);
         const source = sourceFrom(head, home.rows[0]!.epoch);
         const admission = makeAdmission(head, source);
         const page = await minimizeZoneGrantPage(tx, { admission, cursor, limit });
@@ -164,10 +163,9 @@ async function rollbackZonePage(
       async (tx) => {
         const head = await lockZoneHead(tx, route, zoneId);
         if (!head) throw new Error('Fixture Zone disappeared');
-        const home = await tx.query<{ epoch: string }>(
-          'SELECT epoch::text FROM core.partition WHERE partition_no=$1',
-          [partitionOf(route)],
-        );
+        const home = await tx.query<{ epoch: string }>('SELECT epoch::text FROM core.partition WHERE partition_no=$1', [
+          partitionOf(route),
+        ]);
         await minimizeZoneGrantPage(tx, {
           admission: makeAdmission(head, sourceFrom(head, home.rows[0]!.epoch)),
           cursor: null,
@@ -322,17 +320,12 @@ test('terminal account pages remove only its Zone subject grants and close inter
   expect(subjectRoleKeys.length).toBeGreaterThan(0);
 
   const makeTerminal = (head: ZoneHead, source: ZoneGrantCleanupSource) =>
-    terminalAdmission(
-      source,
-      f.accounts.owner,
-      barriers[0]!,
-      {
-        accountId: head.ownerId!,
-        revision: head.revision,
-        lifecycleRevision: head.lifecycleRevision,
-        transactionId: head.transactionId,
-      },
-    );
+    terminalAdmission(source, f.accounts.owner, barriers[0]!, {
+      accountId: head.ownerId!,
+      revision: head.revision,
+      lifecycleRevision: head.lifecycleRevision,
+      transactionId: head.transactionId,
+    });
   await rollbackZonePage(zone.id, 1, makeTerminal);
   const initial = await withZonePage(zone.id, null, 1, makeTerminal);
   expect(initial.page).toMatchObject({ disposition: 'progress', candidateKeys: 2, processedKeys: 1 });
@@ -368,9 +361,9 @@ test('terminal account pages remove only its Zone subject grants and close inter
   );
   expect(unrelated[0]!.n).toBe(1);
 
-  await expect(
-    addActionGrant(zone.id, f.accounts.owner, ['zone:read'], 'other'),
-  ).rejects.toBeInstanceOf(GrantDeniedError);
+  await expect(addActionGrant(zone.id, f.accounts.owner, ['zone:read'], 'other')).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
 
   const survivingOwners = await readOnly<{ subject_id: string }>(
     `SELECT subject_id::text FROM access.resource_role_grant
