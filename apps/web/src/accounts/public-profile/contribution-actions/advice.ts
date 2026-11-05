@@ -1,14 +1,8 @@
-import type { KernelClient, ReadingPageResponse } from '@rezics/client';
+import type { ReadingPageResponse } from '@rezics/client';
 import type { ContributionActionsInput, ContributionReference } from './receiver';
 import type { ContributionOperation } from './current';
 
-type Account = ReturnType<KernelClient['accounts']>;
-type MountedMethod = Account extends { 'contribution-actions': { post: infer Method } } ? Method : never;
-type MountedResult<Method> = Method extends (...args: never[]) => infer Result ? Awaited<Result> : never;
-type MountedData<Result> = Result extends { data: infer Data } ? NonNullable<Data> : never;
-
-/** Deliberately never until the complete-input publisher installs the official callable and DTO. */
-export type MountedContributionActionsResponse = MountedData<MountedResult<MountedMethod>>;
+export type { ContributionActionsResponse as MountedContributionActionsResponse } from './receiver';
 
 /** The existing mounted native action contract, not a replacement contribution response DTO. */
 export type NativeContributionAdvice = Pick<ReadingPageResponse, 'viewer' | 'actions'> & {

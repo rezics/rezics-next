@@ -18,6 +18,7 @@ import type { PageRead } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
 import { browserObservation } from '../../../session/observation';
 import { normalizeSessionObservation, sessionQueryKey } from '../../../session/browser-state';
+import { installedContributionActionsWire, type ContributionActionsRead } from './installed';
 import { ContributionActionsAddress } from './current';
 import type { BrowserObservationSnapshot } from '../../../session/observation';
 import type { OperationLease } from '../../../reader/lease';
@@ -27,7 +28,6 @@ import { isRecord } from '../../../features/pages/shared';
 import {
   contributionActionsInput,
   ContributionActionsReceiver,
-  unavailableAuthorContributionActionsWire,
   type AuthorContributionActionsWire,
   type ContributionActionsInput,
   type ContributionActionsState,
@@ -109,7 +109,7 @@ export type ContributionActionsEpisode = {
   credential: string | null;
   navigation: object;
   mount: object | null;
-  wire: AuthorContributionActionsWire<unknown>;
+  wire: AuthorContributionActionsWire<ContributionActionsRead>;
   rows: RowObservation[];
 };
 
@@ -146,8 +146,9 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
 }
 
 export type ContributionActionsHostValue = {
+  reader: string | null;
   input: ContributionActionsInput | undefined;
-  state: ContributionActionsState<unknown>;
+  state: ContributionActionsState<ContributionActionsRead>;
   isCurrent: () => boolean;
   retry: () => Promise<void>;
   operation: (operation: ContributionOperation) => OperationLease<ContributionOperation> | undefined;
@@ -159,14 +160,14 @@ export function useContributionActionsHost() {
   return useContext(ContributionActionsHostContext);
 }
 
-const unavailable: ContributionActionsState<unknown> = { state: 'unavailable' };
+const unavailable: ContributionActionsState<ContributionActionsRead> = { state: 'unavailable' };
 const noSubscribe = (_notify: () => void) => () => {};
 const noSnapshot = () => unavailable;
 const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 type Visit = {
   episode: ContributionActionsEpisode | undefined;
-  receiver?: ContributionActionsReceiver<unknown>;
+  receiver?: ContributionActionsReceiver<ContributionActionsRead>;
   address?: ContributionActionsAddress;
   operations?: Partial<Record<ContributionOperation, OperationLease<ContributionOperation>>>;
 };
@@ -184,7 +185,7 @@ export function ContributionActionsHost({
   postsPublished,
   reviewsPublished,
   rows,
-  wire = unavailableAuthorContributionActionsWire,
+  wire: suppliedWire,
   children,
 }: {
   accountId: string;
@@ -199,7 +200,7 @@ export function ContributionActionsHost({
   postsPublished: boolean;
   reviewsPublished: boolean;
   rows: readonly Record<string, unknown>[];
-  wire?: AuthorContributionActionsWire<unknown>;
+  wire?: AuthorContributionActionsWire<ContributionActionsRead>;
   children: ReactNode;
 }) {
   const client = useQueryClient();
@@ -207,6 +208,8 @@ export function ContributionActionsHost({
   const observation = useMemo(() => browserObservation(client), [client]);
   const reader = useSyncExternalStore(observation.subscribe, observation.getSnapshot, observation.getServerSnapshot);
   const session = normalizeSessionObservation(client.getQueryData(sessionQueryKey));
+  const installedWire = useMemo(() => installedContributionActionsWire(session.csrfToken), [session.csrfToken]);
+  const wire = suppliedWire ?? installedWire;
   const [navigation, setNavigation] = useState({ active: true });
   const [mount, setMount] = useState<object | null>(null);
   const mounted = useRef<object | null>(null);
@@ -330,7 +333,7 @@ export function ContributionActionsHost({
     if (nextLease) (visit.operations ??= {})[name] = nextLease;
     return nextLease;
   };
-  const hostValue: ContributionActionsHostValue = { input, state, isCurrent, retry, operation };
+  const hostValue: ContributionActionsHostValue = { reader: signedIn ? reader.observation.subject : null, input, state, isCurrent, retry, operation };
   const showReadStatus = hydrated && signedIn;
   const signInHref =
     hydrated && reader.state === 'signed-out'

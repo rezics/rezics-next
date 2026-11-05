@@ -166,3 +166,7 @@ callable and DTO.
 The mounted contribution response adapter and production controls still require the publisher's official callable
 and DTO. Existing public links and the shared host retirement and recovery notice continue to own the production
 journey meanwhile.
+
+Decision: derive the selected request, references and closed response from the installed public callable; mount one
+adapter in each surviving original row. Current denial disables new commands while the original operation lease
+keeps uncertain native owners available for deliberate exact retry or discard. Advice refresh is never a receipt.

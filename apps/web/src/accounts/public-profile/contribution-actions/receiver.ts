@@ -1,22 +1,16 @@
-/** Local public-wire seam. The complete-input publisher owns the eventual installed DTO. */
-export type ContributionReference = Readonly<
-  | { type: 'content.thread'; id: string; placeId: string; sourceRevisionId: string | null }
-  | {
-      type: 'content.post';
-      id: string;
-      threadId: string;
-      placeId: string;
-      threadRevisionId: string | null;
-      sourceRevisionId: string | null;
-    }
+import type { KernelClient } from '@rezics/client';
+
+/** All native operands and responses come from the installed public callable. */
+export type ContributionActionsMethod = ReturnType<KernelClient['accounts']>['contribution-actions']['post'];
+export type ContributionActionsBody = Parameters<ContributionActionsMethod>[0];
+export type ContributionReference = ContributionActionsBody['references'][number];
+export type ContributionActionsResponse = NonNullable<Awaited<ReturnType<ContributionActionsMethod>>['data']>;
+export type ContributionActionsInput = Readonly<
+  Omit<ContributionActionsBody, 'references'> & {
+    accountId: Parameters<KernelClient['accounts']>[0]['id'];
+    references: readonly ContributionReference[];
+  }
 >;
-export type ContributionActionsInput = Readonly<{
-  accountId: string;
-  view: 'posts' | 'reviews' | 'discussion';
-  cursor: string | null;
-  proof: string;
-  references: readonly ContributionReference[];
-}>;
 
 export interface AuthorContributionActionsWire<T = never> {
   /** One selected native read; implementations must retain private/no-store transport semantics. */

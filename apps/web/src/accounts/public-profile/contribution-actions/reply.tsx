@@ -74,6 +74,8 @@ export function ContributionReply({
     ? 'retired'
     : presentation.failed
       ? 'failed'
+      : presentation.replyState && presentation.replyState !== 'available'
+        ? presentation.replyState
       : target
         ? contributionOperationAdvice({
             reference: target.reference,
@@ -186,6 +188,7 @@ function ContributionReplyVisit({
           initialKey={initialKey}
           localDraft={false}
           canSubmit={currentLease}
+          canStart={ready}
           containerId={target.threadId}
           boardId={target.boardId}
           replyTargetId={target.parentId}

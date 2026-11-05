@@ -107,6 +107,11 @@ export function ThreadWatch(props: ThreadWatchProps) {
               {m.thread_watch_retry_exact()}
             </Button>
           ) : null}
+          {visit.ready && view.command && canRecover && props.allowDiscard ? (
+            <Button type="button" variant="ghost" size="sm" className={actionClass} onClick={visit.discard}>
+              {m.reaction_discard()}
+            </Button>
+          ) : null}
           {visit.ready && (canRecover || (busy && !view.command)) ? (
             <Button
               type="button"

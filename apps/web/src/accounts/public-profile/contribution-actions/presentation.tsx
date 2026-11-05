@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
@@ -24,6 +24,7 @@ export type ContributionPresentation = {
   isCurrent(): boolean;
   operation(name: ContributionOperation): OperationLease<ContributionOperation> | undefined;
   failed?: boolean;
+  replyState?: 'available' | 'denied' | 'sign_in_required' | 'withheld' | 'unavailable';
 };
 
 function adviceText(state: Exclude<ContributionAdviceState, 'available'>, locale: Locale) {
@@ -118,8 +119,11 @@ export function ContributionWatch({
             isCurrent,
           })
         : 'unavailable';
-  const lease = state === 'available' ? presentation.operation('watch') : undefined;
-  const ready = !!lease && lease.reader === reader && lease.operation === 'watch' && lease.current();
+  const lease = isCurrent() ? presentation.operation('watch') : undefined;
+  const ready = state === 'available' && !!reader && !!lease && lease.reader === reader && lease.operation === 'watch' && lease.current();
+  const [admitted, setAdmitted] = useState(ready);
+  if (ready && !admitted) setAdmitted(true);
+  const retaining = (ready || admitted) && isCurrent() && !!lease && lease.current();
   const target = reference ? contributionCommandTarget(reference, 'watch') : undefined;
   return (
     <ContributionAdvicePresentation
@@ -127,8 +131,9 @@ export function ContributionWatch({
       label={m.thread_watch_watch({}, { locale })}
       locale={locale}
       retry={refreshAdvice}
+      retainChildren={retaining && state !== 'available'}
     >
-      {ready && target && reader ? (
+      {retaining && target && reader && lease ? (
         <ThreadWatch
           threadId={target.id}
           session="signed-in"
@@ -136,6 +141,8 @@ export function ContributionWatch({
           viewerId={reader}
           sessionStamp={JSON.stringify([input.accountId, input.view, input.cursor, input.proof, target])}
           admitted
+          canStart={() => state === 'available' && ready}
+          allowDiscard
           initialWatching={watching}
           returnTo={returnTo}
           // Advice readback is not a new command owner. The original operation lease

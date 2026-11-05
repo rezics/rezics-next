@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { ThreadReactions, type ThreadReactionsProps } from '../../../threads/thread-reactions';
 import { contributionOperationAdvice, originalContributionReference } from './advice';
@@ -43,22 +44,30 @@ export function ContributionReaction({
           : 'unavailable',
   );
   const state = states.find((state) => state !== 'available') ?? 'available';
-  const lease = state === 'available' ? presentation.operation('reaction') : undefined;
-  const ready = !!reader && !!lease && lease.reader === reader && lease.operation === 'reaction' && lease.current();
+  const lease = isCurrent() ? presentation.operation('reaction') : undefined;
+  const ready = state === 'available' && !!reader && !!lease && lease.reader === reader && lease.operation === 'reaction' && lease.current();
+  const [admitted, setAdmitted] = useState(ready);
+  if (ready && !admitted) setAdmitted(true);
+  const retaining = (ready || admitted) && isCurrent() && !!lease && lease.current();
+  // The mounted aggregate may advance while the original native command is unresolved.
+  const [originalWatermark] = useState(watermark);
   return (
     <ContributionAdvicePresentation
       state={state === 'available' && !ready ? 'unavailable' : state}
       label={m.reaction_reactions({}, { locale })}
       locale={locale}
       retry={refreshAdvice}
+      retainChildren={retaining && state !== 'available'}
     >
-      {ready && reference ? (
+      {retaining && reference && lease ? (
         <ThreadReactions
           target={{ kind, id: reference.id }}
           counts={counts}
           value={value}
           signedIn
           personalReady
+          canStart={ready}
+          allowDiscard
           returnTo={returnTo}
           locale={locale}
           optimistic={false}
@@ -68,7 +77,7 @@ export function ContributionReaction({
             reader,
             isCurrent: () => isCurrent() && lease.current(),
           }}
-          {...watermark}
+          {...originalWatermark}
           {...(refreshAdvice ? { onMutation: refreshAdvice } : {})}
           {...(preparedTransport ? { preparedTransport } : {})}
         />

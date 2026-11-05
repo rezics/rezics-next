@@ -532,6 +532,8 @@ type PostComposerProps<T, Context> = {
   titleRequired?: boolean;
   localDraft?: boolean;
   canSubmit?: boolean;
+  /** Current advice gates new drafts without retiring an immutable uncertain command. */
+  canStart?: boolean;
   containerId?: string;
   boardId?: string;
   slowModeScopeKey?: string;
@@ -564,6 +566,7 @@ function PostComposerContent<T, Context = undefined>({
   titleRequired = false,
   localDraft = true,
   canSubmit = true,
+  canStart = true,
   containerId,
   boardId,
   slowModeScopeKey,
@@ -641,6 +644,7 @@ function PostComposerContent<T, Context = undefined>({
     commandContext,
   );
   const ready =
+    (canStart || replyIntent.current.unresolved) &&
     canSubmit &&
     snapshotPhase === 'ready' &&
     bodyCanSend &&
