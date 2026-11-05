@@ -22,10 +22,10 @@ export class RealmsVisit {
   private release: () => void;
 
   constructor(router: AnyRouter) {
-    const leave = router.subscribe('onBeforeLoad', ({ toLocation }) => {
+    const leave = router.subscribe('onBeforeLoad', () => {
       const pending = this.pending;
       // A deliberate movement authorizes exactly one route load, including cursor-free Retry.
-      if (pending && !pending.loading && toLocation.publicHref === pending.href) {
+      if (pending && !pending.loading && router.history.location.href === pending.href) {
         pending.loading = true;
       } else this.retire();
     });

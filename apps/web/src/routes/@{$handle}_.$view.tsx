@@ -54,7 +54,10 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
     const view = agentPathView(params.view);
     if (!view) throw notFound();
     const locale = getLocale();
-    const query = agentViewQuery(params.handle, locale, view, deps.cursor, location.searchStr);
+    const address = new URL(location.publicHref, 'https://route.local');
+    const search = view === 'realms' ? address.search : location.searchStr;
+    const hash = view === 'realms' ? address.hash : location.hash;
+    const query = agentViewQuery(params.handle, locale, view, deps.cursor, search);
     const page =
       view === 'realms'
         ? await query.queryFn()
@@ -64,20 +67,18 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
           });
     if (page.kind === 'redirect') {
       throw redirect({
-        href: keepSearch(page.redirectTo, '', location.hash),
+        href: keepSearch(page.redirectTo, '', hash),
         statusCode: 302,
         headers: { 'Cache-Control': 'private, no-store' },
       });
     }
     if (page.kind === 'state') return page;
     if (view !== 'realms' && !agentViewAvailable(page.tabs, view) && !page.overview.views?.includes(view))
-      throw redirect(canonicalRedirect(agentPath(locale, page.handle), location.searchStr, location.hash, 302));
+      throw redirect(canonicalRedirect(agentPath(locale, page.handle), search, hash, 302));
     const canonicalHandle = page.page.account?.handle;
     if (!canonicalHandle) throw notFound();
     if (canonicalHandle !== params.handle) {
-      throw redirect(
-        canonicalRedirect(agentPath(locale, canonicalHandle, view), location.searchStr, location.hash, 308),
-      );
+      throw redirect(canonicalRedirect(agentPath(locale, canonicalHandle, view), search, hash, 308));
     }
     return {
       ...page,

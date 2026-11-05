@@ -16,6 +16,11 @@ mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => new Request('https://rezics.test/'),
 }));
 mock.module('../src/kernel/client', () => ({
+  requestLocale: () => 'en',
+  preparePrivatePage: () => {},
+  hasKernelOrigin: () => true,
+  configuredKernelOrigin: () => 'https://kernel.test',
+  acceptLanguage: () => 'en',
   kernelClient: () => createKernelClient('https://kernel.test', { fetch: (...args) => transport(...args) }),
 }));
 
@@ -87,6 +92,7 @@ export async function setup(entry = '/en/@mira/realms?keep=a%20b&keep=%2f#readin
   Route.update({ id: '/@{$handle}_/$view', path: '/en/@{$handle}/$view', getParentRoute: () => rootRoute } as never);
   const history = createMemoryHistory({ initialEntries: [entry] });
   const router = createRouter({
+    rewrite: { input: ({ url }) => url.href, output: ({ url }) => url.href },
     routeTree: rootRoute.addChildren([Route]),
     history,
     context: { queryClient },

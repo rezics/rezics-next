@@ -26,7 +26,8 @@ export function PublicRealmsRoute({
   cursor?: string;
 }) {
   const router = useRouter();
-  const { searchStr, hash } = useLocation();
+  useLocation();
+  const { search: searchStr, hash } = router.history.location;
   const visit = realmsVisit(router);
   const region = useRef<HTMLElement>(null);
   const account = source.kind === 'page' ? source.page.account : undefined;
@@ -59,7 +60,7 @@ export function PublicRealmsRoute({
   const move = (movement: Movement, target: string | undefined, href: string, action?: HTMLElement) => {
     if (!current()) return;
     visit.start(target, movement, href, action);
-    void router.navigate({ href });
+    router.history.push(href);
   };
   const retry = () => {
     if (!current()) return;
