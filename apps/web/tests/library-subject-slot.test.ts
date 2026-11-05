@@ -678,7 +678,7 @@ afterAll(async () => {
 });
 
 test(
-  'a signed-in person without an entry adds the subject to their library by choosing a state, which saves at once',
+  'a signed-in person without an entry reviews the supplied state before saving it once',
   async () => {
     reset();
     const { page } = await open(`/en/subjects/${subjectId}`);
@@ -701,6 +701,22 @@ test(
       expect(await page.getByRole('option', { name: 'Remove from library', exact: true }).count()).toBe(0);
       holdEntryWrite();
       await page.getByRole('option', { name: 'In progress', exact: true }).click();
+      const review = slot.locator('[data-entry-state-review-card]');
+      await review.waitFor({ state: 'visible' });
+      expect(await review.innerText()).toContain('No personal entry');
+      expect(await review.innerText()).toContain(subject.labels.en);
+      expect(await review.innerText()).toContain(subjectId);
+      expect(await review.innerText()).toContain('In progress');
+      expect(calls.filter((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`)).toHaveLength(0);
+      await page.setViewportSize({ width: 390, height: 844 });
+      expect(await review.getByRole('button', { name: 'Save state', exact: true }).isVisible()).toBe(true);
+      expect(await review.getByRole('button', { name: 'Discard choice', exact: true }).isVisible()).toBe(true);
+      await page.setViewportSize({ width: 1280, height: 860 });
+      const save = review.getByRole('button', { name: 'Save state', exact: true });
+      await save.evaluate((button) => {
+        (button as HTMLButtonElement).click();
+        (button as HTMLButtonElement).click();
+      });
       // The control can show busy before the kernel records the write, so wait for both.
       await eventually(async () => {
         const recorded =
@@ -720,6 +736,14 @@ test(
       expect(put.key).toMatch(/^[0-9a-f-]{36}$/i);
       expect(put.body).toEqual({ state: 'in_progress' });
       expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(1);
+      await page.getByRole('button', { name: /add to collection/i }).click();
+      const links = page.locator('[data-library-subject-links]');
+      expect(await links.getByRole('link', { name: /start progress/i }).getAttribute('href')).toBe(
+        `/library/progress?subjectId=${subjectId}`,
+      );
+      expect(await links.getByRole('link', { name: /your copies/i }).getAttribute('href')).toBe(
+        `/library/copies?subjectId=${subjectId}`,
+      );
     } finally {
       releaseWrite?.();
       await closeContext(page.context());
@@ -744,6 +768,10 @@ test(
 
       refuseEntryWrite = 'closed';
       await pick(page, select, 'Dropped');
+      expect(await slot.locator('[data-entry-state-review-card]').innerText()).toContain('Planned');
+      expect(await slot.locator('[data-entry-state-review-card]').innerText()).toContain('Dropped');
+      expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(0);
+      await slot.locator('[data-entry-state-review-card]').getByRole('button', { name: 'Save state' }).click();
       await eventually(
         async () =>
           (await slot.getByRole('alert').count()) > 0 &&
@@ -755,13 +783,31 @@ test(
       const refused = calls.find((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`)!;
       expect(refused.body).toEqual({ state: 'dropped', revision: 1 });
       expect(refused.key).toMatch(/^[0-9a-f-]{36}$/i);
+      const retry = slot.getByRole('button', { name: 'Retry state update', exact: true });
+      await retry.click();
+      await eventually(async () => libraryEntry?.state === 'dropped' && libraryEntry.revision === 2);
+      const retried = calls.filter((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`);
+      expect(retried).toHaveLength(2);
+      expect(retried[1]?.key).toBe(refused.key);
+      expect(retried[1]?.body).toEqual(refused.body);
 
       calls.length = 0;
+      await page.getByRole('button', { name: 'Review current state', exact: true }).click();
+      const unchanged = slot.locator('[data-entry-state-review-card]');
+      expect(await unchanged.innerText()).toContain('Dropped');
+      await unchanged.getByRole('button', { name: 'Confirm no change', exact: true }).click();
+      expect(await slot.locator('[data-entry-state-no-change-result]').innerText()).toBe(
+        'No change made. No request was sent.',
+      );
+      expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(0);
+
       await pick(page, select, 'In progress');
+      const corrected = slot.locator('[data-entry-state-review-card]');
+      await corrected.getByRole('button', { name: 'Save state', exact: true }).click();
       await eventually(
         async () =>
           libraryEntry?.state === 'in_progress' &&
-          libraryEntry.revision === 2 &&
+          libraryEntry.revision === 3 &&
           (await select.innerText()).includes('In progress'),
       );
       const put = calls.find((call) => call.method === 'PUT' && call.path === `/v1/libraryEntries/${subjectId}`)!;
@@ -778,25 +824,39 @@ test(
       libraryEntry = { ...libraryEntry!, state: 'completed', revision: 8, updatedAt: stamp };
       calls.length = 0;
       await pick(page, select, 'Paused');
+      const conflictReview = slot.locator('[data-entry-state-review-card]');
+      expect(await conflictReview.innerText()).toContain('In progress');
+      expect(await conflictReview.innerText()).toContain('Paused');
+      await conflictReview.getByRole('button', { name: 'Save state', exact: true }).click();
       await eventually(async () => (await select.innerText()).includes('Completed'));
       expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
         `PUT /v1/libraryEntries/${subjectId}`,
         `GET /v1/libraryEntries/${subjectId}`,
       ]);
-      expect(calls[0]?.body).toEqual({ state: 'paused', revision: 2 });
+      expect(calls[0]?.body).toEqual({ state: 'paused', revision: 3 });
       expect(calls[0]?.key).toMatch(/^[0-9a-f-]{36}$/i);
       expect(new URLSearchParams(calls[1]?.query).get('view')).toBe('FULL');
       expect(calls[1]?.authorization).toMatch(/^Bearer /);
       expect(libraryEntry).toMatchObject({ state: 'completed', revision: 8 });
       expect(await slot.getByRole('alert').innerText()).toBe('This entry changed elsewhere.');
       expect(await select.innerText()).not.toContain('Paused');
+      const conflict = slot.locator('[data-entry-state-conflict]');
+      expect(await conflict.innerText()).toContain('Completed');
+      expect(await conflict.innerText()).toContain('Paused');
+      await conflict.getByRole('button', { name: 'Review this choice again', exact: true }).click();
+      const freshReview = slot.locator('[data-entry-state-review-card]');
+      expect(await freshReview.innerText()).toContain('Completed');
+      expect(await freshReview.innerText()).toContain('Paused');
+      expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(1);
+      await freshReview.getByRole('button', { name: 'Save state', exact: true }).click();
+      await eventually(async () => libraryEntry?.state === 'paused' && libraryEntry.revision === 9);
 
       calls.length = 0;
       await pick(page, select, 'Remove from library');
       await eventually(async () => libraryEntry === null && (await select.innerText()).includes('Add to library'));
       const remove = calls.find((call) => call.method === 'DELETE' && call.path === `/v1/libraryEntries/${subjectId}`)!;
       expect(remove.key).toMatch(/^[0-9a-f-]{36}$/i);
-      expect(remove.query).toContain('revision=8');
+      expect(remove.query).toContain('revision=9');
     } finally {
       await closeContext(page.context());
     }

@@ -420,6 +420,10 @@ test('Complete Subject Library entry labels and member chooser authority preserv
     expect(option).toBeDefined();
     retained(option).click();
   });
+  expect(entries).toHaveLength(0);
+  expect(host.textContent).toContain('Plan to read');
+  expect(host.textContent).toContain('Finished reading');
+  await click(m.library_entry_review_save());
   expect(entries.at(-1)!.data).toMatchObject({
     intent: 'entry',
     action: 'save',

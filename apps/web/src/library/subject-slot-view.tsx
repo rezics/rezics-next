@@ -10,16 +10,7 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { useQueryClient } from '@tanstack/react-query';
 import { Menu } from '@rezics/ui/menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from '@rezics/ui/shadcn/select';
-import { Loader2Icon } from 'lucide-react';
-import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { SubjectLabelNotice } from './subject-labels.tsx';
@@ -39,11 +30,17 @@ import { CollectionChooserPanel } from './subject-collection-journey/chooser';
 import { PublicCollectionsPanel } from './subject-collection-journey/public';
 import { publicCountOf, type CapturedChooserTarget } from './subject-collection-journey';
 import type {
-  LibraryEntryStateWrite,
   SubjectLibraryMutation,
   SubjectLibraryMutationResponse,
   SubjectLibrarySlotData,
 } from './subject-slot';
+import {
+  SubjectEntryStateReview,
+  captureEntryStateBasis,
+  entryStateBasisMatches,
+  type EntryStateConflictIntent,
+  type ReviewedEntryState,
+} from './subject-entry-state-review/review';
 import { normalizeLibraryLabelName } from './subject-label-name';
 import { subjectLabelInputIssue } from './subject-label-input.ts';
 import { SubjectLabelInput } from './subject-label-input.tsx';
@@ -73,8 +70,6 @@ const labelButtonClass = cn(
   controlFocusClass,
 );
 const labelChoiceClass = `min-h-[44px] w-full min-w-0 rounded px-2 py-2 text-start text-sm whitespace-normal [overflow-wrap:anywhere] hover:bg-muted disabled:opacity-50 ${controlFocusClass}`;
-const removeValue = 'remove';
-const otherStateValue = '__library_other__';
 const subscribe = () => () => {};
 type SlotAdmission = {
   signature: string;
@@ -240,60 +235,11 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
       {...props}
       data={current}
       entryIdentity={scope}
+      entryObservation={observation.value.entry}
       entryLifetime={admissions.current.entry!.lifetime}
       labelLifetime={admissions.current.labels!.lifetime}
       collectionLifetime={admissions.current.collections!.lifetime}
     />
-  );
-}
-
-function LibraryStateSelect({
-  busy,
-  disabled,
-  hasEntry,
-  selectedState,
-  selectedStateLabel,
-  stateOptions,
-  onChoose,
-}: {
-  busy: boolean;
-  disabled: boolean;
-  hasEntry: boolean;
-  selectedState: string;
-  selectedStateLabel: string;
-  stateOptions: readonly (readonly [LibraryEntryStateWrite, string])[];
-  onChoose: (value: string) => void;
-}) {
-  const knownState = stateOptions.some(([value]) => value === selectedState);
-  const choices = [
-    ...(hasEntry && selectedState && !knownState ? [{ value: otherStateValue, label: selectedStateLabel }] : []),
-    ...stateOptions.map(([value, label]) => ({ value, label })),
-    ...(hasEntry ? [{ value: removeValue, label: m.library_subject_remove() }] : []),
-  ];
-  return (
-    <Select
-      disabled={disabled}
-      items={choices}
-      onValueChange={(value) => onChoose(value ?? '')}
-      value={selectedState ? (knownState ? selectedState : otherStateValue) : null}
-    >
-      <SelectTrigger
-        aria-busy={busy ? true : undefined}
-        aria-label={m.library_subject_entry()}
-        className="w-fit bg-primary text-primary-foreground hover:bg-primary/80 data-placeholder:text-primary-foreground [&_svg]:text-primary-foreground"
-      >
-        {busy ? <Loader2Icon aria-hidden className="size-4 animate-spin motion-reduce:animate-none" /> : null}
-        <SelectValue placeholder={m.library_subject_add()} />
-      </SelectTrigger>
-      <SelectContent alignItemWithTrigger={false}>
-        {choices.map((option) => (
-          <Fragment key={option.value}>
-            {option.value === removeValue ? <SelectSeparator /> : null}
-            <SelectItem value={option.value}>{option.label}</SelectItem>
-          </Fragment>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 
@@ -304,11 +250,13 @@ function SubjectLibrarySlotView({
   data,
   entryLifetime,
   entryIdentity,
+  entryObservation,
   labelLifetime,
   collectionLifetime,
 }: SubjectSlotProps & {
   entryLifetime: SlotLifetime;
   entryIdentity: string;
+  entryObservation: number;
   labelLifetime: SlotLifetime;
   collectionLifetime: SlotLifetime;
 }) {
@@ -331,6 +279,7 @@ function SubjectLibrarySlotView({
     csrfToken: string;
     send: typeof mutateSubjectLibrarySlot;
     previous: string;
+    review?: ReviewedEntryState;
     running: boolean;
     response?: SubjectLibraryMutationResponse | undefined;
   } | null>(null);
@@ -354,7 +303,8 @@ function SubjectLibrarySlotView({
   const initialEntry =
     data.restore?.ok || data.restore?.reason === 'occupied' ? (data.restore.entry ?? null) : data.entry;
   const [entry, setEntry] = useState(initialEntry);
-  const [selectedState, setSelectedState] = useState(initialEntry?.state ?? '');
+  const [entryStateLabel, setEntryStateLabel] = useState(data.entryStateLabel ?? m.library_other());
+  const [entryConflict, setEntryConflict] = useState<EntryStateConflictIntent | null>(null);
   const [removeKey] = useState(() => crypto.randomUUID());
   const [collections, setCollections] = useState(data.collections);
   const [collectionsLoaded, setCollectionsLoaded] = useState(data.collectionsLoaded);
@@ -432,10 +382,12 @@ function SubjectLibrarySlotView({
     }
     setEntryOrigin(entryLifetime);
     setEntry(initialEntry);
-    setSelectedState(initialEntry?.state ?? '');
+    setEntryStateLabel(data.entryStateLabel ?? m.library_other());
+    setEntryConflict(null);
     setPending(false);
     setActionResult(undefined);
     setRestoreMessage(null);
+    if (uncertainEntry.current) uncertainEntry.current.response = undefined;
     entryFlight.current = false;
   }
   if (labelOrigin !== labelLifetime) {
@@ -479,13 +431,32 @@ function SubjectLibrarySlotView({
     pickerFlight.current = false;
   }
   const stateOptions = (data.stateOptions ?? []).map(({ id, label }) => [id, label.text] as const);
+  const entryReviewOrigin = JSON.stringify([
+    entryIdentity,
+    entryObservation,
+    data.provenance?.viewer,
+    data.provenance?.readId,
+    data.entryAvailable,
+    data.entryStateLabel,
+    subject.id,
+    subject.type,
+    subject.label,
+    subject.typeLabel,
+    locale,
+    (data.stateOptions ?? []).map(({ id, label }) => [id, label.text, label.lang]),
+  ]);
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
     if (!entryLifetime.current()) return;
     const loadedEntry =
       data.restore?.ok || data.restore?.reason === 'occupied' ? (data.restore.entry ?? null) : data.entry;
     setEntry(loadedEntry);
-    setSelectedState(loadedEntry?.state ?? '');
+    setEntryStateLabel((current) => {
+      if (entryStateBasisMatches(captureEntryStateBasis(loadedEntry), entry)) return current;
+      return loadedEntry
+        ? ((data.stateOptions ?? []).find(({ id }) => id === loadedEntry.state)?.label.text ?? m.library_other())
+        : m.library_other();
+    });
     if (data.undo && !uncertainRestore.current)
       setEntryUndo((current) =>
         current?.deletionId === data.undo!.deletionId && current.revision === data.undo!.revision
@@ -630,13 +601,18 @@ function SubjectLibrarySlotView({
       if (restored.ok) {
         setEntryUndo(undefined);
         setEntry(restored.entry);
-        setSelectedState(restored.entry.state);
+        setEntryStateLabel(
+          (data.stateOptions ?? []).find(({ id }) => id === restored.entry.state)?.label.text ?? m.library_other(),
+        );
+        setEntryConflict(null);
         setActionResult('saved');
         setRestoreMessage(null);
       } else if (restored.reason === 'occupied') {
         if (restored.entry) {
           setEntry(restored.entry);
-          setSelectedState(restored.entry.state);
+          setEntryStateLabel(
+            (data.stateOptions ?? []).find(({ id }) => id === restored.entry!.state)?.label.text ?? m.library_other(),
+          );
         }
         setActionResult(undefined);
         setRestoreMessage(m.library_restore_occupied());
@@ -650,17 +626,21 @@ function SubjectLibrarySlotView({
     }
   }
 
-  function applyEntryResult(response: SubjectLibraryMutationResponse, previous: string) {
+  function applyEntryResult(response: SubjectLibraryMutationResponse) {
     if (!entryLifetime.current() || (response.entry && response.entry.subjectId !== subject.id)) return;
     if (response.result === 'saved' && response.entry) {
       setEntry(response.entry);
-      setSelectedState(response.entry.state);
+      setEntryStateLabel(
+        (data.stateOptions ?? []).find(({ id }) => id === response.entry!.state)?.label.text ?? m.library_other(),
+      );
+      setEntryConflict(null);
       setActionResult('saved');
       return;
     }
     if (response.result === 'cleared') {
       setEntry(null);
-      setSelectedState('');
+      setEntryStateLabel(m.library_other());
+      setEntryConflict(null);
       setActionResult('cleared');
       const receipt = response.undo ? captureRestore({ subjectId: subject.id, ...response.undo }) : undefined;
       if (receipt) setEntryUndo(receipt);
@@ -678,15 +658,20 @@ function SubjectLibrarySlotView({
     }
     if (response.result === 'conflict' && 'entry' in response) {
       setEntry(response.entry ?? null);
-      setSelectedState(response.entry?.state ?? '');
+      setEntryStateLabel(
+        (data.stateOptions ?? []).find(({ id }) => id === response.entry?.state)?.label.text ?? m.library_other(),
+      );
       setActionResult('conflict');
       return;
     }
-    setSelectedState(previous);
     setActionResult(response.result);
   }
 
-  async function writeEntry(input: SubjectLibraryMutation, previous: string) {
+  async function writeEntry(
+    input: SubjectLibraryMutation,
+    previous: string,
+    review?: ReviewedEntryState,
+  ): Promise<SubjectLibraryMutationResponse | undefined> {
     if (
       !entryLifetime.current(
         'library_entry.get',
@@ -704,6 +689,7 @@ function SubjectLibrarySlotView({
       csrfToken: data.csrfToken!,
       send: mutateSubjectLibrarySlot,
       previous,
+      ...(review ? { review } : {}),
       running: false,
     };
     uncertainEntry.current = operation;
@@ -717,13 +703,27 @@ function SubjectLibrarySlotView({
           headers: { 'X-CSRF-Token': operation.csrfToken },
         }));
       operation.response = response.result === 'unavailable' || response.result === 'closed' ? undefined : response;
-      if (!entryLifetime.current()) return;
+      if (!entryLifetime.current()) {
+        operation.response = undefined;
+        return;
+      }
       if (response.entry && response.entry.subjectId !== subject.id) {
         setActionResult('unavailable');
         return;
       }
       if (operation.response) uncertainEntry.current = null;
-      applyEntryResult(response, operation.previous);
+      if (response.result === 'conflict' && operation.input.action !== 'clear' && operation.input.state) {
+        const choice = (data.stateOptions ?? []).find(({ id }) => id === operation.input.state);
+        setEntryConflict({
+          state: operation.input.state,
+          stateLabel: choice?.label.text ?? operation.review?.stateLabel ?? m.library_other(),
+          stateLabelLanguage: choice?.label.lang ?? operation.review?.stateLabelLanguage ?? locale,
+          originKey: entryReviewOrigin,
+          hasAcceptedBasis: 'entry' in response,
+          ...('entry' in response ? { acceptedEntry: response.entry ?? null } : {}),
+        });
+      }
+      applyEntryResult(response);
       if (
         response.result === 'saved' ||
         response.result === 'cleared' ||
@@ -739,10 +739,11 @@ function SubjectLibrarySlotView({
               : current,
         );
       }
+      return response;
     } catch {
       if (!entryLifetime.current()) return;
-      setSelectedState(previous);
       setActionResult('unavailable');
+      return;
     } finally {
       operation.running = false;
       if (entryLifetime.current()) {
@@ -752,53 +753,68 @@ function SubjectLibrarySlotView({
     }
   }
 
-  function choose(value: string) {
+  function removeEntry() {
     if (
       !hydrated ||
       pending ||
-      (!uncertainEntry.current && !data.csrfToken) ||
-      !value ||
-      !entryLifetime.current('library_entry.get', value === 'remove' ? 'library_entry.delete' : 'library_entry.put')
+      uncertainEntry.current ||
+      !entry ||
+      !data.csrfToken ||
+      !entryLifetime.current('library_entry.get', 'library_entry.delete') ||
+      !entryDeleteAdmitted
     )
       return;
-    if (uncertainEntry.current) {
-      void writeEntry(uncertainEntry.current.input, uncertainEntry.current.previous);
-      return;
-    }
-    if (value === 'remove') {
-      if (!entry) return;
-      const previous = selectedState;
-      setPending(true);
-      void writeEntry(
-        {
-          subjectId: subject.id,
-          intent: 'entry',
-          action: 'clear',
-          revision: entry.revision,
-          ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
-          idempotencyKey: crypto.randomUUID(),
-        },
-        previous,
-      );
-      return;
-    }
-    if (value === selectedState || !stateOptions.some(([state]) => state === value)) return;
-    const next = value as LibraryEntryStateWrite;
-    const previous = selectedState;
-    setSelectedState(next);
     setPending(true);
     void writeEntry(
       {
         subjectId: subject.id,
         intent: 'entry',
-        action: 'save',
-        state: next,
-        ...(entry ? { revision: entry.revision } : {}),
-        ...(entry?.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
+        action: 'clear',
+        revision: entry.revision,
+        ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
         idempotencyKey: crypto.randomUUID(),
       },
-      previous,
+      entry.state,
     );
+  }
+
+  async function saveReviewedEntry(review: ReviewedEntryState) {
+    if (
+      !hydrated ||
+      pending ||
+      uncertainEntry.current ||
+      !data.csrfToken ||
+      review.subjectId !== subject.id ||
+      review.subjectLabel !== subject.label ||
+      review.originKey !== entryReviewOrigin ||
+      review.lifetime !== entryLifetime ||
+      !entryLifetime.current('library_entry.get', 'library_entry.put') ||
+      !entryPutAdmitted ||
+      !entryStateBasisMatches(review.basis, entry)
+    )
+      return;
+    const choice = (data.stateOptions ?? []).find(
+      ({ id, label }) =>
+        id === review.state && label.text === review.stateLabel && label.lang === review.stateLabelLanguage,
+    );
+    if (!choice) return;
+    const input: SubjectLibraryMutation = {
+      subjectId: review.subjectId,
+      intent: 'entry',
+      action: 'save',
+      state: review.state,
+      ...(review.basis
+        ? {
+            revision: review.basis.revision,
+            ...(review.basis.incarnationId === undefined ? {} : { incarnationId: review.basis.incarnationId }),
+          }
+        : {}),
+      idempotencyKey: crypto.randomUUID(),
+    };
+    setEntryConflict(null);
+    setActionResult(undefined);
+    setPending(true);
+    return writeEntry(input, review.basis?.state ?? '', review);
   }
 
   async function mutate(input: SubjectLibraryMutation) {
@@ -1167,7 +1183,6 @@ function SubjectLibrarySlotView({
       {data.session === 'signed-in' && data.entryAvailable && stateOptions.length > 0 && entryPutAdmitted ? (
         <Exposure operation="library_entry.put">
           <form
-            data-library-entry
             method="get"
             action={action}
             onSubmit={(event) => event.preventDefault()}
@@ -1178,29 +1193,41 @@ function SubjectLibrarySlotView({
             {typeof entry?.incarnationId === 'string' ? (
               <input type="hidden" name="incarnationId" value={entry.incarnationId} />
             ) : null}
-            <LibraryStateSelect
+            <SubjectEntryStateReview
+              subject={subject}
+              entry={entry}
+              receivedLabel={entryStateLabel}
+              stateOptions={data.stateOptions ?? []}
+              canRemove={entryDeleteAdmitted}
+              originKey={entryReviewOrigin}
+              lifetime={entryLifetime}
+              disabled={!hydrated || !data.csrfToken || !entryPutAdmitted}
               busy={pending}
-              disabled={!hydrated || !data.csrfToken || pending}
-              hasEntry={entry !== null}
-              onChoose={choose}
-              selectedState={selectedState}
-              selectedStateLabel={data.entryStateLabel ?? m.library_other()}
-              stateOptions={stateOptions}
+              uncertain={uncertainEntry.current !== null}
+              conflict={entryConflict}
+              onSave={saveReviewedEntry}
+              onRemove={() => {
+                setEntryConflict(null);
+                removeEntry();
+              }}
+              onDismissConflict={() => setEntryConflict(null)}
             />
           </form>
         </Exposure>
       ) : null}
 
       {data.session === 'signed-in' && data.entryAvailable && entry && (!stateOptions.length || !entryPutAdmitted) ? (
-        <div data-library-entry className="flex items-center gap-2">
-          <span data-library-entry-state>{data.entryStateLabel ?? m.library_other()}</span>
+        <div data-library-entry className="flex min-w-0 flex-wrap items-center gap-2">
+          <span data-library-entry-state className="min-w-0 break-words [overflow-wrap:anywhere]">
+            {entryStateLabel}
+          </span>
           {entryDeleteAdmitted ? (
             <Exposure operation="library_entry.delete">
               <button
                 type="button"
                 className={buttonClass}
                 disabled={!hydrated || !data.csrfToken || pending}
-                onClick={() => choose('remove')}
+                onClick={removeEntry}
               >
                 {m.library_subject_remove()}
               </button>
@@ -1212,6 +1239,7 @@ function SubjectLibrarySlotView({
       {hydrated && !pending && entryLifetime.current() && uncertainEntry.current ? (
         <button
           type="button"
+          data-entry-state-retry={uncertainEntry.current.input.action === 'save' ? true : undefined}
           className={buttonClass}
           disabled={pending}
           onClick={() => {
@@ -1219,7 +1247,9 @@ function SubjectLibrarySlotView({
             if (original && entryLifetime.current()) void writeEntry(original.input, original.previous);
           }}
         >
-          {m.library_selection_retry()}
+          {uncertainEntry.current.input.action === 'save'
+            ? m.library_entry_review_retry()
+            : m.library_selection_retry()}
         </button>
       ) : null}
 
