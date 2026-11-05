@@ -298,7 +298,7 @@ test('reviewed Person requests use native evidence query and preserve ordered de
   const client = createKernelClient(ORIGIN, { fetch: remote.fetch });
   const reviewed = reviewedPersonRequests(client);
   const read = await reviewed.read(ID, endpoint);
-  expect(read.data?.reviewedIdentity?.securityRevision).toBe(endpoint.securityRevision);
+  expect(read.data).toMatchObject({ reviewedIdentity: { securityRevision: endpoint.securityRevision } });
   expect(new URL(remote.sent[0]!.url).searchParams.get('reviewIdentitySource')).toBe('bangumi');
   expect(new URL(remote.sent[0]!.url).searchParams.get('reviewIdentityExternalId')).toBe('person:123');
   expect(new URL(remote.sent[0]!.url).searchParams.get('includeViewerActions')).toBe('true');
