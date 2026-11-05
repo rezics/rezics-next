@@ -1,2933 +1,357 @@
 # Importer
 
-The importer owns source dump ingestion, durable SQLite run and record state, and replayable requests for platform writes through the kernel API.
+The importer owns source acquisition, run and record state, candidate journals and recovery. It sends ordinary public API requests under current caller authority. It does not have a privileged catalogue writer.
 
-## Preview a source dump before importing
+## Sources, grain and rights
 
-`rezics-import preview` decodes an actual dump through the registered converters and compares it with a captured
-completed baseline. It needs the source kind and dump path; it does not need an account key, credentials, network
-access, a writer lease or the configured import state. Help is available without opening a file:
+| Source       | Accepted input and identity                                                                                                                                                       | Source terms and exclusions                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Bangumi      | JSON-lines subject records with native subject IDs. Supported subject kinds retain their source grain; an unsupported type remains a source member and is counted as skipped.     | Metadata and attributed summary text use CC-BY-SA-3.0. This grants no cover-image rights.                                            |
+| VNDB         | Public COPY tables with their real headers, grouped by native visual-novel, release, staff, producer and character keys; supported API tables retain their own response revision. | Permitted metadata uses ODbL-1.0 database terms and LicenseRef-DbCL-1.0 contents terms. Descriptions, posts and images are excluded. |
+| Open Library | Native five-column TSV rows containing Work or Edition records. Work and Edition IDs remain distinct.                                                                             | CC0-1.0 applies to permitted bibliographic metadata, not unknown-licensed prose or cover images.                                     |
+| Wikidata     | JSONL Q-item records with native entity revisions and exact property claims.                                                                                                      | CC0-1.0 applies to structured data. User text, unsupported claims and Commons images are excluded.                                   |
 
-```sh
-bun services/importer/src/cli.ts preview --help
-bun services/importer/src/cli.ts preview --source wikidata --dump /srv/imports/wikidata.json
-bun services/importer/src/cli.ts preview --source wikidata --dump /srv/imports/wikidata.json.gz --compression gzip
-bun services/importer/src/cli.ts preview --source wikidata --dump /srv/imports/wikidata.json.zst --compression zstd
-bun services/importer/src/cli.ts preview --source vndb --dump /srv/imports/vndb-db.tar.zst --compression zstd
-bun services/importer/src/cli.ts preview --source openlibrary --dump-set /srv/imports/open-library/manifest.json --baseline .state/imports.sqlite
-```
+Licences and attribution are fixed by reviewed source registration, never taken from a dump field or caller-supplied descriptor. An alias cannot admit a new source or create a default licence. A metadata licence does not grant summary, image or other creative-content rights.
 
-`--source` is one of the four launch kinds. `--compression none|gzip|zstd` defaults to `none` for exact compatibility;
-gzip is admitted only for Open Library and Wikidata streamed dumps; zstd is admitted only for VNDB ustar archives and
-Wikidata streamed dumps as one regular local file. A suffix is not a source identity,
-revision or licence. `--dump-set` previews one complete Open Library author/work/edition manifest and is
-mutually exclusive with `--dump` and `--plan-dir`. `--decode-budget` is a decoded-byte ceiling for one gzip
-or zstd dump or one complete dump set (default 256 GiB for the whole set). `--plan-dir` reopens a retained plan
-without reopening or decompressing input. `--source-alias` names the configured source identifier used in local
-state; the two remain distinct. `--baseline` opens an existing importer state file read-only and copies only that
-source's completed generation into a caller-owned temporary store under `os.tmpdir()` (or `--output-dir`). A live
-writer does not invent a future baseline. Without `--baseline`, the view is a first-import preview, not proof that
-the server has no existing subjects. An unavailable schema is reported precisely. Preview never migrates, takes a
-writer lease or modifies import journals.
+## Registration, identity and ordinary writes
 
-Pages default to 20 rows and accept at most 100. Use `--page new|changed|unchanged|vanished`, `--limit`, the printed
-opaque cursor, `--record` for exact-record drill-down, or `--json` for the version 1 document. Incomplete, truncated
-or duplicate input keeps a bounded error identity and withholds a vanished set. Empty input and total disappearance
-keep the production stop rule; preview never lowers the threshold. Converter diagnostics appear on the prospective
-record view. Media intents are descriptions only. Source statistics stay labelled as source statistics.
+The importer uses the converter revision exported by the registered converter. Current exports are Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@4, Wikidata wikidata-6 and cross-media-entities cross-media-entities@14. Selected Bangumi family conversion combines the current exports as cross-media-entities@14+bangumi@15. Vocabulary revisions are owned by the conversion package. See its [public exports and current mapping contract](../../packages/conversion/README.md#package-api).
 
-`--output-dir` retains the plan for later `--plan-dir` page reads. The directory is created with owner-only access
-and is refused when it already contains a database. Plans may be discarded without touching import state.
+A configured source alias and exact external_id form the durable record tuple. Provider identity and converter revision come from registered code, not the source body. An alias binds to one normalized API origin before run or network effects; the same source state cannot silently move to another destination.
 
-Decision: preview pages persist only in `--output-dir` or a process-owned temporary directory; `--plan-dir` reopens a
-complete plan without re-decoding. The ordinary import invocation is printed with placeholders and is not an
-executable interpolation of dump paths.
+A run stages one complete input generation, validates its source records and mass-disappearance threshold, then seals it before public metadata or semantic writes. Records and their owned candidates are reconciled through the ordinary API. Changed input creates new source-backed proposals; vanished source facts may retract only that importer's owned candidates. Independent community subjects and adoption are not deleted or overwritten. Missing, malformed, unsupported and unknown values remain distinct omissions; one omission does not suppress independent valid fields.
 
-```sh
-bun services/importer/src/cli.ts preview --source wikidata --dump /srv/imports/wikidata.json --baseline .state/imports.sqlite --page changed --record Q1
-bun services/importer/src/cli.ts --source wikidata --dump <complete-input-path> --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>
-```
+Each durable request keeps its original tuple, command key and bytes. If delivery is unknown, reopening replays that exact intent under current authorization before it prepares a replacement. Reprocessing does not regenerate or mutate a sealed command. Current permissions, source/field ownership and takedown/facts fences are checked before new effects or replay. A denial or unresolved response does not count as completion.
 
-## Compare two completed preview plans
+## Command line and recovery
 
-`rezics-import compare` reads two completed persistent dump-preview directories and builds a derived before/after
-index of exact source-key membership and retained native field/evidence differences. It does not decode dumps, load
-historical converters, construct credentials or HTTP clients, write import state, or apply a preview. Help is
-available without opening a path:
+A normal run names one source, one native dump, one state file and the public API/Auth origins. The direct entry is bun services/importer/src/cli.ts; --help prints usage without reading credentials, opening SQLite or contacting a service. Source choices are bangumi, vndb, openlibrary and wikidata.
 
-```sh
-bun services/importer/src/cli.ts compare --help
-bun services/importer/src/cli.ts compare --left /srv/previews/left --right /srv/previews/right --output-dir /srv/comparisons/refresh
-```
+--dump - accepts plain stdin. Compression is explicit: gzip is supported for Open Library and Wikidata streamed dumps; zstd is supported for VNDB archives and Wikidata dumps. It is not inferred from the filename. zstd requires one local regular file and a trusted executable. The decoded-byte ceiling defaults to 256 GiB; source records default to 256 KiB with a hard 1 MiB maximum, subject to tighter native limits. API and Auth values must be HTTPS origins with no path, query, fragment or credentials. The disappearance threshold is from zero through one. Progress is opt-in and goes to stderr.
 
-Both plans must be complete, share the exact configured source alias and provider kind, and capture the same baseline
-generation. Two first-import plans (both without a baseline) may be compared; that view does not establish server
-emptiness. Different baseline captures are refused with a bounded mismatch asking for a fresh common capture. Missing
-or unavailable metadata is never treated as equality. Different admitted input paths and different converter revisions
-may coexist; both are reported and neither is assigned as the cause.
+| Command                        | Purpose                                                                                              |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| preview                        | Decode a dump and compare it with a retained completed baseline without public writes.               |
+| compare / capture-comparison   | Compare bounded preview plans or pages of two retained complete captures.                            |
+| inspect / inspect-bindings     | Read one exact source generation, record binding or retained journal locally.                        |
+| disappearance-review           | Explain one sealed mass-disappearance stop and its bounded missing-key pages.                        |
+| diagnostics                    | Page stored conversion diagnostics or inspect one exact record; it has no publish or rewrite action. |
+| resume                         | Finish one sealed ready/finalizing generation from the state file without the original dump.         |
+| retention / staging-retirement | Review and retire only the exact eligible complete generation or unpublished staging capture.        |
+| backup / validate-snapshot     | Preserve and verify the SQLite database together with committed WAL state.                           |
 
-Pages default to 20 rows and accept at most 100. Use `--page only-left|only-right|changed|unchanged|skipped|unavailable`,
-`--limit`, the printed opaque cursor, `--record` for exact-record drill-down, or `--json` for the version 1 document.
-A record absent from the right dump is an input comparison difference; source withdrawal eligibility remains that
-plan's complete acquisition. Title-equal records with changed references or qualifier precision stay changed. A digest
-change with equal retained rendered fields is reported as a digest/revision distinction, not complete semantic
-equivalence. Unresolved targets stay unresolved on each side. Ordered reference groups are not paired by index when
-no stable matching key exists.
+Ordinary interrupted, unsealed acquisition is discarded and starts again. Optional staging checkpoints support large Bangumi, Open Library and Wikidata files; VNDB COPY acquisition has its own explicit checkpoint. Resume verifies the same source and bytes before continuing. A sealed generation is resumed from its journal; replacement input is never substituted for an unknown-delivery request. Concurrent operators use the same state file with exact alias ownership; one live operator cannot take another's lease.
 
-`--output-dir` retains the derived comparison for later `--comparison-dir` page reads without reopening the dumps.
-Cursors bind to the comparison identity and capture digest. Cancellation or a storage ceiling leaves no completed
-marker. The printed ordinary import invocation uses placeholders and the plans' actual source kind/alias.
+## Retained source metadata
 
-Decision: comparison reopens retained preview.sqlite files read-only using the delivered preview plan schema; it does
-not call DumpPreview.open (a writable reader) or invent a second conversion pipeline. Reopen uses `--comparison-dir`.
+The four built-in source descriptors identify the provider-native record URL, attribution and permitted metadata terms. Only a completely acquired, validated and sealed generation can send metadata through the public source-record API under current subject:batch_write authority. The exact source alias and external_id must already bind to the actual subject tuple.
 
-```sh
-bun services/importer/src/cli.ts compare --left /srv/previews/left --right /srv/previews/right --page changed --record Q1 --json
-bun services/importer/src/cli.ts compare --comparison-dir /srv/comparisons/refresh --page only-right
-bun services/importer/src/cli.ts --source wikidata --dump <complete-input-path> --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>
-```
+Metadata uses its own immutable request/result journal. A first write expects no prior metadata revision; a changed descriptor uses only the last returned revision. Response-loss replay uses the original bytes and key before any replacement. Acknowledged unchanged descriptors cause no new request. A metadata failure preserves the previous source baseline and native subject. The Sources reader uses the actual current subject.sourceRecords response; metadata never proves support for every field or permission to publish source prose or media.
 
-## Inspect retained source-dump work
-
-`rezics-import inspect` opens an existing importer state file for local read-only inspection. It needs only the state
-path and exact configured source identifier; it does not need a dump, account key, credentials, network access or a
-writer lease. Its help is available without opening a file:
-
-```sh
-bun services/importer/src/cli.ts inspect --help
-bun services/importer/src/cli.ts inspect --state .state/imports.sqlite --source wikidata
-```
-
-By default, inspection selects the source's active generation, or its completed baseline when no generation is
-active. A recognized empty completed source is shown as an empty baseline. Retained generation progress is separate
-from the baseline and does not advance it. Stored counters keep their production phase meanings; unavailable legacy
-counters are shown as unknown. The displayed status is the stored status, and unrecognized statuses remain
-unrecognized.
-
-Pending envelopes and deferred covers are separate live pages. Pages default to 20 entries and accept at most 100;
-the next cursor is reusable only with the same source, generation and page kind. Each invocation reads one bounded
-page snapshot, so a writer may settle work between page requests. The next page is not a cross-invocation snapshot.
-Page rows show classification, stored unresolved counts and bounded field-group/operation summaries. They do not
-include request bodies or projections.
-
-```sh
-bun services/importer/src/cli.ts inspect --state .state/imports.sqlite --source wikidata --page pending
-bun services/importer/src/cli.ts inspect --state .state/imports.sqlite --source wikidata --page covers
-bun services/importer/src/cli.ts inspect --state .state/imports.sqlite --source wikidata --record Q42
-```
-
-Copy the opaque cursor printed by a page response into the next invocation with that same `--page` value. Use
-`--generation <id>` to select another exact retained generation, `--limit 1..100` to set a page size, or `--json` for
-the deterministic version 1 document. JSON mode emits one JSON value with `version`, `source`, `sourceState`,
-`baseline`, `ownershipRow`, `selection`, `generation`, `record` and `page`; it has no progress chatter. Exact-record
-inspection shows retained envelope byte lengths and SHA-256 digests, command identities, unresolved delivery,
-settled command outcomes and recorded fence omissions without printing serialized request bodies. A local completion
-marker is evidence in this importer journal, not a current selected/public read or proof of publication, adoption,
-source rights or cover permission. Other subsystem journals are outside this view.
-
-Decision: inspection accepts an exact configured source ID, defaults to the active generation or completed baseline,
-and selects pending-envelope or deferred-cover pages explicitly. Inspection shows the recorded API origin and whether
-it was recorded on first use or declared for legacy state.
-
-## Keep source history at one API destination
-
-Each exact durable source alias records a normalized API origin in the same SQLite state. First use binds that origin
-before any generation or network effect. Continuing at that destination with ordinary renewed credentials is allowed.
-A mistyped `--api` fails before token retrieval or native replay and does not reuse another server's baseline.
-
-This is local configuration binding, not a server identity protocol. Same-origin server replacement cannot be detected
-without a separately released deployment identity. Account, client and key rotation remain allowed under current native
-authority.
-
-Old state has no trustworthy origin to infer. Ordinary import never adopts `--api` for unbound history. Review one
-source, then declare its original origin as the operator's statement, not verified historical evidence:
-
-```sh
-bun services/importer/src/cli.ts destination --state .state/imports.sqlite --source wikidata --api https://api.rezics.example
-bun services/importer/src/cli.ts destination --state .state/imports.sqlite --source wikidata --api https://api.rezics.example \
-  --review-revision <64-hex-from-review> --declare --acknowledge-unverified
-```
-
-Declaration changes only destination metadata. An already-bound source cannot be rebound. An operator who cannot
-establish the original destination leaves the history unbound and uses read-only inspect and backup. New destination
-use starts with a separate state file. Backups preserve binding and provenance; a restored legacy snapshot stays
-unbound until explicit declaration.
-
-Declaration opens retained existing state without constructing RunStore or RecordBindings, so a refused declaration
-leaves schema and history unchanged and an accepted declaration does not migrate unrelated importer tables.
-
-Decision: destination binding is source-exact local configuration recorded on first use or by explicit operator
-declaration; mismatch and unbound history fail before credentials. Sealed resume uses the same origin guard and does
-not record a first-use binding on empty state. The `source_destinations` table is additive; legacy files stay readable.
-Declaration reuses existing-state inode admission and writes only destination metadata; it serializes with an immediate
-transaction and refuses a live or uninspectable owner without creating or rotating a capability.
-
-## Compare two retained complete captures
-
-`rezics-import capture-comparison` selects two exact retained complete generation IDs for the same configured source
-and pages captured-record differences. It needs the state path, source identifier, `--before` and `--after`; it does
-not need a dump, account key, credentials, network access or a writer lease. Generation IDs are exact decimal text
-and are never rounded or replaced with the current generation. Help is available without opening a file:
-
-```sh
-bun services/importer/src/cli.ts capture-comparison --help
-bun services/importer/src/cli.ts capture-comparison --state .state/imports.sqlite --source wikidata --before 1 --after 2 --counts
-```
-
-Both captures must be complete history of that exact source. An empty complete capture is a valid input. Staging,
-abandoned, noncomplete, missing, partially retired and retired history are distinct unavailable states. API68
-retirement metadata is consumed when those columns or statuses are already present; this command does not invent or
-migrate that schema. Missing provenance and incomplete supplied-versus-present accounting fail instead of inventing
-an empty result.
-
-Comparison uses retained normalized input rows, not public current facts. Present population is `row_json.state =
-present`. Vanished journal rows stay in the generation but are excluded from that population; a staged
-new/changed/unchanged/vanished classification is import-time evidence and is not this comparison result. Before-only
-present records are vanished, after-only present records are new, and common present records are unchanged only when
-stored revision, digest and converter revision are all equal. `--before` and `--after` are operator-selected
-identities, not a chronological requirement.
-
-Pages default to 20 rows and accept at most 100. Use `--page new|changed|unchanged|vanished`, `--limit`, the printed
-opaque cursor, `--record` for two indexed point reads, or `--json` for the version 1 document. Complete category
-counts require `--counts` and one explicit streaming merge; a detail page does not recount. A sparse category stops
-after a bounded scan window and continues with the cursor even if the page is not full. A page with no matches and
-remaining work is not a completed empty comparison. Cursors bind source, both generation IDs, schema and page
-parameters, then revalidate header/capture state before the next page. Retirement or incompatible mutation
-invalidates the cursor.
-
-One invocation reads one consistent SQLite snapshot and closes. Concurrent source progress cannot retarget the
-selected generations inside that invocation. The reader uses the inspect producer's readonly opening, path and
-schema guards and never constructs RunStore, RecordBindings or RecordStore. It makes no database create, migration,
-lease, checkpoint, cleanup, credential, network, dump or native effect. Bounded projection field detail is shown
-only from the immutable stored source-record format; unavailable legacy projection is reported honestly. Native
-candidate proposal, acceptance, adoption and current publication stay independent of this local view.
-
-```sh
-bun services/importer/src/cli.ts capture-comparison --state .state/imports.sqlite --source wikidata --before 1 --after 2 --page changed --json
-bun services/importer/src/cli.ts capture-comparison --state .state/imports.sqlite --source wikidata --before 1 --after 2 --record Q42
-bun services/importer/src/cli.ts --source wikidata --dump <complete-input-path> --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>
-```
-
-Decision: capture comparison requires exact `--before`/`--after` complete generation IDs for one configured source;
-counts are an explicit `--counts` pass; vanished-state journal rows are excluded from each present population.
-
-## Review a stopped mass disappearance
-
-`rezics-import disappearance-review` explains one exact stopped generation after the existing mass-disappearance
-seal. It needs the state path, the configured source identifier and the stopped generation ID. It does not take a
-dump, account key, credentials, network access or a writer lease. Help is available without opening a file:
-
-```sh
-bun services/importer/src/cli.ts disappearance-review --help
-bun services/importer/src/cli.ts disappearance-review --state .state/imports.sqlite --source wikidata --generation 2
-```
-
-The header shows the stopped generation, the compared completed baseline, stored prior/survivor/supplied/missing
-counts, the threshold, whether the input was a complete capture or malformed/truncated, and whether immutable
-missing-identity evidence is available. Pages default to 20 missing identities and accept at most 100. Use
-`--page missing`, `--limit`, the printed opaque cursor, `--record` for one indexed point read, or `--json` for the
-version 1 document. Cursors bind the view, source, generation, evidence identity and last emitted key.
-
-Evidence is captured inside the existing complete seal transaction from the source-leading missing index into
-generation-scoped tables `run_disappearance_stops` and `run_disappearance_missing`. That write is not native
-publication, selection, source finalization or approval of loss. The all-missing and ratio threshold rules are
-unchanged. Old stopped runs without a header show stored counts and missing-evidence unavailable; they do not
-reconstruct a list from current membership. API68 remains retention owner: those tables are generation children.
-Pruned evidence is unavailable, not an empty capture.
-
-Review never changes a threshold, accepts the stopped generation, copies credentials, or runs import. Correct the
-local file, then invoke the ordinary importer with current input and credentials. A local missing row is not a native
-deletion. A generation number is not source-native version order. Uncertain earlier requests stay under original
-native custody; acknowledged but unread work uses ordinary readback.
-
-```sh
-bun services/importer/src/cli.ts disappearance-review --state .state/imports.sqlite --source wikidata --generation 2 --page missing --json
-bun services/importer/src/cli.ts disappearance-review --state .state/imports.sqlite --source wikidata --generation 2 --record Q42
-bun services/importer/src/cli.ts --source wikidata --dump <corrected-complete-input> --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>
-```
-
-Decision: disappearance review requires an exact stopped generation; default output is the header plus the first
-missing page; evidence tables are API68 generation children and are not reconstructed from mutable membership.
-Mass-disappearance generations stay status-retained; retention deletes those children only for an eligible
-superseded-complete generation.
-
-## Inspect retained record bindings
-
-`rezics-import inspect-bindings` opens the same importer state file for a local read-only visit of one exact
-`(source, external_id)` binding. It needs the state path, the exact configured source alias and the exact external
-record key. It does not take a writer lease, load credentials, call the network or construct `RecordBindings`.
-Help is available without opening a file:
-
-```sh
-bun services/importer/src/cli.ts inspect-bindings --help
-bun services/importer/src/cli.ts inspect-bindings --state .state/imports.sqlite --source wikidata --record Q42
-```
-
-The first document is one consistent SQLite snapshot. It shows retained binding state `pending`, `bound`,
-`taken-down` or `absent`, the locally acknowledged subject when a subject is stored, bootstrap / current metadata /
-cover pointers, stored candidate capacity as local accounting, and whether each journal family is available, not
-retained or unavailable. A missing binding row is distinct from no current `run_sources` row, missing tables,
-unsupported columns and unavailable history. Source-level absence is not inferred from a missing binding.
-
-Independent keyset pages default to 20 rows and accept at most 100. Category is `semantic`, `candidates`, `media` or
-`metadata`. Cursors bind source, record, category, schema and the exact ordering tuple; key order is lexical, not a
-timeline. Candidate pages show currently owned candidates, not every historical accepted candidate. Semantic journals
-preserve retired original requests; a local acknowledgement is a receipt, not current acceptance or a public fact.
-
-```sh
-bun services/importer/src/cli.ts inspect-bindings --state .state/imports.sqlite --source wikidata --record Q42 --page semantic
-bun services/importer/src/cli.ts inspect-bindings --state .state/imports.sqlite --source wikidata --record Q42 --page candidates
-bun services/importer/src/cli.ts inspect-bindings --state .state/imports.sqlite --source wikidata --record Q42 --page media
-bun services/importer/src/cli.ts inspect-bindings --state .state/imports.sqlite --source wikidata --record Q42 --page metadata --request wikidata:Q42:<original-key>
-```
-
-`--json` emits the version 1 document. Human and JSON output keep raw wire bodies out; they show byte length, SHA-256
-of the original request body when the body is inside the 65,536-byte budget, original key/signature, acknowledgement
-presence and admitted native identifiers. Unknown delivery stays unknown. A reserved media receipt supplies no cover
-permission. Metadata acknowledgement is separate from source licence and native current metadata. Taken-down records
-an observed native 404; it is not a live visibility check. Oversized or corrupt rows are finite unavailable reasons
-and do not stop the page from advancing.
-
-Refresh through a new invocation. A local cursor authorizes no native request. Resume an original uncertain request
-with the ordinary authorized import command, which rechecks current registration, credentials, fences and original
-immutable bytes/key. Sealed resume remains that command; source-observation CAS remains a separate operation.
-
-Decision: binding inspection is the `inspect-bindings` subcommand; it requires exact `--state`, `--source` and
-`--record`, and pages `semantic|candidates|media|metadata` independently of generation/pending-envelope inspection.
-
-## Retire superseded complete generations
-
-`rezics-import retention` is local importer history cleanup for one exact configured source alias. It never contacts
-Auth or the API, never mutates native publication, and never erases source records, acknowledgements, bindings,
-payloads or the current complete baseline. Help is available without opening a file:
-
-```sh
-bun services/importer/src/cli.ts retention --help
-bun services/importer/src/cli.ts retention --state .state/imports.sqlite --source wikidata
-```
-
-The default command is a read-only generation page (20, at most 100). Each row shows stored terminal status, whether
-the generation is the active/recoverable pin or the completed baseline, an eligibility reason, and honest per-table
-generation-local counts. Pages follow stored `seq` order with exact generation ID strings. Abandoned, invalid,
-staging, ready, finalizing and currently pinned complete generations stay retained. A supposedly complete generation
-with pending envelopes, deferred covers or disagreeing stored counts is ineligible and is not repaired into
-eligibility.
-
-Build a bounded plan of at most 100 explicitly named IDs. The plan file is created exclusive mode `0600` and records
-database identity, source, schema compatibility and the observed baseline, recoverable generation, sequence and
-present count. It describes what becomes unavailable and what stays preserved, without emitting records or secret
-payloads. A plan token is not a native grant. Apply requires that exact plan identity as `--confirm` and revalidates
-the same pins before deleting any page; stale, replaced, tampered or expanded input needs a fresh explicit plan.
-
-```sh
-bun services/importer/src/cli.ts retention --state .state/imports.sqlite --source wikidata \
-  --generation 1 --output .state/wikidata-retention.json
-bun services/importer/src/cli.ts retention --state .state/imports.sqlite \
-  --plan .state/wikidata-retention.json --confirm <plan-id> --apply
-```
-
-Apply claims the source with ImportSession's PID/birth/capability rules. A live or uninspectable owner is busy.
-Selected eligible generations are marked retiring under the same write lock as the plan recheck, then deleted in
-bounded keyset pages over `run_entries`, `run_envelopes`, `run_commands`, `run_conversion_diagnostics`,
-`run_conversion_diagnostic_records`, `run_aggregate_operations`, leftover `run_staging_checkpoints` and
-`run_staging_prefix` rows, and, when present, the VNDB materialization tables keyed by `(source, run_id)`.
-Unknown per-run tables are unavailable and are not deleted. Crash restart resumes the
-same local plan without restoring removed rows or widening the selected set. A completed plan reports its retired
-result without deleting another generation. SQLite may reuse pages; file size need not shrink, and this command never
-VACUUMs.
-
-After retirement the generation header remains as a tombstone with status `retired`, distinct from an empty complete
-run, corrupt journal or unknown ID. Inspection and diagnostics readers display that status; they do not invent a
-second inspector. Ordinary import remains a separate invocation under current credentials. A source-history plan may
-recommend `rezics-import backup` without turning snapshot restore into this workflow.
-
-Decision: generation pages use stored `seq` order with exact string IDs; VNDB materialization rows and leftover
-staging checkpoint/prefix rows are enumerated for per-run cleanup when those tables exist. Complete generations
-normally already dropped staging at seal. An already-aborted apply reports the cancelled apply document and does not
-claim a lease.
-
-## Retire an unpublished staging capture
-
-An operator who will not continue an interrupted local capture can review one exact source/generation, see that it
-never crossed the complete-input barrier, and deliberately retire it without the original file. Default
-`rezics-import retire-staging` is read-only. It never contacts Auth or the API, never claims a lease, and never
-starts a replacement capture.
-
-```sh
-bun services/importer/src/cli.ts retire-staging --help
-bun services/importer/src/cli.ts retire-staging --state .state/imports.sqlite --source wikidata --generation 2
-bun services/importer/src/cli.ts retire-staging --state .state/imports.sqlite --source wikidata --generation 2 \
-  --output .state/wikidata-staging-retirement.json
-bun services/importer/src/cli.ts retire-staging --state .state/imports.sqlite \
-  --plan .state/wikidata-staging-retirement.json --confirm <plan-id> --apply
-```
-
-Strict staging status and `prepared=false` are necessary, not sufficient. Indexed existence probes refuse sealed
-complete-input evidence, prepared commands/envelopes, observation operations, finalization cursors and other
-effect/recovery pins. Ready, finalizing, complete, abandoned, invalid, mass-disappearance and unknown status stay
-ineligible even when a shallow counter is zero. Unrecognised schema or a corrupt checkpoint denies retirement. VNDB
-table acquisitions that have not become native staging remain unsupported; their tables and spool are not deleted.
-
-Confirmation names the exact plan and acknowledges that this unpublished input/checkpoint cannot be resumed after
-retirement. Apply claims the conservative same-source owner, revalidates, installs the existing retention pin and
-releases the generation from active staging without synthesizing a successful capture. Cleanup reuses retention's
-bounded keyset pages over selected-generation `run_entries`, leftover `run_staging_checkpoints`/`run_staging_prefix`,
-conversion diagnostics and generation-local VNDB leftovers. Shared membership, acknowledgements, payloads, bindings
-and the current complete baseline stay untouched. Interrupted cleanup resumes the same plan. Same-source import
-during incomplete cleanup reports local maintenance; other sources stay independently usable. The tombstone is
-status `retired`, never an empty successful generation. `--resume-staging` of the old ID explains that the capture
-cannot be recreated; a later import is a separate ordinary command.
-
-Decision: the command is `retire-staging` for one exact source/generation. Uncheckpointed strict staging is eligible;
-missing checkpoint tables are unavailable rather than empty. Same-source import during incomplete cleanup returns
-busy with a local-maintenance diagnostic. Apply and ordinary same-source acquire refuse live or uninspectable
-PID/birth evidence; PID-reuse recovery still requires a well-formed birth mismatch.
-
-## Resolve VNDB source-observation conflicts
-
-A newer same-binding VNDB statistic still imports automatically. An equal-date correction, record rebinding or
-alias rebinding stops that exact aggregate operation with a durable explanation and leaves the source run
-uncommitted. Exit code 6 is this observation-conflict outcome; it is not an authorization failure, invalid dump
-or permission to discard unrelated pending work. An older observation date is refused: CAS cannot override date
-order, so supply corrected authoritative input.
-
-```sh
-bun services/importer/src/cli.ts observations --help
-bun services/importer/src/cli.ts observations --state .state/imports.sqlite --source vndb
-bun services/importer/src/cli.ts observations --state .state/imports.sqlite --source vndb --operation <64-hex>
-bun services/importer/src/cli.ts observations --state .state/imports.sqlite --source vndb --operation <64-hex> \
-  --resolve --reviewed-observation <64-hex-head> --api <https-origin> --account-key <path> \
-  --account <uuid> --client <client-id> --auth <https-origin>
-```
-
-Pages list at most 20 unresolved aggregate operations, keyed by stable operation ids. Detail shows the intended
-record, alias, date, count, scale, mean or explicit clear, the readable retained head and the native reason.
-A source figure is independent of a REZICS vote. If the live head no longer matches the reviewed digest, inspect
-again. Resolution rereads current fences and authority, seals `expectedObservation` onto a successor intent, and
-does not rewrite dates or escalate credentials. Uncertain deliveries resume through the ordinary import command
-with the original body and key; a timeout is not a definitive conflict. A successful clear retains its native
-observation head even when no public figure is visible.
-
-Decision: observation-conflict is RunStatus plus CLI exit 6; same-date dump refreshes wait for explicit
-resolution; local digests use kernel `sourceObservation`; generated client fields `expectedObservation` and
-`observation` are an additive seam.
-
-Indexed custody lives in `run_aggregate_operations` (primary key `source,run_id,operation_id`;
-`run_aggregate_pending` on unresolved statuses; `run_aggregate_record` on `record_key`) and
-`run_aggregate_heads` (`source,subject_id,provider`). Each eligible record does one indexed journal
-lookup/prepare, one GET of `/v1/subjects/{id}/source-statistics`, three fence checks per
-`fences()` pass (facts/summary/cover; two passes once the subject exists), one native PUT or
-`:clear` for a newly prepared intent, and after delivery one list GET plus one public figure GET.
-Retries and explicit resolutions are extra transitions R. Work is O(N+A+R). A conflict page is
-`SELECT ... WHERE status IN ('prepared','uncertain','conflict','refused') AND operation_id>? ORDER BY operation_id LIMIT P`
-with P≤20. Unrelated retained history is not scanned per record.
-
-## Resolve source-classification conflicts
-
-A first admitted classification observation writes with `expectedObservation: null`. Any later change to the
-same Semantic association, including a newer date, stops that exact aggregate operation until an operator
-reviews the retained head. Exit code 6 is the shared observation-conflict outcome. An older classification
-date is refused: CAS cannot override date order.
-
-Classification admission is importer-owned. Public dump fields never populate it. Native writes happen only
-when the converter projection is available, an authentic Semantic association is bound, and the facts fence
-is clear. Public VNDB dump licences `ODbL-1.0` and `LicenseRef-DbCL-1.0` stay unadmitted and have no native
-classification effect. A source classification is independent of a REZICS classification ballot.
-
-```sh
-bun services/importer/src/cli.ts classifications --help
-bun services/importer/src/cli.ts classifications --state .state/imports.sqlite --source vndb
-bun services/importer/src/cli.ts classifications --state .state/imports.sqlite --source vndb --operation <64-hex>
-bun services/importer/src/cli.ts classifications --state .state/imports.sqlite --source vndb --operation <64-hex> \
-  --resolve --reviewed-observation <64-hex-head> --api <https-origin> --account-key <path> \
-  --account <uuid> --client <client-id> --auth <https-origin>
-```
-
-Pages list at most 20 unresolved classification operations, keyed by stable operation ids. Detail shows the
-intended association, source record, date, confidence or lie or explicit clear, the readable retained head
-and the native reason. Resolution seals `expectedObservation` onto a successor intent and does not rewrite
-dates. Uncertain deliveries resume through the ordinary import command with the original body and key.
-
-Decision: classification heads live in `run_classification_heads` (`source,subject_id,association_key`);
-operations reuse `run_aggregate_operations` with `intended.family='classification'`. Native calls use the
-mounted generated client (`subjects({id})['source-classifications'].$read|$put|$clear`); official kernel
-declaration emit for these routes stays on the compiler database. Admitted facts are projected at
-staging without a native subject. An unchanged dump record still evaluates admitted classification when
-`classificationAdmission` is configured. Ordinary import resumes sealed classification intents from the
-journal, including when admission is not reconfigured; the sealed intended carries the Semantic association.
-A Semantic association keeps its canonical release identity in the `sha256:<64 lowercase hex>` form, forwarded
-unchanged to the mounted Content methods.
-A bound association whose `subjectId` is not the native subject is withheld with no journal row and no native
-write. Only a mounted Content read returning `not_observed` admits an
-absent head; missing, stale, changed, or otherwise unavailable associations are withheld without a native
-write.
-
-Indexed custody for a classification is one journal lookup/prepare, one POST of
-`/v1/subjects/{id}/source-classifications:read`, the same three fence checks, one `:put` or `:clear` for a
-newly prepared intent, and after delivery one independent read. Work remains O(N+A+R).
-
-After inspection, return to the existing authorized import command and provide a complete input and the usual
-credentials. For the built-in Wikidata source, the invocation shape is:
-
-```sh
-bun services/importer/src/cli.ts --source wikidata --dump <complete-input-path> --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>
-```
-
-For a configured source alias, keep its original input kind and add
-`--source-alias <configured-source-id>`. The existing importer rechecks input integrity, current authority, source
-registration, fences and single-owner admission. Inspection never resumes automatically and cannot bypass a writer
-or unresolved authority failure.
-
-## Live import progress
-
-Progress is opt-in with `--progress human` or `--progress jsonl`. Both modes use stderr, leaving the existing final
-summary on stdout. Human output updates one bounded line on a TTY and writes newline records to a pipe. JSONL writes
-one version 1 event per line. Snapshots are coalesced at a fixed 250 ms cadence; phase and terminal changes flush
-immediately. A slow sink holds at most one in-flight frame and one current counter snapshot.
-
-Events identify the source kind, invocation UUID, invocation-local sequence and the actual durable importer run ID
-when it exists. VNDB also reports its separate table-acquisition run as `sourceRun`. `resumed` marks work recovered
-from the same state file; `acknowledgedEffects` counts only successful effects acknowledged during this invocation.
-The counters distinguish input bytes, VNDB records materialized, RunStore records staged, acknowledged effects,
-record classifications, skipped records, and deferred or rejected media outcomes. A deferred media outcome is not
-reported as a total import failure by itself. `sourceComplete` means the input was fully decoded and sealed; it does
-not mean the current catalogue was read. `selectedCatalogue` is always `not-read`: local commit does not prove
-candidate acceptance, public selection or readback.
-
-Phases are `acquiring`, `materializing`, `verifying`, `staging`, `resuming`, `reconciling`, `deferred-media` and `finalizing`;
-terminal phases identify committed, invalid, mass-disappearance, busy, interrupted, denied, failed or
-observation-conflict outcomes.
-Progress contains no account credentials, request bodies, raw record keys, provider text, URLs or private error
-bodies. A broken sink stops this invocation through the existing cancellation path and reports a sanitized output
-failure. SIGINT and SIGTERM preserve the durable journal and original pending request. Rerun `rezics-import resume` for
-sealed work without the dump, or the ordinary import command with complete source input; progress does not add an
-acknowledge, abandon or force-release operation.
-
-Decision: human and JSONL progress both use stderr so the existing final stdout summary stays compatible.
-
-## Resume a checkpointed local staging capture
-
-Ordinary import still discards an unsealed staging generation and starts again. Large Bangumi, Open Library and Wikidata
-files can opt into an explicit staging checkpoint so an interruption before sealing does not repeat conversion of
-records that already committed.
-
-```sh
-bun services/importer/src/cli.ts --source bangumi --dump /srv/imports/bangumi.jsonl --state .state/imports.sqlite \
-  --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
-  --checkpoint-staging
-bun services/importer/src/cli.ts --source bangumi --dump /srv/imports/bangumi.jsonl --state .state/imports.sqlite \
-  --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
-  --resume-staging --generation 1
-bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.json --state .state/imports.sqlite \
-  --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
-  --checkpoint-staging
-bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.json.gz --state .state/imports.sqlite \
-  --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
-  --compression gzip --checkpoint-staging
-bun services/importer/src/cli.ts --source openlibrary --dump-set /srv/imports/open-library/manifest.json --state .state/imports.sqlite \
-  --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
-  --checkpoint-staging
-bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.json --state .state/imports.sqlite \
-  --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
-  --resume-staging --generation 1
-```
-
-`--checkpoint-staging` and `--resume-staging` admit one uncompressed Bangumi regular file, one Open Library or Wikidata
-regular file (plain, gzip, or Wikidata zstd), or one Open Library dump-set manifest. VNDB archives and stdin stay
-non-resumable. Checkpointed compressed capture still records and checks the source-exact API destination before any
-capture or resume mutation. Version 1 checkpoints remain one uncompressed file. Version 2 binds the ordered member family,
-compression, byte length and SHA-256 of every original file, the admitted manifest version, codec, whole-set
-`--decode-budget` (default 256 GiB) and the existing source/converter configuration. Paths, inode, size and mtime are
-not that identity. A failed hash creates no capture and does not contact Auth or the API. Resume re-hashes every
-original file, replays the production decoder from the start of each member, verifies the committed prefix without
-reconverting it, and converts only the remaining records. An incomplete final member is an input failure. Local
-conversion is not publication; Bangumi ratings stay omitted. Changed bytes, a same-size rewrite of an unread suffix,
-member replacement or reordering, a different budget/codec/converter, an old uncheckpointed staging row, a missing
-database and live ownership never resume and never rotate the stored checkpoint. After a valid seal the checkpoint is
-deleted so it cannot compete with sealed recovery. An interruption after sealing uses `rezics-import resume` without
-the dump, or the ordinary import command with the original requests; `--resume-staging` does not replace that path.
-Help names full-file hashing, committed-prefix verification, remaining conversion and later native application as
-separate steps. An operator who will not continue an unpublished checkpoint uses `rezics-import retire-staging`
-instead of supplying replacement input.
-
-Decision: checkpointed staging commits each accepted record with its prefix cursor in one SQLite transaction so a
-crash keeps either the previous complete checkpoint or the new one. Ordinary acquisition keeps the existing 100-record
-staging page.
-
-## Resume a sealed generation without its dump
-
-`rezics-import resume` finishes an existing sealed (`ready` or `finalizing`) generation from the state file after the
-original dump or archive has been removed. It does not open stdin, construct a decoder, materialize a VNDB archive,
-fetch a provider dump or synthesize an empty record stream. `--dump`, `--dump-set` and `--disappearance-threshold` are
-rejected. Help prints without I/O:
-
-```sh
-bun services/importer/src/cli.ts resume --help
-```
-
-Built-in Wikidata registration:
-
-```sh
-bun services/importer/src/cli.ts resume \
-  --source wikidata \
-  --state /var/lib/rezics/importer.sqlite \
-  --api https://api.rezics.example \
-  --account-key /run/secrets/rezics-importer-account.jwk \
-  --account 6b147e8d-1762-4717-9a65-aeb435cb843e \
-  --client rezics-importer \
-  --auth https://auth.rezics.example
-```
-
-Configured alias (the alias is the exact durable source identity, not a profile selector):
-
-```sh
-bun services/importer/src/cli.ts resume \
-  --source bangumi \
-  --source-alias community-bangumi \
-  --state /var/lib/rezics/importer.sqlite \
-  --api https://api.rezics.example \
-  --account-key /run/secrets/rezics-importer-account.jwk \
-  --account 6b147e8d-1762-4717-9a65-aeb435cb843e \
-  --client rezics-importer \
-  --auth https://auth.rezics.example
-```
-
-A missing state path does not create a database. No active generation and incomplete staging leave the generation,
-baseline, entries, requests and fence state untouched and perform no catalogue or credential HTTP work; the diagnostic
-points at ordinary complete-input import or `rezics-import inspect` without running either. A live owner exits busy.
-An unprepared staged projection whose stored source kind or converter revision does not match the current registration,
-or that the current converter cannot reproduce, is incompatible: resume does not start a replacement run.
-
-Current-authority retry is the same command with the same state after restoring grants. Pending envelopes keep their
-original body and key; native response and current grants still decide what can resolve. A second interruption may
-resume the same durable work again. Resume is not inspect (read-only pages), preview (offline dump comparison), backup
-or restore. Existing sealed disappearance thresholds remain authoritative; this command does not supply a new threshold.
-
-Decision: unprepared staged rows must match the current registration's source kind and converter revision exactly;
-pending envelopes still drain under their original bytes. Stored projections without source-kind provenance are
-incompatible rather than treated as verified. Sealed resume opens an existing state file without creating tables or
-applying additive migrations; missing required run schema is unsupported rather than repaired.
-
-## Resume a checkpointed VNDB table acquisition
-
-Ordinary VNDB import still fails an interrupted table load and starts a separate acquisition ID. Large local COPY
-archives can opt into an explicit table checkpoint so an interruption before tables are ready does not repeat durable
-row insertion. After a valid capture, publication uses the ordinary importer. A later native interruption belongs to
-sealed recovery, not table loading.
-
-```sh
-bun services/importer/src/cli.ts --source vndb --dump /srv/imports/vndb-db.tar.zst --compression zstd \
-  --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> \
-  --client <client-id> --auth <https-origin> --checkpoint-acquisition
-bun services/importer/src/cli.ts --source vndb --dump /srv/imports/vndb-db.tar.zst --compression zstd \
-  --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> \
-  --client <client-id> --auth <https-origin> --resume-acquisition --acquisition <uuid>
-```
-
-`--checkpoint-acquisition` and `--resume-acquisition` admit one regular local VNDB archive with plain tar or owned zstd
-decoding. Stdin, dump-set manifests, gzip and other sources are refused. Before a checkpointed acquisition starts, the
-CLI hashes every byte of the opened original file. Path, inode, size, mtime and prefix hashes are not that identity.
-Resume re-hashes the same file, then replays the archive from the first member to verify the committed prefix, and
-inserts only remaining rows. Changed bytes, a same-size rewrite, a different converter, alias, codec or table
-projection, an old uncheckpointed staging row, a missing database and live ownership never resume. Failed invalid input
-is not shortened into a ready capture. Ready tables remain immutable; `--resume-acquisition` then publishes through the
-existing materialization binding without rematerializing. After sealing, resume with the ordinary command and original
-requests. Table acquisition IDs are distinct from source generation IDs.
-
-Decision: checkpointed VNDB acquisition commits each accepted row, spool effect, header state and cursor in one SQLite
-transaction. Interrupted invocations keep the last valid checkpoint. Credentials, identifier lookup and native effects
-wait until tables are ready.
-
-The [connected design status](../../docs/research/design-status-imports.md) follows the operator from terminal
-acquisition, status and recovery through the private SQLite baseline, source ownership and immutable request/ACK
-journal. Ordinary account Auth (`POST /signin/key` → `POST /token`) authorizes public tuple/bootstrap and proposal
-effects through `POST /v1/subjects:batchWrite`, exact `GET /v1/sourceFences:check`, and media acquisition through
-`POST /v1/media:importFromUrl` → `GET /v1/media/{id}:importStatus`. VNDB statistics use the PUT and clear POST below.
-[Semantic](../kernel/src/semantic/README.md) owns independent candidate selection through
-`POST /v1/subjects/{id}/candidates/{candidate}:accept` and `POST /v1/subjects/{id}:adopt`;
-[Content](../kernel/src/content/README.md) owns rights, current fences and final disclosure. Selected results reach
-`GET /v1/subjects/{id}`, `POST /v1/pages:read` and `POST /v1/subjects:search`, then the
-[Web](../../apps/web/README.md) subject/search journey. These APIs and CLI form the designed journey; browser
-candidate-review entry remains Web/Semantic work and is not delivered by Imports. Primary-source rights,
-independent selection, current authorization and exact replay remain required. The reviewed SourceRecord binding
-below is implemented for the four launch registrations. A general metadata ACK programme, reviewed
-vocabulary/measured inputs and broader discovery remain deferred.
-
-## Back up stopped importer state
-
-Keep the same SQLite state after an interrupted or uncertain request. Copying only the main file can miss committed
-WAL frames. `rezics-import backup`, `validate-snapshot` and `restore` are local snapshot commands: they route before
-credentials and network, and they never construct an Importer just to inspect a file. `inspect`, capture-comparison,
-dump previews, live progress and observation CAS keep their existing commands.
-
-```sh
-bun services/importer/src/cli.ts backup --state .state/imports.sqlite --output .state/imports.snapshot
-bun services/importer/src/cli.ts validate-snapshot --snapshot .state/imports.snapshot
-bun services/importer/src/cli.ts restore --snapshot .state/imports.snapshot --state .state/imports-restored.sqlite
-```
-
-`--state` for backup must name an existing regular file. `--output` and restore `--state` must name a distinct path
-that does not exist. Symlinks, FIFOs, special files, source/destination aliasing and existing output are refused.
-Every `import_owners` row is checked with the existing Linux `/proc` process-birth and boot-id identity; a live or
-unverifiable owner is busy (exit 5) and is never permission to force a backup or rotate its capability. Older schemas
-that cannot establish owner safety are reported as unsupported; RunStore is not opened to migrate them. A suspended
-run with no live process remains recoverable, including unresolved durable requests.
-
-The database copy uses SQLite `VACUUM INTO` under a read-only source connection so committed WAL frames are included
-without checkpointing the source, concatenating sidecars, or loading rows into an unbounded JavaScript object.
-Unknown compatible tables and columns and exact stored payload bytes are preserved. The snapshot is not an
-acknowledgement. Destination files are created exclusively at mode `0600` in a new `0700` directory, staged, flushed
-and published by renaming the database first and the manifest last. A failure removes only this operation's incomplete
-output.
-
-`snapshot.json` records format version 1, SQLite/schema compatibility, SHA-256 and byte length of
-`importer-state.sqlite`, creation time, and bounded source/run baseline identities. It does not contain key-file
-bytes, tokens, environment variables, provider prose or command payloads. Validation checks the immutable files
-against that manifest, `PRAGMA integrity_check`, and the supported importer structure, then returns the bounded
-source/run summary. It never repairs, migrates or rewrites a purported snapshot. Restore installs exact snapshot bytes
-at a new state path after validation and does not start an import. A restored `import_owners` row is not an authority
-grant; ordinary `ImportSession` acquisition still checks live process identity.
-
-Restoring local state cannot undo native writes made after that snapshot, revoke receipts, retract a selected fact or
-guarantee that an older source dump is safe. Stop the original importer and use one state lineage. Resume with the
-ordinary import command and current credentials; original request keys, current authority, source revision/fence
-checks and existing reconciliation remain decisive. There is no force mode, merged restore, selective row restore or
-recovery-only request key.
-
-Copying and hashing are O(B+T) time and O(buffer+T) memory for database bytes B and bounded schema/owner metadata T.
-Integrity work is SQLite's `PRAGMA integrity_check` over the snapshot's `page_count` pages. Opening a WAL source
-read-only may create reader `-wal`/`-shm` sidecars; logical tables and ownership stay unchanged.
-
-Decision: stopped-state snapshots are a new directory containing `importer-state.sqlite` plus `snapshot.json`; Bun has
-no backup API, so the consistent copy is SQLite `VACUUM INTO` into an exclusive empty `0600` file so committed WAL
-frames are included without checkpointing the source.
-
-## Reviewed provider metadata
-
-The four built-in registrations describe their actual canonical record identity, independently of the configured
-source alias: Bangumi subject IDs, VNDB visual-novel IDs, Open Library work/edition keys and Wikidata item IDs.
-Names, record links and attribution are application-reviewed descriptors, never dump-supplied licence/name fields.
-Bangumi metadata uses CC-BY-SA-3.0; VNDB records identify ODbL-1.0 database terms and separately name DbCL-1.0
-permitted metadata contents in attribution; Open Library metadata and Wikidata structured data use CC0-1.0.
-These descriptions grant no cover or prose rights. Unknown community registrations have no default descriptor
-or writer, and there is no CLI option for unreviewed rights.
-
-Only a completely acquired, validated, mass-loss-checked and sealed generation can send metadata. After actual
-tuple binding, the ordinary client calls public `POST /v1/source-records:setMetadata` under current Global
-`subject:batch_write` authority, normal rate limits, idempotency and Session handling. Old bound unchanged records
-also catch up; an acknowledged identical descriptor skips future writes, including reopen. Metadata failure keeps
-the previous source baseline and independent tuple/subject intact. Missing ports, denial, unknown responses and
-conflicts never count as completion.
-
-A distinct immutable SQLite metadata request/result journal binds the exact tuple, descriptor and HTTP intent.
-Initial fill uses `expected_metadata_revision: null`; a changed descriptor uses only the last actual returned
-revision. Pending response-loss intents replay their original bytes/key under current authority before any replacement
-descriptor or acquisition. Existing sealed plans, bootstrap envelopes, semantic receipts, source/converter/native
-revisions and digests are unchanged. Partial fill preserves native optional leaves; incompatible leaves and stale
-CAS remain explicit conflicts.
-
-Metadata costs are separate from semantic/media/statistic envelopes: at most one new point intent per bound
-record/descriptor in an ordinary run, or two when replaying a pending descriptor before a replacement. Each intent
-uses the existing maximum eight coordinator attempts and at most five HTTP attempts per coordinator attempt;
-unchanged acknowledged descriptors send none. The staged descriptor is capped at 8 KiB and native leaf limits
-still apply. These bounds do not enlarge old semantic, fence, native-vote or source-statistic ceilings or claim
-measured PostgreSQL/local work units.
-
-The Sources consumer now reads the actual returned current `subject.sourceRecords` DTO. Native selected support
-and exact fences determine those rows; original per-field references and separate cover/prose credit remain intact.
-A metadata row proves neither support for every field nor publication permission. Unknown metadata stays unknown.
-The [native outcome](../kernel/test/imports/source-record-metadata.test.ts) uses the existing ordinary API/CLI fixture
-to connect catch-up to selected Sources and unchanged reopen while retaining bootstrap/semantic receipt identity.
-It is added for integration verification and has not been run in this implementation attempt. Web owns normal
-visual review of `pages-subject-sources--selected-facts` and `pages-subject-sources--partial-metadata`.
-
-```sh
-bun run --cwd services/kernel check test/imports/source-record-metadata.test.ts
-```
-
-Completed results report `new`, `changed`, `unchanged`, `vanished`, and `skipped` separately. An identity-only Bangumi
-type 3/6 projection, or an unknown live-action platform, remains a present source member and increments `skipped` once
-during acquisition; it creates no subject, proposal, or media effect. Named type 3/6 records convert. The sealed run
-stores this bounded count so recovery reports it without reading replacement input. CLI summaries always include
-`skipped=N`, including zero.
-
-## Conversion field omissions
-
-Converters already return `{ pointer, code }` diagnostics on `ConvertedRecord`. The importer now retains that sanitized
-vector with the exact source, generation, record, digest, converter revision and phase it describes, then offers a
-read-only `diagnostics` CLI command. Journal rows are not native publication, request acknowledgement or candidate
-selection. API47 keeps generation/pending-envelope/cover inspection; this command owns a separate read model and does
-not take a writer lease. Decision: inspect, preview, compare, capture-comparison and diagnostics remain separate CLI
-subcommands. API47 keeps single-capture inspection; capture-comparison owns two retained complete generations.
-
-Phases are `staging` for dump conversion and `application` for dependency-driven reconversion. A recognized empty
-vector is stored; missing journal rows on a generation are unavailable historical evidence. Resume of the same
-digest/revision/converter identity does not duplicate or replace earlier reasons. Invalid converter diagnostic output
-fails that record or input; it never becomes a silent empty set. Limits are derived from registered converter field
-caps (64), vocabulary gaps (64), the public batch (100), VNDB sentence bytes (4096) and the public envelope (65,536).
-
-```sh
-bun services/importer/src/cli.ts diagnostics --source openlibrary --state /path/to/state.sqlite
-bun services/importer/src/cli.ts diagnostics --source openlibrary --state /path/to/state.sqlite --record /books/OL900000002M --format json
-```
-
-Default generation is the live acquisition or the completed baseline. Pages are diagnostic-bearing records only,
-default 20 and at most 100, with source/run-leading keyset order. Repair uses the ordinary import invocation with
-placeholders; this command has no accept-all, rewrite-mapping or publish action. The connected native journey is
-`services/kernel/test/imports/cli-conversion-diagnostics.test.ts`.
-
-The connected [Bangumi scope-transition journey](../kernel/test/imports/cli-bangumi-scope-transition.test.ts)
-uses five metadata-only native envelopes and the ordinary account-key CLI: an existing Book becomes a music
-subject, then live action, then returns as a revised Book under the same native key. Complete membership
-stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
-receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
-`bangumi@11` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
-five-record launch checks. Its earlier ignored-type native child is superseded by typed 3/6 conversion.
-[Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md) record the raw native
-log, actual source/receipt anchors and inspected reference source. This isolated pass does not establish promotion.
-
-```sh
-bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-bangumi-scope-transition.test.ts
-```
-
-## Command line
-
-Run the importer with a decompressed native dump and an automated account key:
-
-```sh
-bun services/importer/src/cli.ts \
-  --source wikidata \
-  --dump /srv/imports/wikidata.jsonl \
-  --state /var/lib/rezics/importer.sqlite \
-  --api https://api.rezics.example \
-  --account-key /run/secrets/rezics-importer-account.jwk \
-  --account 6b147e8d-1762-4717-9a65-aeb435cb843e \
-  --client rezics-importer \
-  --auth https://auth.rezics.example
-```
-
-`--source` accepts `bangumi`, `vndb`, `openlibrary`, or `wikidata`. `--dump -` reads standard input for plain input only. `--compression none|gzip|zstd` defaults to `none`; gzip is admitted only for Open Library and Wikidata streamed dumps, zstd only for VNDB ustar archives and Wikidata streamed dumps, and neither is inferred from a filename suffix. zstd requires one descriptor-owned regular local file, not stdin, URLs, archive extraction or an external command string. `--zstd-executable` selects an absolute trusted zstd binary; otherwise the importer uses `/usr/bin/zstd` or `zstd` on PATH. Missing or incompatible zstd (needs `-d`, `-c`, `-M#` and `--no-pass-through`) fails before credentials, state or native work. `--decode-budget` is a positive decoded-byte ceiling for gzip, zstd or one complete dump set (shipped default 256 GiB for the whole capture). `--source-alias` selects a configured source identifier, and `--disappearance-threshold` accepts a number from 0 through 1. `--api` and `--auth` must be HTTPS origins with no path, query, fragment, or credentials. `--account-key` names the private JWK, `--account` is its account UUID, and `--client` is the registered first-party client ID. The CLI has no switch for weakening the origin rules. `--help` prints usage without reading the key, opening SQLite, or contacting Auth or the API. VNDB archives and Bangumi input reject gzip before credentials or state are opened. Bangumi and Open Library reject zstd at the same point.
-
-### Open Library dump set
-
-Open Library publishes author, work and edition dumps as separate files. `--dump-set` names one local JSON
-manifest that lists those files as one complete capture for the configured source alias. It is mutually
-exclusive with `--dump` and is accepted only for `--source openlibrary`. Version 1 remains family/path only
-and means uncompressed members. Version 2 requires explicit per-member `compression: "none"|"gzip"` and is
-the supported mixed-input format; unknown fields stay refused. `--compression` stays a single `--dump`
-option. `--decode-budget` on a dump set is the whole-set decoded-byte ceiling (default 256 GiB), including
-plain members, and is never multiplied by member count. The set is the entire alias generation, not a patch,
-append, native-profile choice or disappearance override. Preview the same manifest with
-`rezics-import preview --source openlibrary --dump-set` before ordinary import.
-
-```json
-{
-  "version": 1,
-  "source": "openlibrary",
-  "members": [
-    { "family": "author", "path": "ol_dump_authors.txt" },
-    { "family": "work", "path": "ol_dump_works.txt" },
-    { "family": "edition", "path": "ol_dump_editions.txt" }
-  ]
-}
-```
-
-```sh
-bun services/importer/src/cli.ts --source openlibrary --dump-set /srv/imports/open-library/manifest.json \
-  --state /var/lib/rezics/importer.sqlite --api https://api.rezics.example \
-  --account-key /run/secrets/rezics-importer-account.jwk --account 6b147e8d-1762-4717-9a65-aeb435cb843e \
-  --client rezics-importer --auth https://auth.rezics.example
-```
-
-The manifest may list at most 64 members and is at most 64 KiB. Paths are at most 4096 bytes. Relative
-member paths resolve from the manifest directory. All three families must appear; an explicitly empty
-member file is an empty family under the ordinary complete-input and disappearance rules. A member's
-declared family must match decoded TSV framing. Author members are admitted for completeness and skipped
-as catalogue records, matching the work/edition converter. Duplicate keys, family mismatch, missing
-members, malformed late input and cancellation invalidate the whole capture. One generation, one seal
-and one coordinator run cover every member. A local SHA-256 of consumed member bytes and per-member
-lengths is a capture digest, not a source revision or licence.
-
-```json
-{
-  "version": 2,
-  "source": "openlibrary",
-  "members": [
-    { "family": "author", "path": "ol_dump_authors.txt.gz", "compression": "gzip" },
-    { "family": "work", "path": "ol_dump_works.txt", "compression": "none" },
-    { "family": "edition", "path": "ol_dump_editions.txt.gz", "compression": "gzip" }
-  ]
-}
-```
-
-Decision: dump-set admission keeps version-1 family/path manifests as uncompressed complete sets and
-adds version 2 with explicit per-member none/gzip. Authors remain non-catalogue framing members.
-`--decode-budget` on `--dump-set` is the aggregate decoded-byte ceiling. `--compression` remains
-single-stream and is rejected with `--dump-set`. `--checkpoint-staging` and `--resume-staging` admit
-the same dump-set and compressed Wikidata producers; zstd is never an Open Library set-member codec.
-Preview, import and checkpoint identity share that whole-set budget. A completed preview plan reopens
-without member files.
-
-Ordinary rerun of the same `--dump-set` command first resolves prior sealed work under existing
-ready/finalizing recovery. Changing or deleting the manifest does not rewrite unknown native bodies.
-Keep the same state path and current credentials. Explicit no-input resume remains the sealed dump-free
-resume command.
-
-Wikidata input accepts the decompressed native mixed Item/Property JSON dump directly, with one entity per
-line inside its JSON array; existing item-only JSONL input also works. No item extraction or caller-side filter
-is needed. The [official JSON dump guidance](<https://www.wikidata.org/w/index.php?title=Wikidata:Database_download&oldid=2479770906#JSON_dumps_(recommended)>)
-documents this mixed format (verified 2026-10-30).
-
-The reader admits `type: 'item'` with canonical `Q[1-9][0-9]*` identity and recognizes `type: 'property'` only
-with canonical `P[1-9][0-9]*` identity. Either kind's `lastrevid`, when present, must be a positive safe integer.
-Properties pass the same bounded JSON, byte and array-framing validation, then are excluded before conversion
-and source staging. They create no subjects, commands, schema definitions, source membership or `sourceRecords`
-metadata and do not increment `skipped`. Unknown types, mismatched identities and malformed native revisions
-invalidate the entire acquisition before effects or baseline replacement. Lexemes, EntitySchemas and user/talk
-content remain unsupported. Properties do not count toward item survival: a replacement containing only
-Properties still triggers the existing mass-disappearance guard when prior items all vanish.
-
-Yielded Wikidata items use the registered `wikidata-5` converter, the shipped catalogue vocabulary and the reviewed
-[conversion-local dish/food bindings](../../packages/conversion/README.md#source-mappings-and-limits). The public
-pure converter remains item-only. Supported
-names, dates, URLs and unresolved author statements retain their source references, supported qualifiers and
-ranks through editor acceptance/adoption and public reads. A refresh creates new cited proposals under the
-same returned subject identity; it preserves independent Context selections. Exact quantities with unsupported,
-unresolved or narrowed qualifiers are withheld as whole measurements, including after durable staging.
-The source registry reads the converter's exported `converter_revision`; changed
-records follow the ordinary revision-change path, with mass-disappearance protection
-unchanged. Dishes bootstrap as Recipe, food and food ingredients as Food, with CC0
-labels/descriptions and cited P186 material relations after binding. Dish takes
-precedence over food; other mapped-type conflicts are refused. Instruction text and
-P18/Commons images are excluded and create no assets.
-Unknown-language text and unknown-licensed prose/images confer no import authority. Keep the same state path
-for unchanged refresh and interrupted work: reopen checks current tuple fences before delivering pending facts.
-The [connected native journey](../kernel/test/imports/wikidata-rich-cli.test.ts) and its
-[evidence notes](../../docs/research/imports-audit/wikidata-rich-cli.md) cover this operator flow.
-
-The account key must be a regular private-JWK file readable only by its owner (for example, mode `0600` or `0400`); symlinks, non-files, and group- or world-accessible files are refused before network access. Dump paths must also open as regular files. Both file opens use nonblocking acquisition followed by descriptor-based regular-file checks, so FIFO paths are rejected without waiting for a writer, reading content, opening SQLite, or contacting Auth or the API; key opens retain symlink protection and the existing mode and 16 KiB limits. The focused [FIFO subprocess cases](tests/cli-special-files.test.ts) exercise the actual CLI with no writer for dump and key paths, checking exit 2, closed handles and no state or network effects. Their child deadline is a liveness guard, not a performance claim; admitted regular-file byte bounds and the existing native CLI receipts remain separate evidence. The importer keeps the bearer only in memory, renews it 60 seconds before expiry, and renews and replays once after an API 401. Bangumi, Open Library, and Wikidata request six registered scopes. VNDB requests those six plus `source_statistic:write` and `subject:read` for its aggregate rating and observation head. The account needs the fixed Global Context grants `subject:create`, `subject:batch_write`, `source_fence:read`, and `media:import_from_url`; a VNDB account also needs `source_statistic:write` and `subject:read`. Platform staff put the importer actor on the `service` tier once through `setRateTier`, before the first large import. The VNDB token must carry `subject:create`, `subject:batch_write`, `source_statistic:write`, `subject:read`, `statement:propose`, `source_fence:read`, `media:import_from_url`, and `media:read_reservation`; other sources omit `source_statistic:write`. VNDB `subject:read` is required to GET the current observation head. `statement:propose` comes from the standing grant every active account has, and `media:read_reservation` lets the importer read the status of media it imported. Provision the account, client, key, grants, and tier outside the CLI.
-
-Official Open Library and Wikidata gzip dumps are admitted with `--compression gzip` on the original regular file. The importer streams owned compressed windows through member-framed `createInflateRaw` (RFC 1952 header/trailer, CRC/ISIZE) into the existing dump decoder. Decision: concatenated members, including an empty last member, are one complete input; this runtime's `createGunzip` concatenates members but reports trailing garbage as the same incorrect-header error as a non-gzip first byte and drops a decoded prefix when a complete member shares one write with trailing bytes. Non-gzip bytes after a member trailer fail the capture. Gzip header mtime, extra fields, filename and compression level never enter record identity. A decoded early record followed by a bad trailer still invalidates the capture. The decoded-byte budget is a zip-bomb ceiling (default 256 GiB, one transform-window overshoot counted), not permission to relax record or journal caps. Compressed and decoded byte counts are reported separately through `--progress` when present.
-
-Official VNDB `tar.zst` archives and Wikidata zstd dumps are admitted with `--compression zstd` on the original regular file. Install a trusted zstd 1.5.x (this environment has `/usr/bin/zstd` v1.5.7) that exposes `-d`, `-c`, `-M#` and `--no-pass-through`. The importer selects that executable once through `--zstd-executable` or the documented lookup (`/usr/bin/zstd`, then `zstd` on PATH), then spawns it as a direct child with those fixed arguments and pumps descriptor-owned chunks to its stdin. Manifests and source bytes cannot supply the executable path or arguments. Decision: concatenated zstd frames, including an empty last frame, and skippable frames are one complete input, matching the installed tool; raw passthrough and non-zstd trailing bytes fail. Decoder memory is `-M128MB` (128 MiB window; `--long=27` dumps are admitted, larger windows fail). Capture, preview-plan completion and publication wait for input-pump EOF, parser completion and child exit 0 together. An early decoded prefix with a later corrupt, truncated, checksum-failing or nonzero-exit frame invalidates the unsealed capture and leaves the last completed baseline and immutable requests unchanged. Compression metadata is not a record revision or licence. Resume native application through the ordinary sealed command (API62); do not decompress a replacement file as authority to reseal it.
-
-```sh
-bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.json.gz --compression gzip --state /var/lib/rezics/importer.sqlite --api https://api.rezics.example --account-key /run/secrets/rezics-importer-account.jwk --account 6b147e8d-1762-4717-9a65-aeb435cb843e --client rezics-importer --auth https://auth.rezics.example
-bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.json.zst --compression zstd --state /var/lib/rezics/importer.sqlite --api https://api.rezics.example --account-key /run/secrets/rezics-importer-account.jwk --account 6b147e8d-1762-4717-9a65-aeb435cb843e --client rezics-importer --auth https://auth.rezics.example
-bun services/importer/src/cli.ts --source vndb --dump /srv/imports/vndb-db.tar.zst --compression zstd --state /var/lib/rezics/importer.sqlite --api https://api.rezics.example --account-key /run/secrets/rezics-importer-account.jwk --account 6b147e8d-1762-4717-9a65-aeb435cb843e --client rezics-importer --auth https://auth.rezics.example
-```
-
-VNDB table paths are validated by the importer; do not extract an untrusted archive to the filesystem. Use fixed operator-controlled paths and literal command arguments, without shell interpolation. Bangumi, Open Library, and Wikidata input is their native framed text format. Native record revisions are retained when present; unversioned records remain unversioned.
-
-For the pinned VNDB dump, `c_average` and `c_votecount` replace the VNDB source statistic on each visual novel through `PUT /v1/subjects/{subjectId}/source-statistics/vndb`. The mean is `c_average / 100` on a 1 to 10 scale, as of the dump date, under ODbL-1.0 with attribution `VNDB`. A statistic-only refresh can retain the same native entry revision and every semantic candidate. The completed input snapshot advances only after the required statistic write is acknowledged and bounded reconciliation retains every proposal; a failed or uncertain write leaves the prior completed baseline intact. The Bayesian `c_rating` is omitted, and no source statistic creates native votes. Bangumi's `score`, `score_details` and `rank` remain omitted because its licence covers entry information and not ratings.
-
-Before publishing a source statistic, the importer checks its already obtained current facts omission for the
-exact configured source and external ID, including previously bound VNDB records. A facts fence suppresses that
-statistic write; metadata still completes through ordinary omission/reconciliation without acknowledging a
-statistic effect. Cover and summary groups remain independent. Every refresh reads current fences before the
-unchanged shortcut, and prepared bulk dispatch retains its late fence check. This is a client publication guard:
-the exact clear operation and final disclosure remain owned by Content. Positive publication stays suppressed;
-exact zero-vote removal may still run behind the facts fence.
-The frozen [caller test](tests/source-statistic-fence.test.ts) binds first, then fences changed and unchanged
-refreshes through the production importer and source registration with a fake external transport.
-[Source-statistic tests](tests/source-statistics.test.ts) retain public-route, acknowledgement and retry coverage.
-
-Explicit sanitized VNDB `c_votecount: 0` with its admitted paired `c_average` produces an exact removal
-intent, including `0/null` and `0/0`. The ordinary seven-scope CLI calls the installed
-`rating.source_statistic_clear` operation, `POST /v1/subjects/{id}/source-statistics/vndb:clear`,
-with strict `{sourceRecordId, count: 0, asOf}` and expects 204 with ordinary session continuity.
-Default `vndb` calls omit `sourceAlias` and retain their existing bytes. A configured VNDB feed alias sends its
-exact registration alias on both positive PUT and clear POST, while provider `vndb` and native record `v123`
-remain unchanged. Facts/claim/read-fence identity follows that alias. The single subject/provider score slot
-is unchanged: removal matches its current subject/provider/record/alias association; absent or mismatched
-bindings leave another association intact. Canonical `vndb` fencing does not govern a custom alias.
-Clear uses the existing bounded write coordinator, keyed POST retry budget and run-derived identity;
-reopening a sealed run reuses the original bytes/key before reading replacement source records. The native archive admission gate still validates a supplied
-archive first; it cannot replace the sealed projection or its clear command. An uncertain or denied clear
-preserves the previous complete baseline.
-Both missing fields mean UNKNOWN and send no statistic request; a partial pair remains invalid. A positive
-count with unavailable mean also sends no statistic request. No mean, vote, mapping or revision is invented.
-For the same native/converter revision, the statistic-refresh completion proof requires an existing
-acknowledged VNDB record and exhaustive retention of every semantic candidate/proposal, including when the
-source-specific statistic omission requires no request. It advances only the input projection, without a
-fabricated receipt or changes to old semantic requests/receipts. Beyond the reviewed binding above, general metadata acknowledgement remains deferred.
-
-The supplemental [alias journey](../kernel/test/imports/vndb-statistic-alias.test.ts) reuses the same fixture
-for ordinary alias PUT/clear, exact facts fencing and stale-association preservation.
-The frozen [zero-refresh journey](../kernel/test/imports/vndb-zero-refresh.test.ts) now has an adjacent genuine
-native CLI fixture. It uses pinned headers/COPY archive input, real account-key credential effects, public
-clear/read/receipt/event observation, same-state response-loss recovery and current grant denial. UNKNOWN
-is explicitly a registered-source/coordinator branch in the same imports world, since the pinned archive
-cannot omit those columns. The existing native figure fixture supplies a separate real vote/worker control.
-The caller also preserves an independent imported tuple/subject, semantic candidate IDs and full old receipts.
-This implementation has no native execution receipt yet: native acceptance is reserved for integration by
-the current verification instruction. Local verification commands/results and tested revision are recorded
-in the capability manifest; they do not claim native acceptance or promotion.
-
-The native archive binding and real account-key CLI caller are exercised by
-`services/kernel/test/imports/vndb-statistics-outcomes.test.ts` and `vndb-cli-native.test.ts`.
-They use synthetic COPY rows with the pinned headers, retain the native revision and statistic fields,
-and observe public responses and exact native receipt/event anchors. The binding keeps its importer SQLite
-file across close/reopen in the same native server and Auth world. Its reported source baseline uses
-RunStore's maintained complete-generation pointer and present count; it is distinct from an entry revision
-and from a statistic transaction. See the [verification record](../../docs/research/imports-audit/vndb-statistics-native-verification.md)
-for check results and limits. Native acceptance `3641609f-917a-40df-b98e-c5f3603a4311`
-passed the unchanged six cases (91 assertions), the CLI caller (249 assertions) and its wrapper;
-local focused regressions and the importer compiler also passed. The native CLI observed two
-statistic receipts/events, ten unchanged bulk receipts and zero native votes through refresh/retry/revocation.
-This six-case binding is separate from the fourteen-case table/growth port.
-
-Keep the same SQLite state path when resuming. Prepared writes and receipts are durable, and a retry reuses their original command keys and request bodies. Do not replace or clear the state file after an interrupted or uncertain request. Exit codes are 0 for committed/help, 2 for invalid input, 3 for mass disappearance, 4 for authorization denial, 5 for a busy source, and 130 for interruption; other unresolved import failures exit 1. Diagnostics contain only bounded maintained counters. Operator interruption aborts this invocation’s actual account-key Auth requests and body reads as well as API work. CLI cleanup ends its credential-provider lifetime; cancellation prevents a successor token exchange or later bearer publication without cancelling other invocations. Aborted, oversized or failed Auth body consumption cancels the owned reader without waiting for an untrusted cancellation hook; the existing 120-second request deadline and 1 MiB response ceiling still apply.
-
-To rotate an operator key while a run is pending, provision and approve the new key for the same account and
-client before retiring the old key through Auth's credential-effect lifecycle. Replace the private JWK at the
-existing owner-only key-file path, then invoke the same command with the same SQLite state. Each CLI invocation
-loads its account key afresh; a live invocation retains the key it already imported. Keep the ordinary six scopes
-(plus the existing VNDB statistic scope only for VNDB). Grant restoration and key retirement are separate operations:
-current grants govern receipt replay, and retiring a key prevents new sign-ins with that key without claiming
-revocation of already-issued bearer tokens.
-
-The frozen [native key-rotation journey](../kernel/test/imports/cli-key-rotation.test.ts) connects the ordinary CLI
-to native Auth, Access, public commands and the registered media worker. It loses a real committed response,
-denies exact original-bearer replay after ordinary grant revocation, retires the old key, and resumes the durable
-run with its original bytes and command keys. The [evidence record](../../docs/research/imports-audit/cli-key-rotation.md)
-describes its observations and limits. The local credential test supplies only the file/crypto preflight.
-
-A complete source reduction exceeding the default 20% disappearance threshold exits 3 before public effects and
-retains the last completed baseline. After reviewing the supplied input, invoke the same CLI with the same state
-and input and an explicit existing `--disappearance-threshold` value (for example, `0.5` admits losing two of five
-records). The stopped acquisition is terminal, so the next invocation acquires and validates the supplied input
-again; it does not resume an unapproved removal plan. Losing every prior record still stops at threshold `1`.
-Malformed framing, truncated JSON and input-read failure exit 2 before effects, regardless of threshold. A clean
-EOF on valid JSONL cannot detect upstream omission of complete records; the disappearance guard still applies.
-
-Stopped diagnostics report reconciliation outcomes, all zero when sealing stopped before classification. They
-do not estimate new/changed/unchanged/vanished counts by scanning the baseline. RunStore separately maintains
-prior, supplied and surviving-member counts for seal admission. An admitted three-of-five unchanged successor
-reports `unchanged=3 vanished=2`, and reopening that input reports `unchanged=3 vanished=0`. Source removal
-retracts only the missing records' owned candidates. Native subject identities, other Contexts' selections,
-independent facts and immutable bootstrap requests/receipts survive. Receipt replay uses current authorization;
-a revoked grant denies even an original bearer carrying a previously successful request.
-
-The [native CLI journey](../kernel/test/imports/disappearance-cli-native.test.ts) exercises this connected flow
-with five synthetic Bangumi metadata records, an approved account key, real Auth/Access and public editor
-acceptance/adoption. It observes exact durable baseline anchors, native removal proposals, original receipt bodies,
-authorized byte-identical replay and revoked-grant denial. It covers one controlled source reduction, with no
-external assets, provider matrix or new throughput claim.
-
-The [bounded reappearance journey](../kernel/test/imports/cli-source-reappearance.test.ts) binds the ordinary
-account-key CLI to the native application for all four launch sources in one Auth/Access/worker world. Each feed
-has five synthetic metadata records: removing one reaches the default 20% boundary, and returning its changed
-title must reuse the original exact tuple claim and bootstrap receipt while appending proposals with the changed
-revision/digest. A second removal followed by a public facts fence must suppress both the next return and old
-receipt/candidate disclosure. Independent editor selections and every other source's claims and receipts survive;
-unchanged reopen sends no public writes. VNDB uses a tar archive of native COPY tables, not scalar JSON.
-Run `bun run --cwd services/kernel check test/imports/cli-source-reappearance.test.ts` through the managed worker
-check. The selected native case passed at `669e18e5bff87837e8368e7c0ea9f562cb2f3188` with 3,443 assertions;
-[evidence and limits](../../docs/research/imports-audit/cli-source-reappearance.md) record its managed log,
-source/converter revisions and receipt anchors. Local protocol proof and broader imports promotion remain
-separate. This adds no sourceRecords migration, asset, summary, discovery or new PostgreSQL growth claim.
-
-The remaining launch operators share the [reviewed native reduction journey](../kernel/test/imports/cli-reviewed-source-reduction.test.ts):
-five synthetic VNDB ustar/COPY records, Open Library five-column TSV works and Wikidata JSONL books coexist
-in one native application/Auth world and one state file. Each operator supplies three unchanged records,
-sees the default guard stop, explicitly reviews the same input with `--disappearance-threshold 0.5`, and
-reopens without writes. Only the two missing records' retrieved owned candidate IDs are retracted through
-ordinary batch commands. Public candidate/retraction reads, independent accepted/adopted facts, communal
-subjects, exact bootstrap journals and receipt point reads establish preservation. Loss of all three remaining
-records still stops at threshold `1`. The exact original successful retraction request is denied after native
-Global bulk-grant revocation, including when replayed with its original bearer. Only that ordinary grant is
-restored between source legs. VNDB uses the existing statistic foundation and seventh scope; the other
-operators retain six scopes. Acquisition reaches EOF and seals before any request, and each CLI invocation
-closes its handles. See the [evidence and limits](../../docs/research/imports-audit/cli-reviewed-source-reduction.md).
-
-A completely consumed VNDB archive containing the six valid headers/table members with no data rows reaches
-the same total-loss guard when that source has a completed nonempty baseline. Header validation remains with
-the native table reader; fresh empty catalogues and malformed archives remain refused before effects.
-
-Limits follow the exports in `src/dumps-bytes.ts`, `src/vndb-tables.ts`, `src/import-fetch.ts`, and `src/import-client.ts`: dump chunks default to 256 KiB (1 MiB maximum), records default to 256 KiB (1 MiB maximum), VNDB archives default to 16 GiB and 512 entries (64 GiB and 2,048 entries maximum), and VNDB source pages contain at most 16 records. HTTP request bodies are capped at 2 MiB, public batch bodies at 64 KiB, responses at 1 MiB, and scheduled HTTP retry waits at 30 seconds per attempt and 60 seconds total with a 120-second request deadline. Each HTTP transport invocation defaults to three counted attempts and permits at most five, plus its existing one-time 401 renewal. Alongside ordinary GET/HEAD and eligible POST retries, the exact `/v1/subjects/{UUID}/source-statistics/vndb` PUT retries only with a valid quoted structured-field `Idempotency-Key`. Other PUT routes and missing or malformed keys remain ineligible. Retried requests preserve their original bytes, headers and bearer except for the existing explicit 401 renewal rule; all attempt, wait, body and deadline ceilings remain unchanged. Cover resolution handles at most 64 assets per record, with one POST and one status GET per invocation and no inline polling wait.
-
-Record write width starts at `recordConcurrency` (default 16). After a final transport `429` or a `503` problem with `retryable: true`, an admitted continuation halves the width, rounding down to at least one. The failed write goes to the front of the queue with the same envelope and command keys; its record resumes at that write, preserving completed planning, bootstrap and cover resolution. Nothing new starts while active records meet or exceed the width. Each successful write adds one slot up to the configured concurrency. A write started alone at width one that still overloads fails as before; older requests from a wider cohort can requeue while it drains. Other failures retain their existing behaviour. Width persists across pages and phases within a run and resets for the next run.
-
-Admission and retry accounting are separate controls. Each invocation of the coordinator's Write callback is one logical write with at most **eight transport invocations**, including the initial call. Eight is a local platform policy, not a standard's retry count: it permits more than the six width reductions from maximum K=64 while bounding a failing write independently of successful neighbors. Success, width recovery and requeue never refill this allowance. Exhaustion retains durable unresolved work, leaves the record unacknowledged and produces the existing `bulk-failed` outcome. An isolated width-one overload can stop sooner. A later explicit durable resume gets a new allowance; this is no lifetime cap across operator reruns.
-
-For eligible 429 and retryable 503 responses, integer-seconds and HTTP-date Retry-After hints follow [RFC 9110 section 10.2.3](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3). The bounded adapter carries a sanitized not-before time, its original invocation deadline and any retry-refusal reason through ImportTransportError. A queued continuation waits until that time using the injected clock/sleep and cannot reopen a refused wait or deadline budget. A hint that cannot fit the 30-second per-wait, 60-second total scheduled wait or original invocation deadline stops the write without truncation or an early new invocation. Missing/malformed hints retain fallback behavior; other status classifications are unchanged.
-
-This adopts the [bulk backpressure research](../../docs/research/importer-bulk-backpressure.md): prospective concurrency admission from [Netflix's limiter](https://github.com/Netflix/concurrency-limits/blob/78a74b9878d38c4c048b0304ce12a162ab7b7222/concurrency-limits-core/src/main/java/com/netflix/concurrency/limits/limiter/SimpleLimiter.java), finite per-invocation accounting from [Smithy's retry strategy](https://github.com/smithy-lang/smithy-typescript/blob/cb3a25c37bc9455ccb116fe722c544adac981690/packages/core/src/submodules/retry/util-retry/StandardRetryStrategy.ts), and retained serialized work from the [Elastic bulk helper](https://github.com/elastic/elasticsearch-js/blob/acf9711ba7f55064ac70dbe1439b931501ccc7d2/src/helpers.ts#L581). No reference implementation is copied. Per-HTTP attempt/wait/deadline caps remain distinct from the eight-call logical-write allowance. With transport maxAttempts A, physical sends per logical write are at most 8*(A+1), including 401 renewal. Unlimited whole inputs and operator reruns have no aggregate bound; arbitrary injected transports/providers that never settle have no overall wall-clock bound.
-
-`tests/write-width.test.ts` verifies this behaviour in `contention answered with retryable 503 narrows the write width and every record lands once`, `a single writer that still gets retryable 503 fails the run as before`, and `width grows back to the configured concurrency after successful writes`.
-
-The ordinary account-key caller is connected to native Auth, Access, the public write-rate limiter and the
-registered media worker in
-[`cli-native-backpressure.test.ts`](../kernel/test/imports/cli-native-backpressure.test.ts).
-Seventeen supplied synthetic Bangumi records cross multiple public envelopes. One invocation recovers from real
-429 responses; competing authorized receipt replays then keep one refreshed record refused while independent
-records succeed. Exhaustion retains the completed source baseline and exact pending envelopes. After actual
-admission recovery, a fresh same-state CLI drains those envelopes with their original keys, preserving bootstrap
-and media evidence, original native receipts and an independent editor's accepted selection.
-
-`runImportCli` accepts optional `stdin`, `fetch`, `signal`, `clock`, `observer` and `createImporter` boundaries.
-The clock supplies both transport and coordinator retry timing. A construction observer can wrap transport
-calls and return the real `createImporter(options)`; it must retain the options object, since the CLI attaches
-its session-backed media resolver after construction. This boundary adds no command-line configuration or
-alternative writer. The [verification note](../../docs/research/imports-audit/cli-native-backpressure.md) describes
-the captured evidence and its limits; local protocol tests alone do not establish this native journey.
-
-## Explicit local batch of independent source imports
-
-Catalogue operators can preview and deliberately run a bounded local JSON manifest of independent launch-source
-jobs instead of assembling separate invocations. This is a product command, not a Goal-controller scheduler.
-
-```sh
-bun services/importer/src/cli.ts batch --manifest /srv/imports/launch.json --json
-bun services/importer/src/cli.ts batch --manifest /srv/imports/launch.json --run \
-  --api https://api.rezics.example --account-key /run/secrets/rezics-importer-account.jwk \
-  --account 6b147e8d-1762-4717-9a65-aeb435cb843e --client rezics-importer --auth https://auth.rezics.example \
-  --progress jsonl --json
-```
-
-The manifest is version `1`, at most 16 jobs and 64 KiB. Each job names one of `bangumi`, `vndb`, `openlibrary` or
-`wikidata`, an exact configured `--source-alias` when used, a local complete dump path and an existing ordinary
-state path. Relative paths resolve against the manifest directory under the existing regular-file, no-follow
-descriptor policy. Credentials, API origins and account keys stay on the invocation; they are never embedded in
-the manifest or report. Default invocation parses, validates and displays ordered aliases and input modes. It does
-not acquire credentials, open state for mutation, decode dumps or send network requests. `--run` is the only
-execution switch; there is no hidden approval loop or cached plan token.
-
-Successful preflight is local shape and path validation. It does not prove dump integrity, current authority or
-that every job will succeed. Preflight refuses unknown fields, stdin, URLs, environment interpolation, include
-files, globs, duplicate configured sources, and two path spellings of the same state file for one source. Shared
-SQLite is allowed only for distinct aliases under existing ownership rules. Jobs are not merged because names
-resemble each other. Decision: Open Library dump-set manifests remain one job's complete `--dump` input; batch
-jobs cannot declare `dumpSet` because the ordinary single-source CLI has not delivered that flag.
-
-`--run` revalidates every ordinary input at each job, then calls the exported single-source CLI serially in
-manifest order. At most one importer, input and state owner is active. Handles close before the next job.
-Progress keeps the existing stderr protocol with a bounded job index/name context; underlying source/run IDs and
-invocation identity stay intact. JSON output lists at most 16 summaries, the actual stopping job and explicit
-not-started jobs. Human output keeps a concise final result on stdout. Native errors are never rewritten as
-success. Single-source stdout contracts are unchanged.
-
-Any non-success, cancellation, uncertain delivery, disappearance, incompatible input or observation-conflict
-exit 6 stops before the next job. Completed jobs stay completed. Later jobs are not started, not labelled failed
-and not rolled back. SIGINT or SIGTERM before a job begins starts no new coordinator. There is no
-continue-on-error, hidden retry, force disappearance, automatic CAS resolution or parallel worker. A dump replacement or a different state inode between local preview and execution is refused rather
-than followed. Ordinary writes by an earlier job into a shared SQLite file are not a replacement.
-
-Rerunning the manifest uses ordinary per-source journals only. The report cannot resume a request, skip a job
-from an old summary or mint new keys for unresolved work. A stopped or uncertain job prints the established
-ordinary importer command, and observation conflicts also point at `rezics-import observations`, without
-executing either automatically.
-
-```json
-{
-  "version": 1,
-  "jobs": [
-    { "source": "bangumi", "dump": "bangumi.jsonl", "state": "importer.sqlite" },
-    {
-      "source": "openlibrary",
-      "sourceAlias": "catalogue-ol",
-      "dump": "works.tsv",
-      "state": "importer.sqlite",
-      "compression": "none"
-    }
-  ]
-}
-```
-
-## Known own references
-
-Imports owns the default handoff of successful local claims to conversion, including ordinary
-[`createSourceRegistration`](src/source-registry.ts), [`Importer`](src/importer.ts) and
-[CLI](src/cli.ts) construction without an injected identifier provider. A later Open Library
-edition must receive the real work subject ID already learned from successful public
-create-or-resolve for the exact same configured source alias and native work key. The
-completed response and its durable own binding are identity evidence. Never allocate or
-guess a UUID, infer across aliases, look up a source label, or search global claims.
-The configured alias is authoritative even when it differs from the native registration's
-alias; an identical native key under another alias supplies no evidence.
-
-This is bounded own-claim resolution within the current session's durable bindings. The
-existing [`resolvedReferences` context](../../packages/conversion/README.md#package-api)
-passes actual native-key bindings to the pure converter. Conversion remains caller-resolution
-capable; this default producer obligation belongs to the importer and requires no conversion
-API change. The ordinary default path point-reads up to the converter's 64 supplied author/work
-keys through `RecordBindings.claim`. An explicitly injected identifier provider retains its
-existing interface and output and takes precedence over this local handoff. No new author source
-adapter or global resolver is implied.
-An unknown author retains its native external identifier and citation, using `somevalue`
-only where the adopted property permits it, including the Open Library author relation.
-
-An acknowledged edition whose bounded work dependency becomes known must be reconsidered
-when the unchanged source input is reimported. Learning may refresh it in that complete dump
-or on the next identical import; by the latter, its relation must use the actual work ID. A
-bounded signature of exact own-reference outcomes is committed with the resolved run entry,
-so a later unchanged pass revisits only when one of those outcomes changes. The lookup is
-linear in at most 64 supplied relation keys and uses indexed exact-key point reads; it does not
-enumerate stored history. One signature row is retained per acknowledged Open Library record.
-Equality of the source row alone cannot justify skipping that dependency check. The resolved
-semantic body produces a distinct proposal command key and candidate while native revision,
-data-only source digest and converter revision remain intact. Immutable bootstrap command
-bytes, their key and receipt never change. Recovery replays previously prepared requests
-exactly; changed dependency planning must not rewrite uncertain or acknowledged envelopes.
-
-Old unresolved candidates and their revisions/history remain readable. Source reconciliation
-may retract its own candidate through the ordinary API but must not commandeer another
-Context's adoption. The community's prior selection remains until its editor independently
-accepts and adopts the resolved candidate. Once actual resolution is unchanged, further
-identical runs create neither duplicates nor replay conflicts. Cached IDs and receipts are
-not permission grants: native target admission and disclosure still check current
-authorization, including on replay and after grant revocation.
-
-The ordinary default `Importer` now supplies this handoff without an injected identifier
-provider. It point-reads the configured alias and native relation keys through
-[`RecordBindings.claim`](src/record-bindings.ts). The existing
-`run_reference_signatures(source,record_key)` table stores one bounded signature per
-acknowledged record; an unchanged record is replanned only when the exact own-reference
-outcomes change. Prepared bootstrap bytes, keys and receipts remain immutable across reopen.
-During a dependency refresh, proposals whose producing converter revision and complete semantic statement
-are unchanged are retained, while changed relation bodies are proposed with new keys. This avoids duplicate
-candidate effects for unrelated fields such as an unchanged unknown author.
-
-A trusted converter revision change reconciles every unfenced field even when its semantic values match.
-The bounded current owned-candidate comparison reads the producing revision from each immutable saved proposal;
-an old revision cannot supply provenance for the new converter. A transition from the acknowledged converter
-also refreshes candidates from an earlier matching revision left behind a fence; only already acknowledged
-proposals from the current run can be retained during that transition. Ordinary retractions and fresh proposals use
-stable run-specific operation keys while preserving the source digest, native revision, bound subject and prior
-request/receipt bytes. Exact source/record/field fences are checked before the unchanged shortcut and again at
-dispatch. Same-run recovery can retain candidates already acknowledged from the current converter. VNDB's
-statistic-only completion still requires a successful statistic write and exhaustive semantic retention; it
-cannot stand in for new-converter proposals. See the [focused verification record](../../docs/research/imports-audit/revision-fence-refresh.md).
-
-### Refresh source-only provenance
-
-A changed admitted source field requires fresh cited proposals even when its catalogue values remain equal.
-For example, changing only an unversioned Bangumi Book's native date changes the source digest, while the
-unchanged `bangumi@3` converter still emits only its name and external identifier. The importer retracts its
-old owned candidates and publishes those equal facts with the actual new digest, using the same native subject
-and claim. It preserves bootstrap bytes, old requests/receipts and independently selected editor candidates.
-It does not infer `schema:datePublished`. Current facts fences suppress publication; unchanged successors send
-no public writes. Keep the same state path for recovery and immutable-plan replay.
-
-Semantic retention requires matching source digests as well as converter revision, subject, group and complete
-statement. A candidate acknowledged by the current immutable run remains eligible during recovery. The explicit
-confirmed VNDB statistic-only exception still requires exhaustive semantic retention and its acknowledged
-statistic effect; it does not become a generic source-metadata acknowledgement.
-
-The frozen [local caller](tests/source-only-provenance-refresh.test.ts), focused
-[partial-receipt/reopen caller](tests/source-provenance-recovery.test.ts), and
-[native ordinary CLI journey](../kernel/test/imports/source-only-provenance-refresh.test.ts) bind this outcome.
-The single managed native acceptance passed with exit status 0 at
-`d1f050321ebc4f50af830ac4ef5cf14041d85303`; the frozen caller proves changed source provenance,
-immutable native anchors, independent selection, unchanged no writes and current facts fencing.
-[Evidence and limits](../../docs/research/imports-audit/source-only-provenance-refresh.md) record the supplied
-receipt and the three unchanged importer safety-test compiler diagnostics. This scoped pass adds no growth,
-main integration or promotion claim.
-
-```sh
-bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/source-only-provenance-refresh.test.ts
-```
-
-### Reconcile a new converter revision with current fences
-
-- Touches: the bounded current owned candidates and their immutable proposal source fields, exact run/member/acknowledgement keys and ordinary public bulk commands.
-- Bound: at most 300 current candidates per record, 100 commands and 65,536 bytes per envelope; existing O((1+q) log R) writes and O(q) retained data at the existing q caps. The revision comparison adds no SQL, history scan, source pass or privilege; existing proposal matching work is unchanged.
-- Growth check: existing local/canonical PostgreSQL/derived units and bounds remain unchanged. Focused refresh acceptance proves proposal provenance and fences, not new growth measurements; native growth remains with the shared producer's full acceptance.
-
-The frozen [native cases](../kernel/test/imports/known-reference-refresh.test.ts) cover the
-default handoff and unchanged dependency refresh. Original implementation locator:
-`0b648d744b3ed6f34bf435866606c102d1b0707d`. The installed combined observation correction
-preserves proposal property objects and requires the native read datatype only on native
-responses; a busy partition relay consumes one of the same 16 calls and is never readiness.
-Its installed SHA-256 is
-`f46b81a106c65ed6a37732845c89c94c239affa69105ba47d67fc2d94584dc89`, matching the approved raw
-file, canonical worker bytes and read-only frozen registry. The latest authorized amendment
-factors the existing property conditional into a local binding before the same generic matcher;
-the compared objects and business assertions are unchanged. The preceding root typecheck failed
-with frozen-helper TS2353 before native execution. Current-tree root typecheck passed all 13 workspaces on
-`39e12edb2885ffd974fa849f9de53b0fa3d21ab1` (check `95993fff-f007-4bce-830a-78972966d876`).
-Focused native acceptance then passed on `2f7e1cc68802bb34d6906dfb0dbb1000669002fa`
-(check `1e7682fe-3eb8-4f38-93d9-a9207c83bab2`): 2 cases, 135 assertions. Both known-claim and
-late-learning flows reached real target-addressed candidate acceptance/adoption and stable replay.
-Late learning preserved old unresolved history and independent community adoption; revoked-grant
-replay returned 403.
-The unknown author retained its external identifier and exact native read datatype. This proves
-the two bounded default Open Library flows, with no new full-imports or growth claim.
-All three adjacent recovery files passed (11 cases, 158 assertions), with the extra recovery file
-run separately after a filename correction. The local reopen regression passed (2 cases,
-16 assertions); runtime, storage and local regression bytes remain unchanged, so those qualified
-results are reused.
-See the [verification report](../../docs/research/imports-audit/own-reference-refresh-verification.md)
-for revisions, receipts, reached transitions and evidence limits.
-
-### Own-reference refresh cost
-
-- Touches: read at most 64 author/work relation keys from the bounded Open Library projection, with one indexed `RecordBindings.claim` point read per supplied key; compare and persist one signature for the record. A changed signature runs ordinary bounded candidate reconciliation. Existing journals and receipts are read only by their exact owner/key.
-- Bound: O(M + F log B) per supplied record for M projection bytes, F ≤ 64 native relation keys and B stored binding rows, plus existing bounded planning and writes. Reconciliation additionally compares at most C × Q full statements, C ≤ 300 current owned candidates and Q ≤ 100 Open Library proposals, each under the existing bounded statement/envelope bytes. This adds local comparison work, not a history scan or server query. Durable dependency metadata is O(1) per record; source record admission retains its existing byte and field caps. No claim/history enumeration or source-wide dependency sweep is used.
-- Growth check: `services/importer/tests/own-reference-refresh.test.ts` previously passed exact-alias point reads and the default reopen/late-learning/stable-replay path (2 cases, 16 assertions). Native evidence and its limits are recorded in the verification report. No new native growth measurement or PostgreSQL count is claimed.
-
-The exact native command is:
-
-```sh
-bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/known-reference-refresh.test.ts
-```
-
-### Independent named feeds
-
-The [Open Library edition and cover CLI journey](../kernel/test/imports/openlibrary-cli-edition-media.test.ts)
-connects a five-column work/edition TSV to account-key Auth, the real coordinator, ordinary
-editor selection and public reads. The same edition bytes initially retain unresolved
-author/work citations, then resolve only the exact work claim learned within their configured
-source. Separate source cover IDs reach registered media jobs with independent unknown-rights
-credits; `-1` never becomes a media request. A cover tuple fence survives close/reopen without
-changing native entry identity/revision or immutable bootstrap/media requests. Unknown-licensed
-prose never becomes a proposal or public summary. See the
-[evidence record](../../docs/research/imports-audit/openlibrary-cli-edition-media.md)
-for fixture framing, observation boundaries and verification limits.
-
-Two configured aliases for Open Library share a provider and its bibliographic CC0-1.0
-permission, but share no native claims, dependency evidence, request journals, baseline or
-run ownership. Alias spelling supplies neither licensing evidence nor another provider.
-An edition under `books-b` remains unresolved when only `books-a` knows its work key;
-after B learns its own actual work claim, an unchanged import can propose the resolved
-relation without rewriting the bootstrap bytes, key or receipt. Existing unresolved
-history and independent editor selections remain intact.
-
-Disappearance has no normalized source projection. It bypasses own-reference resolution
-and reconciles only the vanished record's exact-source candidates. Refresh and tuple-fence
-checks still use the selected alias. A live `ImportSession` ownership handle makes another
-CLI invocation for that alias busy before source acquisition or public writes, while a
-different alias can proceed in the same SQLite file. Releasing the handle permits normal
-reopen with the original identities; ownership and timeout rules are unchanged.
-
-[`named-feed-cli-native.test.ts`](../kernel/test/imports/named-feed-cli-native.test.ts)
-exercises this connected journey through the production CLI, staged/approved/applied account
-key, native Auth/Access/kernel and worker. Its two controlled native TSV feeds share one
-tmpfs SQLite file. It records exact serialized requests, actual claims and receipts, baseline
-fingerprints/counts and public responses using the original CLI bearer. Editor selection
-and governance fences use public commands. The adjacent own-reference regression covers
-disappearance without a source projection. These cases add no source-record catch-up,
-provenance backfill, global resolution or PostgreSQL growth claim.
-
-Cost: inspect supplied feed bytes, exact alias/native-key journal rows and at most the
-existing 64 own-reference keys, plus existing bounded public writes and tuple-fence reads.
-Current alias point/keyset reads and source ownership retain their existing caps; no
-other-source, catalogue or history enumeration is added.
-
-### Changed-dependency cost obligation
-
-For one supplied record, let F be its admitted native reference-key count, bounded by the
-supplied record-byte and field caps, B the stored binding rows, and M its bounded source
-and semantic-body bytes. Examine only those F keys with exact `(configured source alias,
-native key)` local point reads and bounded per-record dependency metadata. Required work
-is O(M + F log B) for resolution comparison, plus bounded changed-command planning and the
-existing journal/write costs; retained dependency state is O(F) per record. Unchanged input
-still incurs this bounded comparison before skipping effects. Whole-dump work follows the
-finite supplied records; learning a claim must not trigger binding, history or catalogue
-enumeration or an unbounded replay sweep. This derives a required bound, not measured
-implementation evidence or a mandated dependency storage/API. Existing injected-provider
-call bounds below remain unchanged.
-
-## Deletion
-
-The [common deletion policy](../../docs/deletion.md) governs lifecycle; the
-[first public scope](../../docs/scope.md) limits imports to Bangumi, VNDB,
-Open Library and Wikidata, with no recipe-site source or user posts. Imports
-owns pure conversion, an ordinary authenticated API client and private,
-operator-managed SQLite coordination state. Authoritative contributions and
-subjects belong to [Semantic](../kernel/src/semantic/README.md), media to
-[Content](../kernel/src/content/README.md), and account lifecycle to
-[Access](../kernel/src/access/README.md#account-deletion-policy).
-
-Those owners are responsible for enforcing platform soft deletion, record-owner
-restore within 30 days, separate bounded purge, account erasure, early-purge
-permission, takedown and legal holds through their public APIs under the common
-policy. Imported proposals and media remain under those owners. The importer
-does not soft-delete, restore or purge authoritative user-owned records, expose
-parallel lifecycle routes, or use privileged SQL into those modules.
-
-Accounts owns one terminal workflow and a fixed, versioned participant list.
-The kernel's `imports` work effect consumes
-`com.rezics.access.account-tombstoned.v1`, then records an immutable `none`
-acknowledgement through Access. `none` is truthful for the reviewed importer
-storage because no importer-owned persisted payload is owned by a platform
-account. This is server-side work in the kernel; the importer CLI remains an
-API-only client with no PostgreSQL dependency, privileged write, deletion hook
-or access to operator SQLite/key files. Dispatch by itself is not completion.
-The common [deletion policy](../../docs/deletion.md) and
-[Access coordinator](../kernel/src/access/README.md#account-deletion-policy)
-remain authoritative for lifecycle and acknowledgement semantics.
-
-The retention inventory is exact: accepted source projections and source
-record state are keyed by source and external key; run state, generations,
-candidate/media identifiers, immutable request and acknowledgement bytes,
-receipts, counters, and same-source process ownership are importer-owned
-SQLite coordination state. None has an account owner or account locator.
-Credentials and bearer tokens are memory-only; operator key/configuration
-files and source inputs are external to application storage. Author, editor,
-uploader, delegate, operator and acting-human attribution, shared receipts,
-outbox, media, search and catalogue copies belong to their respective owners,
-not this importer inventory. No importer copy of account-owned payload was
-found, so there is no purge job or personal-data retention interval here.
-This `none` result does not attest cleanup by those other participants.
-
-Any future importer field or store containing personal or private account
-data must first gain a native indexed account ownership relation or an exact
-locator recorded atomically with its producer. Its retention and bounded
-minimizer must be documented before release; do not infer ownership from a
-source name, scan JSON/name text, or add a central ownership graph. A new
-personal-library import is outside the current storage and public scope until
-that producer and locator exist.
-
-In [`importer.ts`](src/importer.ts), source disappearance and replacement reconcile
-provenance by publicly bulk-retracting the actual returned source candidate IDs.
-This does not delete a communal subject, another contributor's adoption or media
-bytes. [`record-bindings.ts`](src/record-bindings.ts) removes an acknowledged
-retracted candidate's local binding pointer and retains its journal receipt;
-that cleanup is not content purge. The `present`/`vanished` checkpoints and
-generations in [`run-store.ts`](src/run-store.ts) and
-[`record-store.ts`](src/record-store.ts) describe source state, not user-facing
-soft deletion or restoration.
-
-Refresh must respect server deletion, authorization and disclosure checks.
-Planning checks `(source, external_id, field_group)` takedown fences before even
-the unchanged-record shortcut, and dispatch checks them again. Never clear
-those fences or terminal source claims to recreate withheld material.
-
-The public import transport and standalone media resolver admit open fence evidence only with
-`fenced: false` and `securityRevision: null`. Closed evidence requires `fenced: true` and a nonempty
-string proof; standalone ports preserve opaque proofs without imposing a numeric revision grammar.
-Malformed or contradictory evidence throws before media journal preparation, POST or status calls,
-including for an already bound exact owner. The frozen [fence evidence cases](tests/media-fence-evidence.test.ts)
-exercise the actual public transport and SQLite-bound resolver. These checks add no read pass or retained state;
-existing media resolution growth evidence and native receipts and limits remain unchanged.
-
-The `run_reference_signatures` table holds only exact source/key dependency outcome signatures.
-It is coordination metadata for every role, has no role-specific product surface, and contains
-no account, bearer or owner data. It follows the same restart and retention restrictions below.
-
-Operational source/key/revision/digest/converter-revision rows, sanitized source
-projections, generation pages, returned IDs, exact prepared request bytes and
-replay receipts support restart safety. They have no product browse, count,
-search or sitemap surface. Bearers stay in memory; the automated account key
-file is externally provisioned, not an account-content database. This state is
-not a workaround for retaining deleted private account content. Current code
-has no timed coordination-state purge job or retention interval; do not clear
-state while effects remain unresolved. Operators may deliberately retire
-explicitly selected superseded complete generation captures through
-`rezics-import retention`, and one exact unpublished staging capture through
-`rezics-import retire-staging`; those paths do not erase acknowledgements, payloads,
-bindings or native published state. Authoritative lifecycle work and its
-bounds belong to the linked owners; conversion itself has no purge work.
-
-## Cost
-
-### Import Bangumi Character source names
-
-- Touches: one selected Character record, up to 16 preferred-name facts, 64
-  alternate-name facts and 85 ordinary proposal commands, including existing
-  physical-profile facts. Local parsing visits at most 64 fields and 64 alias
-  rows; it adds no native name lookup.
-- Bound: source lines stay within the existing 1 MiB cap; name evidence stays
-  within 32 KiB, depth 2, 4 KiB/500 codepoints per scalar, 16 diagnostics and
-  the 65,536-byte normalized-record ceiling.
-- Growth check: conversion and selected-registration tests pin exact values,
-  released citations, malformed/overflow losses and unchanged sealed replay.
-  Native publication batches and current reads keep their existing bounds; no
-  call is added for name lookup. The native runtime checks separate publication
-  and public read; broader acceptance remains controller-owned.
-
-### Import authored Bangumi television original-run and episode count
-
-- Touches: one admitted type-2 TVAnime infobox on the ordinary Bangumi JSON-lines
-  registration, the shared `bangumi@11` converter, and ordinary public
-  batch/fence/candidate paths on that TVSeries. Selected-family seed reuses the
-  same registration; this adds no publisher.
-- Bound: at most 64 infobox keys and three run facts inside the existing 64 KiB
-  projection, 33-command and journal budgets. Unknown `*`, weekday schedule
-  text and custom keys withhold only those fields. No extra reads, episode-row
-  counts or broadcaster resolution.
-- Growth check: the focused importer case checks exact start/end/count
-  proposals, month precision, unknown totals, schedule/custom diagnostics,
-  converter-revision refresh and changed totals with stable work identity. The
-  focused kernel case checks public acceptance/adoption, citation, facts fencing
-  and idempotent reopen. No PostgreSQL growth series is added.
-
-### Import authored Bangumi Game player count
-
-- Touches: one admitted type-4 Game infobox on the ordinary Bangumi JSON-lines
-  registration, the shared `bangumi@11` converter, and ordinary public
-  batch/fence/candidate paths on that VideoGame. Selected-family seed reuses the
-  same converter; this adds no publisher.
-- Bound: at most 64 infobox keys, 8 examined count occurrences and one player
-  count fact plus at most one qualifier inside the existing 64 KiB projection,
-  command and journal budgets. Mode-qualified, reversed, zero, decimal and
-  malformed fields withhold only that count. No extra reads or release
-  identities.
-- Growth check: the focused importer case checks a stated range, a
-  mode-qualified omission, converter-revision refresh and a corrected same
-  UUID with stable work identity. The focused kernel case checks public
-  inspect/accept/adopt/current read, citation and facts fencing. No PostgreSQL
-  growth series is added.
-
-### Bangumi creator and voice credits
-
-- Touches: at most 64 `subject-persons` rows for each selected Game, exact current
-  reads for its VideoGame and creator endpoints, and the existing type-2
-  staff/voice paths.
-- Bound: at most 64 distinct staff-role requirements per operation and the
-  existing 8,192-association, family, command and journal caps. Type-4 Game
-  character and voice rows remain with the Game-character journey; there is no
-  catalogue scan, name matching or inferred staff order.
-- Growth check: `services/importer/tests/showcase-bangumi-game-creators.test.ts`
-  pins selected-Game planning and excludes Game character/voice rows.
-  `services/kernel/test/imports/showcase-bangumi-game-creators.test.ts` covers
-  current role bindings, separate acceptance/adoption, exact citations,
-  endpoint withholding and unchanged-source UUID reuse. Controller acceptance
-  and a real-data walkthrough remain deferred.
-
-### Bangumi subject relations
-
-- Touches: at most 4,096 selected `subject-relations` rows, their reciprocal evidence, existing source bindings and current facts-fence tuples. Relation commands use the bundled property descriptor and the resolved native profile of both endpoints.
-- Bound: the source table remains streamed; the planner retains no more than 4,096 rows and coalesces by unordered endpoint pair. Each exact mapped command body is recorded in the import session's `cross_media_graph` journal before the bounded API write. One relation can cause at most two fence reads. Unknown codes, omitted source families, unavailable properties, missing endpoints and fenced records remain bounded diagnostics or refusals.
-- Growth check: `the production seed coalesces reciprocal subject relation rows into one canonical statement`, `production graph journals immutable relation commands and retries without duplicate delivery`, `live-action adaptation uses the admitted Movie profile and keeps a one-sided row`, `reciprocal parent-story evidence selects its canonical relation and changes the proposal key`, and `unknown, unreviewed music, missing endpoint, and unavailable profile remain bounded gaps` are the focused scenarios. They do not add a separate growth series; the native operator journey is registered in the capability manifest and remains deferred for integration.
-
-### Resume a sealed generation without its dump
-
-- Touches: exact-source owner/status admission and existing indexed post-seal reconciliation, envelopes, deferred media and finalization pages. Let N be remaining staged/vanished entries, P pending envelope/cover rows, E their remaining effects, H unrelated retained generations, and W the existing admitted record concurrency.
-- Bound: admission performs a constant number of exact-source/indexed generation lookups, independent of H. Resume visits existing bounded pages of at most 100 and uses the coordinator's existing indexed paths, including necessary joins and dependency reconversion. Ordinary traversal is O((N+P+E) log M) indexed storage work for relevant store size M, with bounded page/concurrency retention and no dump-size memory or archive materialization. Unknown retry retains the same finite per-logical-write budget eight. Owned-candidate review stays at the existing cap of 300 current candidates per record. No added polling, historical hydration or per-reference HTTP request.
-- Growth check: `tests/resume-growth.test.ts` executes the production resume path at 32/128/512 valid sealed-entry populations using equal scale ratio four and shared production observers. It records database visits, pages/retention and actual transport effect invocations against the bound, independently increases unrelated retained generations, and includes a bounded pending-envelope population and a finalization cursor.
-
-### Compare two retained complete captures
-
-- Touches: the two selected complete captures with N and M retained input rows, source/generation header point reads, and at most p≤100 displayed details plus bounded scan windows. Other sources and old generations are unrelated.
-- Bound: complete `--counts` is one indexed merge of O(N+M) row visits plus index seek cost, O(p+w) working memory for fixed scan window w=256, and no retained global key set. A detail page performs at most w scanned present-merge steps with a continuation even if fewer than p matches; total full traversal remains O(N+M) without recounting. Exact-record detail uses two primary-key seeks and bounded stored projection decode.
-- Growth check: production compare/count/page/exact-record paths on 32/128/512 captured rows, equal ratio 4, including mostly-unchanged sparse changes, vanished/reappeared records, converter-only changes, and independently growing unrelated history. Count visited rows, decoded projection bytes, comparison calls, retained buffers and SQLite read queries. Counts and paged union agree; page/cancellation bounds hold.
-
-### Explicit source statistic removal
-
-- Touches: the existing bounded source projection/own binding and one public exact-subject/source/record clear command per changed zero intent; no extra global lookup.
-- Bound: at most one native clear effect per source record/run under existing logical-write/transport budgets. UNKNOWN sends zero statistic requests; source rows/candidates remain indexed and bounded. Physical retries remain visible in native HTTP captures, separately from positive PUTs and votes.
-- Growth check: existing importer counted/store/transport bounds remain unchanged. Content owns native exact-key clear/read/fence growth. The connected native journey observes effect/receipt/recovery; it adds no synthetic PostgreSQL growth series and has not been run in this attempt.
-
-### Receive admitted source classifications
-
-- Touches: the exact admitted association and current Semantic selection, the existing three source-fence checks, one sealed classification journal entry, one mounted `:put` or `:clear`, and one independent authoritative readback. Replays retain the original request body, expected observation and idempotency key.
-- Bound: O(N + A + R) for selected records N, admitted association intents A and existing bounded retry work R. Each intent stays bound to one Subject and association; withheld or stale associations produce no native classification write. Source classifications remain independent of community ballots and aggregates.
-- Growth check: `tests/source-classification.test.ts` covers admission, exact retry, authoritative readback, malformed/opposite-state uncertainty and unchanged sealed CAS. Kernel physical-prefix and all-pool growth at 256/1024/4096 remain controller integration acceptance; this receiving check does not claim those native ceilings.
-
-### Source-only provenance refresh
-
-- Touches: the already bounded current record's <=300 owned candidates/proposals and existing exact source/subject/fence/journal reads; no new lookup authority.
-- Bound: changed-record delta times q indexed journal/proposal work; current-run replay and unchanged input preserve existing caps/zero duplicate effects. Confirmed statistic-only effect retains its accepted bound.
-- Growth check: existing reconciliation/counting and native sourced-write growth keep their units and literal bounds; the native caller proves actual changed-provenance/public outcome, not a new PostgreSQL growth series.
-
-### Fenced statistic refresh
-
-- Touches: the already obtained bounded facts-omission result for the exact tuple; the existing positive-statistic HTTP effect only when unfenced.
-- Bound: one in-memory omission lookup within at most three groups, no additional SQL or fence request, and zero statistic HTTP writes for the fenced tuple.
-- Growth check: the production importer/registration caller test above proves suppression; existing source-statistic native/cost suites retain their independent scope. This guard adds no native growth measurement.
-
-### Import VNDB character traits and qualified appearances
-
-- Touches: bounded authored COPY rows for `chars`, `chars_traits`, `chars_vns` and the parent work tables; exact owner/run/journal; ordinary public create/propose/accept/adopt/read.
-- Bound: existing source-vocabulary row/command/gap caps (64/100/64) and sequential CrossMedia seed conversion so appearance rows reuse already bound character identities. No catalogue scan, voter, identity-merge or classification write.
-- Growth check: existing conversion/importer counted suites remain the measured evidence. The connected native file is registered and not executed in this attempt.
-
-### Default VNDB character-trait showcase seed
-
-- Touches: streamed `traits`, `traits_parents`, `chars_traits` and `chars_vns` COPY rows for the selected family, at most 64 works, 64 trait associations, 64 appearances, 256 parent edges through depth 12, dictionary ConceptScheme/Concept create and `schema:url`/`skos:inScheme`/`skos:broader` proposals through the existing importer and showcase journal, current disclosed scheme/concept point reads, admitted `schema:keywords`/`schema:character` associations, and the common publishShowcase accept/adopt/public-read path. Gender variants, BWH and birthday cells stay unprojected.
-- Bound: O(file bytes) stream plus O((W+T+A+P+V) log R) importer work for selected works W, closed dictionary T, associations A, parent edges P≤256 and vocabulary records V≤512. Dictionary schemes publish before Concepts; current type/`schema:url`/`skos:inScheme` and taxonomy-parent `skos:broader` are reread before association admission. Deduplicated current reads stay inside their existing freshness lifetime. Unrelated VN/character/trait rows are not materialized. No catalogue scan or identity merge.
-- Growth check: `tests/showcase-character-vocabulary.test.ts` covers default dictionary publication without a UUID file, spoiler-qualified associations, lying/release-qualified withholding, retracted URI/inScheme/parent contradiction and parent-closure overflow, plus refresh identity. The connected native file `services/kernel/test/imports/showcase-character-vocabulary.test.ts` is registered and not executed in this attempt.
-
-### Default VNDB release platform and medium showcase seed
-
-- Touches: association rows owned by the at most 64 selected release IDs, at most two source ConceptSchemes and the finite selected platform/medium Concepts, their source URI and `skos:inScheme` proposals in the shared ShowcaseJournal, current native type/URI/inScheme reads, and the shared manifest/publishShowcase plus ordinary Release association path. Existing date, state and other provider bindings remain composed through the same release adapter.
-- Bound: source tables stream by file size; retained association evidence is at most 4,096 distinct rows total and at most the remaining source-vocabulary row budget on each Release. Concept preparation stays within the common vocabulary budget. Each native dependency UUID is read once per binding preparation; no catalogue or native-history scan is added.
-- Growth check: `tests/showcase-vndb-releases.test.ts` covers default selected rows, journal-created dependencies, duplicate/unsupported/wrong-owner associations, independent platform/media facts, overflow, preserved release values and work membership. `tests/vndb-release-platforms.test.ts` retains source-refresh coverage. The receiving native test remains integration evidence and is not run in this attempt.
-
-### Import VNDB character height and weight
-
-- Touches: the selected-family `chars` COPY row already acquired for appearance, existing identity bootstrap/proposals, and independent accept/adopt/read of `schema:height` and `schema:weight`.
-- Bound: at most two exact quantity facts per selected character inside the current command cap; unknown or invalid cells add at most one diagnostic each and never invent a native value.
-- Growth check: existing conversion/importer counted suites remain the measured evidence. The connected native file is registered and not executed in this attempt.
-
-### Import VNDB character blood types
-
-The selected-family `chars` rows pass through the existing cross-media
-coordinator and source registration. `vndb-character-profile@1` emits a
-`wdt:P1853` source-vocabulary row only for exact `bloodt` codes `a`, `b`, `ab`
-and `o`. Literal `unknown`, COPY null, missing, unsupported and malformed
-values produce bounded omissions; none resolves by label or nearby Concept.
-The classification input and its omission reason enter the deterministic
-projection under `cross-media-entities@14`, so a same-source refresh can offer
-new support without inventing an upstream revision. Character identity, names
-and height/weight survive this projection together.
-
-The source-specific scheme is
-`https://rezics.com/schemes/vndb/character-blood-types`; each Concept URI adds
-the exact source code. The default showcase publishes that scheme and only the
-selected explicit Concepts through the existing journal and publishShowcase
-path, then rereads current type, URI and inScheme before proposing. Optional
-`--vndb-character-profile-bindings <json>` is a current-verified hint of at
-most four code-to-ID rows; a missing file does not skip publication, and a
-prior file cannot bypass a retired, mismatched or refused binding. Ordinary
-importer tokens stay proposal-only; local showcase review accept/adopt stays
-on the current commands.
-
-`gender` and `spoil_gender` remain distinct actual and spoiler source variants
-in the digest. The source gender enums have no admitted native qualifier in
-this release, so both are withheld; the importer does not turn either into a
-numeric spoiler level or an unqualified fallback. The `sex` fields remain
-outside this mapping.
-
-- Touches: selected VNDB Character rows, journal create/propose of one source
-  ConceptScheme and at most four selected Concepts, current native type/URI/
-  inScheme reads, ordinary `wdt:P1853` candidates and exact `/chars/bloodt`
-  citations, and the common publishShowcase accept/adopt/public-read path.
-- Bound: at most 256 selected Characters and five current binding reads per
-  verification lifetime; preparation stays inside the common vocabulary budget.
-  Deduplicated current reads stay inside their existing freshness lifetime. No
-  catalogue or native-history scan.
-- Growth check: `tests/vndb-character-profile.test.ts` covers default
-  publication without a UUID file, both seed phases, unknown/malformed
-  omission, gender withholding, changed/refused Concepts and sealed UUID
-  recovery. Kernel `test/imports/vndb-character-profile.test.ts` authors
-  independent acceptance/adoption, a wrong-scheme binding and refresh/reopen;
-  native execution remains deferred to integration.
-
-### Publish admitted VNDB public tag associations
-
-- Touches: extracted `tags` and `tags_vn` COPY rows for the selected works, one reviewed scheme/concept read per admitted binding, and the existing ordinary batch/candidate/current paths.
-- Bound: dictionary ≤512 tags, ≤256 associations, ≤64 vocabulary rows per work, remaining slots in the existing 100-command batch; diagnostics carry exact source path and tag code only.
-- Growth check: existing importer and source-vocabulary bounds. This journey adds no new PostgreSQL growth series.
-
-### Operate a permitted scalar source feed
-
-- Touches: supplied native bytes, exact current-run tuple/journal and existing ordinary Auth/public commands.
-- Bound: existing source byte/field/page and command budgets; input consumed once after the actual acquisition rules. No catalogue/history scan or predicted native effects. The caller captures exact consumed bytes, actual seal accounting and independent committed rows/receipts under the existing fixture bounds.
-- Growth check: reuse the existing importer/native capture bounds and units. The new three-provider caller acceptance proves connected behaviour and retains raw observations; it claims no new growth measurement.
-
-### Complete the rejected-cover operator journey
-
-- Touches: supplied bounded source bytes, exact owner/run/record and native receipt/subject/candidate keys, ordinary Auth/public requests and captured response bodies.
-- Bound: existing input/page/projection/public envelope and retry bounds, O(input bytes+(S+D)(1+q)logR) with bounded q. No catalogue/history scan or invented PostgreSQL units.
-- Growth check: existing local counted ceilings and canonical/derived native suites remain unchanged. This connected outcome adds no growth series or replacement counters.
-
-### Import Open Library edition page counts
-
-- Touches: one native `number_of_pages` field from an Open Library edition TSV row, the existing `open-library@5` converter, and ordinary proposal, editor selection and public-read paths on the same `bf:Instance`.
-- Bound: Source bytes: one five-column TSV row remains capped at 256 KiB by default, with the sanitized projection capped at 2 MiB. Per-edition preparation: one bounded allowlist pass and source digest; the count adds one scalar and no relation or catalogue lookup. Native calls: author/work resolution remains at most 64 configured-source point reads per record; the count adds one proposal within the existing 100-command batch ceiling and no extra API call.
-- Growth check: `packages/conversion/tests/open-library-page-count.test.ts` covers the observed citation, released quantity validation, digest change and malformed/missing values. `../kernel/test/imports/openlibrary-cli-edition-media.test.ts` extends the real five-column CLI journey with proposal-only import, separate selection, changed-count replay, current refusal and facts fencing; native execution remains deferred to integration, with no new growth series.
-
-### Import Open Library Work first publication date
-
-- Touches: one optional Work `first_publish_date` from the existing five-column TSV reader and complete author/work/edition dump-set composition, the registered `open-library@5` converter, ordinary proposal, separate editor acceptance/adoption and independent current public read on the acknowledged Work.
-- Bound: the source row remains under the configured CLI record ceiling (256 KiB by default); the explicit 17-field projection remains at most 2 MiB, with this scalar capped at 1,500 characters and longer fields refused. It adds at most one proposal under the existing 100-command ceiling, no Edition lookup, additional relation lookup, catalogue/history scan or acquisition call. Existing author/work resolution stays at most 64 configured-source point reads per record.
-- Growth check: `packages/conversion/tests/open-library-growth.test.ts` measures the admitted field bytes and output while fixed input remains constant across unrelated catalogue/history growth and named I/O guards. `../kernel/test/imports/open-library-first-publication.test.ts` uses the existing dump-set fixture and `runImportCli`, then separately accepts/adopts the returned candidate and reads current public statements. The connected local runtime does not make a new Open Library network call or add a PostgreSQL growth series.
-
-### Native mixed Wikidata acquisition
-
-- Touches: each existing bounded JSON line plus type, identity and optional native revision validation; only admitted Q items stage indexed source rows and public effects.
-- Bound: O(input bytes) scan with unchanged record/chunk retention caps, no per-property retained set or durable rows, and unchanged item reconciliation bounds.
-- Growth check: `tests/wikidata-mixed-dump.test.ts` exercises the production coordinator with mixed input, unchanged and changed refresh, property-only mass-stop and invalid acquisition. Its real durable in-memory stores and typed external API fake prove local coordination, not real server authorization, PostgreSQL work or promotion. Existing reader growth/retention cases remain the measured cost evidence; the connected native item/public bulk journeys above supply separate API evidence.
-
-### Local zstd admission
-
-- Touches: compressed bytes C, decoded bytes B, one direct zstd child with a 128 MiB `-M128MB` window, bounded stdin/stdout/stderr pipes, existing parser record bound R and source staging/application work N.
-- Bound: streaming work O(C+B); parent retained memory O(inputWindow+outputWindow+stderrBudget+R) with pipe windows ≤256 KiB and stderr 8 KiB; child decoder memory is the configured 128 MiB plus observed fixed overhead. Decode budget default 256 GiB with at most one window overshoot. Termination uses a 2s SIGTERM grace then SIGKILL and an actual reap. No second decompression pass, full decoded spool or extra engine scan.
-- Growth check: `tests/zstd-input.test.ts` and `tests/cli-zstd.test.ts` run the installed zstd tool plus production intake/parsers for identity, late failure, cancellation and handle closure. Native import comparison remains the deferred controller suite. Decision: executable lookup is `--zstd-executable` (absolute), else `/usr/bin/zstd`, else `zstd` on PATH.
-
-### Interrupted source acquisition cleanup
-
-- Touches: the existing input iterator boundary, exact source lease and owned SQLite/file handles.
-- Bound: one cleanup request per unfinished source iterator, with one abort listener per pending input/cleanup operation. After cancellation, no further input reads or acquisition HTTP/public writes; source-controlled cleanup promises are observed for rejection without waiting for settlement. Owned descriptor reads and already-dispatched import writes still settle before their handles close. Valid input has no lifetime timer cap.
-- Growth check: `tests/cli-upstream-cancellation.test.ts` uses an actual CLI child with a nonsettling source return; `tests/cli-upstream-cleanup.test.ts` covers queued generator return, late rejection, prior-baseline preservation and same-process reacquisition. Existing `tests/concurrent-cli-owners.test.ts` and `tests/cli-file-admission.test.ts` retain ownership and descriptor-admission coverage. These are stack-free acquisition checks, with no native Auth/public success, PostgreSQL budget or wall-time performance claim.
-
-### Review and resume a bounded partial source reduction
-
-- Touches: the supplied current run, maintained seal counters, exact missing-record pages and their existing native removal commands and receipts.
-- Bound: existing current-run/source-key page seeks, at most 100 records per page and 300 current owned candidates per record, with the existing envelope and retry budgets. No global catalogue or receipt-history scan, new approval state or retry allowance is introduced.
-- Growth check: existing run-store and importer reconciliation growth cases retain their mass-loss and removal capture bounds. The native CLI journey above proves connected safety and recovery; it does not measure physical work at additional scales.
-
-### Adaptive writes
-
-- Touches: one width counter and prospective admission check per success; constant-time halving and insertion of the existing failed-write continuation. Existing wider cohorts drain without cancellation; no database reads or storage are added.
-- Bound: active plus paused records stay at most K (`recordConcurrency`, default 16, maximum 64), with queued continuations admitted before fresh records. Width-one failure is an early stop, while the independent logical-write allowance bounds partial overload even as successes restore width.
-- Growth check: `tests/write-width.test.ts`, `contention answered with retryable 503 narrows the write width and every record lands once`, `a single writer that still gets retryable 503 fails the run as before`, and `width grows back to the configured concurrency after successful writes` cover retained effects, live records, virtual waits and recovery.
-
-### Logical write retry admission
-
-- Touches: one in-memory attempt counter and existing bounded continuation per active/paused logical write, plus constant sanitized retry timing/refusal metadata. No new database tables, history reads, source scans or API effects beyond exact envelope replay.
-- Bound: <=K live records and queue entries with constant metadata each; <=8 transport invocations per logical write independently of input N or history. Each invocation retains its attempts/wait/deadline caps; its final hint is charged against that invocation's remaining wait/deadline allowance before a continuation may send. Physical sends <=8*(A+1). Explicit resume starts a later run allowance.
-- Growth check: `tests/logical-write-budget.test.ts`, `unrelated successes cannot refill a failing logical write budget` compares 16/64/256 successful neighbors, counts 401 renewal sends, preserves exact command identity and observes no duplicate effect; `prior completed effects and exact envelope identities survive retry exhaustion` checks durable resume. `tests/retry-after-layering.test.ts`, `retry-after survives the final transport response without an early coordinator send` and `oversized retry-after leaves durable unresolved work without retrying early` cover both overload statuses, seconds/date and cap refusal; `deferred cover polling cannot reopen a terminal retry refusal` covers the media pass. The full importer check preserves `importer-reconciliation-growth` at history scales 32/128/512 and `import-fetch-growth` at M=1/8/64; probe-count/cost assertions are unchanged.
-
-### Imports erasure disposition
-
-- Touches: importer SQLite state is keyed by source, external record, run or process ownership, with no platform account ownership relation. Candidate/media IDs, source projections, command bytes and receipts support source reconciliation. Operator-managed key files and in-memory bearers do not make those records account-owned payload; author, editor, uploader, delegate, operator and acting-human evidence in shared stores belongs to those stores' participants. See the [current inventory and delivery limits](../../docs/research/imports-audit/erasure-participant.md).
-- Bound: the required `none` disposition validates the native tombstone and makes one indexed coordinator point acknowledgement for `imports` within the 11-participant version-1 set, without reading or mutating importer SQLite. This storage rationale does not establish delivery. A future importer-owned personal field requires its producer to supply an indexed ownership relation or exact locator and bounded minimizer before `none` can remain valid; no JSON/name scan supplies that relation.
-- Growth check: `../kernel/test/access/growth-erasure-coordinator.test.ts`, `erasure acknowledgement (first) stays constant as accounts and completed erasures grow at three scales`, owns the coordinator bound. No new importer benchmark or zero-work measurement is implied. Native registration, delivery and replay require the participant acceptance; their reached evidence is recorded in the audit.
-
-### Measurement units and evidence
-
-Composed growth setup appends immutable PostgreSQL revisions to the actual selected subjects after native baseline binding; a smaller history target starts a new appended range without rewriting earlier revisions. Same-source SQLite run history and same-route unrelated subjects remain separate growth populations.
-
-The [remaining measurement inventory](https://github.com/rezics/rezics-next/blob/472aa311ffe270eca9f01f7d7bf633281c76f14d/docs/research/imports-audit/remaining-cost-unit-ports.md)
-and [VNDB binding inventory](https://github.com/rezics/rezics-next/blob/14659f678751fc153ab67752628b9d9efc32c15d/docs/research/imports-audit/vndb-tables-binding-seams.md)
-are dated source evidence, not passing executions or authority to amend frozen acceptance.
-Current table grouping still retains `id`, `olang`, `c_votecount` and `c_average`.
-The fourteen-case portable table binding remains absent: it needs acceptance-owner reconciliation of the stale
-whole-object statistic oracles, a production committed acquisition/baseline association, row-lifetime observation
-and closed execution-boundary evidence. Table `ready` is not a committed baseline; adapter Maps, guessed IDs,
-row-write formulas and zero-filled observations cannot supply these producers. Deliver the missing production
-producers with their caller in one implementation. The separate six-case native statistics binding must retain
-actual source-statistic API effects; neither local table success nor pure conversion proves those effects.
-
-- Touches: count SQLite executions (including controls) and returned rows, input bytes/chunks, requests and retained bytes under those names. Keep raw SQL, bindings, bound EQP, schema/index evidence, validators and combined-events assertions. Returned rows do not measure examined rows; unavailable SQLite buffers cannot be reported as `blocks: 0`. Preserve canonical native PostgreSQL capture unchanged, with PG-derived appended rows and calls-plus-plans as separate named checks, never SQLite totals. Counted client sends in `tests/importer-growth.test.ts` are distinct from real server capture in `../kernel/test/semantic/growth-sourced-writes.test.ts`; width-only observations and a shorter series do not prove full batch growth. Record actual physical populations separately from logical scales and independent payload axes.
-- Bound: retain every exact statement/page/byte formula in the Cost table below. In particular, run classify/prepare uses <=14+7q statements and <=15+7q touches plus two controls; acknowledgement <=1+8r point statements/rows plus two controls; finalize <=r+4 statements/2r+3 touches plus two controls. VNDB pages use 2+2r SELECTs, <=r+1 numeric rows and <=66r child/metadata rows plus one run row; internal ranges hold <=32 rows and public pages <=16. These touch bounds do not become measured examined-row counters. Native SQLite execution ceiling remains 1456+144I+32M and PG calls-plus-plans 4000+1000I+256M; allocated/retained byte ceilings remain 64*(I*65536+M*1024) and 4*(8*65536+M*1024). Source policies and all independent admission/byte limits remain unchanged.
-- Growth check: when porting old checks, explicitly carry row-like slack {absolute:2, relative:0.1}, byte/block-like slack {absolute:4, relative:0.5} and execution slack {absolute:0, relative:0}; counted defaults are zero. Preserve stricter explicit-zero checks and exact ceilings. For equally spaced ratio r and samples a,b,c, slack=max(absolute,relative*a); constant permits max(b,c)-a<=slack, linear permits c-b<=1.5*r*max(b-a,0)+slack, and logarithmic uses factor 2 instead of 1.5*r. Local helpers and artifacts establish neither native/API/growth acceptance nor physical zero I/O.
-
-### Credentials
-
-- Touches: one key file read at start; per renewal, one `POST /signin/key` and one `/token`.
-- Bound: at most ceil(T / 240 s) renewals over a run of duration T, plus one per 401. Nothing per record.
-- Growth check: `../../specs/imports-cli-credentials.test.ts`, test `a long import renews before expiry within the sign-in bound and every batch write succeeds`, on a virtual clock across three token lifetimes, counting sign-ins.
-
-### Import run
-
-- Touches: per record, the same requests as today, plus one batch for a cover whose media was pending. Per run, one pending-cover pass.
-- Bound: run time about ceil(N / K) x the record's request path x request latency, plus the media tail capped by `mediaDeadlineMs`. In-flight records at most K. Live state O(K) plus one page of 100 staged rows, independent of N and of history.
-- Growth check: `../../specs/imports-pipeline.test.ts`, test `virtual throughput at sixty four two hundred fifty six and one thousand twenty four keeps bounded live state`, at N = 64, 256 and 1024 on a virtual clock.
-
-### Import authored Bangumi episode members
-
-- Touches: one bounded authored episode table (cap 64) plus matching parent subjects, the existing seed/importer caller, current native scheme/concept point reads supplied by the operator, and ordinary public batch/fence/candidate commands. Disc is omitted from episode identity and normalized records.
-- Bound: O((P+E) log R) indexed importer work for admitted parents P and episodes E≤64, with the existing per-record converter, candidate (≤300) and journal budgets. Vocabulary bindings are re-read on each convert so unchanged source bytes cannot hide missing or retracted kind availability. Duration admits only explicit ISO-8601 or named second/minute/hour units as seconds (`wd:Q11574`); clock-style and unitless values stay unknown review gaps.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
-
-### Import authored VNDB release dates and completeness
-
-- Touches: the retained finite development selection (2 VNDB works), both actual ends of selected `releases_supersedes` rows, their release titles, work memberships and metadata, current native Release point reads, the existing seed/importer caller and ordinary cited graph proposal/journal path. A source release stays one native release; platform and language lists do not form a Cartesian product.
-- Bound: O((W+R) log S) indexed importer work for admitted works W and at most 64 release endpoints R, with supersession depth 8 and at most 128 relation rows. Within release fidelity, `vn`/`releases_vn` scans cap at 100,000/500,000 rows and 64 MiB per pass (at most two passes each); `vn_titles`/`releases_titles` cap at 500,000 rows/128 MiB; `entry_meta`/`releases` cap at 100,000 rows/64 MiB; `releases_supersedes` caps at 100,000 rows/16 MiB; platform/media tables cap at 500,000 rows/64 MiB. Each bound release UUID gets at most one current native read per seed attempt; reads are not cached across users or revocation. Existing per-record converter, candidate (≤300) and journal budgets remain. Completeness remains a review gap on `wdt:P31`.
-- Growth check: `tests/vndb-release-fidelity.test.ts` covers selected endpoint acquisition, directed source evidence, current native descriptor checks, and exact unknown-send retry; `test/cross-media-local-seed.test.ts` pins the finite default selection. Existing importer reconciliation and native sourced-write suites retain their units. The native acceptance and independent public publication remain integration-owned; this attempt does not establish either outcome or add a PostgreSQL growth series.
-
-### Publish selected-family VNDB release dates and states
-
-- Touches: the ordinary selected-family plan, already selected `releases` / `releases_vn` / `vn.devstatus` rows, finite reviewed-catalogue development-status subject IDs already published by `task seed:dev`, current native scheme/concept point reads for those codes, an optional UUID binding file, the existing seed/importer caller, and ordinary public batch/fence/candidate commands. Dates, TBA/unknown distinctions and development-status keywords are proposed on those native work/release identities. The standalone first-64 archive planner is not invoked.
-- Bound: one date or released-state row per selected release and one development-status row per selected work, inside the existing per-record vocabulary (64 rows), candidate (≤300) and journal budgets. Completeness stays a `wdt:P31` qualifier gap. TBA/unknown stay mapper `property_not_admitted` on `schema:keywords` because the current Release profile omits that property and the reviewed inventory has no released-state Concepts; a current development-status binding publishes work keywords. Decision: selected-family `schema:exampleOfWork` stays on the existing graph edge; the mapper still records the completeness gap without a second association. Decision: do not remap TBA/unknown onto `schema:creativeWorkStatus`. Decision: default seed rereads reviewed-catalogue development-status identities; a UUID file is an optional override validated by those same current reads.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. Local proof: `bun test services/importer/tests/showcase-vndb-releases.test.ts`. Native outcome `services/kernel/test/imports/showcase-vndb-releases.test.ts` is registered and not executed as a worker check in this attempt.
-
-### Import authored VNDB release titles
-
-- Touches: the same selected-family and date-fidelity operator entry points, plus `releases_titles` COPY rows whose exact release ID is already selected. Titles share `convertCrossMediaEntity`; they do not invent a second converter, identity or language-split release.
-- Bound: at most 64 title rows and 64 KiB per release, 64 names and 64 Romanized alternate names, within the existing per-record candidate and journal budgets. Nonselected owners, missing selected titles, overflow and duplicate associations are review gaps or converter refusals. Machine-translation flags are not a ranking rule.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
-
-### Import authored VNDB release original language
-
-- Touches: the same selected-family COPY set and seed caller, plus `releases.olang` on already selected releases. Language shares `convertCrossMediaEntity` with titles and identity; it does not split or merge releases, copy language onto a work, or invent platform language qualifiers.
-- Bound: one optional cited `schema:inLanguage` fact per release inside the existing 163-command, 64 KiB and 64-release caps. Inventory language codes canonicalise through `inLanguageTag`; COPY `\\N` and unmapped codes are review diagnostics only. No Concept reads or per-field authority queries.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
-
-### Import authored VNDB release barcodes
-
-- Touches: the same selected-family and date-fidelity operator entry points, plus the COPY `releases.gtin` cell on already selected releases. The barcode shares `convertCrossMediaEntity` and the existing public batch/facts group; it does not invent a second identity, uniqueness registry or SourceRegistration option.
-- Bound: O((W+R) log S) indexed importer work for admitted works W and releases R≤64, one optional `schema:gtin` fact per release inside the existing 163-command, 64 KiB, per-record candidate (≤300) and journal budgets. Unknown `0`, null, malformed, unsupported-length and unsafe numeric cells withhold only that fact. Unrelated releases are not scanned.
-
-### Import authored VNDB character names and qualified aliases
-
-- Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
-- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@14` makes newly supported rows available on refresh even when source bytes are unchanged.
-- Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
-
-### Import authored VNDB release minimum ages
-
-- Touches: the selected `releases.minage` COPY cell or supported Kana integer on the existing release payload, the shared entity converter and ordinary public batch/fence/candidate paths. The value is proposed only on that Release with the VNDB citation.
-- Bound: at most 64 selected releases and 32 characters for a retained malformed scalar, within the existing 64 KiB source projection, 300-candidate and journal budgets. Missing, null, malformed, nonintegral and out-of-range values withhold only this fact; no extra reads, authorization calls, release scans or work proposals are added.
-- Growth check: the focused importer case checks canonical COPY integers, all-ages zero, unknown/invalid values, same-byte refresh, changed age and stable release identity. The focused kernel case checks public acceptance/adoption, citation, facts fencing and idempotent reopen. No PostgreSQL growth series is added.
-
-### Import authored VNDB public tag associations
-
-- Touches: bounded `tags` (512) and `tags_vn` (256) COPY projections, matching VN title/revision rows, current native scheme/concept point reads, and ordinary public batch/fence/candidate commands through the existing seed/importer caller. User ids, notes and vote values stay unprojected.
-- Bound: O((W+T+A) log R) indexed importer work for admitted works W, dictionary tags T≤512 and associations A≤256, with at most 64 vocabulary rows per work and the existing per-record converter, candidate (≤300) and journal budgets. Bindings and admitted associations are re-read on each convert so unchanged VN bytes cannot hide a retracted Concept or a changed spoiler. Positive integer votes 1–3 with `ignore=f`, `lie=f` and applicable tags publish exact `schema:genre` facts; other associations stay review gaps without native ballots or aggregates.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
-
-### Default VNDB public-tag showcase seed
-
-- Touches: streamed `tags`, `tags_parents` and `tags_vn` COPY rows for the selected family, at most 1024 parent edges and 8 closure steps, dictionary ConceptScheme/Concept proposals through the existing coordinator and showcase journal, current disclosed scheme/concept reads, selected Kana `/vn` observations, admitted `schema:genre` and qualified weight proposals, plus their current native reads through the common publishShowcase accept/adopt/public-read path. Individual user ids, notes and votes stay unprojected.
-- Bound: O(file bytes) stream plus O((W+T+A+P+V) log R) importer work for selected works W≤96, closed dictionary T≤512, associations A≤256, parent edges P≤1024 and vocabulary records V≤512. Selected VN titles cap at 64 rows and the existing 64 KiB source-record budget per work. Kana requests at most 512 currently bound tags, with 64 KiB per response, 6 MiB total, 3.5 seconds per request and 120 seconds per run. Dictionary schemes publish before Concepts; current type/`schema:url`/`skos:inScheme` is reread before association admission. Deduplicated current reads stay inside their existing freshness lifetime. Unrelated VN/tag rows are not materialized. No catalogue scan or vote aggregate.
-- Growth check: `tests/showcase-tags.test.ts` covers selected and unrelated rows, selected-work overflow, unsupported/qualified associations, bounded Kana requests, exact response evidence, valid and withheld ratings, independent spoiler levels, changed-response refresh and stable identities. The connected native file `services/kernel/test/imports/showcase-tags.test.ts` is registered and controller-owned for integration.
-
-### Default Bangumi novel/book showcase seed
-
-- Touches: streamed `subject`, `subject-relations`, `subject-persons` and `person` rows for the documented Book Girl seeds (499, 26) and their 1002/1003 novel members, ordinary `convertBangumi` grain, type-1 author role 2001 only, existing Bangumi creator-credit preparation and current binding readers, the common journal/manifest/publisher, and graph delivery. Titles do not select. Manga, adaptations, translators, illustrators and same-title extras stay excluded. P2635 counts do not create volumes. Fresh seed publishes the author Concept and current `schema:Book` `schema:author` references without a manual binding file. BookSeries does not admit `schema:author`; those series rows stay explicit `property_not_admitted` gaps rather than a guessed `schema:contributor`.
-- Bound: O(file bytes) stream plus at most 32 volumes, 16 authors, one staff scheme, the selected author role Concept, and the existing relation/credit/journal budgets. Current type/`schema:url`/`schema:sameAs`/`skos:inScheme` is reread before author admission. Deduplicated current reads stay inside their existing freshness lifetime. Missing, wrong-type, retracted or unavailable author evidence withholds only that claim. Book author gaps stay in the books result so they do not fail Steins;Gate publication. ISBN, publisher and pages stay off Book/BookSeries. Unrelated source libraries are not materialized.
-- Growth check: `tests/showcase-books.test.ts` covers selection completeness, Book/BookSeries grain, membership direction, Japanese/Chinese names, default author publication, withheld non-author roles, retracted/missing author evidence, refresh identity and exact journal replay. The connected native file `services/kernel/test/imports/showcase-books.test.ts` is registered and not executed in this attempt.
-
-### Import authored VNDB producer parent and subsidiary rows
-
-- Touches: one bounded authored family plus `producers`/`producers_relations` COPY tables with the dump header `id pid relation`, referenced parent and subsidiary endpoints reachable under the existing family cap, the production cross-media dump reader and seed caller, and ordinary public batch/fence/candidate commands. Descriptions, language preferences, aliases, predecessor/successor and imprint codes stay omitted.
-- Bound: O((V+P+R) log S) indexed importer work for admitted works V, producers P and parent rows R within the existing relation cap, with sequential identity create-or-resolve then graph delivery. Mapping revision `producer-parent@1` is part of command identity so unchanged producer bytes cannot hide newly admitted endpoints. Local SQLite counts stay separate from native PostgreSQL measurements.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
-
-### Import authored VNDB staff aliases and credited roles
-
-- Touches: one bounded authored VN (cap 8) plus at most 64 staff/voice credits, resolved person and character endpoints, the existing seed/importer caller, current native credit-type scheme/concept point reads supplied by the operator, and ordinary public batch/fence/candidate commands. Personal lists, local votes and source aggregates are not written. Alias IDs resolve to staff identities before proposal; credited spelling is the note, otherwise that alias's name.
-- Bound: O((V+S+C) log R) indexed importer work for admitted works V≤8, staff S and characters C, with sequential entity-then-work conversion so person identities exist before credit proposals. Existing per-record converter, candidate (≤300) and journal budgets apply. Vocabulary bindings are re-read on each convert so unchanged source bytes cannot hide missing or retracted detailed-role availability. Unknown roles, missing aliases, non-person staff kinds and unadmitted credited spelling withhold the whole credit.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
-
-Selected-family planning records an invalid optional website as a bounded source gap and removes only that
-join from the converter input. Valid sibling links and the source entity remain eligible. The converter
-continues to enforce the same public HTTPS citation policy; no invalid URL becomes a native fact.
-
-### Carry exact VNDB credits through the normal selected-family seed
-
-Decision: Selected VNDB credit Concepts use exact source role codes as undetermined-language labels; local showcase stages them through the existing journal and withholds credits without current role or endpoint bindings.
-
-The normal cross-media seed uses the existing staff-credit coordinator for selected `vn_staff` and `vn_seiyuu` rows. Staff aliases resolve to the planner's actual staff owner, with credited spelling taken from the row note or that exact alias name. The existing vocabulary mapper emits precise `wdt:P3831` staff roles and qualified voice assertions with `wdt:P453`; every source credit table edge is withheld so an unavailable role or endpoint cannot fall back to an unqualified relation. Each assertion retains its exact table path, source row digest, VN revision and `vndb-staff-credits@1` converter revision. Local showcase review stages only the selected role scheme and Concepts through `ShowcaseJournal` and `publishShowcase`, recovers acknowledged UUIDs on restart, and supplies references only after the publisher's independent public read. The seed then rereads native and public subject type, URI and scheme membership before mapping. Ordinary imports remain proposal-only and may continue to use operator-supplied `--vndb-credit-bindings`; a local showcase run needs no generated UUID file. Missing, changed, refused and unavailable evidence stays distinct, and unrelated current roles continue independently.
-
-- Touches: selected-family work rows and at most 8,192 `vn_staff` / `vn_seiyuu` rows, same-owner `staff_alias` joins, selected Person and Character identities, the common native publisher, and current native/public subject reads. The staff-name worker retains preferred-name ownership; no alias becomes a person identity.
-- Bound: at most 64 credit rows per VN, 511 distinct role Concepts plus one scheme, and the existing 512 vocabulary-record, 100-command batch and 65,536-byte per-record limits. Each selected role is read once from the native API and once from the tokenless public API per preparation; no catalogue scan or label lookup occurs. Work remains O(selected credit rows + selected role codes + selected endpoints), with entity identities available before credit mapping.
-- Growth check: `services/importer/tests/showcase-vndb-credits.test.ts` covers journal staging, restart recovery, selected source endpoints, qualified roles and missing-role withholding. Existing importer reconciliation bounds remain; no new database growth claim is added. The native accept/adopt/current-read journey in `services/kernel/test/imports/showcase-vndb-credits.test.ts` and the real-data VN/person/character walkthrough remain controller-owned.
-
-### Identify an imported VNDB contributor by preferred and additional source names
-
-- Touches: the existing family operator and dump reader, pinned `staff` / `staff_alias` COPY headers (`id gender lang main description prod` and `id aid name latin`), one selected staff identity reached through a genuine credit, at most 64 admitted alias names, ordinary public batch/fence/candidate commands, and independent editor accept/adopt. `staff.main` selects the preferred label by exact `aid` and owner. Additional admitted names become further `schema:name` facts on that Person, with the preferred name first and distinct remaining names sorted by codepoint. Reordering equivalent COPY alias rows does not change the preferred label or proposal set. Another owner's matching spelling never merges. Exact credited roles and credited-as spelling stay with the staff-credit coordinator.
-- Bound: O(A) alias collection for selected staff A≤64 names, within the 64 KiB normalized entity projection and 65-command name mapping (identifier plus at most 64 names), below the existing 100-command batch. Mapping revision `cross-media-entities@4` is part of command identity so unchanged dump bytes can acquire newly supported name facts; unknown delivery replays the original envelope. Overflow, duplicate/conflicting alias keys and a preferred selector owned by someone else are gaps or rejected projections, never last-row choice.
-- Source types: both `staff.main` and `staff_alias.aid` are PostgreSQL integer columns decoded from COPY as decimal strings. Alias keys must be positive; `main=0` is the source's no-preference value.
-- Decision: if `staff.main` does not resolve to an admitted same-owner alias, keep the staff key as the bootstrap label and order remaining distinct names by codepoint.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series. Local proof: `bun test packages/conversion/tests/vndb-staff-names.test.ts services/importer/tests/vndb-staff-names.test.ts`. Native outcome `services/kernel/test/imports/vndb-staff-names.test.ts` is registered and not executed in this attempt.
-
-### Import authored VNDB contributor, producer and release websites
-
-- Touches: selected-family staff, producer and release owners, their `staff_extlinks` / `producers_extlinks` / `releases_extlinks` joins, the shared `extlinks` dictionary, the existing family seed/importer caller, and ordinary public batch/fence/candidate commands. No new profile, provider or link-fetching service. One dictionary row may serve several selected owners; unselected owners never become another entity's fact. Bangumi identity stays the independent VN cited-provider bridge.
-- Bound: at most 32 admitted links per owner, 1500-character public HTTPS websites, 64 KiB projection and the existing per-record converter, candidate (≤300) and journal budgets. Overflow, missing dictionary rows and duplicate joins fail with an honest source diagnostic. Mapping revision `cross-media-entities@4` includes each owner association and admitted URL in the digest so newly supported links cannot stay hidden behind unchanged source bytes. Decision: selected entity websites use the shared owner converter; only selected VN work links can supply the existing Bangumi identity bridge.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
-- Authored conversion and seed tests are local evidence. The kernel native file `services/kernel/test/imports/vndb-entity-websites.test.ts` is registered and not executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: `extlinks.value` for `site=website` maps to inherited `schema:url`; the table-level `schema:sameAs` heading supplies no identity authority.
-
-### Import selected VN work websites and cited Bangumi work identifiers
-
-- Touches: the verified VNDB COPY archive, selected-family `vn_extlinks` joins, only their matching shared `extlinks` dictionary rows, ordinary `convertVndb` records, the existing `CrossMediaGraph`, and current reads in `seedCrossMedia`. The generic local showcase manifest/publication worker remains the sole publication path; Web composes the resulting UUIDs and current fields.
-- Bound: each of the three selected franchise families is capped at 256 works (768 total) and each owner has at most 32 links; the existing 64 KiB VN conversion and public HTTPS URL policy still apply. Dictionary reads are restricted to selected work and entity link IDs. Each link carries its raw candidate digest, normalized semantic digest, upstream entry revision and `vndb-work-links@1` graph revision. Missing or duplicate selected joins/dictionary rows produce bounded gaps; missing or malformed required table/header fails with its VNDB table name. A `site=website` Bangumi subject citation may propose its exact numeric `wdt:P5732` value after a `facts` fence check. The VN and anime identities stay separate; source work relations remain their own graph facts.
-- Decision: only the existing `website` source-site admission plus a parsed public Bangumi `/subject/N` URL supplies the VN-to-Bangumi identifier proposal; character/person URLs and other websites stay ordinary URL assertions or explicit unsupported handoffs.
-- Growth check: selected joins and link candidates are O(W×L), with W≤768 and L≤32; dictionary materialization is O(K) for bounded selected keys. Current reads are claim-only and cached by acknowledged UUID for this operation. No per-field permission query or catalogue-wide scan is added.
-- Local proof: `services/importer/tests/showcase-work-links.test.ts` exercises real COPY/header-shaped selected-family planning and conversion. `services/kernel/test/imports/showcase-work-links.test.ts` exercises proposal, accept/adopt, current reads, refresh and a source facts fence; it is authored and remains deferred in this attempt.
-
-### Import run (processor)
-
-- Touches: per record, its conversion, its journal rows and its request bodies, each once. Every SQL text is prepared once per connection, the cover intent, batch and result bodies are validated once however many modules they cross (a small memory of accepted bodies, bounded in entries and bytes), a record's journals are written in one commit and its receipts in one commit, and a page of staged records shares one commit. Per record: at most five converter calls, 165 statements and 3 commits; no statement is prepared per call.
-- Bound: processor time per record constant in the dump size and in history; the only per-run work is schema, ownership and the first preparation of each statement.
-- Growth check: `tests/record-cpu-growth.test.ts` at 256, 1024 and 4096 records through the pipeline driver with zero latency, counting converter calls, statements prepared and executed, and commits instead of wall time.
-
-### Retain conversion diagnostics
-
-- Touches: one current staged record and at most D admitted diagnostic entries/bytes; existing source/generation keys and writer transaction. Application reconversion writes the same generation row identity for phase `application`.
-- Bound: O(D) extra validation and writes per converted record, bounded by derived per-record entry/byte ceilings (228 entries, 65,536 vector bytes); O(N*D) across N records with page-bounded memory. No reads of unrelated historical generations or PostgreSQL work added by local retention.
-- Growth check: `tests/conversion-diagnostics-growth.test.ts` at 32, 128 and 512 diagnostic-bearing records and separately 32, 128 and 512 unrelated history, counted local SQLite executions/returned rows plus raw EQP SEARCH evidence. The repository counted-scale helper requires equal ratios of at least four, so 32/64/128 cannot be admitted.
-
-### Retire superseded complete generations
-
-- Touches: indexed generation metadata, selected generation-local rows D, a bounded plan of at most 100 IDs and page size p≤100, current baseline/source-owner point reads. Shared acknowledgements, bindings and payloads are not enumerated or rewritten. Generation-local `run_disappearance_stops` and `run_disappearance_missing` rows are the same selected-generation children; mass-disappearance generations stay status-retained.
-- Bound: index seeks O(log H+p) per generation/table page, total O(D log H) pessimistically for row deletion with bounded transactions and memory O(p+100). Eligibility and count queries use source/run indexed prefixes; count cost is proportional to the explicitly examined capture. No whole-database scan, whole-key retention set, repeated OFFSET, shared payload anti-join or VACUUM. Schema migration (`run_retention_work`, `run_generation_seq`) is separate from steady-state deletion.
-- Growth check: `tests/retention-growth.test.ts` at 32/128/512 selected-capture rows, equal ratio four, with unrelated source and historical rows also growing. Counts actual visited statements and returned rows through shared SQLite instrumentation. Baseline/ack/binding/payload snapshots remain byte-identical.
-
-### Review and retire one unpublished capture
-
-- Touches: exact-source owner/baseline and selected generation metadata; its D capture-local staging/prefix/diagnostic rows; fixed delivered effect-pin tables queried by exact source/generation. H unrelated history is excluded.
-- Bound: eligibility uses indexed existence probes and bounded metadata, O(log H) seeks per fixed table; honest counts cost O(D), once per explicit review, not every deletion page. Cleanup O(D log H) pessimistically with page p≤existing retention cap and O(p) retained memory. No full-history hydration, OFFSET, whole-key sets or scan of shared payload bodies.
-- Growth check: `tests/staging-retirement-growth.test.ts` runs actual review/apply/interruption/restart at 32/128/512 selected staging rows with ratio 4 and independently increasing unrelated histories. Page work remains bounded; total work follows selected rows and network stays zero.
-
-### Review a stopped mass disappearance
-
-- Touches: existing regular-file state, source and generation point reads, optional stop-header PK, then one missing-identity keyset page L≤100 plus one continuation probe or one exact missing PK. No credentials, network, lease, threshold change or import.
-- Bound: header O(log R) point reads; page O(log M+L) PK visits and O(L) bounded output, L≤101 including the continuation probe; exact detail one indexed point read. Stored missing counts, no COUNT scan, OFFSET or current-membership reconstruction. Seal evidence capture is O(log N+M) `run_missing` visits and O(B+M log M) insertion inside the existing seal transaction.
-- Growth check: `tests/disappearance-review-growth.test.ts` at 32/128/512 prior identities with a fixed missing fraction and independently growing unrelated generations, first/middle/final pages and exact detail.
-
-### Review diagnostic pages and exact record
-
-- Touches: source/generation point reads, indexed diagnostic-bearing record page P≤100 and at most D bounded diagnostics per returned record.
-- Bound: O(log(H+N)+P*D) local work and O(P*D) bounded output/memory; exact record O(log(H+N)+D). No N/H aggregate scan, JSON payload reads of projections or schema writes on read.
-- Growth check: `tests/diagnostics-cli-growth.test.ts` at 32, 128 and 512 current diagnostic-bearing records and independently growing unrelated history, fixed page 20, first/next/end pages and exact-record lookup with production SQL instrumentation and EQP. The series uses ratio four because the counted helper rejects 32/64/128.
-
-### Skipped input accounting
-
-- Touches: one in-memory scalar increment for each ignored conversion during the existing acquisition; successful seal writes that scalar to the exact run-generation row. Resume makes one exact `(source,id)` metadata read before finalization, including when acknowledgements are already durable. Existing databases add the column with default zero, preserving prepared work and receipts.
-- Bound: O(1) retained state and one indexed point write/read per run; no source-wide count, history enumeration, ignored-key set, or second acquisition pass. Invalid or duplicate acquisition cannot publish a successful partial count. The scalar is a nonnegative safe integer.
-- Growth check: `tests/bangumi-scope.test.ts`, `mixed complete dump counts both exclusions on initial, unchanged and changed runs without false disappearance`, both durable-resume scenarios, and the directly executed CLI scenario assert exact accounting and no skipped-record effects at real SQLite state boundaries.
-
-### Operation bounds
-
-These bounds follow `src/` and `../../packages/conversion/src/`: R is stored records (including retained run history), B is binding/journal rows, M is one record/request/response's bytes, r is one page/batch's records, and k is rows changed; H is records already seen in a dump, C is a supplied chunk's backing bytes, S is supplied table/snapshot rows, D is disappearances, and q is commands for one record.
-An indexed point operation examines at most one matching row plus O(log R) or O(log B) B-tree navigation; a keyset range examines its bounded results plus that navigation, without OFFSET, history enumeration, or COUNT scans.
-Below, PK means the declared primary-key index, SELECT/INSERT/UPDATE/DELETE counts exclude connection-time schema/PRAGMA work, and each transaction adds BEGIN IMMEDIATE plus COMMIT (or ROLLBACK on failure); methods make zero kernel calls unless explicitly described.
-Run/record pages cap r at 100, VNDB pages at 16, internal VNDB ranges at 32, and command/result batches at 100; public run projections/envelopes and binding snapshots cap M at 65,536 bytes; `readDump`/`runDump` source records default to 256 KiB with a hard 1 MiB maximum, while source-record staging separately budgets serialized normalized records at 1 MiB plus a fixed wrapper; private record plans cap M at 2 MiB and q at 300 (classification alone caps q at 100); record metadata has fixed field byte limits of 64/512/256/64/128 for source/key/revision/digest/converter revision.
-Growth checks below cite exact existing titles only for the exercised paths; outcome checks cover limits and failure handling rather than every growth path.
-
-Decision: one Operation table lists each identity once; complete-generation then unpublished-staging retirement follow retain-diagnostics, matching the Cost subsections.
-
-| Operation                                                                           | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Bound                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Growth check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CLI entry and bounded input (`cli.ts`)                                              | Parses bounded argv and validates the exact origins before I/O; reads and imports one owner-only account key, opens one file or stdin with no-follow descriptor custody, owns bounded chunks, optionally gunzips Open Library/Wikidata dumps or decompresses VNDB/Wikidata zstd dumps through one owned child, and carries Open Library's native TSV date into record metadata. The `diagnostics` subcommand delegates before credentials or network construction. gzip is rejected for VNDB/Bangumi before credentials or state. zstd is rejected for Bangumi and Open Library at the same point; dump-set members stay none/gzip. | O(A + K) preflight with A ≤16 KiB and key K ≤16 KiB. One input read, O(C+B) gzip/zstd+decoder work; owned compressed and decoded windows ≤256 KiB from backings ≤1 MiB, plus one Open Library line ≤256 KiB+1. No whole-file materialization or source-key set; diagnostics ≤4 KiB. Credential network bounds are stated above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `services/importer/tests/cli-outcomes.test.ts`: real source pipeline outcomes. `specs/imports-cli.test.ts`: actual SQLite work stays fixed and streaming input grows linearly across three scales. `tests/diagnostics-cli.test.ts`: diagnostics routing, help and handle closure. `tests/compressed-dump.test.ts` and `tests/compressed-dump-cli.test.ts`: gzip admission, integrity and equivalent decoded identity.                                                                                                                                                                                                                                                                                                      |
-| Streaming gzip dump transform (`compressed-dump.ts`)                                | Sits below the common owned byte reader. Member-framed `createInflateRaw` validates CRC/ISIZE/EOF; concatenated members including an empty last member are one complete input; trailing non-gzip bytes fail. Never falls back to raw text. Reports compressed and decoded bytes separately.                                                                                                                                                                                                                                                                                                                                         | O(C+B) work; retained windows O(Wc+Wd) with Wc,Wd ≤256 KiB plus zlib's configured high-water mark; decoded budget default 256 GiB with at most one window overshoot. Memory independent of whole-file size. Codec buffering is the configured production high-water mark.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `tests/compressed-dump-growth.test.ts`: production raw and gzip paths at 32/128/512 records, ratio four, highly compressible input and a slow consumer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Streaming zstd dump transform (`zstd-input.ts`)                                     | Sits below the same owned byte reader. Spawns one trusted zstd child (`-d -c -M128MB --no-pass-through -`) and pumps descriptor-owned compressed windows to stdin. Concatenated frames, empty last frame and skippable frames are one complete input; raw passthrough and trailing non-zstd bytes fail. Capture waits for pump EOF, parser completion and child exit 0. An early parser stop still drains decoded stdout and joins the child. Reports compressed and decoded bytes separately.                                                                                                                                      | O(C+B) work; parent windows O(Wc+Wd) with Wc,Wd ≤256 KiB plus 8 KiB stderr; child window 128 MiB plus fixed overhead; decoded budget default 256 GiB with at most one window overshoot. One child per invocation. Termination grace 2s then SIGKILL and reap.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `tests/zstd-input.test.ts`: identity versus plain Wikidata, concat/skippable/empty frames, late trailing/truncated/checksum/window failure, decode budget, missing/incompatible executable, hang SIGKILL, stderr flood and replaced file. `tests/cli-zstd.test.ts`: admission, offline preview and plan-dir reopen.                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Retain conversion diagnostics (`run-store.ts`, `importer.ts`)                       | Validates the converter diagnostic array without accessors; INSERT the exact generation/record/phase identity; INSERT diagnostic-bearing review keys; UPDATE stored generation counts. Resume of the same digest/revision/converter identity is a PK seek with no second write.                                                                                                                                                                                                                                                                                                                                                     | Generation/entry/diagnostic PK exact seeks; ≤4 statements/point rows per record plus 2 transaction controls when folded into the staging commit; O(D + log R) extra work, D ≤228 and vector ≤65,536 bytes; no unrelated-generation reads.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `tests/conversion-diagnostics-growth.test.ts`: `staging diagnostic retention stays indexed as diagnostic-bearing records and unrelated history grow`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Retire superseded complete generations (`retention.ts`, `retention-cli.ts`)         | Read-only list/plan of one source's generations; apply deletes generation-local rows for at most 100 explicitly named complete non-baseline IDs. Point-reads current baseline, recoverable pin, sequence, present_count and owner; keyset DELETE pages over entries/envelopes/commands/diagnostics/aggregates/leftover staging checkpoint-prefix/disappearance stop-missing evidence/VNDB run tables. Shared acknowledgements, bindings and payloads are unread.                                                                                                                                                                    | Indexed source/run prefixes; O(log H+p) per page, p≤100, selected ≤100, memory O(p+100). COUNT/EXISTS cost is the examined capture. Crash cursor persists with each bounded page. No OFFSET, payload anti-join, VACUUM or whole-history scan. Schema discovery (`run_retention_work`, `run_generation_seq`) is separate from steady-state deletion.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `tests/retention-growth.test.ts`: `retention plan, apply and restart stay indexed as selected-capture rows and unrelated history grow` at 32/128/512.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Retire unpublished staging (`staging-retirement.ts`, `staging-retirement-cli.ts`)   | Read-only exact source/generation review; explicit plan; apply revalidates under conservative ownership, releases unpublished staging through a source-correct transition, then bounded selected-generation cleanup. Shared journals and the current complete baseline are unread.                                                                                                                                                                                                                                                                                                                                                  | Indexed existence probes O(log H) per fixed table; honest counts O(D) once per review; cleanup O(D log H) with p≤100 and memory O(p). No OFFSET, payload scan, VACUUM or network.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `tests/staging-retirement-growth.test.ts`: review/apply/interruption/restart at 32/128/512 selected staging rows.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Review diagnostic pages and exact record (`diagnostics-cli.ts`)                     | Opens an existing regular file read-only with `O_NOFOLLOW`; source/generation point lookup; indexed diagnostic-bearing keyset page; exact record PK prefix. Releases handles before rendering.                                                                                                                                                                                                                                                                                                                                                                                                                                      | 1 source + 1 generation point read, then 1 keyset SELECT of P+1 review keys and P diagnostic PK prefix reads; O(log(H+N)+P*D) local work, P≤100, output/memory O(P*D). No OFFSET, schema writes, lease, or projection JSON.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `tests/diagnostics-cli-growth.test.ts`: `diagnostic pages and exact lookup stay indexed as current omissions and unrelated history grow`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Binding inspection overview, page and exact request (`binding-inspection-store.ts`) | Opens an existing regular file with the shared read-only path guard; exact `binding_records` point read; optional current metadata/cover pointers and per-record group capacity; one selected journal family keyset page or one exact original-request PK. Releases handles before rendering. No `RecordBindings` constructor, WAL pragmas, lease or native call.                                                                                                                                                                                                                                                                   | Point reads O(log B); keyset page 1 SELECT of P+1 owner-prefixed rows, P≤100; body length is measured in SQL before load/hash; projection O(P·M) for M≤65,536. Memory O(P+M). No OFFSET, all-history COUNT, payload-history join or per-row table scan. Native writer paths unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `tests/binding-inspection-growth.test.ts`: production CLI/reader at 32/128/512 retained request rows, ratio four, plus independently growing unrelated sources, records and generations.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Dump lines and parsing (`dumps.ts`, `dumps-bytes.ts`)                               | Reads decompressed bytes; decodes/parses one line and yields duplicates unchanged to durable RunStore staging; no SQL/writes/API or retained native-key set.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | O(M) scanning, amortized copying and parsing per record line; O(C + L) live input, line buffers, decoded scratch and COPY framing metadata, independent of H. L is caller `maxRecordBytes` + 1, + 2 for Wikidata, or max(cap + 1, 65,536) for VNDB outside COPY; accepted records remain at most cap. Chunk backing is checked before scanning/copying/yielding: default 256 KiB, maximum 1 MiB, including tiny views of larger buffers. Unterminated tails reject after L + 1 examined bytes; no next chunk is pulled before yielding. Record caps default to 256 KiB and cannot exceed 1 MiB, independently of chunk backing and normalized projection budgets; total scanning is linear in supplied bytes and skipped lines have no count cap.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `tests/dumps-growth.test.ts`: `streaming parser growth follows supplied bytes with bounded per-record read-ahead`; `oversized unterminated tails abort with the same byte bound at every scale`; `one fixed admitted backing is charged in full and only the first record is visited before yield`. `tests/reader-bounds-outcomes.test.ts`: `all bounded reader outcomes pass with production parser`. Duplicate uniqueness is measured by the run-staging growth check below. `tests/record-caps-growth.test.ts`: `one-record acquisition has linear actual parser work outside database measures`; `record boundaries retain native framing overhead, UTF-8 accounting and upstream cleanup`.                            |
-| Bangumi pure conversion (`../../packages/conversion/src/bangumi.ts`)                | Reads supported native fields, normalizes source data, hashes the digest and returns proposals/metadata; zero SQL, network or persistent catalogue state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | O(M) work and logical retained return bytes per record, independent of unrelated catalogue/history size. Normalized source ≤64 KiB, ≤64 ordinary tags and ≤64 public metadata tags, ≤6 commands and one cover intent; summary Text snapshot ≤32 KiB, infobox ≤64 KiB characters.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `../../packages/conversion/tests/bangumi-growth.test.ts`: `fixed source conversion intercepts I/O at every unrelated population scale`. `../../packages/conversion/tests/logical-growth.test.ts`: `Bangumi: actual unrelated conversions leave anchor return bytes identical`; `Bangumi: whole-return logical bytes have at most linear incremental slopes`.                                                                                                                                                                                                                                                                                                                                                               |
-| VNDB pure conversion (`../../packages/conversion/src/vndb.ts`)                      | Reads supported native fields, normalizes source data, hashes the digest and returns proposals/metadata; zero SQL, network or persistent catalogue state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | O(M) work and logical retained return bytes per record, independent of unrelated catalogue/history size. Normalized grouped record ≤64 KiB, ≤64 titles, ≤32 links, strings ≤4096 bytes and ≤98 commands; no assets.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `../../packages/conversion/tests/vndb-growth.test.ts`: `fixed conversion performs zero SQL network or file I/O across unrelated populations`. `../../packages/conversion/tests/logical-growth.test.ts`: `VNDB: actual unrelated conversions leave anchor return bytes identical`; `VNDB: whole-return logical bytes have at most linear incremental slopes`.                                                                                                                                                                                                                                                                                                                                                               |
-| Open Library pure conversion (`../../packages/conversion/src/open-library.ts`)      | Reads supported native fields, normalizes source data, hashes the digest and returns proposals/metadata; zero SQL, network or persistent catalogue state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | O(M) work and logical retained return bytes per record, independent of unrelated catalogue/history size. Converter normalized record ≤2 MiB, prose ≤1 MiB, field arrays ≤64, combined author/work relations ≤64 and proposals ≤100; importer admission/staging independently enforce the smaller record/projection caps above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `../../packages/conversion/tests/open-library-growth.test.ts`: `fixed conversion touches zero SQL and network across unrelated catalogue and history growth`. `../../packages/conversion/tests/logical-growth.test.ts`: `Open Library: actual unrelated conversions leave anchor return bytes identical`; `Open Library: whole-return logical bytes have at most linear incremental slopes`.                                                                                                                                                                                                                                                                                                                               |
-| Wikidata pure conversion (`../../packages/conversion/src/wikidata.ts`)              | Reads supported native fields, normalizes source data, hashes the digest and returns proposals/metadata; zero SQL, network or persistent catalogue state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | O(M) work and logical retained return bytes per record, independent of unrelated catalogue/history size. Native supported record ≤128 KiB, ≤64 statements and terms, ≤15 references and ≤16 snaks per bounded collection, ≤100 commands; no assets or instrumentation metrics.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `../../packages/conversion/tests/wikidata-growth.test.ts`: `fixed conversion return is byte-identical after unrelated actual conversions`. `../../packages/conversion/tests/logical-growth.test.ts`: `Wikidata: actual unrelated conversions leave anchor return bytes identical`; `Wikidata: whole-return logical bytes have at most linear incremental slopes`.                                                                                                                                                                                                                                                                                                                                                          |
-| VNDB raw entry chunks (`vndb-tables.ts`)                                            | Admits full backing before scanning supported rows or discarding user/unknown entries; only supported entries allocate the 64 KiB row buffer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Shared chunk validator defaults to 256 KiB with a hard 1 MiB ceiling; the table loader further restricts configuration to ≤256 KiB. O(C + M) live input/row scratch (plus bounded spool pages above), with C bounded before retention/copy even for empty views; supported scanning is O(record bytes), ignored bodies count bytes without decoding. Total work is linear in admitted input, within archive admission limits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `tests/vndb-chunk-growth.test.ts`: `raw six-entry staging SQL stays constant across accumulated native keys and source history`; `native input visits grow linearly over 1/8/64 owned chunks with bounded admitted backing`; `late oversized known/header/ignored backings fail before byte access and erase staged rows`.                                                                                                                                                                                                                                                                                                                                                                                                 |
-| VNDB archive streaming and staging (`vndb-tables.ts`)                               | `begin`: INSERT run; `inspect`: SELECT run, both PK(source,run_id). Stage: keyed state UPDATE, stream six supported paths, INSERT spool before header or INSERT row + UPDATE run counters after header; drain spool via PK(source,run_id,table_name,sequence) and DELETE each consumed row; finish with keyed ready UPDATE (failure: failed UPDATE + cleanup).                                                                                                                                                                                                                                                                      | O(M) bytes scanned/decoded per supported row, raw row M ≤ 65,536 and serialized payload O(M); one fixed row buffer plus ≤32 spooled rows/decoded scratch and C backing bytes, O(C + 32M) live storage, no next chunk prefetch. Every entry is admitted before its body: total decompressed entry bytes default to 16 GiB (hard 64 GiB), entry count to 512 (hard 2048), including unknown entries and directories. Safe-integer declared sizes reserve aggregate bytes; actual bytes must match and reject over-declaration before scanning. Ignored entries are drained without decoding/row buffering. Full chunk backing is checked before retention or byte access on every raw entry, with no prefetch; `readArchive` additionally bounds tar framing and yields owned payload copies ≤512 bytes. Supported input rows capped by maxRows (default 2,000,000, maximum 10,000,000), VN records by maxSourceRecords (500,000/1,000,000). Direct row: 2 point statements; spooled row: 1 INSERT, then 1 range SELECT per ≤32 rows, 2 insert/counter statements + 1 DELETE per row. Rows touched O(k), cost O(k log R + supplied bytes); no prior-run scan.                                                                                                                                                                                                                       | `tests/vndb-tables-growth.test.ts`: `VNDB staging stays within its bound as R grows`. `tests/vndb-archive-limits-growth.test.ts`: `fixed admission rejection and ready staging keep exact-run SQL and live buffers constant over history`; `entry and byte populations stop exactly before the excessive body with linear admitted input`; `unsafe declarations, lying bodies and oversized backing close raw input without scanning or draining`.                                                                                                                                                                                                                                                                         |
-| VNDB validation, projection page and cleanup                                        | Validation walks each table's PK(source,run_id,table_name,id,child) keyset; each VN seeks titles + metadata, each child seeks its VN. Page: inspect, numeric `vndb_table_ids` range, then metadata/title PK seeks per VN. Cleanup: row/spool PK prefix range SELECT and exact DELETE per row.                                                                                                                                                                                                                                                                                                                                       | Validation: 1 SELECT per ≤32 rows (plus terminal ranges), 2 SELECTs per VN or 1 per child; O(S log R + SM), not history. Title seek LIMIT children+1 ≤65 detects overflow; children ≤64; metadata 1 row. Page: 2+2r SELECTs, ≤r+1 numeric rows plus ≤66r child/metadata rows and 1 run row, O(r log R + 64rM) bytes/work. Cleanup: 1 SELECT per ≤32 rows plus 1 DELETE per row, O(k log R + kM), ending each table with a short/empty page.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `tests/vndb-tables-growth.test.ts`: `VNDB projection stays within its bound as R grows`; `VNDB validation stays within its bound as R grows`; `VNDB cleanup stays within its bound as R grows`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Fetch one request (`import-fetch.ts`)                                               | Reads/copies request once without teeing its stream; checks retry identity, gets one token, sends exact buffered bytes; cancels retried response bodies, buffers the final response before returning; no SQLite.                                                                                                                                                                                                                                                                                                                                                                                                                    | O(M) amortized CPU/owned buffered bytes and O(aM) transmitted bytes; a defaults to 3, maximum 5 (unsafe writes 1), with ≤a−1 waits. Lower-only request/response caps default to 2 MiB/1 MiB; final response chunks also reject backing >1 MiB before copying. Each full producer backing buffer must be ≤2 MiB before retention or copy, including empty/tiny views and direct ArrayBuffer/view bodies; accepted chunks are copied and released, so live memory is O(M + C) with C ≤2 MiB, independent of chunk history. Known excessive request length rejects before pulling; overflow cancels without another pull. GET/HEAD and keyed POST retry transport/429/5xx; batch POST requires nonempty distinct command keys. Fallback min(1,000×2^(attempt−1),30,000) ms; waits cap at 30s each/60s total and the whole invocation at 120s, all lower-only. An advertised wait beyond budget returns the bounded response without shortening the wait; unrepresentable delays do likewise. Deadline/caller abort interrupts body reads, token, upstream, cancellation and sleep.                                                                                                                                                                                                                                                                                                   | `tests/import-fetch-growth.test.ts`: `real adapter sends two attempts and linear supplied bytes at M = 1, 8, 64`; `body cap counts UTF-8 bytes and stops streaming before reading the remainder`; `repeated 429 is capped, cancels only retried bodies, and returns the actual final response`; `HTTP-date Retry-After uses the injected clock and never shortens advertised waits`. `tests/http-bounds-outcomes.test.ts`: `all bounded HTTP outcomes pass with production fetch`. `tests/request-backing-growth.test.ts`: `fixed visible bytes survive 1/8/64 chunks and five exact adapter attempts at both entrypoints`; `oversized backing stops at the first offending pull, including empty views and later chunks`. |
-| Run start, capability, seal and checkpoint controls                                 | `begin`: SELECT source, UPSERT source lease/sequence, INSERT generation; busy: SELECT only. `activeRun`: source/generation join; `source`: SELECT source. `reopen`: SELECT generation + UPDATE lease. `abandon`: SELECT generation + UPDATE generation/source on release. `seal`: SELECT generation + UPDATE ready counters or two release UPDATEs; mass-disappearance adds one source point read, one `run_missing` INSERT...SELECT of M missing identities and one stop-header INSERT before release. Stored supplied/survivor/prior counters avoid aggregate scans. Failure rolls the seal back.                                 | PK source, PK(source,id) generation throughout; ≤3 statements/point rows per control operation (activeRun 1 statement/2 point rows), constant bytes, O(log R), k ≤2; mass-disappearance evidence is O(log N+M) index visits and O(B+M log M) insertion inside the existing seal transaction, constant application buffers, storage O(B+M) for generation lifetime. Every transaction adds 2 controls. The durable per-source run lease and atomic SQLite updates intentionally coordinate workers sharing one state file and its single writer; ImportSession guards live same-source coordinators before capability rotation. Separate imports scale through separate state files or independent sources; importer writes use the API, so platform bounds do not depend on this deployment boundary.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `tests/run-store-growth.test.ts`: `fixed run-state operations stay indexed at three scales` measures seal. `tests/run-store-disappearance-review.test.ts` and `tests/disappearance-review-growth.test.ts` measure evidence capture.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Review a stopped mass disappearance (`disappearance-review.ts`)                     | Opens an existing regular file read-only with the shared path guard; source and generation point reads; optional stop-header PK; missing-identity keyset page `LIMIT L+1` or one exact missing PK. Releases handles before rendering. No credentials, network, lease, threshold change or import.                                                                                                                                                                                                                                                                                                                                   | Header O(log R) point reads; page O(log M+L) PK visits and O(L) bounded output, L≤101 including continuation probe; exact detail one indexed point read. Stored missing counts, no COUNT scan, OFFSET or current-membership reconstruction. No native requests.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `tests/disappearance-review-growth.test.ts`: production reader/CLI at 32/128/512 prior identities, fixed missing fraction, unrelated generations, first/middle/final pages and exact detail.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Run stage one record                                                                | SELECT generation; INSERT OR IGNORE entry; SELECT member; optional survivor UPDATE member; UPDATE generation counters. Duplicate branch instead UPDATEs invalid flag. Stores bounded projection/row JSON and seen-generation marker. The entry PK(source,run_id,record_key) detects duplicate native keys; the invalid flag commits before throwing.                                                                                                                                                                                                                                                                                | Generation/entry/member PK exact seeks; ≤5 statements/point rows (duplicate 3) per record, +2 transaction controls per commit (the coordinator stages up to 100 records per commit; a record failing in the middle keeps the records before it and its invalid mark); k ≤3, O(log R + M) accepted bytes/work, O(M) live serialized state independent of H, no retained source-key array; H unique records occupy O(HM) durable staging bytes already included in R. Descriptor validation enumerates caller object own keys before rejection, so hostile object width is not bounded by the accepted JSON cap. Source-record mode serializes normalizedRecord with a separate hard 1 MiB budget, then adds the fixed sourceKind wrapper; public projection mode remains 64 KiB.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `tests/run-store-growth.test.ts`: `Run staging stays within its bound as R grows`. `tests/record-caps-growth.test.ts`: `larger sanitized record stage and exact key/page reads stay indexed as unrelated state grows`; `hard projection cap counts serialized record bytes independently of its fixed wrapper`.                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Run pages and stored projection/observation                                         | `pageStaged`: source/generation capability join + entry range; `pageAcknowledged`: acknowledged range; `pagePending`: generation SELECT + `run_envelope_pending(source,run_id,pending,record_key,envelope_index)` range. `pageVanished`: generation no-op capability UPDATE + `run_missing(source,active,seen,record_key)` composite range with generation and cursor-member PK subqueries. `key`: source, optional baseline entry, acknowledgement, optional generation and staged entry SELECTs; returns persisted row/projection JSON and omissions, without parsing a private command plan.                                     | Staged/pending/vanished: 2 statements, acknowledged: 1; staged ≤r+2 rows, pending ≤r+1, vanished ≤r+3 point/range touches including capability write. Entry/acknowledgement PK and envelope index keysets avoid scans; vanished skips survivors/inactive history through index predicates. `key` ≤5 point SELECTs. O(log R + rM) page work/bytes; key O(log R + M). Projection is persisted JSON, not a platform-wide read; no write except vanished capability check.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `tests/run-store-growth.test.ts`: `fixed run-state operations stay indexed at three scales` measures pending. `tests/run-store-growth.test.ts`: `Run projection page stays within its bound as R grows`; `Run vanished page stays within its bound as R grows`; `Run key observation stays within its bound as R grows`.                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Run classify, prepare and omission checks                                           | SELECT generation/entry; missing entry: SELECT member, INSERT entry, re-SELECT entry. First classification: SELECT acknowledgement, baseline-entry seek with source-pointer subquery; per command SELECT payload, optional INSERT payload, INSERT command; INSERT each split envelope; UPDATE entry/generation. Omissions: UPDATE entry, SELECT each saved command, optional UPDATE command/envelope, UPDATE remaining. Resolution when eligible: UPDATE entry, UPSERT acknowledgement, UPDATE generation.                                                                                                                          | All PK seeks: entry(source,run_id,key), acknowledgement/member(source,key), payload(source,command_key), command(source,run_id,command_key), source/generation as above. ≤14+7q statements, ≤15+7q point-row touches (baseline subquery adds one), +2 controls; O((1+q) log R + M) bytes/work, q ≤100 for classify or ≤300 for prepare, omissions ≤3, saved keys ≤300; private plans ≤2 MiB split into at most q envelopes, each ≤100 commands/65,536 bytes; replay avoids history scans and rejects changed bytes for a reused key.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `tests/run-store-growth.test.ts`: `fixed run-state operations stay indexed at three scales` measures one-command classification. `tests/run-store-growth.test.ts`: `Run omission check stays within its bound as R grows`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Run acknowledgement and finalize checkpoint                                         | Ack: SELECT generation, per result SELECT command; successful unfinished results UPDATE command/envelope, group by record for UPDATE remaining RETURNING and optional SELECT entry, optional three-statement resolution above. Finalize: SELECT generation, entry PK keyset page, UPSERT member per entry, then UPDATE generation cursor or UPDATE source pointer/count + generation complete.                                                                                                                                                                                                                                      | Ack ≤1+8r point statements/rows +2 controls; O(r log R + rM) work, response envelope ≤65,536 bytes. Finalize ≤r+4 statements, ≤2r+3 row touches, +2 controls; O(r log R + rM), durable cursor, no COUNT. Across pages finalization writes all S+D entries, including unchanged records: O((S+D) log R); each call remains independent of total history.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `tests/run-store-growth.test.ts`: `fixed run-state operations stay indexed at three scales` measures acknowledgement. `tests/run-store-growth.test.ts`: `Run finalize stays within its bound as R grows`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Record get, count, page and upsert (`record-store.ts`)                              | Get SELECT record; count SELECT stored count; page SELECT keyset range. Put: SELECT previous state, UPSERT record, optional UPSERT/increment or UPDATE/decrement count.                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Record PK(source,record_key), counts PK(source); get/count 1 statement/≤1 row, page 1/≤r rows; put 2–3 point statements/rows +2 controls, k ≤2. Metadata bytes constant, page O(r) bytes; O(log R + r) reads, O(log R) put, no count scan.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `tests/sqlite-growth.test.ts`: `actual record store uses indexed keys at three analyzed scales` measures get/count/page. `tests/record-store-growth.test.ts`: `Record upsert stays within its bound as R grows`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Binding lookup, candidate page and media projection (`record-bindings.ts`)          | `claim`: SELECT owner; `journal`/`mediaPending`: SELECT owner/key journal; `candidates`: SELECT current owner/group candidate keyset; `mediaIds`: SELECT binding then current cover-key media row. No retired-history enumeration.                                                                                                                                                                                                                                                                                                                                                                                                  | PKs: records(source,external_id); journal/media(source,external_id,key); candidates(source,external_id,field_group,candidate). 1 statement/point row per lookup; page 1 statement/≤r rows; projection ≤2 statements/point rows. O(log B + rM) page bytes/work, projection O(log B + M); r ≤100/group, reserved/current capacity ≤100/group and ≤300/record, M ≤65,536 per snapshot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `tests/bindings-growth.test.ts`: `Binding lookup stays within its bound as B grows`; `Binding candidate page stays within its bound as B grows`; `Media projection stays within its bound as B grows`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Binding prepare, acknowledge and taken-down write                                   | Prepare SELECTs binding/journal; create INSERTs binding; propose SELECTs group count, optionally INSERTs group, UPDATEs group/record counts; retract SELECTs candidate; finally INSERT journal. Ack SELECTs binding/journal; create UPDATEs binding; propose SELECTs/INSERTs candidate; retract SELECTs/DELETEs candidate and UPDATEs group/record counts; finally UPDATE acknowledgement. TakenDown: SELECT/UPDATE binding.                                                                                                                                                                                                        | Owner-prefixed PKs above plus groups(source,external_id,field_group), every statement exact keyed. Prepare create/propose/retract ≤4/7/4 statements, ack ≤4/5/7 (replay 2), takenDown 2; same upper bound on point rows, +2 transaction controls each. O(log B + M), constant k ≤4; one command per prepared envelope; no lookup of all journals.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `tests/bindings-growth.test.ts`: `Binding write stays within its bound as B grows`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Media prepare, accept and observe                                                   | Prepare SELECT binding/media, INSERT media, UPDATE cover_key (replay only two reads). Accept/observe SELECT binding/media then UPDATE receipt/status; accept replay or terminal rejected replay skips UPDATE.                                                                                                                                                                                                                                                                                                                                                                                                                       | Same owner/media PKs: prepare ≤4 point statements/rows, accept/observe ≤3, +2 controls; O(log B + M), constant k ≤2, snapshot M ≤65,536; no SQL polling loop, projection follows current cover_key, not all historical jobs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `tests/bindings-growth.test.ts`: `Media write stays within its bound as B grows`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Media resolution (`media-resolver.ts`)                                              | Snapshots/validates all supplied assets before effects; SELECTs claim and one cover fence, then sequentially seeks exact media journals, prepares/replays POST bytes and persists receipts/statuses via bindings; returns available URL-to-ID mappings and per-asset outcomes.                                                                                                                                                                                                                                                                                                                                                      | At most 64 distinct assets, each snapshot ≤65,536 bytes, depth ≤32 and ≤65,536 nodes; O(64M) retained input/results, O(64 log B + 64M log M) local work including canonical snapshot key sorting, independent of history. One fence plus ≤1 POST and ≤1 status GET per asset: ≤129 logical calls, one in flight and no inline polling waits. HTTP retries/deadlines apply only when the injected port uses the bounded adapter; arbitrary port latency and repeated resolve invocations have no aggregate deadline. Terminal saved statuses avoid polling; accepted receipts avoid POST replay; no source-baseline write.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `tests/media-resolver-outcomes.test.ts`: `all durable cover outcomes pass with production resolver`. A resolver growth check across retained media history is missing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Checkpointed staging resume (`staging-checkpoint.ts`, `run-store.ts`)               | Opt-in SHA-256 of complete local bytes, then one INSERT prefix row and checkpoint UPDATE per accepted record in the staging transaction; resume PK-seeks ordinal then record key. Seal deletes the checkpoint so it is not an application cursor.                                                                                                                                                                                                                                                                                                                                                                                   | Acquire O(B) hash plus ordinary O(B+N log M) decode/stage. Resume O(B) hash plus O(B) redecode, K PK seeks, convert/insert only N-K. Live memory O(max frame); no O(K) key set. Unrelated sources do not add prefix work. Native transport starts only after seal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Checkpointed VNDB table resume (`vndb-acquisition.ts`, `vndb-tables.ts`)            | Opt-in SHA-256 of the original regular file, then one transaction per accepted COPY/spool/header effect plus cursor. Resume re-hashes, replays ustar from the first member without tar/zstd seek, PK-validates the committed prefix and inserts only remaining rows. Ready captures drop the checkpoint and publish through existing materialization.                                                                                                                                                                                                                                                                               | Verification O(C); replay O(C+B); prefix checks and remaining inserts O(R log M) with spool pages of 32. Live memory one decoder/window, one capped row and existing table page. Native transport starts only after tables are ready. Unrelated acquisitions do not add prefix work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Coordinator acquisition and reconciliation (`importer.ts`)                          | Acquires source ownership, converts/stages the source once to EOF before effects, seals, keyset-pages staged/vanished/pending work, plans current owned candidates, dispatches saved envelopes and finalizes durable pages.                                                                                                                                                                                                                                                                                                                                                                                                         | Acquisition is O(supplied bytes + S log R), with O(M) per-record conversion and separate normalized staging budget; reconciliation/finalization visit S+D records, O((S+D)((1+q) log R + (1+q) log B + M)) including bounded command work. Pages retain O(rM), r ≤100, current candidates ≤300/record; no accumulated source-key set or catalogue/history enumeration. Result arrays default empty with streaming sinks; opt-in key collection caps at 10,000 total. Resume drains durable pending work before newer input; replay preserves stored command bytes and source revision.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `tests/importer-reconciliation-growth.test.ts`: `actual coordinator fixed work searches same-source keys/history at three scales; command work is linear`; `source acquisition is explicitly linear and reaches EOF once before any effect`. `tests/import-session.test.ts`: `uncertain run replays original source and command bodies before changed input is consumed`.                                                                                                                                                                                                                                                                                                                                                  |
-| Session ownership and recovery (`import-session.ts`)                                | Same connection supplies RunStore and RecordBindings; acquire SELECTs/upserts import_owners by source in an immediate transaction, checks Linux PID/boot/birth identity, then permits durable capability rotation; release verifies capability and deletes the exact owner.                                                                                                                                                                                                                                                                                                                                                         | PK(source) exact seeks: acquire ≤2 statements plus 2 transaction controls, busy ≤1 plus controls; reopen checks owner then reads active run and rotates its lease, ≤4 statements plus 2 controls; release 2 statements. O(log R) database work with constant identity bytes and no history scan; O(number of held sources) local ownership/close work. Live same-source owners exclude another connection; dead process recovery needs no timeout, while independent sources proceed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `tests/importer-reconciliation-growth.test.ts`: `actual coordinator fixed work searches same-source keys/history at three scales; command work is linear`. `tests/import-session.test.ts`: `same-file live owners exclude another connection while independent sources proceed`; `guard release permits capability rotation and fences old RunStore handles`; `dead process owner recovers immediately with birth identity and no lease timeout`.                                                                                                                                                                                                                                                                          |
-| Kernel writes and fence reads per record/batch                                      | `Importer` checks three exact tuple fences per planning/dispatch phase, prepares bindings and immutable RunStore envelopes before writes, then validates and persists receipts. Bootstrap sends one create; dispatch sends one saved envelope with fenced groups removed. No accumulated kernel subject/candidate enumeration; default Open Library references use exact local binding point reads.                                                                                                                                                                                                                                 | One batch call per envelope e, e ≤ q ≤300 per prepared record, each ≤100 commands/65,536 bytes; optional bootstrap adds one call. A planning pass reads ≤6 fences (unchanged: 3), dispatch adds 3 per envelope, so ≤7+4q logical calls for planning plus one dispatch pass. Default Open Library planning adds at most 64 indexed local claim reads for supplied relation keys; this also applies to unchanged records before the dependency signature comparison. Coordinator writes multiply each logical call by ≤8 bounded transport invocations, each with ≤A+1 physical sends (A ≤5, including one-time 401 renewal), and O(M) per-send bytes under the adapter caps above. Resume can dispatch pending work before planning and again afterwards; repeated run invocations have no lifetime retry cap. Current owned candidate reads hold ≤300 candidates, ≤100/group, using bounded local keysets; pages hold O(rM), per-record work O((1+q) log R + (1+q) log B + M + 64 log C), where C is indexed local claim count. One compact dependency signature row is retained per acknowledged Open Library record. The coordinator reuses journal bytes/keys, hashes planned identities into source-prefixed keys, and does not batch across records. Arbitrary injected media/identifier providers have no enforced call bound; kernel internal cost is outside these files. | `tests/import-fetch-growth.test.ts`: `network uncertainty preserves exact bytes, URL, method and caller headers`; `only POST with a valid caller Idempotency-Key retries arbitrary writes`. `tests/importer-growth.test.ts`: `client transport sends each supplied bounded batch once as input grows`. `tests/importer-reconciliation-growth.test.ts`: `actual coordinator fixed work searches same-source keys/history at three scales; command work is linear`; `source acquisition is explicitly linear and reaches EOF once before any effect`.                                                                                                                                                                        |
-
-When deferred cover recovery finds a currently bound candidate whose exact command key belongs to the run's immutable cover proposal, it retains that acknowledged candidate and omits both its retraction and proposal replay. Older candidates remain eligible for replacement; their retractions must still receive successful receipts, unless the cover group has a valid fence omission. This uses the existing bounded per-record candidate pages and adds no journal or database query.
-
-Bound: Run-store and resolver descriptor validation examines O(K) own keys supplied by the caller, the changes side of the O(changes × log stored N) criterion; this work is independent of stored R/B/H and catalogue/history. Direct in-process callers pay for the objects their code builds, so validation does not reject an arbitrarily wide host object in constant time or cap its pre-validation allocation. External source records are guarded at 1 MiB (256 KiB default), parsed API responses at 1 MiB, and public envelopes and binding snapshots at 65,536 bytes. Private record plans remain capped at 2 MiB and are not public envelopes.
-The concrete media resolver bounds calls and scheduled waits per invocation, while injected coordinator providers and repeated run invocations have no lifetime API-call bound.
-
-## Native scalar-feed operator evidence
-
-`services/kernel/test/imports/provider-cli-native.test.ts` calls actual `runImportCli` with an account key provisioned
-through native Auth stage/approve/apply, native Access/public grants, the existing kernel runtime and its real worker.
-The three independently named cases are:
-
-- `Bangumi account-key CLI imports refreshes reopens and safely stops the native scalar feed`
-- `Open Library account-key CLI imports refreshes reopens and safely stops the native scalar feed`
-- `Wikidata account-key CLI imports refreshes reopens and safely stops the synthetic native scalar feed`
-
-They pin `bangumi@3` (unversioned) and `open-library@3` (edition revision 11 → 12). Wikidata uses the actual
-exported converter revision, currently `wikidata-6`, with synthetic Q571 revision 24681012 → 24681013.
-Bangumi retains types 1/2/4 and complete skipped membership for 3/6. Open Library
-uses five-column TSV, an independent work and the pinned edition with unresolved native author/work keys. Each
-case checks actual tuple claims, retrieved cited candidates, immutable bootstrap bytes/keys/receipts, unchanged
-new invocations, a supported-value refresh, independent community adoption and preservation of the last completed
-baseline with zero public writes after malformed/truncated input and mass disappearance. Owned key/state files
-are mode 0600 on tmpfs; each CLI invocation and all fixture resources are closed.
-
-Run the native acceptance through the worker check queue; landing owns regression and root checks:
-
-```sh
-bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/provider-cli-native.test.ts
-```
-
-### Wikidata released time and quantity
-
-The ordinary JSONL registration uses the exported `wikidata-6` converter. It
-admits actual cited complete statements through public Definitions validation,
-then native writes recheck the bound holder and its current release. Signed partial
-Gregorian/Julian times retain timezone/uncertainty; quantities retain exact lexical
-amount, bounds and unit. Unsupported neighbors and incomplete exact measurements
-are withheld whole. No importer credentials gain acceptance or adoption authority.
-
-Unchanged reopen retains proposal identity. Converter revision refresh discovers
-supported facts on unchanged source input; changed components change the digest.
-Unknown delivery reuses sealed bytes and keys. Prior receipts and editorial
-selection survive omission and refresh; current authorization and tuple fences
-still govern replay and disclosure.
-
-- Touches: one selected JSONL record, its bounded claims, qualifiers and selected
-  references, local staging/journal point reads and ordinary native batch calls.
-- Bound: 128 KiB record, 64 statements, 100 commands, 15 source references per
-  claim and 16 snaks per group; local conversion is O(selected bytes). Native
-  calls retain existing batch, binding, receipt and fence bounds separately.
-- Growth check: existing converter/importer/native growth suites remain authoritative;
-  unrelated source and native population grows independently. Focused scenarios
-  `tests/wikidata-lossless-source-completion.test.ts` and
-  `../kernel/test/imports/wikidata-lossless-source-completion.test.ts` exercise
-  serialization, independent accept/adopt/read, refresh, lost responses and fences.
-  Authored native coverage is not an executed acceptance or upstream observation.
-
-Caller corrections retain exact values and public contracts: the edition type expectation changed from
-`schema:BookEdition` to the existing native observation `bf:Instance`; native URL/sameAs property expectations
-changed from command-input `{ id }` to public `SnakSchema`'s `{ id, data_type: 'url' }`. Candidate selection uses
-strict structural equality instead of JSON member order. Safe acquisition stops require zero Auth requests,
-matching lazy token renewal on the first public request. Converter observations use exact repository paths.
-The feed fixtures omit cover acquisition, retaining separate
-Bangumi CC-BY-SA summary rights and the omission of unknown-licensed Open Library prose. This proves the scalar
-operator entrypoint only; it does not add general SourceRecord metadata, words, form/classification, VNDB archive
-or statistics, or the deferred cross-surface discovery matrix.
-
-The separate [Bangumi summary and cover CLI caller](../kernel/test/imports/bangumi-cli-media-fixture.ts)
-connects the account-key entrypoint to the real media reservation/status API, registered jobs, editor selection,
-refreshed pixels and exact cover tuple takedown. Its [verification notes](../../docs/research/imports-audit/bangumi-cli-media.md)
-record the frozen original-byte assertion conflict and distinguish privately retained originals from reencoded
-public variants. A native pass is not claimed for that assertion.
-
-## Exact CLI acknowledgement interruption
-
-The [native account-key journey](../kernel/test/imports/cli-ack-recovery.test.ts) runs Bangumi and Open Library in
-one ordinary Auth/Access/public API world. It captures a committed bulk response and its native receipts, aborts
-before local acknowledgement, closes the CLI and reopens the same private SQLite/key paths. The new invocation
-drains the sealed generation with its original bytes and keys before a later invocation admits the supplied
-successor input. An independent community selection, immutable bootstrap/proposal/media journals and original
-native media objects survive. Revoking the Global grant denies replay with the exact old bearer without revealing
-stored success. See the [evidence and limits](../../docs/research/imports-audit/cli-ack-recovery.md).
-
-Run this focused native outcome through the managed check queue:
-
-```sh
-bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-ack-recovery.test.ts
-```
-
-This connected outcome adds no PG growth series; missing growth evidence is recorded as missing. Existing
-source, journal, media and transport limits and counted growth evidence retain their original scope.
-
-## Native file acquisition admission
-
-The [file journey](../kernel/test/imports/cli-file-admission.test.ts) runs ordinary
-`--dump <path>` acquisition for all four sources through real account-key Auth,
-Access and public writes, including the registered media worker. Each source
-completes an import, rejects malformed replacements without Auth/public effects
-or changes to the completed baseline and immutable receipts, then accepts a valid
-successor on the same SQLite state. VNDB reads ustar through `readArchive` rather
-than injected entries. Invalid archive staging exits 2, matching scalar input
-admission; interruption still exits 130. Files and SQLite close on either path.
-The [evidence notes](../../docs/research/imports-audit/cli-file-admission.md) describe
-captured anchors and limits. This caller adds no growth measurement or input cap.
-
-## Rejected cover and valid successor through the CLI
-
-Keep the same source and SQLite state after a corrupt cover is rejected. Metadata import can complete while
-the rejected cover remains explicitly terminal in the media journal and native status. The importer supplies
-no converter media mapping for that object and publishes no cover attachment. Reopening the same input does
-not submit another media job or fetch that URL again, even if the provider has replaced its bytes. A changed
-source cover URL creates a distinct request and media object; only actual availability permits a cover proposal.
-An editor still accepts and selects that proposal through the ordinary API. Cover credit remains
-`LicenseRef-unknown`, independently of the provider's metadata rights.
-
-The [frozen native outcome](../kernel/test/imports/cli-rejected-cover-recovery.test.ts) now has a connected
-account-key caller for two independent records, Bangumi JSONL and an Open Library edition TSV, in one native
-Auth/Access/worker world. It observes corrupt-image rejection, same-state reopen, a genuinely changed source,
-private original equality, encoded AVIF/WebP variants, public selected media and download decisions, immutable
-old journals/receipts, and an independent contributor's adopted title. Managed acceptance passed at
-`94e003a486ee861a4d5a71083cda671f786bb7b9`: one native case, two provider children, six successful CLI
-invocations and 820 assertions. See the [evidence record and limits](../../docs/research/imports-audit/cli-rejected-cover-recovery.md)
-for the raw log, actual source/converter/bundle revisions and receipt anchors. This is scoped native evidence;
-integration, promotion and the broader consumer matrix remain open.
-
-```sh
-bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-rejected-cover-recovery.test.ts
-```
-
-## Concurrent ordinary CLI operators
-
-Use the same `--state` path for independent configured `--source-alias` feeds. A live CLI owns its exact alias
-while acquiring input, including while stdin waits before EOF. Another CLI for that alias exits 5 before Auth
-or public writes; a different alias can seal and publish in the same SQLite file. Cancel the owner through
-SIGINT and reopen with the same state and complete source input. Source claims, own-reference resolution,
-receipts and tuple fences remain confined to their configured alias even when native provider keys coincide.
-
-The frozen [concurrent native journey](../kernel/test/imports/concurrent-cli-owners.test.ts) binds actual concurrent
-`runImportCli` calls to one native Auth/Access/application/worker world. Its [evidence description](../../docs/research/imports-audit/concurrent-cli-owners.md)
-covers held acquisition, same-alias refusal, independent publication, cancellation/reopening, immutable prior
-identities/receipts, and exact-tuple fence visibility. The importer-local companion proves only pre-effect
-ownership and cleanup. Native execution and growth evidence are separate; this caller introduces no growth series.
-
-During incomplete acquisition, interruption requests upstream iterator cleanup once and releases the actual
-source guard even if that cleanup never settles or is queued behind a stalled read. Late read/cleanup rejection
-is observed. The CLI reports exit 130 after closing its owned handles, so a same-state rerun can acquire the
-source normally. Incomplete input cannot seal a successful or empty dump, advance the prior completed baseline,
-or start Auth/public effects. Ordinary EOF and parser-error cleanup retain their existing behavior; cancellation
-can interrupt a pending source cleanup. Owned file reads and already-dispatched writes settle before SQLite
-and descriptor closure. This boundary does not detach ingestion or change post-dispatch authorization cleanup.
-The frozen [CLI child](tests/cli-upstream-cancellation.test.ts) proves the nonsettling-return acquisition case;
-its timeout only bounds a failing test, and establishes no performance or native-stack claim.
-
-## VNDB durable table materialization
-
-`VndbMaterialization` is the CLI's production facade for validated VNDB table
-entries and ustar archives. It stages the complete generation before ordinary
-`Importer.runRecords` publication, enumerating at most 16 grouped records per
-page. `baseline(key)` reads the completed RunStore row and its durable acquisition
-link; it does not maintain a second record baseline. Failed acquisition cannot
-resume publication or replace that baseline. Unchanged publication retains the
-original acquisition, while interrupted sealed work resumes with its own original
-acquisition even if a subsequent invocation supplies a different archive.
-
-The staged `vn.alias` field is newline-separated text and survives COPY
-materialization into the pure converter. Nonempty lines become undetermined
-alternate names; alias changes and removals participate in the ordinary
-importer's source digest, candidate reconciliation and durable replay. The
-converter caps a record at 64 alias lines and 162 commands; the importer sends
-those commands in its existing 100-command batches.
-
-The native materialization acceptance binds all fourteen portable table outcomes
-and the account-key CLI publication/reopen/late-invalid journey. Its local SQLite
-row, byte, execution and EQP evidence does not add canonical server growth claims.
-See [the materialization evidence](../../docs/research/imports-audit/vndb-materialization-native.md).
-
-## VNDB and Wikidata sealed CLI recovery
-
-The [connected operator journey](../kernel/test/imports/cli-sealed-source-resume.test.ts) captures a committed
-response lost before local ACK, closes all CLI handles and reopens the same private state/key paths. VNDB
-validates every supplied archive before recovery: malformed replacement input rejects with status 2 and no Auth
-or public effects; valid replacement input permits the original sealed generation to drain with its original
-acquisition and native revisions. Wikidata drains sealed work without reading replacement stdin; the same
-malformed stream is admitted and rejected only on the next fresh invocation. A later valid invocation publishes
-the successor for each source, preserving subject identity, original receipts and independent Context selection.
-VNDB retains its seventh statistic scope and exact statistic receipt identity.
-
-The managed native acceptance passed at `fc2509fd177143bafb3a4f598bb0db43c55337a8`: one frozen test, two source
-children and 1,686 assertions. The [receipt and limits](../../docs/research/imports-audit/cli-sealed-source-resume.md)
-record exact log, source revision/digest and original receipt anchors; promotion remains separate. Source bytes are the pinned
-VNDB COPY/header files in real ustar and Wikidata `Q571` in streamed JSON-array framing. This connected outcome
-adds no growth series and does not close general source metadata or discovery work.
-
-```sh
-bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-sealed-source-resume.test.ts
-```
-
-## Mid-run bulk authority loss
-
-The ordinary CLI retains its completed baseline and original sealed generation when native bulk authority is
-revoked between writes. It exits 4 after authorization denial and closes its handles. Restore the existing grant
-and reopen the same state to drain pending prepared bytes and keys; a distinct supplied successor is acquired on
-the following invocation. Earlier authorized transactions remain committed. Receipt replay checks current Access
-before revealing stored success, including replay with the original bearer.
-
-The frozen [native journey](../kernel/test/imports/cli-midrun-authority-resume.test.ts) binds seventeen changed
-Bangumi records after a metadata-only baseline, real account-key Auth, native Access/public writes, the media worker
-and an independent community selection. It schedules actual outgoing requests before forwarding to Access and
-retains exact native denial bodies. See [scenario, evidence and limits](../../docs/research/imports-audit/cli-midrun-authority-resume.md).
-The corrected managed native run passed one test and 4,330 assertions at
-`72f22215978b429a77e33a34e0dd7e75d909d787`, with no TypeScript diagnostics. The evidence notes retain its raw
-receipt and the earlier fixture typing correction. This proves the connected journey; main promotion and native
-growth evidence remain separate.
-
-```sh
-bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-midrun-authority-resume.test.ts
-```
-
-This connected outcome reuses existing input, envelope and retry bounds and adds no growth series. Original native
-receipts, bootstrap/proposal/media journals and acquired objects remain independently observed recovery anchors.
-
-## Explicit reviewed vocabulary and Bangumi lookup
-
-`seedReviewedCatalogue({path, port, seeds?, signal?})` in
-[`reviewed-catalogue.ts`](src/reviewed-catalogue.ts) is the one trusted operator
-producer. Its finite authored input is the four records in Definitions'
-`reviewed-vocabulary.json`, including the already-reviewed Bangumi Episode type
-scheme and its seven Concepts. Scheme self records use the empty literal member;
-the canonical member is the exact reviewed QID. These authored keys identify
-seed owners, never provider records or derived UUIDs. Native create-or-resolve
-receipts supply every subject/candidate ID.
-
-Run deliberately with an already authorized ordinary operator account:
-
-```sh
-bun services/importer/src/reviewed-catalogue-cli.ts \
-  --state .temp/reviewed.sqlite --api https://api.example.org \
-  --auth https://auth.example.org --account-key .temp/operator.jwk \
-  --account <account-uuid> --client <registered-client-id>
-```
-
-The account needs genuine current Global trusted batch, create/propose and
-editorial acceptance/adoption authority and matching OAuth scopes. The tool
-grants nothing. `task seed:dev` invokes this same publisher as an explicit local
-showcase step, using its separate persistent journal and passing returned native
-subject IDs directly to the Episode adapter. Ordinary provider imports never
-invoke it. Use the same state file for subsequent ordinary Bangumi imports; the
-platform seed namespace stays separate from provider namespaces. No
-SourceRegistration option or parallel registry exists.
-
-Before effects, the entire exact inventory passes descriptor-safe preflight and
-the existing RunStore acquisition/seal policy. The unchanged RecordBindings
-journal retains original native claim/proposal bytes and ACKs. Every owner's
-real Source metadata CAS ACK precedes its bootstrap, including response-loss
-recovery. The sealed inventory deterministically reproduces the same metadata
-bytes/key before a claim exists; after binding, the existing metadata journal
-retains the genuine receipt. Changed sealed input or unrelated editorial heads
-are refused. Acceptance and adoption use freshly read native heads and genuine
-returned receipts, with current authority required on replay.
-
-Seed alias is exactly `rezics_reviewed_vocabulary`. External IDs are `v1:` plus
-unpadded base64url UTF-8 canonical JSON of `[schemeURI, exactLiteral]`, without
-normalization or identity hashing. The raw ConversionContext key remains UTF-8
-JSON, not base64url. Both actual external ID and complete public command key are
-checked before effects. The pinned member produces 82 ASCII external-ID bytes
-and a 174-byte complete key with the existing 64-hex command suffix; oversize
-identities are rejected, never shortened. Existing provider aliases/QID keys stay
-unchanged. Reviewed licence metadata covers only its explicitly attributed
-projection; authored scheme metadata deliberately has no inferred licence.
-
-`createReviewedCatalogueLookup(bindings, port)` implements the existing
-`ImportIdentifierLookup`; the ordinary Bangumi CLI installs it by default. It
-reads four current original subjects, their fact fences and six bounded native
-candidate slots (limit 100 each), checks scheme membership, exact external
-identity, distinct canonical correspondence, accepted selected unretracted
-provenance and current disclosed graph. Redirects, hidden/retracted/unselected
-subjects or candidates, foreign repair, Access refusal, missing seeds and
-unavailable native reads produce no mapping. A local journal ID is only a read
-anchor. Retained Context adoption alone is insufficient after retraction.
-
-Lookup makes four fence reads, four subject reads and six candidate-list reads
-for the fixed reviewed inventory; no label search, population scan or extra
-source probe occurs. Pure conversion bounds are twelve projected fields,
-64 public metadata tags of 200 characters, six commands and the existing 64 KiB
-projection guard. The native producer/consumer cases and geometric 64/512/4096
-lookup case are authored in Kernel's existing native fixture. Native outcomes
-remain integration proof; this source delivery permits local typing only.
+The staged descriptor is at most 8 KiB. An ordinary run adds at most one new metadata intent per bound record; an unresolved old intent followed by a changed descriptor may require two. Each coordinator attempt is bounded to eight attempts and each HTTP call to five attempts. These bounds are separate from semantic, source-statistic and media envelopes.
 
 ## Registered source vocabulary mapping
 
-Bangumi and VNDB registrations append bounded proposals from the shared pure
-vocabulary mappers when a trusted conversion caller provides normalized graph
-rows and released bindings in `ConversionContext.sourceVocabulary`. The graph
-owner supplies row traversal and resolved identities; the importer registration
-does not search for endpoints, create subjects or resolve labels. Mapping output
-uses the existing source alias, revision, digest, licence attribution and
-ordinary batch-write path. Mapping-specific command-key revisions prevent a
-sealed command from being replayed with changed statement bytes.
+The importer supplies already normalized graph rows and current public bindings to the pure mapper. The graph owner selects and traverses source rows, creates or resolves native identities and provides exact bindings. The mapper does not follow IDs, search labels or infer canonical equivalence. It verifies the current released descriptor, source path/code, target type, exact property and qualifiers. Missing, withdrawn, concealed, wrong-type or unavailable bindings yield addressable gaps; they do not fall back to a similarly named Concept. A valid row is independent of a malformed neighbor.
 
-The selected-family VNDB staff-credit coordinator supplies genuine `vn_staff`
-and `vn_seiyuu` rows to the same mapper after resolving same-owner alias IDs to
-their actual Person UUIDs and retaining exact Character UUIDs. Local review
-publishes selected credit-type and blood-type requirements through the existing
-showcase journal and publisher. Native and public current reads must agree on Concept
-type, URI and scheme membership before a qualified assertion is built; missing
-or unsupported cases remain omissions without an unqualified graph fallback.
+Bangumi and VNDB vocabulary rows are capped at 128 per call; the mapper uses only remaining room in the 100-command batch after ordinary proposals. Scheme and Concept binding collections are bounded, unknown subtrees are not traversed, and diagnostics are finite. Native proposals remain separate from current reads, acceptance, adoption and public return.
 
-Exact unresolved values and descriptor admission failures are returned both as
-`sourceVocabularyGaps` and structured conversion diagnostics, including provider,
-source path, code or endpoint, required profile and property where applicable.
-VNDB release supersession uses the released `rezics:releaseSupersedes` binding for
-the exact outgoing COPY row `releases_supersedes.id -> rid`, after bounded selected
-endpoint acquisition and current native Release descriptor checks. Both release
-identities and field citations remain in the graph proposal evidence; chronology,
-organization replacement, reverse rows and missing rows do not imply supersession.
-Unknown native sends retain their sealed command and key for retry. Proposal
-acknowledgement does not establish independent public selection or publication.
-Decision: follow only authored outgoing `id -> rid` rows reachable from release
-memberships of the finite selected work family; do not infer inverse or date/title
-replacement edges.
-The production release-fidelity operator now supplies `release-date`, `development-status` and `release-work` rows
-from authored COPY `releases.released`, `vn.devstatus` and `releases_vn.rtype`.
-The default selected-family seed uses the same coordinator through
-[`showcase-vndb-releases.ts`](src/showcase-vndb-releases.ts): it collects facts
-only for already selected works and releases, maps needed development-status
-codes onto current reviewed-catalogue subject IDs, rereads exact URI/type/inScheme,
-and composes those bindings with any sibling adapter without overwriting prior
-rows. Optional `--vndb-release-state-bindings` is a UUID hint file validated
-against that same current read; it is not required for `task seed:dev`. The
-ordinary CLI runs that adapter, then the existing public-tag importer and the
-common showcase publisher, and writes release facts, publicTags and publication
-results into the seed result. Work and release proposal acknowledgements stay on
-the existing manifest. TBA, unknown and absent release dates remain distinct
-outcomes; date precision is never guessed. Completeness
-stays a `wdt:P31` qualifier gap on the release-to-work fact. These proposals do
-not contain VNDB votes, personal lists or score-derived facts. Decision: COPY
-integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to TBA and 00/99 omitted
-components to year or month precision. Decision: default `schema:exampleOfWork`
-stays on the existing graph edge; the mapper records the completeness gap without
-a second association. TBA/unknown stay mapper `property_not_admitted` on
-`schema:keywords` because the current Release profile omits that property and the
-reviewed inventory has no released-state Concepts; a current development-status
-binding publishes work keywords. Decision: do not remap TBA/unknown onto
-`schema:creativeWorkStatus`. Decision: default seed rereads reviewed-catalogue
-development-status identities rather than inventing a second state publisher.
+### Bangumi TVAnime websites and work evidence
 
-The default selected-family path also reads `releases_platforms` and
-`releases_media` only for admitted release IDs. It prepares stable source-scheme
-and source-code Concept dependencies in the same journal, submits their source
-evidence to the existing manifest/publisher, and rereads current native type,
-URI and `skos:inScheme` before the release mapper admits each independent
-association. Duplicate source rows collapse; unsupported, conflicting, overflow
-or withdrawn dependencies remain bounded omissions. The release projection
-includes exact admitted associations so a changed dump refreshes through the
-existing converter digest. Decision: selected release platform and medium
-Concepts use stable VNDB code URIs and exact source codes as English labels;
-association admission requires current native type, URI and `inScheme` readback.
+For the exact type-2 TVAnime profile, one literal official-site value produces schema:url; ordinary link values produce cited descriptive wdt:P973 facts. Copyright text is a separate cited notice, not a reuse licence. URL bytes are retained, links are not fetched, and a malformed occurrence does not withhold an independent valid value. The parser accepts only the pinned fields and bounded plain scalar/list forms.
 
-Selected-family `chars` rows already reach `convertCrossMediaEntity`. Revision
-`cross-media-entities@4` publishes admitted height and weight from those COPY
-cells as exact native quantities with source units and citations. Appearance
-selection still owns identity; measurement cells never authorize acceptance.
-The dump COPY header is the public `chars` columns; height unknown is `0` and
-weight unknown is `\N`. Exact `0` is never a measured zero. Those cells enter
-the entity digest, so a mapping that newly admits them refreshes without a
-revision bump.
-Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
-exact `0` is never a measured zero.
+### Bangumi Book and Character mapping
 
-selected release payload and convert them through `cross-media-entities@14`.
-Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
-their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
-latin on this table is unadmitted. Date/status/completeness remain independently
-owned. Decision: label order is language then text; `mtl` never ranks names.
+Book template names require the selected Book profile and exact pinned Book header. Chinese title and aliases retain their admitted language meanings; they do not replace TVAnime alias semantics. Book versus BookSeries follows the existing source-profile mapping, while manga remains Book. ISBN, publisher, pages and volume counts do not create Edition facts on the work. Character identity, kind, appearance, source names and explicitly unit-bearing physical measurements stay under their own mapping contracts; no missing unit or unbound blood-type Concept is guessed.
 
-The production release-language operator
-[`vndb-release-language.ts`](src/vndb-release-language.ts) reuses the selected-family
-planner and `convertCrossMediaEntity`. `releases.olang` is a cited literal, not a
-Concept binding. Title language never supplies the whole-release fact. COPY `\\N`
-and codes outside the inventory language enumeration withhold only that statement.
-Decision: a later absent or unsupported `olang` does not retract an independently adopted language.
+### Bangumi Game names, dates, environment and genres
 
-Those callers also keep the COPY `releases.gtin` cell. Admitted 8 or 12–14 digit
-strings become one cited `schema:gtin` fact on the same Release; dump unknown
-`0`, null, malformed, unsupported-length and unsafe JavaScript numbers withhold
-only that field. Decision: COPY bigint decimal spelling is preserved; `0` is
-unknown; leading zeros are not invented; barcode equality does not merge
-subjects.
-The release-fidelity operator also reads `releases_platforms` and
-`releases_media` for its selected release keys. Converter `@7` includes these
-child associations in the sanitized digest, so unchanged source bytes can gain
-their proposals through deliberate refresh. It proposes every supported,
-reviewed current platform Concept on `schema:gamePlatform` and medium Concept on
-`wdt:P437` on the same Release. Duplicate associations collapse, unknown or
-unbound codes retain bounded gaps, and `qty` is ignored. The source-specific
-schemes are described in the conversion contract.
+Only the exact type-4 Game template supplies Game infobox fields. Chinese name is zh; aliases are und. Platform and engine values require exact reviewed Concept bindings. A complete scalar genre occurrence remains one literal and is never split or translated. Player counts accept only the complete admitted positive integer or range form. Game publication dates retain the cited source date; unsupported, malformed or uncertain dates are omitted. Names, date, genres, environment, player count, websites and cast remain independent fields.
 
-- Touches: selected release keys, the two extracted COPY child tables, at most
-  64 schemes/512 Concepts through cached current reads, and ordinary cited
-  Release proposals.
-- Bound: 4,096 selected child rows across both tables, at most 64
-  source-vocabulary rows per Release after date/work rows, and 64 planner gaps.
-  The existing batch and tuple-home fence paths remain in use.
-- Growth check: the focused importer test covers multiple values, duplicate
-  rows, an unsupported code and refresh. The connected native test covers
-  independent acceptance/adoption, current disclosures, unavailable bindings
-  and a facts fence; this attempt defers its execution to integration.
-
-The production VNDB public-tag operator
-[`vndb-public-tags.ts`](src/vndb-public-tags.ts) traverses extracted `tags` and
-`tags_vn` COPY tables through the inventoried columns in
-[`vndb-tables.ts`](src/vndb-tables.ts), binds currently accepted/adopted
-category schemes and source Concepts, and supplies those rows to the existing
-vocabulary admission seam. Positive integer votes 1–3 with `ignore=f`, `lie=f`
-and applicable dictionary tags publish exact `schema:genre` facts and spoiler
-qualifiers. Lie flags, non-positive or non-integer votes, ignore flags,
-unresolved codes and duplicate `(vid,tag)` rows stay review gaps. User ids,
-notes and vote values never appear in diagnostics. Native classification
-ballots are not written.
-
-The default real-dump seed also runs
-[`showcase-books.ts`](src/showcase-books.ts) after the selected-family import.
-That adapter keeps the documented Book Girl novel family (series 499, first
-volume 26) from the pinned dump relation check, walks only 1002/1003 novel
-members, and delivers authors through the existing creator-credit helper.
-The helper prepares type-1 author role 2001 and current `schema:author`
-references after rereading source URI, type and `skos:inScheme`.
-The ordinary broad CLI retains this separate Book Girl source family.
-`task seed:dev` elects its directly selected Bangumi Official Book root as part
-of the five-work showcase. Decision: type 1 Book/BookSeries dispatch uses the
-current `bangumi@14` converter, preserving Book names, TVAnime original-run
-and Game player-count while adding TVAnime work evidence. Decision: one Bangumi subject stays one
-identity, so ISBN on a volume does not create a `bf:Instance`. Decision:
-selected Book Girl records join the common showcase manifest; book review
-gaps stay in the seed books section so they do not fail Steins;Gate
-publication. Author-credit gaps stay in that same books section. Decision:
-Book author selection admits only source person.type 1 individuals and author
-role 2001; company, band, translator and illustrator rows are explicit omissions.
-
-The real-dump seed acquires `tags`, `tags_parents` and `tags_vn` from the same
-checksum-verified current VNDB archive. The ordinary broad CLI runs
-[`showcase-tags.ts`](src/showcase-tags.ts) after the selected-family import;
-the bounded `task seed:dev` path composes its two reviewed content-tag concepts
-with elected works in the single reconciliation run. Association projection
-keeps at most one admitted row per selected work/tag before the cap, so voter
-duplicates cannot starve a later work. The broad adapter closes tag parents
-inside its dictionary cap and feeds the existing public-tag coordinator.
-Optional `--vndb-public-tag-bindings` remains an explicit UUID override;
-adopted usable bindings are those the current public read actually discloses.
-Publication consumes finite vocabulary records and exact source URIs without
-inventing another publisher. Concept labels preserve the exact `tags.name`
-spelling under `und` when COPY has no language; Han-only, kana and Latin names
-are not assigned a guessed locale. Sealed Concept identities and command bytes
-stay unrepaired; later name proposals are separate reviewed commands.
-Decision: only a current Kana `/vn` response for the selected work and its
-currently admitted tag binding supplies `rezics:sourceTagWeight`; COPY
-`tags_vn.vote` remains an association filter, and unavailable ratings withhold
-only weights while valid association and spoiler facts remain eligible.
-
-### Bangumi TVAnime bounded profile conversion
-
-`bangumi@14` includes TVAnime names, original-run, work evidence and official
-websites. Ordinary and selected-family registration share bounded conversion;
-selected envelopes use `cross-media-entities@14+bangumi@14`. The existing journal
-preserves exact alias/key, source admission, citations, independent
-review/adoption and current reads. Unversioned rows retain the bounded infobox
-digest; no publisher or identity lookup is added.
-
-- Touches: one selected TVAnime record, at most 24 name facts, 32 website facts,
-  existing original-run/work-evidence facts and 16 bounded diagnostics. Every
-  projected fact cites the exact Bangumi subject record.
-- Bound: 65,536 projected characters, 64 infobox fields, 1,500 characters per
-  URL and the existing 100-command batch ceiling; source values stay out of
-  diagnostics.
-- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
-  covers ordinary and selected-family proposals, identity reuse, refresh and a
-  bounded unsupported value. The related public-read journey is
-  `services/kernel/test/imports/bangumi-official-websites.test.ts`; native
-  execution remains controller-owned.
-
-### Bangumi Book-template subject names
-
-Ordinary Bangumi registration and the selected-family importer share one pure
-extractor for Book title fields. It requires the selected native profile
-`schema:Book` and the exact pinned `{{Infobox animanga/Book` header. The
-source-defined `Novel`, `Manga`, `PhotoBook` and `BookSeries` templates do not
-inherit this mapping. Both Book `中文名` and `别名` become additional
-`schema:name` candidates; explicit Chinese names use `zh`, and unqualified
-aliases use `und`. A malformed field is withheld as a whole while independent
-source names and summary proposals remain available.
-
-The ordinary importer remains proposal-only. The default selected-family path
-uses its existing `cross-media-entities@14+bangumi@14` registration, record bindings,
-finite showcase manifest and publication journal. Local review accepts and
-adopts current candidates through separate native commands; corrected source
-names create new proposals on the acknowledged Book UUID, and ordinary refresh
-does not rewrite adopted names. Record citations, the unversioned marker,
-source digest and field-pointer command identity remain attached.
-
-- Touches: one selected Book record, at most 24 distinct name values and 16
-  shared omission diagnostics.
-- Bound: the 65,536-byte projection/infobox caps, 64 visited field occurrences,
-  existing source journal and native batch limits; no catalogue scan is added.
-- Growth check: `services/importer/tests/bangumi-book-names.test.ts` covers
-  ordinary/default conversion, atomic malformed-field handling, same-UUID
-  refresh and same-title source identity separation. The native publication and
-  public-read scenario is `services/kernel/test/imports/bangumi-book-names.test.ts`;
-  its execution remains controller-owned.
-
-### Bangumi television original run
-
-Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
-`放送开始`, `播放结束` and `话数` on type 2 through current `bangumi@14`,
-retaining the original-run mapping alongside newer TVAnime evidence. Selected-family seed uses that same converter; this
-journey adds no publisher. Native read is the acknowledged TVSeries. Weekday
-schedule text, custom keys and OVA/Movie templates remain diagnostics. An end
-date is not completion or access authority.
-
-- Touches: one ordinary or selected type-2 TVAnime record, at most three
-  original-run facts, and the existing Bangumi citation on that TVSeries.
-- Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
-  and the current source journal and batch limits; raw source values never enter
-  diagnostics.
-- Growth check: `services/importer/tests/bangumi-television-run.test.ts` covers
-  JSON-lines proposals, unknown totals, schedule/custom omissions, converter
-  refresh and changed totals with stable identity. The connected ordinary caller
-  is `services/kernel/test/imports/bangumi-television-run.test.ts`; native
-  execution remains controller-owned.
-
-### Bangumi Game player count
-
-Ordinary Bangumi JSON-lines registration converts pinned Game infobox
-`游玩人数` on type 4 through current `bangumi@14`, retaining original-run and
-work-evidence mappings. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@14+bangumi@14` registration; this journey adds no
-publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
-or condition qualification withholds the whole occurrence. Names, dates,
-platforms, developer/voice credits and websites retain their owners.
-Decision: Game-template `游玩人数` admits only an entire-field unqualified
-positive integer or inclusive range; a lone count invents no minimum.
-
-- Touches: one ordinary or selected type-4 Game record, at most one
-  `schema:numberOfPlayers` statement with at most one `schema:minValue`
-  qualifier, and the existing Bangumi citation on that VideoGame.
-- Bound: the existing 65,536-character infobox cap, 64 parsed field
-  occurrences, 8 examined count occurrences, 16 diagnostics, and the current
-  source journal and batch limits; raw source values never enter diagnostics.
-- Growth check: `services/importer/tests/bangumi-game-player-count.test.ts`
-  covers ordinary and selected-family proposals, a mode-qualified omission,
-  converter refresh and a malformed-to-corrected same UUID. The connected
-  selected-family caller is
-  `services/kernel/test/imports/bangumi-game-player-count.test.ts`; native
-  execution remains controller-owned.
-
-### Bangumi Game platforms and software engine
-
-Ordinary Bangumi JSON-lines registration converts pinned Game infobox `平台`
-and `游戏引擎` on type 4 through `bangumi@14`, preserving Game names, player-count,
-Book grain and TVAnime work-evidence mapping. Selected-family type
-4 rows use that same converter.
-Current reviewed Concept reads supply the only native targets; a configuration
-UUID or identical label is a lookup hint. Concealed or wrong-source bindings
-withhold that occurrence and keep the VideoGame identity and sealed retry
-candidates. Top-level `platform` remains the profile selector. Engine version,
-platform or edition text is withheld because `wdt:P408` admits no qualifiers.
-No second vocabulary publisher or taxonomy release is introduced.
-Decision: Game environment admission stays on the combined `bangumi@14` revision; book
-grain stays on that combined revision. No infobox-field scheme URI is minted
-from `平台` or `游戏引擎`.
-
-- Touches: one ordinary or selected type-4 Game record, at most 16 platform
-  and 8 engine Concept relations, exact infobox field citations, and
-  independent accept/adopt/read of those properties.
-- Bound: 65,536 infobox bytes, 64 fields, depth 2, 16 diagnostics, 24 cached
-  current Concept reads, the 64 KiB command envelope and existing journal
-  limits. No catalogue label scan.
-- Growth check: `services/importer/tests/bangumi-game-environment.test.ts`
-  covers selected-family planning, ordinary registration, citations and
-  concealed/wrong-source withholding. The connected ordinary caller is
-  `services/kernel/test/imports/bangumi-game-environment.test.ts`; native
-  execution remains controller-owned.
-
-### Bangumi Game source genres
-
-Decision: one complete scalar `游戏类型` occurrence remains one exact literal;
-compound values are not split, and nested or continued fields are withheld.
-
-Ordinary Bangumi registration and the selected-family default seed share the
-`bangumi@14` adapter. Only the exact type-4 Game template field can propose
-`schema:genre` on its `schema:VideoGame`, using a finite literal-to-Concept
-profile and the pinned source scheme
-`https://rezics.com/schemes/bangumi/genres`. Profile UUIDs are lookup hints:
-each used Scheme and Concept is reread publicly for its type, exact source URI,
-and current `skos:inScheme` relation. The source mapping grants no mutation
-authority, canonical taxonomy equivalence, or inferred disclosure. Public tags,
-title, and platform never supply this field.
-
-The ordinary `--bangumi-game-genre-bindings-file` option only resolves current
-references for proposal conversion. Explicit local showcase configuration uses
-`REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS` through the existing dev seed flow; the
-common journal separately accepts, adopts, and reads each exact cited Concept
-relation on the acknowledged Game. A transient read failure emits no new genre
-candidate and preserves only the exact prior candidate for recovery. Corrected
-source or bindings reuse the Game UUID; absent later facts do not retract
-independently adopted editor facts.
-
-- Touches: one selected Game, up to 16 exact genre occurrences, and the existing
-  publication, review/adoption, and current public-read path.
-- Bound: 65,536 projected characters, 64 shared infobox fields, depth 2, 16
-  genre occurrences, 16 sanitized omissions, 200 characters and 1,024 UTF-8
-  bytes per literal, the current-read cache, and the 64 KiB command envelope.
-- Growth check: `services/importer/tests/bangumi-game-source-genres.test.ts`
-  covers exact extraction and current binding states; the selected-family
-  lifecycle is `services/kernel/test/imports/bangumi-game-source-genres.test.ts`.
-  The fixtures are authored examples, not observed source rows.
+The Game destination revision preserves the previously reviewed bangumi@14 source-genre and publication-date mappings within the actual current bangumi@15 export. This states the reviewed mapping history without assigning a new revision.
 
 ### Bangumi creator and voice credits
 
-The real local showcase seed derives finite staff roles from selected type-2
-anime and type-4 Game `subject-persons` rows. It uses the reviewed mappings in
-`bangumi-vocabulary.ts`, creates source Concepts only through acknowledged
-ordinary import commands, and sends them through the common showcase manifest,
-independent acceptance/adoption and tokenless current reads. Game creators must
-resolve through their Bangumi person key to the current Person or Organization
-profile and exact identity statement. Game `subject-characters` and
-`person-characters` keep the delivered Game-character selection and tuple fences. Exact
-UUIDs carry through the mapper; names and cross-provider title matches never
-resolve endpoints.
+Selected type-2 anime and type-4 Game subject-person rows provide finite creator and voice credit roles. Role and person Concepts use the released Bangumi vocabulary. Each association keeps the exact source work/person relationship and citation; missing role or identity binding is a gap, not an inferred credit. There is no catalogue scan or name-based person match.
 
-Decision: local showcase creator-credit reads retain Bangumi subject types 2 and 4, matching the selected anime and Game credit contract.
+### Bangumi Character identity and appearance
 
-Decision: staff-role Concepts cite the pinned Bangumi `subject_staffs.yml`
-definition; each staff or voice credit cites its selected Bangumi work row.
-Vocabulary source IDs use `vocabulary:bangumi.staff[:code]` so their native
-subjects stay distinct from the selected work ID while the manifest keeps that
-work as the evidence owner.
-The common publisher accepts only the exact Bangumi staff-position or
-performer-character row fragment under that selected work URL for these
-credit facts.
+Selected type-2 work-character rows define appearance; actual Character records define identity, kind and source names. Character kind and appearance role use distinct exact source schemes and Concepts. A malformed optional order does not erase a valid role-qualified appearance. Character mappings do not broaden provider selection or create a second identity.
 
-Archive staff `position` remains a role code and is never copied into
-`schema:position`. A credited spelling is preserved only when a supporting
-association supplies it; `person-characters.summary` remains commentary and
-does not become `wdt:P1932`. Voice credits keep the bound character on
-`wdt:P453` for that performer and work. Music and live-action staff, unprofiled
-type-3/type-6 roles, and stale or wrong-scheme role bindings remain exact gaps.
-The default Book adapter derives type-1 author role 2001 through this helper;
-the Game adapter derives type-4 staff roles through the same helper. Book
-selection, grain and membership stay with the Book adapter. Ordinary imports
-without explicit showcase state remain proposal-only.
+### Bangumi Game cast
 
-- Touches: at most 64 staff and 64 voice association rows per Bangumi work;
-  selected type-2 anime and type-4 Game staff use the finite staff inventory,
-  while Game appearance and performer associations keep their existing selection
-  fences. At most 64 distinct staff-role
-  requirements are derived per bounded operation.
-- Bound: each selected role is checked against its exact common-manifest
-  create/candidate acknowledgements, pinned vocabulary citation, current
-  native type, current `schema:sameAs`, and `skos:inScheme`. Credit citations
-  must be the exact staff-position or performer-character row under the
-  selected work URL. Game creator endpoint types come from the admitted
-  `person.type` mapping; unsupported source types and unresolved endpoints
-  withhold only their associations. Work/person reads are operation-local and
-  invalidated after publication. Role requirements beyond the 64-role bound
-  remain visible as `missing_concept` gaps. No catalogue-wide label scan or
-  generic import auto-publication is added.
-- Growth check: `services/importer/tests/showcase-bangumi-credits.test.ts`
-  retains the type-2 anime staff/cast case. The new
-  `services/importer/tests/showcase-bangumi-game-creators.test.ts` follows
-  selected Game staff through planning and excludes Game character/voice rows.
-  `services/kernel/test/imports/showcase-bangumi-game-creators.test.ts` covers
-  current role bindings, separate acceptance/adoption, exact work/creator
-  reads, role and citation meaning, wrong-scheme and unresolved withholding,
-  and identity reuse on an unchanged refresh. Controller acceptance and a real
-  dump walkthrough remain deferred.
+A Game cast association requires a selected acknowledged type-4 Game, its actual subject-character row, the exact Character identity and a matching person-characters row for a voice performer. The Game's source work citation and role qualification are preserved. A malformed or unrelated neighbor does not suppress an independent valid cast row.
 
-### Bangumi character identity and appearance mapping
+### Bangumi source publication mapping
 
-The default local showcase seed derives the character-kind and appearance-role
-requirements from actual selected Bangumi character records and type-2 anime
-`subject-characters` rows. It creates only the exact source-specific schemes and
-codes in the pinned Bangumi mappings, then sends their candidates through the
-common publication journal for separately authorized acceptance and adoption.
-It publishes a scheme before creating its Concepts, rereads each acknowledged
-UUID through the current public API, and reruns the complete Bangumi generation
-with only current exact bindings. Names never resolve identity. The explicit
-`--bangumi-character-bindings <json>` mode remains available to standalone
-operators. Appearance proposals retain their source row key, digest, citation,
-work and character identities, role Concept and supported order semantics.
-Missing, malformed, unknown or wrong-scheme roles remain bounded diagnostics;
-unsupported `schema:position` does not remove the independently useful role.
+Source dates are assertions about the source entity, never dump or import timestamps. Admitted Book, Game, music and live-action dates remain cited facts on the exact source subject and obey its selected profile. TVAnime original-run dates and episode counts use their distinct fields; top-level dates do not silently become a more specific run fact. Missing, unknown, malformed and unsupported precision remain distinct omissions.
 
-Decision: The default character vocabulary and appearance adapter follows Bangumi type-2 anime work rows only.
+### Bangumi Person biographies and careers
 
-- Touches: at most 64 admitted appearance rows per selected anime work, one
-  character-kind row per admitted character, current work/character identities,
-  up to two ConceptSchemes and seven Concepts, and the existing sealed local
-  publication journal.
-- Bound: appearance projection is O(64 × selected anime works), source-row
-  evidence is capped before materialization, and current identity reads stay in
-  pages of 16. The role mapper emits a qualified relation only when exact work,
-  character and current role Concept identities are available. Overflow is one
-  bounded diagnostic per work.
-- Growth check: `services/importer/tests/showcase-bangumi-characters.test.ts`
-  covers selected anime rows, kind/role separation, exact row custody and an
-  unavailable wrong-scheme binding. The native public-read and restart scenario
-  is `services/kernel/test/imports/showcase-bangumi-characters.test.ts`;
-  browser pages and inverse projections remain Web and Semantic ownership.
+Selected person rows keep person:<id> identity. A nonempty source summary becomes an attributed schema:abstract. Birth-date facts use only the supported PersonDetail integers. Career strings are normalized only for an actual type-1 Person, at most seven values, and do not themselves create an occupation.
 
-### Bangumi character source names
+The vocabulary mapper may emit P106 only for the actual Person bound to the exact person:<id> source key, with the source-owned careers Scheme, the exact current Concept for that career code, the released P106 property and the exact person career citation. No pure converter emits P106. Bangumi career Concepts are source-owned; their presence does not establish canonical equivalence with other providers. A valid career item survives an independently malformed neighbor. Empty, unknown, malformed and Organization cases emit no unsupported occupation.
 
-`planCrossMediaSeed` retains each selected `character` row for the existing
-`bangumi_cross_media` registration. The shared converter accepts the pinned Crt
-string and exact type-1 CharacterDetail `infobox` array; the official bounded
-fixture is an excerpt of [CharacterDetail](https://api.bgm.tv/v0/characters/1)
-and its [API schema](https://bangumi.github.io/api/dist.json). It emits cited
-`schema:name` and `schema:alternateName` facts on the source-bound Character.
-The array path preserves scalar punctuation, diagnoses unlabelled/unknown
-labels, and withholds conflicting or over-limit projections. Its evidence
-fingerprints only bounded name fields and retains absent/null/top-level name
-states; nested API values are not interpreted. An already captured response
-uses the same converter and journal, with no name-only fetch or graph expansion.
-The ordinary Bangumi dump CLI remains JSONL; the fixture and malformed or
-refresh derivatives are source review and synthetic test inputs respectively.
-
-Decision: admit parsed CharacterDetail arrays beside the existing Crt grammar and reuse already captured selected responses in the same converter and journal; add no name-only fetch or graph expansion. Top-level `name` is `und`, `name_cn` is `zh`, `简体中文名` is `zh-Hans`, and only exact reviewed alias labels are mapped. The Crt path alone splits its observed full-width-comma nickname syntax.
-
-### Bangumi character physical profile
-
-The default `planCrossMediaSeed` path already selects a character by the
-selected work's `subject-characters` relation and passes that exact `character`
-row to the ordinary `bangumi_cross_media` registration. The conversion adds
-bounded Crt physical evidence on that existing path; the common finite
-publication manifest remains responsible for exact candidate acceptance,
-independent property adoption and the current public read. An acknowledgement
-alone does not make a quantity public. Source attribution and metadata rights
-remain independent of summary permission.
-
-Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
-
-Decision: Book-template names, character names and physical profile stay under Registered source vocabulary mapping and are not repeated under Explicit local showcase publication.
-
-- Touches: at most one height and one weight quantity per selected `character:<id>`, the exact scalar and `/infobox/fields/<n>` evidence, and bounded sanitized diagnostics. Existing names, kind, appearance and summary behavior stay on their current paths.
-- Bound: 65,536 UTF-8 infobox bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 emitted quantity facts and 16 diagnostics. Explicit centimetres/metres and kilograms/grams retain their source units; missing units are never guessed. The existing source journal, publication manifest and command ceiling still apply.
-- Growth check: `packages/conversion/tests/bangumi-character-measurements.test.ts` covers exact unit meaning, unknown and unsupported values, independent removal and the parser bounds. `services/kernel/test/imports/bangumi-character-measurements.test.ts` covers default selected identity, exact citation, proposal versus public adoption, reopen and changed-source suppression under a current facts fence. Kernel execution remains controller-owned and is deferred to integration.
-
-### Default Bangumi anime episodes
-
-The default local seed discovers Episodes only for selected Bangumi type-2
-anime, keeps each source `episode:<id>` identity, and adds the exact
-`episode.subject_id` parent edge. The Episode kind adapter re-reads the finite
-reviewed type scheme and Concepts through the current public reader before it
-composes with other vocabulary-admission hooks. A retracted, hidden or changed
-binding withholds only the kind statement; the converter still imports the
-Episode identity and independently admitted ordinal, airdate, duration and
-attributed summary. The source ordinal is a direct Episode fact; it is not
-duplicated as a parent-edge qualifier. Ordinary import proposals remain subject
-to separate acceptance and adoption.
-
-Decision: the local showcase imports one `BATCH_LIMIT` Episode window per
-selected franchise and reports every additional selected source key as an
-explicit omission.
-
-- Touches: selected type-2 anime Episodes, exact parent edges, the existing
-  reviewed Episode type scheme/concepts, and current public parent/Episode
-  readback.
-- Bound: at most one `BATCH_LIMIT` Episode window per selected franchise; every
-  overflow diagnostic carries its exact `episode:<id>` key, with a fixed maximum
-  of 4,096 omission diagnostics. The adapter reads only the scheme and seven
-  known Concepts; it performs no label or catalogue scan.
-- Growth check: `tests/showcase-bangumi-episodes.test.ts` covers main/special
-  identity, an unrelated row, withheld bindings, composition and overflow.
-  `../kernel/test/imports/showcase-bangumi-episodes.test.ts` covers independent
-  acceptance/adoption, current public reads, binding retraction and resumable
-  identity. Existing Episode ordinal/date/duration/summary checks remain in
-  `tests/bangumi-episode-fidelity.test.ts`.
-
-### VNDB character traits and selected work appearances
-
-The default family seed acquires the verified `traits`, `traits_parents`,
-`chars_traits`, and `chars_vns` COPY tables. It keeps character identity in the
-VNDB source namespace, selects only characters attached to the chosen VNDB
-family works, and imports supported traits as `schema:keywords` and appearances
-as `schema:character` with the exact role Concept and source spoiler level.
-Association citations retain their table keys. False-positive, unsupported,
-missing-qualifier, and release-scoped rows remain review gaps. For
-`task seed:dev`, reviewed trait Concepts i23 and i30 are checked against current
-public reads and composed with selected works in the same reconciliation run.
-Its optional vocabulary profile supplies appearance-role bindings; other
-character traits remain withheld unless they have reviewed Concepts. The
-ordinary broad publisher emits the bounded needed trait dictionary, parent
-closure and admitted appearance-role terms through the current importer and
-common journal, rereads current native type/`schema:url`/`skos:inScheme`/
-`skos:broader`, and only then admits exact character and per-work associations.
-Optional
-`--vndb-character-vocabulary` / `REZICS_DEV_VNDB_CHARACTER_VOCABULARY` remains
-an explicit UUID override; adopted usable bindings are those the current public
-read actually discloses. Publication consumes the finite vocabulary records and
-exact source URIs from this adapter; it does not invent another vocabulary
-publisher. Trait labels use the exact `traits.name` (ja when kana is present,
-zh-Hant when Han is present without kana, otherwise en) and never a minted
-translation. Mapping revisions stay `character-trait@1` and `appearance-role@1`
-on those associations; vocabulary create/propose identity uses
-`vndb-character-vocabulary@1`.
-
-Decision: vocabulary profile UUIDs are lookup hints only; the broad publication
-worker emits them after acknowledgement, and the importer rereads each
-selected Scheme and Concept from current public state before use.
-
-Decision: bounded `traits_parents` edges publish as `skos:broader` on the child Concept; a later URI, type, inScheme or taxonomy-parent contradiction withholds only that term and leaves independently admitted character names and blood-type facts intact.
-
-### Bangumi person biographies
-
-Selected `subject-persons`/`person-characters` rows keep `person:<id>` identity
-and type. Nonempty summaries become attributed `schema:abstract` proposals.
-Type-1 PersonDetail `birth_year`/`birth_mon`/`birth_day` integers become one
-cited day-precision `schema:birthDate`; partial, Organization and Character
-`生日` stay omitted. Archive person rows lack those fields: one shared GET
-`/v0/persons/{id}` per selected id (existing public GET, 65,536 bytes, 64 people)
-is sealed beside the archive digest. Decision: that GET is the existing Person
-career acquisition, not a second HTTP client. Failed acquisition withholds only the date.
-Ordinary dumps are JSON-lines; a `career` array keys `person:<id>` under
-`cross-media-entities@14` on `bangumi@14`. Selected envelopes keep
-`cross-media-entities@14+bangumi@14`. `last_modified` is comment time, not a
-wiki revision. VNDB prose is not borrowed.
-
-- Touches: one Person, at most one birthDate and one abstract, at most 64 PersonDetail reads.
-- Bound: 65,536-byte response, one GET per id per attempt, journal reuse; no second HTTP stack.
-- Growth check: `tests/showcase-bangumi-person-birth-date.test.ts`, `test/bangumi-people-biography.test.ts`; native `services/kernel/test/imports/bangumi-person-birth-date.test.ts` remains controller-owned.
-
-Reviewed metadata and candidate provenance compare bounded canonical JSON values. Public transport snapshots
-with null object prototypes retain the same provenance; prototype identity is never a source or permission fact.
+The career feature review retains its original identities cross-media-entities@12, bangumi-vocabulary@3 and source-vocabulary@3 as history. The current source registration uses the checked-in exports above. When the archive omits career data, only the separately authorized local showcase may use the fallback described under [Explicit local showcase publication](#explicit-local-showcase-publication).
 
 ## Explicit local showcase publication
 
-Decision: the built-in `task seed:dev` path explicitly publishes a sealed finite intent of current source and candidate digests; ordinary imports remain proposal-only.
+Ordinary import remains proposal-only. The explicit local seed uses the common publication journal and public API: it records finite source/candidate intent, reviews exact native candidates, accepts and adopts them under current authority, then checks current returned facts. A local plan or acknowledgement alone is not public visibility. Source Concept/Scheme proposals are not canonical mappings; current source URI, type and scheme membership must be reread before a dependent assertion is admitted.
 
-Decision: the local seed stores finite reviewed-catalogue journal identities in the same importer state file, then validates native bindings on every run; a transient unavailable read preserves only the exact prior keyword candidate.
+Selected showcase inputs are bounded by their selected work/person graph. The seed does not perform label or catalogue scans. If an exact binding is missing, retracted, concealed or changed, only dependent facts are withheld; independent names, biography, identity and credits remain usable.
 
-Decision: selected Bangumi covers use the pinned subject API and keep its response receipt separate from the unchanged archive revision/digest in the existing showcase journal.
+### Bangumi Person career acquisition
 
-Decision: selected Bangumi Person and Organization images use only pinned `GET /v0/persons/{person_id}` `PersonDetail.images.large` after exact response `id` and archive-selected `type` match; missing, null, blank and placeholder images are absent, and no alternate size or image redirect is used.
+Archive career data has precedence, including an empty or malformed field. The fallback fetches only selected actual type-1 Persons whose archive career is absent; the same selected PersonDetail request may also supply a missing birth date. There is at most one request for each of at most 64 selected Persons. Requests are sequential with 250 ms spacing, share the existing import deadline, and each response is capped at 64 KiB. A response must identify the requested person and contain no more than seven bounded career strings. No archive revision is invented.
 
-The finite selected-people rows are derived after the existing per-provider cap. Their response evidence uses the official OpenAPI schema version `2026-07-24`, bounded bytes, SHA-256 and an optional bounded ETag; a missing source revision is recorded as `unversioned`. Changed response digests create immutable receipts in the same showcase journal. Pending, unknown and fenced outcomes reuse prior evidence; ordinary media submission, cover fencing and separate local review/adoption remain shared with work covers.
+The immutable journal receipt binds the exact GET https://api.bgm.tv/v0/persons/{id}, the archive digest, response SHA-256 and optional ETag. Restart reuses the sealed response without fetching it again. Missing, malformed or unavailable response data withholds only dependent P106 or birth-date facts; identity, biography and credits remain independent. The public-source admission is exact to the Person, Scheme, Concept and P106 mapping described above.
 
-If the native cover POST returns an explicitly retryable `dependency_unavailable` (503) or `rate_limited` (429),
-the showcase retains its exact prepared intent as unavailable without inventing a reservation or Media ID. The same
-producer invocation does not submit that refused intent again. Independently authorized text facts can finish and
-publication records the image gap. An indexed check of the current unsubmitted intent and source digest keeps that
-asset eligible on an unchanged source refresh. An actually accepted pending job still holds its source generation
-until normal completion. Permission failures and other refusals remain failures; native admission, retry limits and
-all media checks stay active.
+### Media rights and replay
 
-#### Current unsubmitted cover refresh
+Converters return media intent, not fetched image bytes. Media acquisition requires an explicit provider-supported source and a valid current subject. A 202 reserved receipt is not an available media ID; the importer records the exact request, observed receipt and status separately. Unknown delivery reuses original bytes and key. Only confirmed available media can enter the separately reviewed cover candidate.
 
-- Touches: the exact record binding and its current media intent, plus at most 65,536 bytes of prepared request JSON.
-- Bound: at most two primary-key point reads and two returned rows, independent of unrelated records and media history.
-- Growth check: `tests/bindings-growth.test.ts`, “Media projection stays within its bound as B grows”, measures the
-  current projection and unsubmitted-intent check together at three seeded scales. `tests/showcase-media.test.ts`
-  checks refusal, text completion, unchanged-input retry and eventual actual availability.
-  Decision: `task seed:dev` uses one exact five-work selection with direct cast and episodes and at most 64 people or organizations per provider; Bangumi Organization `wdt:P6298` is omitted with an explicit conversion gap because the released Organization profile has no property that preserves Bangumi-ID semantics.
+Bangumi cover bytes keep the rights-holder credit, “via Bangumi” source attribution, unknown image licence and cover-only use. Originals remain private; public output is re-encoded. Summary prose is not made public by a cover permission or metadata descriptor. Rejected or missing covers remain addressable gaps without suppressing independent metadata. Source withdrawal, media takedown and deletion are governed by the common [deletion policy](../../docs/deletion.md); refresh may not reintroduce fenced material.
 
-Decision: selected graph preparation retains at most 8,192 edges and 8 MiB total (1 MiB per edge), recording a bounded gap when either limit is exceeded.
+## Deletion
 
-`task seed:dev` elects Bangumi Steins;Gate anime/book (10380, 84148) and CLANNAD anime (51), plus VNDB Steins;Gate (v2002) and CLANNAD (v4). It adds direct cast and episodes, omits recursive work expansion and releases, and skips the separate Book Girl importer. It reuses the Accounts `dev:persona` setup and its private `.temp/local-stack/seed.env`. The local invocation gives the cross-media CLI a separate durable showcase journal. The ordinary CLI stays proposal-only unless that local publication state is explicitly supplied. The journal records exact create and proposal command bodies before send, then stores native UUIDs only after an acknowledged response. Publication derives its intent from those selected source records, current reads, and exact candidate identities. Ordinary selected graph relations and release membership use their existing graph commands and exact source envelopes; only an acknowledged command whose exact selected endpoints and current candidate still match enters the manifest. The publisher checks both native endpoints before review actions, then independently reads both public identities and the complete relation statement, including its qualifiers and source citation. A missing endpoint or unreadable relation withholds that edge and keeps unrelated public facts available. Publication reads only selected subject/property candidate pages, accepts each selected candidate through the review API, and adopts only those IDs while preserving any prior adoption selections. Refused steps keep their known acknowledgements; an unknown send reuses its sealed body and idempotency key on restart.
+Imports owns only its source-backed candidates and retained local acquisition state. Vanished provider fields retract only matching owned candidates through ordinary APIs. Subjects, independent adoption and unrelated statements survive. A takedown or rights withdrawal fence prevents later refresh or replay from restoring removed material. See the [shared deletion contract](../../docs/deletion.md).
 
-The result carries provider and native type bindings, source keys, source and converter digests, selected candidate IDs, and ordinary reader routes. Each selected subject and vocabulary dependency is checked through current reads, and the final facts are checked with a tokenless Global-context reader. Source ConceptScheme and Concept records are eligible only when their source create commands are acknowledged and their current source URI and scheme association are present. No canonical equivalence is inferred. The default cross-media seed consumes only the exact Bangumi editor `meta_tags` literal `后宫` and adapts its trusted alias to the existing lookup. Unsupported or withdrawn genre bindings produce bounded addressable diagnostics while independent source facts remain usable; source-tag removal retracts only the importer-owned keyword candidate. The pinned `GET /v0/subjects/{id}` response is validated against the selected work and required image fields before `images.large` is admitted. Its SHA-256 and optional ETag are sealed beside the archive revision/digest in the showcase journal. A missing or invalid cover stays an addressable gap while independent metadata remains useful. Pending reservations resume from their original bytes and key, and only available media enters the separately accepted/adopted cover candidate. Covers retain `(c) rights holder`, `via Bangumi`, unknown image licence, cover-only use, private original retention and public re-encoded variants. Prose stays private without admitted rights. Public visibility makes no Search-index claim.
+## Cost
 
-### Cost: selected showcase media acquisition and publication
+Costs are finite functions of supplied input, selected rows, bounded pages and bounded command count. R is retained records, B is binding/journal rows, N is input records, M is one record/request/response bytes, q is commands for one record, r is one page, and K is concurrent records. Indexed point work is O(log R) or O(log B); keyset pages add only their bounded results. No operation scans unrelated source history or catalogue state.
 
-- Touches: preparation of at most 8,192 selected graph edges and 8 MiB of retained edge data (at most 1 MiB per edge), plus at most 768 selected source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 candidates per current page, 256 selected Bangumi works, 64 selected creators and 320 combined media outcomes or omissions.
-- Bound: work is limited to the exact five roots, their direct cast and episodes, at most 64 people or organizations per provider, reviewed VNDB trait/tag codes i23/i30 and g105/g249, exact local candidate IDs, and required current subject/property reads. Current native and public reads are deduplicated by subject ID and cover at most 768 selected source plus 512 vocabulary subjects; graph targets must belong to that selected set. Candidate pages are limited by the 8,192 assertion cap and 100-row page bound. Selected work and creator detail acquisition is sequential and capped at 320 requests, 1 MiB per response and 1 MiB combined sealed source evidence, using the existing deadline and pacing. Media send/status uses the ordinary authenticated transport, exact importer bindings and current `(source, external_id, cover)` fence; public readback uses the existing bounded publication pass. There is no catalogue-wide scan, unsupported-tag inference or generic accept-all mode.
-- Growth check: `services/importer/tests/showcase-media.test.ts` covers work recovery, creator/Organization conversion, absent/unavailable/invalid detail states, changed image evidence and unknown-send receipt reuse; `services/importer/tests/showcase-publication.test.ts` proves exact candidate and relation publication across refusal, current-read withholding and journal restart; `services/importer/tests/showcase-bangumi-genres.test.ts` covers trusted alias resolution. `services/kernel/test/imports/showcase-media.test.ts` authors the common Person/Organization media, review, public-read, served-variant and takedown path with synthetic detail derivatives; integration verifies it against the actual finite default selection. Native showcase media, genre and graph walkthroughs remain controller-owned; no native pass or database growth series is claimed here.
+### Import authored Bangumi television original-run and episode count
 
-### Bangumi Person careers
+At most 64 infobox fields and three run facts in the existing 64 KiB projection and command budget; no episode-table or broadcaster scan.
 
-The selected-family converter retains authentic career strings on actual
-type-1 Persons. When the selected archive row omits `career`, explicit local
-showcase seeding fills only that selected Person through bounded public
-`GET /v0/persons/{id}`. A career field present in the archive, including an
-empty or malformed value, takes precedence and prevents fallback. The API
-response must identify the requested Person and contain at most seven bounded
-strings; its exact endpoint, SHA-256, optional ETag and values are sealed in the
-existing `ShowcaseJournal`. Missing or malformed responses withhold only
-dependent occupations and retain independent identity, biography and credits.
-No archive revision is invented.
+### Import authored Bangumi Game player count
 
-The default local review derives only present finite categories, uses the
-existing common ShowcaseJournal publisher and current vocabulary reader, and
-feeds the reread bindings into the ordinary importer. The optional
-`--bangumi-character-bindings` input remains a validated current-binding
-override. Ordinary imports emit cited `wdt:P106` proposals only; only explicit
-local showcase review accepts and adopts candidates. Source Concepts under
-`https://rezics.com/schemes/bangumi/careers/` are source-owned and do not assert
-canonical equivalence.
+At most 64 fields, eight examined count occurrences, one count and one optional qualifier.
 
-- Touches: at most 64 selected Person/Organization rows, 64 selected-Person
-  fallback requests, one 64 KiB response per request, one Scheme and at most
-  seven Concept requirements, and their separate current reads.
-- Bound: selected actual Persons missing archive career or birth-date fields
-  share one GET `/v0/persons/{id}`; requests are sequential with a 250 ms gap,
-  share the existing import deadline and bounded public transport, and no
-  population or label scan occurs.
-- Growth check: `services/importer/tests/showcase-bangumi-person-careers.test.ts`
-  covers archive precedence, exact API receipt, malformed-response withholding
-  and sealed replay. `services/kernel/test/imports/bangumi-person-careers.test.ts`
-  covers default review/adoption, current reads and ordinary source proposals;
-  broader acceptance remains integration-owned.
+### Bangumi creator and voice credits
 
-### Bangumi TVAnime official websites
+At most 64 distinct role requirements per operation; existing 8,192-association, family and journal bounds apply.
 
-The official-website projection runs through ordinary `bangumi@14` and the
-selected-family `cross-media-entities@14+bangumi@14` registration. It recognizes
-only a literal `官方网站` value from the exact pinned type-2 TVAnime template.
-The URL fact is distinct from its `schema:url` reference to the exact Bangumi
-subject record. Source spelling, path, query and fragment are preserved. A
-changed value offers a new candidate on the same acknowledged work identity;
-ordinary import stays proposal-only and current adopted selections are not
-rewritten by source text. Absent or unsupported values do not retract facts.
+### Bangumi subject relations
 
-The common publisher keeps independent exact-candidate acceptance and adoption,
-current authority checks, journal recovery, source and tuple-home fences, and a
-current public read of the acknowledged TVSeries. The website is never fetched
-or used for identity resolution. The one-literal/no-host-normalization/no-list-
-splitting decision is recorded in `packages/conversion/README.md`.
+Source rows stream; at most 4,096 retained relation rows coalesce by unordered endpoint pair.
 
-- Touches: one selected TVAnime source record, up to 32 URL proposals and 16
-  bounded omission diagnostics, each candidate citing the source record.
-- Bound: 65,536 projected characters, 64 visited infobox fields, 1,500
-  characters per URL and at most 95 converter commands under the released
-  100-command batch ceiling; destination pages are not requested.
-- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
-  covers ordinary/default proposals, same-identity refresh and unsupported
-  source shape. `services/kernel/test/imports/bangumi-official-websites.test.ts`
-  covers separate acceptance/adoption, public read, restart and fencing; native
-  execution is controller-owned and the M1 walkthrough remains separate.
+### Resume a sealed generation without its dump
 
-### Bangumi TVAnime work evidence
+Constant indexed admission work; existing pages contain at most 100 records and resume does not reacquire source bytes.
 
-Decision: trim only horizontal template/list-boundary whitespace; `链接` remains a cited `wdt:P973` descriptive page and `官方网站` remains the separate `schema:url` mapping.
+### Compare two retained complete captures
 
-Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright` are admitted. Descriptive destinations preserve their source spelling and cite the Bangumi subject record; notices remain verbatim `schema:copyrightNotice` values and grant no licence or media permission. Malformed neighbors are bounded, source-free omissions; summary and cover rights remain separate.
+O(N+M) merge work with a fixed 256-row scan window; page memory is bounded by the page and window.
 
-- Touches: ordinary `bangumi@14` and selected-family `cross-media-entities@14+bangumi@14` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
-- Bound: 64 visited fields, 16 descriptive links, 16 diagnostics, and the compiled TVSeries 1,500-character limits. No linked-page fetch or hostname identity lookup.
-- Growth check: `tests/bangumi-work-evidence.test.ts` covers selected-family proposals, unchanged/changed source, citations, malformed neighbor and repair. `../kernel/test/imports/bangumi-work-evidence.test.ts` authors ordinary independent adoption, reopen/current reads and the facts fence; no real-data walkthrough is claimed.
+### Explicit source statistic removal
 
-### Bangumi Game-template subject names
+At most one native clear per source record/run. Unknown delivery sends no duplicate statistic intent.
 
-Ordinary Bangumi registration and selected-family Game records use the exact
-`{{Infobox Game` grammar through the current `bangumi@14` converter. Type 4
-remains `schema:VideoGame`; scalar `中文名` supplies `zh`, and scalar or
-single-level bullet `别名` stays `und`. Top-level labels keep their existing
-meaning. Unsupported field occurrences are withheld atomically while separate
-valid names remain eligible. The normalized source retains the bounded
-infobox, so changed names produce changed source digests and fresh proposals on
-the acknowledged identity. This adds no identity lookup or publisher; local
-review and adoption use the existing manifest, journal, source admission and
-facts fence. Name links and diagnostics grant no rights.
+### Receive admitted source classifications
 
-- Touches: at most 24 distinct names and 16 omission diagnostics from one
-  selected Game record, with exact Bangumi record citations.
-- Bound: the 65,536-character record/infobox cap, 64 visited fields and current
-  batch/journal limits; source prose stays out of logs.
-- Growth check: `tests/bangumi-game-names.test.ts` covers ordinary and selected
-  conversion, exact provenance, malformed field omission, neighbor exclusion
-  and changed-name refresh. `../kernel/test/imports/bangumi-game-names.test.ts`
-  covers independent native adoption, same identity on reopen and the facts
-  fence; native execution remains controller-owned.
+O(N+A+R) for selected records, admitted intents and bounded retries; each intent remains bound to one subject/association.
 
-### Bangumi Game characters and voice performers
+### Source-only provenance refresh
 
-The selected-family seed keeps the existing type-2 anime appearance branch and
-adds a separate type-4 Game branch. Only an actual `subject-characters` row on a
-selected, acknowledged Game can create an appearance. A `person-characters` row
-must match that Game and its admitted Character; the Person remains a separate
-Bangumi identity. Existing vocabulary preparation reads only the selected role
-and Character-kind Concepts, then the ordinary source registration emits cited
-`schema:character` and Character-qualified `wdt:P725` candidates. The common
-showcase journal, exact accept/adopt operations and public reads remain in use.
+Work scales with changed-record delta and bounded indexed proposal/journal work. Unchanged input adds no duplicate effects.
 
-Decision: malformed optional appearance order retains the independently valid
-role-qualified association, records a source diagnostic, and emits
-`schema:position` only when the current `schema:VideoGame` definition admits it.
+### Fenced statistic refresh
 
-The bundled native release admits Game `schema:character` with `wdt:P3831` and
-Game `wdt:P725` with required `wdt:P453` and supported `wdt:P1932`. The Bangumi
-source inventory still declares `subject-characters` and `person-characters`
-on `schema:TVSeries` only; its producer contract needs Game applicability while
-retaining the anime path. Web and Semantic own public page and inverse
-projections, so this delivery claims no page/index acceptance.
+At most three in-memory omission groups; no additional SQL or fence request and zero statistic writes for the fenced tuple.
 
-- Touches: at most 64 selected appearances and the existing stricter 64 voice
-  associations per Game, within the 16 KiB row, shared 4 MiB appearance
-  evidence, common batch and journal bounds, and the actual 64 KiB command
-  envelope.
-- Growth check: `tests/showcase-bangumi-game-characters.test.ts` pins selected
-  source rows, role binding, malformed order, exact performer qualification,
-  citations and unrelated-work exclusion. The native lifecycle and current-read
-  scenario is `test/imports/showcase-bangumi-game-characters.test.ts`; broader
-  native and public-page acceptance is controller-owned.
+### Import VNDB character traits and qualified appearances
 
-### Bangumi Game first publication date
+Existing 64 vocabulary-row, 100-command and 64-gap limits apply; bound character identities are reused.
 
-[Touches, Bound and Growth check](../../packages/conversion/bangumi-game-publication.md).
+### Default VNDB character-trait showcase seed
 
-### Bangumi Game web destinations
+O(file bytes + (W+T+A+P+V) log R); dictionary T≤512, selected associations bounded, parent edges P≤256 and vocabulary records V≤512.
 
-Ordinary Game imports preserve exact unqualified values from the pinned
-`{{Infobox Game` fields `website` and `链接` as separate `schema:url` and
-`wdt:P973` proposals. Occurrence citations retain the source field pointer; the
-Bangumi subject URL remains provenance only. Unsafe, malformed or qualified
-destinations are withheld without suppressing independent valid facts. The
-conversion and selected-family callers share the honest `bangumi@15` revision
-and existing native review, adoption, refresh, journal and current-read APIs.
+### Default VNDB release platform and medium showcase seed
 
-Decision: preserve admitted URL bytes; withhold labelled destinations until a
-released source contract can preserve their platform, region or edition meaning.
-No destination is fetched or followed, and none grants mutation authority.
+Tables stream by file size; at most 4,096 distinct retained associations and the remaining source-vocabulary budget per release.
 
-- Touches: at most 16 candidates across the two destination fields for one
-  source-selected Game, with independent native adoption.
-- Bound: existing projection, infobox, journal and 64 KiB command-envelope
-  limits; overflow is an explicit bounded omission.
-- Growth check: `tests/bangumi-game-web-destinations.test.ts` covers ordinary
-  registration and malformed, dangerous, qualified and overflow cases. The
-  selected-family native lifecycle is `test/imports/bangumi-game-web-destinations.test.ts`;
-  execution and public-page acceptance remain controller-owned.
+### Import VNDB character height and weight
+
+At most two quantity facts per selected character; each invalid value yields at most one diagnostic.
+
+### Import VNDB character blood types
+
+At most 256 selected characters and five current-binding reads per verification lifetime.
+
+### Publish admitted VNDB public tag associations
+
+At most 512 dictionary tags, 256 associations and 64 vocabulary rows per work; no more than the 100-command batch.
+
+### Operate a permitted scalar source feed
+
+Consumes the supplied input once under the registered byte, field, page and command limits; no catalogue scan.
+
+### Complete the rejected-cover operator journey
+
+O(input bytes + (selected + dependencies)(1+q) log R) with bounded retry count and envelope size.
+
+### Import Open Library edition page counts
+
+One five-column TSV row defaults to 256 KiB; normalized projection ≤2 MiB; one bounded allowlist pass and scalar count.
+
+### Native mixed Wikidata acquisition
+
+O(input bytes), with existing chunk and record retention caps and no retained per-property set.
+
+### Local zstd admission
+
+Streaming work O(C+B); parent pipe windows ≤256 KiB, stderr ≤8 KiB, child memory 128 MiB plus fixed overhead, decoded input defaults to 256 GiB.
+
+### Interrupted source acquisition cleanup
+
+At most one cleanup per unfinished iterator; cancellation prevents further reads and acquisition writes.
+
+### Review and resume a bounded partial source reduction
+
+At most 100 records per page and 300 owned candidates per record; no catalogue or receipt-history scan.
+
+### Adaptive writes
+
+Active and paused records total at most K; K defaults to 16 and is capped at 64.
+
+### Logical write retry admission
+
+At most K live records and eight transport invocations per logical write, independent of input size and history.
+
+### Imports erasure disposition
+
+One indexed coordinator acknowledgement within the fixed 11-participant set; importer SQLite is not read or mutated.
+
+### Measurement units and evidence
+
+Database statements, rows, source bytes and HTTP requests are counted separately. Growth evidence uses fixed page, record and batch sizes; serialized bytes are not machine heap measurements.
+
+### Credentials
+
+At most ceil(T/240 seconds) renewals over run duration T, plus one renewal per 401 response.
+
+### Import run
+
+Approximately ceil(N/K) times the bounded per-record request path, plus a media tail capped by mediaDeadlineMs. Live state is O(K) plus one staged page of at most 100 rows.
+
+### Import authored Bangumi episode members
+
+At most 64 Episodes per selected parent; per-record converter, 300-candidate and journal limits apply.
+
+### Import authored VNDB release dates and completeness
+
+At most 64 selected releases, supersession depth 8 and 128 relation rows; table scans have fixed row and byte ceilings.
+
+### Publish selected-family VNDB release dates and states
+
+At most 64 vocabulary rows, 300 candidates and one date/state per selected release plus one status per work.
+
+### Import authored VNDB release titles
+
+At most 64 title rows and 64 KiB per release; at most 64 names and 64 Romanized aliases.
+
+### Import authored VNDB release original language
+
+At most one language fact per release, with the existing 163-command, 64 KiB and 64-release limits.
+
+### Import authored VNDB release barcodes
+
+At most one barcode fact per selected release; 64 releases, 163 commands, 64 KiB and 300 candidate limits.
+
+### Import authored VNDB character names and qualified aliases
+
+At most 64 localized names and 64 aliases per Character, 4 KiB/1,500 codepoints per value, 64 KiB input and 257 proposals.
+
+### Import authored VNDB release minimum ages
+
+At most 64 releases; malformed scalar diagnostics are bounded to 32 characters.
+
+### Import authored VNDB public tag associations
+
+At most 512 dictionary entries, 256 associations, 64 vocabulary rows per work and 300 candidates.
+
+### Default VNDB public-tag showcase seed
+
+At most 96 selected works, 512 dictionary tags, 256 associations, 1,024 parent edges and 512 vocabulary records.
+
+### Default Bangumi novel/book showcase seed
+
+At most 32 volumes and 16 authors, within existing relation, credit and journal limits.
+
+### Import authored VNDB producer parent and subsidiary rows
+
+O((V+P+R) log S) for admitted works, producers and bounded parent rows; sequential identity then graph delivery.
+
+### Import authored VNDB staff aliases and credited roles
+
+At most eight admitted works; entities are converted before work credits so person identities are already bound.
+
+### Carry exact VNDB credits through the normal selected-family seed
+
+At most 64 credit rows, 511 role Concepts plus one Scheme, 512 vocabulary records, 100-command batch and 65,536 bytes per record.
+
+### Identify an imported VNDB contributor by preferred and additional source names
+
+At most 64 selected names and 65 name commands including the identifier.
+
+### Import authored VNDB contributor, producer and release websites
+
+At most 32 admitted links per owner and a 64 KiB projection; public website URL rules still apply.
+
+### Import selected VN work websites and cited Bangumi work identifiers
+
+At most three selected families, 256 works per family and 32 links per owner.
+
+### Import run (processor)
+
+Processor work per record is constant in dump size and retained history; only first preparation of each statement adds per-run work.
+
+### Retain conversion diagnostics
+
+At most 228 diagnostic entries and 65,536 vector bytes per record; page-bounded memory.
+
+### Retire superseded complete generations
+
+At most 100 rows per page and O(log H+p) indexed work per page; no OFFSET or whole-history scan.
+
+### Review and retire one unpublished capture
+
+Indexed eligibility probes; explicit cleanup work is O(D log H) with page size at most 100.
+
+### Review a stopped mass disappearance
+
+Indexed header and exact-record reads; pages return at most 100 keys plus one continuation probe.
+
+### Review diagnostic pages and exact record
+
+At most 100 records per page, O(log(H+N)+P·D) work and O(P·D) output; no aggregate scan.
+
+### Skipped input accounting
+
+O(1) retained state and one indexed point write/read per run; no second acquisition pass or ignored-key set.
+
+### Operation bounds
+
+| Operation                    | Bound                                                                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| CLI and bounded input        | Argument work is bounded; one owned file/stdin stream and one account key.                                             |
+| Gzip and zstd                | Streaming O(C+B); fixed-size pipe windows; decoded bytes stop at configured ceiling with at most one window overshoot. |
+| Dump parsing                 | O(M) per record; live memory is bounded by input window plus configured record limit, independent of history.          |
+| Pure converters              | O(M); Bangumi 64 KiB, VNDB 64 KiB, Open Library 2 MiB, Wikidata 128 KiB.                                               |
+| VNDB COPY chunks             | Default 256 KiB, hard 1 MiB chunk ceiling; importer configuration is at most 256 KiB.                                  |
+| VNDB archive rows            | At most 65,536 bytes per row and 32 spooled rows; table and page limits apply.                                         |
+| HTTP                         | O(M) buffering; default three attempts, maximum five, unsafe writes one; lower-only request/response caps.             |
+| Run controls                 | Constant indexed statements per start, seal, capability and checkpoint control; no history scan.                       |
+| Record staging               | At most five point statements per record plus transaction controls; commits batch at most 100 rows.                    |
+| Pages                        | Keyset order; public pages at most 100, VNDB pages 16 and internal VNDB ranges 32.                                     |
+| Classification and prepare   | At most 14+7q statements and 15+7q point touches plus bounded controls.                                                |
+| Acknowledge and finalize     | Acknowledge at most 1+8r point statements; finalization at most r+4 statements, without COUNT.                         |
+| Binding and candidate access | Exact source-keyed seeks; page at most 100; snapshots at most 65,536 bytes.                                            |
+| Media journals               | At most 64 assets; each snapshot ≤65,536 bytes, relation depth ≤32 and ≤65,536 nodes.                                  |
+| Coordinator                  | O(supplied bytes + S log R) acquisition and O((S+D)((1+q)log R+(1+q)log B+M)) reconciliation.                          |
+| Session ownership            | Constant indexed acquire, busy, reopen and release operations by exact source alias.                                   |
+| Kernel writes and fences     | At most q≤300 commands per record, 100 commands and 65,536 bytes per envelope; planning and dispatch are bounded by q. |
+
+See [Imports acceptance](../../docs/goals/imports.capabilities.md) for the unchanged fixture, API, receiving and growth requirements.
