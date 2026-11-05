@@ -1,6 +1,6 @@
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode, useState, type ReactNode } from 'react';
+import { act, createElement, StrictMode, useState, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import type { Root } from 'react-dom/client';
 import * as start from '../.storybook/react-start';
@@ -132,6 +132,18 @@ let publicationReader: (input: ShelfInput) => Promise<ShelfPage<PublishedSubject
   next: null,
   unavailable: 0,
 });
+type MembershipTestReceipt = {
+  realmId: string;
+  action: 'join' | 'leave';
+  membership: 'member' | 'pending' | 'none';
+  current: () => boolean;
+  focusEligible: () => boolean;
+};
+let showMembershipHarness = false;
+let membershipCurrent = true;
+let membershipFocusEligible = true;
+let membershipResult: boolean | undefined;
+let membershipButton: HTMLButtonElement | null = null;
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -187,12 +199,45 @@ mock.module('../src/community/space-actions', () => ({
 }));
 mock.module('../src/accounts/resource-access/link', () => ({ ResourceAccessLink: () => null }));
 mock.module('../src/library/follow-target-control', () => ({ FollowTargetControl: () => null }));
-mock.module('../src/community/realm-membership', () => ({ RealmMembership: () => null }));
+mock.module('../src/community/realm-membership', () => ({
+  RealmMembership: ({
+    realm,
+    onCompleted,
+  }: {
+    realm: { id: string };
+    onCompleted?: (receipt: MembershipTestReceipt) => boolean;
+  }) => {
+    if (!showMembershipHarness) return null;
+    return createElement(
+      'button',
+      {
+        ref: (element: HTMLButtonElement | null) => {
+          membershipButton = element;
+        },
+        type: 'button',
+        onClick: () => {
+          membershipResult =
+            onCompleted?.({
+              realmId: realm.id,
+              action: 'join',
+              membership: 'member',
+              current: () => membershipCurrent,
+              focusEligible: () => membershipFocusEligible,
+            }) === true;
+        },
+      },
+      'Membership completion',
+    );
+  },
+}));
 mock.module('../src/community/realm-bans-panel', () => ({ RealmBansPanel: () => null }));
 mock.module('../src/community/realm-presentation-panel', () => ({ RealmAppearancePanel: () => null }));
 mock.module('../src/community/realm-claim-panel', () => ({ RealmClaimPanel: () => null }));
 mock.module('../src/community/container-lifecycle-controls', () => ({ ContainerLifecyclePanel: () => null }));
-mock.module('../src/community/realm-home-header', () => ({ RealmHomeHeader: () => null }));
+mock.module('../src/community/realm-home-header', () => ({
+  RealmHomeHeader: ({ participation }: { participation?: ReactNode }) =>
+    showMembershipHarness ? createElement('header', null, participation) : null,
+}));
 
 const { createRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
@@ -475,6 +520,11 @@ afterEach(async () => {
   calls.realms.length = 0;
   calls.boards.length = 0;
   calls.publications.length = 0;
+  showMembershipHarness = false;
+  membershipCurrent = true;
+  membershipFocusEligible = true;
+  membershipResult = undefined;
+  membershipButton = null;
 });
 
 afterAll(async () => {
@@ -1226,6 +1276,42 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     expect(calls.boards).toHaveLength(1);
     expect(calls.publications).toHaveLength(1);
   });
+});
+
+test('the admitted Space returns acknowledged membership focus to its selected shelf only while eligible', async () => {
+  showMembershipHarness = true;
+  pageReader = async (input) => pageFor(input.address, true, input.credentialMode);
+  boardReader = async () => ({ kind: 'page', items: [board()], next: null, unavailable: 0 });
+  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  nextClient.setQueryData(sessionQuery.queryKey, viewer());
+  await mountFileRoute(
+    fileRouteTree(spaceRoute, '/spaces/$address'),
+    `/spaces/${address}?node=boards&cursor=original%2Fwindow#realm-board-${boardId}`,
+    nextClient,
+  );
+  await settle();
+  expect(calls.boards).toEqual([{ realmId, cursor: 'original/window', credentialMode: 'anonymous' }]);
+  const action = membershipButton;
+  if (!action) throw new Error('The admitted membership control was not mounted');
+  action.focus();
+  await act(async () => action.click());
+  expect(membershipResult).toBe(true);
+  expect(window.document.activeElement?.id).toBe(`realm-board-${boardId}`);
+
+  const other = window.document.createElement('button');
+  host.append(other);
+  membershipFocusEligible = false;
+  other.focus();
+  await act(async () => action.click());
+  expect(membershipResult).toBe(false);
+  expect(window.document.activeElement).toBe(other);
+
+  membershipFocusEligible = true;
+  membershipCurrent = false;
+  action.focus();
+  await act(async () => action.click());
+  expect(membershipResult).toBe(false);
+  expect(window.document.activeElement).toBe(action);
 });
 
 test('the mounted Realm return reads only its selected native window and keeps publication continuation independent', async () => {

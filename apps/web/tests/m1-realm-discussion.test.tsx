@@ -179,6 +179,11 @@ test('the real Realm shelves hand consumed returns to Board, work and participat
     'anonymous',
   );
   if (!page.realm) throw new Error('Recorded Realm unavailable');
+  expect(
+    page.realm.published.some((subject) =>
+      subject.types.some((type) => ['wd:Q689445', 'schema:Movie', 'schema:TVSeries'].includes(type)),
+    ),
+  ).toBe(true);
   const previous = getLocale;
   try {
     for (const locale of ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'fr', 'de', 'es'] as const) {
