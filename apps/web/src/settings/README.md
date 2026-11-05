@@ -16,9 +16,9 @@
 
 **Decision:** After a Profile command is acknowledged, a failed current read retains that fact and offers deliberate read recovery only; a successful read adopts newer native values and preserves only edits outside the command or made after it for review.
 
-**Decision:** A current Profile projection matching an unacknowledged command updates the displayed values but does not resolve the original attempt; only an exact command response acknowledges it, and a subsequent readable snapshot consumes it while preserving later edits. Leaving ends local custody without claiming cancellation or nonapplication.
+**Decision:** A current Profile projection matching an unacknowledged command changes displayed values only; it is neither acknowledgement, denial nor commitment. Only the exact command response acknowledges the original. An independent current read, later draft, remount, original retry and viewer retirement remain distinct. Leaving ends local recovery without claiming cancellation or nonapplication.
 
-**Decision:** Private Profile reads consume the installed `{ profile, editing }` GET and PATCH `{ accountId }` acknowledgement; setup, serialization and unknown native bodies stay in the existing success/failure envelope. Local preview stays local until that original acknowledgement. Matching current fields still only update the projection. Focused journey, source and preview tests pin the envelope, official body, exact retry and Stay/Leave; no extra stories.
+**Decision:** Private Profile reads consume the installed `{ profile, editing }` GET and PATCH `{ accountId }` acknowledgement; setup, serialization and unknown native bodies stay in the existing success/failure envelope. The original intent keeps its immutable credential, key, version and body for exact retry. Local preview stays local until the original acknowledgement; only later edits remain for review.
 
 The profile reader accepts additive top-level response fields while keeping the consumed profile and editing advice
 closed, bounded and identity-bound. Editing advice stays in the private reader result; the command retains its strict
@@ -48,7 +48,7 @@ Subject lookup carries a private success/failure envelope with a safe localized 
 
 ## Profile avatar
 
-Settings Profile reads Content `GET /v1/media/avatar-upload-advice` for current `media:create` admission, independently of profile-reference `account:update` advice. Missing, malformed or wrong-viewer advice hides upload while name, biography and avatar-reference edits stay usable. One in-memory reservation intent binds the reviewed file, avatar purpose, self container, reservation body, CSRF credential and idempotency key; a lost first acknowledgement retries that key and body, a known media id resumes, and a changed file, crop export or target mints a new intent. The generated advice handle is unavailable until Content publication `d9c5a408-5c67-4d33-bf97-76a9918a21b5`; until then the control stays honestly unavailable.
+Settings Profile reads Content `GET /v1/media/avatar-upload-advice` for current `media:create` admission, independently of profile-reference `account:update` advice. Missing, malformed or wrong-viewer advice hides upload while name, biography and avatar-reference edits stay usable. One in-memory reservation intent binds the original File, avatar purpose, self container, request body, CSRF credential and idempotency key; a lost first acknowledgement retries that exact intent, and a known media id resumes it. A changed file, crop export or target mints a new intent. Uncertain reservations are retained without automatic cleanup or account-update acknowledgement. The generated advice handle stays unavailable until the official [Kernel client declaration publication](../../../../services/kernel/README.md#client-declaration-output-placement) installs the Content callable and composition root.
 
 **Decision:** Web advice decoding binds the current viewer, self target and native constraints without a second UUID grammar; Content schemas remain the identifier authority.
 
@@ -61,7 +61,8 @@ Settings Profile reads Content `GET /v1/media/avatar-upload-advice` for current 
 ## Notifications
 
 The signed-in Settings notifications section reads the Access preference `page`: current optional kinds, compulsory
-notices as explained policy, honest defaults, and admitted `edit`/`reset` actions with the current version. The
+notices as explained policy, honest defaults, and admitted `edit`/`reset` actions with the current version. Edit and
+reset use that advice's version in the existing PATCH envelope; no separate version or inferred action is admitted. The
 catalogue is the authority; the page does not invent kinds, title-case unknown keys, or promise email or push. The same
 200 response carries current-viewer, read/update and Reading advice. Edit and reset appear only when its current
 `account:update` observation allows them; a readable account with update denied keeps confirmed values and sees disabled

@@ -56,3 +56,51 @@ separate axes. SQL-only terms can declare zero engine requests; nested native ca
 The ordinary session/unit/change limits remain default 20 and maximum 100; owner discovery remains maximum 50.
 Raw sentinels and discarded candidates consume work and retain their original keyset frontier. No declaration
 permits refill, account-history scans, cap increases or a second native admission.
+
+# Library performance contract
+
+This leaf owns Collection operation bounds and custody across Library consumers. The detailed SQL derivations and
+operation-specific growth suites remain in the [Library Cost sections](README.md#cost); this contract does not claim
+those suites have passed. Shared native bounds and evidence are owned by the [Kernel performance contract](../../performance-contract.md).
+
+## Collection operation costs
+
+Price the complete operation: request and status reads, checkpoints, activation, preparation, authorization, locks,
+serialization, receipt and effect work, source fences, negative or discarded candidates, and every nested disclosure.
+A short returned page, deduplicated terminal set or fixed candidate declaration does not reduce physical work already
+performed. Apply the existing 100 raw-key and 262,144-row native ceilings and the published Search maxima. Producer
+declarations describe admissible work; they are not native grants, pagination evidence or funding.
+
+Library owns one immutable closed nine-axis operation set: `candidateKeys`, `nativeRows`,
+`identityMetadataRows`, `nativePoints`, `witnessKeys`, `statements`, `bytes`, `emptySeeks` and `engineRequests`.
+Use overflow-safe sums, complete nested costs, explicit aliases and deterministic conflict resolution. Actual
+Progress/Continue and Content Feed callers consume these descriptors.
+
+## Whole-query publication
+
+The 50-original branch is inadmissible. Its two `resolveSubject` disclosure passes alone require
+`50 × 2 × 8,192 = 819,200` native rows before settlement, above the retained 262,144-row ceiling. This is a necessary
+lower bound, not the completed operation derivation or native execution evidence. Refuse before useful staging and
+preserve output A, the original client and owner, deadline, current authorization, drain and rollback behavior.
+Do not create a refused frontier, checkpoint, seal, activation, partial disclosure, smaller-prefix workaround or
+larger ceiling.
+
+The whole-query branch remains separate from ordinary member-page planning, directory `listCuratorPage` and
+read-only previews. Its existing [Cost entry](README.md#whole-query-collection-publication) owns operation-specific
+SQL detail. The [ordinary member-page entry](README.md#members-page) owns canonical store/fence behavior, owner-filter
+HTTP, plan and growth evidence, BASIC/FULL continuation, and final owner/source currentness. Search receiving keeps
+its five existing suites: `scoped-work-context`, `members-native-scope`,
+`scope-members-source-declaration`, `scope-kind-work-context` and `publication-work-context`.
+
+## Descriptor custody
+
+Preserve original opaque evidence, one original client, current owner and deadline, the three-attempt limit,
+current authorization and source checks, and native consumption before the tracked transaction. Drain and release
+exactly once, including terminal release after useful-work expiry; preserve same-client rollback and native caps.
+History and Work bind their execution adapters at service roots ([History](../history/README.md#selected-native-executor-binding),
+[Work](../work/README.md#selected-execution-producer)). This documentation does not authorize cross-owner mutable
+quotes or funding, refill, price profiles, another admission protocol, a second consumer or a new writer.
+
+The [architecture](../../../../docs/architecture.md#modules-and-boundaries) owns permission-core purity, public
+edges and adapter direction; [verification](../../../../docs/development/verification.md#capability-evidence)
+owns the limits of native, browser and finite-execution evidence.

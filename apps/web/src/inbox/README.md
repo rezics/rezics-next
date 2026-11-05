@@ -16,6 +16,9 @@ native identity and existing localized route builders; supplied URLs are never e
 When native disclosure names both a thread and a board, the row shows both current titles while opening only the
 admitted thread-post destination.
 
+Unread-count returns are private, `no-store` and scoped to the immutable current viewer. Concurrent count consumers
+for that viewer episode share one coalesced native count query, independently of page and acknowledgement custody.
+
 Reading the page or opening a destination does not acknowledge notices. A chosen unread notice has an explicit
 keyboard-reachable action which acknowledges only that notice. The existing bulk action still acknowledges through
 the owner-supplied displayed boundary when the page admits it. Each command uses its original account, identity and

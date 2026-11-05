@@ -73,7 +73,8 @@ capabilities it registers. The kinds are:
 
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
-before they hand off. Every worker prompt carries the module map generated from the manifest.
+before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
+an alias edge or an allowance. Every worker prompt carries the module map generated from the manifest.
 
 Content's `community-projection/index.ts` is a registered pure core with no dependencies. Board and Realm adapters
 supply selected native activity values and actor identity through that public entry, including its contract types;
@@ -88,11 +89,17 @@ adapters. The catalogue is independent of HTTP routing. Cedar is the formal refe
 ever needs general recursion, host functions or a solver, adoption is reopened. Evidence:
 [access model (Opus 5.5)](research/access-model-opus-5-5.md) and [(GPT-6 Astra)](research/access-model-gpt-6-astra.md).
 
+The public `packages/access` permission-core APIs remain zero-runtime-dependency contracts. Their admission result
+does not establish native, browser or finite-execution acceptance.
+
 The Collection directory binds its qualified owner full-view result or the existing public floor; per-Collection
 management grants do not widen another account's directory. The account's public face keeps public-floor semantics
 even when its owner is viewing it.
 
 ## Data access
+
+Pure bounds arithmetic and operation descriptors belong in contracts or cores, outside service handlers and
+transport adapters. Native adapters bind through service composition roots.
 
 Writes are single-partition commands. A read may not join rows across partitions.
 

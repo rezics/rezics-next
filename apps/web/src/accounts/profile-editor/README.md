@@ -14,12 +14,13 @@ avatar summaries. Native GET and PATCH evaluate existing current profile authori
 additional scopes. A denied native read shows refusal, including when current consent lacks `account:update`.
 
 Profile and public-view changes each require explicit confirmation for the selected immutable account. PATCH
-acknowledges only the immutable command. The shared editor performs CURRENT GET readback before Saved, retains
-unknown attempts with their original key/body, and reconciles current state before a new attempt. A current value
-different from the submitted value requires review. Every retry rereads native rights before sending the same body.
+acknowledges only the immutable command. The shared editor performs CURRENT GET readback before Saved and retains an
+unknown attempt with its original credential, key, version, intent and body. A matching current projection is neither
+acknowledgement, denial nor commitment. Independent current reads, later drafts, remounts, exact-original retries and
+session retirement remain distinct. Every retry rereads exact current native operation advice before sending the same
+original body; a different current value requires review.
 Missing real `KERNEL_ORIGIN` is unavailable, including development; the editor never consumes the fake kernel.
 
-Integration acceptance remains the contract's web suite and native authority oracles. This delivery's permitted
-verification is local web workspace typing; Web owns subsequent visual review.
+Integration acceptance remains the contract's web suite and native authority oracles. Web owns visual review.
 
 Profile reads and saves use Web’s ten-second deadline through headers and body decoding, composed with caller cancellation; a timed-out PATCH retains its exact command and draft for explicit recovery, and only a fresh account-bound read confirms current state.

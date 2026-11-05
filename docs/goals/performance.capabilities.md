@@ -3,7 +3,13 @@
 This manifest maps the [Performance Goal](performance.md) to user cases across [public scope](../scope.md).
 The [acceptance-gap report](../research/api-acceptance-gaps.md#definitions-and-fixtures-the-missing-cases-require)
 owns the fixture contract names; [filtered-list Cost](../filtered-lists.md#cost) owns list budgets and scales.
-This is an acceptance specification, not evidence that the capabilities have passed.
+This file owns acceptance scenarios and evidence limits, not durable bounds or product recovery rules. See the
+[Kernel performance contract](../../services/kernel/performance-contract.md),
+[Library performance contract](../../services/kernel/src/library/performance-contract.md),
+[architecture](../architecture.md#modules-and-boundaries) and
+[verification](../development/verification.md#native-growth-evidence) for those authorities. The Settings, Inbox
+and Profile owners are linked from the [Performance Goal](performance.md). This is an acceptance specification,
+not evidence that the capabilities have passed.
 
 Stages advance separately: **specified red** (validated failing specification), **driver registered** (native binding),
 **implementation exposed** (production boundary), **user-case acceptance passed** (all named cases at a recorded
@@ -89,9 +95,6 @@ Search retains direct catalogue/prepared public checks; Commerce retains direct 
 the `POST /v1/zones/{id}:readPage` owner retains the per-plan composed-page check. Reuse their native plans and
 evidence rather than duplicate their checks or implement benchmark-only matching.
 
-**Stage:** the full composed capability remains not yet specified. This increment adds an unexecuted public Search
-slice; no user-case acceptance or promotion claim is made for that slice or the remaining owner/composed cases.
-
 ## growth-harness
 
 **User job and persona:** an owner Goal contributor measures engine work at three seeded scales independently of
@@ -113,8 +116,8 @@ are all not applicable: this is test support with no list surface.
 Reserve `counted-unit-ceilings-at-three-scales` for `growth-counters.test.ts`: examined/removed rows, shared blocks,
 statements, request/response bytes, connections per backend and native counted units must be captured, attributed
 and asserted at every scale. Independent background work is reported separately, with its own bounded statements.
-Decision: native engine units come from harness Cost on every scale and repetition; `connections` and `slots` are the
-declared counted ceilings; a plan node without `Rows Removed by *` is omitted from the removed total.
+See [Measured native units](../../services/kernel/performance-contract.md#measured-native-units) for the authoritative
+unit and counted-ceiling interpretation.
 
 **Native acceptance command:**
 
@@ -122,10 +125,8 @@ declared counted ceilings; a plan node without `Rows Removed by *` is omitted fr
 bun run --cwd services/kernel check test/support/growth.test.ts test/support/growth-counters.test.ts
 ```
 
-**Stage:** implementation exposed for the existing harness API and the reserved
-`counted-unit-ceilings-at-three-scales` scenario in `growth-counters.test.ts`. The complete capability has no
-recorded user-case acceptance or promotion. A file's presence is not a pass; native acceptance remains the command
-above at a recorded revision. Existing supporting suites are inventoried below, not treated as its substitute.
+The complete capability requires the command above; a file's presence is not a pass. Existing supporting suites are
+inventoried below, not treated as a substitute.
 
 ## hot-path-bounds
 
@@ -159,9 +160,7 @@ check-run/stack-run retain the assignment and resolve its repo-relative path on 
 before the frozen suite receives it. A missing-driver verifier is red evidence only. These are capability commands
 for future verification, not a claim that they ran in this specification change.
 
-**Stage:** implementation exposed for existing Cost verification and module growth suites; complete hot-path
-coverage has no recorded user-case acceptance or promotion. Inventory presence alone cannot prove every operation
-has a sound derivation or that its native driver passes.
+Inventory presence alone cannot prove every operation has a sound derivation or that its native driver passes.
 
 ### Imports and lifecycle operation coverage
 

@@ -390,83 +390,16 @@ each configured rule to reject a witness, compare diagnostic spans and severity,
 check the configured null comparison, unused argument, rest sibling and underscore
 exceptions. No permissive unsupported-rule flag is used.
 
-## Wall-time measurements
+## Native growth evidence
 
-### Retained host-a transfer comparison
+Performance measurement establishes bounded work, not machine speed. Keep one folded capture for the operation and all
+tracked nested native work. Apply the existing [shared, notice and entry ceilings](../../services/kernel/performance-contract.md#native-growth-capture-memory),
+and await read-only post-drain verification before another preparation. Retain growing `progress_session` scan guards
+and exact doomed/retained assertions. State administrative work outside the capture.
 
-Three comparable required Kernel-check receipts on host a share ordinary one-slot priority, overlay after GitHub fetch,
-0 overlay files (17 bytes sent), snapshot reuse and a dependency-artifact hit. Git preparation phases are present:
-snapshot staging 3.9–4.8 s, shared-store lock/fetch 0.71–0.92 s, checkout 1.04–1.12 s, GitHub fetch 3.1–3.4 s, and
-empty-overlay rsync 2.2–2.9 s. Slot wait is 4.5–5.6 s; dependency install 13.1–16.0 s; command 10.0–10.7 s; and
-return rsync 16.5–26.6 s. The exact receipt references remain in the existing temporary evidence.
+A SQL failure retains its bound head, scale, occurrence, plan, rows and buffers for the owning module. Forced plans,
+tolerance changes, larger capture caps and fixture-only passes do not close it. Root SQL admission requires actual
+supported Reylo types through affected Web/root checks; fast copy-on-write preparation does not establish SQL closure.
 
-The exact source commit, working-tree dirty bytes beyond the empty overlay, deployed `remote-check` hash, cp-sync point,
-concurrent occupancy, periodic reclaim state and independent disk stopgap state remain unmeasured. Do not infer these
-deployment facts from integrated source. This cohort establishes only its observed 2.2–2.9-second empty-overlay phase.
-No comparable non-empty host-a required-check receipts with the source/deployment context needed for comparison are
-available in the retained evidence, so the original 58-second per-run upload question remains unmeasured. These
-receipts do not establish resolution after admission deployment or characterize a non-empty source transfer.
-
-No cause-supported runner repair follows from this cohort. Dependency-cache and Git-preparation work retain their
-existing owners. Keep reclaim and disk stopgap evidence separate; runner deployment and cp-sync, and retirement of
-either stopgap, remain with the supermanager. Post-admission throughput and host-b successful typecheck duration
-remain separate questions for the existing compiler/health chain; this cohort supplies neither.
-
-Measured on 28 October 2026 on this machine: Linux x64, AMD Ryzen Threadripper 3970X,
-32 cores / 64 logical CPUs, 64 GiB RAM. Baseline runtime: Bun 1.4.3. Candidate runtime:
-the pinned canary above. Times are elapsed wall seconds, one observation per command,
-including startup. The paired workspace table runs tsc then Bun per workspace. The
-machine also runs other workers; caches and load are uncontrolled, so these observations
-are evidence of this attempt, not isolated benchmark guarantees.
-
-Full checks use the loopback check host through the normal admission protocol, with
-all other hosts excluded from this attempt's local hosts file. Queueing, synchronization,
-installation and browser setup are included in their end-to-end times. No busy slot is
-bypassed. The gate's per-workspace times are reported separately from admission wait.
-
-| Check                                                                     | Before seconds | After seconds | Result / interpretation                                                              |
-| ------------------------------------------------------------------------- | -------------: | ------------: | ------------------------------------------------------------------------------------ |
-| Tree format check                                                         |          0.882 |         2.552 | oxfmt retained; both detect existing base formatting issues.                         |
-| Eleven non-SQL type checks, sequential sum                                |         53.571 |        34.129 | Identical diagnostics; 1.57 times faster in this paired observation.                 |
-| Root typecheck, including generation, compiler DB and kernel construction |        302.044 |       150.699 | Both passed; includes database and generator costs.                                  |
-| Tree lint                                                                 |          1.290 |         0.195 | Identical 80 JSON diagnostics; 6.62 times faster in this observation.                |
-| Full kernel check                                                         |    Unavailable |   Unavailable | Local comparison cancelled after the gate proved incompatible acceptance assertions. |
-| Full web check                                                            |    Unavailable |   Unavailable | Local comparison cancelled on the same specification conflict.                       |
-
-The candidate formatter also took 0.615 seconds to check the oxfmt-normalized 3,170-file
-temporary copy and rejected the two files above. An initial canary lint observation
-under heavier load took 3.086 seconds; the final installed-runtime observation is in
-the table. The retained formatter's slower observation likewise illustrates load
-variation rather than a formatter implementation change. On the unchanged checkout, the final
-paired formatter observation was 2.638 seconds for oxfmt and 0.324 seconds for Bun;
-the two output differences still prevent adoption. The component and per-workspace
-typecheck observations are complete; full-check comparisons are not. The focused
-toolchain and root-typecheck regression run passed all 27 tests across three files.
-
-The root gate's kernel check completed in 4,298.43 seconds on host a and failed;
-that remote observation is separate from the requested local comparison. In that run,
-`test/commerce/http.test.ts` passed and `test/commerce/exposure.test.ts` failed.
-The former requires `summary` among the exact keys returned by `POST /v1/offers`;
-the latter forbids that key for the same input shape (an unseeded target subject,
-title `Book`, USD 1,200 minor units and the same tax code). Their public offer reads
-also require different shapes: the former replaces `summary` with `subject`, while
-the latter requires the creation response unchanged. Both assertions already exist
-on the pre-migration commit. Changing runtime tools cannot satisfy both fixed
-response contracts, and existing acceptance tests were preserved. The remaining
-checks started by this attempt were cancelled after establishing this conflict;
-queue time and cancelled runs are not reported as completed benchmark times.
-
-## Sources and reproduction
-
-The [Bun 1.4.4 release notes](https://bun.com/blog/bun-v1.4.4) describe the formatter,
-checker improvements and canary-only lint command. Exact npm metadata and tarballs
-were read from `registry.npmjs.org/bun/canary` and `@oven/bun-linux-x64`. A preliminary
-GitHub canary download reported an older `11c367163` revision; only the newer npm
-canary is pinned and used for final compatibility checks. No reference-project code
-was ported.
-
-For future upgrades, repeat the formatter comparison on an oxfmt-normalized disposable
-copy, compare each workspace's diagnostics, exercise the SQL content mappers and
-compare lint diagnostics before changing a command. Run the equivalence tests and
-root typecheck, then the root gate. Preserve the fallback when the comparison differs;
-do not suppress diagnostics or reformat frozen files to make a replacement pass.
+Existing cache and Git preparation retain their owner-defined locks, identity and cleanup. Deployment, process
+reconciliation, mechanical retries and check execution remain with their controller or host owner.

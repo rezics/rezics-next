@@ -2,66 +2,68 @@
 
 ## Outcome
 
-People and API consumers receive predictable work bounds as the catalogue, history and tenant population grow.
-Contributors can demonstrate those bounds using a shared native growth harness rather than machine speed.
+People and API consumers receive predictable work bounds as catalogue, history and tenant populations grow.
+Contributors demonstrate those bounds with shared native evidence, rather than machine speed.
 
 ## Done when
 
-- Each read, write, authorization, validation, projection and cleanup path has a derivation identifying its anchors,
-  examined work and admitted expansion, linked to a native growth check.
+- Every owned read, write, authorization, validation, projection and cleanup derivation names its anchors, examined
+  work, admitted expansion and complete nested native cost, and links to a native growth check.
 - The shared harness measures statements, examined rows, buffers and other relevant engine work at three seeded
-  scales, growing unrelated data and history independently of the selected neighborhood, including Auth workflow and
-  request history at 256, 1024 and 4096 records.
-- Kernel command execution, keyset reads, receipts, outbox/relays, Access/Auth, semantic/content, search, library,
-  commerce, imports, lifecycle jobs including Auth workflow-history retention, and control-plane operations meet their
-  stated bounds.
-- Large jobs make bounded resumable progress; denied, empty, deep-page and cleanup paths obey the same principle,
+  scales. It grows unrelated data and history independently of the selected neighbourhood, including Auth workflow
+  and request history at 256, 1,024 and 4,096 records.
+- Kernel command execution, keyset reads, receipts, outbox and relays, Access/Auth, semantic/content, search, library,
+  commerce, imports, lifecycle jobs including Auth workflow-history retention, and control-plane operations meet
+  their stated bounds.
+- Large jobs make bounded resumable progress. Denied, empty, deep-page and cleanup paths obey the same principle,
   including Auth zero-eligible and post-drain repeated-empty retention batches.
-- Filter/source/order plans have derived budgets in honest work units, including preparation, rereads, discarded
-  candidates and native disclosure. Returned page size is never the only cost evidence.
+- Filter, source and order plans have derived budgets in honest work units, including preparation, rereads, discarded
+  candidates and native disclosure. A shorter returned page or deduplicated terminal set cannot reprice raw work.
 - Every violated derivation or growth assertion is corrected with its owner and verified through native acceptance.
-  Load-sensitive classification and background work attribution preserve visible diagnostic evidence.
-
-Completion requires the scoped outcomes on main with recorded checks covering the promoted commit. Specified,
-implemented, exposed, tested and promoted are separate states; a passing local check alone does not complete a Goal.
+  Load-sensitive classification and background-work attribution preserve visible diagnostic evidence.
 
 ## Scope
 
-Includes shared growth measurement, fixtures, cost derivations, hot-path audits and bounded-work corrections across
-[public scope](../scope.md). Slow engine constants are distinct from work growing with unrelated data. Wall-clock
-thresholds alone do not prove asymptotic behavior. Runtime features remain with their product owners.
+Includes the shared native growth harness, fixtures, operation derivations, hot-path corrections and cross-owner
+receiving across [public scope](../scope.md). Slow engine constants are distinct from work growing with unrelated
+data. Wall-clock thresholds alone do not prove asymptotic behavior.
+
+The assigned website work covers signed-in account Settings, notices, preferences, section navigation, safety, and
+the assigned Profile/Watches journeys through the existing real typed Web shell. M1 is the signed-in Settings
+Profile/Watches path. Do not enlarge production exposure or native/browser admission.
 
 ## Ownership
 
-Owns `services/kernel/test/support/growth*` and growth suites under module test directories.
-The [kernel README](../../services/kernel/README.md), module Cost sections and
-[verification](../development/verification.md) describe the evidence. Product-code fixes require coordination with
-the owning Goal and one writer per shared path. A shared harness API change is a cross-owner contract.
+Performance owns `services/kernel/test/support/growth*`, growth suites under module test directories, shared bounds
+and cross-owner receiving. [Kernel performance](../../services/kernel/performance-contract.md) owns shared harness
+and native evidence rules; [Library performance](../../services/kernel/src/library/performance-contract.md) owns
+Collection derivations and custody. [Work](../../services/kernel/src/work/README.md#selected-execution-producer)
+and [History](../../services/kernel/src/history/README.md#selected-native-executor-binding) own their execution
+adapters. [Architecture](../architecture.md#modules-and-boundaries) owns pure-package and adapter direction, and
+[verification](../development/verification.md#native-growth-evidence) owns evidence and check placement.
 
-Performance also owns the website account-settings, notices and preferences journeys: section navigation,
-account safety entry and the assigned profile/preference regions, using the existing Web shell and real typed
-APIs. Accounts, Auth and Content retain backend behavior. Web owns shared patterns and Storybook organization
-and reviews the component stories; Root reviews screenshots before these interface journeys count as complete.
+Performance owns the assigned Settings/Profile/Watches interface journeys. [Settings](../../apps/web/src/settings/README.md),
+[Inbox](../../apps/web/src/inbox/README.md) and the [profile editor](../../apps/web/src/accounts/profile-editor/README.md)
+own their recovery semantics. Web owns the shared shell, patterns and visual acceptance. Accounts, Auth and Content
+retain their native backends.
 
 ## Dependencies
 
-Requires native owner operations and realistic fixtures with isolated resources. Other Goals use the common harness
-and own their local derivations. Semantic supplies disclosure dependencies; search and commerce expose concrete
-admitted plans; performance sets and verifies their budgets. Do not reproduce owner logic inside a benchmark.
+Native owner operations and realistic fixtures with isolated resources are required. Other Goals own their local
+derivations and consume the common harness. Semantic supplies disclosure dependencies; Search and Commerce expose
+concrete admitted plans. Performance derives and verifies their budgets without reproducing owner logic in a
+benchmark.
 
 ## Acceptance
 
-Use [growth harness tests](../../services/kernel/test/support/growth.test.ts), module growth suites and
-[import growth](../../specs/imports-growth.test.ts) as applicable through their owning check runners.
-Measure at three scales, such as 1×, 8× and 64×, against constant, logarithmic or change-proportional bounds derived
-before implementation. Include native examined work, not only call counts. Observe projection/worker work within
-its operation context and report independent background work separately without allowing its per-statement cost to
-grow with scale. Use [verification](../development/verification.md) for targeted admission, diagnostic reruns,
-root typecheck and promoted evidence. Repeated-run calibration combines a check occurrence only when declared bounds
-match across runs; incompatible declarations remain visible with their run names. Document failures by algorithm,
-fixture or classifier ownership.
+The [capability acceptance](performance.capabilities.md) owns user cases and frozen scenarios. Use the
+[shared growth harness](../../services/kernel/performance-contract.md) and module suites through their owning check
+runners. Measure at three scales, such as 1×, 8× and 64×, against constant, logarithmic or change-proportional bounds
+derived before implementation; use the prescribed Auth scales above where applicable. Count native examined work,
+not only calls, and observe projection or worker work within its operation context. Report independently owned
+background work separately.
 
-## External conditions
-
-Check capacity and production resource provisioning are external inputs, kept in private configuration. Queue for
-shared check admission. Capacity limits do not excuse an unproved bound or convert infrastructure failure into denial.
+Root, module and native evidence retain separate meaning. Root SQL acceptance uses the supported Reylo types through
+the affected Web/root checks; fast copy-on-write preparation does not establish SQL closure. Infrastructure failure
+or unavailable evidence is neither denial nor a product pass. Use [verification](../development/verification.md)
+for evidence and check-host placement.

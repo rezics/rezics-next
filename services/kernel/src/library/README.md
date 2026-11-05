@@ -1841,7 +1841,9 @@ still report unavailable; this Source integration supplies neither a replacement
 
 ## Cost
 
-These are derivations from the library commands, SQL, `db/library/schema.sql` and `db/library/migrations/`, not measurements or guaranteed PostgreSQL plans.
+[The Library performance contract](performance-contract.md) owns cross-operation ceilings, descriptor closure and
+custody. The operation-specific entries below derive from Library commands, SQL, `db/library/schema.sql` and
+`db/library/migrations/`; they are not measurements or guaranteed PostgreSQL plans.
 `N` is total rows of the relevant relation kind; `P` is rows of that kind in an anchor's partition.
 `L(N) = O(log(2+N))` shared blocks for a B-tree probe, with constant rows examined for a unique key; `k` indexed changes cost `O(k L(N))` blocks.
 Bounds distinguish rows examined (`R`), shared blocks (`B`) and SQL statements (`S`). A subsection excludes the command envelope and authorization unless it adds them.
@@ -1852,11 +1854,8 @@ Where a named test does not call the operation, or does not grow the rows that o
 
 ### Whole-query Collection publication
 
-- Operation/touches: one locator-only staging attempt, its current native definition and Source, prepared private owner filter, at most one canonical subject (including an excluded subject) or one sparse prefix, checkpoint recovery/CAS, evidence and member writes, optional exhaustion seal, and the ordinary final command's two fresh seal reads, output inventory, local rule/header checks, activation hook, callbacks and cleanup. Staging never selects B. Final activation preserves A until COMPLETE.
-- Branch maxima: a staging call admits at most 16 canonical prefix candidates and settles at most one pending subject. A pending checkpoint needs no prefix; a sparse exhausted prefix has no subject evaluation and may seal; an already exhausted checkpoint only rereads its seal. The owner closure admits at most 100 raw canonical keys; fact probes share a separate `100 - originalIds - facts already retained` key limit. Its `originalIds + raw canonical keys <= 100` fence allows at most 50 originals. Each original's `resolveSubject` disclosure reserves at most 8,192 native rows. The native step allows at most three attempts; each final activation attempt receives a fresh native work frame.
-- Necessary first-closure lower bound: with 49 raw canonical references and 50 originals, the structural fence `originalIds + raw canonical keys <= 100` holds. The staging Search path takes the non-deferred owner closure, which reserves two `resolveSubject` disclosure passes; `50 × 2 × 8,192 = 819,200 nativeRows`. Those disclosures alone exceed the existing per-attempt `262,144 nativeRows` ceiling by 557,056 rows, before canonical queries, fact probes, the second whole closure read, prefix, admission, Source getter/currentness, preparation, checkpoint SQL, settlement or seal costs. Each pass also reserves 50 candidate keys, 6,400 native points, 6,400 statements and 50 MiB. This is a necessary lower bound for the branch, not the complete staging plan.
-- Nine axes: the lower-bound declaration includes every `@rezics/bounds` axis. `engineRequests = 0` is inapplicable only for the admitted private-owner branch after the public-catalogue branch is refused; the other zero entries in that lower bound omit costs and do not stand for the complete plan. The native Work receipt still exposes eight axes, so the service bridge names its zero `engineRequests` assumption instead of dropping it implicitly.
-- Growth/availability: the source and output suites retain A and keep missing seals unavailable. Native end-to-end acceptance, completion after checkpoint recovery, and identity/currentness changes across real staging settlement remain deferred to receiving acceptance. The complete immutable plans for preparation, checkpoint recovery, exhaustion sealing and one final activation attempt, and replacement of staging's held settlement envelope, remain unimplemented until the owning ceiling decision permits a full bound. No 64 MiB staging byte allowance is treated as evidence for the unrelated 32 MiB whole-capture measurement.
+See the [whole-query publication contract](performance-contract.md#whole-query-publication) for the admissible ceiling,
+refusal behavior and preserved output. This subsection remains the owner anchor for the operation.
 
 ### Private saved-query member evaluation
 
