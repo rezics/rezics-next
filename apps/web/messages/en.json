@@ -5350,6 +5350,8 @@
   "creator_sales_empty": "No sales recorded yet",
   "creator_sales_empty_hint": "Only recorded purchases appear here. Royalty statements provide separate accounting and external payment records.",
   "creator_sales_pagination": "Sales history pages",
+  "creator_sales_previous": "Previous sales",
+  "creator_sales_retry": "Retry this window",
   "creator_sales_next": "Older sales",
   "game_profile_refresh": "Refresh Game reading",
   "game_profile_refreshing": "Refreshing the Game reading… The last confirmed reading remains below.",

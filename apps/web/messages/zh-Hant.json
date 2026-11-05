@@ -5146,6 +5146,8 @@
   "creator_sales_empty": "尚無銷售紀錄",
   "creator_sales_empty_hint": "這裡只顯示已記錄的購買。版稅報表另行提供會計資料與外部付款紀錄。",
   "creator_sales_pagination": "銷售紀錄分頁",
+  "creator_sales_previous": "上一頁銷售",
+  "creator_sales_retry": "重試此頁",
   "creator_sales_next": "較早的銷售紀錄",
   "game_profile_title": "遊戲與視覺小說作品編輯",
   "game_profile_credits": "創作者與職員",

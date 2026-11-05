@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { CreatorSalesAddress } from '../../../checkout/creator-sales-address';
 import { CreatorSalesPage } from '../../../checkout/creator-sales-page';
 import { CreatorSalesCurrent } from '../../../checkout/creator-sales-current';
@@ -24,6 +24,7 @@ export const Route = createFileRoute('/creator/sales/')({
     pageHead({ title: m.creator_sales_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   pendingComponent: () => <CreatorSalesPage page={{ kind: 'loading' }} locale={getLocale()} />,
   component: function CreatorSalesRoute() {
+    const router = useRouter();
     const search = Route.useSearch();
     const initial = Route.useLoaderData();
     const locale = getLocale();
@@ -32,6 +33,7 @@ export const Route = createFileRoute('/creator/sales/')({
         <CreatorSalesAddress locale={locale} {...(search.cursor === undefined ? {} : { cursor: search.cursor })} />
       );
     if (!initial) return <CreatorSalesPage page={{ kind: 'unavailable' }} locale={locale} {...search} />;
-    return <CreatorSalesCurrent initial={initial} locale={locale} {...search} />;
+    return <CreatorSalesCurrent initial={initial} locale={locale} {...search}
+      navigate={(href) => { void router.navigate({ href }); }} />;
   },
 });

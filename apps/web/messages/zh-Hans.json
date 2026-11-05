@@ -5143,6 +5143,8 @@
   "creator_sales_empty": "暂无销售记录",
   "creator_sales_empty_hint": "这里只显示已记录的购买。版税报表另行提供会计数据与外部付款记录。",
   "creator_sales_pagination": "销售记录分页",
+  "creator_sales_previous": "上一页销售",
+  "creator_sales_retry": "重试此页",
   "creator_sales_next": "更早的销售记录",
   "game_profile_title": "游戏与视觉小说作品编辑",
   "game_profile_credits": "创作者与职员",

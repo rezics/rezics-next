@@ -5138,6 +5138,8 @@
   "creator_sales_empty": "Aucune vente enregistrée pour le moment",
   "creator_sales_empty_hint": "Seuls les achats enregistrés apparaissent ici. Les relevés de redevances fournissent séparément les données comptables et les paiements externes.",
   "creator_sales_pagination": "Pages de l’historique des ventes",
+  "creator_sales_previous": "Ventes précédentes",
+  "creator_sales_retry": "Réessayer cette page",
   "creator_sales_next": "Ventes plus anciennes",
   "game_profile_title": "Modifier un jeu ou un visual novel",
   "game_profile_credits": "Créateurs et crédits",
