@@ -126,17 +126,20 @@ test('screen episode windows retain ordered original memberships, disclosures, c
         holderId: seasonId,
         parentId: profile.public.subject.id,
         type: 'schema:TVSeason',
-        position: '1',
-        statement: { id: seasonMembership, value: { content: profile.public.subject.id } },
+        statement: {
+          id: seasonMembership,
+          value: { content: profile.public.subject.id },
+          qualifiers: [{ property: { id: 'schema:position' }, value: { content: '1' } }],
+        },
       },
       {
         membershipId: episodeMembership,
         holderId: episodeId,
         type: 'schema:Episode',
-        position: 'SP 1',
         statement: {
           id: episodeMembership,
           references: [{ parts: [{ value: { content: 'https://example.invalid/source' } }] }],
+          qualifiers: [{ property: { id: 'schema:position' }, value: { content: 'SP 1' } }],
         },
       },
     ],
@@ -260,7 +263,18 @@ test('unknown totals keep a sparse disclosed window continuable and oversized ev
     profile.public,
     'en',
   );
-  expect(sparse).toMatchObject({ ok: true, state: 'ready', entries: [{ position: ' 1/2 ' }], next: 'next-window' });
+  expect(sparse).toMatchObject({
+    ok: true,
+    state: 'ready',
+    entries: [
+      {
+        statement: {
+          qualifiers: [{ property: { id: 'schema:position' }, value: { content: ' 1/2 ' } }],
+        },
+      },
+    ],
+    next: 'next-window',
+  });
 
   const oversized = statement(
     episodeMembership,
