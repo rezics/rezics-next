@@ -296,9 +296,10 @@ const copyListContextSchema = t.Union([
     },
     closed,
   ),
-  ...(['scope', 'withheld', 'missing', 'unavailable'] as const).map((state) =>
-    t.Object({ state: t.Literal(state) }, closed),
-  ),
+  t.Object({ state: t.Literal('scope') }, closed),
+  t.Object({ state: t.Literal('withheld') }, closed),
+  t.Object({ state: t.Literal('missing') }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
 ]);
 const followSchema = t.Object(
   {
@@ -785,7 +786,11 @@ function copyPresentationView(presentation: CopyPresentation): Static<typeof cop
         : presentation.statusEditing,
     conditionEditing:
       presentation.conditionEditing.state === 'supported'
-        ? { ...presentation.conditionEditing, choices: [...presentation.conditionEditing.choices] }
+        ? {
+            state: 'supported',
+            currentness: 'current',
+            choices: COPY_CONDITION_CHOICES.map((choice) => ({ ...choice })),
+          }
         : presentation.conditionEditing,
   };
 }

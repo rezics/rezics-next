@@ -284,12 +284,18 @@ beforeAll(async () => {
     });
     if (response.status !== 201) throw new Error(`${response.status}: ${await response.text()}`);
     const body: unknown = await response.json();
-    if (!isRecord(body) || !isRecord(body.subject) || typeof body.subject.id !== 'string')
+    if (
+      !isRecord(body) ||
+      !isRecord(body.subject) ||
+      typeof body.subject.id !== 'string' ||
+      !isRecord(body.subject.statements) ||
+      !Array.isArray(body.subject.statements['schema:isPartOf'])
+    )
       throw new Error('Episode response is missing its subject');
-    return {
-      id: body.subject.id,
-      statements: isRecord(body.subject.statements) ? body.subject.statements : {},
-    };
+    const relation = body.subject.statements['schema:isPartOf'][0];
+    if (!isRecord(relation) || typeof relation.id !== 'string')
+      throw new Error('Episode response is missing its membership statement');
+    return { id: body.subject.id, relationId: relation.id };
   };
   const member = await createEpisode('Archive member'),
     detached = await createEpisode('Archive detached member');
@@ -309,7 +315,7 @@ beforeAll(async () => {
     }),
   );
   await json(await f.send(owner.bearer, 'POST', `/v1/progressSessions/${unitSession.id}:complete`, { revision: 2 }));
-  const relation = detached.statements['schema:isPartOf']![0]!.id;
+  const relation = detached.relationId;
   const hidden = await f.send('steward', 'POST', `/v1/subjects/${detached.id}/candidates/${relation}:hide`, {
     reason: 'Archive fixture removes current membership',
   });

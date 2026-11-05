@@ -219,7 +219,8 @@ export function assertListingCountReaderWork(report: GrowthReport, batch: Listin
       expect(statement).toMatch(/route >= .*partition_no \* 16/);
       expect(statement).toMatch(/route < \(.*partition_no \+ 1\) \* 16/);
       const occurrence = product[0];
-      if (!occurrence) throw new Error('The indexed listing statement is missing');
+      if (!occurrence || !occurrence.planDocuments)
+        throw new Error('The indexed listing statement is missing its execution plan');
       const nodes = occurrence.planDocuments.flatMap(planNodes);
       const scans = nodes.filter(
         (node) =>

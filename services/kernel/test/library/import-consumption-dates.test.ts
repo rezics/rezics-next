@@ -6,10 +6,9 @@ import {
   reviewImportConsumptionDates,
   vndbDateSource,
   type ImportConsumptionDateIntent,
-  type ImportConsumptionDateReview,
 } from '../../src/library/import-consumption.ts';
 
-const journal: ImportConsumptionDateReview['journal'] = {
+const journal: Parameters<typeof reviewImportConsumptionDates>[0]['journal'] = {
   sessionId: 'session',
   revision: 3,
   startDate: { year: 2020 },
@@ -126,9 +125,7 @@ test('review requires independent adoption or clear consent and keeps unknown da
 });
 
 test('lost acknowledgement replays the stored patch, key and attribution without rereading the journal', async () => {
-  const reviewed = review(
-    aniListDateSource({ startedAt: { year: 2024, month: 2 } }, 'startedAt'),
-  ) as ImportConsumptionDateReview;
+  const reviewed = review(aniListDateSource({ startedAt: { year: 2024, month: 2 } }, 'startedAt'));
   let stored: ImportConsumptionDateIntent | undefined;
   let receipt: { value: { sessionId: string; revision: number; changed: boolean } } | undefined;
   let loseFirstReply = true;
