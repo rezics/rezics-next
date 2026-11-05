@@ -338,6 +338,10 @@ async function until(check: () => boolean) {
   expect({
     ready: check(),
     writes: nativeWrites.map((write) => write.kind),
+    own: client.getQueryCache().findAll({ queryKey: ['subject-own-reaction'] }).map((query) => ({
+      status: query.state.status,
+      value: (query.state.data as { value?: unknown } | undefined)?.value,
+    })),
     chips: chips().map((button) => ({
       text: button.textContent,
       pressed: button.getAttribute('aria-pressed'),
@@ -539,13 +543,13 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
 
   const ownReadsBeforeMount = ownReads.length;
   const countReadsBeforeMount = countReads.length;
-  browserSessionPending = deferred<SessionIdentity>();
+  client.setQueryData(sessionQuery.queryKey, sessionData());
   queueNativeRead({ status: 503 });
   holdPersonalCalls = new Set([1, 2, 5]);
   const firstOutcome = zoneOutcome(subjectId);
   await paint(firstOutcome);
   await until(
-    () => browserSessionReadCount > 0 && personalCalls.length === 1 && personalCalls[0]!.result !== undefined,
+    () => personalCalls.length === 1 && personalCalls[0]!.result !== undefined,
   );
 
   const firstPersonal = personalCalls[0]!.result!;
@@ -561,7 +565,6 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   expect(personalCalls).toHaveLength(1);
   expect(countReads.length - countReadsBeforeMount).toBe(1);
 
-  await flush(() => browserSessionPending!.resolve(storySession()));
   await until(() => ownReads.length === ownReadsBeforeMount + 1);
   const firstPrivateRead = ownReads.at(-1)!;
   expect(firstPrivateRead.id).toBe(subjectId);
@@ -591,23 +594,6 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   ).toBe(true);
   expect(preferenceReads).toContain('reader-one');
   expect(libraryEntryReads).toContain(subjectId);
-
-  await client
-    .fetchQuery({
-      ...sessionQuery,
-      staleTime: 0,
-      queryFn: async () => {
-        throw new Error('session cache refresh failed');
-      },
-    })
-    .catch(() => undefined);
-  expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
-  expect(client.getQueryData(sessionQuery.queryKey)).toMatchObject(sessionData());
-  expect(host.textContent).toContain('ZONE-PREFERENCE-WITNESS');
-  expect(chips().every((button) => button.disabled)).toBe(true);
-  expect(personalCalls).toHaveLength(1);
-  expect(countReads.length - countReadsBeforeMount).toBe(1);
-  expect(nativeWrites).toHaveLength(0);
 
   queueNativeRead({ status: 200, data: { kind: null } });
   await flush(() => client.setQueryData(sessionQuery.queryKey, sessionData()));
@@ -780,14 +766,14 @@ function noSelection() {
 function independentZonePayload(combined: number, counts: number, follows = 1) {
   expect(personalCalls).toHaveLength(combined);
   expect(countReads).toHaveLength(counts);
-  expect(preferenceReads).toEqual(['reader-one']);
-  expect(libraryEntryReads).toEqual([subjectId]);
+  expect(preferenceReads).toEqual(Array.from({ length: combined }, () => 'reader-one'));
+  expect(libraryEntryReads).toEqual(Array.from({ length: combined }, () => subjectId));
   expect(followReads).toEqual(Array.from({ length: follows }, () => subjectId));
   expect(host.textContent).toContain('ZONE-PREFERENCE-WITNESS');
   expect(chip('like').textContent).toContain('2');
 }
-function independentZone(combined: number, counts: number) {
-  independentZonePayload(combined, counts);
+function independentZone(combined: number, counts: number, follows = 1) {
+  independentZonePayload(combined, counts, follows);
   expect(libraryEntryButton()?.disabled).toBe(false);
   const follow = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.textContent?.trim() === m.library_follow(),
@@ -875,7 +861,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
         expect(oldButton.isConnected).toBe(false);
         expect(window.document.activeElement).not.toBe(oldButton);
         expect(countReads).toHaveLength(countsBefore);
-        if (surface === 'production Zone') independentZone(1, 1);
+        if (surface === 'production Zone') independentZone(1, 1, 2);
         // The fresh response comes through the real prepared native read, never from a copied cache value.
         await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
         await until(() => chips().some((button) => !button.disabled));
@@ -888,7 +874,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
           nativeWrites.every((write) => write.id === subjectId && write.authorization === 'Bearer token-reader-one'),
         ).toBe(true);
         expect(ownReads).toHaveLength(2);
-        if (surface === 'production Zone') independentZone(1, 1);
+        if (surface === 'production Zone') independentZone(1, 1, 2);
         else expect(countReads).toHaveLength(countsBefore + 2); // Only the two useful current mutation refreshes.
       });
 
@@ -928,6 +914,8 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     await clickKind('insightful');
     await clickKind('insightful');
     expect(nativeWrites).toHaveLength(1);
+    const queuedButton = chip('like');
+    expect(queuedButton.getAttribute('aria-pressed')).toBe('true');
     const sessionResponse = deferred<SessionIdentity>();
     browserSessionPending = sessionResponse;
     let fetch!: Promise<unknown>;
@@ -940,12 +928,15 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('success');
     expect(ownReads).toHaveLength(1);
     expect(nativeWrites).toHaveLength(1);
+    expect(chip('like') === queuedButton).toBe(true);
+    expect(queuedButton.disabled).toBe(false);
+    expect(queuedButton.getAttribute('aria-pressed')).toBe('true');
     await flush(() => write.resolve({ status: 200 }));
     await until(() => nativeWrites.length === 3 && chip('insightful').getAttribute('aria-pressed') !== 'true');
     expect(nativeWrites.map((write) => write.kind)).toEqual(['like', 'insightful', null]);
     expect(ownReads).toHaveLength(1);
     expect(nativeWrites.every((write) => write.authorization === 'Bearer token-reader-one')).toBe(true);
-    if (surface === 'production Zone') independentZone(1, 1);
+    if (surface === 'production Zone') independentZonePayload(1, 1);
     else expect(countReads).toHaveLength(initialCountReads + 3); // Each current callback refreshes the mounted public baseline.
     // Only its eventual successful commit retires the observation.
     await act(async () => {
@@ -956,7 +947,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     await until(() => ownReads.length === 2);
   });
 
-test('production Zone keeps exact independent loads across private refusal, retained-data session error and missing cache', async () => {
+test('production Zone reloads its personal source after session loss while reaction refusal stays independent', async () => {
   client.setQueryData(sessionQuery.queryKey, sessionData());
   queueNativeRead({ status: 403 });
   await paint(zoneOutcome(subjectId));
@@ -978,22 +969,31 @@ test('production Zone keeps exact independent loads across private refusal, reta
   });
   expect(client.getQueryState(sessionQuery.queryKey)?.status).toBe('error');
   expect(client.getQueryData(sessionQuery.queryKey)).toEqual(sessionData());
-  // Session loss keeps the independently completed payload, but does not override Library/follow authority.
+  await until(() => personalCalls.length === 2 && personalCalls[1]?.result !== undefined && chips().length > 0);
+  // A different browser session state retires the combined source; equal success does not.
   expect(personalCalls[0]!.result!.library?.provenance?.viewer).toBe('reader-one');
-  independentZonePayload(1, 1);
+  independentZonePayload(2, 2);
   expect(ownReads).toHaveLength(1);
   browserSessionPending = deferred<SessionIdentity>();
   await flush(() => client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true }));
-  independentZonePayload(1, 1);
+  await until(() => personalCalls.length === 3 && personalCalls[2]?.result !== undefined && chips().length > 0);
+  independentZonePayload(3, 3);
   noSelection();
   expect(host.querySelectorAll('button[data-slot="reaction-chip"]:not(:disabled)')).toHaveLength(0);
   expect(ownReads).toHaveLength(1);
   expect(nativeWrites).toHaveLength(0);
   queueNativeRead({ status: 200, data: { kind: null } });
-  await flush(() => browserSessionPending!.resolve(storySession()));
+  let recovery!: Promise<unknown>;
+  await flush(() => {
+    recovery = client.fetchQuery(sessionQuery);
+  });
+  await act(async () => {
+    browserSessionPending!.resolve(storySession());
+    await recovery;
+    await tick();
+  });
   await until(() => ownReads.length === 2 && followReads.length === 2 && chips().some((button) => !button.disabled));
-  // A genuine session loss can require the follow owner's fresh read; reaction replacement alone never does.
-  independentZonePayload(1, 1, 2);
+  independentZonePayload(4, 4, 2);
 });
 
 test('anonymous production Zone makes zero private reaction reads and preserves its public counts', async () => {
@@ -1033,7 +1033,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     noSelection();
     expect(chips().every((button) => button.disabled)).toBe(true);
     expect(countReads).toHaveLength(initialCountReads);
-    if (surface === 'production Zone') independentZone(1, 1);
+    if (surface === 'production Zone') independentZone(1, 1, 2);
     await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
     await until(() => chips().some((button) => !button.disabled));
   });

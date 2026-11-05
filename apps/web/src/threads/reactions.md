@@ -70,3 +70,10 @@ Equal-success regression campaigns also cover manual cache updates and real Quer
 commits, through the ordinary Subject consumer and production Zone personal loader. Fresh admissions share one
 matching own response among mounted readers; independent Zone preferences, Library and public counts keep their
 original load. These authored campaigns and the original native cost campaigns remain **UNRUN** until integration.
+
+Zone appearance merging retains the document root while its source document and appearance are unchanged, so
+personal readback cannot remount the composition's action host and lose queued choices or focus. Equal session
+success retains the combined Zone payload but requires Follow's own fresh admission under the shared session
+contract. A changed browser session state retires the combined source and loads a new one; removing the session
+cache requires an explicit fresh session read before private recovery. The focused tests use a known initial
+session for reaction recovery and cover session loss separately.

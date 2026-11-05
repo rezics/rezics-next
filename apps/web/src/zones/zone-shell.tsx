@@ -18,7 +18,7 @@ import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { defaultReader, type Reader } from '../subject/reader';
 import { loadReader } from '../subject/load-reader';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { NotFoundPage, StatusPage } from '../shell/shell';
 import { RouteState } from '../shell/route-state';
 import type { PagePaths } from '../shell/head';
@@ -286,7 +286,7 @@ export function ZonePageSurface({
   document: CompositionDocument;
   children: (document: CompositionDocument) => ReactNode;
 }) {
-  const merged = zonePageDocument(zone.appearance, document);
+  const merged = useMemo(() => zonePageDocument(zone.appearance, document), [zone.appearance, document]);
   return (
     <div data-zone-page {...zoneAppearanceAttributes(zone.appearance, document)}>
       {children(merged)}
