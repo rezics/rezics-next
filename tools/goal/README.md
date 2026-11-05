@@ -1002,26 +1002,29 @@ reported as unknown rather than inferred.
 
 ### Host-capacity admission
 
-Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count running
-attempts through the `worker_attempts_state` expression index. An admitted start keeps its queue ticket in an admitted
-state while it prepares its worktree and launches; that ticket occupies one worker slot until the attempt is recorded
-running or ends. Tickets are tied to the admitting process and are discarded when that process dies. Waiting check-wake
-attempts do not count. The existing 15-second waiting interval, oldest-ticket-first order and critical-path half-hour
-head start are unchanged. Replacing, updating or removing `capacity.json` wakes queued starts immediately, without
-waiting for the periodic worker/memory poll.
+Decision: Host admission and width observations share the indexed, trigger-maintained `worker_current_attempts`
+projection; admission counts only each task's current attempt, while width retains its process-identity classification.
+
+Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count current
+running attempts through the `worker_current_attempts_state` index. An admitted start keeps its queue ticket in an
+admitted state while it prepares its worktree and launches; that ticket occupies one worker slot until the attempt is
+recorded running or ends. Tickets are tied to the admitting process and are discarded when that process dies. Waiting
+check-wake attempts do not count. The existing 15-second waiting interval, oldest-ticket-first order and critical-path
+half-hour head start are unchanged. Replacing, updating or removing `capacity.json` wakes queued starts immediately,
+without waiting for the periodic worker/memory poll.
 
 #### Cost: running-attempt count
 
-- **Touches:** One SQLite statement and the state-index entries for running attempts; no attempt bodies are returned.
-- **Bound:** One indexed count per capacity check, with work proportional to the number of running entries and no scan
-  of non-running attempt history.
-- **Growth check:** `capacity-wait.test.ts`, `a start waiting for host capacity counts running attempts with one
-  indexed query, without reading every attempt body`, holds running entries at 0/1/10/100 while independently
-  crossing settled histories of 10/100/1,000 entries with 128/1,024/8,192-byte payloads. It captures the store's
-  actual statement execution and aggregate result, checks zero body decoding and the nonpartial state-index schema
-  and query plan, and replays that captured SQL with native `sqlite3` against the same fixture. Each replay executes
-  once with zero fullscan steps and at most `5 * running entries + 20` VM steps, identical across history/payload
-  scales for each running set. Zero running entries also leave host capacity available.
+- **Touches:** One SQLite statement and the current live-state index entries; no attempt bodies are returned.
+- **Bound:** One indexed count per capacity check, with work proportional to current running entries and no scan of
+  settled or superseded attempt history.
+- **Growth check:** `capacity-wait.test.ts`, `a start waiting for host capacity counts current running attempts with
+  one indexed query, without reading every attempt body`, holds current running entries at 0/1/10/100 while
+  independently crossing settled and superseded histories of 10/100/1,000 entries with 128/1,024/8,192-byte
+  payloads. It captures the store's actual statement execution and aggregate result, checks zero body decoding and the
+  partial live-state index schema and query plan, and replays that captured SQL with native `sqlite3` against the same
+  fixture. Each replay executes once with zero fullscan steps and at most `5 * running entries + 20` VM steps,
+  identical across history/payload scales for each running set. Zero running entries also leave host capacity available.
 - **Measurement decision:** Use required native `sqlite3` statement statistics for the captured-SQL replay because
   Bun exposes no statement-status counters. VM steps measure executed opcodes; fullscan steps exclude indexed visits.
   Indexed rows examined and physical page/byte work remain unavailable; the returned aggregate is not examined work.
@@ -2072,10 +2075,11 @@ release checks belong to the native controller after source integration; typing 
 
 #### Width governor
 
-The independent manager-host sweep checks worker width every minute and delivers at most one wakeable width event per
-Goal in each UTC 15-minute bucket when fewer than ten current attempts have live process identities and known ready,
-pending-start, held or stopped work exists. The event reports the current running and Codex counts, unknown process
-evidence, and known work counts. Ready, held, waiting and stale-identity attempts do not count as running. The manager
+The independent manager-host sweep checks worker width every minute from the same `worker_current_attempts` projection
+used by host admission and delivers at most one wakeable width event per Goal in each UTC 15-minute bucket when fewer
+than ten current attempts have live process identities and known ready, pending-start, held or stopped work exists. The
+event reports the current running and Codex counts, unknown process evidence, and known work counts. Ready, held, waiting
+and stale-identity attempts do not count as running. The manager
 is alerted based on confirmed live workers only; unknown process identities remain explicit evidence and do not
 suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The event tells the manager
 to recover, reshape or dispatch real work, to act on each stopped task within an hour (retry with a rewritten brief,

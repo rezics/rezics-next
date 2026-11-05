@@ -108,6 +108,120 @@ CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.stat
       WHERE COALESCE(json_extract(body, '$.state'), '') NOT IN
         ('integrated', 'merged', 'stopped', 'cancelled', 'verified');`,
   },
+  {
+    module: 'worker',
+    version: 11,
+    sql: `CREATE TABLE worker_current_attempts (
+      task_id TEXT PRIMARY KEY,
+      sequence INTEGER NOT NULL,
+      current_attempt INTEGER NOT NULL,
+      task_state ANY,
+      goal ANY,
+      manager ANY,
+      urgent ANY NOT NULL,
+      attempt_state ANY,
+      pid ANY,
+      process_start ANY,
+      process_boot ANY,
+      process_group ANY,
+      cli ANY
+    );
+INSERT INTO worker_current_attempts
+SELECT t.id, t.sequence, t.current_attempt,
+       json_extract(t.body, '$.state'),
+       json_extract(t.body, '$.brief.goal'),
+       json_extract(t.body, '$.brief.manager'),
+       COALESCE(json_extract(t.body, '$.brief.urgent'), 0),
+       json_extract(a.body, '$.state'),
+       json_extract(a.body, '$.process.pid'),
+       json_extract(a.body, '$.process.start'),
+       json_extract(a.body, '$.process.boot'),
+       json_extract(a.body, '$.process.group'),
+       json_extract(a.body, '$.profile.cli')
+FROM worker_tasks AS t
+LEFT JOIN worker_attempts AS a ON a.task_id=t.id AND a.attempt=t.current_attempt;
+CREATE INDEX worker_current_attempts_state
+  ON worker_current_attempts(attempt_state, urgent, task_id, current_attempt)
+  WHERE attempt_state IN ('running', 'waiting');
+CREATE INDEX worker_current_attempts_width ON worker_current_attempts(sequence)
+  WHERE task_state IN ('ready', 'held', 'running', 'stopped');
+DROP INDEX IF EXISTS worker_attempts_state;
+DROP INDEX IF EXISTS worker_tasks_width_current;
+CREATE TRIGGER worker_current_attempts_task_insert AFTER INSERT ON worker_tasks BEGIN
+  INSERT INTO worker_current_attempts VALUES (
+    NEW.id, NEW.sequence, NEW.current_attempt,
+    json_extract(NEW.body, '$.state'),
+    json_extract(NEW.body, '$.brief.goal'),
+    json_extract(NEW.body, '$.brief.manager'),
+    COALESCE(json_extract(NEW.body, '$.brief.urgent'), 0),
+    (SELECT json_extract(a.body, '$.state') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt),
+    (SELECT json_extract(a.body, '$.process.pid') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt),
+    (SELECT json_extract(a.body, '$.process.start') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt),
+    (SELECT json_extract(a.body, '$.process.boot') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt),
+    (SELECT json_extract(a.body, '$.process.group') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt),
+    (SELECT json_extract(a.body, '$.profile.cli') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt)
+  );
+END;
+CREATE TRIGGER worker_current_attempts_task_update AFTER UPDATE OF sequence, current_attempt, body ON worker_tasks BEGIN
+  UPDATE worker_current_attempts SET
+    sequence=NEW.sequence,
+    current_attempt=NEW.current_attempt,
+    task_state=json_extract(NEW.body, '$.state'),
+    goal=json_extract(NEW.body, '$.brief.goal'),
+    manager=json_extract(NEW.body, '$.brief.manager'),
+    urgent=COALESCE(json_extract(NEW.body, '$.brief.urgent'), 0),
+    attempt_state=(SELECT json_extract(a.body, '$.state') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt),
+    pid=(SELECT json_extract(a.body, '$.process.pid') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt),
+    process_start=(SELECT json_extract(a.body, '$.process.start') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt),
+    process_boot=(SELECT json_extract(a.body, '$.process.boot') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt),
+    process_group=(SELECT json_extract(a.body, '$.process.group') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt),
+    cli=(SELECT json_extract(a.body, '$.profile.cli') FROM worker_attempts AS a
+      WHERE a.task_id=NEW.id AND a.attempt=NEW.current_attempt)
+  WHERE task_id=NEW.id;
+END;
+CREATE TRIGGER worker_current_attempts_task_delete AFTER DELETE ON worker_tasks BEGIN
+  DELETE FROM worker_current_attempts WHERE task_id=OLD.id;
+END;
+CREATE TRIGGER worker_current_attempts_attempt_insert AFTER INSERT ON worker_attempts BEGIN
+  UPDATE worker_current_attempts SET
+    attempt_state=json_extract(NEW.body, '$.state'),
+    pid=json_extract(NEW.body, '$.process.pid'),
+    process_start=json_extract(NEW.body, '$.process.start'),
+    process_boot=json_extract(NEW.body, '$.process.boot'),
+    process_group=json_extract(NEW.body, '$.process.group'),
+    cli=json_extract(NEW.body, '$.profile.cli')
+  WHERE task_id=NEW.task_id AND current_attempt=NEW.attempt;
+END;
+CREATE TRIGGER worker_current_attempts_attempt_update AFTER UPDATE ON worker_attempts BEGIN
+  UPDATE worker_current_attempts SET
+    attempt_state=NULL, pid=NULL, process_start=NULL, process_boot=NULL, process_group=NULL, cli=NULL
+  WHERE task_id=OLD.task_id AND current_attempt=OLD.attempt;
+  UPDATE worker_current_attempts SET
+    attempt_state=json_extract(NEW.body, '$.state'),
+    pid=json_extract(NEW.body, '$.process.pid'),
+    process_start=json_extract(NEW.body, '$.process.start'),
+    process_boot=json_extract(NEW.body, '$.process.boot'),
+    process_group=json_extract(NEW.body, '$.process.group'),
+    cli=json_extract(NEW.body, '$.profile.cli')
+  WHERE task_id=NEW.task_id AND current_attempt=NEW.attempt;
+END;
+CREATE TRIGGER worker_current_attempts_attempt_delete AFTER DELETE ON worker_attempts BEGIN
+  UPDATE worker_current_attempts SET
+    attempt_state=NULL, pid=NULL, process_start=NULL, process_boot=NULL, process_group=NULL, cli=NULL
+  WHERE task_id=OLD.task_id AND current_attempt=OLD.attempt;
+END;`,
+  },
   checkResultsMigration(),
   {
     module: 'dev-verifier',
@@ -458,23 +572,28 @@ export class WorkerStore implements AttemptFence {
         };
       });
   }
-  /** Counts running attempts through the state index without reading or decoding attempt bodies. */
+  /** Counts current running attempts through the shared live-state index. */
   runningAttemptsCount(): number {
-    const row = this.db
-      .query("SELECT count(*) AS count FROM worker_attempts WHERE json_extract(body, '$.state') = 'running'")
-      .get() as { count: number };
-    return row.count;
+    return this.currentAttemptsCount();
   }
-  /** Count only live attempts in the requested host lane; a waiting urgent attempt retains its reserved slot. */
+  /** Count current attempts in the requested host lane; a waiting urgent attempt retains its reserved slot. */
   capacityAttemptsCount(urgent: boolean, taskId?: string, attempt?: number): number {
-    return (
-      this.db
-        .query(`SELECT count(*) AS count FROM worker_attempts a JOIN worker_tasks t ON t.id=a.task_id
-      WHERE json_extract(a.body,'$.state') IN (${urgent ? "'running','waiting'" : "'running'"})
-      AND coalesce(json_extract(t.body,'$.brief.urgent'),0)=?
-      AND NOT (a.task_id=? AND a.attempt=?)`)
-        .get(urgent ? 1 : 0, taskId ?? '', attempt ?? -1) as { count: number }
-    ).count;
+    return this.currentAttemptsCount(urgent, urgent, taskId, attempt);
+  }
+  private currentAttemptsCount(
+    urgent?: boolean,
+    includeWaiting = false,
+    taskId?: string,
+    attempt?: number,
+  ): number {
+    const states = includeWaiting ? "attempt_state IN ('running', 'waiting')" : "attempt_state='running'";
+    const lane = urgent === undefined ? '' : ` AND urgent=${urgent ? 1 : 0}`;
+    const excludeCurrent =
+      taskId !== undefined && attempt !== undefined ? ' AND NOT (task_id=? AND current_attempt=?)' : '';
+    const row = this.db
+      .query(`SELECT count(*) AS count FROM worker_current_attempts WHERE ${states}${lane}${excludeCurrent}`)
+      .get(...(excludeCurrent ? [taskId, attempt] : [])) as { count: number };
+    return row.count;
   }
   /** Retained unbound UUID evidence. Classification affects only logical admission, never physical custody. */
   historicalProofChecks(goal?: string): HistoricalProofCheck[] {

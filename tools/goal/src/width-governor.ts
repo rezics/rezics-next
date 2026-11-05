@@ -122,28 +122,27 @@ function pageQuery(db: Database, afterSequence: number, limit: number, hasRetryI
   const pendingStart = hasRetryIntents
     ? `EXISTS (
         SELECT 1 FROM worker_retry_intents AS i
-        WHERE i.task_id=t.id AND i.attempt=t.current_attempt
+        WHERE i.task_id=c.task_id AND i.attempt=c.current_attempt
           AND json_extract(i.body, '$.status')='pending'
       )`
     : '0';
   return db
     .query(
-      `SELECT t.sequence, t.current_attempt,
-        json_extract(t.body, '$.state') AS task_state,
-        json_extract(t.body, '$.brief.goal') AS goal,
-        json_extract(t.body, '$.brief.manager') AS manager,
-        json_extract(a.body, '$.state') AS attempt_state,
-        json_extract(a.body, '$.process.pid') AS pid,
-        json_extract(a.body, '$.process.start') AS process_start,
-        json_extract(a.body, '$.process.boot') AS process_boot,
-        json_extract(a.body, '$.process.group') AS process_group,
-        json_extract(a.body, '$.profile.cli') AS cli,
+      `SELECT c.sequence, c.current_attempt,
+        c.task_state,
+        c.goal,
+        c.manager,
+        c.attempt_state,
+        c.pid,
+        c.process_start,
+        c.process_boot,
+        c.process_group,
+        c.cli,
         CASE WHEN ${pendingStart} THEN 1 ELSE 0 END AS pending_start
-      FROM worker_tasks AS t
-      LEFT JOIN worker_attempts AS a ON a.task_id=t.id AND a.attempt=t.current_attempt
-      WHERE t.sequence > ?
-        AND json_extract(t.body, '$.state') IN ('ready', 'held', 'running', 'stopped')
-      ORDER BY t.sequence
+      FROM worker_current_attempts AS c
+      WHERE c.sequence > ?
+        AND c.task_state IN ('ready', 'held', 'running', 'stopped')
+      ORDER BY c.sequence
       LIMIT ?`,
     )
     .all(afterSequence, limit) as WidthRow[];
@@ -253,7 +252,7 @@ async function readSnapshotAsync(
   return finishSnapshot(date.toISOString(), system, goals);
 }
 
-/** Read bounded pages of active task rows and only the scalar fields from each current attempt. */
+/** Read bounded indexed pages from the shared current-attempt projection. */
 export function readWidthSnapshot(db: Database, at?: Date | number, options?: SyncWidthSnapshotOptions): WidthSnapshot;
 export function readWidthSnapshot(
   db: Database,
