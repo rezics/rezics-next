@@ -1064,11 +1064,14 @@ export function auditArchitecture(
   const warnings: string[] = [];
   const violations: BoundaryViolation[] = [];
   const currentByModule = new Map<string, Map<string, BoundaryViolation>>();
-  const add = (moduleId: string, rule: string, file: string, edge: string): void => {
+  const diagnosticContexts = new Map<string, string>();
+  const add = (moduleId: string, rule: string, file: string, edge: string, context?: string): void => {
     const violation = { rule, file, edge };
+    const key = `${moduleId}\n${baselineKey(violation)}`;
     const group = currentByModule.get(moduleId) ?? new Map<string, BoundaryViolation>();
     group.set(baselineKey(violation), violation);
     currentByModule.set(moduleId, group);
+    if (context) diagnosticContexts.set(key, context);
   };
 
   const files = Object.keys(graph.hashes).sort();
@@ -1134,7 +1137,14 @@ export function auditArchitecture(
         locatedEdges.push({ source, sourceModule, edge, target, targetModule });
         if (sourceModule.id === targetModule.id) continue;
         const publicTarget = isPublicTarget(edge.specifier, target, targetModule, exportTargets);
-        if (!publicTarget) add(sourceModule.id, 'rule 2', source, stableEdge(edge, target));
+        if (!publicTarget)
+          add(
+            sourceModule.id,
+            'rule 2',
+            source,
+            stableEdge(edge, target),
+            `${sourceModule.id} -> ${targetModule.id}`,
+          );
         if (
           !(
             sourceModule.allowedDependencies.includes('*') || sourceModule.allowedDependencies.includes(targetModule.id)
@@ -1145,6 +1155,7 @@ export function auditArchitecture(
             'rule 3',
             source,
             stableEdge(edge, `${target} (${targetModule.id} is not an allowed dependency)`),
+            `${sourceModule.id} -> ${targetModule.id}`,
           );
         }
         if (moduleRank(sourceModule.kind) < moduleRank(targetModule.kind)) {
@@ -1153,6 +1164,7 @@ export function auditArchitecture(
             'rule 3',
             source,
             stableEdge(edge, `${target} (${sourceModule.kind} cannot depend on ${targetModule.kind})`),
+            `${sourceModule.id} -> ${targetModule.id}`,
           );
         }
         if (
@@ -1164,6 +1176,7 @@ export function auditArchitecture(
             'rule 5',
             source,
             stableEdge(edge, `${target} (${sourceModule.kind} cannot select or import ${targetModule.kind})`),
+            `${sourceModule.id} -> ${targetModule.id}`,
           );
         }
         if (
@@ -1171,7 +1184,13 @@ export function auditArchitecture(
           targetModule.kind === 'adapter' &&
           !sourceModule.allowedDependencies.includes(targetModule.id)
         ) {
-          add(sourceModule.id, 'rule 5', source, stableEdge(edge, `${target} (unrelated adapter ${targetModule.id})`));
+          add(
+            sourceModule.id,
+            'rule 5',
+            source,
+            stableEdge(edge, `${target} (unrelated adapter ${targetModule.id})`),
+            `${sourceModule.id} -> ${targetModule.id}`,
+          );
         }
       }
 
@@ -1241,7 +1260,8 @@ export function auditArchitecture(
       const lookupKey = `${moduleId}\n${baselineKey(violation)}`;
       currentKeys.add(lookupKey);
       if (!baselineEntries.has(lookupKey)) {
-        errors.push(`${violation.rule}: ${violation.file}: ${violation.edge}`);
+        const context = diagnosticContexts.get(lookupKey);
+        errors.push(`${violation.rule}: ${violation.file}: ${violation.edge}${context ? ` [modules ${context}]` : ''}`);
       }
       violations.push(violation);
     }
@@ -1257,12 +1277,48 @@ export function auditArchitecture(
   return { errors: [...new Set(errors)].sort(), warnings, violations };
 }
 
+const COMPACT_KIND: Record<ModuleKind, string> = {
+  contract: 't',
+  core: 'c',
+  application: 'a',
+  adapter: 'd',
+  'composition root': 'r',
+  'UI/transport library': 'u',
+};
+const COMPACT_OWNER: Record<string, string> = {
+  accounts: 'a',
+  commerce: 'c',
+  content: 't',
+  imports: 'i',
+  performance: 'p',
+  platform: 'l',
+  search: 's',
+  semantic: 'm',
+  web: 'w',
+};
+
+function compactModuleId(id: string): string {
+  return id.replace(/^kernel-/, 'k-').replace(/^web-/, 'w-');
+}
+
+function compactPublicEntry(entry: string): string {
+  if (entry.startsWith('@rezics/')) return entry.replace('@rezics/', '@/');
+  return entry
+    .replace(/^services\/kernel\/src\//, 'k/')
+    .replace(/^services\/auth\/src\//, 's/')
+    .replace(/^services\/importer\/src\//, 'i/')
+    .replace(/^apps\/web\/src\//, 'w/')
+    .replace(/^apps\/auth\/src\//, 'a/')
+    .replace(/^packages\//, 'p/');
+}
+
 function moduleEntryLabel(module: ArchitectureModule): string {
   const entries = module.publicEntries;
   if (!entries.length) return '-';
   const byPackage = new Map<string, string[]>();
   const other: string[] = [];
-  for (const entry of entries) {
+  for (const original of entries) {
+    const entry = compactPublicEntry(original);
     if (entry.startsWith('@')) {
       const slashAt = entry.indexOf('/');
       const secondSlash = entry.indexOf('/', slashAt + 1);
@@ -1280,11 +1336,16 @@ function moduleEntryLabel(module: ArchitectureModule): string {
 }
 
 export function formatModuleMap(manifest: ArchitectureManifest): string {
-  const result = manifest.modules
+  const legend =
+    'id k-=kernel-,w-=web-; kind t=contract,c=core,a=application,d=adapter,r=root,u=ui; owner a=accounts,c=commerce,t=content,i=imports,p=performance,l=platform,s=search,m=semantic,w=web; path k=services/kernel/src,s=services/auth/src,i=services/importer/src,w=apps/web/src,a=apps/auth/src,p=packages,@=rezics';
+  const rows = manifest.modules
     .slice()
     .sort((left, right) => left.id.localeCompare(right.id))
-    .map((module) => `${module.id}|${module.kind}|${module.owner}|${moduleEntryLabel(module)}`)
-    .join('\n');
+    .map(
+      (module) =>
+        `${compactModuleId(module.id)}|${COMPACT_KIND[module.kind]}|${COMPACT_OWNER[module.owner] ?? module.owner}|${moduleEntryLabel(module)}`,
+    );
+  const result = [legend, ...rows].join('\n');
   if (result.length > 2_000) throw new Error(`Generated module map is ${result.length} characters; maximum is 2000.`);
   return result;
 }
