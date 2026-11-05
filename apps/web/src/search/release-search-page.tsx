@@ -381,7 +381,7 @@ export function ReleaseSearchPage({
   const current = () => !reader || reader.isCurrent();
   const page = current() && 'page' in state ? state.page : undefined;
   const next = page?.next ?? null;
-  const pageEmpty = page !== undefined && page.groups.length === 0 && next !== null;
+  const pageEmpty = page?.status === 'ready' && page.groups.length === 0 && next !== null;
   const restartHref = parsed
     ? releaseSearchHref(locale, parsed.form)
     : (retryHref ?? `/${encodeURIComponent(locale)}/search/releases`);

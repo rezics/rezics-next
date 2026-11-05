@@ -251,6 +251,10 @@ test('released group Continue, Previous, First and native open/back each read on
   const envelope = JSON.stringify(window.history.state.rezicsSearchWindows);
   expect(envelope).not.toContain('Current edition');
   expect(envelope).not.toContain('csrf');
+  await click('next');
+  await finish(page(null));
+  expect(link('next')).toBeNull();
+  expect(document.activeElement === host.querySelector('[data-release-group-results]')).toBe(true);
 });
 
 test('direct opaque and preparing addresses stay unnumbered; progress, failure, cycles and restart retain truthful actions', async () => {
@@ -258,6 +262,9 @@ test('direct opaque and preparing addresses stay unnumbered; progress, failure, 
   expect(host.textContent).toContain('Current group window');
   expect(link('previous')).toBeNull();
   await click('next');
+  await finish(page('next', 'preparing'));
+  expect(host.textContent).not.toContain('Current edition');
+  await click('retry');
   await finish(page('preparing-progress', 'preparing'));
   expect(host.textContent).not.toContain('Current edition');
   expect(link('previous')!.href).toContain('cursor=opaque');
@@ -285,16 +292,19 @@ test('direct opaque and preparing addresses stay unnumbered; progress, failure, 
 test('same-principal replacement, A/B/A, checkpoint replacement and moved focus retire pending authority', async () => {
   await show();
   await click('next');
-  const retired = reads.at(-1)!;
   await act(async () =>
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'reader', csrfToken: 'two' }),
   );
   await finish();
   expect(document.activeElement === host.querySelector('[data-release-group-results]')).toBe(false);
+  expect(link('retry')).not.toBeNull();
+  expect(host.textContent).not.toContain('Current edition');
+  expect(host.querySelector('[data-release-group-windows]')!.getAttribute('aria-busy')).toBeNull();
+  await click('retry');
+  await finish(page('third'));
   const outside = document.createElement('button');
   document.body.append(outside);
   outside.focus();
-  if (reads.at(-1) !== retired) await finish();
   expect(document.activeElement).toBe(outside);
   await act(async () => {
     void router.navigate({
