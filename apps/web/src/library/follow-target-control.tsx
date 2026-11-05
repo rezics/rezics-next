@@ -152,8 +152,25 @@ export function FollowTargetControl({
     readLifetime.accepted === true &&
     queryClient.getQueryState(options.queryKey)?.status === 'success' &&
     queryClient.getQueryData(options.queryKey) === readLifetime.data;
-  const isCurrent = (next: boolean) =>
-    address.isCurrent() && origin.current(next ? 1 : 2) && (following !== undefined || !next || acceptedRead());
+  const isCurrent = (next: boolean) => {
+    const direction = next ? 1 : 2;
+    if (!address.isCurrent()) {
+      console.log('following current rejected by address');
+      return false;
+    }
+    if (!origin.current(direction)) {
+      console.log('following current rejected by operation', {
+        parent: parent?.isCurrent(),
+        allowed: origin.allowed[direction],
+      });
+      return false;
+    }
+    if (following === undefined && next && !acceptedRead()) {
+      console.log('following current rejected by own-edge read');
+      return false;
+    }
+    return true;
+  };
   return (
     <span hidden={!canFollow && !canRemove}>
       <FollowControl
