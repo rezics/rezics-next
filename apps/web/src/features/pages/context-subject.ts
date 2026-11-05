@@ -11,15 +11,21 @@ export const loadContextSubject = createServerOnlyFn(async function loadContextS
   client: KernelClient,
   id: string,
   locale: string,
-  options: { realm?: string | undefined; authorization?: string | undefined } = {},
+  options: { realm?: string | undefined; authorization?: string | undefined; signal?: AbortSignal | undefined } = {},
 ) {
+  options.signal?.throwIfAborted();
   if (!options.realm) {
     const { loadSubject } = await import('../../subject/load-subject');
-    return loadSubject(client, id, locale as never);
+    options.signal?.throwIfAborted();
+    return loadSubject(client, id, locale as never, options.signal);
   }
   let loaded = await loadSubjectPage(client, id, undefined, locale, options);
-  if (loaded.kind === 'redirect' && loaded.target !== 'account')
+  options.signal?.throwIfAborted();
+  if (loaded.kind === 'redirect' && loaded.target !== 'account') {
+    options.signal?.throwIfAborted();
     loaded = await loadSubjectPage(client, loaded.id, undefined, locale, options);
+    options.signal?.throwIfAborted();
+  }
   if (loaded.kind === 'missing') return loaded;
   if (loaded.kind === 'redirect') {
     if (loaded.target !== 'account') throw new PageReadError('dependency_unavailable', 503);

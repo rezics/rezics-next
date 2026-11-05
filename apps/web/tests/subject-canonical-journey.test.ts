@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,11 +9,20 @@ import recordedSubject from '../src/kernel/recorded/subject.json';
 import recordedPage from '../src/kernel/recorded/subject-page.json';
 import { loadSubject } from '../src/subject/load-subject';
 import { accountHref, canonicalRedirect, keepSearch, subjectUrlForView } from '../src/subject/subject-href';
-import { formerHandleRedirect } from '../src/features/pages/agent';
-import { loadSubjectPage, SubjectPage, subjectBody, type SubjectPageData } from '../src/features/pages/subject';
+import type { SubjectPageData } from '../src/features/pages/subject';
 import { cachePublicPage } from '../src/security/page-cache';
 
 const original = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e80';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { loadSubjectPage, SubjectPage, subjectBody } = await import('../src/features/pages/subject');
+const { formerHandleRedirect } = await import('../src/features/pages/agent');
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => (resolve = complete));
+  return { promise, resolve };
+}
 
 test('the complete assigned visible journey uses actual current native data and preserves its privacy failure and request bounds', async () => {
   // Exercise the generated HTTP client against native recorded DTOs, without a second page/data protocol.
@@ -80,6 +89,62 @@ test('the complete assigned visible journey uses actual current native data and 
     '/ja/subjects/id/%E6%9C%AC/works?q=a%20b#roles',
   );
   expect(canonicalRedirect(accountHref('en', 'Current_Name', 'works'), '', '', 308).statusCode).toBe(308);
+});
+
+test('retired canonical reads abort native stages and never schedule survivor or handle work afterward', async () => {
+  const firstStarted = deferred<void>();
+  const firstReply = deferred<Response>();
+  const firstCalls: { path: string; signal: AbortSignal }[] = [];
+  const firstClient = createKernelClient('https://kernel.invalid', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      firstCalls.push({ path: new URL(request.url).pathname, signal: request.signal });
+      firstStarted.resolve();
+      return firstReply.promise;
+    },
+  });
+  const firstController = new AbortController();
+  const firstRead = loadSubject(firstClient, original, 'en', firstController.signal);
+  await firstStarted.promise;
+  firstController.abort();
+  firstReply.resolve(
+    Response.json({ redirect: { from: original, to: recordedSubject.subject.id } }, { status: 308 }),
+  );
+  await expect(firstRead).rejects.toMatchObject({ name: 'AbortError' });
+  expect(firstCalls).toHaveLength(1);
+  expect(firstCalls[0]?.signal.aborted).toBe(true);
+
+  const read = structuredClone(recordedSubject) as SubjectRead;
+  read.subject.type = 'schema:Person';
+  read.summary!.types = ['schema:Person', 'schema:Thing'];
+  const survivorStarted = deferred<void>();
+  const survivorReply = deferred<Response>();
+  const survivorCalls: { path: string; signal: AbortSignal }[] = [];
+  const survivorClient = createKernelClient('https://kernel.invalid', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      survivorCalls.push({ path, signal: request.signal });
+      if (path === `/v1/subjects/${original}`)
+        return Response.json({ redirect: { from: original, to: read.subject.id } }, { status: 308 });
+      if (path === `/v1/subjects/${read.subject.id}`) {
+        survivorStarted.resolve();
+        return survivorReply.promise;
+      }
+      return Response.json({ accounts: [{ id: read.subject.id, handle: 'current_name' }] });
+    },
+  });
+  const survivorController = new AbortController();
+  const survivorRead = loadSubject(survivorClient, original, 'en', survivorController.signal);
+  await survivorStarted.promise;
+  survivorController.abort();
+  survivorReply.resolve(Response.json(read));
+  await expect(survivorRead).rejects.toMatchObject({ name: 'AbortError' });
+  expect(survivorCalls.map((call) => call.path)).toEqual([
+    `/v1/subjects/${original}`,
+    `/v1/subjects/${read.subject.id}`,
+  ]);
+  expect(survivorCalls[1]?.signal.aborted).toBe(true);
 });
 
 test('non-agent ID canonicalization uses the admitted type summary without loading a definitions release', async () => {
