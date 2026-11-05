@@ -1,4 +1,13 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Badge } from '@rezics/ui/shadcn/badge';
@@ -7,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezi
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { ContentItem, ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
 import { initials } from '../threads/initials';
 import { readManagedAccountsInventory } from './actions';
@@ -57,18 +67,22 @@ function IdentityRow({ account, children }: { account: ManagedIdentity; children
   );
 }
 
+type Activation = (event: MouseEvent<HTMLButtonElement>) => void;
+
 function Failure({
   failure,
   retry,
   firstPage,
+  previous,
   busy,
   scope,
   headingId,
   waiting,
 }: {
   failure: ManagedAccountsFailure;
-  retry: () => void;
-  firstPage?: (() => void) | undefined;
+  retry: Activation;
+  firstPage?: Activation | undefined;
+  previous?: Activation | undefined;
   busy: boolean;
   scope: 'inventory' | ManagedFeed;
   headingId: string;
@@ -123,6 +137,18 @@ function Failure({
           >
             {m.settings_retry()}
           </Button>
+          {previous ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={recoveryButtonClassName}
+              aria-describedby={`${headingId} ${descriptionId}${waiting ? ` ${waitId}` : ''}`}
+              disabled={busy || waiting}
+              onClick={previous}
+            >
+              {m.prq_previous()}
+            </Button>
+          ) : null}
           {firstPage ? (
             <Button
               type="button"
@@ -147,14 +173,16 @@ function FeedActions({
   preparing = false,
   retry,
   firstPage,
+  previous,
   headingId,
   waiting,
 }: {
-  feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure' | 'restartable'>;
+  feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure' | 'restartable' | 'previous'>;
   scope: ManagedFeed;
   preparing?: boolean;
-  retry: () => void;
-  firstPage: () => void;
+  retry: Activation;
+  firstPage: Activation;
+  previous: Activation;
   headingId: string;
   waiting: boolean;
 }) {
@@ -165,15 +193,16 @@ function FeedActions({
         <Failure
           failure={feed.failure}
           retry={retry}
-          firstPage={feed.restartable && feed.next !== null && !preparing ? firstPage : undefined}
+          firstPage={feed.restartable ? firstPage : undefined}
+          previous={feed.previous ? previous : undefined}
           busy={feed.busy}
           scope={scope}
           headingId={headingId}
           waiting={waiting}
         />
       ) : null}
-      {!feed.failure && (feed.next !== null || preparing) ? (
-        <div role="group" aria-labelledby={headingId}>
+      {!feed.failure && (feed.next !== null || preparing || feed.previous || feed.restartable) ? (
+        <div role="group" aria-labelledby={headingId} className="flex min-w-0 flex-wrap items-start gap-2">
           {waiting ? (
             <p id={waitId} role="status" aria-labelledby={headingId}>
               {scope === 'organizations'
@@ -190,16 +219,36 @@ function FeedActions({
               variant="outline"
               className={recoveryButtonClassName}
               aria-describedby={`${headingId}${waiting ? ` ${waitId}` : ''}`}
-              disabled={feed.busy || waiting}
+              disabled={feed.busy || waiting || (feed.next === null && !preparing)}
               onClick={retry}
             >
-              {feed.busy
-                ? m.settings_managed_loading()
-                : preparing
-                  ? m.settings_retry()
-                  : m.settings_managed_load_more()}
+              {feed.busy ? m.settings_managed_loading() : preparing ? m.settings_retry() : m.managed_next()}
             </Button>
           </div>
+          {feed.previous ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={recoveryButtonClassName}
+              aria-describedby={`${headingId}${waiting ? ` ${waitId}` : ''}`}
+              disabled={feed.busy || waiting}
+              onClick={previous}
+            >
+              {m.prq_previous()}
+            </Button>
+          ) : null}
+          {feed.restartable ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={recoveryButtonClassName}
+              aria-describedby={`${headingId}${waiting ? ` ${waitId}` : ''}`}
+              disabled={feed.busy || waiting}
+              onClick={firstPage}
+            >
+              {m.settings_managed_restart_list()}
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </>
@@ -209,6 +258,7 @@ function FeedActions({
 export function ManagedAccountsView({
   snapshot,
   more,
+  previousPage,
   firstPage,
   retry,
   current = () => true,
@@ -217,6 +267,7 @@ export function ManagedAccountsView({
   snapshot: ManagedAccountsSnapshot;
   settingsHref: string;
   more: (feed: ManagedFeed) => void;
+  previousPage: (feed: ManagedFeed) => void;
   firstPage: (feed: ManagedFeed) => void;
   retry: () => void;
 }) {
@@ -229,23 +280,47 @@ export function ManagedAccountsView({
   const waiting = usePreferenceRetry(undefined, snapshot.retryAt ?? 0);
   const inventoryWaitId = `${id}-inventory-wait`;
   const previous = useRef(snapshot);
+  const handoff = useRef<{ feed: ManagedFeed; activator: HTMLButtonElement } | null>(null);
+  const activate =
+    (feed: ManagedFeed, action: (feed: ManagedFeed) => void): Activation =>
+    (event) => {
+      if (!current() || snapshot.loading || snapshot[feed].busy || waiting) return;
+      handoff.current =
+        event.detail === 0 && document.activeElement === event.currentTarget
+          ? { feed, activator: event.currentTarget }
+          : null;
+      action(feed);
+    };
   useLayoutEffect(() => {
     const before = previous.current;
     previous.current = snapshot;
-    if (!current()) return;
-    for (const [feed, heading] of [
-      ['organizations', organizationsHeadingId],
-      ['responsibilities', responsibilitiesHeadingId],
-    ] as const) {
-      if (before[feed].busy && !snapshot[feed].busy && !snapshot[feed].failure && snapshot.account)
-        document.getElementById(heading)?.focus();
+    const pending = handoff.current;
+    if (!current() || snapshot.loading || !snapshot.account) {
+      handoff.current = null;
+      return;
     }
+    if (!pending || !before[pending.feed].busy || snapshot[pending.feed].busy) return;
+    handoff.current = null;
+    if (snapshot[pending.feed].failure) return;
+    if (
+      document.activeElement !== pending.activator &&
+      (pending.activator.isConnected || document.activeElement !== document.body)
+    )
+      return;
+    const heading = pending.feed === 'organizations' ? organizationsHeadingId : responsibilitiesHeadingId;
+    document.getElementById(heading)?.focus();
   }, [snapshot, current, organizationsHeadingId, responsibilitiesHeadingId]);
   return (
     <div
       className="min-w-0 max-w-full space-y-6 wrap-anywhere"
       data-slot="managed-accounts"
-      onClickCapture={managedNavigationGuard(current)}
+      onClickCapture={(event) => {
+        handoff.current = null;
+        managedNavigationGuard(current)(event);
+      }}
+      onBlurCapture={(event) => {
+        if (event.target === handoff.current?.activator) handoff.current = null;
+      }}
       onAuxClickCapture={managedNavigationGuard(current)}
     >
       <Card className="min-w-0 max-w-full" role="region" aria-labelledby={viewerHeadingId} aria-busy={snapshot.loading}>
@@ -339,8 +414,9 @@ export function ManagedAccountsView({
                 feed={organizations}
                 scope="organizations"
                 preparing={organizations.state === 'preparing'}
-                retry={() => more('organizations')}
-                firstPage={() => firstPage('organizations')}
+                retry={activate('organizations', more)}
+                previous={activate('organizations', previousPage)}
+                firstPage={activate('organizations', firstPage)}
                 headingId={organizationsHeadingId}
                 waiting={waiting}
               />
@@ -397,8 +473,9 @@ export function ManagedAccountsView({
               <FeedActions
                 feed={responsibilities}
                 scope="responsibilities"
-                retry={() => more('responsibilities')}
-                firstPage={() => firstPage('responsibilities')}
+                retry={activate('responsibilities', more)}
+                previous={activate('responsibilities', previousPage)}
+                firstPage={activate('responsibilities', firstPage)}
                 headingId={responsibilitiesHeadingId}
                 waiting={waiting}
               />
@@ -421,7 +498,11 @@ function ViewerInventory({
   io?: ManagedAccountsIO | undefined;
   owner?: ManagedSessionReader | undefined;
 }) {
-  const inventory = useMemo(() => new ManagedAccountsInventory(viewerId, io, owner?.isCurrent), [viewerId, io, owner]);
+  const locale = getLocale();
+  const inventory = useMemo(
+    () => new ManagedAccountsInventory(viewerId, io, () => (!owner || owner.isCurrent()) && getLocale() === locale),
+    [viewerId, io, owner, locale],
+  );
   const snapshot = useSyncExternalStore(inventory.subscribe, inventory.snapshot, inventory.snapshot);
   useManagedReaderLifetime(inventory.dispose, owner);
   useEffect(() => {
@@ -433,6 +514,7 @@ function ViewerInventory({
       current={() => (!owner || owner.isCurrent()) && inventory.snapshot().account !== null}
       settingsHref={settingsHref}
       more={(feed) => void inventory.more(feed)}
+      previousPage={(feed) => void inventory.previous(feed)}
       firstPage={(feed) => void inventory.firstPage(feed)}
       retry={() => void inventory.load()}
     />

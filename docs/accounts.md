@@ -161,7 +161,10 @@ navigation. Detail `authActions` retains authority. Content's serial publisher d
 and installed callable/root from mounted Kernel; no handwritten mirrors or overrides. Until installation, directory
 identities stay unlinked. Then finish independent replacement, cursor-free restart and admitted detail/back navigation;
 transport/rendering/growth acceptance remains deferred. First duplicate wins; Next replaces its selected feed;
-failed cursor-free restart retries exactly.
+failed cursor-free restart retries exactly. Settings inventory exposes Next, Previous and First for each feed;
+its mounted reader retains only eight admitted predecessors and the current coordinate. Failed movement leaves
+accepted rows and coordinates intact; full inventory refresh resets coordinates only on admission and fences older
+feed responses. Keyboard movement hands focus to its feed heading only while the original activator owns it.
 
 Settings show supplied name/handle and initials avatar, unnamed if neither exists, Identity unavailable if absent.
 Supplied target/operator/member/responsibility IDs stay selectable in closed detail disclosures. Localized

@@ -8,6 +8,7 @@ import { preferenceRetryDeadline } from './preference-failure-retry';
 
 const id = v.pipe(v.string(), v.uuid());
 const text = v.nullable(v.string());
+const cursor = v.nullable(v.pipe(v.string(), v.maxLength(4096)));
 const identity = v.strictObject({ id, kind: v.picklist(['actor', 'organization']), handle: text, displayName: text });
 const organization = v.strictObject({ account: identity, role: v.picklist(['owner', 'member']) });
 const responsibility = v.strictObject({
@@ -22,9 +23,9 @@ const schema = v.strictObject({
   organizations: v.strictObject({
     state: v.picklist(['ready', 'preparing']),
     items: v.pipe(v.array(organization), v.maxLength(20)),
-    next: text,
+    next: cursor,
   }),
-  responsibilities: v.strictObject({ items: v.pipe(v.array(responsibility), v.maxLength(20)), next: text }),
+  responsibilities: v.strictObject({ items: v.pipe(v.array(responsibility), v.maxLength(20)), next: cursor }),
 });
 export type ManagedAccountsPage = v.InferOutput<typeof schema>;
 export type ManagedIdentity = ManagedAccountsPage['account'];
@@ -139,6 +140,7 @@ type Feed<T> = {
   busy: boolean;
   failure: ManagedAccountsFailure | null;
   restartable: boolean;
+  previous?: boolean;
   failedRequest?: ManagedAccountsCursors;
   retryAt?: number;
 };
@@ -170,10 +172,19 @@ function pageItems<T>(items: T[], key: (item: T) => string): T[] {
   return [...unique.values()];
 }
 
+type Coordinate = { cursor: string | null; prior: (string | null)[] };
+const firstCoordinate = (): Coordinate => ({ cursor: null, prior: [] });
+
 /** One initial page and one request per explicit feed action. Sibling payloads never advance each other's cursor. */
 export class ManagedAccountsInventory {
   private value = empty();
   private epoch = 0;
+  private coordinates = { organizations: firstCoordinate(), responsibilities: firstCoordinate() };
+  private failed: Partial<Record<ManagedFeed, Coordinate>> = {};
+  private resetCoordinates() {
+    this.coordinates = { organizations: firstCoordinate(), responsibilities: firstCoordinate() };
+    this.failed = {};
+  }
   private disposed = false;
   private readonly lifetime = new AbortController();
   private loadingEpoch = -1;
@@ -202,6 +213,7 @@ export class ManagedAccountsInventory {
     if (this.disposed) return;
     this.disposed = true;
     this.lifetime.abort();
+    this.resetCoordinates();
     this.epoch++;
     this.publish(empty());
   };
@@ -222,6 +234,7 @@ export class ManagedAccountsInventory {
   }
   private deny(failure: ManagedAccountsFailure) {
     this.epoch++;
+    this.resetCoordinates();
     this.publish({ ...empty(), failure, retryAt: this.responseDeadline(failure) });
   }
   private responseDeadline(failure: ManagedAccountsFailure) {
@@ -234,14 +247,22 @@ export class ManagedAccountsInventory {
     if (this.value.loading && this.loadingEpoch === this.epoch) return;
     const epoch = ++this.epoch;
     this.loadingEpoch = epoch;
-    this.publish({ ...empty(), loading: true, retryAt: this.value.retryAt ?? 0 });
+    this.publish({
+      ...this.value,
+      loading: true,
+      failure: null,
+      organizations: { ...this.value.organizations, busy: false },
+      responsibilities: { ...this.value.responsibilities, busy: false },
+    });
     const result = await this.request({});
     if (!this.live() || epoch !== this.epoch) return;
     if (!result.ok) {
-      this.deny(result);
+      if (result.kind === 'denied') this.deny(result);
+      else this.publish({ ...this.value, loading: false, failure: result, retryAt: this.responseDeadline(result) });
       return;
     }
     const { page } = result;
+    this.resetCoordinates();
     this.publish({
       account: page.account,
       loading: false,
@@ -267,29 +288,43 @@ export class ManagedAccountsInventory {
     });
   }
   async more(feed: ManagedFeed) {
-    return this.readFeed(feed, false);
+    return this.readFeed(feed, 'next');
+  }
+  async previous(feed: ManagedFeed) {
+    return this.readFeed(feed, 'previous');
   }
   async firstPage(feed: ManagedFeed) {
-    return this.readFeed(feed, true);
+    return this.readFeed(feed, 'first');
   }
-  private async readFeed(feed: ManagedFeed, firstPage: boolean) {
+  private async readFeed(feed: ManagedFeed, movement: 'next' | 'previous' | 'first') {
     if (!this.live()) return;
     const before = this.value;
     if (!before.account || before.loading || before[feed].busy) return;
     if (this.now() < (before.retryAt ?? 0)) return;
     const preparing = feed === 'organizations' && before.organizations.state === 'preparing';
-    const cursor = before[feed].next;
-    if (cursor === null && !preparing) return;
-    if (firstPage && (preparing || cursor === null || !before[feed].restartable)) return;
-    // Retry the failed request exactly, including a cursor-free restart which failed transiently.
-    const cursors = firstPage
-      ? {}
-      : (before[feed].failedRequest ??
-        (cursor === null
-          ? {}
-          : feed === 'organizations'
-            ? { organizationsCursor: cursor }
-            : { operatorsCursor: cursor }));
+    const position = this.coordinates[feed];
+    let target: Coordinate;
+    if (movement === 'first') {
+      if (!before[feed].restartable) return;
+      target = firstCoordinate();
+    } else if (movement === 'previous') {
+      if (!position.prior.length) return;
+      target = { cursor: position.prior.at(-1)!, prior: position.prior.slice(0, -1) };
+    } else if (this.failed[feed]) {
+      // Retry repeats the complete failed movement, even a cursor-free First or Previous.
+      target = this.failed[feed];
+    } else if (preparing) {
+      target = position;
+    } else {
+      if (before[feed].next === null) return;
+      target = { cursor: before[feed].next, prior: [...position.prior, position.cursor].slice(-8) };
+    }
+    const cursors: ManagedAccountsCursors =
+      target.cursor === null
+        ? {}
+        : feed === 'organizations'
+          ? { organizationsCursor: target.cursor }
+          : { operatorsCursor: target.cursor };
     const epoch = this.epoch;
     this.publish({ ...before, [feed]: { ...before[feed], busy: true } });
     const result = await this.request(cursors);
@@ -297,6 +332,7 @@ export class ManagedAccountsInventory {
     if (!result.ok) {
       if (result.kind === 'denied') this.deny(result);
       else {
+        this.failed[feed] = target;
         const retryAt = this.responseDeadline(result);
         this.publish({
           ...this.value,
@@ -309,37 +345,40 @@ export class ManagedAccountsInventory {
             retryAt,
             restartable:
               before[feed].restartable ||
-              (!preparing && cursor !== null && (result.status === 400 || result.status === 409)),
+              (!preparing && target.cursor !== null && (result.status === 400 || result.status === 409)),
           },
         });
       }
       return;
     }
+    this.coordinates[feed] = target;
+    delete this.failed[feed];
     const current = this.value;
+    const navigation = { previous: target.prior.length > 0, restartable: target.cursor !== null };
     if (feed === 'organizations') {
       const next = result.page.organizations;
       this.publish({
         ...current,
-        account: firstPage ? current.account : result.page.account,
+        account: current.account,
         organizations: {
           ...next,
           items: next.state === 'preparing' ? [] : pageItems(next.items, (item) => item.account.id),
           busy: false,
           failure: null,
-          restartable: false,
+          ...navigation,
         },
       });
     } else {
       const next = result.page.responsibilities;
       this.publish({
         ...current,
-        account: firstPage ? current.account : result.page.account,
+        account: current.account,
         responsibilities: {
           ...next,
           items: pageItems(next.items, (item) => item.reservationId),
           busy: false,
           failure: null,
-          restartable: false,
+          ...navigation,
         },
       });
     }

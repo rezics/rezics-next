@@ -145,6 +145,14 @@ test('many next pages keep one native window per feed and the first duplicate wi
       expect(after[sibling]).toBe(retained);
     }
     expect(sequence).toBe(13);
+    for (let retained = 0; retained < 8; retained++) await inventory.previous(feed);
+    expect(sequence).toBe(21);
+    await inventory.previous(feed);
+    expect(sequence).toBe(21); // The first four predecessors have been forgotten.
+    await inventory.firstPage(feed);
+    expect(sequence).toBe(22);
+    await inventory.previous(feed);
+    expect(sequence).toBe(22);
   }
 });
 
@@ -210,6 +218,10 @@ test('native reads validate the exact bounded schema, preserve literal failures 
     ...page(),
     responsibilities: { items: [{ ...page().responsibilities.items[0], state: 'complete' }], next: null },
   };
+  expect((await loadManagedAccounts(client, 'Bearer viewer', viewer, {})).ok).toBe(false);
+  body = { ...page(), organizations: { ...page().organizations, next: 'x'.repeat(4097) } };
+  expect((await loadManagedAccounts(client, 'Bearer viewer', viewer, {})).ok).toBe(false);
+  body = { ...page(), responsibilities: { ...page().responsibilities, next: 'x'.repeat(4097) } };
   expect((await loadManagedAccounts(client, 'Bearer viewer', viewer, {})).ok).toBe(false);
   status = 403;
   body = {
@@ -698,4 +710,136 @@ test('initial, preparing and exhausted feeds do not offer cursor recovery or iss
     expect(inventory.snapshot().responsibilities.restartable).toBe(false);
     expect(calls).toEqual(state === 'preparing' ? [{}, {}] : [{}]);
   }
+});
+
+test('two three-page feeds reread admitted predecessors and terminal First; failed movements retry exact native targets', async () => {
+  const requests: Request[] = [];
+  const replies: ((response: Response) => void)[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      requests.push(new Request(input, init));
+      return new Promise<Response>((resolve) => replies.push(resolve));
+    }) as typeof fetch,
+  });
+  const inventory = new ManagedAccountsInventory(viewer, (cursors) =>
+    loadManagedAccounts(client, 'Bearer viewer', viewer, cursors),
+  );
+  const answer = (number: number, index = 0, failed = false) => {
+    const value = page();
+    value.organizations = {
+      state: 'ready',
+      items: number === 1 ? page().organizations.items : [],
+      next: number === 3 ? null : `org-${number + 1}`,
+    };
+    value.responsibilities = {
+      items: number === 1 ? page().responsibilities.items : [],
+      next: number === 3 ? null : `op-${number + 1}`,
+    };
+    replies.splice(index, 1)[0]!(
+      failed ? Response.json({ code: 'overloaded' }, { status: 503 }) : Response.json(value),
+    );
+  };
+  const initial = inventory.load();
+  answer(1);
+  await initial;
+  await inventory.previous('organizations'); // Direct visits invent no predecessor.
+  expect(requests).toHaveLength(1);
+  for (const number of [2, 3]) {
+    const org = inventory.more('organizations');
+    const resp = inventory.more('responsibilities');
+    await inventory.more('organizations'); // Rapid repeat is coalesced.
+    answer(number, 1);
+    await resp;
+    const retained = inventory.snapshot().responsibilities;
+    answer(number);
+    await org;
+    expect(inventory.snapshot().responsibilities).toBe(retained);
+  }
+  expect(inventory.snapshot().organizations.next).toBeNull();
+  expect(inventory.snapshot().responsibilities.next).toBeNull();
+  for (const feed of ['organizations', 'responsibilities'] as const) {
+    const sibling = feed === 'organizations' ? 'responsibilities' : 'organizations';
+    const retained = inventory.snapshot()[sibling];
+    const terminal = inventory.snapshot()[feed];
+    const back = inventory.previous(feed);
+    answer(2, 0, true);
+    await back;
+    expect(inventory.snapshot()[feed].items).toBe(terminal.items);
+    const retry = inventory.more(feed);
+    answer(2);
+    await retry;
+    const next = inventory.more(feed);
+    answer(3);
+    await next;
+    const first = inventory.firstPage(feed);
+    answer(1, 0, true);
+    await first;
+    expect(inventory.snapshot()[feed].next).toBeNull();
+    const retryFirst = inventory.more(feed);
+    answer(1);
+    await retryFirst;
+    await inventory.previous(feed);
+    expect(inventory.snapshot()[sibling]).toBe(retained);
+    expect(inventory.snapshot()[feed].items).toEqual(page()[feed].items);
+  }
+  expect(requests.map((request) => Object.fromEntries(new URL(request.url).searchParams))).toEqual([
+    {},
+    { organizationsCursor: 'org-2' },
+    { operatorsCursor: 'op-2' },
+    { organizationsCursor: 'org-3' },
+    { operatorsCursor: 'op-3' },
+    { organizationsCursor: 'org-2' },
+    { organizationsCursor: 'org-2' },
+    { organizationsCursor: 'org-3' },
+    {},
+    {},
+    { operatorsCursor: 'op-2' },
+    { operatorsCursor: 'op-2' },
+    { operatorsCursor: 'op-3' },
+    {},
+    {},
+  ]);
+  for (const request of requests) {
+    expect(request.method).toBe('GET');
+    expect(new URL(request.url).pathname).toBe('/v1/me/managedAccounts');
+    expect(request.headers.get('authorization')).toBe('Bearer viewer');
+    expect(request.headers.get('cache-control')).toBe('no-store');
+  }
+});
+
+test('only an admitted full refresh resets coordinates, and earlier feed results cannot republish across it', async () => {
+  const replies: ((result: ManagedAccountsResult) => void)[] = [];
+  const calls: ManagedAccountsCursors[] = [];
+  const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
+    calls.push(cursors);
+    if (calls.length <= 2) return ready(page());
+    return new Promise((resolve) => replies.push(resolve));
+  });
+  await inventory.load();
+  await inventory.more('organizations');
+  const accepted = inventory.snapshot().organizations;
+  const old = inventory.previous('organizations');
+  const refresh = inventory.load();
+  expect(inventory.snapshot().organizations.items).toBe(accepted.items);
+  replies[1]!(unavailable);
+  await refresh;
+  expect(inventory.snapshot().organizations.items).toBe(accepted.items);
+  expect(inventory.snapshot().organizations.previous).toBe(true);
+  replies[0]!(ready({ ...page(), organizations: { state: 'preparing', items: [], next: null } }));
+  await old;
+  expect(inventory.snapshot().organizations.items).toBe(accepted.items);
+  const back = inventory.previous('organizations');
+  replies[2]!(ready(page()));
+  await back;
+  expect(calls.at(-1)).toEqual({});
+  const pending = inventory.more('organizations');
+  const admitted = inventory.load();
+  replies[4]!(ready(page()));
+  await admitted;
+  const replacement = inventory.snapshot();
+  replies[3]!(ready({ ...page(), organizations: { state: 'preparing', items: [], next: null } }));
+  await pending;
+  await inventory.previous('organizations');
+  expect(inventory.snapshot()).toBe(replacement);
+  expect(calls).toHaveLength(7);
 });
