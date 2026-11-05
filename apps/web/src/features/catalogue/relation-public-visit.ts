@@ -83,8 +83,8 @@ export function createRelationPublicOrigin(input: {
   id: string;
   label: string;
   locale: string;
-  context?: string;
-  realm?: string;
+  context?: string | undefined;
+  realm?: string | undefined;
 }): RelationPublicOrigin | undefined {
   if (input.context === undefined) return;
   const publicUrl = new URL(subjectHref({ id: input.id, label: input.label }, input.locale).href, localOrigin);
