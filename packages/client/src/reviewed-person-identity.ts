@@ -12,7 +12,7 @@ export type ReviewedPersonEndpoint = {
   value: string;
 };
 export type ReviewedPersonSource = Pick<ReviewedPersonEndpoint, 'source' | 'externalId'>;
-export type ReviewedPersonRead = SubjectRead & { reviewedIdentity?: ReviewedPersonEndpoint };
+export type ReviewedPersonRead = SubjectRead & { reviewedIdentity?: ReviewedPersonEndpoint | null };
 export type ReviewedPersonMerge = {
   subjects: [string, string];
   expectedIdentity: { endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint] };
@@ -36,6 +36,7 @@ export function isReviewedPersonEndpoint(value: unknown): value is ReviewedPerso
   if (!isReviewedPersonSource(value)) return false;
   const v = value as ReviewedPersonEndpoint;
   return (
+    Object.keys(v).length === 8 &&
     typeof v.subject === 'string' &&
     uuid.test(v.subject) &&
     Number.isSafeInteger(v.revision) &&

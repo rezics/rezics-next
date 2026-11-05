@@ -46,8 +46,6 @@ export async function mergeSubjects(
   options: {
     subjects: string[];
     survivor?: string;
-    expectedIdentity?: ReviewedPersonExpectation;
-    routeKey?: Uint8Array;
     actor: AccountActor;
     idempotencyKey: string;
     digest: Uint8Array;
@@ -55,7 +53,8 @@ export async function mergeSubjects(
     authorization: CommandAuthorization;
     deadline?: number;
     clock?: () => Date;
-  },
+  } & ({ expectedIdentity: ReviewedPersonExpectation; routeKey: Uint8Array } |
+       { expectedIdentity?: undefined; routeKey?: Uint8Array }),
 ) {
   const requestedSurvivor = options.survivor;
   if (requestedSurvivor !== undefined && !options.subjects.includes(requestedSurvivor))
@@ -93,7 +92,7 @@ export async function mergeSubjects(
     async (tx, { transactionId }) => {
       if (kept instanceof Error) throw kept;
       if (options.expectedIdentity) {
-        await guardReviewedPersonIdentity(tx, options.expectedIdentity, options.routeKey!, options.release.release);
+        await guardReviewedPersonIdentity(tx, options.expectedIdentity, options.routeKey, options.release.release);
       }
       return mergeSubjectsInCommand(tx, transactionId, {
         survivor,

@@ -718,7 +718,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       signal,
     );
     const read = reply.body as ReviewedPersonRead;
-    if (read.reviewedIdentity !== undefined) {
+    if (read.reviewedIdentity != null) {
       const endpoint = read.reviewedIdentity;
       ensure(
         isReviewedPersonEndpoint(endpoint) &&
@@ -736,9 +736,10 @@ export function createImportTransport(options: ImportTransportOptions) {
     key: string,
     signal?: AbortSignal,
   ): Promise<ReviewedPersonAdmission> {
+    const safe = snapshot(body, BODY_BYTES) as ReviewedPersonMerge;
     const reply = await response(
       () =>
-        reviewedPersonRequests(client).merge(body, {
+        reviewedPersonRequests(client).merge(safe, {
           headers: { 'idempotency-key': idempotencyKey(key) },
           ...fetchOptions(signal),
         }),

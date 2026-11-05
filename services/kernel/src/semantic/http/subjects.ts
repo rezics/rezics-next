@@ -1008,8 +1008,7 @@ function subjectRoutes(
           const { component, ...result } = await admission.run('normal', job, () =>
             mergeSubjects(pool, {
               subjects: body.subjects,
-              expectedIdentity: body.expectedIdentity,
-              routeKey,
+              ...(body.expectedIdentity ? { expectedIdentity: body.expectedIdentity, routeKey } : {}),
               actor,
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
               digest: requestDigest('subject.merge', actor, body),

@@ -31,7 +31,7 @@ export type ReviewedPersonExpectation = { endpoints: [ReviewedPersonEndpoint, Re
 export const ReviewedPersonEndpointSchema = t.Object({
   subject: t.String({ format: 'uuid' }),
   revision: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-  securityRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
+  securityRevision: t.String({ pattern: '^[1-9][0-9]*$(?![\\s\\S])' }),
   source: t.Union([t.Literal('bangumi'), t.Literal('vndb')]),
   externalId: t.String({ maxLength: 255 }),
   claimTransactionId: t.String({ format: 'uuid' }),

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { KernelClient } from '@rezics/client';
+import type { KernelClient, ReviewedPersonMerge } from '@rezics/client';
 import { createImportTransport } from '../src/import-client.ts';
 import type {
   ClassificationAssociation,
@@ -316,4 +316,30 @@ test('classification mutation transport rejects malformed and opposite-state suc
       },
     ]);
   }
+});
+
+
+test('review transport retains coherent query, nullable evidence, exact admission and immutable request bytes', async () => {
+  const first = '019a1b2c-3d4e-7f00-8a00-000000000001';
+  const second = '019a1b2c-3d4e-7f00-8a00-000000000002';
+  const endpoint = { subject: first, revision: 2, securityRevision: '9007199254740993', source: 'bangumi' as const,
+    externalId: 'person:123', claimTransactionId: first, property: 'wdt:P6298' as const, value: '123' };
+  const body: ReviewedPersonMerge = { subjects: [first, second], expectedIdentity: {
+    endpoints: [endpoint, { ...endpoint, subject: second, source: 'vndb', externalId: 's123', property: 'wdt:P3180', value: 's123' }],
+  } };
+  const requests: Request[] = [];
+  const answers = [Response.json({ subject: { id: first, type: 'schema:Person' }, reviewedIdentity: null }),
+    Response.json({ operation: { id: first } }, { status: 202 }),
+    Response.json({ survivor: first, redirected: second, revision: 3 })];
+  const transport = createImportTransport({ origin: 'https://api.importer.test', tokenProvider: async () => 'review-token',
+    fetch: (async (request: Request) => { requests.push(request.clone()); return answers.shift()!; }) as typeof fetch });
+  expect((await transport.readReviewedPersonIdentity(first, endpoint)).reviewedIdentity).toBeNull();
+  const query = new URL(requests[0]!.url).searchParams;
+  expect([query.get('reviewIdentitySource'), query.get('reviewIdentityExternalId'), query.get('includeViewerActions')])
+    .toEqual(['bangumi', 'person:123', 'true']);
+  expect(await transport.mergeReviewedPersons(body, 'review-key')).toEqual({ operation: { id: first } });
+  expect(await requests[1]!.json()).toEqual(body);
+  expect(requests[1]!.headers.get('authorization')).toBe('Bearer review-token');
+  expect(requests[1]!.headers.get('idempotency-key')).toBe('"review-key"');
+  await expect(transport.mergeReviewedPersons(body, 'review-key')).rejects.toMatchObject({ status: 200 });
 });

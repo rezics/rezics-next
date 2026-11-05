@@ -1,6 +1,9 @@
 import { expect, expectTypeOf, test } from 'bun:test';
 import {
   createKernelClient,
+  reviewedPersonRequests,
+  isReviewedPersonEndpoint,
+  type ReviewedPersonMerge,
   SESSION_HEADER,
   type Kernel,
   type KernelClient,
@@ -282,4 +285,25 @@ test('the same proxy rewrites a custom method and retains viewer headers', async
   expect(sent[0]!.url).toBe(`${ORIGIN}/v1/subjects:merge`);
   expect(sent[0]!.headers.get(SESSION_HEADER)).toBe('viewer');
   expect(sent[0]!.headers.get('idempotency-key')).toBe('"merge"');
+});
+
+
+test('reviewed Person requests use native evidence query and preserve ordered decimal identity', async () => {
+  const endpoint = { subject: ID, revision: 7, securityRevision: '9007199254740993', source: 'bangumi' as const,
+    externalId: 'person:123', claimTransactionId: ID, property: 'wdt:P6298' as const, value: '123' };
+  const other = { ...endpoint, subject: '019a1b2c-3d4e-7f00-8a00-000000000002' };
+  const body: ReviewedPersonMerge = { subjects: [ID, other.subject], expectedIdentity: { endpoints: [endpoint, other] } };
+  const remote = kernel([() => json(200, { subject, reviewedIdentity: endpoint }),
+    () => json(200, { survivor: ID, redirected: other.subject, revision: 8 })]);
+  const client = createKernelClient(ORIGIN, { fetch: remote.fetch });
+  const reviewed = reviewedPersonRequests(client);
+  const read = await reviewed.read(ID, endpoint);
+  expect(read.data?.reviewedIdentity?.securityRevision).toBe(endpoint.securityRevision);
+  expect(new URL(remote.sent[0]!.url).searchParams.get('reviewIdentitySource')).toBe('bangumi');
+  expect(new URL(remote.sent[0]!.url).searchParams.get('reviewIdentityExternalId')).toBe('person:123');
+  expect(new URL(remote.sent[0]!.url).searchParams.get('includeViewerActions')).toBe('true');
+  await reviewed.merge(body, { headers: { 'idempotency-key': '"review"' } });
+  expect(JSON.parse(remote.sent[1]!.body!)).toEqual(body);
+  expect(isReviewedPersonEndpoint(endpoint)).toBe(true);
+  expect(isReviewedPersonEndpoint({ ...endpoint, privateClaim: ID })).toBe(false);
 });
