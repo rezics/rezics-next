@@ -60,12 +60,20 @@ function ClassificationAssessmentsRoute() {
   retained.current.address = address.key;
   const confirmMovement = useRef<(() => Promise<boolean>) | null>(null);
   useEffect(() => {
-    const cancelFocus = () => { windows.focus = false; };
+    const cancelFocus = () => {
+      windows.focus = false;
+    };
     document.addEventListener('focusin', cancelFocus);
-    return () => { document.removeEventListener('focusin', cancelFocus); windows.retire(); };
+    return () => {
+      document.removeEventListener('focusin', cancelFocus);
+      windows.retire();
+    };
   }, [windows]);
-  const read = useCallback((original: import('../../ratings/own-classifications/types').ClassificationFrontier, signal?: AbortSignal) =>
-    readOwnClassificationsForViewer({ data: classificationSearch(original), ...(signal ? { signal } : {}) }), []);
+  const read = useCallback(
+    (original: import('../../ratings/own-classifications/types').ClassificationFrontier, signal?: AbortSignal) =>
+      readOwnClassificationsForViewer({ data: classificationSearch(original), ...(signal ? { signal } : {}) }),
+    [],
+  );
   const state = !frontier
     ? 'invalid-address'
     : origin.session.state === 'signed-out'
@@ -89,7 +97,12 @@ function ClassificationAssessmentsRoute() {
         windows.stage(next, keyboard ?? false);
         void navigate({
           search: (current) => {
-            const { cursor: _cursor, selectedSubjectId: _subject, selectedAssociationId: _association, ...rest } = current;
+            const {
+              cursor: _cursor,
+              selectedSubjectId: _subject,
+              selectedAssociationId: _association,
+              ...rest
+            } = current;
             return { ...rest, ...classificationSearch(next) };
           },
           hash: location.hash,
@@ -103,7 +116,13 @@ function ClassificationAssessmentsRoute() {
         review: (intent, signal) =>
           reviewClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
         departure: (dirty, locked, current, retire) => (
-          <OwnVotesDeparture dirty={dirty} locked={locked} isCurrent={current} onLeave={retire} confirmMovement={confirmMovement} />
+          <OwnVotesDeparture
+            dirty={dirty}
+            locked={locked}
+            isCurrent={current}
+            onLeave={retire}
+            confirmMovement={confirmMovement}
+          />
         ),
       }}
     />

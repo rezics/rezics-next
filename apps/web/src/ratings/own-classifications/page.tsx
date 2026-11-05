@@ -94,13 +94,15 @@ export function OwnClassificationsWorkspace({
     if (!leave || !current()) return;
     const target = {
       cursor,
-      selected: frontier.selected ?? (selected ? { subjectId: selected.subjectId, associationId: selected.associationId } : null),
+      selected:
+        frontier.selected ??
+        (selected ? { subjectId: selected.subjectId, associationId: selected.associationId } : null),
     };
     commands?.retire?.();
     onNext(target, keyboard);
   }
   useLayoutEffect(() => {
-    if (commands && selected && current()) inspect.current?.focus();
+    if (!focusHeading && commands && selected && current()) inspect.current?.focus();
   }, [generation, selectedKey]);
   const feedback = () => {
     if (state === 'signed-out') return m.own_classifications_signed_out({}, options);
@@ -113,7 +115,9 @@ export function OwnClassificationsWorkspace({
   };
   return (
     <main className="mx-auto min-w-0 max-w-4xl space-y-6 p-4">
-      <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold">{m.own_classifications_title({}, options)}</h1>
+      <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold">
+        {m.own_classifications_title({}, options)}
+      </h1>
       <p>{m.own_classifications_intro({}, options)}</p>
       {!admitted ? (
         <div role="status" className="space-y-3">
@@ -231,15 +235,21 @@ export function OwnClassificationsWorkspace({
             </section>
           ) : null}
           <div className="flex flex-wrap gap-3">
-            {previous ? <Button className={control} onClick={(event) => void move(previous.cursor, event.detail === 0)}>
-              {m.library_collections_previous({}, options)}
-            </Button> : null}
-            {frontier.cursor !== null ? <Button className={control} onClick={(event) => void move(null, event.detail === 0)}>
-              {m.library_collections_first_page({}, options)}
-            </Button> : null}
-            {admitted.next !== null ? <Button className={control} onClick={(event) => void move(admitted.next, event.detail === 0)}>
-              {m.own_classifications_next({}, options)}
-            </Button> : null}
+            {previous ? (
+              <Button className={control} onClick={(event) => void move(previous.cursor, event.detail === 0)}>
+                {m.library_collections_previous({}, options)}
+              </Button>
+            ) : null}
+            {frontier.cursor !== null ? (
+              <Button className={control} onClick={(event) => void move(null, event.detail === 0)}>
+                {m.library_collections_first_page({}, options)}
+              </Button>
+            ) : null}
+            {admitted.next !== null ? (
+              <Button className={control} onClick={(event) => void move(admitted.next, event.detail === 0)}>
+                {m.own_classifications_next({}, options)}
+              </Button>
+            ) : null}
           </div>
         </>
       )}

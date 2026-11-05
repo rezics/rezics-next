@@ -156,7 +156,7 @@ export function ClassificationsReader({
       page={admitted && candidate.state === 'ready' ? candidate.page : null}
       frontier={frontier}
       locale={locale}
-      isCurrent={isCurrent}
+      isCurrent={current}
       onNext={onNext}
       previous={windows?.previous(frontier)}
       focusHeading={focusHeading}

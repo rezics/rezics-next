@@ -36,16 +36,32 @@ test('Stay keeps the exact draft; confirmed Leave retires the original visit bef
   const root = createRoot(host);
   const sequence: string[] = [];
   let retired = false;
+  const confirmMovement = { current: null as (() => Promise<boolean>) | null };
+  let movement: Promise<boolean> | undefined;
   function Harness() {
     const [draft, setDraft] = useState('Keep this exact unsent draft');
     return (
       <>
+        <button
+          onClick={() => {
+            const originalCurrent = () => !retired;
+            movement = confirmMovement.current!().then((leave) => {
+              if (!leave || !originalCurrent()) return false;
+              retired = true;
+              sequence.push('retired', 'admitted');
+              return true;
+            });
+          }}
+        >
+          Previous window
+        </button>
         <input
           aria-label="Unsent assessment draft"
           value={draft}
           onChange={(event) => setDraft(event.currentTarget.value)}
         />
         <OwnVotesDeparture
+          confirmMovement={confirmMovement}
           dirty={draft.length > 0}
           locked={false}
           isCurrent={() => !retired}
@@ -83,6 +99,11 @@ test('Stay keeps the exact draft; confirmed Leave retires the original visit bef
     expect(draft.value).toBe('Keep this exact unsent draft');
     expect(retired).toBe(false);
 
+    await act(async () => button('Previous window').click());
+    await act(async () => button(m.library_my_ratings_stay()).click());
+    expect(await movement).toBe(false);
+    expect(draft.value).toBe('Keep this exact unsent draft');
+    expect(sequence).toEqual([]);
     const { promise: leaveAttempt } = await startNavigation();
     await act(async () => button(m.library_my_ratings_leave()).click());
     const admission = leaveAttempt.then((shouldBlock) => {
@@ -91,6 +112,12 @@ test('Stay keeps the exact draft; confirmed Leave retires the original visit bef
     });
     expect(await admission).toBe(false);
     expect(sequence).toEqual(['retired', 'admitted']);
+    retired = false;
+    await act(async () => button('Previous window').click());
+    retired = true;
+    await act(async () => root.render(<Harness />));
+    expect(await movement).toBe(false);
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
   } finally {
     await act(async () => root.unmount());
     host.remove();

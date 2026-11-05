@@ -25,6 +25,7 @@ const globals = {
   window,
   document: window.document,
   navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
   IS_REACT_ACT_ENVIRONMENT: true,
   requestAnimationFrame: (callback: FrameRequestCallback) => frames.push(callback),
 };
@@ -198,18 +199,40 @@ test('three native windows, terminal Previous, exact failed Retry and First reta
   let fail = false;
   const host = window.document.createElement('div') as HTMLElement;
   const root = createRoot(host);
-  const render = () => root.render(<ClassificationsReader
-    key={JSON.stringify(address)}
-    initial={{ state: 'preparing', page: null, subject: accountId, locale: 'en', frontier: address }}
-    frontier={address} locale="en" subject={accountId} state={null} isCurrent={() => true} windows={windows}
-    read={async (target) => {
-      calls.push(target);
-      return fail
-        ? { state: 'unavailable', page: null, subject: accountId, locale: 'en', frontier: target }
-        : { state: 'ready', source: 'content.classification-ballot-own-page.v1', page: classificationsPage(target.cursor === 'two' ? [] : undefined, target.cursor === null ? 'one' : target.cursor === 'one' ? 'two' : null), subject: accountId, locale: 'en', frontier: target };
-    }}
-    onNext={(target) => { windows.stage(target, false); address = target; render(); }}
-  />);
+  const render = () =>
+    root.render(
+      <ClassificationsReader
+        key={JSON.stringify(address)}
+        initial={{ state: 'preparing', page: null, subject: accountId, locale: 'en', frontier: address }}
+        frontier={address}
+        locale="en"
+        subject={accountId}
+        state={null}
+        isCurrent={() => true}
+        windows={windows}
+        read={async (target) => {
+          calls.push(target);
+          return fail
+            ? { state: 'unavailable', page: null, subject: accountId, locale: 'en', frontier: target }
+            : {
+                state: 'ready',
+                source: 'content.classification-ballot-own-page.v1',
+                page: classificationsPage(
+                  target.cursor === 'two' ? [] : undefined,
+                  target.cursor === null ? 'one' : target.cursor === 'one' ? 'two' : null,
+                ),
+                subject: accountId,
+                locale: 'en',
+                frontier: target,
+              };
+        }}
+        onNext={(target) => {
+          windows.stage(target, false);
+          address = target;
+          render();
+        }}
+      />,
+    );
   const click = async (label: string) => {
     const button = [...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === label);
     expect(button).toBeDefined();
