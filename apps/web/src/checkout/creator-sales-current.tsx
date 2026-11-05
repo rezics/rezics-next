@@ -191,7 +191,9 @@ export function CreatorSalesCurrent(props: Props) {
   live.current = active;
   useLayoutEffect(() => {
     mounted.current = true;
-    const cancel = () => {
+    const cancel = (event: FocusEvent) => {
+      const pending = live.current.windows.focus;
+      if (pending && (event.target === pending || event.target === document.body)) return;
       live.current.windows.focus = undefined;
     };
     document.addEventListener('focusin', cancel);
