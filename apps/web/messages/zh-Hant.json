@@ -9490,7 +9490,7 @@
   "producer_history_retired_explanation": "此更正已沒有目前有效的讀取。已傳送的命令可能已經生效，結果也可能尚不明確。不會從此失效的更正重新傳送任何命令。",
   "producer_history_slice_lost": "此處已無法使用原來的片段。請重新讀取歷史，再主動開始另一項更正。",
   "producer_history_retired_close": "關閉已失效的更正",
-  "people_names_context_unsupported": "來源和名稱編輯尚不支援目前選取的語境。目前的名稱仍可閱讀；未開啟其他全域檢視。",
+  "people_names_context_unsupported": "來源和名稱編輯尚不支援目前選取的語境。目前的名稱仍可閱讀；未開啟其他全域檢視。 下方的名稱編輯建議僅適用於全域，不代表此語境中的權限。",
   "people_names_destination_scope": "名稱編輯會另開全域檢視，並重新檢查編輯權限。來源依所選領域讀取，不會將某個拼寫歸屬於供應者。",
   "people_names_heading": "提供的名稱與別名",
   "people_names_selected": "頁面選用的名稱：",

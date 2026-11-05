@@ -38,7 +38,7 @@ for (const kind of ['Person', 'Character'] as const) test(`${kind} Sources visit
   await mounted(async (host, draw) => {
     let current = kind === 'Person' ? personReaderExample().read : characterRelationshipsFixture().character;
     current.subject.labels = { en: 'Selected', ja: '旅人' };
-    current.subject.aliases = { en: Array.from({ length: 40 }, (_, i) => `Mél—旅人 ${i}`) };
+    current.subject.aliases = { en: Array.from({ length: 40 }, (_, i) => `Mél—旅人 ${i} ${'عَلِيّ/'.repeat(10)}`) };
     const history = createMemoryHistory({ initialEntries: [`/en/subjects/${current.subject.id}/selected?realm=${realm}`] });
     const root = createRootRoute({ component: Outlet });
     const route = createRoute({ getParentRoute: () => root, path: '/$', component: Visit });
@@ -46,7 +46,7 @@ for (const kind of ['Person', 'Character'] as const) test(`${kind} Sources visit
     function Visit() {
       const location = useRouterState({ select: (state) => state.location });
       if (location.pathname.endsWith('/sources')) return h(SubjectSourcesPage, {
-        result: { kind: 'unavailable' }, locale: 'en', returnTo: new URLSearchParams(location.searchStr).get('via')!,
+        result: { kind: kind === 'Person' ? 'unavailable' : 'missing' }, locale: 'en', returnTo: new URLSearchParams(location.searchStr).get('via')!,
       });
       return h(PeopleNamesEntry, { reading: { public: current, locale: 'en', link: ({ href, ...props }) => h('a', { ...props, href: contextHref(href, realm) }) },
         adviceLoader: async () => ({ viewer: 'signed-in', actions: { state: 'ready', actions: [] } }) });
@@ -62,6 +62,17 @@ for (const kind of ['Person', 'Character'] as const) test(`${kind} Sources visit
     const group = host.querySelector<HTMLDetailsElement>('[data-name-language="en"]')!;
     group.open = true;
     await act(async () => [...group.querySelectorAll('button')].find((button) => button.textContent === 'More names')!.click());
+    let copied = '', failCopy = false;
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => {
+      if (failCopy) throw new Error('clipboard refused');
+      copied = text;
+    } } });
+    const copy = group.querySelector<HTMLButtonElement>('button')!;
+    await act(async () => copy.click());
+    expect(copied).toBe(current.subject.aliases.en![24]!);
+    failCopy = true;
+    await act(async () => copy.click());
+    expect(copy.parentElement?.textContent).toContain('Could not copy');
     const sources = host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!;
     const address = new URL(sources.href);
     const via = new URL(address.searchParams.get('via')!, 'https://rezics.invalid');
@@ -74,7 +85,8 @@ for (const kind of ['Person', 'Character'] as const) test(`${kind} Sources visit
     expect(modified.defaultPrevented).toBe(false);
     await act(async () => sources.click());
     await act(async () => router.load());
-    expect(host.textContent).toContain('unavailable');
+    if (kind === 'Person') expect(host.textContent).toContain('unavailable');
+    expect(host.querySelector('input')).toBeNull();
     const saved = namesReturn(Reflect.get(history.location.state, 'namesReturn'), 'en')!;
     expect(saved.window).toMatchObject({ query: 'Mél', expanded: true, groups: [{ index: 0, page: 1, open: true }] });
     expect(saved.focus).toBe('sources');
@@ -132,7 +144,7 @@ test('Context and release replacement permanently retire actions and late copy/a
     await act(async () => copy.click());
     await render({ ...A, public: { ...A.public, subject: { ...A.public.subject, context: otherContext } } });
     expect(host.textContent).toContain('do not support this selected Context');
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
     await render(A);
     expect(host.textContent).toContain('retired');
     await act(async () => { finishCopy(); oldAdvice({ viewer: 'signed-in', actions: { state: 'ready', actions: [] } } as never); });

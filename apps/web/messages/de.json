@@ -9487,7 +9487,7 @@
   "producer_history_retired_explanation": "Diese Korrektur hat keine aktuelle Ansicht mehr. Ein bereits gesendeter Befehl kann wirksam geworden sein; das Ergebnis kann unbekannt sein. Aus dieser Korrektur wird nichts erneut gesendet.",
   "producer_history_slice_lost": "Der ursprüngliche Ausschnitt ist hier nicht mehr verfügbar. Lies den Verlauf erneut, bevor du bewusst eine weitere Korrektur beginnst.",
   "producer_history_retired_close": "Nicht mehr aktuelle Korrektur schließen",
-  "people_names_context_unsupported": "Quellen und Namensbearbeitung unterstützen diesen Kontext nicht. Die aktuellen Namen bleiben lesbar; es wurde keine separate globale Ansicht geöffnet.",
+  "people_names_context_unsupported": "Quellen und Namensbearbeitung unterstützen diesen Kontext nicht. Die aktuellen Namen bleiben lesbar; es wurde keine separate globale Ansicht geöffnet. Die folgenden Bearbeitungshinweise gelten nur global und gewähren keine Rechte in diesem Kontext.",
   "people_names_destination_scope": "Die Namensbearbeitung öffnet eine separate globale Ansicht und prüft dort die aktuellen Rechte. Quellen werden im gewählten Realm gelesen und ordnen keine Schreibweise einem Anbieter zu.",
   "people_names_heading": "Bereitgestellte Namen und Aliasse",
   "people_names_selected": "Für die Seite gewählte Bezeichnung:",

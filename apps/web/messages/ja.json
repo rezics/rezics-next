@@ -9490,7 +9490,7 @@
   "producer_history_retired_explanation": "この訂正には現在有効な閲覧内容がありません。送信済みの操作はすでに反映されている可能性があり、結果が不明な場合があります。この失効した訂正から再送することはありません。",
   "producer_history_slice_lost": "元の範囲はここでは利用できません。履歴を読み直してから、改めて訂正を開始してください。",
   "producer_history_retired_close": "失効した訂正を閉じる",
-  "people_names_context_unsupported": "出典と名称の編集は選択中のコンテキストに対応していません。現在の名称は引き続き読めます。別のグローバル表示は開いていません。",
+  "people_names_context_unsupported": "出典と名称の編集は選択中のコンテキストに対応していません。現在の名称は引き続き読めます。別のグローバル表示は開いていません。 以下の名称編集の案内はグローバルのみが対象で、このコンテキストの権限を示すものではありません。",
   "people_names_destination_scope": "名称の編集では別のグローバル表示を開き、現在の編集権限を確認します。出典は選択した Realm で読み込み、表記を特定の提供元に帰属させません。",
   "people_names_heading": "提供された名前と別名",
   "people_names_selected": "ページで選択された名前：",

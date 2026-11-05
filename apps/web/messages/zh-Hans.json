@@ -9487,7 +9487,7 @@
   "producer_history_retired_explanation": "此更正已没有当前有效的读取。已发送的命令可能已经生效，结果也可能尚不明确。不会从此失效的更正重新发送任何命令。",
   "producer_history_slice_lost": "此处已无法使用原来的片段。请重新读取历史，再主动开始另一项更正。",
   "producer_history_retired_close": "关闭已失效的更正",
-  "people_names_context_unsupported": "来源和名称编辑尚不支持当前选取的语境。当前名称仍可阅读；未打开其他全局视图。",
+  "people_names_context_unsupported": "来源和名称编辑尚不支持当前选取的语境。当前名称仍可阅读；未打开其他全局视图。 下方的名称编辑建议仅适用于全局，不代表此语境中的权限。",
   "people_names_destination_scope": "名称编辑会另开全局视图，并重新检查编辑权限。来源按所选领域读取，不会将某个拼写归属于提供方。",
   "people_names_heading": "提供的名称与别名",
   "people_names_selected": "页面选用的名称：",
