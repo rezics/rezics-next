@@ -25,6 +25,9 @@ test('run keeps its 120-second default and reports ETIMEDOUT for a child exceedi
     failure = error;
   }
   expect(failure).toHaveProperty('code', 'ETIMEDOUT');
+  expect((failure as Error).message).toContain('spawnSync');
+  expect((failure as Error).message).toContain('ETIMEDOUT');
+  expect((failure as Error).message).toContain('--eval');
 });
 
 function traceDocker(action: (commands: () => string[][], temporary: string) => void): void {

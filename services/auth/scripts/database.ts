@@ -14,6 +14,7 @@ type TestDatabase = { readonly url: string; readonly container: string; close: (
 const OWNER_LABEL = 'rezics.auth.check.pid';
 const NONCE_LABEL = 'rezics.auth.check.nonce';
 const CLEANUP_TIMEOUT = 5_000;
+const READY_TIMEOUT = 60_000;
 let placed = false;
 let cleanupRegistered = false;
 
@@ -29,8 +30,18 @@ export function assertDatabasePlacement(): void {
   }
 }
 
+function spawnError(program: string, args: string[], error: NodeJS.ErrnoException): never {
+  if (error.code === 'ETIMEDOUT') {
+    throw Object.assign(error, {
+      message: `spawnSync ${program} ETIMEDOUT ${JSON.stringify([program, ...args])}`,
+    });
+  }
+  throw error;
+}
+
 function cleanupDocker(args: string[]): string {
   const result = spawnSync('docker', args, { cwd: directory, encoding: 'utf8', timeout: CLEANUP_TIMEOUT });
+  if (result.error) spawnError('docker', args, result.error);
   return result.stdout?.trim() ?? '';
 }
 
@@ -92,7 +103,7 @@ export function run(
       .filter(Boolean);
     if (ids.length) cleanupDocker(['rm', '-f', '-v', ...ids]);
   }
-  if (result.error) throw result.error;
+  if (result.error) spawnError(program, args, result.error);
   if (result.status !== 0) throw new Error(`${program} ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
   return result.stdout.trim();
 }
@@ -141,8 +152,9 @@ export function schemaDump(url: string, fixture?: TestDatabase): string {
 }
 
 /**
- * The migrated Auth database a check lane is handed: a copy of the check's template, in the check's container. Only the
- * lane's own `bun test` process, the direct child of the check, takes part; a process a test starts must use a placed check.
+ * The migrated Auth database a check lane is handed: a copy of the check's template, in the check's container. The
+ * check publishes AUTH_TEST_DATABASE_URL and AUTH_CHECK_CONTAINER; bun-test workers and module imports consume that
+ * admitted copy instead of starting another server. A process a test starts for its own child uses withTestDatabaseLane.
  */
 type LaneContext = { container: string; url: string };
 
@@ -150,8 +162,11 @@ let laneClaimed = false;
 let laneCopies = 0;
 
 function laneContext(env: NodeJS.ProcessEnv): LaneContext | null {
-  return env.AUTH_CHECK_CONTAINER && env.DATABASE_URL && env.AUTH_CHECK_LANE_OWNER === String(process.ppid)
-    ? { container: env.AUTH_CHECK_CONTAINER, url: env.DATABASE_URL }
+  const container = env.AUTH_CHECK_CONTAINER;
+  if (!container) return null;
+  if (env.AUTH_TEST_DATABASE_URL) return { container, url: env.AUTH_TEST_DATABASE_URL };
+  return env.DATABASE_URL && env.AUTH_CHECK_LANE_OWNER === String(process.ppid)
+    ? { container, url: env.DATABASE_URL }
     : null;
 }
 
@@ -246,6 +261,33 @@ export function testDatabase(): TestDatabase {
   };
 }
 
+function waitUntilReady(container: string): void {
+  const deadline = Date.now() + READY_TIMEOUT;
+  let last = '';
+  while (Date.now() < deadline) {
+    const inspect = run('docker', [
+      'inspect',
+      '-f',
+      `{{.State.Status}} {{.Id}} {{index .Config.Labels "${OWNER_LABEL}"}} {{index .Config.Labels "${NONCE_LABEL}"}}`,
+      container,
+    ]);
+    last = inspect;
+    const [status] = inspect.split(' ');
+    if (status === 'running') {
+      const ready = spawnSync(
+        'docker',
+        ['exec', container, 'pg_isready', '-U', 'rezics', '-d', TEMPLATE_DATABASE],
+        { cwd: directory, encoding: 'utf8', timeout: 5_000 },
+      );
+      if (!ready.error && ready.status === 0) return;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    Bun.sleepSync(Math.min(250, remaining));
+  }
+  throw new Error(`Auth test fixture ${container} was not ready: ${last}`);
+}
+
 /** A migrated database in a server of its own, removed on close. */
 export function ownDatabase(): TestDatabase {
   assertDatabasePlacement();
@@ -271,7 +313,12 @@ export function ownDatabase(): TestDatabase {
       // An inaccessible owner may still be alive; only a missing process is stale.
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') continue;
       // Removing a container that another checker already removed is success.
-      spawnSync('docker', ['rm', '-f', '-v', id], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
+      const removal = spawnSync('docker', ['rm', '-f', '-v', id], {
+        cwd: directory,
+        encoding: 'utf8',
+        timeout: 120_000,
+      });
+      if (removal.error) spawnError('docker', ['rm', '-f', '-v', id], removal.error);
     }
   }
   const container = run('docker', [
@@ -316,8 +363,9 @@ export function ownDatabase(): TestDatabase {
   process.once('SIGINT', () => interrupt(130));
   process.once('SIGTERM', () => interrupt(143));
   try {
+    waitUntilReady(container);
     const port = run('docker', ['port', container, '5432/tcp']).match(/127\.0\.0\.1:(\d+)/)?.[1];
-    if (!port) throw new Error('Cannot determine Auth test database port');
+    if (!port) throw new Error(`Cannot determine Auth test database port for ${container}`);
     const url = `postgres://rezics:rezics@127.0.0.1:${port}/${TEMPLATE_DATABASE}?sslmode=disable`;
     migrate(url);
     return { url, container, close };

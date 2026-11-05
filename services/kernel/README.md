@@ -323,7 +323,8 @@ runs the persisted work. A workflow ID provides idempotency only while its workf
 for idempotency after retention may have deleted that row, because DBOS will treat it as a new workflow.
 
 The retention module collects only `SUCCESS`, `ERROR`, `CANCELLED` and `MAX_RECOVERY_ATTEMPTS_EXCEEDED` workflows
-whose `completed_at` is older than the configured period. Scheduled selection uses the repository partial index
+whose `completed_at` is older than the configured period. Auth keeps a separate `auth_dbos` sweep with the same
+terminal statuses at 256/1,024/4,096; empty and post-drain batches are `services/auth/test/growth-empty-retention.test.ts`. Scheduled selection uses the repository partial index
 `workflow_retention_selector` on `(application_name, completed_at, workflow_uuid)` with that terminal predicate, exact
 application, exclusive cutoff, `ORDER BY completed_at, workflow_uuid` and `LIMIT 1000`. Examined keys are the returned
 batch plus logarithmic index descent. Unrelated applications, nonterminal rows, recent completions and later long-lived

@@ -2,13 +2,16 @@ import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
-import { createAuthService, WEBSITE_CLIENT_ID, type AuthService } from '../src/index.ts';
+import { createAuthService, WEBSITE_CLIENT_ID, type AccessAccount, type AuthService } from '../src/index.ts';
 import { capture, checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 let fixture: ReturnType<typeof testDatabase>;
 let db: GrowthDatabase;
 let service: AuthService;
 const owner = 'retention-owner';
+const issuer = 'https://retention.auth.test';
+const accounts = new Map<string, AccessAccount>();
+const approvals = new Set<string>();
 const batch = 100;
 const kinds = [
   '"oauthAccessToken"',
@@ -26,7 +29,7 @@ beforeAll(async () => {
   const key = { ...(await exportJWK(keys.privateKey)), kid: 'retention-signing', alg: 'ES256' };
   service = await createAuthService({
     database: db.pool,
-    issuer: 'https://retention.auth.test',
+    issuer,
     secret: 'retention-only-secret-with-at-least-32-bytes',
     audience: 'https://retention.api.test',
     signing: { activeKid: key.kid, privateKeys: [key] },
@@ -34,11 +37,12 @@ beforeAll(async () => {
       async readFencedAccount(id) {
         return this.readAccount(id);
       },
-      async readAccount() {
-        return null;
+      async readAccount(id) {
+        return accounts.get(id) ?? null;
       },
-      async authorizeProvisioning() {
-        throw new Error('unused');
+      async authorizeProvisioning(accountId) {
+        if (!approvals.delete(accountId)) throw new Error('Missing trusted provisioning approval');
+        return { accountId };
       },
     }),
   });
@@ -150,3 +154,47 @@ test('checkGrowth keeps one retention invocation constant in rows and statements
   expect((await counts('current'))['"oauthRefreshToken"']).toBe(64 * 1024);
   console.info('Native protocol retention growth:', JSON.stringify(report.samples));
 }, 180000);
+
+test('ordinary protocol retention leaves the signed-in Auth session readable', async () => {
+  const id = 'retention-session-member';
+  const password = 'correct horse battery staple';
+  const account: AccessAccount = { accountId: id, kind: 'actor', state: 'pending', authnEpoch: 1, automated: false };
+  accounts.set(id, account);
+  approvals.add(id);
+  await service.internal.registerClient({ clientId: 'login', firstParty: true, scopes: [] });
+  await service.internal.provisionPassword({ authorization: id, email: `${id}@example.test`, password });
+  account.state = 'active';
+  const login = await service.handler(
+    new Request(`${issuer}/signin`, {
+      method: 'POST',
+      headers: { origin: issuer, 'content-type': 'application/json' },
+      body: JSON.stringify({ email: `${id}@example.test`, password, client_id: 'login', scope: [] }),
+    }),
+  );
+  expect(login.status).toBe(200);
+  const cookie = login.headers
+    .getSetCookie()
+    .map((value) => value.split(';')[0])
+    .join('; ');
+  expect(cookie).toContain('session_token=');
+  const session = await db.admin.query<{ id: string }>('SELECT id FROM session WHERE "userId"=$1', [id]);
+  expect(session.rows).toHaveLength(1);
+  await seed('session-live', 1, 8, false);
+  await seed('session-due', 1, batch, true);
+  expect(await service.internal.pruneExpiredProtocolState(batch)).toBe(kinds.length * batch);
+  expect(await counts('session-due')).toEqual(Object.fromEntries(kinds.map((kind) => [kind, 0])));
+  expect(await counts('session-live')).toEqual(Object.fromEntries(kinds.map((kind) => [kind, 8])));
+  const remaining = await db.admin.query<{ id: string }>('SELECT id FROM session WHERE "userId"=$1', [id]);
+  expect(remaining.rows).toEqual([{ id: session.rows[0]!.id }]);
+  const page = await service.handler(
+    new Request(`${issuer}/signin/page`, {
+      method: 'POST',
+      headers: { origin: issuer, 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ query: '' }),
+    }),
+  );
+  expect(page.status).toBe(200);
+  expect(await page.json()).toMatchObject({
+    viewer: { kind: 'signed-in', account_id: id, email: `${id}@example.test` },
+  });
+}, 60000);

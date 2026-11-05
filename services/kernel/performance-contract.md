@@ -22,6 +22,13 @@ ceilings. A plan node without `Rows Removed by *` is omitted from the removed-ro
 
 ## Growth checks
 
+Auth empty and post-drain workflow retention (`services/auth/test/growth-empty-retention.test.ts`) and website
+protocol retention (`services/auth/test/website-protocol-retention.test.ts`) use this harness at 256, 1,024 and
+4,096 independently grown workflow and request histories, and at 1/8/64 for protocol kinds. They run through
+`bun run --cwd services/auth check <file>` so `testDatabase` consumes the check lane's `AUTH_TEST_DATABASE_URL`.
+Zero-eligible and repeated-empty batches keep constant rows/statements and logarithmic blocks. A live signed-in
+session remains readable after expired protocol rows retire.
+
 A growth check proves that the cost of one operation stays within a declared bound as its data grows; it counts rows,
 shared blocks and statements, never time. An optional `byteBounds` can also bound `requestBytes` and/or `responseBytes`
 using the same `constant`, `logarithmic` and `linear` rules. Its default slack is 0 absolute and 10% relative, and a

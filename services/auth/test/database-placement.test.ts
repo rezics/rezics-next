@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { POSTGRES_IMAGE } from '../scripts/database.ts';
 
 const repository = resolve(import.meta.dir, '../../..');
 const database = resolve(import.meta.dir, '../scripts/database.ts');
@@ -196,6 +197,12 @@ try { ownDatabase(); } catch (error) {
       );
       expect(result.exitCode).toBe(79);
       expect(result.stderr.toString()).toContain(hang ? 'ETIMEDOUT' : 'created but never started');
+      if (hang) {
+        expect(result.stderr.toString()).toContain('"run"');
+        expect(result.stderr.toString()).toContain('rezics.auth.check.pid=');
+        expect(result.stderr.toString()).toContain('rezics.auth.check.nonce=');
+        expect(result.stderr.toString()).toContain(POSTGRES_IMAGE);
+      }
       expect(existsSync(f.state)).toBe(false);
       const events = f.events();
       const run = events.find((event) => event.kind === 'docker' && event.args?.[0] === 'run')!.args!;
@@ -288,6 +295,30 @@ first.close(); second.close();`,
     expect(
       f.events().some((event) => event.args?.includes('CREATE DATABASE lane_copy_1 TEMPLATE rezics_auth_test')),
     ).toBe(true);
+  } finally {
+    f.close();
+  }
+});
+
+test('AUTH_TEST_DATABASE_URL reuses the labelled fixture when ppid is not the lane owner', () => {
+  const f = fixture();
+  try {
+    const result = f.run(
+      `
+import { testDatabase } from ${JSON.stringify(database)};
+const first = testDatabase();
+if (first.container !== 'lane' || first.url !== 'postgres://fake/admitted') throw new Error('admitted URL was not reused');
+first.close();`,
+      {
+        AUTH_CHECK_CONTAINER: 'lane',
+        AUTH_CHECK_LANE_OWNER: '1',
+        AUTH_TEST_DATABASE_URL: 'postgres://fake/admitted',
+        DATABASE_URL: 'postgres://fake/other',
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr.toString()).toBe('');
+    expect(f.events().some((event) => event.kind === 'docker')).toBe(false);
   } finally {
     f.close();
   }
