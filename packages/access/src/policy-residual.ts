@@ -367,6 +367,7 @@ export function evaluatePolicyResidual(
     return (
       !fact ||
       !fact.present ||
+      fact.value === null ||
       (fact.value !== true && fact.value !== false && fact.value !== null)
     );
   });
