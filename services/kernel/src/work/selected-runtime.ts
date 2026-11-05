@@ -81,11 +81,7 @@ const executionOriginals = new WeakMap<WorkExecutionOriginal, ExecutionOriginalS
 const executionTransactions = new WeakMap<ExecutionTransaction, WorkExecutionOriginal>();
 
 /** Work creates this opaque original once; retries retain its pool, client and absolute deadline. */
-export function openWorkExecutionOriginal(
-  pool: Pool,
-  deadline: number,
-  client: WorkClient,
-): WorkExecutionOriginal {
+export function openWorkExecutionOriginal(pool: Pool, deadline: number, client: WorkClient): WorkExecutionOriginal {
   if (!Number.isFinite(deadline) || Date.now() >= deadline)
     throw new WorkExecutionUnavailable('work-execution-deadline');
   const original = Object.freeze({}) as WorkExecutionOriginal;

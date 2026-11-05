@@ -5,10 +5,7 @@ import { currentOperationalResources, enqueueIntent, type OperationalTransaction
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkClient, WorkIntent } from '../work/client.ts';
-import type {
-  HistoryExecutionPort,
-  WorkExecutionOriginal,
-} from '../command/execution-contract.ts';
+import type { HistoryExecutionPort, WorkExecutionOriginal } from '../command/execution-contract.ts';
 import { receiveOperationalHistoryWork } from '../work/history-enqueue.ts';
 import { guardHistoryAccounts } from './gates.ts';
 import { encodeLocator, validateScope, type HistoryScope } from './locator.ts';

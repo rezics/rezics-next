@@ -32,12 +32,7 @@ export type WorkExecutionPort = Readonly<{
   finishTransaction(tx: ExecutionTransaction): void;
   openSelectedPhase(pool: Pool, options: unknown): SelectedExecutionPhase | undefined;
   selectedEnqueue(tx: ExecutionTransaction, intent: WorkIntent): EnqueueCapture | undefined;
-  enqueue(
-    client: WorkClient,
-    rawClient: PoolClient,
-    intent: WorkIntent,
-    capture?: EnqueueCapture,
-  ): Promise<void>;
+  enqueue(client: WorkClient, rawClient: PoolClient, intent: WorkIntent, capture?: EnqueueCapture): Promise<void>;
 }>;
 
 export type HistoryExecutionPort = Readonly<{

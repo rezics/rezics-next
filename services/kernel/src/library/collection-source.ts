@@ -441,9 +441,10 @@ export function createCollectionSource(dependencies: {
         : null,
       work: l.receipt(),
     });
-    const raw = input.work && current
-      ? COLLECTION_SOURCE_WORK_GROUP_LIMIT
-      : Math.min(COLLECTION_SOURCE_WORK_GROUP_LIMIT, Math.floor(l.allowance().remaining.candidateKeys / 4));
+    const raw =
+      input.work && current
+        ? COLLECTION_SOURCE_WORK_GROUP_LIMIT
+        : Math.min(COLLECTION_SOURCE_WORK_GROUP_LIMIT, Math.floor(l.allowance().remaining.candidateKeys / 4));
     if (!raw) return partial('allowance');
     const window =
       input.work && current

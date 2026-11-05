@@ -17,10 +17,7 @@ import {
 } from './command.ts';
 import { enterCommandGate } from './gate.ts';
 import fence from './operational-fence.sql';
-import type {
-  SelectedExecutionPhase,
-  WorkExecutionOriginal,
-} from './execution-contract.ts';
+import type { SelectedExecutionPhase, WorkExecutionOriginal } from './execution-contract.ts';
 
 declare const operational: unique symbol;
 export type OperationalTransaction = Pick<PoolClient, 'query'> & { readonly [operational]: true };

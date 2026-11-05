@@ -8,10 +8,7 @@ import { ProblemError } from '../http/problem.ts';
 import { readScopeWorkDefinition, type ScopeWorkContext } from '../search/scope-work-context.ts';
 import type { Access } from '../request/access.ts';
 import { nativeSourceFence, type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
-import {
-  readNativeCollectionMetadataForWork,
-  type NativeCollectionMetadata,
-} from './collection-source-native.ts';
+import { readNativeCollectionMetadataForWork, type NativeCollectionMetadata } from './collection-source-native.ts';
 import type { CollectionSourceObservation, WorkDimensions, WorkReceipt } from './collection-source.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 
@@ -27,14 +24,11 @@ export type CollectionSourceWorkState = Readonly<{
 }>;
 const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
 
-const bounded = (
-  values: Omit<Bound, 'engineRequests'>,
-): Bound => declareBound({ ...values, engineRequests: 0 });
+const bounded = (values: Omit<Bound, 'engineRequests'>): Bound => declareBound({ ...values, engineRequests: 0 });
 
 const sourceScopeSQL = `SELECT identity,capture_id::text AS capture,committed_revision::text AS revision
        FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3`;
-const sourceHeadSQL =
-  'SELECT generation::text FROM library.canonical_source_head WHERE route=$1 AND collection_id=$2';
+const sourceHeadSQL = 'SELECT generation::text FROM library.canonical_source_head WHERE route=$1 AND collection_id=$2';
 const sourceGenerationSQL = `SELECT basis,state,source_exhausted AS exhausted FROM library.canonical_source_generation
        WHERE route=$1 AND collection_id=$2 AND generation=$3`;
 const groupSeekSQL = `SELECT canonical_subject_id::text AS subject FROM library.canonical_source_reference
@@ -258,7 +252,10 @@ export async function readCollectionSourceWorkState(
         native.identityObservation.committedRevision !== BigInt(scope.revision))
     )
       throw new ProblemError('semantic_not_ready');
-    const [head] = await query<{ generation: string }>(work, current, stateHeadStatement, [source.route, source.collectionId]);
+    const [head] = await query<{ generation: string }>(work, current, stateHeadStatement, [
+      source.route,
+      source.collectionId,
+    ]);
     if (!head) throw new ProblemError('dependency_unavailable');
     const [generation] = await query<{ basis: CanonicalBasis; state: string; exhausted: boolean }>(
       work,
@@ -295,7 +292,10 @@ export async function readCollectionSourceWorkState(
     });
   } catch (error) {
     if (error instanceof Error)
-      Object.defineProperty(error, 'work', { value: sourceReceipt(COLLECTION_SOURCE_WORK_COST.state), configurable: true });
+      Object.defineProperty(error, 'work', {
+        value: sourceReceipt(COLLECTION_SOURCE_WORK_COST.state),
+        configurable: true,
+      });
     throw error;
   }
 }
@@ -318,7 +318,10 @@ export async function seekCollectionSourceWorkGroup(
     return { subjectId: row?.subject ?? null, work: sourceReceipt(COLLECTION_SOURCE_WORK_COST.seek) };
   } catch (error) {
     if (error instanceof Error)
-      Object.defineProperty(error, 'work', { value: sourceReceipt(COLLECTION_SOURCE_WORK_COST.seek), configurable: true });
+      Object.defineProperty(error, 'work', {
+        value: sourceReceipt(COLLECTION_SOURCE_WORK_COST.seek),
+        configurable: true,
+      });
     throw error;
   }
 }
@@ -375,7 +378,8 @@ export async function readCollectionSourceWorkGroup(
     });
     return { rows: keys.map((key) => ({ key })), exhausted: rows.length < limit, work: sourceReceipt(cost) };
   } catch (error) {
-    if (error instanceof Error) Object.defineProperty(error, 'work', { value: sourceReceipt(cost), configurable: true });
+    if (error instanceof Error)
+      Object.defineProperty(error, 'work', { value: sourceReceipt(cost), configurable: true });
     throw error;
   }
 }

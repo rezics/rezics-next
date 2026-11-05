@@ -26,7 +26,9 @@ test('the selected Members Source has a complete static bound for the declared c
   expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.status).toBe('complete');
   expect(isBound(MEMBERS_PREPARATION_SOURCE_DECLARATION.cost)).toBe(true);
   expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.cost).toEqual(MEMBERS_PREPARATION_SOURCE_COST);
-  expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.cost).toEqual(sumBounds(...Object.values(MEMBERS_PREPARATION_SOURCE_TERMS)));
+  expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.cost).toEqual(
+    sumBounds(...Object.values(MEMBERS_PREPARATION_SOURCE_TERMS)),
+  );
   expect(MEMBERS_PREPARATION_SOURCE_TERMS.collectionState).toEqual(
     repeatBound(COLLECTION_SOURCE_WORK_COST.state, MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots),
   );

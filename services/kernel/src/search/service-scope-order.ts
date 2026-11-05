@@ -136,10 +136,7 @@ export function createSearchScopeOrder(
       allowance: WorkAllowance,
       candidateLimit?: number,
     ) {
-      if (
-        options.work &&
-        (!Number.isSafeInteger(candidateLimit) || candidateLimit! < 1 || candidateLimit! > 100)
-      )
+      if (options.work && (!Number.isSafeInteger(candidateLimit) || candidateLimit! < 1 || candidateLimit! > 100))
         throw new RangeError('Selected Collection Source candidate limit required');
       const admitted = await currentWork(collection.order, collection.observation);
       const page = await native.prefix({

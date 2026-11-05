@@ -548,12 +548,13 @@ export async function readNativeCollectionMetadataForWork(
     Date.now() >= deadline
   )
     throw new ProblemError('semantic_not_ready');
-  const allowed = new Set([headerSQL, referenceSQL, nativeCollectionPartitionMetadataSQL, outputHead.sql, fenceSQL].map(normal));
+  const allowed = new Set(
+    [headerSQL, referenceSQL, nativeCollectionPartitionMetadataSQL, outputHead.sql, fenceSQL].map(normal),
+  );
   const calls = new Set<string>();
   const client: QueryClient = {
     query: (async (config: string | QueryConfig, parameters: unknown[] = []) => {
-      if (Date.now() >= deadline || !hasLiveOperationalTransaction(tx))
-        throw new ProblemError('semantic_not_ready');
+      if (Date.now() >= deadline || !hasLiveOperationalTransaction(tx)) throw new ProblemError('semantic_not_ready');
       const sql = typeof config === 'string' ? config : config.text;
       const values = (typeof config === 'string' ? parameters : config.values) ?? [];
       const key = normal(sql);
@@ -703,9 +704,7 @@ export function authorizeNativeCollectionMetadata(
   });
 }
 async function currentSource(client: QueryClient, metadata: NativeCollectionMetadata, work: NativeCollectionWork) {
-  const current = await (workingMetadata.has(metadata)
-    ? observeWorking(client, metadata)
-    : observe(client, metadata));
+  const current = await (workingMetadata.has(metadata) ? observeWorking(client, metadata) : observe(client, metadata));
   if (!current || current.state !== 'active') throw new ProblemError('not_found');
   if (
     current.incarnation !== metadata.incarnation ||

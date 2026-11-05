@@ -23,10 +23,7 @@ export function declareBound(value: unknown): Bound {
   if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)
     throw new TypeError('Invalid bound declaration');
   const keys = Reflect.ownKeys(value);
-  if (
-    keys.length !== BOUND_AXES.length ||
-    keys.some((key) => typeof key !== 'string' || !axisSet.has(key))
-  )
+  if (keys.length !== BOUND_AXES.length || keys.some((key) => typeof key !== 'string' || !axisSet.has(key)))
     throw new TypeError('Invalid bound declaration axes');
   const descriptors = Object.getOwnPropertyDescriptors(value);
   for (const axis of BOUND_AXES) {

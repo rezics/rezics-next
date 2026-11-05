@@ -60,9 +60,7 @@ import {
   reserveOperationalWorkTransfer,
   type OperationalWorkRegistration,
 } from '../history/operational-work.ts';
-import {
-  type OperationalWorkTransfer,
-} from '../history/operational-work-budget.ts';
+import { type OperationalWorkTransfer } from '../history/operational-work-budget.ts';
 
 const LIVE_LIMIT = 32;
 const IDLE_MS = 24 * 60 * 60 * 1000;
@@ -1004,11 +1002,7 @@ export async function readPreparationOwnerFence(
 export async function checkMembersPreparationCompletion(
   tx: OperationalTransaction,
   locator: PreparationLocator,
-): Promise<
-  | Readonly<{ status: 'obsolete' }>
-  | Readonly<{ status: 'current' }>
-  | Readonly<{ status: 'unavailable' }>
-> {
+): Promise<Readonly<{ status: 'obsolete' }> | Readonly<{ status: 'current' }> | Readonly<{ status: 'unavailable' }>> {
   const state = await readPreparationStep(tx, locator);
   if (!state) return { status: 'obsolete' };
   const association = await original.run(tx, {

@@ -1,8 +1,5 @@
 import type { Pool } from 'pg';
-import {
-  OPERATIONAL_WORK_LOCAL_DECLARATION,
-  sumOperationalWork,
-} from '../history/operational-work-budget.ts';
+import { OPERATIONAL_WORK_LOCAL_DECLARATION, sumOperationalWork } from '../history/operational-work-budget.ts';
 import { openWorkExecutionOriginal } from '../work/selected-runtime.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
