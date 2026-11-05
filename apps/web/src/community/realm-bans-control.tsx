@@ -372,6 +372,10 @@ function RealmBansVisit({
     direction?: BanWindowDirection;
     focus: PageReadFocusIntent | null;
   }>({ focus: null });
+  if (view.state === 'forbidden' || view.state === 'closed' || view.state === 'signed-out') {
+    windows.current = { active: { realmId, visit: gate.id, cursor: undefined }, previous: [], discarded: false };
+    pageRead.current = { focus: pageRead.current.focus };
+  }
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const currentListHeading = useRef<HTMLHeadingElement>(null);
   const banTrigger = useRef<HTMLButtonElement>(null);
@@ -569,10 +573,11 @@ function RealmBansVisit({
   );
 
   const refresh = useCallback(
-    async (cursor?: string, focusSource?: HTMLButtonElement, direction: BanWindowDirection = 'restart') => {
+    async (cursor?: string, focusSource?: HTMLButtonElement, direction: BanWindowDirection = 'refresh') => {
       if (!gate.current() || working.current || uncertain.current) return;
       cancelPageReadFocus();
       pageReady.current = false;
+      if (direction === 'refresh') cursor = windows.current.active.cursor;
       // Restart is deliberate recovery even when its new first-page read fails.
       if (direction === 'restart') {
         cursor = undefined;
@@ -617,8 +622,6 @@ function RealmBansVisit({
       }
       setView(next);
       if (next.state === 'forbidden' || next.state === 'closed' || next.state === 'signed-out') {
-        windows.current = { active: { realmId, visit: gate.id, cursor: undefined }, previous: [], discarded: false };
-        pageRead.current = { focus: pageRead.current.focus };
         setResult(null);
         setReceipts([]);
         setRetry(null);

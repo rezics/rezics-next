@@ -169,7 +169,7 @@ async function mount(session: unknown = viewer(), content?: Parameters<typeof pa
   await paint(content);
 }
 function button(label: string) {
-  const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+  const node = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
     (node) => node.textContent?.trim() === label,
   );
   expect(node).toBeDefined();
