@@ -20,12 +20,7 @@ import {
   reusableCheckResult,
   type DevVerifierExecution,
 } from './dev-verifier-execution.ts';
-import {
-  cachedRun,
-  knownExisting,
-  saveFinding,
-  saveRun,
-} from './dev-verifier-storage.ts';
+import { cachedRun, knownExisting, saveFinding, saveRun } from './dev-verifier-storage.ts';
 import {
   checkInputAreas,
   checkSourceQueryPaths,
@@ -629,7 +624,10 @@ export async function locateNewFailure(
   return contains === null ? null : contains ? suspects[low]!.task : undefined;
 }
 
-export function groupNewFindings(findings: readonly DevVerifierFinding[], checks: readonly IndexedCheck[]): FindingGroup[] {
+export function groupNewFindings(
+  findings: readonly DevVerifierFinding[],
+  checks: readonly IndexedCheck[],
+): FindingGroup[] {
   const groups = new Map<number, FindingGroup>();
   for (const finding of findings) {
     if (finding.status !== 'new') continue;
@@ -716,4 +714,3 @@ export function saveComparisonFindings(
 ): void {
   for (const finding of comparison.findings) saveFinding(store, finding, policy);
 }
-
