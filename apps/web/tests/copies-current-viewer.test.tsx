@@ -558,7 +558,7 @@ test('The actual Copies route retires retained private rows and editor state on 
   try {
     await show(viewer('A'));
     expect(host.textContent).not.toContain('FOREIGN');
-    search = { subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'opaque/cursor+exact' };
+    search = { subjectId: id(10), cursor: 'opaque/cursor+exact' };
     await show(viewer('A'));
     await acceptList('A');
     await click(m.library_copy_compare_select());
