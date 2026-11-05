@@ -48,7 +48,7 @@ function fixture(state: SearchLoaderDeps, labels: Labels): SearchPageData {
     condition: state.condition,
     ...(state.ranges ? { ranges: state.ranges } : {}),
     selectedFacets: state.facets,
-    selectedFacetLabels: known || mixed ? { 'schema:genre': { en: retainedLabel } } : {},
+    selectedFacetLabels: known || mixed ? { 'schema:genre': { 'fixture:genre-a': { text: retainedLabel, lang: 'en' } } } : {},
     hitTypes: {},
     yearProperties: [],
     typeChoices: [],

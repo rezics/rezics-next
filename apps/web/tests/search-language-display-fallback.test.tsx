@@ -32,7 +32,7 @@ test('SearchPage keeps admitted language tags readable and removable when Intl c
     condition: state.condition,
     ranges: state.ranges,
     selectedFacets: state.facets,
-    selectedFacetLabels: { 'schema:genre': { en: 'Genre' } },
+    selectedFacetLabels: {},
     groups: [],
     typeChoices: [],
     hitTypes: {},

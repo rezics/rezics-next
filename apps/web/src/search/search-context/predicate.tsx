@@ -1,4 +1,4 @@
-import type { DiscoveryFilterDocument, FilterRange } from '@rezics/filter';
+import type { DiscoveryFilterDocument, FilterRange, OwnerLeaf } from '@rezics/filter';
 import type { ReactNode } from 'react';
 import { calendarPrecision } from '../condition-calendar';
 import { m } from '../../paraglide/messages.js';
@@ -16,7 +16,7 @@ export function rangeDescription(
     return `${m.condition_range_calendar_mode({}, options)}: ≥ ${endpoint(range.gte)}; ≤ ${endpoint(range.lte)}. ${m.condition_calendar_overlap({}, options)}`;
   }
   const end = (value: unknown) => (typeof value === 'object' ? JSON.stringify(value) : String(value));
-  const unit = range.type === 'time' ? undefined : (unitText?.(range.unit) ?? range.unit);
+  const unit = unitText?.(range.unit) ?? range.unit;
   return (
     <>
       {range.gte !== undefined && <span>≥ {end(range.gte)}</span>}
@@ -26,10 +26,7 @@ export function rangeDescription(
         </span>
       )}
       {unit !== undefined && (
-        <span
-          title={range.type === 'time' ? undefined : range.unit}
-          data-unit-id={range.type === 'time' ? undefined : range.unit}
-        >
+        <span title={range.unit} data-unit-id={range.unit}>
           {range.gte !== undefined || range.lte !== undefined ? ' ' : ''}
           {unit}
         </span>
@@ -56,30 +53,78 @@ function relationDescription(property: ReactNode, values: ReactNode, locale: str
     );
 }
 
+function conceptDescription(scheme: ReactNode, match: string, locale: string): ReactNode {
+  const options = { locale: locales.find((item) => item === locale) ?? 'en' };
+  const schemeToken = '\uE000scheme\uE001';
+  return m
+    .condition_concept_predicate({ scheme: schemeToken, match }, options)
+    .split(schemeToken)
+    .flatMap((part, index) => (index === 0 ? [part] : [<span key={index}>{scheme}</span>, part]))
+    .map((part, index) => (index === 0 ? ` (${part}` : part))
+    .concat(')');
+}
+
+/** Labels enter by their meaning; statement values are admitted only for their property/value pair. */
+export type PredicatePresentation = {
+  property: (id: string) => ReactNode;
+  catalogueType: (id: string) => ReactNode;
+  discoveryType: (id: string) => ReactNode;
+  value: (property: string, id: string) => ReactNode;
+  conceptScheme: (id: string) => ReactNode;
+};
+
+function ownerDescription(owner: OwnerLeaf['owner'], locale: string): ReactNode {
+  const options = { locale: locales.find((item) => item === locale) ?? 'en' };
+  if ('presence' in owner) return m.search_context_owner_presence({}, options);
+  if ('state' in owner) return m.search_context_owner_state({}, options);
+  if ('label' in owner) return m.search_context_owner_label({}, options);
+  if ('session' in owner) {
+    switch (owner.session.lifecycle) {
+      case 'active':
+        return m.search_context_owner_session_active({}, options);
+      case 'completed':
+        return m.search_context_owner_session_completed({}, options);
+      case 'abandoned':
+        return m.search_context_owner_session_abandoned({}, options);
+      default:
+        return m.search_context_owner_unsupported({}, options);
+    }
+  }
+  if ('holding' in owner) {
+    const fields = [
+      m.search_context_owner_holding_profile({}, options),
+      ...(owner.holding.kind === undefined ? [] : [m.search_context_owner_holding_kind({}, options)]),
+      ...(owner.holding.status === undefined ? [] : [m.search_context_owner_holding_status({}, options)]),
+    ];
+    return m.search_context_owner_holding({ fields: fields.join(', ') }, options);
+  }
+  return m.search_context_owner_unsupported({}, options);
+}
+
 /** Preserve the executed Boolean structure and same-statement qualifiers in the explanation. */
 export function PredicateDescription({
   value,
   locale,
-  label,
+  presentation,
   unitText,
   saved,
   previewNodes,
 }: {
   value: DiscoveryFilterDocument;
   locale: string;
-  label: (id: string) => ReactNode;
+  presentation: PredicatePresentation;
   unitText?: ((property: string, unit: string | undefined) => string | undefined) | undefined;
   saved?: ((id: string) => ReactNode) | undefined;
   previewNodes?: ReadonlySet<DiscoveryFilterDocument> | undefined;
 }) {
   const options = { locale: locales.find((item) => item === locale) ?? 'en' };
   const shortened = <span>{m.condition_preset_shortened({}, options)}</span>;
-  const terms = (ids: readonly string[]) => (
+  const terms = (ids: readonly string[], present: (id: string) => ReactNode) => (
     <>
       {(previewNodes ? ids.slice(0, 6) : ids).map((id, i) => (
         <span key={i}>
           {i > 0 && ', '}
-          {label(id)}
+          {present(id)}
         </span>
       ))}
       {previewNodes && ids.length > 6 && shortened}
@@ -94,7 +139,7 @@ export function PredicateDescription({
             <PredicateDescription
               value={node}
               locale={locale}
-              label={label}
+              presentation={presentation}
               unitText={unitText}
               saved={saved}
               previewNodes={previewNodes}
@@ -132,41 +177,58 @@ export function PredicateDescription({
     const statement = value.statement;
     const inverseDescription =
       'inverse' in statement && statement.inverse && 'in' in statement
-        ? relationDescription(label(statement.property), terms(statement.in), locale)
+        ? relationDescription(
+            presentation.property(statement.property),
+            terms(statement.in, (id) => presentation.value(statement.property, id)),
+            locale,
+          )
         : undefined;
     return (
       <>
-        {label(statement.property)}:{' '}
+        {presentation.property(statement.property)}:{' '}
         {'in' in statement
-          ? terms(statement.in)
+          ? terms(statement.in, (id) => presentation.value(statement.property, id))
           : rangeDescription(statement.range, locale, (unit) => unitText?.(statement.property, unit))}
         {inverseDescription ? <p>{inverseDescription}</p> : null}
         {'inverse' in statement && statement.inverse && !('in' in statement) ? ' ←' : null}
         {'in' in statement && statement.concept
-          ? ` (${m.condition_concept_predicate(
-              {
-                scheme: label(statement.concept.scheme),
-                match: statement.concept.includeChildren
+          ? (
+              conceptDescription(
+                presentation.conceptScheme(statement.concept.scheme),
+                statement.concept.includeChildren
                   ? m.condition_concept_descendants({}, options)
                   : m.condition_concept_exact({}, options),
-              },
-              options,
-            )})`
+                locale,
+              )
+            )
           : null}
         {(previewNodes ? statement.qualifiers?.slice(0, 2) : statement.qualifiers)?.map((qualifier, i) => (
           <p key={i}>
-            {m.condition_qualifier({}, options)}: {label(qualifier.property)} = {terms(qualifier.in)}
+            {m.condition_qualifier({}, options)}: {presentation.property(qualifier.property)} ={' '}
+            {terms(qualifier.in, (id) => presentation.value(qualifier.property, id))}
           </p>
         ))}
         {previewNodes && (statement.qualifiers?.length ?? 0) > 2 && shortened}
       </>
     );
   }
-  if ('type' in value) return <>{terms(value.type.in)}</>;
-  if ('kind' in value) return <>{terms(value.kind.in)}</>;
-  if ('realm' in value) return <>Realm: {value.realm.id}</>;
+  if ('type' in value)
+    return (
+      <>
+        {m.search_context_catalogue_type({}, options)}{' '}
+        {terms(value.type.in, presentation.catalogueType)}
+      </>
+    );
+  if ('kind' in value)
+    return (
+      <>
+        {m.search_context_exact_type({}, options)}{' '}
+        {terms(value.kind.in, presentation.discoveryType)}
+      </>
+    );
+  if ('realm' in value) return <>{m.search_context_realm({ id: value.realm.id }, options)}</>;
   if ('ratingQuestion' in value)
     return <>{m.search_context_rating_question({ id: value.ratingQuestion.id }, options)}</>;
-  // Private owner operands were admitted by the native reader, never resolved through public index data.
-  return <>{m.search_context_owner({}, options)}</>;
+  if ('owner' in value) return <>{ownerDescription(value.owner, locale)}</>;
+  return <>{m.search_context_owner_unsupported({}, options)}</>;
 }
