@@ -6,11 +6,18 @@ import { readItemIdentityVersion } from '../semantic/item-identity.ts';
 import { readItemTypes } from '../semantic/subject.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 
-async function observe(pool: Pool, subjectId: string, full: boolean) {
+export interface PreparationSourceExecution {
+  transaction<T>(read: () => Promise<T>): Promise<T>;
+  read<T>(client: import('pg').PoolClient, subjectId: string, full: boolean, read: () => Promise<T>): Promise<T>;
+}
+type PreparationSourceContext = { pool: Pool; deadline?: number; execution?: PreparationSourceExecution };
+
+async function observe({ pool, deadline, execution }: PreparationSourceContext, subjectId: string, full: boolean) {
   const route = routeOf(subjectId);
   if (route === null) throw new TypeError('Invalid preparation source');
   const partition = partitionOf(route);
-  return withReadTransaction(pool, async (client) => {
+  const transaction = () => withReadTransaction(pool, async (client) => {
+    const read = async () => {
     const owner = await readPartition(client, partition);
     if (!owner) throw new CommandUnavailableError('deadline', partition);
     if (owner.writeState === 'moved') throw new CommandUnavailableError('moved', partition, owner.movedTo);
@@ -20,12 +27,15 @@ async function observe(pool: Pool, subjectId: string, full: boolean) {
     // Metadata revalidation never invokes the full Type reader.
     const type = full ? ((await readItemTypes(client, [subjectId])).get(subjectId) ?? null) : null;
     return { stamp, identity, type };
-  });
+    };
+    return execution ? execution.read(client, subjectId, full, read) : read();
+  }, deadline);
+  return execution ? execution.transaction(transaction) : transaction();
 }
-export function observePreparationSource({ pool }: { pool: Pool }, subjectId: string) {
-  return observe(pool, subjectId, true);
+export function observePreparationSource(context: PreparationSourceContext, subjectId: string) {
+  return observe(context, subjectId, true);
 }
-export async function observePreparationIdentity({ pool }: { pool: Pool }, subjectId: string) {
-  const { stamp, identity } = await observe(pool, subjectId, false);
+export async function observePreparationIdentity(context: PreparationSourceContext, subjectId: string) {
+  const { stamp, identity } = await observe(context, subjectId, false);
   return { stamp, identity };
 }

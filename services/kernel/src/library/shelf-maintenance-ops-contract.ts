@@ -25,16 +25,7 @@ export function counterWriteMode(ready: boolean): 'active' | 'defer' {
   return ready ? 'active' : 'defer';
 }
 
-export const SHELF_MAINTENANCE_LIMITS = Object.freeze({
-  page: 100,
-  segment: 100,
-  commandDeadlineMs: 5_000,
-  cursorScalars: 8,
-  cursorBytes: 2_048,
-  workflowBytes: 4_096,
-  edgeBytes: 256,
-  stagingBytes: 25_600,
-});
+export { SHELF_MAINTENANCE_LIMITS } from './shelf-maintenance-bounds.ts';
 export const EMPTY_SHELF_GENERATION = '00000000-0000-0000-0000-000000000000';
 export const SHELF_BACKFILL_PHASES = [
   'drain',

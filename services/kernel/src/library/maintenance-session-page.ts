@@ -1,6 +1,8 @@
 import type { PoolClient } from 'pg';
 import { ROUTES, routeOf } from '../route/route.ts';
-import sessionPage from './maintenance-session-page.sql';
+import sessionPageQuery from './maintenance-session-page.sql';
+import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
+const sessionPage = shelfMaintenanceQuery(sessionPageQuery);
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 type MaintenanceSession = Awaited<ReturnType<typeof sessionPage.run>>[number];

@@ -127,21 +127,41 @@ permits refill, account-history scans, cap increases or a second native admissio
 
 # Shelf rebuild invocation custody
 
-Decision: snapshot the rebuild request before authorization and retain one absolute page deadline through
-preparation and the existing conflict reconciliation. Extend the native journey rather than add a plan-only suite.
+Decision: compose costs at the existing request/page/recovery/segment owner, preserve exact Core replay and
+publication/retirement, and use the existing native one-attempt maintenance policy beneath DBOS's eight attempts.
+Retain one original five-second deadline through released preparation and the one conflict reconciliation.
 
-`shelf-maintenance-runtime.ts` retains the original owner, kind and request key for both the receipt digest and
-the native body. Reusing a caller's request container during authorization cannot change the requested generation
-kind. Request authorization and command execution share the same absolute deadline. A page captures its locator
-once; its one idempotency-conflict retry reloads the winner's header within the original five-second budget.
-Already advanced pages still reach ordinary Core replay without another source preparation. Current authorization,
-the original Pool, native account/gate/run locks and transaction cleanup remain with their existing owners.
+`shelf-maintenance-bounds.ts` owns immutable nine-axis SQL and command declarations. Each dispatch retains literal SQL,
+serialized original operands, schema-specific escaped projections, logical result limit and examined-work bound.
+The eight-axis native translation names every shared axis explicitly. These producers execute native SQL and the
+existing DBOS enqueue; they issue no engine requests. Trigger/deferred work, empty probes, discarded contributions,
+collision retries and terminal cleanup remain charged independently of returned row counts. Statements returning one
+aggregate are not one examined row. No population constant or post-dispatch rowCount repricing supplies a bound.
 
-This custody boundary does not supply complete nine-axis rebuild operation plans. Those plans must include released
-source/type preparation, account/action/group checks, command and receipt work, phase SQL and repeated native points,
-validation, publication, bounded old-generation retirement, response serialization and successor/ack controls.
-Page and segment limits bound finite invocations; they do not bound the number of future durable pages. A completed
-phase or count cannot establish completed publication and retirement.
+The runner uses the original Pool and transaction, current account/gate/run evidence and private allocator WeakMap
+provenance. Its declarations supply neither authorization nor execution evidence. The command scaffold is reserved
+before checkout, separately from phase and Access work, and settles after Core drains and releases its transaction.
+Its terminal reserve includes failed COMMIT and expired ROLLBACK. Existing Access accounting retains action/group
+costs. The released account anchor uses the native account SHARE query; the live command still calls `shareAccount`.
+A released Access client is not a CommandTransaction.
+
+Source observation retains the page deadline and RR snapshot. Narrow size points precede otherwise unbounded full
+Type/address projections. Root comparison and old-reservation retirement likewise derive bytes from indexed native
+length metadata before useful work. Full source input and final publication stay proportional to exact input bytes;
+continuations transfer at most 25,600 staged bytes. Metadata observations never retransfer the full Type. The allocator
+uses the same live client, original run/epoch/build and existing bounded UUID/edge retries; public plans cannot mint it.
+
+Request owner/kind/key, page owner/run/epoch/sequence/segment, fixed header, recovery keyset and enqueue locator are
+retained across awaits. Already advanced pages reach ordinary Core replay without fresh source preparation. Source
+change before useful work cannot attach mixed identities. Page effects, source frontier, receipt and successor intent
+commit together; rollback leaves the same resumable header. Only whole-build native validation permits publication.
+Old-generation counts/reservations and scratch retire through their bounded phases before the terminal receipt.
+
+Page100 and segment100 bound invocations, not future durable pages or a whole-account rebuild. Purge remains the
+separate erasure owner's policy. Native receiving must exercise interruption/retry, full-page EOF, source changes,
+duplicate/out-of-order replay, publication and acknowledged retirement with unrelated population growth. Compiler
+output and arithmetic declarations are not receiving passes; affected Kernel/root receiving remains required after
+integration. Search's five receiving suites remain unchanged.
 
 # Library performance contract
 
