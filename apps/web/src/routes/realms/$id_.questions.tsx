@@ -138,20 +138,21 @@ function QuestionManagementRoute() {
     window.addEventListener('keydown', keyDown, true);
     window.addEventListener('focusin', focusIn, true);
     const unsubscribe = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+      const nextSearch = toLocation.search as Search;
       const target = toLocation.pathname
         .replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/, '')
         .replace(/\/$/, '');
       windows.moving(
-        target === `/realms/${initial.realmId}/questions` && !('invalidAddress' in toLocation.search)
+        target === `/realms/${initial.realmId}/questions` && !('invalidAddress' in nextSearch)
           ? {
-              selectedQuestionId: toLocation.search.selectedQuestionId ?? null,
-              cursor: toLocation.search.cursor ?? null,
+              selectedQuestionId: nextSearch.selectedQuestionId ?? null,
+              cursor: nextSearch.cursor ?? null,
             }
           : null,
       );
       if (windows.focus?.region === 'directory') return;
       const pending = pendingSelection.current;
-      if (pending && toLocation.search.selectedQuestionId === pending) {
+      if (pending && nextSearch.selectedQuestionId === pending) {
         pendingSelection.current = null;
         return;
       }
