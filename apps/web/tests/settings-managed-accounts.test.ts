@@ -33,7 +33,15 @@ function page(): ManagedAccountsPage {
       next: 'signed organization +/=',
     },
     responsibilities: {
-      items: [{ reservationId: organization, accountId: operated, account: null, state: 'reconciling', navigation: { state: 'concealed' } }],
+      items: [
+        {
+          reservationId: organization,
+          accountId: operated,
+          account: null,
+          state: 'reconciling',
+          navigation: { state: 'concealed' },
+        },
+      ],
       next: 'signed operator +/=',
     },
   };
