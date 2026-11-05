@@ -81,7 +81,7 @@ function driverSource(input: {
   resultPath: string;
   entries: readonly string[];
   cwd: string;
-  preload?: string;
+  preload?: string | undefined;
 }): string {
   return `import { spawn } from 'node:child_process';
 import { appendFileSync, writeFileSync } from 'node:fs';
@@ -366,7 +366,7 @@ export async function importLandingKernelCandidate(input: {
     appendFileSync(logPath, `Dev landing Kernel import unavailable: ${parsed.infrastructureError ?? 'unknown'}\n`);
     return result('unavailable', { setupMs: null, importMs: null, cleanupMs: null, elapsedMs: null }, {
       output: parsed.output,
-      infrastructureError: parsed.infrastructureError,
+      infrastructureError: parsed.infrastructureError ?? 'unknown',
       argv: parsed.argv,
     });
   }

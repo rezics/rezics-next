@@ -164,7 +164,7 @@ test('interrupting the import removes owned driver files and keeps the diagnosti
         logPath: ${JSON.stringify(join(root, '.temp', 'landing.log'))},
       });
     `;
-    const childEnv = { ...process.env, KERNEL_IMPORT_READY: ready };
+    const childEnv: NodeJS.ProcessEnv = { ...process.env, KERNEL_IMPORT_READY: ready };
     delete childEnv.DATABASE_URL;
     delete childEnv.KERNEL_DATABASE_CONTAINER;
     const child = spawn(process.execPath, ['-e', script], {
