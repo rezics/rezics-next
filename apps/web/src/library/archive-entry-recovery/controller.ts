@@ -29,6 +29,7 @@ export class ArchiveEntryRecoveryJourney {
   #reviewed: NativeArchiveReview['reviewed'] = [];
   #readback: { ordinal: number; value: unknown } | null = null;
   #cancelRequest: RecoveryRequest | null = null;
+  #cancelAcknowledged = false;
   #pendingUpload: { text: string; key: string; request: RecoveryRequest } | null = null;
   #evidenceId: string | null = null;
   #expiry: ReturnType<typeof setTimeout> | undefined;
@@ -53,7 +54,7 @@ export class ArchiveEntryRecoveryJourney {
     this.#listeners.clear();
   }
   #current() { return !this.#retired && this.visit.state !== null; }
-  #feedback<T>(reply: ArchiveReply<T>) {
+  #feedback(reply: ArchiveReply<unknown>) {
     this.#notice = reply.kind === 'uncertain' ? 'uncertain' : reply.kind === 'refused' ? `${reply.status}:${reply.code}` : '';
   }
   async #run(action: () => Promise<void>) {
@@ -68,6 +69,8 @@ export class ArchiveEntryRecoveryJourney {
   async upload(file: File) {
     if (file.size > archiveUploadBytes) { this.#notice = 'file_too_large'; this.#emit(); return; }
     const request = this.visit.startUpload();
+    this.#cancelRequest = null;
+    this.#cancelAcknowledged = false;
     this.#readback = null;
     this.#reviewed = [];
     await this.#run(async () => {
@@ -149,7 +152,7 @@ export class ArchiveEntryRecoveryJourney {
       const changed = reply.value.applied.some(row => ['current_conflict', 'unresolved', 'unsupported'].includes(row.status));
       this.visit.settleApply(original.request, unresolved ? 'recoverable' : changed && !cancelling ? 'stale' : 'complete', results);
       if (unresolved) this.#notice = 'uncertain';
-      if (this.#cancelRequest) this.visit.admitCancel(this.#cancelRequest);
+      if (this.#cancelRequest && this.#cancelAcknowledged) this.visit.admitCancel(this.#cancelRequest);
     });
   }
   async results(after = -1) {
@@ -180,7 +183,7 @@ export class ArchiveEntryRecoveryJourney {
     const reply = await this.#port.cancel(id, request.signal);
     if (!this.#current() || request.signal.aborted) return;
     this.#feedback(reply);
-    if (reply.kind === 'ok') this.visit.admitCancel(request);
+    if (reply.kind === 'ok') { this.#cancelAcknowledged = true; this.visit.admitCancel(request); }
     this.#emit();
   }
   async readCurrent(ordinal: number) {
