@@ -45,9 +45,7 @@ import { watch, sshProbe } from './watchdog.ts';
 import { readRouting } from './routing.ts';
 import {
   MergeTrain,
-  trainConfigurationRevision,
   type IntegrationCheck,
-  type TrainConfigurationReloader,
   type TrainOptions,
 } from './merge-train.ts';
 import { promote } from './promotion.ts';
@@ -56,8 +54,9 @@ import { verifyDev } from './dev-verifier.ts';
 import { runPageDataCycle } from './page-data.ts';
 import { createRuntimeRepairRouting } from './runtime-repair-routing.ts';
 export { routePageDataRepair } from './runtime-repair-routing.ts';
-import { gateRunner, processGroupRunner, type GateRunner } from './merge.ts';
-import { bootSmokeEnvironment } from './verification.ts';
+import type { GateRunner } from './merge.ts';
+import { createCheckRuntime } from './config-check-runtime.ts';
+export { LANDING_CHECK_ENVIRONMENT } from './config-check-runtime.ts';
 import { captureLoadedCodeVersion, codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
@@ -131,7 +130,6 @@ function backlogManagerActor(db: Database, managerId: string): AuthenticatedMana
 }
 
 /** The only production composition: every module shares this database connection and worker fence. */
-export const LANDING_CHECK_ENVIRONMENT = { REMOTE_CHECK_PRIORITY: 'landing' } as const;
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
   const flowThresholds = settings.flowThresholds ?? DEFAULT_FLOW_THRESHOLDS;
@@ -159,109 +157,22 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     reportedConfigurationProblem(problem);
   }
   const sharedInbox = new SharedInboxQueries(db, settings.policy?.inbox);
-  const checkResultOptions = {
-    root: settings.mainCheckout,
+  const checkRuntime = createCheckRuntime({
+    settings,
     results: store.checkResults,
-    shadow: !settings.integration.checkResultReuse,
-    enabled: settings.integration.checkResultReuse,
-    alert: (summary: string) =>
-      inbox.deliver({
-        managerId: settings.integration.supermanager,
-        kind: 'instruction',
-        summary: `Check result reuse alert: ${summary}`,
-      }),
-  };
-  // Landing checks unblock every other task, so remote checks admit them before workers' checks (promotion uses --gate).
-  const execute = gateRunner(
-    settings.integration.gateTimeoutMs,
-    settings.stateDirectory,
-    LANDING_CHECK_ENVIRONMENT,
-    checkResultOptions,
-    settings.policy?.merge,
-  );
-  const runGate: GateRunner = options.runGate ?? execute;
-  // Promotion runs the full root gate, which outlasts the integration gate's limit.
-  const promotionGate: GateRunner =
-    options.runGate ??
-    gateRunner(
-      Math.max(settings.integration.gateTimeoutMs, (settings.policy ?? defaultPolicy).promotion.gateTimeoutMs),
-      settings.stateDirectory,
-      {},
-      checkResultOptions,
-      settings.policy?.merge,
-    );
-  // The dev verifier checks after integration at ordinary priority: at landing priority its checks held every host's
-  // ordinary admission at zero, and workers waited an hour behind one run (2026-10-30).
-  const verifierGate: GateRunner =
-    options.runGate ??
-    gateRunner(
-      Math.max(settings.integration.gateTimeoutMs, (settings.policy ?? defaultPolicy).verifier.gateTimeoutMs),
-      undefined,
-      {},
-      checkResultOptions,
-      settings.policy?.merge,
-    );
-  // Boot smoke is local: it never enters remote check-host or worker-slot admission, and never holds the train lease.
-  const bootSmokeGate: GateRunner =
-    options.runGate ??
-    processGroupRunner(
-      (settings.policy ?? defaultPolicy).verifier.bootSmokeTimeoutMs,
-      undefined,
-      bootSmokeEnvironment(),
-      false,
-      settings.policy?.merge,
-    );
-  // The prelanding compiler guard is a direct process group. It never enters remote check-host slot admission.
-  const typecheckGate = processGroupRunner(
-    settings.integration.gateTimeoutMs,
-    settings.stateDirectory,
-    process.env,
-    true,
-    settings.policy?.merge,
-  );
-  const refreshTrainConfiguration: TrainConfigurationReloader = () => {
-    const latest = loadSettings({ cwd: settings.mainCheckout, localFile: settings.localFile });
-    const configuration = {
-      policy: latest.policy,
-      integration: latest.integration,
-      formatCommand: latest.formatCommand,
-      affectedTests: latest.affectedTests ?? [],
-      integrationChecks: latest.integrationChecks,
-      derivedFiles: options.train?.derivedFiles ?? latest.derivedFiles ?? packageDerivedFiles,
-      gateIdentity: JSON.stringify(latest.gate),
-      mainBranch: latest.mainBranch,
-      integrationBranch: latest.integrationBranch,
-      stabilizeBranch: latest.stabilizeBranch,
-      supermanager: latest.integration.supermanager,
-      inboxDirectory: latest.integration.inboxDirectory,
-      runGate:
-        options.runGate ??
-        gateRunner(
-          latest.integration.gateTimeoutMs,
-          latest.stateDirectory,
-          LANDING_CHECK_ENVIRONMENT,
-          checkResultOptions,
-          latest.policy?.merge,
-        ),
-      runTypecheck: processGroupRunner(
-        latest.integration.gateTimeoutMs,
-        latest.stateDirectory,
-        process.env,
-        true,
-        latest.policy?.merge,
-      ),
-      runControlPlaneGate:
-        options.runGate ??
-        gateRunner(
-          latest.integration.gateTimeoutMs,
-          latest.stateDirectory,
-          LANDING_CHECK_ENVIRONMENT,
-          undefined,
-          latest.policy?.merge,
-        ),
-    };
-    return { ...configuration, configurationRevision: trainConfigurationRevision(configuration) };
-  };
+    ...(options.train?.derivedFiles ? { derivedFiles: options.train.derivedFiles } : {}),
+    ...(options.runGate ? { runGate: options.runGate } : {}),
+    deliverReuseAlert: (managerId, summary) => inbox.deliver({ managerId, kind: 'instruction', summary }),
+  });
+  const {
+    runGate,
+    promotionGate,
+    verifierGate,
+    bootSmokeGate,
+    typecheckGate,
+    runControlPlaneGate,
+    refreshTrainConfiguration,
+  } = checkRuntime;
   let train!: MergeTrain;
   const pump = () => train.pump(refreshTrainConfiguration);
   const managerContext = () => {
@@ -323,15 +234,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     promote: () => promoteNow(),
     runGate,
     // Every control-plane release must execute its complete mandatory proof on the exact final candidate.
-    runControlPlaneGate:
-      options.runGate ??
-      gateRunner(
-        settings.integration.gateTimeoutMs,
-        settings.stateDirectory,
-        LANDING_CHECK_ENVIRONMENT,
-        undefined,
-        settings.policy?.merge,
-      ),
+    runControlPlaneGate,
     gateIdentity: JSON.stringify(settings.gate),
     codeIsCurrent,
     ...(startedCodeVersion ? { startedCodeVersion } : {}),

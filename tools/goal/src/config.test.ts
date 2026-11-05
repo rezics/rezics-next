@@ -147,6 +147,63 @@ test('config and settings entries share resolution, strict validation, and recov
   }
 });
 
+test('createRuntime keeps landing, control-plane and compiler runner behavior observable on refresh', async () => {
+  const h = harness();
+  let runtime: ReturnType<typeof createRuntime> | undefined;
+  const previousPriority = process.env.REMOTE_CHECK_PRIORITY;
+  try {
+    const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
+    Object.assign(local, {
+      stateDirectory: '.temp/check-runtime-state',
+      integration: { ...local.integration, gateTimeoutMs: 120, checkResultReuse: true },
+    });
+    writeFileSync(h.settings.localFile, JSON.stringify(local));
+    const settings = loadSettings({ cwd: h.root, env: {} });
+    mkdirSync(settings.stateDirectory, { recursive: true });
+    writeFileSync(join(settings.stateDirectory, 'remote-check-hosts.json'), '[]');
+    process.env.REMOTE_CHECK_PRIORITY = 'inherited';
+    runtime = createRuntime({ settings });
+
+    const snapshot = await runtime.refreshTrainConfiguration!();
+    const capture = join(settings.stateDirectory, 'runner-environments.jsonl');
+    const script = [
+      `import { appendFileSync } from 'node:fs';`,
+      `const value = { priority: process.env.REMOTE_CHECK_PRIORITY ?? null, remote: process.env.KERNEL_CHECK_REMOTE ?? null, cache: process.env.NODE_DISABLE_COMPILE_CACHE ?? null };`,
+      `appendFileSync(${JSON.stringify(capture)}, JSON.stringify(value) + '\\n');`,
+      `console.log(JSON.stringify(value));`,
+    ].join('\n');
+    const command = [process.execPath, '-e', script];
+    const log = (name: string) => join(settings.stateDirectory, `${name}.log`);
+
+    expect((await snapshot.runGate!(command, h.root, log('landing-first'))).passed).toBe(true);
+    expect((await snapshot.runGate!(command, h.root, log('landing-reuse'))).output).toBe('reused check result');
+    expect((await snapshot.runControlPlaneGate!(command, h.root, log('control-plane-first'))).passed).toBe(true);
+    expect((await snapshot.runControlPlaneGate!(command, h.root, log('control-plane-second'))).passed).toBe(true);
+    expect((await snapshot.runTypecheck!(command, h.root, log('compiler'))).passed).toBe(true);
+
+    expect(
+      readFileSync(capture, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      { priority: 'landing', remote: join(settings.stateDirectory, 'remote-check-hosts.json'), cache: '1' },
+      { priority: 'landing', remote: join(settings.stateDirectory, 'remote-check-hosts.json'), cache: '1' },
+      { priority: 'landing', remote: join(settings.stateDirectory, 'remote-check-hosts.json'), cache: '1' },
+      { priority: 'inherited', remote: join(settings.stateDirectory, 'remote-check-hosts.json'), cache: '1' },
+    ]);
+
+    const slowCommand = [process.execPath, '-e', 'await new Promise((resolve) => setTimeout(resolve, 1000))'];
+    expect((await snapshot.runGate!(slowCommand, h.root, log('landing-timeout'))).timedOut).toBe(true);
+    expect((await snapshot.runTypecheck!(slowCommand, h.root, log('compiler-timeout'))).timedOut).toBe(true);
+  } finally {
+    runtime?.close();
+    if (previousPriority === undefined) delete process.env.REMOTE_CHECK_PRIORITY;
+    else process.env.REMOTE_CHECK_PRIORITY = previousPriority;
+    h.dispose();
+  }
+});
+
 test('an invalid live local file keeps its last valid settings, is reported once, and config check stays strict', async () => {
   const h = harness();
   try {
