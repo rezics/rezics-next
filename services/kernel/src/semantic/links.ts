@@ -1239,8 +1239,8 @@ export async function listSubjectLinks(
             ...(options.qualifier
               ? { filterProperties: [options.qualifier.property] }
               : relationFilter === undefined
-              ? {}
-              : { filterProperties: Array.isArray(relationFilter) ? relationFilter : [relationFilter] }),
+                ? {}
+                : { filterProperties: Array.isArray(relationFilter) ? relationFilter : [relationFilter] }),
             requireRelation: true,
           };
         }),
@@ -1250,14 +1250,13 @@ export async function listSubjectLinks(
       );
       const hasCurrentOverflow = !!options.qualifier && currentLinks.length > options.limit;
       const selectedLinks = options.qualifier ? currentLinks.slice(0, options.limit) : currentLinks;
-      const last =
-        hasCurrentOverflow
-          ? rows.find(
-              (row) =>
-                row.subject === selectedLinks[options.limit - 1]?.subject &&
-                row.statement === selectedLinks[options.limit - 1]?.statement,
-            )
-          : rows[examined - 1];
+      const last = hasCurrentOverflow
+        ? rows.find(
+            (row) =>
+              row.subject === selectedLinks[options.limit - 1]?.subject &&
+              row.statement === selectedLinks[options.limit - 1]?.statement,
+          )
+        : rows[examined - 1];
       return {
         page: {
           links: selectedLinks,
@@ -1274,17 +1273,17 @@ export async function listSubjectLinks(
                   after: [last.order_key!, last.subject, last.statement],
                 })
               : scanCapped && scanAfter
-              ? encodeCursor(ring, binding, { epoch: partition.epoch, after: scanAfter })
-              : rows.length > examined && last
-              ? encodeCursor(ring, binding, {
-                  epoch: partition.epoch,
-                  after: [
-                    options.property === null ? last.property : 'order_key' in last ? String(last.order_key) : '',
-                    last.subject,
-                    last.statement,
-                  ],
-                })
-              : null,
+                ? encodeCursor(ring, binding, { epoch: partition.epoch, after: scanAfter })
+                : rows.length > examined && last
+                  ? encodeCursor(ring, binding, {
+                      epoch: partition.epoch,
+                      after: [
+                        options.property === null ? last.property : 'order_key' in last ? String(last.order_key) : '',
+                        last.subject,
+                        last.statement,
+                      ],
+                    })
+                  : null,
           component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
         },
         scannedMembers,
@@ -1388,7 +1387,7 @@ export async function listSubjectLinks(
       credit && (!rawKey || (key?.value.type === 'value' && typeof key.value.content === 'string'))
         ? {
             property: link.property,
-            target: options.qualifier ? current.value.content as string : options.subject,
+            target: options.qualifier ? (current.value.content as string) : options.subject,
             ...(key?.value.type === 'value' && typeof key.value.content === 'string' ? { key: key.value.content } : {}),
           }
         : undefined;

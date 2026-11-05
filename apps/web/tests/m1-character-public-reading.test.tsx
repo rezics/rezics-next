@@ -44,15 +44,11 @@ test('the Character voice stream uses the released P453 slot key and keeps P725 
       },
     }),
   } as unknown as KernelClient;
-  const result = await readConnectionStream(
-    client,
-    { id, locale: 'en' },
-    stream!,
-    undefined,
-    undefined,
-    undefined,
-    { calls: 0, values: 0, bytes: 0 },
-  );
+  const result = await readConnectionStream(client, { id, locale: 'en' }, stream!, undefined, undefined, undefined, {
+    calls: 0,
+    values: 0,
+    bytes: 0,
+  });
   expect(result.ok).toBe(true);
   expect(result.ok && result.body.partial).toBe(true);
   expect(requests[0]).toMatchObject({

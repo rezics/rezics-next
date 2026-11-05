@@ -33,7 +33,13 @@ const actor = {
 beforeAll(async () => {
   db = await openGrowthDatabase(url);
   const digest = await bootstrapRelease(db.pool, bundledRelease);
-  const create = async (id: string, at: number, type: string, label: string, statements?: Record<string, unknown[]>) => {
+  const create = async (
+    id: string,
+    at: number,
+    type: string,
+    label: string,
+    statements?: Record<string, unknown[]>,
+  ) => {
     await createSubject(db.pool, {
       actor,
       target: { route: at, id },
@@ -52,9 +58,7 @@ beforeAll(async () => {
         {
           property: { id: 'wdt:P725' },
           value: { type: 'value', content: performer },
-          qualifiers: [
-            { property: { id: 'wdt:P453' }, value: { type: 'value', content: character } },
-          ],
+          qualifiers: [{ property: { id: 'wdt:P453' }, value: { type: 'value', content: character } }],
         },
       ],
     });
