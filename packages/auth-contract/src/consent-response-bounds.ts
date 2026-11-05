@@ -17,6 +17,22 @@ export type ConsentPageResponse = {
   decisions: { allow: boolean; decline: boolean; switch_account: boolean };
 };
 
+/** Closed acknowledgement returned only to reviewed browser Allow submissions. */
+export type ReviewedConsentDecisionResponse = Readonly<{
+  account_id: string;
+  client_id: string;
+  requested: string[];
+  /** Exact submitted union of current grants and requested registered scopes. */
+  scope: string[];
+}>;
+
+/** Closed native refusal bodies consumed by the reviewed Allow transport. */
+export type ConsentDecisionErrorResponse =
+  | Readonly<{ error: 'authentication_denied' }>
+  | Readonly<{ error: 'authentication_denied'; code: 'stale_review' }>
+  | Readonly<{ error: 'step_up_required'; effect_status: 'not_applied' }>
+  | Readonly<{ error: 'account_suspended'; code: 'ACCOUNT_SUSPENDED' }>;
+
 // The empty-string/array skeleton accounts for every key, quote and punctuation.
 // pending=false + allow=true costs the same as pending=true + allow=false.
 const skeleton: ConsentPageResponse = {
@@ -41,9 +57,28 @@ const textBytes =
 const scopeArrayBytes = CONSENT_PAGE_MAX_SCOPES * (CONSENT_PAGE_MAX_SCOPE_LENGTH + 3) - 1;
 export const CONSENT_PAGE_MAX_RESPONSE_BYTES = JSON.stringify(skeleton).length + textBytes + 3 * scopeArrayBytes;
 
+const decisionSkeleton: ReviewedConsentDecisionResponse = {
+  account_id: '',
+  client_id: '',
+  requested: [],
+  scope: [],
+};
+// The acknowledgement contains two independently bounded IDs and both arrays:
+// requested can be unknown while the submitted union is already fully granted.
+export const CONSENT_DECISION_MAX_RESPONSE_BYTES =
+  JSON.stringify(decisionSkeleton).length + 12 * CONSENT_PAGE_MAX_ID_LENGTH + 2 * scopeArrayBytes;
+
 // Native consent GET errors are {error:'authentication_denied'}, with code only
 // for stale review. No arbitrary message/header participates in this allowance.
 export const CONSENT_PAGE_MAX_ERROR_BYTES = JSON.stringify({
   error: 'authentication_denied',
   code: 'stale_review',
 }).length;
+
+const decisionErrors: readonly ConsentDecisionErrorResponse[] = [
+  { error: 'authentication_denied' },
+  { error: 'authentication_denied', code: 'stale_review' },
+  { error: 'step_up_required', effect_status: 'not_applied' },
+  { error: 'account_suspended', code: 'ACCOUNT_SUSPENDED' },
+];
+export const CONSENT_DECISION_MAX_ERROR_BYTES = Math.max(...decisionErrors.map((body) => JSON.stringify(body).length));

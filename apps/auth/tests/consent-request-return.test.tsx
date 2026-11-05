@@ -92,7 +92,7 @@ test('replacement retires held approval; first unknown and latest reply stay sep
     await v.click('Review current permissions');
     await v.answer(review('b'));
     await v.click('Approve');
-    await v.answer({ code: 'stale_review' }, 409);
+    await v.answer({ error: 'authentication_denied', code: 'stale_review' }, 409);
     expect(v.host.textContent).not.toContain('Access approved.');
     expect(v.notices()).toHaveLength(2);
     expect(v.notices()[1]!.textContent).toContain('refused');

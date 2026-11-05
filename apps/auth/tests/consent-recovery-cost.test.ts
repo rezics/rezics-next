@@ -1,4 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
+import { CONSENT_DECISION_MAX_RESPONSE_BYTES } from '@rezics/auth-contract';
+import { AUTH_POST_TIMEOUT_MS } from '../src/api';
 import { createConsentDecision, type ConsentDecision } from '../src/consent';
 
 const originalFetch = globalThis.fetch;
@@ -54,7 +56,7 @@ test('installed consent seam bounds reads, preserves marker ownership and distin
     const refused = visit.approve();
     void visit.approve();
     expect(calls).toHaveLength(2);
-    await settle(400, { code: 'invalid_request' });
+    await settle(400, { error: 'authentication_denied' });
     await refused;
     expect(state.uncertain).toBe(false);
     expect(state.history).toBe('none');
@@ -113,6 +115,137 @@ test('installed consent seam bounds reads, preserves marker ownership and distin
     visit.dispose();
   }
 });
+
+test('reviewed Allow bounds actual response bytes and accepts UTF-8 split across chunks', async () => {
+  const markers = new Map<string, string>();
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      sessionStorage: {
+        getItem: (key: string) => markers.get(key) ?? null,
+        setItem: (key: string, value: string) => markers.set(key, value),
+        removeItem: (key: string) => markers.delete(key),
+      },
+    },
+  });
+  const clientId = 'reader-é';
+  const accountId = 'person-🙂';
+  const page = {
+    client_id: clientId,
+    display_name: null,
+    requested: ['read'],
+    scopes: ['read'],
+    granted: [],
+    pending_reduction: false,
+    acting_account: { account_id: accountId, email: null },
+    decisions: { allow: true, decline: true, switch_account: true },
+  };
+  let writes = 0;
+  const calls: { method?: string; signal?: AbortSignal }[] = [];
+  globalThis.fetch = (async (_url, init) => {
+    calls.push({ method: init?.method, signal: init?.signal as AbortSignal | undefined });
+    if (init?.method !== 'POST') return Response.json(page);
+    writes++;
+    if (writes === 1) {
+      const bytes = new TextEncoder().encode(
+        JSON.stringify({ account_id: accountId, client_id: clientId, requested: ['read'], scope: ['read'] }),
+      );
+      const split = bytes.findIndex((byte) => byte >= 0xc2) + 1;
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(bytes.slice(0, split));
+            controller.enqueue(bytes.slice(split));
+            controller.close();
+          },
+        }),
+        { status: 200 },
+      );
+    }
+    if (writes === 2) return Response.json({ code: 'stale_review' }, { status: 409 });
+    const bytes = new Uint8Array(CONSENT_DECISION_MAX_RESPONSE_BYTES + 1).fill(0x20);
+    return new Response(new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }), {
+      status: 200,
+      headers: { 'content-length': '1' },
+    });
+  }) as typeof fetch;
+  let state!: ConsentDecision;
+  const visit = createConsentDecision(clientId, 'read', (value) => (state = value));
+  const drain = async () => {
+    for (let turn = 0; turn < 30; turn++) await Promise.resolve();
+  };
+  try {
+    visit.restore();
+    await drain();
+    await visit.approve();
+    expect(state.state).toBe('approved');
+    expect(markers.size).toBe(0);
+    visit.refresh();
+    await drain();
+    await visit.approve();
+    expect(state.uncertain).toBe(true);
+    await visit.approve();
+    expect(state.state).toBe('ready');
+    expect(visit.shouldWarn()).toBe(true);
+    expect(markers.size).toBe(1);
+    expect(calls.filter((call) => call.method === 'GET')).toHaveLength(2);
+    expect(calls.filter((call) => call.method === 'POST')).toHaveLength(3);
+  } finally {
+    visit.dispose();
+  }
+});
+
+test(
+  'a stalled Allow body times out within the existing POST lifetime and keeps its marker',
+  async () => {
+    const markers = new Map<string, string>();
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        sessionStorage: {
+          getItem: (key: string) => markers.get(key) ?? null,
+          setItem: (key: string, value: string) => markers.set(key, value),
+          removeItem: (key: string) => markers.delete(key),
+        },
+      },
+    });
+    const page = {
+      client_id: 'reader',
+      display_name: null,
+      requested: [],
+      scopes: [],
+      granted: [],
+      pending_reduction: false,
+      acting_account: { account_id: 'person', email: null },
+      decisions: { allow: true, decline: true, switch_account: true },
+    };
+    const calls: { method?: string; signal?: AbortSignal }[] = [];
+    globalThis.fetch = (async (_url, init) => {
+      calls.push({ method: init?.method, signal: init?.signal as AbortSignal | undefined });
+      return init?.method === 'POST'
+        ? new Response(new ReadableStream({ start() {} }), { status: 200 })
+        : Response.json(page);
+    }) as typeof fetch;
+    let state!: ConsentDecision;
+    const visit = createConsentDecision('reader', '', (value) => (state = value));
+    const drain = async () => {
+      for (let turn = 0; turn < 30; turn++) await Promise.resolve();
+    };
+    try {
+      visit.restore();
+      await drain();
+      await visit.approve();
+      expect(state.pending).toBe(false);
+      expect(state.uncertain).toBe(true);
+      expect(markers.get(`auth.consent.pending:${JSON.stringify(['person', 'reader', ''])}`)).toBe('pending');
+      expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+      expect(calls.at(-1)?.signal?.aborted).toBe(true);
+    } finally {
+      visit.dispose();
+    }
+  },
+  AUTH_POST_TIMEOUT_MS + 3000,
+);
 
 test('acknowledgement survives authority loss only in mounted generic history', async () => {
   const body = {
