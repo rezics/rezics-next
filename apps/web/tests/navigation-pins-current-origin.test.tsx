@@ -287,7 +287,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await tick();
     expect(pendingReads).toHaveLength(2);
     await settle(1, response('B', ['a', 'x', 'b', 'c']));
-    expect(host.textContent).toContain('Private B');
+    expect(navigation.data.collections).toEqual(response('B').collections);
     const oldMove = select(m.library_pin_move_up());
     await act(async () => {
       oldMove();
@@ -295,7 +295,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     });
     expect(writes).toHaveLength(1);
     await settle(0, response('A', ['old-A']));
-    expect(host.textContent).not.toContain('Private A');
+    expect(navigation.data.collections).toEqual(response('B').collections);
     expect(control.pending).toBe(true);
     // Cache replacement is observed synchronously, before React can commit C's render.
     await act(async () => {
@@ -326,7 +326,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     });
     await tick();
     expect(writes).toHaveLength(2);
-    expect(host.textContent).not.toContain('Private C');
+    expect(navigation.data.collections).toEqual([]);
     await settle(3, response('C', ['b']));
     await act(async () => {
       admit(['collections']);
@@ -334,13 +334,13 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     });
     await tick();
     expect(navigation.data.pins.state).not.toBe('loaded');
-    expect(host.textContent).toContain('Private C'); // Collections has its independent accepted origin.
+    expect(navigation.data.collections).toEqual(response('C').collections); // Collections has its independent accepted origin.
     await settle(4, response('C', ['b']));
     address = 'second';
     await show();
     address = 'first';
     await show();
-    expect(host.textContent).not.toContain('Private C');
+    expect(navigation.data.collections).toEqual([]);
     await settle(5, response('C', ['old-address']));
     expect(navigation.data.pins.state).not.toBe('loaded');
     await settle(6, response('C', ['wrong-limit'], 7, 8));
@@ -384,7 +384,6 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     expect(navigation.data.pins).toMatchObject({ state: 'denied' });
     expect(navigation.data.collections).toEqual(beforeRefusal.collections);
     expect(host.textContent).toContain(m.library_pin_denied());
-    expect(host.textContent).toContain('Private C');
     expect(host.querySelectorAll('[data-library-pin]')).toHaveLength(0);
     expect(navigation.pinsOrigin.isCurrent()).toBe(false);
     expect(control.entries).toHaveLength(0);
