@@ -36,6 +36,29 @@ double-counted in the event fence. The page wrapper preserves the existing one-c
 retry composition. Full actor Access/receipt/History/result-envelope cost derivation remains in
 `.temp/continuation/dense-collection-edit-costs.md`.
 
+## Retained member execution
+
+Decision: preserve exact-episode removal and Undo and normalize the existing due SQL into mutually exclusive
+first/next indexed seeks; partition probes are independent of the 100 due-seek ceiling. No new selection or
+internal refusal protocol is introduced.
+
+`member-retention-bounds.ts` binds original SQL operands at the retained-deletion producer shared by single and
+selected removal. Its JSON selection is encoded once. Retained episode reads, restoration CAS, due discovery,
+parent-owner lookup, exact maintenance authorization and physical purge use their original clients and timestamps.
+A negative probe reserves examined work independently of returned rows. The first/next due branches use the existing
+partition-leading index and preserve the `(purgeAfter,route,collectionId,memberId)` frontier and returned deletion ID.
+
+A page performs at most 100 due seeks and at most 4096 partition observations. Missing or pending partitions advance
+without spending a due seek; each observation retains the read-only repeatable-read transaction and rollback path.
+A segment executes at most 100 pages before enqueuing the original root/sequence/cutoff/frontier with return-existing
+identity. Fixed DBOS retries do not renew cutoff or command deadline. The population requires change-proportional
+segments; the native harness's 4096-byte checkpoint assertion is distinct from Source admission budgets.
+
+The SQL leaf declarations are disjoint from their enclosing command, Access, history-trigger and SDK work. They
+must not be presented as completed native evidence for those enclosing operations. Existing native lifecycle and
+committed-before-checkpoint recovery assertions remain authoritative; integration runs the mounted, native, growth
+and Search receiving suites.
+
 ## Whole-query publication
 
 The 50-original branch is inadmissible. Its two `resolveSubject` disclosure passes alone require

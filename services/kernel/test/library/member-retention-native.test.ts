@@ -1,3 +1,4 @@
+import { pageDueMemberDeletions } from '../../src/library/member-retention.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -326,6 +327,13 @@ test('native member purge is exact episode bounded and never decrements public l
   await sweep.getResult({ pollingIntervalMs: 20 });
   expect((await m.snapshot())[0].row.deletion_id).toBe(d3.deletionId);
   expect((await m.parent()).memberCount).toBe(1);
+  const dueInput = { partition: routeOf(m.collection.id)! >>> 4, cutoff: secondDeadline, limit: 100 };
+  const due = await pageDueMemberDeletions(f.pool, dueInput);
+  const originalKey = due.find(key => key.memberId === m.first.id)!;
+  expect(originalKey.deletionId).toBe(d3.deletionId);
+  const continued = await pageDueMemberDeletions(f.pool, { ...dueInput, after: originalKey });
+  expect(continued.some(key => key.memberId === originalKey.memberId)).toBe(false);
+  expect(await pageDueMemberDeletions(f.pool, { ...dueInput, after: originalKey })).toEqual(continued);
   writeFileSync(clockPath, String(Date.parse(secondDeadline)));
   await (await trigger()).getResult({ pollingIntervalMs: 20 });
   await gone(m);
@@ -376,6 +384,11 @@ test('native member purge is exact episode bounded and never decrements public l
     deleted_ordinal_key: null,
   });
   expect(retained.rows[0].ordinal_key).toBe(`~${publicCollection.first.id}`);
+  await (await trigger()).getResult({ pollingIntervalMs: 20 });
+  expect((await publicCollection.snapshot())[0].row).toMatchObject({
+    deletion_id: publicDeletion.deletionId, note: null, added_at: null, purge_after: null,
+  });
+  expect((await publicCollection.parent()).memberCount).toBe(1);
   expect((await publicCollection.snapshot()).find((row) => row.row.member_id === publicSibling.id)?.row.note).toBe(
     'public sibling',
   );
