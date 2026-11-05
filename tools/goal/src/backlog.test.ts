@@ -511,7 +511,7 @@ test('a running manager below eight ready briefs is woken at most once an hour',
   const events = f.inbox.pending('web');
   expect(events).toHaveLength(1);
   expect(events[0]!.event.summary).toContain('Backlog low: 7 ready brief(s)');
-  expect(events[0]!.event.summary).toContain('keep at least 8');
+  expect(events[0]!.event.summary).toContain('keep about 8');
   expect(events[0]!.event.summary).toContain(join(f.state, 'backlog', 'web'));
   for (const id of ['search', 'paused', 'limited', 'supermanager']) expect(f.inbox.pending(id)).toHaveLength(0);
 
@@ -613,7 +613,7 @@ test('configured backlog limits govern settling, dispatch width and manager wake
   brief(f.state, 'web', 'ready.md', 101);
   brief(f.state, 'web', 'still-writing.md', 100);
   expect((await sweepBacklog(f.runtime)).dispatched.map((entry) => entry.brief)).toEqual(['ready.md']);
-  expect(f.inbox.pending('web')[0]!.event.summary).toContain('keep at least 2');
+  expect(f.inbox.pending('web')[0]!.event.summary).toContain('keep about 2');
   f.runtime.workerCap = 0;
   f.clock.now += 199;
   expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
