@@ -64,9 +64,15 @@ test('actual chunked bytes govern receiving before parsing regardless of Content
 
 test('one five-second lifetime spans headers and stalled bodies even when abort is ignored; retirement wins', async () => {
   const pending = Promise.withResolvers<Response>();
-  globalThis.fetch = (() => pending.promise) as typeof fetch;
+  let started = false;
+  globalThis.fetch = (() => {
+    started = true;
+    return pending.promise;
+  }) as typeof fetch;
   const retired = new AbortController();
   const read = requestOperatorTransferPage(input, retired.signal);
+  await Promise.resolve();
+  expect(started).toBe(true);
   retired.abort();
   expect(await read).toMatchObject({ ok: false, code: 'unavailable' });
   pending.resolve(Response.json(JSON.parse(json)));

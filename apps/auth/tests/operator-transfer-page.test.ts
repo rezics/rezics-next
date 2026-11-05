@@ -74,12 +74,9 @@ test('wrong side, non-ready private advice and invalid native versions never adv
         relation: { previous: request.previous, expectedVersion: '9223372036854775808' },
         action: 'allowed',
       },
-      {
-        kind: side === 'source' ? 'destination' : 'source',
-        destinationAccountId: request.operatorAccountId,
-        relation: { previous: request.previous, expectedVersion: '12' },
-        action: 'allowed',
-      },
+      side === 'source'
+        ? { kind: 'destination', destinationAccountId: request.operatorAccountId, action: 'allowed' }
+        : { kind: 'source', relation: { previous: request.previous, expectedVersion: '12' }, action: 'allowed' },
     ]) {
       const calls: string[] = [];
       globalThis.fetch = (async (input) => {
