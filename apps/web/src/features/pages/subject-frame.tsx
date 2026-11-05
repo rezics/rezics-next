@@ -275,7 +275,9 @@ export function SubjectFrame({
   const title = frame.title.text || unlabelled;
   const base = subjectHref({ id: frame.id, label: title }, locale).href;
   const observedContext = context ?? frame.context;
-  const conceptReturnHref = conceptPublicReturnHref(base, frame.id, locale, observedContext, realm);
+  const conceptReturnHref = observedContext
+    ? conceptPublicReturnHref(base, frame.id, locale, observedContext, realm)
+    : undefined;
   const releaseOrigin = `${location.pathname}${observedContext ? `?${new URLSearchParams({ context: observedContext })}` : ''}`;
   const factsOrigin = observedContext
     ? {
