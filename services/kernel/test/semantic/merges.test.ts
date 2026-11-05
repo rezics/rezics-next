@@ -10,6 +10,7 @@ import { createRealAccess } from './real-access.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -49,7 +50,9 @@ beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:merge');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'gate:subject_identity');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:read');
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
+  await installIdentityEpochBootstrap(pool);
 });
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) };
