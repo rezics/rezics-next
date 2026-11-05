@@ -27,8 +27,7 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 ## Scope
 
-Decision: profile publication, launch pages and Recipe's public method retain the shared registry, aggregate plan and
-public-document runtime, without vertical page readers.
+Decision: retain one shared runtime for publication, launch pages and Recipe.
 
 Decision: Empty Search recovery drafts bind to the executed request, reader, locale, checkpoint and native page response; valid text uses shared query admission, and explicit retry focuses only the still-current result owner after settlement.
 Decision: released CreativeWork inheritance selects ordinary-page tag metadata; Web passes definitions to the shared reader only when the catalogue digest matches the Subject's exact release.
