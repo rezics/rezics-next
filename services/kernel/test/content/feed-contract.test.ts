@@ -9,7 +9,7 @@ test('the mounted Kernel publishes closed review and immediate-parent context wi
   expect(personal[0].additionalProperties).toBe(false);
   expect(personal[0].properties.rows.maxItems).toBe(100);
   expect(personal[0].properties.rows.items.properties.actions.anyOf[0].properties.allowed.type).toBe('array');
-  expect(personal[1].properties.reason.anyOf.map((value: any) => value.const)).toContain('response_limit');
+  expect(personal[1].properties.reason.enum).toContain('response_limit');
   const variants = page.properties.feedItems.items.anyOf.map((schema: any) => schema.properties);
   const collection = variants.find(
     (variant: any) => variant.source.const === 'discovery' && variant.key.properties.kind.const === 'collection',
