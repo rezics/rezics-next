@@ -1,4 +1,11 @@
-import { admitFilter, FILTER_LIMITS, FilterError, walkFilter, type FilterDocument, type FilterRelease } from '@rezics/filter';
+import {
+  admitFilter,
+  FILTER_LIMITS,
+  FilterError,
+  walkFilter,
+  type FilterDocument,
+  type FilterRelease,
+} from '@rezics/filter';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import type { FacetDiscoveryRequest, FacetDiscoveryScope } from './facet-discovery-contract.ts';
@@ -95,9 +102,7 @@ function validateFacetKinds(value: unknown, pointer: string): string[] {
   if (value === undefined) invalid(pointer, 'invalid_type');
   if (!Array.isArray(value)) invalid(pointer, 'invalid_type');
   if (value.length < 1 || value.length > FILTER_LIMITS.in) invalid(pointer, 'out_of_range');
-  if (
-    value.some((entry) => typeof entry !== 'string' || entry.length < 1 || entry.length > 128)
-  )
+  if (value.some((entry) => typeof entry !== 'string' || entry.length < 1 || entry.length > 128))
     invalid(pointer, 'invalid_format');
   return value as string[];
 }

@@ -47,9 +47,10 @@ function kindLeaves(value: unknown): Record<string, unknown>[] {
 /** Return exact positive kind conjuncts; complex kind logic stays unknown instead of guessing. */
 function selectedKindsForApplicability(filter: unknown): readonly string[] | null | undefined {
   if (filter === undefined) return undefined;
-  const root = filter !== null && typeof filter === 'object' && !Array.isArray(filter)
-    ? (filter as Record<string, unknown>)
-    : undefined;
+  const root =
+    filter !== null && typeof filter === 'object' && !Array.isArray(filter)
+      ? (filter as Record<string, unknown>)
+      : undefined;
   const top = root && Object.keys(root).length === 1 && Array.isArray(root.and) ? root.and : [filter];
   const direct = top.filter(
     (value): value is Record<string, unknown> =>

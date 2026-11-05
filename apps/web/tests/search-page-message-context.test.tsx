@@ -230,7 +230,9 @@ function applicabilityPageData(
         status: 'ready',
         page: {
           as_of: page.as_of,
-          facets: [{ property: 'schema:author', values: [{ value: 'writer-1', labels: { en: 'Writer' } }], next: null }],
+          facets: [
+            { property: 'schema:author', values: [{ value: 'writer-1', labels: { en: 'Writer' } }], next: null },
+          ],
         },
       },
     },
@@ -440,9 +442,7 @@ test('owner-only, mixed and catalogue populations retain predicates while exposi
   expect(retainedHtml).toContain('name="type" value="schema:Book"');
   expect(retainedHtml).toContain('name="f.schema:author" value="writer-1"');
   expect(retainedHtml).toContain(m.search_refinement_not_applicable({}, options.en));
-  const repair = new window.DOMParser()
-    .parseFromString(retainedHtml, 'text/html')
-    .querySelector('[role="status"] a');
+  const repair = new window.DOMParser().parseFromString(retainedHtml, 'text/html').querySelector('[role="status"] a');
   expect(repair).not.toBeNull();
   const repairUrl = new URL(repair!.getAttribute('href')!, 'https://search.test');
   expect(repairUrl.searchParams.has('kinds')).toBe(false);

@@ -81,14 +81,16 @@ export function resourceLanguageRefinement(
   releaseAvailable = true,
   sourceApplicability?: 'all' | 'partial' | 'none' | 'unknown',
 ): ResourceLanguageRefinement {
-  const declared = properties.some(
-    (entry) => entry.property === RESOURCE_LANGUAGE_PROPERTY && entry.mode === 'values',
-  );
+  const declared = properties.some((entry) => entry.property === RESOURCE_LANGUAGE_PROPERTY && entry.mode === 'values');
   const applicability =
     sourceApplicability === 'partial'
-      ? declared ? 'partial' : 'not-applicable'
+      ? declared
+        ? 'partial'
+        : 'not-applicable'
       : sourceApplicability === 'all'
-        ? declared ? 'applicable' : 'not-applicable'
+        ? declared
+          ? 'applicable'
+          : 'not-applicable'
         : sourceApplicability === 'none'
           ? 'not-applicable'
           : sourceApplicability === 'unknown'
@@ -103,18 +105,17 @@ export function resourceLanguageRefinement(
       ? state.page.facets.find((entry) => entry.property === RESOURCE_LANGUAGE_PROPERTY)
       : undefined;
   const supported = applicability === 'applicable' || applicability === 'partial';
-  const readiness =
-    !supported
-      ? applicability === 'not-applicable'
-        ? 'not-applicable'
-        : (state?.status ?? 'unavailable')
-      : !state
-        ? 'not-requested'
-        : state.status === 'ready'
-          ? facet
-            ? 'ready'
-            : 'invalid'
-          : state.status;
+  const readiness = !supported
+    ? applicability === 'not-applicable'
+      ? 'not-applicable'
+      : (state?.status ?? 'unavailable')
+    : !state
+      ? 'not-requested'
+      : state.status === 'ready'
+        ? facet
+          ? 'ready'
+          : 'invalid'
+        : state.status;
   const current = facet?.values ?? [];
   const canonicalCurrent = current
     .slice(0, RESOURCE_LANGUAGE_PAGE_SIZE)
@@ -159,7 +160,8 @@ export function resourceLanguageRefinement(
       select: (applicability === 'applicable' || applicability === 'partial') && readiness === 'ready',
       remove: selected.length > 0,
       clear: selected.length > 0,
-      continue: (applicability === 'applicable' || applicability === 'partial') && readiness === 'ready' && facet?.next != null,
+      continue:
+        (applicability === 'applicable' || applicability === 'partial') && readiness === 'ready' && facet?.next != null,
       retry: applicability !== 'not-applicable' && retry,
     },
   };

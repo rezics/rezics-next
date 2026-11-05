@@ -27,12 +27,7 @@ const count = t.Union([
   t.Object({ kind: t.String(), value: t.Integer({ minimum: 1 }), exact: t.Literal(false) }, closed),
   t.Object({ kind: t.String(), unavailable: t.Literal(true) }, closed),
 ]);
-const applicability = t.Union([
-  t.Literal('all'),
-  t.Literal('partial'),
-  t.Literal('none'),
-  t.Literal('unknown'),
-]);
+const applicability = t.Union([t.Literal('all'), t.Literal('partial'), t.Literal('none'), t.Literal('unknown')]);
 /** The owner-tagged key and non-null native summary close together; no Account Subject shell. */
 export const DiscoveryPageSchema = t.Object(
   {
@@ -53,9 +48,7 @@ export const DiscoveryPageSchema = t.Object(
       },
       closed,
     ),
-    applicability: t.Optional(
-      t.Object({ type: applicability, statement: applicability }, closed),
-    ),
+    applicability: t.Optional(t.Object({ type: applicability, statement: applicability }, closed)),
     next: continuation,
     as_of: t.String({ format: 'date-time' }),
     freshness: t.Optional(SearchFreshnessSchema),

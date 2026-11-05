@@ -386,25 +386,30 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const type = data.type;
     const knownType = release && allowedType(release, type) ? type : undefined;
     const languages = data.languages ?? requestLanguages(data.locale);
-    const selectedSemanticKinds = release && data.kinds?.length
-      ? data.kinds.filter((kind) => allowedType(release, kind))
-      : undefined;
+    const selectedSemanticKinds =
+      release && data.kinds?.length ? data.kinds.filter((kind) => allowedType(release, kind)) : undefined;
     const years = release
       ? knownType
         ? yearProperties(release, knownType)
         : selectedSemanticKinds
-          ? [...new Set(selectedSemanticKinds.flatMap((kind) => yearProperties(release, kind)))].slice(0, YEAR_PROPERTIES)
+          ? [...new Set(selectedSemanticKinds.flatMap((kind) => yearProperties(release, kind)))].slice(
+              0,
+              YEAR_PROPERTIES,
+            )
           : yearProperties(release)
       : [];
     const properties = release
-      ? [...new Set([
-          ...(knownType
-            ? factProperties(release, knownType)
-            : selectedSemanticKinds?.flatMap((kind) => factProperties(release, kind)) ?? []),
-          ...years,
-        ])].slice(0, 4)
+      ? [
+          ...new Set([
+            ...(knownType
+              ? factProperties(release, knownType)
+              : (selectedSemanticKinds?.flatMap((kind) => factProperties(release, kind)) ?? [])),
+            ...years,
+          ]),
+        ].slice(0, 4)
       : [];
-    const refinementTypes = knownType ?? (data.facetValues.type?.length ? data.facetValues.type : selectedSemanticKinds);
+    const refinementTypes =
+      knownType ?? (data.facetValues.type?.length ? data.facetValues.type : selectedSemanticKinds);
     const roster = release ? refinementProperties(release, refinementTypes) : [];
     let refinementRequests: ReturnType<typeof scopedRefinementRequests> | undefined;
     try {
@@ -1213,10 +1218,10 @@ export function SearchPage({
       {resourceLanguage?.applicability !== 'applicable' &&
         resourceLanguage?.applicability !== 'partial' &&
         resourceLanguage?.actions.clear && (
-        <Button type="button" variant="outline" size="sm" onClick={clearResourceLanguage}>
-          {m.search_resource_language_clear({}, options)}
-        </Button>
-      )}
+          <Button type="button" variant="outline" size="sm" onClick={clearResourceLanguage}>
+            {m.search_resource_language_clear({}, options)}
+          </Button>
+        )}
       {(draft.languages ?? []).map((tag) => (
         <input key={tag} type="hidden" name="language" value={tag} />
       ))}
@@ -1224,8 +1229,8 @@ export function SearchPage({
         <input key={kind} type="hidden" name="kinds" value={kind} />
       ))}
       {(!data?.refinement ||
-        Object.entries(selectedFacets).some(([property]) =>
-          !filterRefinementProperties.some((entry) => entry.property === property),
+        Object.entries(selectedFacets).some(
+          ([property]) => !filterRefinementProperties.some((entry) => entry.property === property),
         )) &&
         Object.entries(selectedFacets).flatMap(([property, values]) =>
           !data?.refinement || !filterRefinementProperties.some((entry) => entry.property === property)
@@ -1268,30 +1273,32 @@ export function SearchPage({
           }}
         />
       )}
-      {typeRefinementAvailable ? <Field>
-        <FieldLabel htmlFor={`${typeControlId}-${surface}`}>{m.search_subject_type({}, options)}</FieldLabel>
-        <p className="text-sm text-muted-foreground">{m.search_subject_type_help({}, options)}</p>
-        <NativeSelect
-          id={`${typeControlId}-${surface}`}
-          name="type"
-          value={type ?? ''}
-          onChange={(event) => {
-            if (hydrated) event.currentTarget.form?.requestSubmit();
-          }}
-        >
-          <NativeSelectOption value="">{m.search_all_subject_types({}, options)}</NativeSelectOption>
-          {type && !data?.conditionMetadata?.types[type] && (
-            <NativeSelectOption value={type}>
-              {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}
-            </NativeSelectOption>
-          )}
-          {Object.entries(data?.conditionMetadata?.types ?? {}).map(([id, definition]) => (
-            <NativeSelectOption key={id} value={id}>
-              {label(definition.labels, m.search_constraint_identity_kind_unavailable({}, options))}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Field> : null}
+      {typeRefinementAvailable ? (
+        <Field>
+          <FieldLabel htmlFor={`${typeControlId}-${surface}`}>{m.search_subject_type({}, options)}</FieldLabel>
+          <p className="text-sm text-muted-foreground">{m.search_subject_type_help({}, options)}</p>
+          <NativeSelect
+            id={`${typeControlId}-${surface}`}
+            name="type"
+            value={type ?? ''}
+            onChange={(event) => {
+              if (hydrated) event.currentTarget.form?.requestSubmit();
+            }}
+          >
+            <NativeSelectOption value="">{m.search_all_subject_types({}, options)}</NativeSelectOption>
+            {type && !data?.conditionMetadata?.types[type] && (
+              <NativeSelectOption value={type}>
+                {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}
+              </NativeSelectOption>
+            )}
+            {Object.entries(data?.conditionMetadata?.types ?? {}).map(([id, definition]) => (
+              <NativeSelectOption key={id} value={id}>
+                {label(definition.labels, m.search_constraint_identity_kind_unavailable({}, options))}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
+      ) : null}
       {data?.refinement && filterRefinementProperties.length > 0 && (
         <Refinement
           key={`${surface}-${data.refinement.key}`}
@@ -1359,23 +1366,27 @@ export function SearchPage({
           {...(data.sort === 'rating' ? { sort: 'rating' as const } : {})}
         />
       )}
-      {statementRefinementAvailable ? <ConditionEditor
-        requestIdentity={JSON.stringify([stateKey, session])}
-        value={draft.condition}
-        onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
-        metadata={data?.conditionMetadata}
-        conceptLookup={conceptLookup}
-        locale={locale}
-        entityLookup={conditionEntityLookupContext(data, locale, session)}
-        issues={issues}
-        values={Object.fromEntries(
-          data?.refinement?.initial?.status === 'ready'
-            ? data.refinement.initial.page.facets.map(({ property, values }) => [property, values])
-            : [],
-        )}
-        languages={draft.languages}
-        onLanguages={(languages) => setDraft((previous) => ({ ...previous, languages }))}
-      /> : draft.condition ? <input type="hidden" name="condition" value={JSON.stringify(draft.condition)} /> : null}
+      {statementRefinementAvailable ? (
+        <ConditionEditor
+          requestIdentity={JSON.stringify([stateKey, session])}
+          value={draft.condition}
+          onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
+          metadata={data?.conditionMetadata}
+          conceptLookup={conceptLookup}
+          locale={locale}
+          entityLookup={conditionEntityLookupContext(data, locale, session)}
+          issues={issues}
+          values={Object.fromEntries(
+            data?.refinement?.initial?.status === 'ready'
+              ? data.refinement.initial.page.facets.map(({ property, values }) => [property, values])
+              : [],
+          )}
+          languages={draft.languages}
+          onLanguages={(languages) => setDraft((previous) => ({ ...previous, languages }))}
+        />
+      ) : draft.condition ? (
+        <input type="hidden" name="condition" value={JSON.stringify(draft.condition)} />
+      ) : null}
       {!data?.conditionMetadata && (
         <a className={linkClass} href={discoverySearchHref(locale, committedState)}>
           {m.search_facet_retry({}, options)}
