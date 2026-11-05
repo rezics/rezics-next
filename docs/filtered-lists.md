@@ -240,14 +240,11 @@ Web follows at most four 202 steps per render, then renders a private/no-store p
 continuation. A 202 is not an empty successful list and never authorizes endless final-leaf replay. Its progress
 refers to retained preparation/current generation, not cached authority, per-leaf verdicts or a client result vector.
 
-Preserve cursor ownership and codecs. POST uses the existing Search cursor profile for every viewer: timed,
-confidential, bound to stable operation/route, Zone, viewer and request; mutable bases belong inside the encrypted
-position. Valid-shaped unusable progress starts fresh current authorization and returns preparation or a complete
-page; invalid body/query and current denial retain their existing outcomes. The adopted Subject GET uses the default
-profile and returns a complete page/EOF, retained preparation or dependency readiness; see [Zones](zones.md#routes-and-native-declarations)
-and [Zone membership](zone-membership.md#preserved-transport-and-cursor-ownership). It remains unmounted until its native journey lands.
-Search retains native tuple types, stable binding and principal reauthorization. GET status details are Zone-owned;
-shared current source/fact/grant revocation applies on every continuation.
+Preserve cursor codecs. POST retains Search's timed, confidential route/Zone/viewer/request binding and encrypted
+mutable basis; unusable valid progress reauthorizes, while invalid input and denial keep native outcomes. Adopted
+GET uses the default profile for page/EOF, preparation or dependency readiness ([Zones](zones.md#routes-and-native-declarations),
+[Zone membership](zone-membership.md#preserved-transport-and-cursor-ownership)); it is unmounted. Current principal
+and source/fact/grant checks apply on continuation.
 
 ## Shared acceptance matrix
 

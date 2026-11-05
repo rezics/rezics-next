@@ -129,20 +129,9 @@ owner retention hooks, not broad JSON scans in production. Test-wide JSON eviden
 
 ## Ordinary owner-issued purge authority
 
-The native source implementation is `record-purge-authority.ts`. The original `RecordPurgeReference` binds
-`subjectId`, `candidateId`, original `revision`, optional exact `documentId` and `deletionGeneration`.
-`NativeRecordPurgeReference` adds exactly `{kind:'context',contextId,deletionGeneration}` and
-`{kind:'zone',zoneId,deletionGeneration}`. These resolve native Context/Zone rows and versions; resource
-links, including Realm/Space removal, never confer Context lifecycle or purge authority.
-The opaque authority is held in a private identity registry, never in JSON or a durable workflow payload.
-`prepareRecordPurgeAuthority({pool,clock?},reference,{deadline})` verifies native committed ordinary deletion;
-`readRecordPurgeAuthoritySource` revalidates it after releasing the source home, and
-`lockRecordPurgeAuthoritySource(tx,authority)` takes the current source locks in the consuming native command.
-Both reads return actual source version, deletion transaction/time and original expiry, or null only for
-ineligible/stale native lifecycle. A changed/unavailable source home or absent native commit remains an error.
-Hold, restoration, generation and current takedown serialize before removal. This ordinary authority supplies
-no early/legal-order or account-erasure permission. Zone's branch-specific admitted operand and Zone CAS remain a
-separate [Zones-owned contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup); its Content order scope, Access grant minimization and History consumer closure are pending owner interfaces, not extensions of this ordinary authority.
+Native `record-purge-authority.ts` binds `RecordPurgeReference` to `subjectId`, `candidateId`, original `revision`, optional exact `documentId` and `deletionGeneration`. `NativeRecordPurgeReference` adds exactly `{kind:'context',contextId,deletionGeneration}` or `{kind:'zone',zoneId,deletionGeneration}` for native rows/versions; resource links, including Realm/Space removal, confer no Context lifecycle or purge authority. Opaque authority stays in a private identity registry, never JSON or workflow payloads.
+
+`prepareRecordPurgeAuthority({pool,clock?},reference,{deadline})` verifies committed ordinary deletion; `readRecordPurgeAuthoritySource` revalidates after source-home release; `lockRecordPurgeAuthoritySource(tx,authority)` locks current source in the consuming command. Reads return source version, deletion transaction/time and original expiry, or null only for stale/ineligible lifecycle. Missing commit or changed/unavailable home remains an error. Hold, restore, generation and takedown serialize before removal. This authority grants no early/legal-order/account-erasure permission. The separate [Zones-owned contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup) defines its branch operand and CAS; Content order scope, Access grants and History closure remain pending interfaces.
 
 Content alone implements `purgeAuthoredFieldForDeletedRecord(tx,authority)` and exact body/binding validation.
 Accounts alone supplies
