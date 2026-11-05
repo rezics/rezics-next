@@ -318,7 +318,7 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
       initialEntries: [
         routed
           ? `/library/progress/${initial.address.id}?${new URLSearchParams(Object.entries(initial.address).filter(([key, value]) => key !== 'id' && value !== undefined) as [string, string][])}&history=%2Flibrary%2Fhistory%3Fcursor%3Doriginal%252F%252B%253D%253D`
-          : '/',
+          : `/?${new URLSearchParams(Object.entries(initial.address).filter(([key, value]) => key !== 'id' && value !== undefined) as [string, string][])}`,
       ],
     }),
   });
@@ -452,11 +452,13 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
   };
 }
 function retainedSubmit(form: HTMLFormElement) {
-  const key = Object.getOwnPropertyNames(form).find((key) => key.startsWith('__reactProps$'))!;
+  // Happy DOM's form proxy enumerates controls, hiding React's own property keys.
+  const key = Object.getOwnPropertyNames(form.querySelector('input,textarea,button')!).find((key) =>
+    key.startsWith('__reactProps$'),
+  )!;
   const props = Reflect.get(form, key) as {
     onSubmit: (event: { preventDefault(): void }) => void;
   };
-  if (!props) throw new Error(`Form callback properties: ${Reflect.ownKeys(form).map(String).join(',')}`);
   return () => props.onSubmit({ preventDefault() {} });
 }
 const recorded = (p: Extract<ProgressDetail, { state: 'ready' }>, amount = '4.75') =>
