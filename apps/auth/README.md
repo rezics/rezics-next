@@ -81,7 +81,8 @@ checks remain on their owning flows. An uncertain result is never presented as d
 
 Whole-call home cost: server rendering, task navigation and language changes perform zero home requests. Each mount,
 explicit read Retry or persisted `pageshow` performs one installed `POST /account-identity` with `{}` and a five-second
-deadline through response-body completion. `pagehide` synchronously clears private data and aborts the old generation;
+deadline through response-body completion. The shared `privateAuthRead` races cancellation even when fetch or its body
+ignores abort; timeout becomes unavailable with explicit Retry. `pagehide` clears private data synchronously;
 source replacement retires the prior read and makes one fresh observation. Late results cannot restore old identity.
 There is no focus polling or automatic retry, inventory fan-out, command prepare, approval or write. Links perform no
 background preflight and accept no operands or workflow keys. Read Retry only refreshes the observation, focuses its
@@ -949,7 +950,7 @@ submission. Recovery and step-up each make one Auth request per submit. Successf
 
 ### Account home
 
-- **Touches:** one same-origin `POST /account-identity` on entry, explicit Retry or BFCache return; the existing transport deadline is five seconds through response-body validation
+- **Touches:** one same-origin `POST /account-identity` on entry, explicit Retry or BFCache return; one five-second deadline through body validation, even if transport ignores abort
 - **Bound:** 1 Auth read per entry or renewal, 0 kernel reads and 0 mutations; no inventory reads
 - **Growth check:** `tests/account-home.test.tsx`: separate viewers and each explicit renewal own one independent read
 

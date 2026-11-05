@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { privateAuthRead } from './private-auth-read';
 
 export type AccountIdentityResult =
   | { kind: 'ready'; accountId: string; email: string | null }
@@ -9,32 +10,34 @@ export type AccountIdentityState = AccountIdentityResult | { kind: 'loading' };
 /** No account selector, continuation, cache, or mutation authority enters this read. */
 export const loadAccountIdentity: AccountIdentitySource = async (signal) => {
   try {
-    const response = await fetch('/account-identity', {
-      method: 'POST',
-      credentials: 'same-origin',
-      redirect: 'error',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: '{}',
-      signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-    });
-    if (response.status === 401) return { kind: 'signed-out' };
-    if (response.status === 403) return { kind: 'denied' };
-    if (response.status !== 200) return { kind: 'unavailable' };
-    const body: unknown = await response.json();
-    if (!body || typeof body !== 'object' || Array.isArray(body)) return { kind: 'unavailable' };
-    const value = body as Record<string, unknown>;
-    if (
-      Object.keys(value).sort().join(',') !== 'account_id,email' ||
-      typeof value.account_id !== 'string' ||
-      !value.account_id ||
-      (value.email !== null &&
-        (typeof value.email !== 'string' ||
-          value.email.length > 254 ||
-          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value.email)))
-    )
-      return { kind: 'unavailable' };
-    return { kind: 'ready', accountId: value.account_id, email: value.email };
+    return await privateAuthRead(async (readSignal): Promise<AccountIdentityResult> => {
+      const response = await fetch('/account-identity', {
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: '{}',
+        signal: readSignal,
+      });
+      if (response.status === 401) return { kind: 'signed-out' };
+      if (response.status === 403) return { kind: 'denied' };
+      if (response.status !== 200) return { kind: 'unavailable' };
+      const body: unknown = await response.json();
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return { kind: 'unavailable' };
+      const value = body as Record<string, unknown>;
+      if (
+        Object.keys(value).sort().join(',') !== 'account_id,email' ||
+        typeof value.account_id !== 'string' ||
+        !value.account_id ||
+        (value.email !== null &&
+          (typeof value.email !== 'string' ||
+            value.email.length > 254 ||
+            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value.email)))
+      )
+        return { kind: 'unavailable' };
+      return { kind: 'ready', accountId: value.account_id, email: value.email };
+    }, signal);
   } catch {
     return { kind: 'unavailable' };
   }

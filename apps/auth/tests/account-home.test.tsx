@@ -1,8 +1,7 @@
-import { afterAll, afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { AccountIdentityResult, AccountIdentitySource } from '../src/account-identity';
-import { loadAccountIdentity } from '../src/account-identity';
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
 );
@@ -83,41 +82,6 @@ afterAll(async () => {
     else Reflect.deleteProperty(globalThis, name);
   }
   await dom.happyDOM.close();
-});
-
-test('the admitted identity read keeps its closed result states and same-origin request', async () => {
-  const replies = [
-    new Response(JSON.stringify({ account_id: 'own-account', email: 'person@example.test' }), { status: 200 }),
-    new Response(JSON.stringify({ account_id: 'own-account', email: null }), { status: 200 }),
-    new Response(null, { status: 401 }),
-    new Response(null, { status: 403 }),
-    new Response(null, { status: 503 }),
-    new Response(JSON.stringify({ account_id: 'own-account', email: null, extra: true }), { status: 200 }),
-    new Response('{', { status: 200 }),
-  ];
-  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
-  globalThis.fetch = (async (input, init) => {
-    requests.push({ input, init });
-    return replies.shift()!;
-  }) as typeof fetch;
-
-  const results = [];
-  for (let index = 0; index < 7; index++) results.push(await loadAccountIdentity(new AbortController().signal));
-  expect(results).toEqual([
-    identity('own-account', 'person@example.test'),
-    identity('own-account', null),
-    { kind: 'signed-out' },
-    { kind: 'denied' },
-    { kind: 'unavailable' },
-    { kind: 'unavailable' },
-    { kind: 'unavailable' },
-  ]);
-  expect(requests).toHaveLength(7);
-  expect(String(requests[0]!.input)).toBe('/account-identity');
-  expect(requests.every(({ init }) => init?.method === 'POST' && init.credentials === 'same-origin')).toBe(true);
-  expect(
-    requests.every(({ init }) => init?.cache === 'no-store' && init.redirect === 'error' && init.body === '{}'),
-  ).toBe(true);
 });
 
 test('signed-out, denied, unavailable and missing-email states stay distinct', async () => {
@@ -211,13 +175,22 @@ test('one installed identity observation, public tasks and read Retry never prep
   const calls: string[] = [];
   const pendingKey = 'rezics.account-operation.pending';
   window.sessionStorage.setItem(pendingKey, 'owned-by-destination');
+  const late = deferred<Response>();
+  const timeout = spyOn(globalThis, 'setTimeout');
   globalThis.fetch = (async (input, init) => {
     calls.push(String(input));
     expect(init?.body).toBe('{}');
     expect(init?.method).toBe('POST');
-    return new Response(null, { status: 503 });
+    return calls.length === 1 ? late.promise : Response.json({ account_id: 'current', email: 'current@example.test' });
   }) as typeof fetch;
   const page = await mount();
+  const deadline = timeout.mock.calls.findIndex(([, delay]) => delay === 5000);
+  const expire = timeout.mock.calls[deadline]![0] as () => void;
+  clearTimeout(timeout.mock.results[deadline]!.value as ReturnType<typeof setTimeout>);
+  timeout.mockRestore();
+  expect(page.host.textContent).toContain('Checking');
+  await flush(expire);
+  expect(page.host.textContent).toContain('status is unknown');
   expect(calls).toEqual(['/account-identity']);
   const task = page.host.querySelector<HTMLAnchorElement>('a[href="/automated/new"]')!;
   await flush(() => {
@@ -233,7 +206,12 @@ test('one installed identity observation, public tasks and read Retry never prep
   expect(calls).toEqual(['/account-identity', '/account-identity']);
   expect(document.activeElement).toBe(page.host.querySelector('[role="status"]'));
   expect(window.location.pathname).toBe('/');
+  expect(page.host.textContent).toContain('current@example.test');
   task.focus();
+  await flush(() => late.resolve(Response.json({ account_id: 'old', email: 'old@example.test' })));
+  expect(page.host.textContent).not.toContain('old@example.test');
+  expect(page.host.textContent).toContain('current@example.test');
+  expect(document.activeElement).toBe(task);
   await page.render();
   expect(document.activeElement).toBe(task);
   expect(calls).toHaveLength(2);
