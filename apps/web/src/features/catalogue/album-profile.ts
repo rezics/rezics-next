@@ -9,6 +9,7 @@ import { initialTerms, type CreateResult, type InitialSubject, type TermDraft } 
 import type { CreateAuthority } from './identity-intake';
 import { createSubjectRecord } from './create-subject-request';
 import { correctionProperty, type StatementInput } from './statement-editor';
+import type { EditorRead } from './statement-editor';
 
 export const albumType = 'schema:MusicAlbum';
 export const albumUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -16,7 +17,13 @@ export type AlbumItem = InitialSubject & { statements: Record<string, StatementI
 export type AlbumCommand = { item: AlbumItem; key: string };
 export type AlbumRead =
   | { ok: false; reason: 'concealed' | 'denied' | 'invalid' | 'stale' | 'unavailable' }
-  | { ok: true; release: Release; public: SubjectRead | null };
+  | {
+      ok: true;
+      release: Release;
+      public: SubjectRead | null;
+      /** Present only after a deliberate public-origin Global correction choice. */
+      correction?: Extract<EditorRead, { ok: true }>;
+    };
 export type AlbumTransport = {
   load: () => Promise<AlbumRead>;
   create: (command: AlbumCommand) => Promise<CreateResult>;

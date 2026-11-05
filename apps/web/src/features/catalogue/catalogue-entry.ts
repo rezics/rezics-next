@@ -89,10 +89,17 @@ export const catalogueEntries = {
       href: id ? `${subject({ id, label, locale })}/game` : `/${locale}/catalogue/game`,
     };
   },
-  album: ({ id, label, locale }: Locale & { id?: string | undefined; label?: string | undefined }): CatalogueEntry => ({
+  album: ({
+    id,
+    label,
+    locale,
+    visit,
+  }: Locale & { id?: string | undefined; label?: string | undefined; visit?: string | undefined }): CatalogueEntry => ({
     group: id ? 'edit' : 'create',
     label: id ? m.album_edit({}, options(locale)) : m.album_create({}, options(locale)),
-    href: id ? `${subject({ id, label: label ?? '', locale })}/album` : `/${locale}/catalogue/album`,
+    href: id
+      ? `${subject({ id, label: label ?? '', locale })}/album${visit ? `?${new URLSearchParams({ visit })}` : ''}`
+      : `/${locale}/catalogue/album`,
   }),
   screen: ({
     id,
