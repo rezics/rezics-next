@@ -532,6 +532,8 @@ navigation; an unresolved command allows only Stay until its exact intent resolv
 Decision: The received private Copies page compares at most four exact IDs and observed revisions, in native page
 order, using only supplied reading facts. Comparison stays inline, labels missing personal observations explicitly,
 retires changed or missing selections until deliberate reselection, and clears with the current private origin.
+The comparison shares the native rows’ title, calendar-date, historical-label and multiline-text readers; it has no
+separate vocabulary mapper or generic comparison framework.
 Its explicit Edit hands the selected current row to the existing point reader only when no editor is open; otherwise
 it directs the person to the existing editor controls. Web retains ResponsiveDialog editor/detail continuity,
 focus, correction and closing; native commands and Undo retain their owners.
