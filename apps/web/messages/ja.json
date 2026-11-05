@@ -5361,6 +5361,8 @@
   "library_my_logs_retry": "再試行",
   "library_my_logs_restarted": "ページが変更されたため、最新の公開ログを表示しています。",
   "library_my_logs_newest": "最新の公開ログ",
+  "library_my_logs_next": "次へ",
+  "library_my_logs_previous": "前へ",
   "library_my_logs_no_visible": "このページに表示できる公開ログはありません。",
   "library_my_logs_read": "{title}のログを読む（公開日時：{date}）",
   "library_my_logs_full_note": "メモ全文",

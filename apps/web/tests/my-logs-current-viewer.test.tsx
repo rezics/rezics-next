@@ -7,8 +7,6 @@ import type { MyLogsViewerHistory } from '../src/library/logs-server';
 import type { SessionEnv } from '../src/session/client';
 import recording from '../src/kernel/recorded/library-published-logs.json';
 
-// UNRUN: focused mounted/deferred and real server-export regressions for integration.
-// Controlled IO does not establish native authorization, browser, or acceptance proof.
 const origin = 'https://site.test';
 const current = {
   status: 'active',
@@ -300,6 +298,7 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
   window.document.body.append(host);
   const commits: { state: string; subject?: string | null; text: string; links: string[] }[] = [];
   let observe = false;
+  let routeGeneration = 0;
   const Page = Route.options.component!;
   function Mounted() {
     const session = useSession();
@@ -312,12 +311,17 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
           links: [...host.querySelectorAll('a')].map((link) => link.getAttribute('href') ?? ''),
         });
     });
-    return <Page />;
+    return <Page key={routeGeneration} />;
   }
   const rootRoute = createRootRoute();
   const logsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library/logs', component: Mounted });
+  const outsideRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/outside',
+    component: () => <p>Outside My Logs</p>,
+  });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([logsRoute]),
+    routeTree: rootRoute.addChildren([logsRoute, outsideRoute]),
     history: createMemoryHistory({ initialEntries: ['/library/logs'] }),
   });
   const tree = () => (
@@ -334,6 +338,25 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
       client.setQueryData(exposureQuery.queryKey, admitted ? ['reading_progress'] : []);
       await tick();
     });
+  };
+  const remountRoute = async () => {
+    await act(async () => {
+      routeGeneration++;
+      root!.render(tree());
+      await tick();
+    });
+  };
+  const leaveAndReturnTo = async (cursor: string) => {
+    await act(async () => {
+      await router.navigate({ href: '/outside' });
+      await tick();
+    });
+    expect(host.textContent).toContain('Outside My Logs');
+    await act(async () => {
+      await router.navigate({ href: `/library/logs?cursor=${encodeURIComponent(cursor)}` });
+      await tick();
+    });
+    return reads.at(-1)!;
   };
   const settle = async (call: (typeof reads)[number], value: MyLogsViewerHistory | Error) => {
     await act(async () => {
@@ -369,9 +392,19 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     });
     return reads.at(-1)!;
   };
+  const navigateByKeyboard = async (label: string) => {
+    const target = link(label)!;
+    target.focus();
+    await act(async () => {
+      target.click();
+      await tick();
+    });
+    return reads.at(-1)!;
+  };
   const retired = () => {
     expect(host.querySelector('ol')).toBeNull();
-    expect(link(m.library_logs_more())).toBeUndefined();
+    expect(link(m.library_my_logs_next())).toBeUndefined();
+    expect(link(m.library_my_logs_previous())).toBeUndefined();
     expect(link(m.library_my_logs_newest())).toBeUndefined();
   };
   try {
@@ -430,21 +463,59 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     expect(host.textContent).not.toContain('A history');
 
     const oldAddress = await refetch();
-    const next = await navigate(m.library_logs_more());
+    const next = await navigate(m.library_my_logs_next());
     expect(next).not.toBe(oldAddress);
     expect(next.cursor).toBe('B-next+/opaque=');
     retired();
     await settle(next, history('A', next.cursor, 'Wrong viewer'));
     retired();
-    await settle(await retry(), history('B', 'wrong-address', 'Wrong cursor'));
+    const wrongAddress = await retry();
+    expect(wrongAddress.cursor).toBe(next.cursor);
+    await settle(wrongAddress, history('B', 'wrong-address', 'Wrong cursor'));
     retired();
-    await settle(await retry(), { ...history('B', next.cursor, 'Wrong locale'), locale: 'ja' });
+    const wrongLocale = await retry();
+    expect(wrongLocale.cursor).toBe(next.cursor);
+    await settle(wrongLocale, { ...history('B', next.cursor, 'Wrong locale'), locale: 'ja' });
     retired();
-    await settle(await retry(), history('B', next.cursor, 'B next page'));
+    const acceptedNext = await retry();
+    expect(acceptedNext.cursor).toBe(next.cursor);
+    await settle(acceptedNext, history('B', next.cursor, 'B next page'));
     expect(host.textContent).toContain('B next page');
+    expect(link(m.library_my_logs_previous())).toBeDefined();
     expect(link(m.library_my_logs_newest())).toBeDefined();
+
+    await remountRoute();
+    const remountedRead = reads.at(-1)!;
+    expect(remountedRead.cursor).toBe(next.cursor);
+    await settle(remountedRead, history('B', next.cursor, 'B after route remount'));
+    expect(host.textContent).toContain('B after route remount');
+    expect(link(m.library_my_logs_previous())).toBeDefined();
+
+    const previous = await navigateByKeyboard(m.library_my_logs_previous());
+    expect(previous.cursor).toBeNull();
+    retired();
+    await settle(previous, history('B', null, 'B accepted predecessor'));
+    expect(host.textContent).toContain('B accepted predecessor');
+    expect(window.document.activeElement).toBe(host.querySelector('h1'));
+    expect(link(m.library_my_logs_previous())).toBeUndefined();
+    const nextAgain = await navigateByKeyboard(m.library_my_logs_next());
+    expect(nextAgain.cursor).toBe(next.cursor);
+    retired();
+    const retryButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (item) => item.textContent === m.library_my_logs_retry(),
+    );
+    expect(retryButton).toBeDefined();
+    retryButton!.focus();
+    await settle(nextAgain, history('B', nextAgain.cursor, 'B next page again'));
+    expect(host.textContent).toContain('B next page again');
+    expect(window.document.activeElement).not.toBe(host.querySelector('h1'));
+    const directAfterRouteReturn = await leaveAndReturnTo(nextAgain.cursor!);
+    expect(directAfterRouteReturn.cursor).toBe(nextAgain.cursor);
+    await settle(directAfterRouteReturn, history('B', nextAgain.cursor, 'Fresh direct later page'));
+    expect(host.textContent).toContain('Fresh direct later page');
+    expect(link(m.library_my_logs_previous())).toBeUndefined();
     await settle(oldAddress, new Error('Late prior-address failure'));
-    expect(host.textContent).toContain('B next page');
+    expect(host.textContent).toContain('Fresh direct later page');
     for (const state of ['denied', 'preparing', 'unavailable'] as const) {
       await settle(await refetch(), { sessionSubject: null, cursor: next.cursor, locale: 'en', page: { state } });
       expect(host.textContent).toContain(

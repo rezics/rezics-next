@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { myLogsStoryActivity, setMyLogsStory, type MyLogsScenario } from '../kernel/fake/my-logs';
+import recording from '../kernel/recorded/library-published-logs.json';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { fullDateTime } from '../threads/byline';
 import { PageStory } from './page';
 import { logPreviewJourney } from '../../tests/log-preview-journey.test';
 
@@ -78,10 +80,34 @@ export const NewestPage: Story = {
   play: async (context) => {
     await ready(context);
     const canvas = within(context.canvasElement);
-    await userEvent.click(canvas.getByRole('link', { name: m.library_logs_more() }));
+    const supplied = recording.publishedLogs[0]!;
+    let list = await canvas.findByRole('list', { name: m.library_logs_heading() });
+    let first = within(list).getAllByRole('listitem')[0]!;
+    expect(first.querySelector('time')?.getAttribute('datetime')).toBe(supplied.publishedAt);
+    await userEvent.click(first.querySelector('summary')!);
+    await expect(await within(first).findByText(supplied.note!)).toBeVisible();
+    await userEvent.click(canvas.getByRole('link', { name: m.library_my_logs_next() }));
+    await canvas.findByText(m.library_subject_unavailable());
+    await userEvent.click(canvas.getByRole('link', { name: m.library_my_logs_next() }));
     await canvas.findByText(`${m.library_logs_session_state()}: ${m.library_progress_state_abandoned()}`);
+    await userEvent.click(canvas.getByRole('link', { name: m.library_my_logs_previous() }));
+    await canvas.findByText(m.library_subject_unavailable());
     await userEvent.click(canvas.getByRole('link', { name: m.library_my_logs_newest() }));
     await ready(context);
+    list = await canvas.findByRole('list', { name: m.library_logs_heading() });
+    first = within(list).getAllByRole('listitem')[0]!;
+    await userEvent.click(
+      within(first).getByRole('link', {
+        name: m.library_my_logs_read({ title: 'Kokoro', date: fullDateTime(supplied.publishedAt, getLocale()) }),
+      }),
+    );
+    await canvas.findByRole('heading', { name: m.library_logs_page_heading() });
+    await expect(canvas.getByRole('heading', { name: m.library_logs_note() })).toBeVisible();
+    await expect(await canvas.findByText(supplied.note!)).toBeVisible();
+    const dates = canvas.getByRole('region', { name: m.library_logs_dates() });
+    expect(dates.querySelector(`time[datetime="${supplied.publishedAt}"]`)).not.toBeNull();
+    const subject = await canvas.findByRole('link', { name: 'Kokoro' });
+    expect(subject.getAttribute('href')).toContain('/subjects/');
   },
 };
 export const Restarted: Story = {

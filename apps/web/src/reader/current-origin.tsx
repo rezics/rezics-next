@@ -127,6 +127,9 @@ export function useReaderCurrentOrigin(
       snapshot.episodes.every((value) => value === 0) &&
       (!hydrated || seedObservation.current === scoped.observation),
     readKey: (index: number) => JSON.stringify([boundary.id, scoped.observation?.id, snapshot.dispatch[index]]),
+    /** Stable across a leaf remount, but changes with this QueryClient's viewer observation and admission. */
+    admissionKey: (index: number) =>
+      JSON.stringify([subject, snapshot.viewer, scoped.observation?.id ?? null, snapshot.dispatch[index]]),
     lifetime: (index: number) => JSON.stringify([boundary.id, snapshot.episodes[index]]),
     epoch: (index: number) => snapshot.dispatch[index],
     current,

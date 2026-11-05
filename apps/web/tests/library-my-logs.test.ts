@@ -1,8 +1,14 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { createKernelClient } from '@rezics/client';
+import { QueryClient } from '@tanstack/react-query';
 import { loadMyPublishedLogs } from '../src/library/logs-read';
 import { myLogsNavigation, myLogsResult, myLogsSearch } from '../src/library/my-logs';
+import {
+  MyLogsWindowNavigation,
+  myLogsWindowHrefs,
+  myLogsWindowNavigation,
+} from '../src/library/my-logs-window-navigation';
 import { resolveNavigation } from '../src/shell/navigation';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
@@ -202,5 +208,121 @@ test('personal route and navigation use existing signed-in/no-store authority, l
     const messages = JSON.parse(source(`../messages/${locale}.json`));
     expect(messages.library_my_logs_heading).toBeTruthy();
     expect(messages.library_my_logs_read).toContain('{title}');
+    expect(messages.library_my_logs_previous).toBeTruthy();
+    expect(messages.library_my_logs_newest).toBeTruthy();
+    expect(messages.library_my_logs_next).toBeTruthy();
+    expect(messages.library_my_logs_retry).toBeTruthy();
   }
+});
+
+test('My Logs accepts three exact windows, bounded branches, retry, stale restart and a direct later page', async () => {
+  const visit = new MyLogsWindowNavigation();
+  visit.observe('viewer-a', null);
+  visit.accept('viewer-a', null);
+  expect(visit.getSnapshot().coordinates).toEqual([null]);
+  expect(visit.beginMovement('viewer-a', 'next', null, 'middle')).toBe(true);
+  expect(visit.beginMovement('viewer-a', 'next', null, 'middle')).toBe(false);
+  visit.observe('viewer-a', 'middle');
+  visit.accept('viewer-a', 'middle');
+  expect(visit.beginMovement('viewer-a', 'next', 'middle', 'oldest')).toBe(true);
+  visit.observe('viewer-a', 'oldest');
+  visit.accept('viewer-a', 'oldest');
+  expect(visit.getSnapshot().coordinates).toEqual([null, 'middle', 'oldest']);
+
+  expect(visit.beginMovement('viewer-a', 'previous', 'oldest', 'middle')).toBe(true);
+  visit.observe('viewer-a', 'middle');
+  visit.accept('viewer-a', 'middle');
+  expect(visit.getSnapshot().coordinates).toEqual([null, 'middle']);
+  expect(visit.beginMovement('viewer-a', 'next', 'middle', 'branch')).toBe(true);
+  visit.observe('viewer-a', 'branch');
+  visit.failMovement('viewer-a', 'branch');
+  expect(visit.getSnapshot()).toMatchObject({
+    coordinates: [null, 'middle'],
+    current: 'middle',
+    movement: { target: 'branch', failed: true },
+  });
+  expect(visit.retryMovement('viewer-a', 'branch')).toBe(true);
+  expect(visit.getSnapshot().movement).toEqual({ action: 'next', source: 'middle', target: 'branch', failed: false });
+  visit.accept('viewer-a', 'branch');
+  expect(visit.getSnapshot().coordinates).toEqual([null, 'middle', 'branch']);
+
+  expect(visit.beginMovement('viewer-a', 'previous', 'branch', 'middle')).toBe(true);
+  visit.observe('viewer-a', 'middle');
+  visit.failMovement('viewer-a', 'middle');
+  expect(visit.getSnapshot().movement).toMatchObject({ action: 'previous', target: 'middle', failed: true });
+  expect(visit.retryMovement('viewer-a', 'middle')).toBe(true);
+  expect(visit.getSnapshot().movement).toMatchObject({ target: 'middle', failed: false });
+  visit.accept('viewer-a', 'middle');
+  expect(visit.getSnapshot().coordinates).toEqual([null, 'middle']);
+
+  expect(visit.beginMovement('viewer-a', 'newest', 'middle', null)).toBe(true);
+  visit.observe('viewer-a', null);
+  visit.failMovement('viewer-a', null);
+  expect(visit.retryMovement('viewer-a', null)).toBe(true);
+  visit.accept('viewer-a', null);
+  expect(visit.getSnapshot().coordinates).toEqual([null]);
+  expect(visit.beginMovement('viewer-a', 'next', null, 'stale-target')).toBe(true);
+  visit.observe('viewer-a', 'stale-target');
+  visit.accept('viewer-a', 'stale-target', true);
+  expect(visit.getSnapshot()).toMatchObject({ coordinates: [null], current: null, movement: null });
+
+  const direct = new MyLogsWindowNavigation();
+  direct.observe('viewer-a', 'later');
+  direct.accept('viewer-a', 'later');
+  expect(direct.getSnapshot().coordinates).toEqual(['later']);
+  expect(direct.beginMovement('viewer-a', 'previous', 'later', null)).toBe(false);
+  expect(direct.beginMovement('viewer-a', 'newest', 'later', null)).toBe(true);
+  const longCursor = new MyLogsWindowNavigation();
+  longCursor.observe('viewer-a', null);
+  longCursor.accept('viewer-a', null);
+  expect(longCursor.beginMovement('viewer-a', 'next', null, 'x'.repeat(4096))).toBe(true);
+  const malformed = new MyLogsWindowNavigation();
+  malformed.observe('viewer-a', null);
+  malformed.accept('viewer-a', null);
+  expect(malformed.beginMovement('viewer-a', 'next', null, 'x'.repeat(4097))).toBe(false);
+});
+
+test('My Logs keeps only nine accepted coordinates and preserves unrelated address bytes', async () => {
+  const visit = new MyLogsWindowNavigation();
+  visit.observe('viewer-a', null);
+  visit.accept('viewer-a', null);
+  let source: string | null = null;
+  for (let index = 0; index < 10; index++) {
+    const target = `cursor-${index}`;
+    expect(visit.beginMovement('viewer-a', 'next', source, target)).toBe(true);
+    visit.observe('viewer-a', target);
+    visit.accept('viewer-a', target);
+    source = target;
+  }
+  expect(visit.getSnapshot().coordinates).toHaveLength(9);
+  expect(visit.getSnapshot().coordinates[0]).toBe('cursor-1');
+  expect(visit.getSnapshot().coordinates.at(-1)).toBe('cursor-9');
+  expect(myLogsWindowHrefs('/library/logs?raw=%2f&cursor=old&%63ursor=duplicate&empty=#tab%2f', 'a/+==', 'zh-Hant')).toEqual({
+    route: '/library/logs?raw=%2f&empty=&cursor=a%2F%2B%3D%3D#tab%2f',
+    link: '/zh-Hant/library/logs?raw=%2f&empty=&cursor=a%2F%2B%3D%3D#tab%2f',
+  });
+});
+
+test('one named QueryClient visit survives a route leaf remount and retires with its reader', async () => {
+  const client = new QueryClient();
+  const first = myLogsWindowNavigation(client);
+  const detach = first.attach();
+  first.observe('viewer-a', null);
+  first.accept('viewer-a', null);
+  first.beginMovement('viewer-a', 'next', null, 'next');
+  first.observe('viewer-a', 'next');
+  first.accept('viewer-a', 'next');
+  detach();
+
+  const remounted = myLogsWindowNavigation(client);
+  expect(remounted).toBe(first);
+  const detachRemount = remounted.attach();
+  expect(remounted.getSnapshot().coordinates).toEqual([null, 'next']);
+  remounted.observe('viewer-b', 'next');
+  expect(remounted.getSnapshot().coordinates).toEqual([]);
+  detachRemount();
+  await Promise.resolve();
+  expect(remounted.isDisposed).toBe(true);
+  expect(myLogsWindowNavigation(client)).not.toBe(remounted);
+  client.clear();
 });

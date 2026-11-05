@@ -5358,6 +5358,8 @@
   "library_my_logs_retry": "다시 시도",
   "library_my_logs_restarted": "페이지가 변경되어 가장 최근에 공개한 기록을 표시합니다.",
   "library_my_logs_newest": "최근 공개 기록",
+  "library_my_logs_next": "다음",
+  "library_my_logs_previous": "이전",
   "library_my_logs_no_visible": "이 페이지에 표시할 수 있는 공개 기록이 없습니다.",
   "library_my_logs_read": "{title}의 기록 읽기, 공개 일시: {date}",
   "library_my_logs_full_note": "전체 메모",

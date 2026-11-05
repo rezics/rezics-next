@@ -5574,6 +5574,8 @@
   "library_my_logs_retry": "Try again",
   "library_my_logs_restarted": "The page changed. Showing your newest published logs.",
   "library_my_logs_newest": "Newest published logs",
+  "library_my_logs_next": "Next",
+  "library_my_logs_previous": "Previous",
   "library_my_logs_no_visible": "No visible published logs on this page.",
   "library_my_logs_read": "Read log for {title}, published {date}",
   "library_my_logs_full_note": "Full note",

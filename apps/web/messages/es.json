@@ -5358,6 +5358,8 @@
   "library_my_logs_retry": "Volver a intentar",
   "library_my_logs_restarted": "La página ha cambiado. Se muestran tus registros publicados más recientes.",
   "library_my_logs_newest": "Registros publicados más recientes",
+  "library_my_logs_next": "Siguiente",
+  "library_my_logs_previous": "Anterior",
   "library_my_logs_no_visible": "No hay registros publicados visibles en esta página.",
   "library_my_logs_read": "Leer el registro de {title}, publicado el {date}",
   "library_my_logs_full_note": "Nota completa",

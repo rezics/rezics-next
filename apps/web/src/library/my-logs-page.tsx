@@ -1,8 +1,8 @@
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
-import { Link } from '@tanstack/react-router';
+import { useRouter } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
 import {
@@ -17,11 +17,25 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { fullDateTime } from '../threads/byline';
 import { myLogsSearch, type MyLogsPage } from './my-logs';
+import {
+  MyLogsWindowNavigation,
+  myLogsWindowHrefs,
+  myLogsWindowNavigation,
+  type MyLogsWindowAction,
+  type MyLogsWindowSnapshot,
+} from './my-logs-window-navigation';
 import { readMyPublishedLogHistoryForViewer, type MyLogsViewerHistory } from './logs-server';
 import { SubjectCover, rowRatio } from './subject-row';
 import { displayLibraryTitle } from './title';
 
 const logOperations = ['published_log.list'] as const;
+const emptyWindowsSnapshot: MyLogsWindowSnapshot = {
+  coordinates: [],
+  current: null,
+  movement: null,
+  focusReady: false,
+  revision: 0,
+};
 
 function matchesAddress(read: MyLogsViewerHistory, cursor: string | null, locale: string) {
   return read.cursor === cursor && read.locale === locale;
@@ -41,14 +55,40 @@ export function MyLogsCurrentViewer({
   cursor?: string | undefined;
   invalidPosition?: boolean;
 }) {
+  const router = useRouter({ warn: false });
   useOperation('published_log.list');
   const locale = getLocale();
   const address = useHistoryAddress('/library/logs', myLogsSearch({ cursor }).cursor, locale);
   const origin = useHistoryCurrentOrigin(
-    address.key,
+    JSON.stringify(['/library/logs', locale]),
     logOperations,
     initial.page.state === 'loaded' ? initial.sessionSubject : null,
   );
+  const windows = useMemo(
+    () =>
+      typeof window === 'undefined'
+        ? new MyLogsWindowNavigation()
+        : myLogsWindowNavigation(origin.client),
+    [origin.client],
+  );
+  const windowSnapshot = useSyncExternalStore(windows.subscribe, windows.getSnapshot, windows.getSnapshot);
+  const windowAuthorityKey =
+    !invalidPosition && origin.subject && origin.allowed[0]
+      ? JSON.stringify([origin.admissionKey(0), locale])
+      : null;
+  useEffect(() => {
+    const detach = windows.attach(() => router?.state.location.pathname.replace(/\/$/, '') === '/library/logs');
+    const stopNavigation = router?.subscribe('onBeforeNavigate', ({ toLocation }) => {
+      if (toLocation.pathname.replace(/\/$/, '') !== '/library/logs') windows.dispose();
+    });
+    return () => {
+      stopNavigation?.();
+      detach();
+    };
+  }, [windows, router]);
+  useLayoutEffect(() => {
+    windows.observe(windowAuthorityKey, address.cursor);
+  }, [windows, windowAuthorityKey, address.cursor]);
   const current = () => address.isCurrent() && origin.current(0);
   const queryKey = [
     'my-logs-current-viewer',
@@ -130,15 +170,41 @@ export function MyLogsCurrentViewer({
       : origin.current(0, false) && address.isCurrent() && (owner || failure)
         ? read!.page
         : { state: query.isError || read ? 'unavailable' : 'preparing' };
+  useLayoutEffect(() => {
+    if (!windowAuthorityKey) return;
+    if (page.state === 'loaded' && read && owner && current() && readCurrent()) {
+      windows.accept(windowAuthorityKey, address.cursor, page.restarted);
+    } else if (
+      (page.state === 'denied' || page.state === 'unavailable') &&
+      windowSnapshot.movement?.target === address.cursor
+    ) {
+      windows.failMovement(windowAuthorityKey, address.cursor);
+    }
+  }, [
+    windows,
+    windowAuthorityKey,
+    address.cursor,
+    page.state,
+    page.state === 'loaded' ? page.restarted : false,
+    read,
+    owner,
+    query.isError,
+    readCurrent,
+  ]);
   return (
     <MyLogsPageView
       origin={{ lifetime: origin.boundary.lifetime, isCurrent: () => current() && readCurrent() }}
       page={page}
-      cursor={page.state === 'loaded' ? (address.cursor ?? undefined) : undefined}
+      cursor={page.state === 'loaded' && !page.restarted ? (address.cursor ?? undefined) : undefined}
+      windows={windows}
+      windowSnapshot={windowSnapshot}
+      windowAuthorityKey={windowAuthorityKey}
       onRetry={
         origin.subject && origin.allowed[0]
           ? () => {
-              if (current()) void query.refetch();
+              if (!current()) return;
+              if (windowAuthorityKey) windows.retryMovement(windowAuthorityKey, address.cursor);
+              void query.refetch();
             }
           : undefined
       }
@@ -159,24 +225,109 @@ export function MyLogsPageView({
   cursor,
   onRetry,
   origin,
+  windows,
+  windowSnapshot = emptyWindowsSnapshot,
+  windowAuthorityKey,
 }: {
   page: MyLogsPage;
   cursor?: string | undefined;
   onRetry?: (() => void) | undefined;
   origin?: HistoryOrigin;
+  windows?: MyLogsWindowNavigation;
+  windowSnapshot?: MyLogsWindowSnapshot;
+  windowAuthorityKey?: string | null;
 }) {
+  const router = useRouter({ warn: false });
+  const listHeading = useRef<HTMLHeadingElement>(null);
+  const locale = getLocale();
+  const routeHref = router?.state.location.href ?? '/library/logs';
+  const effectiveCursor = page.state === 'loaded' && page.restarted ? null : cursor ?? null;
+  const acceptedCurrent =
+    page.state === 'loaded' &&
+    windowAuthorityKey !== null &&
+    windowAuthorityKey !== undefined &&
+    windowSnapshot.current === effectiveCursor &&
+    windowSnapshot.coordinates.at(-1) === effectiveCursor;
+  const admittedNext =
+    page.state === 'loaded' && page.next !== null && myLogsSearch({ cursor: page.next }).cursor === page.next
+      ? page.next
+      : null;
+  const canPrevious = acceptedCurrent && !windowSnapshot.movement && windowSnapshot.coordinates.length > 1;
+  const previousCursor = canPrevious ? (windowSnapshot.coordinates.at(-2) ?? null) : null;
+  const canNewest = acceptedCurrent && !windowSnapshot.movement && effectiveCursor !== null;
+  const canNext = acceptedCurrent && !windowSnapshot.movement && admittedNext !== null;
   const ratio = rowRatio(page.state === 'loaded' ? page.logs.map((log) => log.subject) : []);
+  useEffect(() => {
+    if (page.state !== 'loaded' || !windows || !windowAuthorityKey || !windowSnapshot.focusReady) return;
+    if (!origin?.isCurrent()) {
+      windows.cancelMovementFocus(windowAuthorityKey);
+      return;
+    }
+    if (windows.consumeFocus(windowAuthorityKey)) listHeading.current?.focus();
+  }, [page.state, windows, windowAuthorityKey, windowSnapshot.focusReady, origin]);
+  const addressFor = (target: string | null) => myLogsWindowHrefs(routeHref, target, locale);
+  const move = (
+    action: MyLogsWindowAction,
+    target: string | null,
+    event: ReactMouseEvent<HTMLAnchorElement>,
+  ) => {
+    if (
+      event.defaultPrevented ||
+      (event.button !== 0 && event.detail !== 0) ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    if (!router) return;
+    event.preventDefault();
+    if (!windows || !windowAuthorityKey || !origin?.isCurrent()) return;
+    const destination = addressFor(target);
+    if (
+      !windows.beginMovement(
+        windowAuthorityKey,
+        action,
+        effectiveCursor,
+        target,
+        event.currentTarget,
+        event.detail === 0,
+      )
+    )
+      return;
+    void router.navigate({ href: destination.route });
+  };
+  const newest = addressFor(null);
+  const openNewest = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.defaultPrevented ||
+      (event.button !== 0 && event.detail !== 0) ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      !router
+    )
+      return;
+    event.preventDefault();
+    void router.navigate({ href: newest.route });
+  };
+  const windowControlClass =
+    'inline-flex min-h-11 min-w-11 max-w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-start whitespace-normal text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
   return (
     <article className="min-w-0 max-w-4xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-2">
-        <PageHeading>{m.library_my_logs_heading()}</PageHeading>
+        <PageHeading ref={listHeading} tabIndex={-1}>
+          {m.library_my_logs_heading()}
+        </PageHeading>
         <p className="text-muted-foreground">{m.library_my_logs_description()}</p>
       </header>
       {page.state === 'invalid-position' ? (
         <div className="space-y-3">
           <p role="alert">{m.library_my_logs_invalid_position()}</p>
           <a
-            href={`/${getLocale()}/library/logs`}
+            href={newest.link}
+            onClick={openNewest}
             className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded px-3 py-2 text-start whitespace-normal text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {m.library_my_logs_newest()}
@@ -288,35 +439,34 @@ export function MyLogsPageView({
           )}
         </>
       )}
-      {(page.state === 'loaded' && (page.next || page.restarted)) || cursor ? (
-        <div className="flex min-w-0 flex-wrap items-start gap-3">
-          {page.state === 'loaded' && page.next ? (
-            <Exposure operation="published_log.list">
-              <Link
-                to="/library/logs"
-                search={{ cursor: page.next }}
-                onClick={(event) => {
-                  if (origin && !origin.isCurrent()) event.preventDefault();
-                }}
-                className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-lg border border-border px-4 py-2 text-start whitespace-normal text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      {canPrevious || canNewest || canNext ? (
+        <Exposure operation="published_log.list">
+          <nav aria-label={m.library_logs_heading()} className="flex min-w-0 flex-wrap items-start gap-2">
+            {canPrevious ? (
+              <a
+                href={addressFor(previousCursor).link}
+                className={windowControlClass}
+                onClick={(event) => move('previous', previousCursor, event)}
               >
-                {m.library_logs_more()}
-              </Link>
-            </Exposure>
-          ) : null}
-          {cursor || (page.state === 'loaded' && page.restarted) ? (
-            <Link
-              to="/library/logs"
-              search={{}}
-              onClick={(event) => {
-                if (origin && !origin.isCurrent()) event.preventDefault();
-              }}
-              className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded px-3 py-2 text-start whitespace-normal text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {m.library_my_logs_newest()}
-            </Link>
-          ) : null}
-        </div>
+                {m.library_my_logs_previous()}
+              </a>
+            ) : null}
+            {canNewest ? (
+              <a href={newest.link} className={windowControlClass} onClick={(event) => move('newest', null, event)}>
+                {m.library_my_logs_newest()}
+              </a>
+            ) : null}
+            {canNext ? (
+              <a
+                href={addressFor(admittedNext).link}
+                className={windowControlClass}
+                onClick={(event) => move('next', admittedNext, event)}
+              >
+                {m.library_my_logs_next()}
+              </a>
+            ) : null}
+          </nav>
+        </Exposure>
       ) : null}
     </article>
   );
