@@ -200,7 +200,7 @@ test('generation restart keeps the original Source proof through lost observatio
     expect(completed.status).toBe('complete');
     if (completed.status !== 'complete') throw new Error(completed.reason);
     expect(readerBlocked).toBe(true);
-    expect(completed.publication).toEqual(original);
+    expect(completed.publication).toEqual(original!);
     expect(completed.observation.changed.length).toBeGreaterThan(0);
     expect((await subjectGenerations(search, prefix)).active).toBe(2);
     const restarted = open();
