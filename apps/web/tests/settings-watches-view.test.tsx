@@ -315,11 +315,11 @@ test('a disclosed later-page visit returns to its exact current window without s
     await act(async () => link('Later thread').click());
     await act(async () => button(m.settings_profile_leave()).click());
     expect(host.textContent).toContain('Thread target');
-    expect((window.history.state as Record<string, unknown>).__rezicsSettingsWatchReturn).toBeDefined();
     await act(async () => {
       await router.history.back();
     });
     expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
+    expect((window.history.state as Record<string, unknown>).__rezicsSettingsWatchReturn).toBeUndefined();
 
     expect(host.textContent).toContain(m.settings_watches_returned());
     expect(requests.at(-1)).toEqual({ kind: 'thread', cursor: 'later-window' });
