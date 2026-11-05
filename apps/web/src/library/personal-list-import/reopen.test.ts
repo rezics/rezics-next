@@ -212,15 +212,16 @@ test('reopen reconciles deliberate zero votes and restores acknowledged score re
 });
 
 test('journey propagates internal defects and releases busy state', async () => {
-  const error = new Error('internal defect');
-  const { journey } = setup([], {
-    page: async () => {
-      throw error;
-    },
-  });
-  await expect(journey.reopen(address)).rejects.toBe(error);
-  expect(journey.snapshot().busy).toBe(false);
-  expect(journey.snapshot().retryCommand).toBeNull();
+  for (const error of [new Error('internal defect'), new TypeError('internal defect')]) {
+    const { journey } = setup([], {
+      page: async () => {
+        throw error;
+      },
+    });
+    await expect(journey.reopen(address)).rejects.toBe(error);
+    expect(journey.snapshot().busy).toBe(false);
+    expect(journey.snapshot().retryCommand).toBeNull();
+  }
 });
 
 test('review keeps an explicit unmatched target selectable only while native readback discloses it', async () => {
