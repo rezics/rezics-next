@@ -182,7 +182,8 @@ test('viewer exposure retires each mounted reader observation without leaking or
       Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
     );
 
-    // Public preparation remains session-free and supplies the public SSR preview from its existing cache.
+    // Public preparation remains session-free and supplies the current public exposure result.
+    client.setQueryData(['exposure', 'anonymous'], { state: 'ready', admitted: publicGroups });
     await prepareExposure(client);
     expect(credentialReads).toBe(0);
     expect(nativeReads).toHaveLength(0);
