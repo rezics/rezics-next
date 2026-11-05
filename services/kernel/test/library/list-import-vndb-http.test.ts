@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
+import { seedShowcasePersonalList } from '../../../importer/src/showcase-personal-list.ts';
+import { ShowcaseJournal } from '../../../importer/src/showcase-publication.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -13,7 +16,7 @@ import { subjectTarget } from '../../src/semantic/subject.ts';
 import { partitionOf } from '../../src/route/route.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
-let f: NativeProfileFixture, matched: string;
+let f: NativeProfileFixture, matched: string, producerBearer: string;
 const vnId = `v${Date.now()}${Math.floor(Math.random() * 100000)}`;
 const base = '/v1/libraryImports/vndb';
 const xml = (rows: string, extra = '') =>
@@ -31,6 +34,7 @@ const apply = (id: string, rows: { ordinal: number; reviewId: string }[]) =>
 beforeAll(async () => {
   f = await createProfileEntryFixture({ gameUnits: ['minute', 'episode'] });
   const producer = await f.identity(['subject:batch_write', 'subject:create', 'subject:read']);
+  producerBearer = producer.bearer;
   await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
     { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30000) },
     {
@@ -421,7 +425,29 @@ async function sameHomeScoreCaller() {
         [scorer.actor.accountId, id],
       )
     ).rows[0].score;
-  return { ...scorer, target, send, votes, service, scoreReview, stored };
+  async function importUpload(source: string) {
+    const journal = new ShowcaseJournal(':memory:');
+    const client = createKernelClient('http://kernel.test', {
+      headers: { authorization: `Bearer ${scorer.bearer}` },
+      fetch: ((input, init) => f.handle(new Request(input, init))) as typeof fetch,
+    });
+    try {
+      const input = {
+        client,
+        journal,
+        xml: source,
+        identity: { origin: 'http://kernel.test', actor: scorer.actor, credential: { keyId: 'native-score-caller' } },
+      };
+      const result = await seedShowcasePersonalList(input);
+      expect(result.state).toBe('uploaded');
+      expect(await seedShowcasePersonalList(input)).toEqual(result);
+      if (result.state !== 'uploaded') throw new Error(result.code);
+      return result;
+    } finally {
+      journal.close();
+    }
+  }
+  return { ...scorer, target, send, votes, service, scoreReview, stored, importUpload };
 }
 
 test('VNDB explicit unmatched score choice commits chosen units, zero and clear with counted current readback and independent Entry state', async () => {
@@ -430,7 +456,8 @@ test('VNDB explicit unmatched score choice commits chosen units, zero and clear 
     vn('v999999999991', '<vote>7.3</vote>'),
     '<reviews><review id="r1"><text>private</text></review></reviews>',
   );
-  const { uploadId } = await c.send('POST', base + ':preview', { xml: source });
+  const { uploadId, rows } = await c.importUpload(source);
+  expect(rows).toBe(2);
   const page = await c.send('GET', `${base}/${uploadId}`);
   expect(page.rows[0].match.status).toBe('unmatched');
   expect(page.rows[0].fields.score).toEqual({
@@ -617,7 +644,7 @@ test('lost score acknowledgements reconcile the original credential and exact na
 
 test('an original score intent cannot admit a fresh effect after source change, cancellation, expiry or removal', async () => {
   const c = await sameHomeScoreCaller();
-  for (const change of ['source', 'review', 'own-vote', 'question', 'cancel', 'expire', 'remove']) {
+  for (const change of ['source', 'review', 'match', 'own-vote', 'question', 'meaning', 'cancel', 'expire', 'remove']) {
     const { uploadId } = await c.send('POST', base + ':preview', { xml: xml(vn('v999999999994', '<vote>7.3</vote>')) });
     const chosen = await c.scoreReview(uploadId, 14);
     await expect(
@@ -638,6 +665,40 @@ test('an original score intent cannot admit a fresh effect after source change, 
         "UPDATE library.vndb_import SET decisions=jsonb_set(decisions,'{0,score,sourceDigest}',to_jsonb(repeat('f',64))) WHERE account_id=$1 AND upload_id=$2",
         [c.actor.accountId, uploadId],
       );
+    if (change === 'match') {
+      const result = await json(
+        'POST',
+        '/v1/subjects:batchWrite',
+        {
+          commands: [
+            {
+              op: 'create',
+              key: entryKey(),
+              source: {
+                source: 'vndb',
+                external_id: externalId,
+                record_revision: '1',
+                digest: 'a'.repeat(64),
+                converter_revision: 'vndb@1',
+                field_group: 'facts',
+              },
+              subject: { type: 'ex:Child', labels: { en: 'New provider match' } },
+            },
+          ],
+        },
+        producerBearer,
+      );
+      expect(result.results[0].status).toBe(201);
+    }
+    const originalMeaning =
+      change === 'meaning'
+        ? (await f.pool.query('SELECT meaning FROM rating.question WHERE id=$1', [STANDARD_QUESTION_ID])).rows[0]
+            .meaning
+        : null;
+    if (change === 'meaning')
+      await f.pool.query("UPDATE rating.question SET meaning=meaning || ' changed' WHERE id=$1", [
+        STANDARD_QUESTION_ID,
+      ]);
     if (change === 'own-vote')
       await c.votes.putVoteOutcome(
         c.actor,
@@ -664,6 +725,11 @@ test('an original score intent cannot admit a fresh effect after source change, 
     } finally {
       if (change === 'question')
         await f.pool.query('UPDATE rating.question SET revision=revision-1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+      if (change === 'meaning')
+        await f.pool.query('UPDATE rating.question SET meaning=$2 WHERE id=$1', [
+          STANDARD_QUESTION_ID,
+          originalMeaning,
+        ]);
       if (change !== 'remove') await c.send('DELETE', `${base}/${uploadId}`);
     }
   }
