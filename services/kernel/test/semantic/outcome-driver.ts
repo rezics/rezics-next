@@ -526,8 +526,28 @@ async function startDriver(
         },
         { 'Idempotency-Key': key() },
       );
-      if (response.status !== 201)
-        throw new Error(`Grant administration failed: ${response.status}: ${JSON.stringify(response.body)}`);
+      if (response.status !== 201) {
+        // Per-action outcomes show which governed action Access refuses for this grantor and subject.
+        const single: Record<string, number> = {};
+        for (const action of actions) {
+          const probe = await send(
+            grantor,
+            'POST',
+            '/v1/grants',
+            {
+              resource: { route, id: resourceId },
+              subject: { kind: 'account', id: account.accountId },
+              actions: [action],
+              valid: '(,)',
+            },
+            { 'Idempotency-Key': key() },
+          );
+          single[action] = probe.status;
+        }
+        throw new Error(
+          `Grant administration failed: ${response.status}: ${JSON.stringify(response.body)}; single actions: ${JSON.stringify(single)}`,
+        );
+      }
     }
 
     await grantAccount(accounts.editor, ['subject:create', 'statement:propose', 'context:create']);

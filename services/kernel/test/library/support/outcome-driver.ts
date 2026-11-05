@@ -648,10 +648,21 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
         workerFailure ??= `executor exited ${code}: ${diagnostics || '(no output)'}`;
         return code;
       });
+      // A worker that never reports readiness would hold this process's Auth host until the hook timeout. Bound the
+      // wait, stop the child this call started, and report what it printed so the failure names the stalled step.
+      let stallTimer: ReturnType<typeof setTimeout> | undefined;
+      const stalled = new Promise<{ ready: false; code: 'stalled' }>((resolveStalled) => {
+        stallTimer = setTimeout(() => resolveStalled({ ready: false, code: 'stalled' }), 150_000);
+      });
       const outcome = await Promise.race([
         readiness.then(() => ({ ready: true as const })),
         exited.then((code) => ({ ready: false as const, code })),
-      ]);
+        stalled,
+      ]).finally(() => clearTimeout(stallTimer));
+      if (!outcome.ready && outcome.code === 'stalled') {
+        running.kill('SIGKILL');
+        throw new Error(`Production library executor reported no readiness; output so far: ${diagnostics.slice(-4000)}`);
+      }
       if (!outcome.ready) throw new Error(`Production library executor exited ${outcome.code}: ${workerFailure ?? ''}`);
       for (const queue of await workClient!.listQueues()) await queue.setMinPollingIntervalMs(5);
       childHeld = false;
