@@ -1476,7 +1476,7 @@ function SummaryContent({
   )
     return null;
   const returnAddress = (focus: 'reading' | 'evidence' = 'reading') => {
-    if (!selectedChoice || !target) return undefined;
+    if (!selectedChoice || !target || !selectedDocument) return undefined;
     const href = subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href;
     const url = new URL(href, 'https://rezics.invalid');
     if (value.realm) url.searchParams.set('realm', value.realm);

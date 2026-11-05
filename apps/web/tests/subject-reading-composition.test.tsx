@@ -53,11 +53,12 @@ test('The default Subject reader does not describe admitted incoming editions as
   // The recorded native default composition, with the same owner leaves as the ordinary route.
   const page = structuredClone(recordedPage) as unknown as SubjectPageData;
   const sourcePlan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
-  const subjectKey = Object.entries(sourcePlan.reads).find(
-    ([, read]) => read.kind === 'subject' && read.id === page.subject,
-  )?.[0];
-  if (!subjectKey) throw new Error('Expected the composition Subject read.');
-  (page.reads[subjectKey]!.body as { summary?: unknown }).summary = structuredClone(recordedSubject.summary);
+  const subjectKeys = Object.entries(sourcePlan.reads)
+    .filter(([, read]) => read.kind === 'subject' && read.id === page.subject)
+    .map(([key]) => key);
+  if (subjectKeys.length === 0) throw new Error('Expected the composition Subject read.');
+  for (const key of subjectKeys)
+    (page.reads[key]!.body as { summary?: unknown }).summary = structuredClone(recordedSubject.summary);
   const recorded = await loadSubjectPage(
     createKernelClient('https://kernel.invalid', {
       fetch: createRecordedKernelFetch({ 'subject-page': page as never }),
