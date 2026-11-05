@@ -51,6 +51,7 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
+type TestRouter = ReturnType<typeof createRouter>;
 const { Route } = await import('../src/routes/search');
 const { sessionQuery } = await import('../src/session/query');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -103,7 +104,17 @@ async function mount(path: string) {
   return router;
 }
 
-async function replaceValue(article: Element, value: string) {
+function nextRouteResolution(router: TestRouter): Promise<void> {
+  return new Promise((resolve) => {
+    let unsubscribe: () => void = () => {};
+    unsubscribe = router.subscribe('onResolved', () => {
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
+async function replaceValue(router: TestRouter, article: Element, value: string) {
   const input = article.querySelector<HTMLTextAreaElement>('textarea')!;
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!;
   await act(async () => {
@@ -113,7 +124,9 @@ async function replaceValue(article: Element, value: string) {
   const apply = [...article.querySelectorAll('button')].find(
     (button) => button.textContent === m.search_input_recovery_apply(),
   )!;
+  const resolved = nextRouteResolution(router);
   await act(async () => user.click(apply));
+  await act(async () => resolved);
   await act(async () => {
     await Promise.resolve();
   });
@@ -122,12 +135,14 @@ async function replaceValue(article: Element, value: string) {
   });
 }
 
-async function removeIssue(key: string) {
+async function removeIssue(router: TestRouter, key: string) {
   const article = host.querySelector(`[data-search-input-key="${key}"]`)!;
   const button = [...article.querySelectorAll('button')].find(
     (candidate) => candidate.textContent === m.search_input_restart_first_window(),
   )!;
+  const resolved = nextRouteResolution(router);
   await act(async () => user.click(button));
+  await act(async () => resolved);
   await act(async () => {
     await Promise.resolve();
   });
@@ -187,7 +202,7 @@ test('the mounted Search route retains multiple errors and a protected filter th
   expect(document.activeElement).not.toBe(host.querySelector('[data-search-input-first] textarea'));
 
   const languageIssue = host.querySelector('[data-search-input-key="language"][data-search-input-occurrence="1"]')!;
-  await replaceValue(languageIssue, 'fr');
+  await replaceValue(router, languageIssue, 'fr');
   expect(reads).toHaveLength(0);
   expect(router.state.location.search.language).toEqual(['ja', 'fr', 'zh-Hant']);
   expect(router.state.location.search.kinds).toEqual(['schema:Book', 'catalogue:Atlas']);
@@ -212,13 +227,17 @@ test('the mounted Search route retains multiple errors and a protected filter th
   expect(document.activeElement !== returnedLanguage).toBe(true);
   expect(reads).toHaveLength(0);
 
-  await removeIssue('cursor');
+  await removeIssue(router, 'cursor');
   const languageAgain = host.querySelector('[data-search-input-key="language"][data-search-input-occurrence="1"]')!;
-  await replaceValue(languageAgain, 'zh-CN');
+  await replaceValue(router, languageAgain, 'zh-CN');
   const orderIssue = host.querySelector('[data-search-input-key="sort"]')!;
-  await replaceValue(orderIssue, 'rating');
+  await replaceValue(router, orderIssue, 'rating');
   const conditionIssue = host.querySelector('[data-search-input-key="condition"]')!;
-  await replaceValue(conditionIssue, JSON.stringify({ statement: { property: 'schema:genre', in: ['mystery'] } }));
+  await replaceValue(
+    router,
+    conditionIssue,
+    JSON.stringify({ statement: { property: 'schema:genre', in: ['mystery'] } }),
+  );
   expect(
     Array.from(host.querySelectorAll<HTMLElement>('[data-search-input-key]'), (element) => element.dataset.searchInputKey),
   ).toEqual([]);
