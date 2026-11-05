@@ -69,40 +69,50 @@ function address(value: unknown) {
   };
 }
 
-export async function exploreContext(locale: string, expectedReader: string | null) {
+export async function exploreContext(locale: string, expectedReader: string | null, signal?: AbortSignal) {
   setResponseHeader('cache-control', 'private, no-store');
   const [{ env }, { prepareSession, sessionSubject, viewerCredential }] = await Promise.all([
     import('cloudflare:workers'),
     import('../../../session/request'),
   ]);
+  signal?.throwIfAborted();
   const request = getRequest();
   await prepareSession(request, env as import('../../../session/client').SessionEnv);
+  signal?.throwIfAborted();
   const reader = sessionSubject(request);
   const authorization = viewerCredential(request) ?? undefined;
   if (expectedReader === null ? !!reader || !!authorization : reader !== expectedReader || !authorization) return null;
   const { kernelClient } = await import('../../../kernel/client');
+  signal?.throwIfAborted();
   return { client: kernelClient(locale), authorization };
 }
 
 export const readSubjectGraphBrowser = createServerFn({ method: 'POST', strict: false })
   .validator(address)
   .handler(async ({ data }): Promise<GraphRead> => {
-    const prepared = await exploreContext(data.locale, data.expectedReader);
+    const signal = getRequest().signal;
+    signal.throwIfAborted();
+    const prepared = await exploreContext(data.locale, data.expectedReader, signal);
+    signal.throwIfAborted();
     if (!prepared) return { ok: false, reason: 'denied' };
     const { fetchGuideRelease } = await import('../../catalogue/definition-guide');
+    signal.throwIfAborted();
     const headers = data.expectedReader && prepared.authorization ? { authorization: prepared.authorization } : {};
     let release;
     try {
-      release = await fetchGuideRelease(prepared.client, undefined, headers);
+      release = await fetchGuideRelease(prepared.client, undefined, headers, signal);
     } catch {
+      signal.throwIfAborted();
       return { ok: false, reason: 'unavailable' };
     }
+    signal.throwIfAborted();
     const selection: GraphSelection | undefined = data.edge
       ? data.edge
       : data.node
         ? { kind: 'node', id: data.node }
         : undefined;
     return readSubjectGraphPage(prepared.client, prepared.authorization, release, data.id, data.locale, {
+      signal,
       property: data.property,
       direction: data.direction,
       depth: data.depth,

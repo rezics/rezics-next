@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { act, createElement as h, useState, type ComponentProps, type ReactNode } from 'react';
+import { act, createElement as h, StrictMode, useState, type ComponentProps, type ReactNode } from 'react';
 import type { GraphBrowserRouteState, GraphSelection, GraphRead } from '../src/features/pages/graph-browser';
-import type { GraphBrowserTransport } from '../src/features/pages/graph-browser/view';
+import type { GraphBrowserTransport } from '../src/features/pages/graph-browser';
 
 const anchor = '00000000-0000-4000-8000-00000000a001';
 const first = '00000000-0000-4000-8000-00000000a002';
@@ -150,7 +150,7 @@ async function mounted() {
     return h(GraphBrowserPage, { ...props, ...route, onNavigate: setRoute });
   }
   async function show(node: ReactNode) {
-    await act(async () => root.render(node));
+    await act(async () => root.render(h(StrictMode, null, node)));
   }
   async function click(button: HTMLButtonElement | null) {
     if (!button) throw new Error('Expected a graph button');
@@ -178,8 +178,10 @@ test('filter, reversed selections and one native truncated expansion keep only t
   const firstRead = deferred<GraphRead>();
   const secondRead = deferred<GraphRead>();
   const calls: ReadInput[] = [];
+  const signals: AbortSignal[] = [];
   const transport: GraphBrowserTransport = {
-    read: (query) => {
+    read: (query, signal) => {
+      signals.push(signal);
       calls.push({ ...query });
       if (query.expansion) return Promise.resolve(reading(query, { expanded: true, session: 'expanded-session' }));
       if (query.property === otherProperty && !query.node && !query.edge) return Promise.resolve(reading(query));
@@ -214,6 +216,8 @@ test('filter, reversed selections and one native truncated expansion keep only t
     await ui.click(ui.host.querySelector<HTMLButtonElement>(`button[data-graph-selection="node:${first}"]`));
     await ui.click(ui.host.querySelector<HTMLButtonElement>(`button[data-graph-selection="node:${second}"]`));
     expect(calls.slice(-2).map((call) => call.node)).toEqual([first, second]);
+    expect(signals.at(-2)?.aborted).toBe(true);
+    expect(signals.at(-1)?.aborted).toBe(false);
     await act(async () => {
       secondRead.resolve(
         reading(
@@ -250,6 +254,7 @@ test('filter, reversed selections and one native truncated expansion keep only t
 test('a failed selection offers an exact explicit retry', async () => {
   const ui = await mounted();
   const calls: ReadInput[] = [];
+  const signals: AbortSignal[] = [];
   const transport: GraphBrowserTransport = {
     read: async (query) => {
       calls.push({ ...query });
@@ -280,6 +285,8 @@ test('a failed selection offers an exact explicit retry', async () => {
     await ui.flush();
     expect(calls).toHaveLength(2);
     expect(calls[1]).toEqual(calls[0]);
+    expect(signals[1]).not.toBe(signals[0]);
+    expect(signals[0]?.aborted).toBe(true);
     expect(ui.host.textContent).toContain('First selected');
   } finally {
     await ui.close();
@@ -369,11 +376,17 @@ test('companion and correction links return only exact public selection state an
   }
 });
 
-test('anchor, locale, reader and transport replacement retire pending results and session tokens', async () => {
+test.each(['success', 'denied'] as const)('anchor, locale, reader and transport replacement retire pending %s and session tokens', async (lateResult) => {
   const ui = await mounted();
   const late = deferred<GraphRead>();
+  const firstCalls: ReadInput[] = [];
+  const signals: AbortSignal[] = [];
   const firstTransport: GraphBrowserTransport = {
-    read: (query) => (query.node ? late.promise : Promise.resolve(reading(query))),
+    read: (query, signal) => {
+      firstCalls.push({ ...query });
+      signals.push(signal);
+      return query.node && firstCalls.length === 1 ? late.promise : Promise.resolve(reading(query, { session: 'fresh-return-session' }));
+    },
   };
   const replacementCalls: ReadInput[] = [];
   const replacement: GraphBrowserTransport = {
@@ -407,6 +420,7 @@ test('anchor, locale, reader and transport replacement retire pending results an
     await ui.click(ui.host.querySelector<HTMLButtonElement>(`button[data-graph-selection="node:${first}"]`));
     await ui.show(page({ id: second, locale: 'en', reader: 'reader-one', transport: replacement }));
     await ui.flush();
+    expect(signals[0]?.aborted).toBe(true);
     expect(replacementCalls).toHaveLength(1);
     expect(replacementCalls[0]?.session).toBeUndefined();
     expect(ui.host.textContent).toContain('Anchor');
@@ -423,15 +437,21 @@ test('anchor, locale, reader and transport replacement retire pending results an
     };
     await ui.show(page({ id: second, locale: 'ja', reader: 'reader-two', transport: thirdTransport }));
     await ui.flush();
+    await ui.show(page({ id: anchor, locale: 'en', reader: 'reader-one', transport: firstTransport }));
+    await ui.flush();
+    expect(firstCalls.at(-1)?.session).toBeUndefined();
     await act(async () => {
-      late.resolve(reading({ property, direction: 'both', depth: 1, node: first }, { session: 'late-session' }));
+      late.resolve(lateResult === 'denied' ? { ok: false, reason: 'denied', clearPrivate: true } : reading({ property, direction: 'both', depth: 1, node: first }, { session: 'late-session' }));
       await late.promise;
     });
     expect(ui.host.textContent).not.toContain('First selected');
     await ui.click(ui.host.querySelector<HTMLButtonElement>(`button[data-graph-selection="node:${first}"]`));
     await ui.flush();
     expect(replacementCalls.length).toBeGreaterThanOrEqual(4);
-    expect(replacementCalls.at(-1)?.session).toBe('third-session');
+    expect(firstCalls.at(-1)?.session).toBe('fresh-return-session');
+    expect(ui.host.textContent).toContain('First selected');
+    await ui.show(null);
+    expect(signals.at(-1)?.aborted).toBe(true);
   } finally {
     await ui.close();
   }

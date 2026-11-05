@@ -85,6 +85,22 @@ export type GraphRead =
       session?: string | undefined;
     };
 
+export type GraphBrowserTransport = {
+  read: (query: {
+    property?: string | readonly string[] | undefined;
+    direction?: string | undefined;
+    depth?: number | undefined;
+    node?: string | undefined;
+    edge?: string | undefined;
+    from?: string | undefined;
+    to?: string | undefined;
+    edgeProperty?: string | undefined;
+    expansion?: GraphTruncation | undefined;
+    session?: string | undefined;
+  }, signal: AbortSignal) => Promise<GraphRead>;
+};
+
+
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type NativeGraph = Extract<NonNullable<Awaited<ReturnType<Endpoint['graph']['get']>>['data']>, { nodes: unknown[] }>;
 type NativeCounts = Extract<
@@ -254,10 +270,13 @@ async function readDetail(
   selection: GraphSelection | undefined,
   headers: Record<string, string>,
   cost: ExploreCost,
+  signal?: AbortSignal,
 ): Promise<{ detail: GraphDetail | null; session?: string | undefined }> {
+  signal?.throwIfAborted();
   if (!selection) return { detail: null };
   const id = selection.kind === 'node' ? selection.id : selection.from;
-  const result = await client.subjects({ id }).get({ headers });
+  const result = await client.subjects({ id }).get({ headers, fetch: { signal } });
+  signal?.throwIfAborted();
   recordCall(cost, `GET /v1/subjects/${id}`, 1, result.data ?? null);
   if (result.status !== 200 || !result.data) return { detail: null };
   const statement = selection.kind === 'edge' ? statementOf(result.data, selection.statement) : undefined;
@@ -359,18 +378,23 @@ export async function readSubjectGraphPage(
     depth?: string | number | undefined;
     selection?: GraphSelection | undefined;
     expansion?: GraphTruncation | undefined;
+    signal?: AbortSignal | undefined;
     graph?: GraphPage | undefined;
     session?: string | undefined;
   },
 ): Promise<GraphRead> {
   const cost = emptyCost();
+  const signal = input.signal;
   try {
+    signal?.throwIfAborted();
     const headers = headersOf(authorization, input.session);
-    const current = await client.subjects({ id }).get({ headers });
+    const current = await client.subjects({ id }).get({ headers, fetch: { signal } });
+    signal?.throwIfAborted();
     recordCall(cost, `GET /v1/subjects/${id}`, 1, current.data ?? null);
     if (current.status !== 200 || !current.data) return candidateFailure(current.status);
     if (current.data.subject.id !== id) return candidateFailure(400);
-    const counts = await client.subjects({ id }).counts.get({ headers });
+    const counts = await client.subjects({ id }).counts.get({ headers, fetch: { signal } });
+    signal?.throwIfAborted();
     recordCall(
       cost,
       `GET /v1/subjects/${id}/counts`,
@@ -399,7 +423,9 @@ export async function readSubjectGraphPage(
           limit: GRAPH_LIMIT,
         },
         headers: headersOf(authorization, session),
+        fetch: { signal },
       });
+      signal?.throwIfAborted();
       recordCall(
         cost,
         `GET /v1/subjects/${id}/graph`,
@@ -424,11 +450,14 @@ export async function readSubjectGraphPage(
           ? await client.subjects({ id: expansion.node }).relations.get({
               query: pageQuery,
               headers: headersOf(authorization, session),
+              fetch: { signal },
             })
           : await client.subjects({ id: expansion.node }).links.get({
               query: pageQuery,
               headers: headersOf(authorization, session),
+              fetch: { signal },
             });
+      signal?.throwIfAborted();
       const path =
         expansion.direction === 'out'
           ? `GET /v1/subjects/${expansion.node}/relations`
@@ -464,7 +493,8 @@ export async function readSubjectGraphPage(
         ? requestedSelection
         : undefined;
     if (requestedSelection && !selected) return { ok: false, reason: 'stale' };
-    const inspected = await readDetail(client, release, locale, selected, headersOf(authorization, session), cost);
+    const inspected = await readDetail(client, release, locale, selected, headersOf(authorization, session), cost, signal);
+    signal?.throwIfAborted();
     if (
       requestedSelection?.kind === 'edge' &&
       (!inspected.detail?.statement ||
@@ -488,6 +518,7 @@ export async function readSubjectGraphPage(
       ...(token ? { session: token } : {}),
     };
   } catch {
+    signal?.throwIfAborted();
     return candidateFailure(503);
   }
 }

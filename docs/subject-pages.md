@@ -2409,6 +2409,10 @@ selected node/edge identifiers belong in the route. Locale, session epoch, read 
 source-page change retire obsolete nodes, continuations and pending results. Redirects, stale cursors, concealed
 endpoints and an unavailable graph never leak previous labels.
 
+Decision: each graph read owns cancellation through the server request and every native stage; replacement or source
+retirement aborts it and prevents later stages, while result fences reject ignored aborts. Retry preserves the exact
+selection or expansion and revalidates native admission; session tokens belong only to the mounted source.
+
 Selecting a node issues at most two explicit native reads (the selected subject, and one quotation, concept or music
 companion page). Correction uses the existing facts, relation and authored-document editors and returns to the same
 bounded exploration address.
