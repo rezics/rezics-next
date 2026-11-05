@@ -1917,6 +1917,11 @@ The reader can select up to twenty Realm populations across pages. The selected 
 complete selection in one call; it never silently truncates it or includes Global beyond the native twenty limit.
 Removing a selection retires its held response and callbacks. Page transitions and removal place keyboard focus at
 the next useful field or legend; native labelled checkboxes, shared fields and wrapping actions support phone use.
+Directory and comparison queries carry cancellation through the BFF Request to native reads. Each comparison's
+aggregate and bounded Realm label reads share one signal; retirement prevents later stages and aborts started
+siblings best effort. Superseding a comparison preserves the observed directory window and public sources.
+Cancellation is not a cached failure or automatic retry; deliberate retry reads only the current selection.
+Response and visit fences still apply when native transport ignores abort; vote writes retain uncertain settlement.
 
 Private directory and selection readers live only in `subject-rating-populations.ts`, its actions and its view.
 Each BFF read prepares the actual Request once, derives actual reader provenance from its credential/subject and

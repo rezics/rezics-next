@@ -29,8 +29,8 @@ import {
 import { admitPopulationEnvelope } from './population-envelope-admission';
 
 type Session = ReturnType<typeof useSession>;
-export type PopulationTransport = (input: PopulationInput) => Promise<PopulationEnvelope>;
-const transport: PopulationTransport = (data) => readSubjectRatingPopulations({ data });
+export type PopulationTransport = (input: PopulationInput, signal?: AbortSignal) => Promise<PopulationEnvelope>;
+const transport: PopulationTransport = (data, signal) => readSubjectRatingPopulations({ data, signal });
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
 let serial = 0;
@@ -316,7 +316,7 @@ function PopulationVisit({
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       enabled: current() && (kind === 'directory' || selected.length > 0),
-      queryFn: async () => {
+      queryFn: async ({ signal }: { signal: AbortSignal }) => {
         const version = registry.version(hash);
         if (!matches()) throw new Error('Rating population visit retired');
         if (kind === 'directory' && progress.current.stopped) throw new Error('Rating population traversal stopped');
@@ -331,7 +331,8 @@ function PopulationVisit({
               : {}
             : { selected }),
         };
-        const value = await read(input);
+        const value = await read(input, signal);
+        signal.throwIfAborted();
         if (!matches() || registry.version(hash) !== version) throw new Error('Rating population response retired');
         const admitted = admitPopulationEnvelope(value, input);
         if (
