@@ -15,7 +15,7 @@ Registration, not aliases, dump fields or caller descriptors, sets source licenc
 
 The importer uses registered converter revisions: Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6 and cross-media-entities cross-media-entities@15. Selected Bangumi entities compose cross-media-entities@15+bangumi@15. Vocabulary revisions belong to [conversion](../../packages/conversion/README.md#package-api).
 
-A configured source alias and exact external_id form the durable record tuple. Provider identity and converter revision come from registered code, not the source body. An alias binds to one normalized API origin before run or network effects; the same source state cannot silently move to another destination.
+Configured alias and exact external_id form the durable tuple; registered code owns identity/revision. Alias binds to one normalized API origin before run/network effects; source state cannot move destinations.
 
 A run stages one complete input generation, validates its source records and mass-disappearance threshold, then seals it before public metadata or semantic writes. Records and their owned candidates are reconciled through the ordinary API. Changed input creates new source-backed proposals; vanished source facts may retract only that importer's owned candidates. Independent community subjects and adoption are not deleted or overwritten. Missing, malformed, unsupported and unknown values remain distinct omissions; one omission does not suppress independent valid fields.
 

@@ -1,6 +1,6 @@
 # Imports capability acceptance
 
-This file states current requirements for the [Imports Goal](imports.md). Source formats, licences, converter mappings, commands, recovery and costs belong to the [conversion](../../packages/conversion/README.md) and [importer](../../services/importer/README.md) contracts. Semantic proposal, acceptance, adoption and Context return belong to [Semantic](../../services/kernel/src/semantic/README.md); media rights and takedown belong to [Content](../../services/kernel/src/content/README.md).
+Current requirements for the [Imports Goal](imports.md). Source formats, licences, mappings, commands, recovery and costs: [conversion](../../packages/conversion/README.md) and [importer](../../services/importer/README.md). Semantic owns proposal, acceptance, adoption and Context return; [Content](../../services/kernel/src/content/README.md) owns media rights and takedown.
 
 Revision choice: current claims use checked-in exports; the reviewed Person-career range keeps its original revision identities as history.
 
