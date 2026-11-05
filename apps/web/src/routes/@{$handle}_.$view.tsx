@@ -9,6 +9,7 @@ import { agentPath } from '../features/pages/agent';
 import { agentViewQuery } from '../features/pages/agent-queries';
 import { useProfileReading } from '../accounts/public-profile/reader-presentation/adapter';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
+import { CollectionWindowsContext, useCollectionWindows } from '../accounts/public-profile/collection-windows/host';
 import { PublicProfilePage } from '../accounts/public-profile/page';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -41,6 +42,8 @@ const viewLabel = {
 
 export const Route = createFileRoute('/@{$handle}_/$view')({
   staticData: { publicCache: true },
+  // Cursor replacements retain the local visit; account/view/locale changes retire it in the receiver.
+  remountDeps: () => null,
   validateSearch: (search: Record<string, unknown>): { cursor?: string } => ({
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
   }),
@@ -102,14 +105,21 @@ function AgentViewRoute() {
   const { cursor } = Route.useSearch();
   const locale = getLocale();
   const router = useRouter();
-  const { searchStr } = useLocation();
-  const { data } = useSuspenseQuery(agentViewQuery(handle, locale, view, cursor, searchStr));
+  const { searchStr, hash } = useLocation();
+  const { data, dataUpdatedAt } = useSuspenseQuery(agentViewQuery(handle, locale, view, cursor, searchStr));
   const reading = useProfileReading({
     handle,
     locale,
     path: { kind: 'view', view: rawView },
     enabled: data.kind === 'page' && view !== 'realms',
     owner: data,
+  });
+  const windows = useCollectionWindows({
+    ...(data.kind === 'page' ? { page: data.page } : {}),
+    failure: data.kind === 'state' ? data.state : undefined,
+    owner: handle, revision: dataUpdatedAt, view, locale, cursor: cursor ?? null, search: searchStr, hash,
+    navigate: (href) => { void router.navigate({ href }); },
+    retry: () => { void router.invalidate(); },
   });
   if (data.kind === 'redirect') {
     throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } });
@@ -128,7 +138,8 @@ function AgentViewRoute() {
       />
     );
   return (
-    <PublicProfilePage
+    <CollectionWindowsContext.Provider value={windows}>
+    <PublicProfilePage key={cursor ?? 'first'}
       page={data.page}
       cursor={data.cursor ?? null}
       locale={locale}
@@ -149,5 +160,6 @@ function AgentViewRoute() {
       publicRealms={data.publicRealms}
       renderJsonLd={false}
     />
+    </CollectionWindowsContext.Provider>
   );
 }

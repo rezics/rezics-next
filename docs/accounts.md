@@ -117,6 +117,15 @@ and organization speaker lists respect the account's publication settings; hidin
 underlying content permissions. See [account-data.ts][account-data], [public-views.ts][public-views] and
 [Public profile by handle][access-profile].
 
+Web public Collections keeps eight admitted preceding cursors plus current in the local named-view visit,
+with one replacing BASIC window at the existing plan limit (at most 24 rows). Previous rereads an admitted
+coordinate; direct later entry invents none. First removes only cursor fields. Failed movement preserves its
+exact retry target and history; only admission commits movement, including an empty final window. Account,
+view, locale, changed public profile projection, native denial/exposure loss and disposal retire the visit
+permanently. Equivalent profile projections from rereads keep the visit. No predecessor bodies or persistent
+storage are retained. The public publication and exposure gates remain required. See the
+[receiver](../apps/web/src/accounts/public-profile/collection-windows/README.md).
+
 Web public Realm pagination keeps the current profile and query context, replacing only the opaque cursor.
 Starting again removes every cursor parameter and loads the first page; only an unavailable read offers retry.
 Web public account reads use ten-second phase deadlines through body decoding (primary/overview together,
