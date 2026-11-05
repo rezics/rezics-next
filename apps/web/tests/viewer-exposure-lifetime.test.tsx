@@ -6,13 +6,41 @@ import * as storyStart from '../.storybook/react-start';
 
 let currentRequest = new Request('https://site.test/en');
 const sessionEnv: Record<string, unknown> = {};
+let serverFunctionDepth = 0;
 
 const testStart = {
   ...storyStart,
+  createServerFn(...args: Parameters<typeof storyStart.createServerFn>) {
+    const base = storyStart.createServerFn(...args);
+    const chain = {
+      validator(next: Parameters<typeof base.validator>[0]) {
+        base.validator(next);
+        return chain;
+      },
+      handler<T extends (...args: never[]) => unknown>(handler: T): T {
+        const invoke = ((...input: never[]) => {
+          serverFunctionDepth++;
+          let result: unknown;
+          try {
+            result = handler(...input);
+          } catch (error) {
+            serverFunctionDepth--;
+            throw error;
+          }
+          return Promise.resolve(result).finally(() => {
+            serverFunctionDepth--;
+          }) as T;
+        }) as T;
+        return base.handler(invoke);
+      },
+    };
+    return chain;
+  },
   createIsomorphicFn() {
     let serverHandler: (...args: unknown[]) => unknown = () => undefined;
     let clientHandler: (...args: unknown[]) => unknown = serverHandler;
-    const invoke = (...args: unknown[]) => (typeof window === 'undefined' ? serverHandler : clientHandler)(...args);
+    const invoke = (...args: unknown[]) =>
+      (typeof window === 'undefined' || serverFunctionDepth > 0 ? serverHandler : clientHandler)(...args);
     const chain = {
       server(handler: (...args: unknown[]) => unknown) {
         serverHandler = handler;
@@ -40,7 +68,6 @@ mock.module('cloudflare:workers', () => ({
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { Exposure, operationIsAdmitted, prepareExposure, useOperation } = await import('../src/kernel/exposure');
-const { browserObservation } = await import('../src/session');
 const { sessionQuery } = await import('../src/session/query');
 
 const admitted = [
@@ -274,17 +301,6 @@ test('viewer exposure retires each mounted reader observation without leaking or
 
     immediateNative = false;
     await act(async () => render(root!, 2));
-    console.log(
-      'viewer admission trace',
-      credentialReads,
-      browserObservation(client).getSnapshot(),
-      client.getQueryCache().findAll({ queryKey: ['exposure'] }).map((query) => ({
-        key: query.queryKey,
-        status: query.state.status,
-        fetchStatus: query.state.fetchStatus,
-        data: query.state.data,
-      })),
-    );
     await until(() => nativeReads.length === 1);
     expect(credentialReads).toBe(1);
     expect(nativeReads.map(({ authorization }) => authorization)).toEqual(['Bearer native-A']);
