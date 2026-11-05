@@ -62,6 +62,8 @@ Semantic owns definitions, subject identity and shared filter semantics; Search 
 Accounts owns Access, account lifecycle and count-management evaluation; Content owns reactions/publication sources.
 Library never treats a purchase, entitlement or its own copies as permission for a protected benefit.
 
+Decision: Review the exact Entry first; confirmation uses the existing clear, and Undo requires its supplied native receipt.
+
 ## Dependencies
 
 Requires release-pinned profiles, references and redirects; ordinary Access/resource grants and durable kernel work;

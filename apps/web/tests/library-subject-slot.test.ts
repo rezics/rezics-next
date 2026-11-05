@@ -221,8 +221,16 @@ const codes = new Map<string, Grant>();
 const families = new Map<string, Family>();
 const assertions = new Set<string>();
 let counter = 0;
-let libraryEntry: null | { subjectId: string; state: string; revision: number; createdAt: string; updatedAt: string } =
-  null;
+let libraryEntry:
+  | {
+      subjectId: string;
+      state: string;
+      revision: number;
+      incarnationId?: string;
+      createdAt: string;
+      updatedAt: string;
+    }
+  | null = null;
 let members = new Set<string>();
 let releaseWrite: (() => void) | undefined;
 let writeGate: Promise<void> | undefined;
@@ -234,6 +242,7 @@ let calls: {
   body: unknown;
   key: string | null;
   authorization: string | null;
+  csrfToken: string | null;
 }[] = [];
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -272,7 +281,7 @@ const fake = Bun.serve({
   async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === '/v1/platform/exposure')
-      return json({ admitted: ['personal_library', 'reading_progress', 'collections'] });
+      return json({ admitted: ['personal_library', 'library_entry.delete', 'reading_progress', 'collections'] });
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
     const client = async (form: URLSearchParams) => {
@@ -382,6 +391,7 @@ const fake = Bun.serve({
       body,
       key: request.headers.get('idempotency-key'),
       authorization: request.headers.get('authorization'),
+      csrfToken: request.headers.get('x-csrf-token'),
     });
     if (
       writeGate &&
@@ -433,8 +443,18 @@ const fake = Bun.serve({
         );
       }
       if (request.method === 'DELETE') {
+        if (refuseEntryWrite === 'closed') {
+          refuseEntryWrite = undefined;
+          return json(problem(403, 'platform_closed'), 403);
+        }
         const revision = Number(url.searchParams.get('revision'));
-        if (!libraryEntry || revision !== libraryEntry.revision) return json(problem(409, 'conflict'), 409);
+        if (
+          !libraryEntry ||
+          revision !== libraryEntry.revision ||
+          (libraryEntry.incarnationId !== undefined &&
+            url.searchParams.get('incarnationId') !== libraryEntry.incarnationId)
+        )
+          return json(problem(409, 'conflict'), 409);
         libraryEntry = null;
         return new Response(null, { status: 204 });
       }
@@ -855,10 +875,80 @@ test(
 
       calls.length = 0;
       await pick(page, select, 'Remove from library');
+      const removalReview = slot.locator('[data-entry-removal-review]');
+      await removalReview.waitFor({ state: 'visible' });
+      expect(await removalReview.innerText()).toContain(subject.labels.en);
+      expect(await removalReview.innerText()).toContain('Paused');
+      expect(await removalReview.innerText()).toContain("only this Entry's reading state");
+      expect(calls.filter((call) => call.method === 'DELETE' || call.method === 'PUT')).toHaveLength(0);
+      await page.setViewportSize({ width: 390, height: 844 });
+      expect(await removalReview.getByRole('button', { name: 'Keep this Entry', exact: true }).isVisible()).toBe(true);
+      expect(await removalReview.getByRole('button', { name: 'Remove from library', exact: true }).isVisible()).toBe(true);
+      await page.setViewportSize({ width: 1280, height: 860 });
+      expect(
+        await removalReview
+          .getByRole('heading', { name: 'Review Entry removal', exact: true })
+          .evaluate((heading) => heading === document.activeElement),
+      ).toBe(true);
+      await removalReview.getByRole('button', { name: 'Keep this Entry', exact: true }).click();
+      expect(await select.evaluate((trigger) => trigger === document.activeElement)).toBe(true);
+      expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(0);
+
+      await pick(page, select, 'Remove from library');
+      const reopenedReview = slot.locator('[data-entry-removal-review]');
+      await reopenedReview.waitFor({ state: 'visible' });
+      expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(0);
+      await reopenedReview.getByRole('button', { name: 'Remove from library', exact: true }).click();
       await eventually(async () => libraryEntry === null && (await select.innerText()).includes('Add to library'));
       const remove = calls.find((call) => call.method === 'DELETE' && call.path === `/v1/libraryEntries/${subjectId}`)!;
+      expect(calls.filter((call) => call.method === 'DELETE')).toHaveLength(1);
       expect(remove.key).toMatch(/^[0-9a-f-]{36}$/i);
       expect(remove.query).toContain('revision=9');
+    } finally {
+      await closeContext(page.context());
+    }
+  },
+  timeout,
+);
+
+test(
+  'an uncertain removal keeps its original request for retry and reports a legacy no-receipt clear honestly',
+  async () => {
+    reset();
+    libraryEntry = {
+      subjectId,
+      state: 'planned',
+      revision: 6,
+      incarnationId: 'entry-incarnation-6',
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+    refuseEntryWrite = 'closed';
+    const { page } = await open(`/en/subjects/${subjectId}`);
+    try {
+      const slot = librarySlot(page);
+      const select = stateControl(slot);
+      await pick(page, select, 'Remove from library');
+      const review = slot.locator('[data-entry-removal-review]');
+      await review.getByRole('button', { name: 'Remove from library', exact: true }).click();
+      const retry = slot.locator('[data-entry-removal-retry]');
+      await retry.waitFor({ state: 'visible' });
+      expect(await slot.getByRole('status').innerText()).toContain('Removal is not confirmed');
+      expect(libraryEntry).toMatchObject({ state: 'planned', revision: 6, incarnationId: 'entry-incarnation-6' });
+      const first = calls.find((call) => call.method === 'DELETE' && call.path === `/v1/libraryEntries/${subjectId}`)!;
+      expect(new URLSearchParams(first.query).get('revision')).toBe('6');
+      expect(new URLSearchParams(first.query).get('incarnationId')).toBe('entry-incarnation-6');
+
+      await retry.click();
+      await eventually(async () => libraryEntry === null);
+      const removals = calls.filter((call) => call.method === 'DELETE' && call.path === `/v1/libraryEntries/${subjectId}`);
+      expect(removals).toHaveLength(2);
+      expect(removals[1]?.key).toBe(removals[0]?.key);
+      expect(removals[1]?.query).toBe(removals[0]?.query);
+      expect(removals[1]?.body).toBe(removals[0]?.body);
+      expect(removals[1]?.authorization).toBe(removals[0]?.authorization);
+      expect(removals[1]?.csrfToken).toBe(removals[0]?.csrfToken);
+      expect(await slot.getByRole('status').innerText()).toContain('No Undo receipt was supplied');
     } finally {
       await closeContext(page.context());
     }

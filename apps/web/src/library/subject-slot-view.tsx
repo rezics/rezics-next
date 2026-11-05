@@ -10,7 +10,7 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
 import { useQueryClient } from '@tanstack/react-query';
 import { Menu } from '@rezics/ui/menu';
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { SubjectLabelNotice } from './subject-labels.tsx';
@@ -37,6 +37,12 @@ import {
   type EntryStateConflictIntent,
   type ReviewedEntryState,
 } from './subject-entry-state-review/review';
+import {
+  SubjectEntryRemovalReview,
+  captureEntryRemovalReview,
+  entryRemovalReviewMatches,
+  type ReviewedEntryRemoval,
+} from './subject-entry-removal-review/review';
 import { normalizeLibraryLabelName } from './subject-label-name';
 import { subjectLabelInputIssue } from './subject-label-input.ts';
 import { SubjectLabelInput } from './subject-label-input.tsx';
@@ -314,6 +320,12 @@ function SubjectLibrarySlotView({
   const [entry, setEntry] = useState(initialEntry);
   const [entryStateLabel, setEntryStateLabel] = useState(data.entryStateLabel ?? m.library_other());
   const [entryConflict, setEntryConflict] = useState<EntryStateConflictIntent | null>(null);
+  const [removalReview, setRemovalReview] = useState<ReviewedEntryRemoval | null>(null);
+  const [removalNotice, setRemovalNotice] = useState<'changed' | 'unavailable' | null>(null);
+  const slotSection = useRef<HTMLElement | null>(null);
+  const removalReviewTrigger = useRef<HTMLElement | null>(null);
+  const removalFocusReturn = useRef(false);
+  const removalConflictObservation = useRef<number | null>(null);
   const [removeKey] = useState(() => crypto.randomUUID());
   const [collections, setCollections] = useState(data.collections);
   const [collectionsLoaded, setCollectionsLoaded] = useState(data.collectionsLoaded);
@@ -428,6 +440,11 @@ function SubjectLibrarySlotView({
     setEntry(initialEntry);
     setEntryStateLabel(data.entryStateLabel ?? m.library_other());
     setEntryConflict(null);
+    setRemovalReview(null);
+    setRemovalNotice(null);
+    removalReviewTrigger.current = null;
+    removalFocusReturn.current = false;
+    removalConflictObservation.current = null;
     setPending(false);
     setActionResult(undefined);
     setRestoreMessage(null);
@@ -496,6 +513,20 @@ function SubjectLibrarySlotView({
     locale,
     (data.stateOptions ?? []).map(({ id, label }) => [id, label.text, label.lang]),
   ]);
+  if (removalConflictObservation.current !== null && entryObservation !== removalConflictObservation.current) {
+    removalConflictObservation.current = null;
+  }
+  if (removalReview && removalReview.originKey !== entryReviewOrigin) {
+    setRemovalReview(null);
+    setRemovalNotice(null);
+    removalReviewTrigger.current = null;
+    removalFocusReturn.current = false;
+  } else if (removalReview && !entryStateBasisMatches(removalReview.basis, entry)) {
+    setRemovalReview(null);
+    setRemovalNotice(entry ? 'changed' : 'unavailable');
+    removalReviewTrigger.current = null;
+    removalFocusReturn.current = false;
+  }
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
     if (!labelReview || labelOrigin.seed !== labelLifetime.seed || isCurrentLabelReview(labelReview)) return;
@@ -535,6 +566,13 @@ function SubjectLibrarySlotView({
           : captureRestore(data.undo!),
       );
   }, [data.entry, data.restore, data.undo, entryLifetime]);
+  useLayoutEffect(() => {
+    if (removalReview || !removalFocusReturn.current) return;
+    removalFocusReturn.current = false;
+    const trigger = removalReviewTrigger.current;
+    removalReviewTrigger.current = null;
+    if (trigger?.isConnected && entryLifetime.current('library_entry.get', 'library_entry.delete')) trigger.focus();
+  }, [removalReview, entryLifetime]);
   useEffect(() => {
     if (!collectionLifetime.current()) return;
     setCollections(data.collections);
@@ -644,6 +682,20 @@ function SubjectLibrarySlotView({
                     : result === 'unavailable'
                       ? m.library_subject_unavailable()
                       : null;
+  const entryRemovalMessage =
+    uncertainEntry.current?.input.action === 'clear'
+      ? m.library_entry_removal_unconfirmed()
+      : result === 'cleared' && !entryUndo
+        ? m.library_entry_removal_no_undo()
+        : result === 'cleared' && entryUndo && !restoreAdmitted
+          ? m.library_entry_removal_undo_unavailable()
+          : null;
+  const removalNoticeText =
+    removalNotice === 'changed'
+      ? m.library_entry_removal_changed()
+      : removalNotice === 'unavailable'
+        ? m.library_entry_removal_unavailable()
+        : null;
 
   const discardRestore = () => {
     uncertainRestore.current = null;
@@ -706,9 +758,10 @@ function SubjectLibrarySlotView({
         setRestoreMessage(m.library_restore_occupied());
       } else if (restored.reason === 'stale') setRestoreMessage(m.library_restore_stale());
       else if (restored.reason === 'expired') setRestoreMessage(m.library_restore_expired());
+      else if (restored.reason === 'closed') setRestoreMessage(m.platform_closed_message());
       else setRestoreMessage(m.library_subject_unavailable());
     } catch {
-      if (entryLifetime.current()) setRestoreMessage(m.library_subject_unavailable());
+      if (entryLifetime.current()) setRestoreMessage(m.library_entry_restore_unconfirmed());
     } finally {
       operation.running = false;
     }
@@ -811,6 +864,9 @@ function SubjectLibrarySlotView({
           ...('entry' in response ? { acceptedEntry: response.entry ?? null } : {}),
         });
       }
+      if (response.result === 'conflict' && operation.input.action === 'clear' && !('entry' in response)) {
+        removalConflictObservation.current = entryObservation;
+      }
       applyEntryResult(response);
       if (
         response.result === 'saved' ||
@@ -841,29 +897,75 @@ function SubjectLibrarySlotView({
     }
   }
 
-  function removeEntry() {
+  function openEntryRemovalReview() {
     if (
       !hydrated ||
       pending ||
       uncertainEntry.current ||
+      removalReview ||
+      removalConflictObservation.current !== null ||
       !entry ||
       !data.csrfToken ||
       !entryLifetime.current('library_entry.get', 'library_entry.delete') ||
       !entryDeleteAdmitted
     )
       return;
-    setPending(true);
-    void writeEntry(
-      {
-        subjectId: subject.id,
-        intent: 'entry',
-        action: 'clear',
-        revision: entry.revision,
-        ...(entry.incarnationId === undefined ? {} : { incarnationId: entry.incarnationId }),
-        idempotencyKey: crypto.randomUUID(),
-      },
-      entry.state,
-    );
+    const stateLabel =
+      (data.stateOptions ?? []).find(({ id }) => id === entry.state)?.label.text ??
+      (entryStateLabel !== m.library_other() ? entryStateLabel : m.library_entry_removal_state_unknown());
+    const review = captureEntryRemovalReview({
+      subject,
+      entry,
+      stateLabel,
+      originKey: entryReviewOrigin,
+      lifetime: entryLifetime,
+    });
+    if (!review) return;
+    if (typeof document !== 'undefined') {
+      const stateTrigger = slotSection.current?.querySelector<HTMLElement>('[data-entry-state-trigger]');
+      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      removalReviewTrigger.current = stateTrigger ?? active;
+    }
+    removalFocusReturn.current = false;
+    setRemovalNotice(null);
+    setRemovalReview(review);
+  }
+
+  function keepEntryFromRemovalReview() {
+    removalFocusReturn.current = true;
+    setRemovalReview(null);
+    setRemovalNotice(null);
+  }
+
+  function confirmEntryRemoval(review: ReviewedEntryRemoval) {
+    if (
+      !hydrated ||
+      pending ||
+      uncertainEntry.current ||
+      !data.csrfToken ||
+      !entryDeleteAdmitted ||
+      !entryRemovalReviewMatches(review, {
+        subject,
+        entry,
+        originKey: entryReviewOrigin,
+        lifetime: entryLifetime,
+      })
+    )
+      return;
+    const input: SubjectLibraryMutation = {
+      subjectId: review.subjectId,
+      intent: 'entry',
+      action: 'clear',
+      revision: review.basis.revision,
+      ...(review.basis.incarnationId === undefined ? {} : { incarnationId: review.basis.incarnationId }),
+      idempotencyKey: crypto.randomUUID(),
+    };
+    removalFocusReturn.current = false;
+    removalReviewTrigger.current = null;
+    setRemovalReview(null);
+    setRemovalNotice(null);
+    setActionResult(undefined);
+    void writeEntry(input, review.basis.state);
   }
 
   async function saveReviewedEntry(review: ReviewedEntryState) {
@@ -1382,7 +1484,7 @@ function SubjectLibrarySlotView({
 
   const undoReceipt = uncertainRestore.current?.input ?? entryUndo;
   return (
-    <section aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
+    <section ref={slotSection} aria-label={m.library_subject_heading()} className="flex flex-wrap items-center gap-2">
       {undoReceipt && data.entryAvailable ? (
         <div
           onSubmit={(event) => {
@@ -1434,7 +1536,7 @@ function SubjectLibrarySlotView({
               entry={entry}
               receivedLabel={entryStateLabel}
               stateOptions={data.stateOptions ?? []}
-              canRemove={entryDeleteAdmitted}
+              canRemove={entryDeleteAdmitted && removalConflictObservation.current === null}
               originKey={entryReviewOrigin}
               lifetime={entryLifetime}
               disabled={!hydrated || !data.csrfToken || !entryPutAdmitted}
@@ -1442,13 +1544,27 @@ function SubjectLibrarySlotView({
               uncertain={uncertainEntry.current !== null}
               conflict={entryConflict}
               onSave={saveReviewedEntry}
-              onRemove={() => {
-                setEntryConflict(null);
-                removeEntry();
-              }}
+              onRemove={openEntryRemovalReview}
               onDismissConflict={() => setEntryConflict(null)}
             />
           </form>
+        </Exposure>
+      ) : null}
+
+      {removalReview ? (
+        <Exposure operation="library_entry.delete">
+          <SubjectEntryRemovalReview
+            review={removalReview}
+            valid={entryRemovalReviewMatches(removalReview, {
+              subject,
+              entry,
+              originKey: entryReviewOrigin,
+              lifetime: entryLifetime,
+            })}
+            busy={pending || uncertainEntry.current !== null}
+            onConfirm={confirmEntryRemoval}
+            onKeep={keepEntryFromRemovalReview}
+          />
         </Exposure>
       ) : null}
 
@@ -1462,8 +1578,15 @@ function SubjectLibrarySlotView({
               <button
                 type="button"
                 className={buttonClass}
-                disabled={!hydrated || !data.csrfToken || pending}
-                onClick={removeEntry}
+                data-entry-removal-trigger
+                disabled={
+                  !hydrated ||
+                  !data.csrfToken ||
+                  pending ||
+                  uncertainEntry.current !== null ||
+                  removalConflictObservation.current !== null
+                }
+                onClick={openEntryRemovalReview}
               >
                 {m.library_subject_remove()}
               </button>
@@ -1472,20 +1595,36 @@ function SubjectLibrarySlotView({
         </div>
       ) : null}
 
-      {hydrated && !pending && entryLifetime.current() && uncertainEntry.current ? (
+      {hydrated &&
+      !pending &&
+      uncertainEntry.current &&
+      entryLifetime.current(
+        'library_entry.get',
+        uncertainEntry.current.input.action === 'clear' ? 'library_entry.delete' : 'library_entry.put',
+      ) &&
+      (uncertainEntry.current.input.action === 'clear' ? entryDeleteAdmitted : entryPutAdmitted) ? (
         <button
           type="button"
           data-entry-state-retry={uncertainEntry.current.input.action === 'save' ? true : undefined}
+          data-entry-removal-retry={uncertainEntry.current.input.action === 'clear' ? true : undefined}
           className={buttonClass}
           disabled={pending}
           onClick={() => {
             const original = uncertainEntry.current;
-            if (original && entryLifetime.current()) void writeEntry(original.input, original.previous);
+            if (
+              original &&
+              entryLifetime.current(
+                'library_entry.get',
+                original.input.action === 'clear' ? 'library_entry.delete' : 'library_entry.put',
+              ) &&
+              (original.input.action === 'clear' ? entryDeleteAdmitted : entryPutAdmitted)
+            )
+              void writeEntry(original.input, original.previous);
           }}
         >
           {uncertainEntry.current.input.action === 'save'
             ? m.library_entry_review_retry()
-            : m.library_selection_retry()}
+            : m.library_entry_removal_retry()}
         </button>
       ) : null}
 
@@ -1922,9 +2061,19 @@ function SubjectLibrarySlotView({
           </div>
         </Exposure>
       ) : null}
-      {resultText ? (
+      {entryRemovalMessage ? (
+        <p role="status" aria-live="polite" className="basis-full text-sm text-muted-foreground">
+          {entryRemovalMessage}
+        </p>
+      ) : null}
+      {!entryRemovalMessage && resultText && result !== 'cleared' ? (
         <p role="alert" className="basis-full text-sm text-muted-foreground">
           {resultText}
+        </p>
+      ) : null}
+      {removalNoticeText ? (
+        <p role="status" aria-live="polite" className="basis-full text-sm text-muted-foreground">
+          {removalNoticeText}
         </p>
       ) : null}
       {restoreMessage ? (
