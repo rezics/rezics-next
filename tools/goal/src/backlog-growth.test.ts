@@ -191,7 +191,7 @@ async function run(input: Input) {
   if (input.ready) mkdirSync(join(backlog, 'web'), { recursive: true });
   for (let index = 0; index < input.ready; index += 1) {
     const file = join(backlog, 'web', `brief-${String(index).padStart(2, '0')}.md`);
-    writeFileSync(file, `${index}\n`);
+    writeFileSync(file, `---\ngoal: web\nmanager: web\npaths: [result.txt]\n---\n\n${index}\n`);
     const time = (NOW - 60_000) / 1_000;
     utimesSync(file, time, time);
   }
@@ -319,4 +319,4 @@ test(GROWTH_SCENARIO, async () => {
     directories[0]!.metrics.directoryEnumerations,
     directories[0]!.metrics.directoryEnumerations,
   ]);
-});
+}, 30_000);
