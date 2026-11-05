@@ -136,6 +136,33 @@ test('released inverse descriptors keep the original cast property and pin quali
     ]);
   }
 
+  const unqualifiedCharacterLookup = await call(
+    'GET',
+    `/v1/subjects/${characterSubject.id}/links?property=wdt%3AP725&filter=${characterSubject.id}`,
+  );
+  expect(unqualifiedCharacterLookup.response.status).toBe(400);
+  const wrongQualifier = await call(
+    'GET',
+    `/v1/subjects/${characterSubject.id}/links?property=wdt%3AP725&filter=${characterSubject.id}&qualifier=wdt%3AP3831`,
+  );
+  expect(wrongQualifier.response.status).toBe(400);
+  const voice = await call(
+    'GET',
+    `/v1/subjects/${characterSubject.id}/links?property=wdt%3AP725&filter=${characterSubject.id}&qualifier=wdt%3AP453`,
+  );
+  expect(voice.response.status).toBe(200);
+  expect(voice.body.links.map((link: any) => link.subject).sort()).toEqual(works.map(({ id }) => id).sort());
+  for (const link of voice.body.links) {
+    expect(link.assertion.property.id).toBe('wdt:P725');
+    expect(link.assertion.value).toEqual({ type: 'value', content: actor.id });
+    expect(link.assertion.qualifiers).toContainEqual({
+      property: { id: 'wdt:P453', data_type: 'wikibase-item' },
+      value: { type: 'value', content: characterSubject.id },
+    });
+    expect(link.creditSlot).toEqual({ property: 'wdt:P725', target: actor.id, key: characterSubject.id });
+    expect(link.related[actor.id].label.value).toBe('Voice actor');
+  }
+
   const first = await call('GET', `/v1/subjects/${actor.id}/links?property=wdt%3AP725&limit=1`);
   expect(first.response.status).toBe(200);
   expect(first.body.links).toHaveLength(1);

@@ -54,7 +54,7 @@ export function characterWorkRows(current: ConnectionSection, character: string,
             (part) =>
               isRecord(part) &&
               isRecord(part.property) &&
-              ['schema:character', 'wdt:P453'].includes(String(part.property.id)) &&
+              part.property.id === 'wdt:P453' &&
               isRecord(part.value) &&
               part.value.type === 'value' &&
               part.value.content === character,
