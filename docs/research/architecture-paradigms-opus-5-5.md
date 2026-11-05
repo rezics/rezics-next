@@ -198,7 +198,7 @@ example is our own failure: the `IDEMPOTENCY_HEADER` boot failure was a cycle be
   This shows the industrial compromise: the runtime mechanism shipped, the static effect tracking did not.
 - **Effect (TypeScript).** Effect-TS/effect `cb679e3`, package `effect` 4.1.2, MIT. `Effect<A, E, R>` is "a value that
   lazily describes a workflow or job. The workflow requires some context `R`, and may fail with an error of type `E`"
-  (`packages/effect/src/Effect.ts:97-99`). "A `Layer<ROut, E, RIn>` describes how to acquire one or more services,
+  (`packages/effect/src/Effect.ts:98-100`). "A `Layer<ROut, E, RIn>` describes how to acquire one or more services,
   which services are required to build them, and which errors can occur during acquisition"
   (`packages/effect/src/Layer.ts:4-6`). Test services such as `testing/TestClock.ts` replace time. `R` is a
   compile-time coeffect: a program that still requires a service does not type-check as runnable. Production evidence
@@ -327,7 +327,101 @@ graph" that does not serialise work.
 
 ## What each idea predicts for our failure
 
+Four symptoms, from the brief: agents add imports that close cycles; modules compute values at load time from other
+modules; effects run through 95% of the code; verification needs the whole system.
+
+| Idea | Agents closing cycles | Cross-module computation at load | Effects everywhere | Whole-system verification |
+| --- | --- | --- | --- | --- |
+| Parnas 1972 (information hiding) | A worker imports the file that has the function it needs because nothing marks it as a hidden decision; modules split by feature journey, the flowchart decomposition Parnas warns against, so every journey touches shared representations | Load-time computation exposes a module's internal representation (bounds sums, schemas) as a dependency of others' initialisation | Effects are design decisions likely to change (database, DBOS, Elysia); unhidden, every module depends on them | A module whose secrets are not hidden cannot be tested against its interface |
+| Parnas 1979 (loop-free *uses*) | Predicts exactly "nothing works until everything works": one loop and no subset is testable | Initialisation order is a *uses* relation at load time; a loop makes it undefined | — | Loop-free *uses* is the precondition for testing subsets; we have none |
+| Dijkstra THE (layers) | A layer may use only those below; a cycle is a layering violation by definition | Layers initialise bottom-up; cross-layer initialisation is impossible by construction | Effects belong to designated layers | Each layer is verified before the next exists; we verify only the whole |
+| Conway / mirroring | Domain modules mirror Goals (0.80–0.98 owner share, earlier report); infrastructure has no owner and the most writers, so it becomes the cycle's hub (`command.ts` receives 219 SCC edges) | — | — | Workers that do not communicate produce modules that only meet at boot |
+| Lakos (levelization, CCD) | A cycle merges all its members into one level; CCD jumps | Static initialisation across components is the classic C++ "static initialisation order fiasco"; the same class appears here as TDZ | — | CCD ≈ test cost: median closure 610 files means each test needs half the Kernel |
+| Martin (ADP, SDP, SAP) | Cycles break ADP; infrastructure (most depended on, should be most stable) imports volatile domain code, breaking SDP | Concrete computation in stable modules breaks SAP | — | Fix by inversion: the stable side declares an interface |
+| Ports and adapters | — | — | Business rules call effects directly instead of through ports; 4.7% effect-free | Predicts our state: without ports, tests need the real database (713 test files) |
+| Functional core / imperative shell | — | Load-time computation is shell work done at import | Predicts that decisions are tested only through I/O | A pure core would be testable by values, in milliseconds |
+| Out of the Tar Pit | — | Module-level registries and caches are accidental state with global reach (38 top-level maps, 18 `install*` setters) | Control and state woven through logic are the main source of complexity | Tests must reconstruct all accidental state, hence `createKernel` in 350 tests |
+| Effect systems (Koka, Effekt, Effect) | — | — | An effect type or capability makes effects visible in signatures; absent that, any call may do anything and agents cannot know | Handlers or layers substitute test implementations; requires effects to be reachable only through them |
+| Coeffects / spatiotemporal composability | Requirements declared as keys make cycles "predictable from the dependency declarations alone" | Registrations as `ctx.effect` values with inverses replace import-time side effects | Every interaction goes through one context, so it can be observed and faked | A component can be loaded alone with its declared requirements satisfied by test providers, and unloaded cleanly |
+| Packwerk retrospective | Dependency checks hold the line on new edges | Untracked load mechanisms let a "clean" package crash at run time | — | Zero static violations did not make a package boot alone; only running it in isolation proves isolation |
+| Recent agent studies | Agents respect the relations they can see (98–100%, BulkPR-Bench) and miss the ones they cannot | — | — | Agents' changes pass alone and fail together when an interface changes silently (97% in constructed cases) |
+
+**The mechanism of the boot failures.** ECMAScript evaluates a strongly connected set of modules in one depth-first
+pass; a module whose import is still being evaluated sees that binding in its temporal dead zone, and reading it
+throws a `ReferenceError` (ECMA-262, *Cyclic Module Records* and *InnerModuleEvaluation*,
+<https://tc39.es/ecma262/#sec-cyclic-module-records>). Functions declared but not called at load are harmless in a
+cycle. Cycles become fatal only when combined with **evaluation at load across the cycle**: a top-level `const`
+computed from an imported value. Which import runs first depends on the entry point and on import order, so a new
+import anywhere in the 387-file SCC can reorder evaluation and break a file nobody touched. We have both
+ingredients: 404 files in cycles and 197 cross-module top-level initialisers in 108 files, 148 SCC files calling
+functions at load. The literature agrees on the fix: remove the cycles (Parnas, Dijkstra, Lakos, Martin), and until
+then forbid cross-module evaluation at load (Lakos's static-initialisation rule; Cordis's "every mutation through the
+context", which makes registration a runtime call rather than an import side effect).
+
+**Agents are a special case of Conway, not an exception.** Thirty agents that never talk to each other are the
+loosest-coupled organisation possible. Mirroring predicts modular products from loosely coupled organisations only
+when the interfaces are fixed first (Baldwin and Clark's design rules). Without visible design rules, independent
+writers re-derive mechanisms and import whatever compiles. The agent studies say the same at small scale: the
+interface relations they are shown are respected; the ones they must discover are broken.
+
 ## Evaluation of the adopted architecture
+
+The adopted rules are in [architecture](../architecture.md#modules-and-boundaries) and implemented by
+`scripts/architecture.ts` with `docs/architecture/modules.json` and `boundary-baseline.json`.
+
+**What is right.**
+
+| Adopted element | Literature support | Comment |
+| --- | --- | --- |
+| One owner and one mechanism per capability | Parnas (one secret per module), Conway, Cataldo et al. | Correct; ownership is what makes inversion and consolidation someone's job |
+| Manifest with public entries and allowed dependencies | Bazel visibility, Packwerk, Lakos physical design | Correct form; machine-readable, checkable without running code |
+| Kinds (contract, core, application, adapter, composition root) and direction toward cores and contracts | Dijkstra layers, Lakos levels, Martin SDP/SAP, Cockburn, functional core | Correct; this is the levelled structure every source recommends |
+| Pure cores and contracts: no I/O, clock, randomness; time and IDs as values | Functional core, Out of the Tar Pit, Effekt (capabilities from outside) | Correct and specific |
+| Only composition roots choose implementations; one `createKernel`; one injected clock | Ports and adapters, Effect layers, Cordis loader | Correct |
+| One declarative operation descriptor per operation, checked statically | Spatial composability (declared keys), Bazel | Correct; removes boot-time route conflicts once complete |
+| Ratchet baseline that may only shrink | Packwerk's deprecated references, the earlier reports | Correct |
+| Static check in seconds; `--changed` mode; module map in prompts | Uber/Google (graph-aware checks), agent studies (show relations) | Correct design; 10.5 s measured |
+
+**What is missing.**
+
+1. **Enforcement.** The check is wired to nothing. 1,014 new violations in 15.6 hours is the predictable result
+   (Packwerk's experience is that dependency checks only "hold the line" when they gate). This is the largest gap and
+   the cheapest to close.
+2. **An acyclic declared graph.** Allowed dependencies were seeded from the current imports, so the manifest
+   *declares* the cycle: 18 of 49 modules are on allowed-dependency cycles. The rule "the module graph is acyclic" is
+   therefore unenforceable at module level; only rule 3 (new file-level value cycles) catches anything. The target
+   graph must be declared as a DAG and the existing back edges moved into the baseline, where they can only shrink.
+3. **Granularity.** Every Kernel domain is one `adapter` module. Purity rules apply to 13 small `core` modules; 95% of
+   the code is in modules where anything is allowed. Lakos's unit of levelization is the *component*, a file pair, not a
+   400-file directory. The kinds must apply inside domains: `access/contract`, `access/core`, `access/application`,
+   `access/adapters`, and so on.
+4. **No rule about evaluation at load.** The rules govern *what* may be imported, not *what may run when imported*.
+   Cross-module top-level computation is what turns a cycle into a boot failure; it has no rule, no check, no count.
+5. **No representation of registrations.** Modules mount themselves on a shared app (`modules?: ((app) => void)[]` in
+   `http/kernel.ts:147`) and conflicts surface only when `createKernel` runs. Descriptors are adopted for operations
+   but not for events, queues, permission catalogue entries or projections. The spatiotemporal paper's point is that
+   all of these are effects on a shared context and should be declared values with inverses.
+6. **No representation of ambient effects outside cores.** The clock rule applies to cores; adapters and applications
+   call `Date.now()` in 257 files. Since 95% of the code is not a core, the rule binds little.
+7. **No isolated verification.** Nothing lets a worker run a module without the system, and nothing proves that a
+   module with zero static violations actually runs alone. Packwerk's retrospective shows that static cleanliness and
+   runtime isolation diverge; Lakos and Parnas define isolation *by* testability of a subset.
+8. **Interface changes are silent.** When a contract's export changes, dependents learn at integration. The agent
+   evidence says this is the dominant failure of parallel writers and that a short explicit description of the change
+   recovers most of it.
+
+**What would fail at our rate of change.**
+
+- *A baseline that is not gated* grows faster than any owner can shrink it: about 65 an hour against 90 removed in a
+  day.
+- *Coarse modules* hide new cycles inside them. With a 400-file `adapter`, rule 2 (public entries) cannot see
+  intra-domain deep imports, and every new file is free to import any other file of its domain.
+- *Snapshotted allowed dependencies* teach agents that whatever compiles is allowed: once a module pair is allowed,
+  new file edges in either direction pass rule 2.
+- *Rules that need judgment* (is this a core? is this constant shared?) are applied inconsistently by 30 agents. Rules
+  must be decidable by the tool from the path and the import, as the manifest already intends.
+- *A single boot test as the only runtime proof* serialises everything behind one expensive check and blames the
+  wrong change. Module-local runtime proofs scale with the change.
 
 ## Recommended target paradigm
 
