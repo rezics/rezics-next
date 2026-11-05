@@ -158,11 +158,9 @@ async function allowed(
   return (await accessCheck(access, ctx.actor, action, resource, ctx))(pool);
 }
 
-function fixtureAccess(
-  catalogue: ReturnType<typeof actionCatalogue> = new Map(actions.map((action) => [action, { anonymous: false }])),
-) {
+function fixtureAccess(entries: ReturnType<typeof actionCatalogue> = catalogue) {
   return createAccess({
-    actions: catalogue,
+    actions: entries,
     auth: {
       issuer: 'https://auth.example.test',
       audience: 'https://api.rezics.test',
@@ -618,7 +616,7 @@ test('local showcase uses one native identity grant, authoritative validity and 
       await accessCheck(using, ctx.actor, 'board:create', { route: routeOf(person)!, id: person }, ctx)
     )(pool),
   ).toBe(false);
-  const unrelated = await context(other, ctx.actor.scopes, using);
+  const unrelated = await context(other, [...ctx.actor.scopes], using);
   expect(await (await accessCheck(using, unrelated.actor, 'board:create', PLATFORM_RESOURCE, unrelated))(pool)).toBe(
     false,
   );
