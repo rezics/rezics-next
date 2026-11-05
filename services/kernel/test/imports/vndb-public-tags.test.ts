@@ -12,7 +12,7 @@ import {
   publishShowcase,
   ShowcaseJournal,
 } from '../../../importer/src/showcase-publication.ts';
-import { vndbTagsRatingMetric } from '@rezics/conversion/vndb-vocabulary';
+import { vndbTagsRatingMetric } from '../../../../packages/conversion/src/vndb-vocabulary.ts';
 import {
   importVndbPublicTags,
   parseAuthoredVndbCopy,
@@ -545,7 +545,7 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
           string,
           {
             value: { content: unknown };
-            qualifiers?: { property: { id: string }; value: { content: unknown } }[];
+            qualifiers?: { property: { id: string }; value: { type: 'value'; content: unknown } }[];
             references?: unknown[];
           }[]
         >;
@@ -579,6 +579,17 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
       expect(JSON.stringify(weight.references)).toContain(digest);
     }
     expect(journal.vndbTagRatingSource('v2002')!.pending).toBe(false);
+    console.log(
+      JSON.stringify({
+        outcome: 'current-public-tag-weights',
+        work: 'v2002',
+        subjectId: work.subjectId,
+        tags: concepts,
+        metric: vndbTagsRatingMetric,
+        responseDigest: digest,
+        readerRoute: work.readerRoute,
+      }),
+    );
     const editorial = await editor.http(`/v1/subjects/${work.subjectId}/candidates`, {
       statement: {
         property: { id: 'schema:genre' },
@@ -636,16 +647,6 @@ test('selected Kana weights publish independently, reopen exactly, refresh and p
     const fenced = await publish();
     expect(fenced.omissions).toContainEqual({ provider: 'vndb', sourceKey: 'v2002', code: 'tag-weight-fenced' });
     expect((await candidates(work.subjectId, 'schema:genre')).adoption).toEqual(beforeFence);
-    console.log(
-      JSON.stringify({
-        work: 'v2002',
-        subjectId: work.subjectId,
-        tags: concepts,
-        metric: vndbTagsRatingMetric,
-        responseDigest: digest,
-        readerRoute: work.readerRoute,
-      }),
-    );
   } finally {
     journal.close();
     await runtime.close();
