@@ -21,9 +21,7 @@ test('owned check adapters preserve argv, actual cwd, environment and command lo
     });
     expect(affected.status).toBe('passed');
     expect(affected.output).toContain(`${directory.path}|affected-env|affected-arg`);
-    expect(readFileSync(affectedLog, 'utf8')).toContain(
-      `$ ${affectedCommand.join(' ')} (cwd: ${directory.path})`,
-    );
+    expect(readFileSync(affectedLog, 'utf8')).toContain(`$ ${affectedCommand.join(' ')} (cwd: ${directory.path})`);
 
     const integrationLog = join(directory.path, 'integration.log');
     const integrationCommand = ['sh', '-c', 'printf "%s|%s" "$PWD" "$1"', 'fixture', 'integration-arg'];
