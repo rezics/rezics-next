@@ -1025,6 +1025,7 @@ export type SubjectLinksPage = {
   links: SubjectLink[];
   workReleaseCards?: WorkReleaseCards;
   count?: { value: number; exact: boolean };
+  partial?: boolean;
   freshness: { consistency: 'eventual'; target_seconds: 10; caught_up: boolean };
   next: string | null;
   component: { partition: number; epoch: number; position: bigint };
@@ -1069,6 +1070,7 @@ export async function listSubjectLinks(
   if (route === null) throw new SubjectNotFoundError();
   if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
     throw new RangeError('Invalid links page limit');
+  if (options.qualifier && options.limit > 20) throw new RangeError('Qualified link pages accept at most 20 rows');
   const context = options.context ?? GLOBAL_CONTEXT;
   const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
   if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
@@ -1117,28 +1119,63 @@ export async function listSubjectLinks(
       if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
       const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
       const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
-      let rows =
-        options.property === null
-          ? await listInboundLinks.run(client, {
-              context_id: context,
-              route,
-              subject_id: options.subject,
-              after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-              after_source: afterSource,
-              after_statement: afterStatement,
-              page_limit: options.limit + 1,
-            })
-          : await listInboundLinksByProperty.run(client, {
-              context_id: context,
-              route,
-              subject_id: options.subject,
-              property: options.property,
-              filter_value: options.filter ?? NIL_UUID,
-              after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-              after_source: afterSource,
-              after_statement: afterStatement,
-              page_limit: (options.type ? 4 * options.limit : options.limit) + 1,
-            });
+      let scanCapped = false;
+      let scanAfter: CursorKey[] | undefined;
+      let rows: { subject: string; property: string; statement: string; type: string; order_key?: string }[];
+      if (options.property === null) {
+        rows = (await listInboundLinks.run(client, {
+          context_id: context,
+          route,
+          subject_id: options.subject,
+          after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+          after_source: afterSource,
+          after_statement: afterStatement,
+          page_limit: options.limit + 1,
+        })) as typeof rows;
+      } else {
+        const projected = (await listInboundLinksByProperty.run(client, {
+          context_id: context,
+          route,
+          subject_id: options.subject,
+          property: options.property,
+          filter_value: options.filter ?? NIL_UUID,
+          after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+          after_source: afterSource,
+          after_statement: afterStatement,
+          // A qualified Character lookup may need to pass stale projection entries while filling its
+          // selected page. Its reader page is capped at 20, with one metadata row returned separately.
+          page_limit: options.qualifier ? 21 : (options.type ? 4 * options.limit : options.limit) + 1,
+          scan_limit: options.qualifier ? 20 : null,
+        })) as {
+          subject: string | null;
+          property: string | null;
+          statement: string | null;
+          type: string | null;
+          order_key: string | null;
+          scan_capped: boolean;
+          scan_after_order: string | null;
+          scan_after_source: string | null;
+          scan_after_statement: string | null;
+          metadata_only: boolean;
+        }[];
+        const metadata = projected.find((row) => row.metadata_only)!;
+        scanCapped = metadata.scan_capped;
+        if (scanCapped)
+          scanAfter = [metadata.scan_after_order!, metadata.scan_after_source!, metadata.scan_after_statement!];
+        rows = projected.flatMap((row) =>
+          row.metadata_only
+            ? []
+            : [
+                {
+                  subject: row.subject!,
+                  property: row.property!,
+                  statement: row.statement!,
+                  type: row.type!,
+                  order_key: row.order_key!,
+                },
+              ],
+        );
+      }
       const privateRows = options.qualifier
         ? []
         : (
@@ -1171,8 +1208,8 @@ export async function listSubjectLinks(
                   ? 1
                   : a.statement.localeCompare(b.statement);
         })
-        .slice(0, (options.type ? 4 * options.limit : options.limit) + 1);
-      const scanLimit = options.type ? 4 * options.limit : options.limit;
+        .slice(0, options.qualifier ? 20 : (options.type ? 4 * options.limit : options.limit) + 1);
+      const scanLimit = options.qualifier ? 20 : options.type ? 4 * options.limit : options.limit;
       const scanned = rows.slice(0, scanLimit);
       const scannedMembers = [...new Set(scanned.map((row) => row.subject))];
       const links: Omit<SubjectLink, 'label'>[] = [];
@@ -1181,7 +1218,7 @@ export async function listSubjectLinks(
         examined++;
         if (matches(row.type))
           links.push({ subject: row.subject, property: row.property, statement: row.statement, type: row.type });
-        if (links.length === options.limit) break;
+        if (!options.qualifier && links.length === options.limit) break;
       }
       const current = await currentRelationFacts(
         client,
@@ -1210,17 +1247,34 @@ export async function listSubjectLinks(
       const currentLinks = links.filter((link) =>
         current.has(currentRelationKey({ subject: link.subject, property: link.property, candidate: link.statement })),
       );
-      const last = rows[examined - 1];
+      const hasCurrentOverflow = !!options.qualifier && currentLinks.length > options.limit;
+      const selectedLinks = options.qualifier ? currentLinks.slice(0, options.limit) : currentLinks;
+      const last =
+        hasCurrentOverflow
+          ? rows.find(
+              (row) =>
+                row.subject === selectedLinks[options.limit - 1]?.subject &&
+                row.statement === selectedLinks[options.limit - 1]?.statement,
+            )
+          : rows[examined - 1];
       return {
         page: {
-          links: currentLinks,
+          links: selectedLinks,
           freshness: {
             consistency: 'eventual',
             target_seconds: FRESHNESS_TARGET_SECONDS,
             caught_up: caughtUp,
           },
+          ...(scanCapped && !hasCurrentOverflow ? { partial: true } : {}),
           next:
-            rows.length > examined && last
+            hasCurrentOverflow && last
+              ? encodeCursor(ring, binding, {
+                  epoch: partition.epoch,
+                  after: [last.order_key!, last.subject, last.statement],
+                })
+              : scanCapped && scanAfter
+              ? encodeCursor(ring, binding, { epoch: partition.epoch, after: scanAfter })
+              : rows.length > examined && last
               ? encodeCursor(ring, binding, {
                   epoch: partition.epoch,
                   after: [

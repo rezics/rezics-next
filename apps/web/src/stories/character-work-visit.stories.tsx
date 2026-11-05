@@ -66,6 +66,7 @@ function CharacterVisit({
                   ok: true,
                   read: { kind: 'links', id: id(1), property: stream.property, limit: 12 },
                   body: {
+                    ...(stale && index ? { partial: true } : {}),
                     freshness: { consistency: 'eventual', target_seconds: 10, caught_up: !stale },
                     links: (paged && stream.group === 'characters'
                       ? address.selection?.characters?.cursor === 'appearance-page-3'

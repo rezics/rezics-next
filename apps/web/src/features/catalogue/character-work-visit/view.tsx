@@ -30,7 +30,9 @@ export function CharacterWorkRows({
   const o = { locale: value.locale as never };
   const raw = current.section.ok ? current.section.body.links : undefined;
   const freshness = current.section.ok && isRecord(current.section.body) ? current.section.body.freshness : undefined;
-  const partial = isRecord(freshness) && freshness.caught_up === false;
+  const partial =
+    (current.section.ok && isRecord(current.section.body) && current.section.body.partial === true) ||
+    (isRecord(freshness) && freshness.caught_up === false);
   return (
     <div className="min-w-0 space-y-6" data-slot="character-work-visit">
       {rows.map((row, index) => (
