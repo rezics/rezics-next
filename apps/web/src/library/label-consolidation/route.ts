@@ -13,10 +13,13 @@ type Call<K extends keyof ConsolidationTransport> = Owner & { args: Parameters<C
 async function owner(data: Owner) {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
-  if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, {
-    expectedReader: data.viewer,
-    expectedCredential: data.csrfToken,
-  })) || !/^[0-9a-f-]{36}$/i.test(data.sourceLabelId))
+  if (
+    !(await prepareExpectedReader(request, env as Partial<SessionEnv>, {
+      expectedReader: data.viewer,
+      expectedCredential: data.csrfToken,
+    })) ||
+    !/^[0-9a-f-]{36}$/i.test(data.sourceLabelId)
+  )
     throw new Error('Consolidation owner is no longer current');
   const authorization = await originalEntryRestoreCredential(request, env as Partial<SessionEnv>, data.sender);
   if (!authorization) throw new Error('Consolidation sender is no longer current');
@@ -74,13 +77,16 @@ export function consolidationTransport(
   const captured = { viewer, sourceLabelId, csrfToken: headers['x-csrf-token'] ?? '' };
   // The visit retains this transport for an uncertain command. Capture before its first dispatch.
   const sender = captureSender({ data: captured, headers });
-  const original = async () => ({ ...captured, sender: await sender });
+  const original = async () => {
+    const token = await sender;
+    return { ...captured, ...(token === undefined ? {} : { sender: token }) };
+  };
   return {
-    review: async (...args) => review({ data: { ...await original(), args }, headers }),
-    confirm: async (...args) => confirm({ data: { ...await original(), args }, headers }),
-    apply: async (...args) => apply({ data: { ...await original(), args }, headers }),
-    retry: async (...args) => retry({ data: { ...await original(), args }, headers }),
-    cancel: async (...args) => cancel({ data: { ...await original(), args }, headers }),
-    result: async (...args) => result({ data: { ...await original(), args }, headers }),
+    review: async (...args) => review({ data: { ...(await original()), args }, headers }),
+    confirm: async (...args) => confirm({ data: { ...(await original()), args }, headers }),
+    apply: async (...args) => apply({ data: { ...(await original()), args }, headers }),
+    retry: async (...args) => retry({ data: { ...(await original()), args }, headers }),
+    cancel: async (...args) => cancel({ data: { ...(await original()), args }, headers }),
+    result: async (...args) => result({ data: { ...(await original()), args }, headers }),
   };
 }
