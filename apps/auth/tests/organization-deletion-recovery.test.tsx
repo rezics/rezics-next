@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import {
   creationFixture,
   approval,
@@ -13,6 +13,9 @@ import {
 } from './creation-page-fixture';
 import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
 import {
+  clearOrganizationDeleteStepUp,
+  clearOrganizationDeleteUnknown,
+  ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16,
   readOrganizationDeleteStepUp,
   readOrganizationDeleteUnknown,
   storeOrganizationDeleteStepUp,
@@ -133,3 +136,46 @@ for (const restored of ['exact', 'malformed', 'wrong-target'] as const)
     expect(readOrganizationDeleteUnknown(first)).toEqual(saved);
     expect(page.calls).toHaveLength(0);
   });
+
+test('closed delete descriptors use the exact raw boundary and cleanup preserves replacements and invalid bytes', () => {
+  const stepUpKey = 'rezics.organization-delete.step-up';
+  const unknownKey = `${stepUpKey}.unknown.${first}`;
+  expect(ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16).toBe(231);
+  expect(JSON.stringify(hint).length).toBe(ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16);
+  window.sessionStorage.removeItem(stepUpKey);
+  window.sessionStorage.removeItem(unknownKey);
+
+  expect(storeOrganizationDeleteStepUp(hint)).toBe(true);
+  expect(window.sessionStorage.getItem(stepUpKey)?.length).toBe(ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16);
+  expect(storeOrganizationDeleteUnknown(hint)).toBe(true);
+  const replacement = { ...hint, operationKey: 'b'.repeat(32) };
+  window.sessionStorage.setItem(unknownKey, JSON.stringify(replacement));
+  expect(clearOrganizationDeleteUnknown(first, hint)).toBe(false);
+  expect(readOrganizationDeleteUnknown(first)).toMatchObject({ kind: 'pending', value: replacement });
+  expect(clearOrganizationDeleteUnknown(first, replacement)).toBe(true);
+  expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
+  expect(clearOrganizationDeleteStepUp(replacement)).toBe(false);
+  expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: hint });
+  expect(clearOrganizationDeleteStepUp(hint)).toBe(true);
+
+  const oversized = `${JSON.stringify(hint)} `;
+  window.sessionStorage.setItem(stepUpKey, oversized);
+  window.sessionStorage.setItem(unknownKey, oversized);
+  const parse = spyOn(JSON, 'parse');
+  const stepUp = readOrganizationDeleteStepUp();
+  const unknown = readOrganizationDeleteUnknown(first);
+  const parseCalls = parse.mock.calls.length;
+  parse.mockRestore();
+  expect(stepUp).toEqual({ kind: 'invalid' });
+  expect(unknown).toEqual({ kind: 'invalid' });
+  expect(parseCalls).toBe(0);
+  expect(window.sessionStorage.getItem(stepUpKey)).toBe(oversized);
+  expect(window.sessionStorage.getItem(unknownKey)).toBe(oversized);
+
+  const getItem = spyOn(window.sessionStorage, 'getItem').mockImplementation(() => {
+    throw new Error('storage unavailable');
+  });
+  const unreadable = readOrganizationDeleteUnknown(first);
+  getItem.mockRestore();
+  expect(unreadable).toEqual({ kind: 'invalid' });
+});

@@ -243,3 +243,30 @@ test('refused generic key storage preserves the exact deletion continuation with
     assign.mockRestore();
   }
 });
+
+test('refused unknown-marker persistence retains custody and cannot dispatch or unlock another delete', async () => {
+  const page = await open(content(first, async () => ready(first)), body);
+  const nativeStorageSet = window.sessionStorage.setItem.bind(window.sessionStorage);
+  const setItem = spyOn(window.sessionStorage, 'setItem').mockImplementation((key, value) => {
+    if (key === `rezics.organization-delete.step-up.unknown.${first}`)
+      throw new Error('storage unavailable');
+    nativeStorageSet(key, value);
+  });
+  try {
+    await confirm(page.host, '@first');
+    await flush(() => page.calls[0]!.resolve(approval()));
+    expect(page.calls).toHaveLength(1);
+    expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
+    expect(page.host.textContent).toContain('The deletion result is unknown');
+    expect(page.host.querySelector('form')).toBeNull();
+    expect(page.unload()).toBe(true);
+
+    await flush(() => button(page.host, 'Check current organization')!.click());
+    expect(page.calls).toHaveLength(1);
+    expect(page.host.textContent).toContain('The deletion result is unknown');
+    expect(page.host.querySelector('form')).toBeNull();
+    expect(page.unload()).toBe(true);
+  } finally {
+    setItem.mockRestore();
+  }
+});

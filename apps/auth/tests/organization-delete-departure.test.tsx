@@ -64,6 +64,22 @@ test('clean review leaves freely', async () => {
   expect(page.router.history.location.pathname).toBe('/away');
 });
 
+test('retiring a mounted review aborts its reader and discards late private advice', async () => {
+  const delayed = Promise.withResolvers<OrganizationDeletionRead>();
+  let signal: AbortSignal | undefined;
+  const page = await setup(async ({ signal: current }) => {
+    signal = current;
+    return delayed.promise;
+  });
+  expect(signal).toBeDefined();
+  await flush(leave);
+  expect(signal?.aborted).toBe(true);
+  await flush(() => delayed.resolve(ready(first)));
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(page.host.textContent).not.toContain('Private organization');
+  expect(page.calls).toHaveLength(0);
+});
+
 test('Stay keeps typed confirmation and Leave discards it', async () => {
   const page = await setup();
   page.input.focus();
@@ -120,6 +136,32 @@ test('accepted deletion releases an open departure prompt', async () => {
   expect(document.querySelector('[role="alertdialog"]')).toBeNull();
   expect(page.host.textContent).toContain('Organization deletion committed');
   expect(page.unload()).toBe(false);
+});
+
+test('acknowledgement of an old command preserves an independently replaced unknown descriptor', async () => {
+  const page = await setup();
+  await flush(() => {
+    fill(page.input, '@first');
+    send(page.host);
+  });
+  await flush(() => page.calls[0]!.resolve(approval()));
+  const replacement = {
+    version: 1 as const,
+    operation: 'delete' as const,
+    humanAccountId: human,
+    organizationId: first,
+    operationKey: 'b'.repeat(32),
+    returnTo: '/organizations/delete' as const,
+  };
+  window.sessionStorage.setItem(
+    `rezics.organization-delete.step-up.unknown.${first}`,
+    JSON.stringify(replacement),
+  );
+  await flush(() => page.calls[1]!.resolve(Response.json({ accountId: first })));
+  expect(readOrganizationDeleteUnknown(first)).toMatchObject({ kind: 'pending', value: replacement });
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(page.unload()).toBe(true);
+  expect(page.calls).toHaveLength(2);
 });
 
 test('changed target releases the old review prompt immediately', async () => {

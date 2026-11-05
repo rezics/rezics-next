@@ -1,4 +1,11 @@
-import { authPost } from './api';
+import {
+  ORGANIZATION_DELETION_MAX_DISPLAY_NAME_LENGTH,
+  ORGANIZATION_DELETION_MAX_HANDLE_LENGTH,
+  ORGANIZATION_DELETION_MAX_RESPONSE_BYTES,
+  type OrganizationDeletionResponse,
+} from '@rezics/auth-contract';
+import { readJsonBounded } from './private-auth-json';
+import { privateAuthRead } from './private-auth-read';
 import { runAccountOperation, type AccountOperationResult } from './account-operations';
 import {
   isAccountId,
@@ -8,70 +15,96 @@ import {
   storeOrganizationDeleteUnknown,
   clearOrganizationDeleteUnknown,
   organizationDeleteReturnTo,
+  sameOrganizationDeleteDescriptor,
 } from './organization-delete-step-up';
 
 // One issuer observation binds the viewer and any privately admitted identity.
 // Browser selection and retained continuations grant no authority.
-export type OrganizationDeletionRead =
-  | {
-      kind: 'ready';
-      humanAccountId: string;
-      action: 'confirm';
-      account: { id: string; kind: 'organization'; handle: string | null; displayName: string | null };
-    }
-  | { kind: 'authentication-required'; humanAccountId: string; action: 'authenticate' }
-  | { kind: 'signed-out' | 'hidden' | 'denied' | 'missing' | 'changed' | 'unavailable' };
-export type OrganizationDeletionReader = (input: { organizationId: string }) => Promise<OrganizationDeletionRead>;
+export type OrganizationDeletionRead = OrganizationDeletionResponse;
+export type OrganizationDeletionReader = (input: {
+  organizationId: string;
+  signal?: AbortSignal | undefined;
+}) => Promise<OrganizationDeletionRead>;
 
-export const readCurrentOrganizationForDeletion: OrganizationDeletionReader = async ({ organizationId }) => {
-  const result = await authPost('/account-management/organizations/deletion-review', { organizationId });
-  if (!result.ok) return { kind: 'unavailable' };
-  const body = result.body;
-  if (!body || typeof body !== 'object' || !('kind' in body)) return { kind: 'unavailable' };
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseOrganizationDeletionResponse(body: unknown, organizationId: string): OrganizationDeletionRead {
+  if (!record(body)) return { kind: 'unavailable' };
   const keys = Object.keys(body).sort().join(',');
   if (
     keys === 'kind' &&
     ['signed-out', 'hidden', 'denied', 'missing', 'changed', 'unavailable'].includes(String(body.kind))
   )
-    return { kind: body.kind } as OrganizationDeletionRead;
-  if (!('humanAccountId' in body) || !isAccountId(body.humanAccountId) || body.humanAccountId === organizationId)
+    return { kind: body.kind as OrganizationDeletionRead['kind'] };
+  if (
+    !('humanAccountId' in body) ||
+    !isAccountId(body.humanAccountId) ||
+    body.humanAccountId === organizationId
+  )
     return { kind: 'unavailable' };
   if (
     keys === 'action,humanAccountId,kind' &&
     body.kind === 'authentication-required' &&
-    'action' in body &&
     body.action === 'authenticate'
   )
     return { kind: 'authentication-required', humanAccountId: body.humanAccountId, action: 'authenticate' };
   if (
     keys !== 'account,action,humanAccountId,kind' ||
     body.kind !== 'ready' ||
-    !('action' in body) ||
     body.action !== 'confirm' ||
-    !('account' in body) ||
-    !body.account ||
-    typeof body.account !== 'object'
+    !record(body.account)
   )
     return { kind: 'unavailable' };
-  const row = body.account;
+  const account = body.account;
   if (
-    Object.keys(row).sort().join(',') !== 'displayName,handle,id,kind' ||
-    !('id' in row) ||
-    row.id !== organizationId ||
-    !('kind' in row) ||
-    row.kind !== 'organization' ||
-    !('handle' in row) ||
-    (row.handle !== null && typeof row.handle !== 'string') ||
-    !('displayName' in row) ||
-    (row.displayName !== null && typeof row.displayName !== 'string')
+    Object.keys(account).sort().join(',') !== 'displayName,handle,id,kind' ||
+    account.id !== organizationId ||
+    account.kind !== 'organization' ||
+    (account.handle !== null &&
+      (typeof account.handle !== 'string' ||
+        account.handle.length > ORGANIZATION_DELETION_MAX_HANDLE_LENGTH ||
+        !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(account.handle))) ||
+    (account.displayName !== null &&
+      (typeof account.displayName !== 'string' ||
+        account.displayName.length > ORGANIZATION_DELETION_MAX_DISPLAY_NAME_LENGTH))
   )
     return { kind: 'unavailable' };
   return {
     kind: 'ready',
     humanAccountId: body.humanAccountId,
     action: 'confirm',
-    account: { id: organizationId, kind: 'organization', handle: row.handle, displayName: row.displayName },
+    account: {
+      id: organizationId,
+      kind: 'organization',
+      handle: account.handle as string | null,
+      displayName: account.displayName as string | null,
+    },
   };
+}
+
+export const readCurrentOrganizationForDeletion: OrganizationDeletionReader = async ({ organizationId, signal }) => {
+  try {
+    return await privateAuthRead(async (readSignal) => {
+      const response = await fetch('/account-management/organizations/deletion-review', {
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId }),
+        signal: readSignal,
+      });
+      // Read bounded actual bytes for both success and error responses before
+      // classifying status. This same signal owns fetch and streamed JSON.
+      const body = await readJsonBounded(response, ORGANIZATION_DELETION_MAX_RESPONSE_BYTES, readSignal);
+      if (response.status !== 200) return { kind: 'unavailable' };
+      return parseOrganizationDeletionResponse(body, organizationId);
+    }, signal);
+  } catch {
+    return { kind: 'unavailable' };
+  }
 };
 
 export type OrganizationDeletionTarget = {
@@ -88,6 +121,7 @@ export type OrganizationDeletionLoad =
 export type OrganizationDeletionReview = {
   humanAccountId?: string | undefined;
   isCurrent: () => boolean;
+  signal?: AbortSignal | undefined;
   onExecutionDispatch?: (() => boolean) | undefined;
 };
 
@@ -96,11 +130,11 @@ export async function loadOrganizationDeletion(
   read: OrganizationDeletionReader = readCurrentOrganizationForDeletion,
   review?: OrganizationDeletionReview,
 ): Promise<OrganizationDeletionLoad> {
-  if (review && !review.isCurrent()) return { kind: 'unavailable' };
+  if (review && (!review.isCurrent() || review.signal?.aborted)) return { kind: 'unavailable' };
   if (!isAccountId(organizationId)) return { kind: 'missing' };
   try {
-    const result = await read({ organizationId });
-    if (review && !review.isCurrent()) return { kind: 'unavailable' };
+    const result = await read({ organizationId, signal: review?.signal });
+    if (review && (!review.isCurrent() || review.signal?.aborted)) return { kind: 'unavailable' };
     if (result.kind !== 'ready' && result.kind !== 'authentication-required') return result;
     if (!isAccountId(result.humanAccountId) || result.humanAccountId === organizationId) return { kind: 'denied' };
     if (review?.humanAccountId && review.humanAccountId !== result.humanAccountId) return { kind: 'changed' };
@@ -177,13 +211,11 @@ export async function executeOrganizationDeletion(
   let fenceUnavailable = false;
   let fenceConflict = false;
   let fenceStored = false;
+  let fenceMayHaveBeenSubmitted = false;
   const clearFence = () => {
     const saved = readOrganizationDeleteUnknown(target.organizationId);
-    if (
-      saved.kind === 'pending' &&
-      organizationDeletePendingMatches(saved.value, target.humanAccountId, target.organizationId, operationKey)
-    )
-      clearOrganizationDeleteUnknown(target.organizationId);
+    if (saved.kind === 'pending' && sameOrganizationDeleteDescriptor(saved.value, identity))
+      clearOrganizationDeleteUnknown(target.organizationId, identity);
   };
   const onExecutionDispatch = () => {
     if (review && !review.isCurrent()) return false;
@@ -200,14 +232,19 @@ export async function executeOrganizationDeletion(
         fenceConflict = true;
         return false;
       }
-      return !review?.onExecutionDispatch || review.onExecutionDispatch();
+      if (review?.onExecutionDispatch && !review.onExecutionDispatch()) return false;
+      fenceMayHaveBeenSubmitted = true;
+      return true;
     }
     try {
-      storeOrganizationDeleteUnknown(identity);
+      if (!storeOrganizationDeleteUnknown(identity)) {
+        fenceUnavailable = true;
+        return false;
+      }
       const stored = readOrganizationDeleteUnknown(target.organizationId);
       if (
         stored.kind !== 'pending' ||
-        !organizationDeletePendingMatches(stored.value, target.humanAccountId, target.organizationId, operationKey)
+        !sameOrganizationDeleteDescriptor(stored.value, identity)
       ) {
         fenceUnavailable = true;
         return false;
@@ -221,6 +258,7 @@ export async function executeOrganizationDeletion(
       clearFence();
       return false;
     }
+    fenceMayHaveBeenSubmitted = true;
     return true;
   };
   const result = await runAccountOperation(
@@ -229,18 +267,21 @@ export async function executeOrganizationDeletion(
     { isCurrent: () => !review || review.isCurrent(), retryUncertain: true, onExecutionDispatch },
   );
   if (fenceUnavailable) {
-    clearFence();
-    return { ok: false, reason: 'unavailable' };
+    // Persistence may have committed before reporting failure. Keep both the
+    // durable marker (if present) and the caller's exact in-memory custody.
+    return { ok: false, reason: 'unknown' };
   }
   if (fenceConflict) return { ok: false, reason: 'unknown' };
+  if (fenceMayHaveBeenSubmitted && !result.ok && result.reason !== 'unknown')
+    return { ok: false, reason: 'unknown' };
   // A response from this exact attempt may settle its own fence after departure.
   // It cannot replace a newer view or settle any earlier unknown attempt.
   if (review && !review.isCurrent()) {
-    if (result.ok || result.reason !== 'unknown') clearFence();
+    if (result.ok || !fenceMayHaveBeenSubmitted) clearFence();
     return result;
   }
-  if (result.ok || result.reason !== 'unknown') {
-    clearOrganizationDeleteUnknown(target.organizationId);
+  if (result.ok || !fenceMayHaveBeenSubmitted) {
+    clearOrganizationDeleteUnknown(target.organizationId, identity);
   }
   return result;
 }

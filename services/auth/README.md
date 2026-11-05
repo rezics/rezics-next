@@ -3006,3 +3006,14 @@ checks and profile classification; no target lookup, permission preparation, inv
 Approval and execution retain independent checks, exact original command/key and the pre-send uncertainty fence.
 Readback never resolves an unknown execution. Committed deletion means cleanup pending, with adopted retention
 exceptions and backups/external copies distinguished from complete erasure.
+
+The only serialized bodies are the closed ready, authentication-required, signed-out, hidden, denied, missing, changed
+and unavailable variants plus the fixed request-denied error. Their shared public UTF-8 ceiling is 30,946 bytes:
+`JSON.stringify(readySkeleton).length + 6 × (1,024 + 4,096)`, where the skeleton includes a UUID36, 64-character
+ASCII handle, every field name, quote and punctuation. The 1,024-unit human-ID ceiling is the existing
+`securityResponseLimits.id` for opaque SessionProof identifiers; organization handles use the database's lowercase
+ASCII 64-character check, and display names use the profile writer's 4,096 UTF-16-unit limit. `display_name` is
+PostgreSQL `text` without a column limit, so native output outside the writer contract is unavailable, never
+truncated or serialized. Nullable identity fields use `null` and do not add to the maximum. The HTTP reader enforces
+this bound on actual streamed success and error bytes before parsing within its one five-second browser read lifetime;
+the native producer keeps the existing three-second whole-call deadline.

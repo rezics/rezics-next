@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
+import { ORGANIZATION_DELETION_MAX_RESPONSE_BYTES } from '@rezics/auth-contract';
 import { creationFixture } from './creation-page-fixture';
 import {
   loadOrganizationDeletion,
@@ -187,4 +188,53 @@ test('review transport rejects browser identity, bearer and cross-origin inputs 
     expect(response.status).toBe(400);
   }
   expect(f.events).toEqual([]);
+});
+
+test('streamed success and error bodies stop at the byte ceiling before parse; caller retirement aborts a stalled body', async () => {
+  const parse = spyOn(JSON, 'parse');
+  let cancelled = false;
+  for (const status of [200, 503]) {
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(ORGANIZATION_DELETION_MAX_RESPONSE_BYTES + 1).fill(32));
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { status },
+      )) as typeof fetch;
+    expect(await readCurrentOrganizationForDeletion({ organizationId })).toEqual({ kind: 'unavailable' });
+  }
+  const parseCalls = parse.mock.calls.length;
+  parse.mockRestore();
+  expect(parseCalls).toBe(0);
+  expect(cancelled).toBe(true);
+
+  const started = Promise.withResolvers<void>();
+  const request = new AbortController();
+  let requestSignal: AbortSignal | undefined;
+  let cancelledStall = false;
+  globalThis.fetch = (async (_input, init) => {
+    requestSignal = init?.signal as AbortSignal;
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        pull() {
+          started.resolve();
+        },
+        cancel() {
+          cancelledStall = true;
+        },
+      }),
+      { status: 200 },
+    );
+  }) as typeof fetch;
+  const reading = readCurrentOrganizationForDeletion({ organizationId, signal: request.signal });
+  await started.promise;
+  request.abort();
+  expect(await reading).toEqual({ kind: 'unavailable' });
+  expect(requestSignal?.aborted).toBe(true);
+  expect(cancelledStall).toBe(true);
 });

@@ -1,4 +1,12 @@
-import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES, type SessionProof } from '@rezics/auth-contract';
+import {
+  AUTH_PAGE_OPERATION_CLIENT_ID,
+  AUTH_PAGE_OPERATION_SCOPES,
+  ORGANIZATION_DELETION_MAX_DISPLAY_NAME_LENGTH,
+  ORGANIZATION_DELETION_MAX_HANDLE_LENGTH,
+  ORGANIZATION_DELETION_MAX_SESSION_PROOF_ID_LENGTH,
+  type OrganizationDeletionResponse,
+  type SessionProof,
+} from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
 
@@ -27,11 +35,41 @@ export interface OrganizationDeletionPageAccess extends OrganizationDeletionAcce
     deadline: number;
   }): Promise<OrganizationDeletionRead | { kind: 'authentication-required' }>;
 }
-export type OrganizationDeletionPage =
-  | { kind: 'authentication-required'; humanAccountId: string; action: 'authenticate' }
-  | { kind: 'ready'; humanAccountId: string; action: 'confirm'; account: OrganizationDeletionIdentity }
-  | { kind: 'signed-out' | 'hidden' | 'denied' | 'missing' | 'changed' | 'unavailable' };
+export type OrganizationDeletionPage = OrganizationDeletionResponse;
 export const ORGANIZATION_DELETION_READ_PATH = '/account-management/organizations/deletion-review';
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validRead(
+  value: unknown,
+  organizationId: string,
+): value is OrganizationDeletionRead | { kind: 'authentication-required' } {
+  if (!record(value)) return false;
+  if (
+    ['hidden', 'denied', 'missing', 'changed', 'unavailable'].includes(String(value.kind)) &&
+    Object.keys(value).join(',') === 'kind'
+  )
+    return true;
+  if (value.kind === 'authentication-required') return Object.keys(value).join(',') === 'kind';
+  if (value.kind !== 'ready' || Object.keys(value).sort().join(',') !== 'account,kind' || !record(value.account))
+    return false;
+  const account = value.account;
+  return (
+    Object.keys(account).sort().join(',') === 'displayName,handle,id,kind' &&
+    account.id === organizationId &&
+    account.kind === 'organization' &&
+    (account.handle === null ||
+      (typeof account.handle === 'string' &&
+        account.handle.length <= ORGANIZATION_DELETION_MAX_HANDLE_LENGTH &&
+        /^[a-z0-9][a-z0-9_-]{0,63}$/.test(account.handle))) &&
+    (account.displayName === null ||
+      (typeof account.displayName === 'string' &&
+        account.displayName.length <= ORGANIZATION_DELETION_MAX_DISPLAY_NAME_LENGTH))
+  );
+}
+
 export function organizationDeletionCaller(proof: SessionProof): boolean {
   return (
     proof.client_id === AUTH_PAGE_OPERATION_CLIENT_ID &&
@@ -49,7 +87,7 @@ export function organizationDeletionReadTransport(
   return async (request) => {
     const url = new URL(request.url);
     if (url.pathname !== ORGANIZATION_DELETION_READ_PATH) return fallback(request);
-    const response = (body: unknown, status = 200) =>
+    const response = (body: OrganizationDeletionPage | { error: 'organization_deletion_read_denied' }, status = 200) =>
       Response.json(body, {
         status,
         headers: { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' },
@@ -82,28 +120,22 @@ export function organizationDeletionReadTransport(
             await service.internal.accessTokenForProof(human);
             if (!access) return { kind: 'unavailable' };
             if (Date.now() >= deadline) throw new TransportDenied(503);
-            const read = await access.readOrganizationDeletionPage({ human, organizationId, deadline });
+            const read: unknown = await access.readOrganizationDeletionPage({ human, organizationId, deadline });
             await service.internal.accessTokenForProof(human);
             if (Date.now() >= deadline) throw new TransportDenied(503);
+            if (!validRead(read, organizationId)) return { kind: 'unavailable' };
             if (read.kind === 'authentication-required') {
               if (organizationDeletionCaller(human)) return { kind: 'unavailable' };
+              if (human.account_id.length > ORGANIZATION_DELETION_MAX_SESSION_PROOF_ID_LENGTH)
+                return { kind: 'unavailable' };
               return { kind: 'authentication-required', humanAccountId: human.account_id, action: 'authenticate' };
             }
             // A misbound producer cannot disclose a target to an ordinary profile.
             if (!organizationDeletionCaller(human)) return { kind: 'unavailable' };
-            if (read.kind !== 'ready') {
-              if (!['hidden', 'denied', 'missing', 'changed', 'unavailable'].includes(read.kind))
-                throw new TransportDenied(503);
-              return { kind: read.kind };
-            }
+            if (read.kind !== 'ready') return { kind: read.kind };
+            if (human.account_id.length > ORGANIZATION_DELETION_MAX_SESSION_PROOF_ID_LENGTH)
+              return { kind: 'unavailable' };
             const row = read.account;
-            if (
-              row.id !== organizationId ||
-              row.kind !== 'organization' ||
-              (row.handle !== null && typeof row.handle !== 'string') ||
-              (row.displayName !== null && typeof row.displayName !== 'string')
-            )
-              throw new TransportDenied(503);
             return {
               kind: 'ready',
               humanAccountId: human.account_id,

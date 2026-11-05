@@ -397,6 +397,12 @@ on its actor anchor; exceeding the cap returns `membership_limit`. Following a R
 not consume a slot. This bounds candidates without dropping possible grants as a resource's ACL grows.
 [membership-inverse.ts][membership-inverse] and [permission-inverse.sql][permission-inverse] enforce that limit.
 
+Deleting an organization is a selected Auth account operation with its own private review, retained step-up key and
+unresolved-command recovery; it is not account erasure. Auth owns its bounded response, browser descriptor and cleanup
+rules in the [Auth page contract](../apps/auth/README.md#delete-organization) and
+[Auth service contract](../services/auth/README.md#organization-deletion-review). Account erasure remains governed by
+[Deletion](deletion.md).
+
 ### Realms and Spaces boundary
 
 Content owns Space/Realm resources and their content; Accounts owns membership and Access, Semantic Contexts

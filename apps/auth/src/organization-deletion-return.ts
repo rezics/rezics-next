@@ -8,6 +8,7 @@ export type OrganizationDeletionReviewGeneration = OrganizationDeletionReview & 
   operationKey?: string | undefined;
   source?: string | undefined;
   reader?: OrganizationDeletionReader | undefined;
+  controller: AbortController;
   active: boolean;
   attemptId?: number | undefined;
   onExecutionDispatch: () => boolean;
@@ -41,9 +42,12 @@ export class OrganizationDeletionReturnController {
 
   begin(input: GenerationInput): OrganizationDeletionReviewGeneration {
     this.retire();
+    const controller = new AbortController();
     let generation: OrganizationDeletionReviewGeneration;
     generation = {
       ...input,
+      controller,
+      signal: controller.signal,
       active: true,
       isCurrent: () => this.active === generation && generation.active,
       onExecutionDispatch: () => {
@@ -98,6 +102,7 @@ export class OrganizationDeletionReturnController {
 
   retire(generation = this.active): void {
     if (!generation || this.active !== generation) return;
+    generation.controller.abort();
     generation.active = false;
     generation.selected = undefined;
     generation.humanAccountId = undefined;

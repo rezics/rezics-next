@@ -671,6 +671,13 @@ management reader in `organization-deletion.ts`. Its default same-origin POST to
 the initiating human. The native management ENTRY deletion authority and the same Auth session are revalidated
 after I/O; failures retain the existing localized recovery in all eight locales. Recovery keeps
 the selected organization and first discovered initiating human, and clears typed confirmation before each fresh review.
+The closed response allowance is 30,946 UTF-8 bytes: the ready JSON skeleton with a UUID36 and 64-character ASCII
+handle, plus six bytes per UTF-16 unit for the 1,024-unit opaque SessionProof ID and 4,096-unit display name. Handles
+remain nullable and database-limited to 64 lowercase ASCII characters; display names remain nullable and use the
+profile writer's 4,096 UTF-16-unit admission limit (the database column is unbounded text, so the native producer
+refuses larger output). The browser still admits only lowercase UUID IDs for sessions and descriptors; the larger
+native opaque-ID allowance does not widen that established browser rule. The confirmation phrase remains `@handle`,
+then display name, then localized fallback, with no truncation.
 Submission revalidates the review and uses the installed approval, execution and step-up protocol. Accepted deletion
 is distinct from cleanup completion. Uncertain results retain the original command identity; unavailable, missing,
 denied and readable readback never establish success or permit a fresh deletion.
@@ -686,6 +693,15 @@ the recovery heading; Leave retires browser work without clearing its exact stor
 does not settle the in-memory attempt. Readback is deliberate, single-flight and uses the existing bounded native
 page reader; it cannot settle the command or produce an authentication-and-delete continuation.
 Even readable recovery advice omits private labels; it reports current readability only.
+
+The read-only POST uses `privateAuthRead` and `readJsonBounded`: one five-second browser deadline covers fetch, headers,
+and actual streamed success or error bytes before JSON parsing; the mounted reader's abort signal is forwarded and
+retired responses are discarded. Step-up and unknown markers retain the closed version-1 descriptor under the existing
+keys, capped at 231 raw UTF-16 code units: JSON for human UUID36, organization UUID36, original 32-hex operation key,
+version 1, fixed `delete`, and `/organizations/delete`, including keys and punctuation. Oversized or unreadable values
+remain invalid and block another deletion. Cleanup rereads and clears only the exact descriptor owned by an established
+native acknowledgement or an explicitly abandoned unsent review. Failed bodies, unknown outcomes, sign-in, current
+advice, unavailable reads and departure retain the original key and unresolved marker.
 
 After a cached-page return, retain only generic mounted history and wait for a deliberate current review; that read never repeats or settles the deletion request. The page keeps known-unsent, dispatched/unresolved and acknowledged outcomes separate from current organization advice. History contains no identity or operation descriptor. An accepted request remains distinct from downstream erasure custody and cleanup.
 

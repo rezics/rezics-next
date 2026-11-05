@@ -425,7 +425,7 @@ export function OrganizationDeleteContent({
       saved.kind === 'pending' &&
       organizationDeletePendingMatches(saved.value, humanAccountId, selected, operationKey)
     )
-      clearOrganizationDeleteStepUp();
+      clearOrganizationDeleteStepUp(saved.value);
   }
 
   function authenticate(humanAccountId: string, selected: string) {
@@ -566,7 +566,14 @@ export function OrganizationDeleteContent({
         focusIntent.current = 'history';
         forgetOperationKey(operation, target.humanAccountId, key);
         clearReviewContinuationFor(target.humanAccountId, target.organizationId, key);
-        if (
+        const retained = readOrganizationDeleteUnknown(target.organizationId);
+        if (retained.kind !== 'absent') {
+          attempt.current = organizationDeletionAttempt(
+            retained.kind === 'pending' ? retained.value : { organizationId: target.organizationId },
+            true,
+          );
+          if (!returns.history().includes('unresolved')) returns.seed('unresolved');
+        } else if (
           attempt.current?.identity.operationKey === key &&
           attempt.current.identity.organizationId === target.organizationId
         ) {
@@ -613,7 +620,10 @@ export function OrganizationDeleteContent({
       if (result.reason === 'unknown') {
         if (phase !== 'unsent') returns.markAttemptUnresolved(attemptId);
         const retained = readOrganizationDeleteUnknown(target.organizationId);
-        if (retained.kind === 'pending' && retained.value.organizationId === target.organizationId)
+        if (
+          retained.kind === 'pending' &&
+          organizationDeletePendingMatches(retained.value, target.humanAccountId, target.organizationId, key)
+        )
           attempt.current = organizationDeletionAttempt(retained.value, true);
         else if (attempt.current) attempt.current.unresolved = true;
         retireReview(current);
@@ -624,7 +634,8 @@ export function OrganizationDeleteContent({
       } else if (result.reason === 'changed') {
         if (phase === 'unresolved') returns.resolveAttempt(attemptId, 'refused');
         retireReview(current, { kind: 'changed' });
-        clearReviewContinuationFor(target.humanAccountId, target.organizationId, key);
+        // A known-unsent current attempt may abandon only its own continuation.
+        if (phase === 'unsent') clearReviewContinuationFor(target.humanAccountId, target.organizationId, key);
         setMessage(m.auth_organization_delete_changed());
         focusIntent.current = 'retry';
       } else if (result.reason === 'denied') {

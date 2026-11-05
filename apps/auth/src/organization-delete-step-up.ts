@@ -16,6 +16,16 @@ export type OrganizationDeletePendingState =
   | { kind: 'absent' | 'invalid' }
   | { kind: 'pending'; value: PendingOrganizationDelete };
 
+/** Exact raw UTF-16 ceiling for the fixed version-1 descriptor (231 code units). */
+export const ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16 = JSON.stringify({
+  humanAccountId: '0'.repeat(36),
+  organizationId: '0'.repeat(36),
+  operationKey: '0'.repeat(32),
+  version: 1,
+  operation: 'delete',
+  returnTo: organizationDeleteReturnTo,
+}).length;
+
 export function isAccountId(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 }
@@ -36,10 +46,25 @@ function valid(value: unknown): value is PendingOrganizationDelete {
   );
 }
 
+export function sameOrganizationDeleteDescriptor(
+  left: PendingOrganizationDelete,
+  right: PendingOrganizationDelete,
+): boolean {
+  return (
+    left.version === right.version &&
+    left.operation === right.operation &&
+    left.humanAccountId === right.humanAccountId &&
+    left.organizationId === right.organizationId &&
+    left.operationKey === right.operationKey &&
+    left.returnTo === right.returnTo
+  );
+}
+
 function readStored(key: string): OrganizationDeletePendingState {
   try {
     const stored = window.sessionStorage.getItem(key);
     if (stored === null) return { kind: 'absent' };
+    if (stored.length > ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16) return { kind: 'invalid' };
     const value: unknown = JSON.parse(stored);
     return valid(value) ? { kind: 'pending', value } : { kind: 'invalid' };
   } catch {
@@ -53,41 +78,63 @@ export function readOrganizationDeleteStepUp(): OrganizationDeletePendingState {
 
 // Only minimal retry identity is retained, never approval/reference or private facts.
 export function readOrganizationDeleteUnknown(organizationId: string): OrganizationDeletePendingState {
-  return readStored(`${storageKey}.unknown.${organizationId}`);
+  const state = readStored(`${storageKey}.unknown.${organizationId}`);
+  return state.kind === 'pending' && state.value.organizationId !== organizationId ? { kind: 'invalid' } : state;
 }
 
-export function clearOrganizationDeleteUnknown(organizationId: string): void {
+function clearStored(key: string, expected: PendingOrganizationDelete): boolean {
+  if (!valid(expected)) return false;
+  const current = readStored(key);
+  if (current.kind !== 'pending' || !sameOrganizationDeleteDescriptor(current.value, expected)) return false;
   try {
-    window.sessionStorage.removeItem(`${storageKey}.unknown.${organizationId}`);
+    window.sessionStorage.removeItem(key);
+    return true;
   } catch {
-    /* Keep unknown on failure. */
+    return false;
   }
 }
 
-export function storeOrganizationDeleteUnknown(value: PendingOrganizationDelete): void {
-  if (!valid(value)) return;
-  window.sessionStorage.setItem(`${storageKey}.unknown.${value.organizationId}`, JSON.stringify(value));
+export function clearOrganizationDeleteUnknown(
+  organizationId: string,
+  expected: PendingOrganizationDelete,
+): boolean {
+  return clearStored(`${storageKey}.unknown.${organizationId}`, expected);
 }
 
-export function clearOrganizationDeleteStepUp(): void {
+function storeDescriptor(key: string, value: PendingOrganizationDelete): boolean {
+  if (!valid(value)) return false;
+  const raw = JSON.stringify(value);
+  if (raw.length > ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16) return false;
+  const existing = readStored(key);
+  if (existing.kind === 'invalid' || (existing.kind === 'pending' && !sameOrganizationDeleteDescriptor(existing.value, value)))
+    return false;
   try {
-    window.sessionStorage.removeItem(storageKey);
+    window.sessionStorage.setItem(key, raw);
+    const stored = readStored(key);
+    return stored.kind === 'pending' && sameOrganizationDeleteDescriptor(stored.value, value);
   } catch {
-    /* Continuation only. */
+    return false;
   }
+}
+
+export function storeOrganizationDeleteUnknown(value: PendingOrganizationDelete): boolean {
+  return storeDescriptor(`${storageKey}.unknown.${value.organizationId}`, value);
+}
+
+export function clearOrganizationDeleteStepUp(expected: PendingOrganizationDelete): boolean {
+  return clearStored(storageKey, expected);
 }
 
 export function storeOrganizationDeleteStepUp(
   input: Omit<PendingOrganizationDelete, 'version' | 'returnTo' | 'operation'>,
 ): boolean {
-  const value = { ...input, version: 1, operation: 'delete', returnTo: organizationDeleteReturnTo };
-  if (!valid(value)) return false;
-  try {
-    window.sessionStorage.setItem(storageKey, JSON.stringify(value));
-    return true;
-  } catch {
-    return false;
-  }
+  const value: PendingOrganizationDelete = {
+    ...input,
+    version: 1,
+    operation: 'delete',
+    returnTo: organizationDeleteReturnTo,
+  };
+  return storeDescriptor(storageKey, value);
 }
 
 export function organizationDeleteSessionMatches(
