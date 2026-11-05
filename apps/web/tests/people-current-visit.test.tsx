@@ -1,16 +1,18 @@
 import { createRequire } from 'node:module';
 import { expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { planReads, platformRegistry, type CompositionDocument, type SelectedContext } from '@rezics/composition';
+import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { PeopleProfileEntry } from '../src/features/catalogue/people-profile-entry';
 import { PeopleCurrentVisitView } from '../src/features/catalogue/people-current-visit-view';
 import {
   peopleCurrentVisitGlobalHref,
+  peopleCurrentVisitHref,
   peopleCurrentVisitReturnHref,
   validatePeopleCurrentVisitSearch,
 } from '../src/features/catalogue/people-current-visit';
 import { peoplePersonId, peopleProfileFixture } from '../src/kernel/fake/catalogue-people-profile';
 import { m } from '../src/paraglide/messages.js';
+import { candidateContext } from '../src/subject/candidates';
 import { subjectHref } from '../src/subject/subject-href';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -81,28 +83,22 @@ test('mounted Person entry carries its admitted origin and mounts the existing e
   expect(editorMounts).toBe(2);
 });
 
-test('the public Subject Person entry carries its actual origin and waits for Global choice before reading the profile', async () => {
+test('the Subject menu carries its Person origin and the selected Realm waits for Global choice before reading', async () => {
   const { SubjectPage } = await import('../src/features/pages/subject');
   const { subjectPageMessages } = await import('../src/features/pages/route-support');
   const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const fixture = peopleProfileFixture('ready', locale, 'person');
-  fixture.person.subject.context = contextId;
-  const selectedContext: SelectedContext = {
-    id: contextId,
-    population: { kind: 'realm', id: realmId, title: 'Harbour readers' },
-  };
   const document: CompositionDocument = {
     root: { props: {} },
     content: [{ type: 'SubjectHeader', props: { id: 'header' } }],
   };
-  const plan = planReads(platformRegistry, document, { subject: peoplePersonId, context: selectedContext });
+  const plan = planReads(platformRegistry, document, { subject: peoplePersonId });
   const page = {
     subject: peoplePersonId,
     profile: 'fixture',
     template: { scope: 'generic' as const, key: null },
     document,
-    context: selectedContext,
     requestedReader: 'public-reader-visit-9',
     catalogue: {
       state: 'released' as const,
@@ -114,7 +110,7 @@ test('the public Subject Person entry carries its actual origin and waits for Gl
       Object.keys(plan.reads).map((key) => [key, { status: 200, body: fixture.person }]),
     ),
   };
-  const source = new URLSearchParams({ context: contextId, realm: realmId });
+  const source = new URLSearchParams({ context: candidateContext });
   const sourceAddress = `${subjectHref({ id: peoplePersonId, label: 'Mira Sato' }, locale).href}?${source}`;
   const serverClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({
@@ -140,22 +136,35 @@ test('the public Subject Person entry carries its actual origin and waits for Gl
   const encodedEntry = /href="([^"]*\/people\?visit=[^"]*)"/u.exec(pageMarkup)?.[1];
   expect(encodedEntry).toBeDefined();
   const entryHref = encodedEntry!.replaceAll('&amp;', '&');
-  const entry = new URL(entryHref, 'https://rezics.invalid');
   const admitted = validatePeopleCurrentVisitSearch(searchOf(entryHref), peoplePersonId, locale);
   expect(admitted.kind).toBe('origin');
   if (admitted.kind !== 'origin') return;
   expect(admitted.origin).toMatchObject({
-    context: contextId,
-    realm: realmId,
+    context: candidateContext,
     locale,
     definition: 'released:sha256:person-release-9',
     reader: 'public-reader-visit-9',
     returnAddress: sourceAddress,
   });
 
+  const unsupportedHref = peopleCurrentVisitHref({
+    id: peoplePersonId,
+    label: 'Mira Sato',
+    locale,
+    context: contextId,
+    realm: realmId,
+    definition: 'released:sha256:person-release-9',
+    reader: 'public-reader-visit-9',
+    sourceAddress: `/en/subjects/${peoplePersonId}/mira-sato?context=${contextId}&realm=${realmId}`,
+  });
+  const unsupportedRoute = new URL(unsupportedHref, 'https://rezics.invalid');
+  const unsupported = validatePeopleCurrentVisitSearch(searchOf(unsupportedHref), peoplePersonId, locale);
+  expect(unsupported.kind).toBe('origin');
+  if (unsupported.kind !== 'origin') return;
+
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
-  const window = new Window({ url: `https://site.test${entry.pathname}${entry.search}` });
+  const window = new Window({ url: `https://site.test${unsupportedRoute.pathname}${unsupportedRoute.search}` });
   const globals = {
     window,
     ...Object.fromEntries(
@@ -208,7 +217,7 @@ test('the public Subject Person entry carries its actual origin and waits for Gl
         >
           <PeopleCurrentVisitView
             locale={locale}
-            pathname={entry.pathname}
+            pathname={unsupportedRoute.pathname}
             visit={visit}
             renderEditor={(origin) =>
               origin ? (
@@ -230,7 +239,7 @@ test('the public Subject Person entry carries its actual origin and waits for Gl
       </QueryClientProvider>,
     );
   try {
-    await import('react').then(({ act }) => act(async () => renderRoute(admitted, entry.href)));
+    await import('react').then(({ act }) => act(async () => renderRoute(unsupported, unsupportedRoute.href)));
     expect(host.textContent).toContain(m.people_current_visit_unsupported({}, options));
     expect(reads).toBe(0);
 
