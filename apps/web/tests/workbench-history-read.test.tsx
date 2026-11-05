@@ -1,10 +1,12 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient, SESSION_HEADER } from '@rezics/client';
-import { readWorkbenchHistory, historySource, type HistoryEntry } from '../src/moderation/workbench-history/read';
-import { WorkbenchHistory } from '../src/moderation/workbench-history/view';
-import { workbenchSearch } from '../src/moderation/workbench-queue/scope';
+import type { HistoryEntry } from '../src/moderation/workbench-history/read';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { readWorkbenchHistory, historySource } = await import('../src/moderation/workbench-history/read');
+const { WorkbenchHistory } = await import('../src/moderation/workbench-history/view');
+const { workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
 
 const entry: HistoryEntry = {
   id: 'decision-one',
