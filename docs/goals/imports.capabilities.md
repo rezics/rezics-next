@@ -6,7 +6,7 @@ Revision choice: current claims use checked-in exports; the reviewed Person-care
 
 ## User outcome
 
-Maintainers and community tools import licensed records through the ordinary API and permission model, inspect omissions and safely refresh changes or vanished facts with the same pure revisioned converters. Facts stay proposals until separately accepted/adopted; refresh preserves communal identity and unrelated adoption.
+Maintainers and community tools import licensed records through ordinary APIs/permissions, inspect omissions and safely refresh changed/vanished facts with pure revisioned converters. Facts remain proposals until accepted/adopted; refresh preserves identity and unrelated adoption.
 
 ## Required source coverage
 
