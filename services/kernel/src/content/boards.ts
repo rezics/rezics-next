@@ -42,6 +42,8 @@ export type BoardPageInput = { cursor?: string; limit?: number; sort?: BoardCurs
 export type BoardOpeningPageInput = Omit<BoardPageInput, 'limit'>;
 export type BoardThreadPage = Page<ThreadView> & {
   pinnedThreads: readonly ThreadView[];
+  /** The native generation observed with this page's candidates and confirmed after disclosure. */
+  pinRevision: string;
   anchors: readonly AnchoredPosition[];
   /** The oldest returned active-rank row's materialization time, or null when no active row was returned. */
   rankRefreshedAt: string | null;
@@ -555,6 +557,7 @@ async function listBoardThreadsFromSource(
   return {
     entries: pageEntries,
     pinnedThreads,
+    pinRevision: selected.pinRevision,
     anchor: finalState.boardAnchor,
     anchors,
     nextCursor,

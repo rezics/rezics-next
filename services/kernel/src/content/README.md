@@ -3098,6 +3098,13 @@ check uses scales [256, 1024, 4096] with the series rule.
 
 Decision: Mount the combined reader at `GET /v1/boards/{id}/page`; accept `new`, `active` and `hot` while binding continuation to the existing native sort, viewer and pin revision.
 
+Decision: Initial and continued Board openings expose the native candidate snapshot's observed `pinRevision`; final page admission compares that generation after foreign hydration, including changes with identical visible rows.
+
+The generation is the existing Board-home counter already read and confirmed by `listBoardOpeningThreads`.
+A change between the opening's page observations returns the existing retryable source-change response; a cursor
+bound to an older generation remains `invalid_cursor`. No additional source read, pin enumeration or body copy is
+needed. The response adds one decimal string of at most 19 bytes to the mounted opening's existing cost bound.
+
 Decision: Board comments are current only from a request-bound cohort witness; expose its exact or lower-bound count, last contribution time and source, and keep unsupported cohorts unavailable. Candidate episodes, empty prefixes and loaded page length never establish a count.
 
 Decision: Board binds the installed producer's public-cohort `select` before hydration and `confirm` afterward; it returns the producer source head and partition anchor, while withheld cohorts remain unavailable.
@@ -3117,7 +3124,7 @@ Its producer seam is `readConversationActivityBatch(threadIds, { actor, deadline
 `{ items: CommunityActivityWitness[], anchors: AnchoredPosition[] }`. Each current witness binds one thread to
 `cohort: {kind:'public'}` or `cohort: {kind:'viewer', accountId}`, a `{kind:'exact'|'lower-bound', value}` count,
 `lastActivityAt`, and `{epoch, position}` source; withheld witnesses return only `{state:'unavailable', threadId}`.
-The HTTP response head is `board`, `pinnedThreads`, `threads`, `next`, `rankRefreshedAt`, `reactionsAsOf`, `viewer`,
+The HTTP response head is `board`, `pinRevision`, `pinnedThreads`, `threads`, `next`, `rankRefreshedAt`, `reactionsAsOf`, `viewer`,
 `actions`. A populated public card can carry
 `comments: {state:'current', cohort:'public', count:{kind:'exact', value:4}, lastActivityAt:'2026-11-04T00:00:00.000Z', source:{epoch:2, position:'10'}}`;
 a withheld or unsupported cohort carries `comments: {state:'unavailable'}`. A changed final witness returns retryable

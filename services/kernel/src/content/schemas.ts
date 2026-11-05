@@ -1025,6 +1025,7 @@ export const BoardPageQuerySchema = t.Object(
 export const BoardPageResponseSchema = t.Object(
   {
     board: BoardViewSchema,
+    pinRevision: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }),
     pinnedThreads: t.Array(BoardOpeningCardSchema, { maxItems: 5 }),
     threads: t.Array(BoardOpeningCardSchema, { maxItems: 20 }),
     next: t.Union([t.String(), t.Null()]),
