@@ -13,16 +13,10 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT, readRelease } from '../../src/semantic/definitions.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
-import {
-  checkGrowth,
-  openGrowthDatabase,
-  placement,
-  seed,
-  type GrowthDatabase,
-  type Population,
-} from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, placement, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { VERTICAL_LOCALES, verticalManifests, verticalProfile } from '../support/manifests.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { seedBulkRows } from '../support/growth-seed-batches.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -31,6 +25,7 @@ const ACTIONS = [
   'definitions:publish',
   'definitions:activate',
   'definitions:read',
+  'gate:definition_publication',
   'subject:create',
   'statement:propose',
   'context:accept',
@@ -345,7 +340,7 @@ const growthAccount = '019a1b2c-3d4e-7f00-8a00-e0a0510a0002';
 const growthAccountRoute = routeOf(growthAccount);
 if (growthAccountRoute === null) throw new Error('Growth account must be a routed id');
 const expansionHotPartition = partitionOf(growthAccountRoute);
-const backgroundOrdinals = 2_000;
+const backgroundOrdinals = 20;
 const expansionName = 'semantic-expansion-growth';
 
 function positionOf(ordinal: number): number {
@@ -671,6 +666,35 @@ function expansionPopulation(): Population {
 }
 
 const expansionRows = expansionPopulation();
+
+// Insert each relation for the whole range before its dependants. A seed batch can
+// start halfway through an ordinal; its first-seen table order is not a foreign-key order.
+async function growBackground(database: GrowthDatabase, from: number, to: number) {
+  const records = new Map(
+    Array.from({ length: to - from }, (_, offset) => {
+      const ordinal = from + offset;
+      return [ordinal, expansionRows.rows!(placement(expansionRows, ordinal))] as const;
+    }),
+  );
+  for (const table of Object.keys(records.get(from)!)) {
+    await seedBulkRows(
+      database.admin,
+      from,
+      to,
+      (ordinal) => placement(expansionRows, ordinal),
+      ({ ordinal }) => ({ [table]: records.get(ordinal)![table]! }),
+    );
+  }
+  await expansionRows.finish!(database.admin, { from, to });
+  const footprint = await database.admin.query<{ rows: string; bytes: string }>(
+    `SELECT count(*)::text AS rows, coalesce(sum(pg_column_size(statement)), 0)::text AS bytes
+     FROM semantic.candidate`,
+  );
+  console.log(JSON.stringify({ manifests: to / backgroundOrdinals, candidates: footprint.rows[0] }));
+  expect(Number(footprint.rows[0]!.rows)).toBeGreaterThanOrEqual(to);
+  expect(Number(footprint.rows[0]!.bytes)).toBeGreaterThan(to * 50);
+}
+
 let growth: GrowthDatabase;
 let growthKernel: Kernel;
 let growthToken = '';
@@ -695,14 +719,9 @@ test('subject commands and reads stay within budget at 10 and at 100 vertical ma
     scales: [1, 10, 100],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (database, scale, previous) => {
-      // Keep the background fixed while the number of vertical manifests grows.
-      // Seed before activation so these heads stay behind the release the measured commands serve.
-      if (previous === 0) {
-        await seed({ pool: database.pool, admin: database.admin }, expansionRows, {
-          from: 0,
-          to: backgroundOrdinals,
-        });
-      }
+      // Grow real statement rows and bytes with the manifest population, before
+      // activation so these background heads stay behind the measured release.
+      await growBackground(database, previous * backgroundOrdinals, scale * backgroundOrdinals);
       const release = await compiledRelease(scale);
       const digest = releaseDigest(release);
       const published = await handle(growthKernel, 'POST', '/v1/definitions/releases', growthToken, {

@@ -532,6 +532,15 @@ async function startDriver(
         );
     }
 
+    // Community creation is exercised by the historical suite, but is outside
+    // the current platform governance role. Author this one native fixture grant
+    // explicitly; all subsequent delegation still uses the real grant endpoint.
+    await pool.query(
+      `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+       VALUES (0,$1,$2,'context:create','(,)',$3)`,
+      [GLOBAL_CONTEXT, governor.accountId, randomUUID()],
+    );
+
     await grantAccount(accounts.editor, ['subject:create', 'statement:propose', 'context:create']);
     await grantAccount(accounts.acceptor, ['context:accept', 'context:adopt', 'subject:merge']);
     await grantAccount(accounts.steward, ['definitions:publish', 'definitions:activate']);
