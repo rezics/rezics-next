@@ -248,6 +248,9 @@ function mediaViews(ids: readonly string[], images: readonly DocumentImagePresen
 }
 
 type ReviewCitation = NonNullable<ItemView['voteCitation']>;
+type HistoryActionReference =
+  | Readonly<{ type: 'content.thread'; id: string }>
+  | Readonly<{ type: 'content.post'; id: string; sourceRevisionId: string }>;
 type HistoryReviewItem =
   | Readonly<{ revisionId: string; state: 'available'; citation: ReviewCitation; question: RatingQuestionView }>
   | Readonly<{ revisionId: string; state: 'unavailable'; citation: null; question: null }>;
@@ -293,7 +296,7 @@ async function readReviewQuestions(
 function actionReferences(
   actor: Actor,
   runtime: ReadingPageViewerActionRuntime,
-  refs: readonly Readonly<{ type: 'content.thread' | 'content.post'; id: string; sourceRevisionId?: string }>[],
+  refs: readonly HistoryActionReference[],
   results: readonly Readonly<{
     type: string;
     id: string;
@@ -331,7 +334,7 @@ async function readHistoryActions(
   } catch (error) {
     if (!dependencyUnavailable(error)) throw error;
   }
-  const refs: Array<Readonly<{ type: 'content.thread' | 'content.post'; id: string; sourceRevisionId?: string }>> = [
+  const refs: HistoryActionReference[] = [
     { type: 'content.thread', id: thread.id },
   ];
   if ('revisionId' in head && head.availability === 'available')
