@@ -134,14 +134,15 @@ export function MalConfirmPage({
                         type="checkbox"
                         checked={scoreConsents.has(scoreKey)}
                         disabled={busy || review.skip}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const checked = event.currentTarget.checked;
                           setScoreConsents((current) => {
                             const next = new Set(current);
-                            if (event.currentTarget.checked) next.add(scoreKey);
+                            if (checked) next.add(scoreKey);
                             else next.delete(scoreKey);
                             return next;
-                          })
-                        }
+                          });
+                        }}
                       />
                       {m.library_mal_score_consent()}
                     </label>
@@ -201,7 +202,7 @@ function currentVoteLabel(
       at: row.currentScoreVote.at,
     });
   }
-  if (score?.question.id === questionId) {
+  if (score && score.question.id === questionId) {
     if (score.baseline.state === 'absent') return m.library_mal_vote_none();
     if (score.baseline.state === 'cleared') return m.library_mal_vote_cleared();
     return m.library_mal_vote_present({
