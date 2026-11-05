@@ -9,7 +9,11 @@ import { MediaUnavailableError } from './media.ts';
 import claim from './realm-media-claim.sql';
 import settings from './realm-media-settings.sql';
 import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
-import { RealmPresentationImageSchema, type RealmPresentationImage } from './realm-presentation-image.ts';
+import {
+  RealmPresentationImageSchema,
+  type RealmPresentationImage,
+  type RealmPresentationOptional,
+} from './realm-presentation-image.ts';
 
 export {
   RealmPresentationImageSchema,
