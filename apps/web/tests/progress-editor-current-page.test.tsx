@@ -606,24 +606,20 @@ test('Internal navigation offers Stay or confirmed Discard and keeps unresolved 
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
 
-    let stayNavigation!: Promise<void>;
     await act(async () => {
-      stayNavigation = h.navigate();
+      void h.navigate();
       await Promise.resolve();
     });
     expect(h.body.getByRole('alertdialog')).toBeDefined();
     await h.click(m.library_progress_draft_navigation_stay());
-    await act(async () => stayNavigation);
     expect(h.path()).toBe('/');
     expect(h.field(m.library_progress_amount()).value).toBe('0');
 
-    let discardNavigation!: Promise<void>;
     await act(async () => {
-      discardNavigation = h.navigate();
+      void h.navigate();
       await Promise.resolve();
     });
     await h.click(m.library_progress_draft_navigation_discard());
-    await act(async () => discardNavigation);
     expect(h.path()).toBe('/destination');
     expect(h.body.queryByRole('dialog')).toBeNull();
     expect(commands).toHaveLength(0);
@@ -644,15 +640,13 @@ test('Internal navigation offers Stay or confirmed Discard and keeps unresolved 
     await pending.fill(m.library_progress_amount(), '0');
     await pending.submit('record');
     const original = commands[0]!.data;
-    let navigation!: Promise<void>;
     await act(async () => {
-      navigation = pending.navigate();
+      void pending.navigate();
       await Promise.resolve();
     });
     expect(pending.body.getByRole('alertdialog')).toBeDefined();
     expect(pending.body.queryByRole('button', { name: m.library_progress_draft_navigation_discard() })).toBeNull();
     await pending.click(m.library_progress_draft_navigation_stay());
-    await act(async () => navigation);
     expect(pending.path()).toBe('/');
     expect(commands).toHaveLength(1);
     await settle(() => commands[0]!.work.reject(new Error('unknown commit outcome')));
