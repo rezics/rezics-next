@@ -188,6 +188,15 @@ function publication(
   };
 }
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
+async function waitFor<T>(read: () => T | undefined): Promise<T> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const value = read();
+    if (value !== undefined) return value;
+    await tick();
+  }
+  throw new Error('Timed out waiting for current viewer exposure');
+}
 async function mounted() {
   exposures.length =
     ruleReads.length =
@@ -223,12 +232,16 @@ async function mounted() {
     exposureKey,
     expose: (subject = 'alice', admitted = ['collections', 'library_label.list']) =>
       perform(() => client.setQueryData(exposureKey(), { subject, admitted })),
-    authorize: (subject = 'alice', admitted = ['collections', 'library_label.list']) =>
-      perform(() => {
-        const pending = exposures.filter((call) => call.expected === subject).at(-1);
-        expect(pending).toBeDefined();
-        pending!.resolve({ subject, admitted });
-      }),
+    settleExposure: async (
+      subject: string,
+      result: { subject: string | null; admitted: string[] },
+    ) => settle(await waitFor(() => exposures.filter((call) => call.expected === subject).at(-1)), result),
+    authorize: async (subject = 'alice', admitted = ['collections', 'library_label.list']) => {
+      await settle(await waitFor(() => exposures.filter((call) => call.expected === subject).at(-1)), {
+        subject,
+        admitted,
+      });
+    },
     perform,
     render: (node: ReactNode) =>
       perform(() =>
@@ -291,7 +304,10 @@ describe('Complete saved rule and selected Publication owner authority preserves
     try {
       await h.render(<CollectionRuleCurrent page={a} collectionId="alpha" navigate={(id) => navigation.push(id)} />);
       expect(h.host.querySelector('form')).toBeNull(); // The legacy global cache grants nothing.
-      await settle(exposures.at(-1)!, { subject: 'foreign-viewer', admitted: ['collections', 'library_label.list'] });
+      await h.settleExposure('alice', {
+        subject: 'foreign-viewer',
+        admitted: ['collections', 'library_label.list'],
+      });
       expect(h.host.querySelector('form')).toBeNull();
       await h.expose();
       const oldForm = h.host.querySelector('form')!;
