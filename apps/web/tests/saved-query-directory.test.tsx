@@ -1,22 +1,9 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { MineCollection } from '../src/library/mine-collections';
+import { savedQueryCollection as collection } from './factories/collections';
 import { SavedQueryDirectory } from '../src/library/saved-query-directory';
 import { savedQueryRuleReturn } from '../src/library/saved-query-results';
 import { m } from '../src/paraglide/messages.js';
-
-function collection(id: string, changes: Partial<MineCollection> = {}): MineCollection {
-  return {
-    id,
-    curatorAccountId: 'alice',
-    title: id,
-    membershipKind: 'dynamic',
-    curator: null,
-    memberCount: 931,
-    updatedAt: '2025-01-02T03:04:05Z',
-    ...changes,
-  };
-}
 
 function directory(props: Partial<Parameters<typeof SavedQueryDirectory>[0]> = {}) {
   return renderToStaticMarkup(

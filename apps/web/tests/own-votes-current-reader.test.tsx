@@ -1,3 +1,4 @@
+import { subjectSummary } from './factories/subjects';
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
@@ -84,14 +85,7 @@ function row(): OwnVoteEntry {
   return {
     targetId: target,
     questionId: question,
-    subject: {
-      id: terminal,
-      type: 'work',
-      types: ['work'],
-      label: { value: 'Kokoro', language: 'en' },
-      creativeWork: true,
-      cover: null,
-    },
+    subject: subjectSummary({ id: terminal, label: { value: 'Kokoro', language: 'en' } }),
     subjectHref: `/v1/subjects/${terminal}`,
     question: {
       id: question,

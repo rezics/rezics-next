@@ -1,3 +1,4 @@
+import { mineCollectionsViewerPage as response } from './factories/collections';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
@@ -9,6 +10,7 @@ import type { PinMutation } from '../src/library/pins-actions';
 
 // UNRUN: one mounted/deferred journey for controller integration. The installed DOM and
 // real exports exercise composition, not native authority, browser rendering or visual proof.
+let serverReads = true;
 let preparation: 'active' | 'absent' | 'unavailable' = 'active';
 let actualSubject: string | undefined = 'A';
 let preparations = 0;
@@ -52,7 +54,7 @@ const startWithServerFunctions = {
       },
       client(handler: typeof client) {
         client = handler;
-        return (...args: never[]) => (typeof window === 'undefined' ? server : client)(...args);
+        return (...args: never[]) => (serverReads ? server : client)(...args);
       },
     };
     return chain;
@@ -75,50 +77,6 @@ function deferred<T>() {
     reject = no;
   });
   return { promise, resolve, reject };
-}
-function response(
-  subject: string,
-  cursor: string | null = null,
-  layout: 'rows' | 'previews' = 'previews',
-): MineCollectionsViewerPage {
-  return {
-    sessionSubject: subject,
-    requested: { cursor, layout },
-    page: {
-      signedIn: true,
-      state: 'loaded',
-      next: `next-${subject}`,
-      collections: [
-        {
-          id: 'shared-private',
-          title: `Private ${subject}`,
-          curator: null,
-          visibility: 'private',
-          preview: {
-            state: 'loaded',
-            members: [{ id: `subject-${subject}`, type: 'Book', label: `Preview ${subject}`, cover: null }],
-          },
-        },
-      ],
-      navigationCollections: [
-        {
-          id: `state-${subject}`,
-          title: `Navigation ${subject}`,
-          curator: null,
-          membershipKind: 'dynamic',
-          builtinKind: 'state',
-        },
-      ],
-    },
-    pins: {
-      state: 'loaded',
-      revision: 7,
-      next: null,
-      canUpdate: true,
-      canRemove: true,
-      pins: [{ collectionId: `pin-${subject}`, target: { id: `pin-${subject}`, title: `Pinned ${subject}` } }],
-    },
-  };
 }
 
 test('The default My Collections route immediately retires private collections and pins on observed viewer or request replacement and accepts only actual matching prepared-viewer results', async () => {
@@ -207,7 +165,7 @@ test('The default My Collections route immediately retires private collections a
     });
     preparation = 'unavailable';
     await expect(load({ deps: { layout: 'previews' } })).rejects.toMatchObject({
-      problem: { code: 'dependency_unavailable' },
+      problem: { code: 'session_unavailable' },
     });
     preparation = 'active';
     actualSubject = undefined;
@@ -229,6 +187,7 @@ test('The default My Collections route immediately retires private collections a
     expect(Route.options.beforeLoad).toBe(requireSignedIn);
   } finally {
     native.mockRestore();
+    serverReads = false;
   }
 
   const { createRoot, hydrateRoot } = await import('react-dom/client');
@@ -239,6 +198,8 @@ test('The default My Collections route immediately retires private collections a
   const menu = await import('@rezics/ui/menu');
   const actions = await import('../src/library/pins-actions');
   const { m } = await import('../src/paraglide/messages.js');
+  const { sessionQuery } = await import('../src/session/query');
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const menus: MenuProps[] = [];
   const OriginalMenu = menu.Menu;
   const menuRead = spyOn(menu, 'Menu').mockImplementation((props) => {
@@ -265,6 +226,7 @@ test('The default My Collections route immediately retires private collections a
   const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
   const Page = Route.options.component!;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const stopObservation = viewerExposureLifetime(client).subscribe(() => {});
   const router = createRouter({
     routeTree: createRootRoute(),
     history: createMemoryHistory({ initialEntries: ['/library/collections?layout=previews'] }),
@@ -291,8 +253,13 @@ test('The default My Collections route immediately retires private collections a
     else if (search.cursor !== undefined) query.set('cursor', search.cursor);
     await act(async () => {
       await router.navigate({ href: `/library/collections?${query}` });
-      client.setQueryData(['session'], viewer);
-      client.setQueryData(['exposure', 'viewer'], admitted ? ['collections', 'personal_library'] : []);
+      client.setQueryData(sessionQuery.queryKey, viewer);
+      const observation = viewerExposureLifetime(client).getSnapshot();
+      if (observation.state === 'signed-in')
+        client.setQueryData(viewerExposureQuery(observation.observation).queryKey, {
+          subject: observation.observation.subject,
+          admitted: admitted ? ['collections', 'personal_library'] : [],
+        });
       client.setQueryData(['exposure', 'anonymous'], []);
       if (!root) {
         const html = renderToString(tree());
@@ -412,6 +379,7 @@ test('The default My Collections route immediately retires private collections a
     expect(hydrationErrors).toEqual([]);
   } finally {
     if (root) await act(async () => root!.unmount());
+    stopObservation();
     client.clear();
     host.remove();
     for (const restore of [menuRead, transport, write, loader, invalidate]) restore.mockRestore();

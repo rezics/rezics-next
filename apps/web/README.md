@@ -111,6 +111,8 @@ The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run de
 
 ## Testing
 
+Decision: native test defaults in `tests/factories` derive from generated client responses; renderer projections use their consumer types. Only this factory directory joins ordinary Web compilation. Malformed boundary inputs remain explicit in journey tests.
+
 For a focused fake, component, route-loader or story-render test that does not need native services, run it locally:
 
 ```sh

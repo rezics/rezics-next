@@ -1,10 +1,10 @@
+import { editableProfile } from './factories/profile';
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import {
   closedProfileEditing,
   EditableProfileReadError,
   officialProfileRead,
-  type EditableProfile,
 } from '../src/settings/editable-profile-source';
 import {
   loadProfileRecord,
@@ -20,16 +20,7 @@ import {
 import { ProfileEditor } from '../src/settings/profile-write';
 import { MediaProblem } from '../src/media/kernel';
 
-const profile: EditableProfile = {
-  id: '019a0000-0000-7000-8000-000000000001',
-  kind: 'actor',
-  handle: null,
-  displayName: 'Native name',
-  bio: 'Native notes',
-  links: [],
-  avatar: null,
-  publicViews: { posts: false, reviews: true, collections: false, realms: true },
-};
+const profile = editableProfile();
 
 test('the editable source rejects incomplete, foreign and non-closed native bodies without a draft or write', async () => {
   const { bio, ...incomplete } = profile;
