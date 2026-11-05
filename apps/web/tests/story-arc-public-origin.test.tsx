@@ -158,6 +158,7 @@ test('the mounted Subject, canonical route, correction session and existing read
     import('../src/paraglide/messages'),
   ]);
   const { within, userEvent, waitFor: waitForMenu } = await import('storybook/test');
+  const user = userEvent.setup({ document: window.document as unknown as Document });
   const oldLocale = getLocale();
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -221,14 +222,7 @@ test('the mounted Subject, canonical route, correction session and existing read
     // Menu submenus render through a body portal, so query the same mounted surface as the addon flow.
     const publicDom = within(window.document.body);
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="subject-contribute"] button')!;
-    await act(async () => userEvent.click(trigger));
-    console.info('StoryArc action menu diagnostic', {
-      width: window.innerWidth,
-      compact: window.matchMedia('(max-width: 767px)').matches,
-      dialog: publicDom.queryByRole('dialog', { name: m.contribute_title() })?.outerHTML.slice(0, 300),
-      menu: publicDom.queryByRole('menu')?.outerHTML.slice(0, 300),
-      trigger: trigger.outerHTML,
-    });
+    await act(async () => user.click(trigger));
     await waitForMenu(() =>
       expect(
         publicDom.queryByRole('dialog', { name: m.contribute_title() }) ?? publicDom.queryByRole('menu'),
@@ -237,12 +231,12 @@ test('the mounted Subject, canonical route, correction session and existing read
     const sheet = publicDom.queryByRole('dialog', { name: m.contribute_title() });
     if (sheet) {
       const edit = within(sheet).getByRole('button', { name: m.contribute_edit() });
-      await act(async () => userEvent.click(edit));
+      await act(async () => user.click(edit));
     } else {
       const menu = publicDom.getByRole('menu');
       const edit = within(menu).getByRole('menuitem', { name: m.contribute_edit() });
       edit.focus();
-      await act(async () => userEvent.keyboard('{ArrowRight}'));
+      await act(async () => user.keyboard('{ArrowRight}'));
     }
     return (await publicDom.findByRole('link', { name: m.story_arc_title() })).getAttribute('href');
   };
