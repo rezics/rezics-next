@@ -23,6 +23,7 @@ import {
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 const appearanceRolesUri = 'https://rezics.com/schemes/bangumi/appearance-roles';
 
@@ -112,10 +113,10 @@ test('selected Game characters and performers publish through current bindings a
     const editor = await openApiObserver(runtime);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     const malformedPlan = await planCrossMediaSeed(sourceTables('unknown'));
     expect(malformedPlan.gameCharacterAppearances?.map(({ subjectId }) => subjectId)).toEqual(['103', '103']);

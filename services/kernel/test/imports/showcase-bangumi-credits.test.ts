@@ -25,6 +25,7 @@ import {
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 
@@ -84,10 +85,10 @@ test('default anime staff and voice publication adopts exact cited endpoints and
     const plan = await planCrossMediaSeed(tables);
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     let resolution: BangumiCreditVocabularyResolution | undefined;
     async function importAndPublish(prior?: ShowcasePublicationResult) {

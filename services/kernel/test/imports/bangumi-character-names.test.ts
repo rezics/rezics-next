@@ -18,6 +18,7 @@ import {
 } from '../../../importer/src/showcase-publication.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const characterExternalId = 'character:12393';
@@ -110,10 +111,10 @@ test('default selected Bangumi character names publish, retain adoption, and ref
     }
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
+      fetch: fixtureFetch(async (input) => {
         const url = new URL(String(input));
         return runtime.request(`${url.pathname}${url.search}`);
-      },
+      }),
     });
     const state = join(directory, 'import.sqlite');
     async function run(input: CrossMediaTables) {
