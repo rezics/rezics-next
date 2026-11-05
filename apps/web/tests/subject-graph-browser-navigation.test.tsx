@@ -18,8 +18,8 @@ type GraphSuccess = Extract<GraphRead, { ok: true }>;
 
 function subject(id: string, label: string) {
   return {
-    subject: { id, type: 'schema:Book', labels: { en: { value: label, language: 'en' } }, statements: {} },
-    labels: { en: { value: label, language: 'en' } },
+    subject: { id, type: 'schema:Book', labels: { en: label }, statements: {} },
+    labels: { en: label },
   };
 }
 
@@ -378,7 +378,7 @@ test('companion and correction links return only exact public selection state an
 });
 
 test.each(['success', 'denied'] as const)(
-  'anchor, locale, reader and transport replacement retire pending %s and session tokens',
+  'source replacement and return reject retired %s and session tokens',
   async (lateResult) => {
     const ui = await mounted();
     const late = deferred<GraphRead>();
