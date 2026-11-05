@@ -178,7 +178,8 @@ test('directory, organization, account and recovery retain independent phone con
     expect(window.document.activeElement).toBe(refresh);
 
     for (const locale of locales) {
-      setLocale(locale, { reload: false });
+      window.history.replaceState(null, '', `/${locale}/accounts`);
+      await setLocale(locale, { reload: false });
       for (const dir of ['ltr', 'rtl'] as const) {
         host.dir = dir;
         await mount(directory());
