@@ -753,6 +753,20 @@ export function SubjectPage({
   const workReturn = workAddress ? contextHref(workAddress.href, realm) : undefined;
   const workRelationsHref =
     workAddress && page.views?.includes('relations') ? subjectUrlForView(workAddress, 'relations') : undefined;
+  const peopleCurrentVisit =
+    read?.subject.type === 'schema:Person'
+      ? {
+          context: page.context?.id ?? read.subject.context,
+          ...(page.context?.population.kind === 'realm' ? { realm: page.context.population.id } : {}),
+          definition: page.catalogue
+            ? page.catalogue.state === 'released'
+              ? `released${page.catalogue.digest ? `:${page.catalogue.digest}` : ''}`
+              : page.catalogue.state
+            : 'absent',
+          ...(page.requestedReader ? { reader: page.requestedReader } : {}),
+          ...(currentHref ? { sourceAddress: currentHref } : {}),
+        }
+      : undefined;
   const ContextLink = useMemo(() => {
     const Link = link ?? PlainLink;
     return function SelectedLink(props: ComponentProps<PageLink>) {
@@ -779,7 +793,12 @@ export function SubjectPage({
         >
           {page.views?.includes('editions') && <PublicationEditorEntry work={read.subject.id} locale={locale} />}
           {(read.subject.type === 'schema:Person' || read.subject.type === 'schema:Organization') && (
-            <PeopleProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+            <PeopleProfileEntry
+              id={read.subject.id}
+              label={subjectPageTitle(page, locale)}
+              locale={locale}
+              {...(peopleCurrentVisit ? { currentVisit: peopleCurrentVisit } : {})}
+            />
           )}
           {read.subject.type === 'schema:Organization' && (
             <ProducerHistoryEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
@@ -884,6 +903,14 @@ export function SubjectPage({
         {existingActions}
         {read && !page.account && realm && (
           <>
+            {read.subject.type === 'schema:Person' && peopleCurrentVisit && (
+              <PeopleProfileEntry
+                id={read.subject.id}
+                label={subjectPageTitle(page, locale)}
+                locale={locale}
+                currentVisit={peopleCurrentVisit}
+              />
+            )}
             <GameProfileEntry
               id={read.subject.id}
               type={read.subject.type}
