@@ -263,6 +263,15 @@ test('authenticated managers read cross-recipient filtered pages and threads wit
     const byTask = await invoke(env, 'inbox', 'thread', 'task-a', '--json');
     expect(byTask.stderr).toBe('');
     expect(JSON.parse(byTask.stdout).entries).toHaveLength(3);
+    const digest = await invoke(env, 'inbox', 'digest', '--since', String(Date.now() - 60_000), '--json');
+    expect(digest.code).toBe(0);
+    expect(digest.stderr).toBe('');
+    const digestBody = JSON.parse(digest.stdout) as { groups: unknown[]; details: { entries: unknown[] } };
+    expect(Array.isArray(digestBody.groups)).toBe(true);
+    expect(Array.isArray(digestBody.details.entries)).toBe(true);
+    const text = await invoke(env, 'inbox', 'log', '--to', 'recipient-a', '--limit', '1');
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain('Second matching signed detail');
     expect(
       db.query('SELECT id, manager, notified, read_at, acknowledged_at FROM manager_inbox ORDER BY id').all(),
     ).toEqual(before);
