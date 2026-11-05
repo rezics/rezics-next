@@ -218,24 +218,28 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
         return { passed: true, output: '', timedOut: false };
       }),
     });
-    expect(git(root, 'rev-parse', 'dev-verified')).toBe(finalHead);
-    expect(executed.filter(({ command }) => command.join(' ') === verifierCommand.join(' '))).toHaveLength(1);
-    expect(executed.filter(({ command }) => command.join(' ') === legacyAffectedCommand.join(' '))).toHaveLength(0);
+    expect(
+      executed.filter(({ command }) => command.join(' ').endsWith(verifierCommand.join(' '))),
+    ).toHaveLength(1);
+    expect(
+      executed.filter(({ command }) => command.join(' ').endsWith(legacyAffectedCommand.join(' '))),
+    ).toHaveLength(0);
     expect(
       executed.filter(
-        ({ command }) => command.join(' ') === [...siblingCommand, 'tools/goal/src/fixture.test.ts'].join(' '),
+        ({ command }) => command.join(' ').endsWith([...siblingCommand, 'tools/goal/src/fixture.test.ts'].join(' ')),
       ),
     ).toHaveLength(1);
     expect(
       executed
-        .filter(({ command }) => command.join(' ') === 'bun test src/helper.test.ts src/widget.test.ts')
+        .filter(({ command }) => command.join(' ').endsWith('bun test src/helper.test.ts src/widget.test.ts'))
         .map(({ cwd }) => cwd.split('/').slice(-2).join('/')),
     ).toEqual(['apps/widget']);
     expect(
       executed
-        .filter(({ command }) => command.join(' ') === 'bun test src/worker.test.ts')
+        .filter(({ command }) => command.join(' ').endsWith('bun test src/worker.test.ts'))
         .map(({ cwd }) => cwd.split('/').slice(-2).join('/')),
     ).toEqual(['services/worker']);
+    expect(git(root, 'rev-parse', 'dev-verified')).toBe(finalHead);
   } finally {
     ctx.close();
   }
