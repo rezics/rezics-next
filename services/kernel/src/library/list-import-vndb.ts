@@ -260,9 +260,7 @@ function vndbProgressSources(row: VndbRow): ProgressSourceValue[] {
   const progress = row.fields.progress ?? { kind: 'missing' as const, raw: null };
   const measure = row.fields.progressMeasure;
   const unit =
-    measure?.kind === 'value' && typeof measure.value === 'string' && measure.value.length > 0
-      ? measure.value
-      : null;
+    measure?.kind === 'value' && typeof measure.value === 'string' && measure.value.length > 0 ? measure.value : null;
   const raw = progress.raw ?? (typeof progress.value === 'string' ? progress.value : null);
   const lexeme = raw?.trim() ?? '';
   let state: ProgressSourceValue['state'];
@@ -526,7 +524,13 @@ export function createVndbImport(config: Config) {
       async (tx) => ({ value: await body(tx, account), events: updated(account.accountId) }),
     );
   }
-  async function save(tx: import('../command/command.ts').CommandTransaction, account: AccountActor, id: string, ordinal: number, decision: Decision) {
+  async function save(
+    tx: import('../command/command.ts').CommandTransaction,
+    account: AccountActor,
+    id: string,
+    ordinal: number,
+    decision: Decision,
+  ) {
     const route = requireRoute(account.accountId);
     const stored = await tx.query<{ decisions: Record<string, Decision> }>(
       'SELECT decisions FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
@@ -777,7 +781,9 @@ export function createVndbImport(config: Config) {
       if (
         !(error instanceof LibraryNotFoundError) &&
         !(error instanceof ProgressConflictError) &&
-        !(error instanceof ProblemError && ['not_found', 'conflict', 'unsupported_library_profile'].includes(error.code))
+        !(
+          error instanceof ProblemError && ['not_found', 'conflict', 'unsupported_library_profile'].includes(error.code)
+        )
       )
         throw error;
     }
@@ -924,7 +930,10 @@ export function createVndbImport(config: Config) {
     const matching = await match(actor, row);
     const targetId = choice.targetId ?? (matching.candidates.length === 1 ? matching.candidates[0] : undefined);
     const target = targetId ? await current(actor, targetId) : null;
-    if (choice.action === 'state' && (row.kind !== 'vn' || !target || !choice.state || !target.states.some((s) => s.id === choice.state)))
+    if (
+      choice.action === 'state' &&
+      (row.kind !== 'vn' || !target || !choice.state || !target.states.some((s) => s.id === choice.state))
+    )
       throw new ProblemError('invalid_request');
     if ((choice.action === 'state' || choice.action === 'progress') && (!target || row.kind !== 'vn'))
       throw new ProblemError('invalid_request');
@@ -1663,8 +1672,7 @@ export function createVndbImport(config: Config) {
       const target = decision.targetId ? await current(actor, decision.targetId) : null;
       if (
         !row ||
-        entryImportMetadataDigest(row) !==
-          (decision.progress?.sourceFingerprint ?? entryImportMetadataDigest(row)) ||
+        entryImportMetadataDigest(row) !== (decision.progress?.sourceFingerprint ?? entryImportMetadataDigest(row)) ||
         !target ||
         !decision.guard ||
         decision.guard.uploadId !== id ||
@@ -1683,21 +1691,27 @@ export function createVndbImport(config: Config) {
         status = 'skipped';
       } else {
         const startKey = `vndb:${id}:${choice.ordinal}:${choice.reviewId}:entry:start`;
-        await mutation(actor, 'apply-entry-start', startKey, { id, ordinal: choice.ordinal, reviewId: choice.reviewId }, async (tx, account) => {
-          const locked = await tx.query<{ decision: Decision | null; active: boolean }>(
-            `SELECT decisions->$4::text AS decision,state='active' AND expires_at>clock_timestamp() AS active
+        await mutation(
+          actor,
+          'apply-entry-start',
+          startKey,
+          { id, ordinal: choice.ordinal, reviewId: choice.reviewId },
+          async (tx, account) => {
+            const locked = await tx.query<{ decision: Decision | null; active: boolean }>(
+              `SELECT decisions->$4::text AS decision,state='active' AND expires_at>clock_timestamp() AS active
              FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
-            [requireRoute(account.accountId), account.accountId, id, String(choice.ordinal)],
-          );
-          const currentDecision = locked.rows[0]?.decision;
-          if (
-            !currentDecision ||
-            currentDecision.reviewId !== choice.reviewId ||
-            (!locked.rows[0]?.active && !pendingState(currentDecision))
-          )
-            throw new LibraryConflictError();
-          await save(tx, account, id, choice.ordinal, { ...currentDecision, status: 'applying' });
-        });
+              [requireRoute(account.accountId), account.accountId, id, String(choice.ordinal)],
+            );
+            const currentDecision = locked.rows[0]?.decision;
+            if (
+              !currentDecision ||
+              currentDecision.reviewId !== choice.reviewId ||
+              (!locked.rows[0]?.active && !pendingState(currentDecision))
+            )
+              throw new LibraryConflictError();
+            await save(tx, account, id, choice.ordinal, { ...currentDecision, status: 'applying' });
+          },
+        );
         decision = { ...decision, status: 'applying' };
         try {
           const result = await entries.putEntry(
@@ -1749,7 +1763,8 @@ export function createVndbImport(config: Config) {
           error instanceof LibraryConflictError ||
           error instanceof LibraryNotFoundError ||
           error instanceof LibraryEntryInvalidError ||
-          (error instanceof ProblemError && ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code))
+          (error instanceof ProblemError &&
+            ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code))
         )
           status = 'stale';
         else throw error;
@@ -1763,95 +1778,106 @@ export function createVndbImport(config: Config) {
         entryImportMetadataDigest((await load(actor, id, true)).rows[choice.ordinal])
     ) {
       const reviewedProgress = decision.progress;
-      const checkpoint = await executeProgressAdoption(actor, sessions, reviewedProgress.plan, reviewedProgress.checkpoint, {
-        async canceled() {
-          try {
+      const checkpoint = await executeProgressAdoption(
+        actor,
+        sessions,
+        reviewedProgress.plan,
+        reviewedProgress.checkpoint,
+        {
+          async canceled() {
+            try {
+              const upload = await load(actor, id, true);
+              return upload.state !== 'active' || upload.expires_at.getTime() <= Date.now();
+            } catch (error) {
+              if (error instanceof LibraryNotFoundError) return true;
+              throw error;
+            }
+          },
+          async binding() {
             const upload = await load(actor, id, true);
-            return upload.state !== 'active' || upload.expires_at.getTime() <= Date.now();
-          } catch (error) {
-            if (error instanceof LibraryNotFoundError) return true;
-            throw error;
-          }
-        },
-        async binding() {
-          const upload = await load(actor, id, true);
-          const row = upload.rows[choice.ordinal];
-          const currentDecision = upload.decisions[choice.ordinal];
-          if (
-            upload.state !== 'active' ||
-            upload.expires_at.getTime() <= Date.now() ||
-            !row ||
-            entryImportMetadataDigest(row) !== reviewedProgress.sourceFingerprint ||
-            !currentDecision ||
-            currentDecision.reviewId !== choice.reviewId ||
-            currentDecision.matchDigest !== decision.matchDigest
-          )
-            return null;
-          const matching = await match(actor, row);
-          const target = await current(actor, reviewedProgress.plan.subjectId);
-          if (
-            entryImportMetadataDigest(matching) !== currentDecision.matchDigest ||
-            !target ||
-            target.source !== currentDecision.guard?.source ||
-            !target.profileBinding
-          )
-            return null;
-          return target.profileBinding;
-        },
-        async save(next, admission = false) {
-          const digest = entryImportMetadataDigest(next);
-          try {
-            const saved = await mutation(
-              actor,
-              admission ? 'progress-admission' : 'progress-checkpoint',
-              `vndb:${id}:${choice.ordinal}:${choice.reviewId}:progress:${admission ? 'admission' : 'checkpoint'}:${digest}`,
-              { id, ordinal: choice.ordinal, reviewId: choice.reviewId, admission, digest },
-              async (tx, account) => {
-                const locked = await tx.query<{ decision: Decision | null; active: boolean }>(
-                  `SELECT decisions->$4::text AS decision,state='active' AND expires_at>clock_timestamp() AS active
-                   FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
-                  [requireRoute(account.accountId), account.accountId, id, String(choice.ordinal)],
-                );
-                const currentDecision = locked.rows[0]?.decision;
-                if (
-                  !currentDecision ||
-                  currentDecision.reviewId !== choice.reviewId ||
-                  currentDecision.matchDigest !== decision.matchDigest ||
-                  currentDecision.progress?.sourceFingerprint !== reviewedProgress.sourceFingerprint ||
-                  entryImportMetadataDigest(currentDecision.progress.plan) !==
-                    entryImportMetadataDigest(reviewedProgress.plan)
-                )
-                  throw new LibraryConflictError();
-                const hadAttempt =
-                  currentDecision.progress.checkpoint?.startAttempted === true ||
-                  Object.values(currentDecision.progress.checkpoint?.steps ?? {}).some((step) => step.attempted);
-                if (admission && !locked.rows[0]?.active) return { admitted: false };
-                if (!locked.rows[0]?.active && !hadAttempt && admission) return { admitted: false };
-                currentDecision.progress.checkpoint = next;
-                if (admission) currentDecision.status = 'applying';
-                await save(tx, account, id, choice.ordinal, currentDecision);
-                return { admitted: true };
-              },
-            );
-            return saved.value.admitted;
-          } catch (error) {
+            const row = upload.rows[choice.ordinal];
+            const currentDecision = upload.decisions[choice.ordinal];
             if (
-              admission &&
-              (error instanceof LibraryConflictError ||
-                error instanceof LibraryNotFoundError ||
-                (error instanceof ProblemError && ['conflict', 'not_found'].includes(error.code)))
+              upload.state !== 'active' ||
+              upload.expires_at.getTime() <= Date.now() ||
+              !row ||
+              entryImportMetadataDigest(row) !== reviewedProgress.sourceFingerprint ||
+              !currentDecision ||
+              currentDecision.reviewId !== choice.reviewId ||
+              currentDecision.matchDigest !== decision.matchDigest
             )
-              return false;
-            throw error;
-          }
+              return null;
+            const matching = await match(actor, row);
+            const target = await current(actor, reviewedProgress.plan.subjectId);
+            if (
+              entryImportMetadataDigest(matching) !== currentDecision.matchDigest ||
+              !target ||
+              target.source !== currentDecision.guard?.source ||
+              !target.profileBinding
+            )
+              return null;
+            return target.profileBinding;
+          },
+          async save(next, admission = false) {
+            const digest = entryImportMetadataDigest(next);
+            try {
+              const saved = await mutation(
+                actor,
+                admission ? 'progress-admission' : 'progress-checkpoint',
+                `vndb:${id}:${choice.ordinal}:${choice.reviewId}:progress:${admission ? 'admission' : 'checkpoint'}:${digest}`,
+                { id, ordinal: choice.ordinal, reviewId: choice.reviewId, admission, digest },
+                async (tx, account) => {
+                  const locked = await tx.query<{ decision: Decision | null; active: boolean }>(
+                    `SELECT decisions->$4::text AS decision,state='active' AND expires_at>clock_timestamp() AS active
+                   FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+                    [requireRoute(account.accountId), account.accountId, id, String(choice.ordinal)],
+                  );
+                  const currentDecision = locked.rows[0]?.decision;
+                  if (
+                    !currentDecision ||
+                    currentDecision.reviewId !== choice.reviewId ||
+                    currentDecision.matchDigest !== decision.matchDigest ||
+                    currentDecision.progress?.sourceFingerprint !== reviewedProgress.sourceFingerprint ||
+                    entryImportMetadataDigest(currentDecision.progress.plan) !==
+                      entryImportMetadataDigest(reviewedProgress.plan)
+                  )
+                    throw new LibraryConflictError();
+                  const hadAttempt =
+                    currentDecision.progress.checkpoint?.startAttempted === true ||
+                    Object.values(currentDecision.progress.checkpoint?.steps ?? {}).some((step) => step.attempted);
+                  if (admission && !locked.rows[0]?.active) return { admitted: false };
+                  if (!locked.rows[0]?.active && !hadAttempt && admission) return { admitted: false };
+                  currentDecision.progress.checkpoint = next;
+                  if (admission) currentDecision.status = 'applying';
+                  await save(tx, account, id, choice.ordinal, currentDecision);
+                  return { admitted: true };
+                },
+              );
+              return saved.value.admitted;
+            } catch (error) {
+              if (
+                admission &&
+                (error instanceof LibraryConflictError ||
+                  error instanceof LibraryNotFoundError ||
+                  (error instanceof ProblemError && ['conflict', 'not_found'].includes(error.code)))
+              )
+                return false;
+              throw error;
+            }
+          },
         },
-      });
+      );
       decision = { ...decision, progress: { ...reviewedProgress, checkpoint } };
       const statuses = progressResults(reviewedProgress.plan, checkpoint).map((measure) => measure.status);
       if (statuses.includes('stale')) status = 'stale';
       else if (statuses.includes('failed')) status = 'failed';
       else if (statuses.includes('applied') || statuses.includes('cleared')) status = 'applied';
-      else if (action === 'progress' && statuses.every((value) => value === 'unsupported' || value === 'invalid' || value === 'missing' || value === 'unknown'))
+      else if (
+        action === 'progress' &&
+        statuses.every(
+          (value) => value === 'unsupported' || value === 'invalid' || value === 'missing' || value === 'unknown',
+        )
+      )
         status = 'unsupported';
       else if (action === 'progress' && status === 'reviewed') status = 'skipped';
       progress = await progressResponse(actor, decision.progress!);
@@ -1865,7 +1891,13 @@ export function createVndbImport(config: Config) {
         status,
         progress: nextDecision.progress?.checkpoint ?? null,
       })}`,
-      { id, ordinal: choice.ordinal, reviewId: choice.reviewId, status, progress: nextDecision.progress?.checkpoint ?? null },
+      {
+        id,
+        ordinal: choice.ordinal,
+        reviewId: choice.reviewId,
+        status,
+        progress: nextDecision.progress?.checkpoint ?? null,
+      },
       async (tx, account) => {
         const locked = await tx.query<{ decision: Decision | null }>(
           'SELECT decisions->$4::text AS decision FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',

@@ -81,10 +81,7 @@ const reviewChoice = t.Union([
     },
     closed,
   ),
-  t.Object(
-    { ordinal, action: t.Literal('progress'), targetId: t.Optional(uuid), progress: progressSelection },
-    closed,
-  ),
+  t.Object({ ordinal, action: t.Literal('progress'), targetId: t.Optional(uuid), progress: progressSelection }, closed),
   t.Object(
     {
       ordinal,
