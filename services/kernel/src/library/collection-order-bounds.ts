@@ -271,29 +271,13 @@ const pageControls = sumBounds(
 );
 const commitControl = dimensions({ statements: 1, bytes: sql('COMMIT') });
 const rollbackControl = dimensions({ statements: 1, bytes: sql('ROLLBACK') });
-const eventFenceCost = (eventCount: number, eventBytes: number, continuation: boolean): Bound =>
-  sumBounds(
-    query(eventFence.sql, eventBytes + eventCount + 1 + uuidBytes + partitionBytes + 8, integerBytes + bigintBytes, {
-      candidateKeys: 1,
-      emptySeeks: 1,
-      nativeRows: eventCount + 1,
-      nativePoints: eventCount + 1,
-    }),
-    dimensions({
-      engineRequests: continuation ? 1 : 0,
-      bytes: continuation
-        ? locatorBytes +
-          Buffer.byteLength(
-            JSON.stringify({
-              workflowName: COLLECTION_ORDER_WORKFLOW,
-              queueName: 'maintenance',
-              workflowID: `${COLLECTION_ORDER_WORKFLOW}:${'0'.repeat(uuidBytes)}:2147483647`,
-              workflowIDReusePolicy: 'return-existing',
-            }),
-          )
-        : 0,
-    }),
-  );
+const eventFenceCost = (eventCount: number, eventBytes: number): Bound =>
+  query(eventFence.sql, eventBytes + eventCount + 1 + uuidBytes + partitionBytes + 8, integerBytes + bigintBytes, {
+    candidateKeys: 1,
+    emptySeeks: 1,
+    nativeRows: eventCount + 1,
+    nativePoints: eventCount + 1,
+  });
 const noEffectCost = query(noEffectFence.sql, partitionBytes + uuidBytes + 4, integerBytes + bigintBytes, {
   candidateKeys: 1,
   nativeRows: 1,
@@ -326,33 +310,33 @@ const terminalPage = sumBounds(
   pageCurrentness,
   removeRepair,
   dimensions({ bytes: eventUpdatedBytes }),
-  eventFenceCost(1, eventUpdatedBytes, false),
+  eventFenceCost(1, eventUpdatedBytes),
   commitControl,
 );
 const fullPageData = pageData(ORDER_WINDOW_SIZE, ORDER_WINDOW_SIZE, false);
 const fullPageSuccess = sumBounds(
   pageControls,
   fullPageData,
-  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes, true),
+  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
   commitControl,
 );
 const shortPageSuccess = sumBounds(
   pageControls,
   pageData(ORDER_WINDOW_SIZE - 1, ORDER_WINDOW_SIZE - 1, true),
-  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes, true),
+  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
   commitControl,
 );
 const exhaustionSuccess = sumBounds(
   pageControls,
   pageData(0, 0, true),
-  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes, true),
+  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
   commitControl,
 );
 const changedFenceRollback = sumBounds(pageControls, pageCurrentness, rollbackControl);
 const failedFullPage = sumBounds(
   pageControls,
   fullPageData,
-  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes, false),
+  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
   commitControl,
   rollbackControl,
 );
@@ -437,6 +421,11 @@ export const COLLECTION_ORDER_DECLARATION = Object.freeze({
     continuationRequest,
   }),
   paths: Object.freeze({
+    edit: Object.freeze({
+      status: 'execution-binding-only' as const,
+      missing:
+        'The original actor command composition is not a complete nine-axis declaration. Its current Access preparation, authorization, receipt, result and transaction envelope remains to be derived.',
+    }),
     barrier: Object.freeze({
       status: 'library-sql-only' as const,
       cost: barrierCeiling,
@@ -455,7 +444,7 @@ export const COLLECTION_ORDER_DECLARATION = Object.freeze({
       cost: pageCeiling,
       ceiling: pageCeiling,
       missing:
-        'runCommand has no owner Bound admission port and the DBOS client has no nine-axis enqueue admission; this declaration describes bounded work without reserving or funding dispatch.',
+        'runCommand has no owner Bound admission port; this declaration describes bounded page work without reserving or funding dispatch. The committed outbox enqueue is a separately declared continuation request.',
     }),
     continuation: Object.freeze({
       status: 'payload-only' as const,
@@ -484,5 +473,6 @@ export type CollectionOrderPath = keyof typeof COLLECTION_ORDER_DECLARATION.path
 
 export function withCollectionOrderDeclaration<T>(path: CollectionOrderPath, dispatch: () => T): T {
   const declaration = COLLECTION_ORDER_DECLARATION.paths[path];
+  if (!('cost' in declaration)) return dispatch();
   return withinCollectionOrderCeiling(declaration.cost, declaration.ceiling, dispatch);
 }

@@ -2055,13 +2055,17 @@ Decision: the Library owns fixed nine-axis declarations at its existing repair-b
   Deleted rows remain in `candidateKeys` and `nativeRows` even when no ordinal is rewritten. An exact 128-row result
   always takes another charged query to observe exhaustion. No deferred unique-constraint statement or per-occurrence
   History event runs during this repair.
-- Admission boundary: the ordinary actor-authorized `runCommand` path has no public whole-command nine-axis admission
-  for begin, including Access preparation, current authorization, account lifecycle, receipt/History, serialization,
-  controls, event/outbox work and rollback/commit. Page declarations are finite and complete for one attempt, but
-  `runCommand` cannot receive them against a live native admission. The existing DBOS retry policy remains the page
-  retry owner; a page runs one command attempt per DBOS attempt. The outbox call carries only a locator, while the
-  DBOS client has no matching nine-axis enqueue admission. These descriptors do not reserve Source work or fund a
-  dispatch. See `.temp/continuation/collection-order-native-admission.md` for the remaining contract.
+- Composition: the original HTTP add/move stays on its actor-authorized `runCommand`; a dense edit rolls back with no
+  success receipt, then the catch path issues a distinct currently authorized begin command and returns
+  dependency-unavailable without acknowledging the edit. After repair, the same body/key is deliberately retried
+  through ordinary deduplication. Pages run one `runCommand` attempt per existing DBOS attempt. Each page commits its
+  exact next locator and event through the existing outbox fence; the production effect then calls the existing DBOS
+  client with the same workflow name, maintenance queue, repair/step identity and return-existing behavior. The
+  continuation request is accounted once outside page SQL and event-fence work.
+- Binding: local wrappers surround add/move, begin, page and enqueue at their existing execution owners. They preserve
+  authorization, absolute deadlines, attempts, transaction and client identity; they do not create admission or
+  funding. Page and continuation declarations are finite. The complete actor Access, receipt, result and ordinary
+  command envelope derivation remains in `.temp/continuation/dense-collection-edit-costs.md`.
 - Growth check: Existing work/Source staleness and privacy assertions remain required for controller proof, including
   interruption, account terminal fencing, changed fences, terminal cleanup and held sources. Native receiving and
   broader acceptance remain deferred to the controller.

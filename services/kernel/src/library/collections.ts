@@ -68,7 +68,7 @@ import {
   updateCollection as updateCollectionRow,
   updateMemberNote as updateMemberNoteRow,
 } from './collection-store.ts';
-import { createLibraryCommandRunner, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { createLibraryCommandRunner, runLibraryCommand, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { createCollectionBatchCommands } from './collection-batch.ts';
 import batchParents from './collection-batch-parents.sql';
 import authorizationCollection from './collection-store-collection-authorization.sql';
@@ -736,17 +736,18 @@ export function createCollectionCommands(config: {
       // Keep admission separate from the failed mutation, including its receipt
       // namespace and authoritative authorization time. No Actor is retained.
       const repairKey = digest(identity, repairKind, { requestKey, kind, input, fence: error.fence }).toString('hex');
-      await mutate(
-        actor,
-        error.collectionId,
-        'collection:update',
-        repairKind,
-        repairKey,
-        { collectionId: error.collectionId, originalKind: kind, originalKey: requestKey, fence: error.fence },
-        async (tx, _command, repairRoute) =>
-          withCollectionOrderDeclaration('begin', () =>
-            beginCollectionOrderRepair(tx, repairRoute, error.collectionId),
+      await runLibraryCommand(
+        () =>
+          mutate(
+            actor,
+            error.collectionId,
+            'collection:update',
+            repairKind,
+            repairKey,
+            { collectionId: error.collectionId, originalKind: kind, originalKey: requestKey, fence: error.fence },
+            (tx, _command, repairRoute) => beginCollectionOrderRepair(tx, repairRoute, error.collectionId),
           ),
+        (dispatch) => withCollectionOrderDeclaration('begin', dispatch),
       );
       throw new ProblemError('dependency_unavailable');
     }
@@ -968,40 +969,44 @@ export function createCollectionCommands(config: {
       after: draft.after ?? null,
       position: position.kind,
     };
-    return mutate(
-      owner,
-      collectionId,
-      'collection:update',
-      'library.collection.member.add',
-      requestKey,
-      input,
-      async (tx, command) => {
-        const current = await activeCollection(tx, route, collectionId);
-        if (current.memberCount >= MAX_MEMBER_COUNT) throw new ProblemError('collection_full');
-        const memberId = newId(route);
-        const placed = await placeInCollection(tx, route, collectionId, position, memberId, false);
-        const subject = await subjectPromise;
-        if (!subject || (subject.subjectId !== draft.subjectId && subject.requestedSubjectId !== draft.subjectId))
-          throw notFound();
-        if (placed.respace.length > 0) {
-          await tx.query('SET CONSTRAINTS library.collection_member_ordinal_key DEFERRED');
-          const epoch = await respaceMembers(tx, route, collectionId, placed.respace, command);
-          if (epoch === null) throw new ProblemError('conflict');
-        }
-        const value = await insertMember(
-          tx,
-          route,
+    return runLibraryCommand(
+      () =>
+        mutate(
+          owner,
           collectionId,
-          { id: memberId, subjectId: subject.subjectId, note, ordinalKey: placed.ordinalKey },
-          command,
-        );
-        if (!value) {
-          const again = await readCollection(tx, route, collectionId);
-          if (again && again.memberCount >= MAX_MEMBER_COUNT) throw new ProblemError('collection_full');
-          throw notFound();
-        }
-        return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
-      },
+          'collection:update',
+          'library.collection.member.add',
+          requestKey,
+          input,
+          async (tx, command) => {
+            const current = await activeCollection(tx, route, collectionId);
+            if (current.memberCount >= MAX_MEMBER_COUNT) throw new ProblemError('collection_full');
+            const memberId = newId(route);
+            const placed = await placeInCollection(tx, route, collectionId, position, memberId, false);
+            const subject = await subjectPromise;
+            if (!subject || (subject.subjectId !== draft.subjectId && subject.requestedSubjectId !== draft.subjectId))
+              throw notFound();
+            if (placed.respace.length > 0) {
+              await tx.query('SET CONSTRAINTS library.collection_member_ordinal_key DEFERRED');
+              const epoch = await respaceMembers(tx, route, collectionId, placed.respace, command);
+              if (epoch === null) throw new ProblemError('conflict');
+            }
+            const value = await insertMember(
+              tx,
+              route,
+              collectionId,
+              { id: memberId, subjectId: subject.subjectId, note, ordinalKey: placed.ordinalKey },
+              command,
+            );
+            if (!value) {
+              const again = await readCollection(tx, route, collectionId);
+              if (again && again.memberCount >= MAX_MEMBER_COUNT) throw new ProblemError('collection_full');
+              throw notFound();
+            }
+            return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
+          },
+        ),
+      (dispatch) => withCollectionOrderDeclaration('edit', dispatch),
     );
   }
 
@@ -1015,26 +1020,30 @@ export function createCollectionCommands(config: {
     collectionRoute(memberId);
     const position = positionOf(move.after);
     const route = collectionRoute(collectionId);
-    return mutate(
-      actor,
-      collectionId,
-      'collection:update',
-      'library.collection.member.move',
-      requestKey,
-      { collectionId, memberId, ...(move.after === undefined ? {} : { after: move.after }) },
-      async (tx, command) => {
-        await activeCollection(tx, route, collectionId);
-        const placed = await placeInCollection(tx, route, collectionId, position, memberId, true);
-        if (placed.respace.length > 0) {
-          await tx.query('SET CONSTRAINTS library.collection_member_ordinal_key DEFERRED');
-          const epoch = await respaceMembers(tx, route, collectionId, placed.respace, command);
-          if (epoch === null) throw new ProblemError('conflict');
-        }
-        const value = await moveMemberRow(tx, route, collectionId, memberId, placed.ordinalKey, command);
-        if (!value) throw notFound();
-        await touchCollection(tx, route, collectionId, command.time, command.transactionId, true);
-        return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
-      },
+    return runLibraryCommand(
+      () =>
+        mutate(
+          actor,
+          collectionId,
+          'collection:update',
+          'library.collection.member.move',
+          requestKey,
+          { collectionId, memberId, ...(move.after === undefined ? {} : { after: move.after }) },
+          async (tx, command) => {
+            await activeCollection(tx, route, collectionId);
+            const placed = await placeInCollection(tx, route, collectionId, position, memberId, true);
+            if (placed.respace.length > 0) {
+              await tx.query('SET CONSTRAINTS library.collection_member_ordinal_key DEFERRED');
+              const epoch = await respaceMembers(tx, route, collectionId, placed.respace, command);
+              if (epoch === null) throw new ProblemError('conflict');
+            }
+            const value = await moveMemberRow(tx, route, collectionId, memberId, placed.ordinalKey, command);
+            if (!value) throw notFound();
+            await touchCollection(tx, route, collectionId, command.time, command.transactionId, true);
+            return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
+          },
+        ),
+      (dispatch) => withCollectionOrderDeclaration('edit', dispatch),
     );
   }
 

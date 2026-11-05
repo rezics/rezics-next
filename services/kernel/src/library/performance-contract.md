@@ -153,6 +153,8 @@ those suites have passed. Shared native bounds and evidence are owned by the [Ke
 
 ## Collection operation costs
 
+Decision: keep each native repair page at 128 raw original occurrences, independently of Source's 100-key ceiling; charge the failed edit, separately authorized begin, each outbox/DBOS continuation, and deliberate retry as separate stages.
+
 Price the complete operation: request and status reads, checkpoints, activation, preparation, authorization, locks,
 serialization, receipt and effect work, source fences, negative or discarded candidates, and every nested disclosure.
 A short returned page, deduplicated terminal set or fixed candidate declaration does not reduce physical work already
@@ -168,9 +170,16 @@ Progress/Continue and Content Feed callers consume these descriptors.
 projection. Capture composes curator reconciliation, transition append, the 129-row prune scan and partial-coverage
 update once; the snapshot projection reserves escaped schema maxima for both sides of all five metadata fields.
 First/next page, empty page, state and exact-revision leaves retain the 128-entry journal bound and 51-row page
-sentinel. These are DAO declarations only. The complete Collection command, private reopen, authorization/gate,
-authoritative-time, media-read and HTTP cost composition is recorded as a continuation at
-`.temp/continuation/collection-editor-plans.md`.
+sentinel. These are DAO declarations only. The dense-order journey keeps the failed add/move command and the
+separately authorized repair-begin command in their existing `runCommand` transactions. A failed edit commits no
+receipt and returns dependency-unavailable; the original request body and key remain available for a deliberate,
+currently authorized retry after repair. Each committed page writes its next exact locator to the existing outbox in
+the same fence transaction. The existing outbox effect then enqueues that locator through the DBOS client with the
+current workflow name, maintenance queue, step identity and return-existing policy. Page SQL and event-fence bytes
+are charged in the page declaration; the enqueue is a separate `engineRequests: 1` continuation term and is not
+double-counted in the event fence. The page wrapper preserves the existing one-command-attempt-per-DBOS-attempt
+retry composition. Full actor Access/receipt/History/result-envelope cost derivation remains in
+`.temp/continuation/dense-collection-edit-costs.md`.
 
 ## Whole-query publication
 
