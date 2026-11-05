@@ -217,7 +217,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
       await user.selectOptions(chooser, second.id);
     });
     const evidence = host.querySelector('#subject-summary-evidence')!;
-    expect(evidence.querySelector('[role="status"]')?.textContent).toBe(m.subject_synopsis_sources_unsupported());
+    expect([...evidence.querySelectorAll('a')].some((link) => link.href.includes('via='))).toBe(true);
     expect(evidence.textContent).toContain(m.sources_no_citations());
     const general = [...evidence.querySelectorAll('a')].find(
       (link) => link.textContent === m.subject_synopsis_general_sources(),
