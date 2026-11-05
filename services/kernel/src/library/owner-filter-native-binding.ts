@@ -49,7 +49,7 @@ import type { PublicFilterQueriedObservation } from '../search/public-filter-con
 import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import type { PublicFilterSource, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { FilterDocument } from '@rezics/filter';
-import { resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 import type { OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 
 type Dependencies = {

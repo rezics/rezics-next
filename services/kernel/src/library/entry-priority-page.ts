@@ -1,5 +1,5 @@
 import { routeOf } from '../route/route.ts';
-import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from '../shared/shelf-reader-unavailable.ts';
 import {
   isShelfEntryState,
   MAX_SHELF_PAGE_SIZE,

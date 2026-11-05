@@ -34,7 +34,7 @@ import { shelfScoreBinding, validShelfScoreKey } from './shelf-score.ts';
 import { shelfTitleBinding, validShelfTitleSeek } from './shelf-title-reader.ts';
 import { currentShelfTitleBasis, titleLanguages } from './shelf-title-source.ts';
 import { validShelfPriorityKey } from './entry-priority-page.ts';
-import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from '../shared/shelf-reader-unavailable.ts';
 
 function owner(actor: Actor, progress: boolean): AccountActor {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');

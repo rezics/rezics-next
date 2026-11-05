@@ -7,6 +7,7 @@ import { createLabelAssignmentCommands } from '../../src/library/label-assignmen
 import { bangumiTagEvidence, bangumiTag } from '../../src/library/list-import-bangumi-label-model.ts';
 import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.ts';
 import { createVoteCommands } from '../../src/rating/votes.ts';
+import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 import { routeOf } from '../../src/route/route.ts';
 let f: NativeProfileFixture;
@@ -23,7 +24,7 @@ const native = () => ({
   access: f.access,
   tokens: f.tokens,
   routeKey: testRouteKey(),
-  votes: createVoteCommands({ pool: f.pool, access: f.access }),
+  votes: createVoteCommands({ pool: f.pool, access: f.access, createCommandRunner: createLibraryCommandRunner }),
 });
 const catalogue = () => createPersonalLabelCommands(native());
 const assignments = () => createLabelAssignmentCommands(native());

@@ -11,7 +11,7 @@ import { createVoteCommands } from '../rating/votes.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { LibraryNotFoundError } from './command-support.ts';
+import { createLibraryCommandRunner, LibraryNotFoundError } from './command-support.ts';
 import { createBangumiImport } from './list-import-bangumi.ts';
 import {
   BANGUMI_LIMITS,
@@ -111,7 +111,12 @@ export function bangumiImportRoutes(
     return createBangumiImport({
       ...deps,
       access,
-      votes: createVoteCommands({ pool: deps.pool, access, clock: deps.clock }),
+      votes: createVoteCommands({
+        pool: deps.pool,
+        access,
+        clock: deps.clock,
+        createCommandRunner: createLibraryCommandRunner,
+      }),
     });
   };
   return app

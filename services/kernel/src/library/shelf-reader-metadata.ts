@@ -7,7 +7,7 @@ import {
   type ShelfSummaryReader,
   type ShelfTab,
 } from './shelf-contract.ts';
-import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from '../shared/shelf-reader-unavailable.ts';
 import summaryRows from './shelf-reader-summary.sql';
 import facetRows from './shelf-reader-facets.sql';
 import valueRows from './shelf-reader-values.sql';

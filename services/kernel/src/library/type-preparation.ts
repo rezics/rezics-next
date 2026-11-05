@@ -19,7 +19,7 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../access/read-transaction.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { preparationHeaderCommitment, type PreparationHeaderCommitment } from './preparation-bindings.ts';
 import { readPreparationNativeHeader, type NativePreparationHeader } from './preparation-native-reader.ts';

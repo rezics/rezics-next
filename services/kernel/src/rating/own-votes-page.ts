@@ -8,7 +8,7 @@ import { readPartition, type Partition } from '../partition/partition.ts';
 import { LibraryNotFoundError } from '../library/command-support.ts';
 import commandGate from '../library/shelf-maintenance-gate-read.sql';
 import { ProblemError } from '../http/problem.ts';
-import { readableSubjects, SubjectIdentityUnavailableError } from '../library/subject-anchor.ts';
+import { readableSubjects, SubjectIdentityUnavailableError } from '../semantic/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';

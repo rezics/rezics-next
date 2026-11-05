@@ -14,7 +14,7 @@ import { customMethod } from '../http/custom-method.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
-import { resolveSubject } from '../library/subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';

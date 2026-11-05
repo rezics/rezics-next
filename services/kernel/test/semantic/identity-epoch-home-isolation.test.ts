@@ -4,7 +4,7 @@ import type { PoolClient } from 'pg';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { routeOf } from '../../src/route/route.ts';
-import { resolveSubject } from '../../src/library/subject-anchor.ts';
+import { resolveSubject } from '../../src/semantic/subject-anchor.ts';
 import {
   acquireIdentityEpochAdmissionHome,
   cancelIdentityEpochAdmission,

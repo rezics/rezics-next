@@ -12,7 +12,7 @@ import type { BulkAdmission, EntryExpectation } from './bulk-contract.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 import { readCollection } from './collection-store.ts';
 import type { CollectionBulkTarget } from './collection-bulk-store.ts';
-import { resolveSubject, type ResolvedSubject } from './subject-anchor.ts';
+import { resolveSubject, type ResolvedSubject } from '../semantic/subject-anchor.ts';
 
 export type ExplicitCollectionBulkAdd = Extract<BulkAdmission, { action: 'add_to_collection' }> & {
   selection: Extract<BulkAdmission['selection'], { kind: 'explicit' }>;

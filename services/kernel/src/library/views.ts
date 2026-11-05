@@ -25,7 +25,7 @@ import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { readSubject } from '../semantic/subject.ts';
 import { relatedReadEligibility, subjectReadEligibility } from '../semantic/eligibility.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';

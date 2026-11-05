@@ -11,7 +11,7 @@ import {
 import { createLibraryCommandRunner, requireRoute } from './command-support.ts';
 import type { ShelfCursorBinding, ShelfDateReader, ShelfEntry } from './shelf-contract.ts';
 import { MAX_SHELF_PAGE_SIZE, isShelfEntryState } from './shelf-contract.ts';
-import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from '../shared/shelf-reader-unavailable.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 export type ShelfScorePreparation = { installation: 'pending' | 'installed'; prepared: number };

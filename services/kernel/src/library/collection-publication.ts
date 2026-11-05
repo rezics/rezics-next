@@ -61,7 +61,7 @@ import {
   readOwnerFilterCandidateClosure,
   type OwnerFilterReadBinding,
 } from './owner-filter-plan.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from './subject-anchor.ts';
+import { resolveSubject, SubjectIdentityUnavailableError } from '../semantic/subject-anchor.ts';
 import { OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './owner-filter-native-closure.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };

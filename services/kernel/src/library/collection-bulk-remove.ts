@@ -30,7 +30,7 @@ import { deleteMembers, readCollection, readMemberDeletion } from './collection-
 import { assertCollectionOrderWritable } from './collection-order.ts';
 import { recordPublicCollectionReduction } from './collections.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
-import { readableSubjects } from './subject-anchor.ts';
+import { readableSubjects } from '../semantic/subject-anchor.ts';
 
 type Source = {
   accountId: string;

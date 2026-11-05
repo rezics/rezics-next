@@ -8,7 +8,7 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Access } from '../request/access.ts';
-import { resolveSubject } from '../library/subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { Pool } from 'pg';
 import readPage from './subject-reaction-merge-page.sql';

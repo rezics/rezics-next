@@ -452,7 +452,7 @@ export function createVndbImport(config: Config) {
   const { pool, access } = config;
   const runner = createLibraryCommandRunner(config),
     entries = createEntryCommands(config),
-    votes = createVoteCommands(config),
+    votes = createVoteCommands({ ...config, createCommandRunner: createLibraryCommandRunner }),
     sessions = createSessionCommands(config);
   const personalEntries = createEntryPersonalCommands(config);
   function owner(actor: Actor): AccountActor {

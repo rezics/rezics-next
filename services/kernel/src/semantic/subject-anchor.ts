@@ -4,12 +4,12 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import { accessCheck, type Access, type AccessContext, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
-import { subjectReadEligibility } from '../semantic/eligibility.ts';
-import { SubjectRedirectError } from '../semantic/merges.ts';
-import { readSubjectReference } from '../semantic/references.ts';
-import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
-import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
-import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { subjectReadEligibility } from './eligibility.ts';
+import { SubjectRedirectError } from './merges.ts';
+import { readSubjectReference } from './references.ts';
+import type { IdentityMapping } from './identity-epoch-contract.ts';
+import { identityEpochStore } from './identity-adapters/index.ts';
+import { WORK_STEP_DEADLINE_MS } from '../request/work-step-deadline.ts';
 
 const MAX_SUBJECT_IDS = 100;
 const MAX_CONCURRENT_SUBJECT_READS = 4;

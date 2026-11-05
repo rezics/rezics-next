@@ -15,7 +15,7 @@ import { readSubjectReference } from '../semantic/references.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { readItemTypes, type SubjectComponent } from '../semantic/subject.ts';
 import { selectLibraryProfile, type LibraryProfileDescriptor, type LibraryProfilePin } from './profile.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 
 export type LibraryProfileSourceDependencies = {

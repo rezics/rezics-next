@@ -235,7 +235,7 @@ import {
   type CanonicalWork,
   type CanonicalRawKey,
 } from './canonical-source-store.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 // Cursor driver ordinals; the order is part of the encoded cursor and matches COLLECTION_SOURCE_DRIVER_COUNT.
 const sourceDrivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
 

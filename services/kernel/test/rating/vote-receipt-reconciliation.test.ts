@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { routeOf } from '../../src/route/route.ts';
 import {
@@ -13,7 +14,11 @@ let commands: ReturnType<typeof createVoteCommands>;
 beforeAll(async () => {
   fixture = await createSourceStatisticLifecycleFixture();
   actor = (await fixture.identityCommand('rating:vote')).actor;
-  commands = createVoteCommands({ pool: fixture.database.pool, access: fixture.access });
+  commands = createVoteCommands({
+    pool: fixture.database.pool,
+    access: fixture.access,
+    createCommandRunner: createLibraryCommandRunner,
+  });
 }, 180_000);
 afterAll(async () => fixture?.close(), 180_000);
 const input = (targetId: string, units = 7) => ({ questionId: STANDARD_QUESTION_ID, targetId, units });

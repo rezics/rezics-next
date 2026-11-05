@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 import type { AccountActor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';

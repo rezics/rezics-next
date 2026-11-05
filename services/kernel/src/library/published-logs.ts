@@ -21,7 +21,7 @@ import {
 import type { ProgressState } from './progress.ts';
 import { readSession } from './progress-store.ts';
 import { receiptKeysFor } from '../command/receipt-key.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 import {
   deletePublishedLog,
   insertPublishedLog,

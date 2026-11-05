@@ -9,6 +9,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createSourceStatisticCommands } from '../../src/rating/source-statistics.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { pagePublicFigures, readPublicFigures } from '../../src/rating/public-figure.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { partitionOf } from '../../src/route/route.ts';
@@ -519,6 +520,7 @@ beforeAll(async () => {
     .sign(signing.privateKey);
   const account = (await readAccount(database.pool, voterRoute, voteActorId))!;
   voteCommands = createVoteCommands({
+    createCommandRunner: createLibraryCommandRunner,
     pool: database.pool,
     access: createPermissionAccess({
       actions: new Map([['subject:read', { anonymous: true }]]),

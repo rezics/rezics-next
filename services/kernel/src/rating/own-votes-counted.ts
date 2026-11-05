@@ -8,7 +8,7 @@ import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { withReadTransaction } from '../access/read-transaction.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import type { IdentityMapping } from '../semantic/identity-core/index.ts';
-import { readableSubjects } from '../library/subject-anchor.ts';
+import { readableSubjects } from '../semantic/subject-anchor.ts';
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readVisibleRatingQuestion } from './question-directory.ts';

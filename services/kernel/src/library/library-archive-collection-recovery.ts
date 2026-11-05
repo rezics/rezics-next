@@ -23,7 +23,7 @@ import {
 } from './library-archive.ts';
 import type { LibraryArchiveManifest } from './library-export-format.ts';
 import { createPins } from './pins.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from './subject-anchor.ts';
+import { resolveSubject, SubjectIdentityUnavailableError } from '../semantic/subject-anchor.ts';
 import { isOrdinalKey } from './ordinal.ts';
 
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;

@@ -37,7 +37,7 @@ import type { Entry, EntryState, EntryDeletion } from './entry-model.ts';
 import * as store from './entry-store.ts';
 import entryPage from './entry-store-entry-page.sql';
 import { createFollowCommands } from './follows.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 import { assertPreProfileLibraryRead, readLibraryProfileSourceObservation } from './profile-source.ts';
 import { hasEntryState } from './profile.ts';
 import { allocateOwnerWriteSeq } from './owner-write-sequence.ts';

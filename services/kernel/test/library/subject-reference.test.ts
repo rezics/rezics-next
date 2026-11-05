@@ -5,7 +5,7 @@ import { deriveAccess } from '../../src/access/derived-access.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { readableSubjects, resolveSubject } from '../../src/library/subject-anchor.ts';
+import { readableSubjects, resolveSubject } from '../../src/semantic/subject-anchor.ts';
 import { accessCommandAuthorization, type Access, type AccountActor } from '../../src/request/access.ts';
 import { withRequestDeadline } from '../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';

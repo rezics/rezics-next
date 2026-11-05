@@ -4,6 +4,7 @@ import { aniListLabelRequests } from '../../../../apps/web/src/library/personal-
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { STANDARD_QUESTION_ID, createVoteCommands } from '../../src/rating/votes.ts';
+import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
@@ -60,7 +61,7 @@ test('generated Web label methods reopen actual admitted rows, preserve source d
   await json(path + ':apply', 'POST', { confirmations: [{ ordinal: 0, reviewId: stateReview.review.id }] });
   // Independent native Progress and vote facts must survive every label effect and replay.
   const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
-  const votes = createVoteCommands({ pool: f.pool, access: f.access });
+  const votes = createVoteCommands({ pool: f.pool, access: f.access, createCommandRunner: createLibraryCommandRunner });
   await votes.putVoteOutcome(
     f.owner.actor,
     { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 7 },

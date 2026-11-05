@@ -7,7 +7,7 @@ import { newId, routeOf } from '../route/route.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
 import { deleteMembers, readCollection, readMember } from './collection-store.ts';
 import { planCollectionPlacement } from './collection-order-placement.ts';
-import { readableSubjects } from './subject-anchor.ts';
+import { readableSubjects } from '../semantic/subject-anchor.ts';
 import lockParents from './collection-batch-lock.sql';
 import selectedMembers from './collection-batch-selected.sql';
 import prepareMembers from './collection-batch-prepare.sql';

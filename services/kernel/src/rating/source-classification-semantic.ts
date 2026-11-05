@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from '../library/subject-anchor.ts';
+import { resolveSubject, SubjectIdentityUnavailableError } from '../semantic/subject-anchor.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readContext, publicContextEligibility } from '../semantic/context.ts';

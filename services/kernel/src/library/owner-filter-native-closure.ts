@@ -13,7 +13,7 @@ import type { PreparedCollectionSource } from './collection-source.ts';
 import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
 import type { OwnerFilterCandidateClosure, OwnerFilterReadBinding } from './owner-filter-plan.ts';
 import type { OwnerFilterFactLocator } from './owner-filter.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 import {
   nativeOwnerFilterBinding,
   ownerFilterAccessContext,

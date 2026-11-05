@@ -43,7 +43,7 @@ import {
 import { subjectCollections } from './listing.ts';
 import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
-import { readableSubjects, resolveSubject } from './subject-anchor.ts';
+import { readableSubjects, resolveSubject } from '../semantic/subject-anchor.ts';
 import collectionRead from './collection-reads-collection.sql';
 import { collectionDirectoryPagePlan, collectionDirectoryRowPlan } from './collection-directory-bounds.ts';
 import memberPage from './collection-reads-members.sql';

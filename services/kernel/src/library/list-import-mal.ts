@@ -526,7 +526,7 @@ export function createMalImport(deps: Dependencies) {
     runner = createLibraryCommandRunner(deps),
     entries = createEntryCommands(deps),
     sessions = journal,
-    votes = createVoteCommands(deps);
+    votes = createVoteCommands({ ...deps, createCommandRunner: createLibraryCommandRunner });
   const labels = createPersonalLabelCommands(deps),
     assignments = createLabelAssignmentCommands(deps),
     personalEntries = createEntryPersonalCommands(deps);

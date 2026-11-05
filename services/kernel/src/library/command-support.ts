@@ -44,8 +44,10 @@ import {
   withFollowCommandWork,
 } from './follow-operation-bounds.ts';
 
-export { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
-import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
+export { WORK_STEP_DEADLINE_MS } from '../request/work-step-deadline.ts';
+import { WORK_STEP_DEADLINE_MS } from '../request/work-step-deadline.ts';
+export { LibraryNotFoundError, requireRoute } from '../shared/library-not-found.ts';
+import { LibraryNotFoundError, requireRoute } from '../shared/library-not-found.ts';
 
 /** Bind a closed Library SQL declaration to the caller's existing accounting frame. */
 export function runLibraryBoundedStep<T>(operation: string, bound: Bound, dispatch: () => Promise<T>): Promise<T> {
@@ -135,20 +137,6 @@ export function runLibraryCommand<T>(
 ): Promise<T> {
   const execute = () => (bind ? bind(dispatch, plan) : dispatch());
   return plan ? runLibraryBoundedOperation(plan.operation, plan.total, execute) : execute();
-}
-
-export class LibraryNotFoundError extends Error {
-  constructor() {
-    super('Library item not found');
-    this.name = 'LibraryNotFoundError';
-  }
-}
-
-/** Return the route encoded by an ID, mapping invalid IDs to the library not-found result. */
-export function requireRoute(id: string): number {
-  const route = routeOf(id);
-  if (route === null) throw new LibraryNotFoundError();
-  return route;
 }
 
 /** Keep an ID on its owning account route and conceal foreign or malformed IDs. */
@@ -497,5 +485,11 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     );
   }
 
-  return { ownAccount, ownAccountPrepared, ownAccountReceiptOnly, trustedAccount };
+  return {
+    ownAccount,
+    ownAccountPrepared,
+    ownAccountReceiptOnly,
+    trustedAccount,
+    receiptDigestForActor: libraryCommandReceiptDigestForActor,
+  };
 }

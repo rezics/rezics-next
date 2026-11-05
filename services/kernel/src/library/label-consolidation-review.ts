@@ -20,7 +20,7 @@ import { readStoredLabelAssignment, type PrivateLabelAssignment } from './label-
 import reservations from './label-assignment-reservations.sql';
 import parents from './label-consolidation-parents.sql';
 import { readPersonalLabel } from './label-store.ts';
-import { resolveSubject } from './subject-anchor.ts';
+import { resolveSubject } from '../semantic/subject-anchor.ts';
 
 /** Independent of catalogue size, assignment history and deleted-parent cardinality. */
 export const LABEL_CONSOLIDATION_REVIEW_LIMITS = Object.freeze({
