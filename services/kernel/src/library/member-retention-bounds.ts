@@ -393,6 +393,9 @@ export function memberRetentionCommandPlan(
     mutation,
     // Native Access and Shelf already consume through their owners in this same frame.
     access: original.kind === 'purge' ? retentionCost() : c.accessPreparation,
+    // resolveSubject prepares original and terminal subject:read checks through
+    // native Access, even when both anchors identify the same subject.
+    subjectAccess: original.kind === 'restore' ? repeatBound(c.accessNativePreparation, 2) : retentionCost(),
     shelf: original.kind === 'purge' ? retentionCost() : c.shelfWrite,
     serialization: retentionCost({
       bytes:
@@ -406,7 +409,7 @@ export function memberRetentionCommandPlan(
     identity: Object.freeze({ ...original }),
     terms,
     native,
-    total: sumBounds(native, terms.access, terms.shelf),
+    total: sumBounds(native, terms.access, terms.subjectAccess, terms.shelf),
   });
 }
 

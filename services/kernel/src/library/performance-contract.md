@@ -58,6 +58,8 @@ terms through their existing owners; disjoint Core/Library terms consume through
 Covered retained SQL is not charged again. The compatibility removal's pre-command parent read is separate.
 Undo preparation includes negative episode reads and native subject disclosure; the body rereads the original
 episode and performs the original placement and expiry CAS. Authorization still precedes receipt replay.
+The two original/terminal subject checks reuse the same native Access producer separately from the Collection
+anchor; those terms remain consumed by Access rather than being charged again by Library.
 
 The retained-deletion producer shared by single and selected removal retains its 1–100 distinct-occurrence capacity
 and encodes its actual JSON bind once. SQL, binds, projections, examined rows, locks, index changes and trigger work

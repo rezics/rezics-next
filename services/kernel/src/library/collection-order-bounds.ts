@@ -525,7 +525,7 @@ const accessFormulaInput = {
   principal_id: uuid,
   deadline: timestamp,
 };
-const accessPreparation = sumBounds(
+const accessNativePreparation = sumBounds(
   accessLeaf('time', permissionTime.sql, { at: timestamp }, {}, 1),
   accessLeaf('account-state', accountRead.sql, actorAccount, { targets: 1 }, 1),
   accessLeaf(
@@ -599,18 +599,21 @@ const accessPreparation = sumBounds(
     },
     1,
   ),
-  query(collectionAuthorization.sql, bindParent, uuidBytes + 7 + 7 + 7 + 16 + 5, {
-    candidateKeys: 1,
-    nativeRows: 1,
-    nativePoints: 1,
-    emptySeeks: 1,
-  }),
   sumBounds(
     ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map((text) =>
       dimensions({ statements: 1, bytes: sql(text) }),
     ),
     dimensions({ nativePoints: 2, emptySeeks: 2 }),
   ),
+);
+const accessPreparation = sumBounds(
+  accessNativePreparation,
+  query(collectionAuthorization.sql, bindParent, uuidBytes + 7 + 7 + 7 + 16 + 5, {
+    candidateKeys: 1,
+    nativeRows: 1,
+    nativePoints: 1,
+    emptySeeks: 1,
+  }),
 );
 
 const authorizationCollection = query(collectionAuthorization.sql, bindParent, uuidBytes + 7 + 7 + 7 + 16 + 5, {
@@ -1014,6 +1017,7 @@ const failedMoveAndBegin = sumBounds(moveFailed, beginActorCeiling);
 /** Shared native Collection producers. Reusers keep ordinal's edit/repair declarations and handles intact. */
 export const COLLECTION_NATIVE_COST = Object.freeze({
   accessPreparation,
+  accessNativePreparation,
   authorizationCollection,
   accountShare: accountShareCost,
   collectionRow,
