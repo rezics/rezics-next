@@ -127,8 +127,7 @@ export function CopyForm({
       : undefined;
   const [kind, setKind] = useState(copy?.kind ?? initialKind ?? profile?.kinds[0]?.id ?? '');
   const selected = choices?.kinds.find((choice) => choice.id === kind);
-  const readable =
-    detailState !== 'forbidden' && detailState !== 'closed' && !inventoryDenied && !inspectionRetired;
+  const readable = detailState !== 'forbidden' && detailState !== 'closed' && !inventoryDenied && !inspectionRetired;
   const editable = readable && (copy ? detailState !== 'loading' : Boolean(selected?.statuses.length));
   const statusChoices = copy?.statusEditing?.state === 'supported' ? (copy.statusEditing.statuses ?? []) : [];
   const statusEditable = Boolean(copy && editable && statusChoices.length);
@@ -1019,9 +1018,7 @@ function LoadedCopiesPage({
   const [addKey, setAddKey] = useState(page.addKey);
   const [removed, setRemoved] = useState<{ copy: CopyItem; result: CopyRemoved; deadline: number } | null>(null);
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);
-  const [detailState, setDetailState] = useState<'loading' | 'ready' | 'unavailable' | 'forbidden' | 'closed'>(
-    'ready',
-  );
+  const [detailState, setDetailState] = useState<'loading' | 'ready' | 'unavailable' | 'forbidden' | 'closed'>('ready');
   const inspection = useRef(0);
   const detailRead = useRef(0);
   const retiredInspection = useRef<number | null>(null);

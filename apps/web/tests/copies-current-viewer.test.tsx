@@ -787,11 +787,10 @@ test('The actual Copies route retires retained private rows and editor state on 
     expect(form().textContent).toContain(m.library_copy_detail_unavailable());
     await click(m.library_copy_cancel(), form());
     await click(m.library_copy_edit());
-    await acceptDetail(
-      { ok: false, reason: 'closed' },
-      'B',
-      { ...response('B', search).requested, cursor: 'wrong-address' },
-    );
+    await acceptDetail({ ok: false, reason: 'closed' }, 'B', {
+      ...response('B', search).requested,
+      cursor: 'wrong-address',
+    });
     expect(host.textContent).not.toContain(m.platform_closed_message());
     await click(m.library_copy_cancel(), form());
     await click(m.library_copy_edit());

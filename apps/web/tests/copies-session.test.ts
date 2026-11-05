@@ -99,9 +99,8 @@ mock.module('../src/subject/definitions', () => ({
     return release;
   },
 }));
-const { readCopiesCurrent, readCopiesPage, readCopyDetail, readCopySubject, updateCopy } = await import(
-  '../src/library/copies-actions'
-);
+const { readCopiesCurrent, readCopiesPage, readCopyDetail, readCopySubject, updateCopy } =
+  await import('../src/library/copies-actions');
 
 function reset(): void {
   currentRequest = request();
@@ -235,7 +234,10 @@ test('point inspection keeps native closure, concealed denial and unavailable me
       }),
     ).toEqual({ ok: false, reason: 'closed' });
     for (const status of [401, 403, 404]) {
-      expect(await point(async () => ({ status, error: { value: { code: 'concealed' } } }))).toEqual({ ok: false, reason: 'forbidden' });
+      expect(await point(async () => ({ status, error: { value: { code: 'concealed' } } }))).toEqual({
+        ok: false,
+        reason: 'forbidden',
+      });
     }
     expect(await point(async () => ({ status: 200, data: { copy: { ...native, id: subjectId } } }))).toEqual({
       ok: false,
