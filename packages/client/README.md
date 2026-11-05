@@ -21,6 +21,10 @@ token returned by the kernel. Use `onSession` to observe token changes, for exam
 The declarations in `src/kernel/` are generated through managed compiler placement by
 `bun run --cwd services/kernel typecheck --emit-client`.
 
+Decision: until whole-Kernel declaration emission succeeds, the personal VNDB binding mirrors the mounted
+Progress selection/result and conditional-vote additions in `services/kernel/src/library/list-import-vndb-routes.ts`.
+It preserves the generated methods and authenticated transport and yields to the generated Progress review union.
+
 Decision: until declaration emission succeeds, the Copy list compatibility seam mirrors the mounted native
 kind/status query and filterOptions schema; Web derives its wire types only from this official client.
 The seam automatically yields to the generated method when its filterOptions envelope is published.
