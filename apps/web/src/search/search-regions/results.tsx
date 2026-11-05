@@ -54,7 +54,7 @@ export type SearchResultsRegionProps = {
   retryFocus?: Pick<ReturnType<typeof useSearchRetryFocus>, 'regionRef' | 'retryRef' | 'captureRetryFocus'>;
   currentSearchHref?: string | undefined;
   windowNavigation?: SearchWindowNavigation | undefined;
-  personal?: Pick<ReturnType<typeof useDiscoveryPersonalResults>, 'regionRef' | 'renderPersonal'>;
+  personal?: Pick<ReturnType<typeof useDiscoveryPersonalResults>, 'regionRef' | 'renderPersonal' | 'recoveryView'>;
 };
 const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
 function messageOptions(locale: string) {
@@ -187,6 +187,7 @@ export function SearchResultsRegion({
         aria-label={m.search_results({}, options)}
         data-search-results
       >
+        {personal?.recoveryView}
         {data?.recovery &&
         data.recovery.status !== 'ready' &&
         data.queryState &&

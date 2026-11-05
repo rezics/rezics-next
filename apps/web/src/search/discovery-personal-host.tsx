@@ -17,7 +17,8 @@ import { changeQuestionBoundRating } from '../features/pages/rating-actions';
 import { discoveryKey, type DiscoveryHit, type DiscoveryRequest, type DiscoveryState } from './discovery';
 import type { SubjectLibraryMutation, SubjectLibraryMutationResponse } from '../library/subject-slot';
 import type { QuestionBoundRatingInput } from '../features/pages/rating-actions';
-import type { ExpectedReader } from '../session/expected-reader';
+import { createPersonalReadRecovery, type PersonalReadState } from './personal-recovery';
+type ExpectedReader = Pick<DiscoveryBoundRequest, 'expectedReader' | 'expectedCredential'>;
 import type { FollowWriteInput, FollowWriteResult } from '../library/follow-records';
 import { QUESTION } from '../features/pages/subject-ratings';
 import {
@@ -141,6 +142,11 @@ export function useDiscoveryPersonalResults(input: {
   }
   const episode = episodeRef.current;
   const [mounted, setMounted] = useState<{ owner: typeof episode; value: Mounted } | null>(null);
+  const [recovery, setRecovery] = useState<{
+    owner: typeof episode;
+    state: PersonalReadState;
+    retry: () => void;
+  } | null>(null);
   const read = input.read ?? readDiscoveryPersonalPage;
   const nativeRegistry = commandRegistry(client);
   function captureFocus() {
@@ -160,30 +166,31 @@ export function useDiscoveryPersonalResults(input: {
   }
   useLayoutEffect(() => {
     const focus = pendingFocus.current;
+    if (
+      mounted?.owner === episode &&
+      mounted.value.suppressed &&
+      (!recovery || recovery.owner !== episode || !['failed', 'retryable'].includes(recovery.state.status))
+    )
+      return;
     pendingFocus.current = null;
     const region = regionRef.current;
     if (!focus || !region) return;
     const active = document.activeElement;
-    if (
-      active instanceof HTMLElement &&
-      active !== focus.element &&
-      active !== document.body &&
-      !region.contains(active)
-    )
-      return;
+    if (active instanceof HTMLElement && active !== focus.element && active !== document.body) return;
     if (!focus.element.isConnected) {
       const rows = [...region.querySelectorAll<HTMLElement>('[data-discovery-personal-row]')];
       const row =
         rows.find((row) => row.dataset.discoveryPersonalRow === focus.row) ??
         rows[Math.min(focus.index, rows.length - 1)];
       const destination =
+        region.querySelector<HTMLElement>('[data-discovery-read-retry]:not(:disabled)') ??
         row?.querySelector<HTMLElement>('button, select, a, input') ??
-        region.querySelector<HTMLElement>('[data-discovery-restart]') ??
+        region.querySelector<HTMLElement>('[data-discovery-read-retry]:not(:disabled), [data-discovery-restart]') ??
         region;
       destination.focus({ preventScroll: true });
     }
     window.scrollTo(focus.x, focus.y);
-  }, [mounted, episode]);
+  }, [mounted, episode, recovery]);
 
   useEffect(() => {
     if (episode.retired || episodeRef.current !== episode) return;
@@ -191,6 +198,7 @@ export function useDiscoveryPersonalResults(input: {
     if (episode.abort.signal.aborted) episode.abort = new AbortController();
     const lifetime = episode.abort;
     let current: Mounted | undefined;
+    const readRecovery = createPersonalReadRecovery();
     const owns = () => {
       const query = client.getQueryState(sessionQuery.queryKey);
       const now = query?.status === 'success' ? normalizeSessionObservation(query.data) : undefined;
@@ -224,6 +232,52 @@ export function useDiscoveryPersonalResults(input: {
     const request = structuredClone(input.request!);
     const binding = { expectedReader: session.subject!, expectedCredential: session.csrfToken! };
     const load = (signal: AbortSignal) => read({ data: { ...binding, request, locale: input.locale }, signal });
+    const publishRecovery = () => {
+      if (owns())
+        setRecovery({
+          owner: episode,
+          state: readRecovery.snapshot(),
+          retry: () => {
+            void refreshCurrent(true);
+          },
+        });
+    };
+    const refreshCurrent = async (activated = false, signal = lifetime.signal) => {
+      if (!owns()) return;
+      const owner = readRecovery.begin();
+      if (owner === undefined) return;
+      if (activated) captureFocus();
+      if (current) {
+        current.page.retire();
+        current.suppressed = true;
+        setMounted({ owner: episode, value: { ...current } });
+      }
+      publishRecovery();
+      let fresh: DiscoveryBoundPage;
+      try {
+        fresh = await load(signal);
+      } catch {
+        if (!owns() || signal.aborted) return;
+        readRecovery.settle(owner, 'failed');
+        publishRecovery();
+        return;
+      }
+      if (!owns() || signal.aborted) return;
+      const status = fresh.state.status;
+      const outcome =
+        status === 'unavailable'
+          ? 'retryable'
+          : status === 'restart'
+            ? 'restart-required'
+            : status === 'ready'
+              ? 'current'
+              : 'closed';
+      if (!readRecovery.settle(owner, outcome)) return;
+      // An unavailable read says nothing new about the retained public observation.
+      // Native refusal/restart replaces it; no old row survives uncertain disclosure.
+      if (status !== 'unavailable') install(fresh);
+      publishRecovery();
+    };
     const install = (result: DiscoveryBoundPage, reviewedRow?: string) => {
       if (!owns()) return;
       current?.page.dispose();
@@ -276,7 +330,6 @@ export function useDiscoveryPersonalResults(input: {
               : [],
           ) ?? [],
       };
-      let refreshed: DiscoveryBoundPage | undefined;
       // The controlled lifetime includes repeated question evidence; refuse the private overlay if it exceeds its bound.
       if (
         observation.targets.length > 100 ||
@@ -300,21 +353,16 @@ export function useDiscoveryPersonalResults(input: {
         observation,
         observe: () => (owns() ? observation : undefined),
         registry: nativeRegistry.commands,
+        activate: () => {
+          pendingFocus.current = null;
+          captureFocus();
+        },
         retirePrivate: () => {
           if (!owns() || !current) return;
-          setMounted({ owner: episode, value: { ...current, suppressed: true } });
+          current.suppressed = true;
+          setMounted({ owner: episode, value: { ...current } });
         },
-        refresh: async (signal) => {
-          refreshed = await load(signal);
-          signal.throwIfAborted();
-          return refreshed.state;
-        },
-        publish: () => {
-          if (refreshed && owns()) {
-            captureFocus();
-            install(refreshed);
-          }
-        },
+        refresh: (signal) => refreshCurrent(false, signal),
       });
       const installed: Mounted = {
         state,
@@ -380,6 +428,7 @@ export function useDiscoveryPersonalResults(input: {
     const unsubscribe = client.getQueryCache().subscribe(() => {
       if (!owns() && episode.active) {
         pendingFocus.current = null;
+        readRecovery.close();
         episode.retired = true;
         episode.active = false;
         episode.abort.abort();
@@ -389,11 +438,16 @@ export function useDiscoveryPersonalResults(input: {
       }
     });
     void load(lifetime.signal)
-      .then(install)
+      .then((result) => {
+        install(result);
+        publishRecovery();
+      })
       .catch(() => {
         if (owns()) install({ state: { status: 'unavailable' }, capabilities: null });
       });
     return () => {
+      readRecovery.close();
+      pendingFocus.current = null;
       episode.active = false;
       lifetime.abort();
       current?.page.dispose();
@@ -420,6 +474,7 @@ export function useDiscoveryPersonalResults(input: {
   const display: DiscoveryState | undefined =
     source?.status === 'ready' && (!value || value.suppressed) ? { ...source, page: publicDisplayPage! } : source;
   const renderPersonal = (hit: DiscoveryHit, title: string) => {
+    if (value?.suppressed) return null;
     if (hit.summary.kind === 'space') {
       const privatePage =
         value?.state.status === 'ready' && !value.suppressed ? value.state.page.spaceEntries : undefined;
@@ -601,5 +656,31 @@ export function useDiscoveryPersonalResults(input: {
       </div>
     );
   };
-  return { state: display, renderPersonal: input.enabled ? renderPersonal : undefined, regionRef };
+  const currentRecovery = recovery?.owner === episode && episode.active ? recovery : undefined;
+  const recoveryView =
+    currentRecovery && ['pending', 'failed', 'retryable'].includes(currentRecovery.state.status) ? (
+      <div data-discovery-read-recovery className="space-y-2" aria-busy={currentRecovery.state.status === 'pending'}>
+        <p role="status">
+          {currentRecovery.state.status === 'pending'
+            ? m.discovery_loading({}, { locale: locales.find((locale) => locale === input.locale) ?? 'en' })
+            : m.discovery_personal_retired({}, { locale: locales.find((locale) => locale === input.locale) ?? 'en' })}
+        </p>
+        <button
+          type="button"
+          data-discovery-read-retry
+          disabled={currentRecovery.state.status === 'pending'}
+          className="min-h-11 rounded-md border px-3 py-2"
+          onClick={currentRecovery.retry}
+        >
+          {m.collection_discovery_retry({}, { locale: locales.find((locale) => locale === input.locale) ?? 'en' })}
+        </button>
+      </div>
+    ) : null;
+  return {
+    state: display,
+    renderPersonal: input.enabled ? renderPersonal : undefined,
+    regionRef,
+    recoveryView,
+    retryRead: currentRecovery?.retry,
+  };
 }

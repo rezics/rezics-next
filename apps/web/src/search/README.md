@@ -272,3 +272,11 @@ without automatic focus movement. Preparation waits for an issued clipboard comm
 current allowed URL immediately before writing; an issued external write cannot be recalled. Opening focuses the
 panel only while its activation still owns focus; close/Escape restores the surviving trigger only from that panel.
 Prepared documents, labels and links remain in the mounted visit and never enter browser storage.
+
+Entry and score settlement retires private facts immediately after successful or uncertain delivery, then waits for
+already-dispatched independent command families before one complete aggregate read. Failed or unavailable reads
+retain only still-lawful public summaries and expose a deliberate read retry under the same executed request. Retry
+never replays a write. Native restart/refusal replaces the old page; ready and empty pages install native evidence
+and a fresh command lifetime together. Reader, credential, exposure, locale or source replacement permanently retires
+reads and focus intent. Only a deliberate command or read retry can hand focus to its current settlement.
+The pure personal-recovery entry owns read settlement; the mounted host supplies native reads and cancellation.

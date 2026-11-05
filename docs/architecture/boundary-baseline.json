@@ -53410,11 +53410,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/search/discovery-personal-host.tsx",
-          "edge": "type import \"../session/expected-reader\" #1 => apps/web/src/session/expected-reader.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/search/discovery-personal-host.tsx",
           "edge": "value import \"../kernel/exposure\" #1 => apps/web/src/kernel/exposure.ts"
         },
         {

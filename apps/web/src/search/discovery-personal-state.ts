@@ -1,4 +1,4 @@
-import type { DiscoveryState, DiscoveryViewerFact, DiscoveryViewerQuestion } from './discovery';
+import type { DiscoveryViewerFact, DiscoveryViewerQuestion } from './discovery';
 
 /** These observations belong to the mounted Search host, never a URL or public cache key. */
 export type DiscoveryPersonalScope = {
@@ -105,9 +105,9 @@ export function createDiscoveryPersonalPage(input: {
   observation: DiscoveryPersonalObservation;
   observe: () => DiscoveryPersonalObservation | undefined;
   registry: DiscoveryCommandRegistry;
-  refresh: (signal: AbortSignal) => Promise<DiscoveryState>;
+  refresh: (signal: AbortSignal) => Promise<void>;
   retirePrivate: () => void;
-  publish: (state: DiscoveryState) => void;
+  activate?: () => void;
 }) {
   const captured = structuredClone(input.observation);
   const encoded = new TextEncoder();
@@ -184,15 +184,8 @@ export function createDiscoveryPersonalPage(input: {
   async function refreshWhenSettled() {
     if (!refreshNeeded || pending !== 0 || refreshStarted || !owns()) return;
     refreshStarted = true;
-    let next: DiscoveryState;
-    try {
-      next = await input.refresh(controller.signal);
-    } catch {
-      next = { status: 'unavailable' };
-    }
-    // The response is a complete admitted page, including empty/final pages and restart outcomes.
-    if (!owns() || controller.signal.aborted) return;
-    input.publish(next);
+    // The host owns complete read settlement, including failed reads and deliberate read retries.
+    await input.refresh(controller.signal);
   }
 
   return {
@@ -205,6 +198,7 @@ export function createDiscoveryPersonalPage(input: {
     },
     snapshot: () => revision,
     current: () => !retired && owns(),
+    retire,
     accepts: (target: DiscoveryPersonalTarget) => signatures.get(target.rowKey) === targetKey(target),
     state(rowKey: string, family: DiscoveryCommandFamily): DiscoveryCommandState {
       if (!owns()) return 'retired';
@@ -230,6 +224,7 @@ export function createDiscoveryPersonalPage(input: {
       try {
         // A subscription can retire the host synchronously when pending is published.
         if (retired || !owns()) return 'retired';
+        input.activate?.();
         result = await send(structuredClone(target), crypto.randomUUID());
       } catch {
         result = 'uncertain';
