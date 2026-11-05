@@ -2732,6 +2732,22 @@ Decision: the local seed stores finite reviewed-catalogue journal identities in 
 
 Decision: selected Bangumi covers use the pinned subject API and keep its response receipt separate from the unchanged archive revision/digest in the existing showcase journal.
 
+If the native cover POST returns an explicitly retryable `dependency_unavailable` (503) or `rate_limited` (429),
+the showcase retains its exact prepared intent as unavailable without inventing a reservation or Media ID. The same
+producer invocation does not submit that refused intent again. Independently authorized text facts can finish and
+publication records the image gap. An indexed check of the current unsubmitted intent and source digest keeps that
+asset eligible on an unchanged source refresh. An actually accepted pending job still holds its source generation
+until normal completion. Permission failures and other refusals remain failures; native admission, retry limits and
+all media checks stay active.
+
+#### Current unsubmitted cover refresh
+
+- Touches: the exact record binding and its current media intent, plus at most 65,536 bytes of prepared request JSON.
+- Bound: at most two primary-key point reads and two returned rows, independent of unrelated records and media history.
+- Growth check: `tests/bindings-growth.test.ts`, “Media projection stays within its bound as B grows”, measures the
+  current projection and unsubmitted-intent check together at three seeded scales. `tests/showcase-media.test.ts`
+  checks refusal, text completion, unchanged-input retry and eventual actual availability.
+
 Decision: `task seed:dev` uses one exact five-work selection with direct cast and episodes and at most 64 people or organizations per provider; Bangumi Organization `wdt:P6298` is omitted with an explicit conversion gap because the released Organization profile has no property that preserves Bangumi-ID semantics.
 
 Decision: selected graph preparation retains at most 8,192 edges and 8 MiB total (1 MiB per edge), recording a bounded gap when either limit is exceeded.

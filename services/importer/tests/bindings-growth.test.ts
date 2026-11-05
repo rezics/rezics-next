@@ -393,9 +393,10 @@ test('Media projection stays within its bound as B grows', async () => {
     },
     (bindings, target) => {
       expect(bindings.mediaIds(target)).toEqual({ cover: uuid(500_000) });
+      expect(bindings.hasUnsubmittedMedia(target, 'a'.repeat(64))).toBe(false);
     },
   );
-  assertMaximum(samples, evidence, { rows: 2, statements: 2 });
+  assertMaximum(samples, evidence, { rows: 4, statements: 4 });
 });
 
 test('Binding write stays within its bound as B grows', async () => {

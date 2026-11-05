@@ -17,6 +17,18 @@ import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
 
+test('a fresh local database gets a new search namespace while ordinary setup preserves it', () => {
+  const prefix = (env: string) => env.split('\n').find((line) => line.startsWith('KERNEL_SEARCH_PREFIX='));
+  const url = 'postgres://127.0.0.1/rezics';
+  const existing = 'KERNEL_SEARCH_PREFIX=doctor-old-\n';
+  const reset = developmentEnv(existing, url, true);
+  expect(prefix(reset)).toMatch(/^KERNEL_SEARCH_PREFIX=local-[a-f0-9]{24}-$/);
+  expect(prefix(reset)).not.toBe(prefix(existing));
+  expect(prefix(developmentEnv(reset, url))).toBe(prefix(reset));
+  expect(prefix(developmentEnv(reset, url, true))).not.toBe(prefix(reset));
+  expect(prefix(developmentEnv('', url))).toMatch(/^KERNEL_SEARCH_PREFIX=local-[a-f0-9]{24}-$/);
+});
+
 test('development setup gives finite dataset write capacity and preserves explicit deployment budgets', () => {
   const generated = developmentEnv('', 'postgres://127.0.0.1/rezics');
   const value = generated
@@ -102,8 +114,8 @@ test('persona retries open mixed Search and POST facets alongside anonymous GET 
   };
   await openLocalShowcase(routes, open);
   await openLocalShowcase(routes, open);
-  expect([...receipts.values()]).toEqual(['search', 'search_advanced', 'subjects']);
-  expect(attempts.slice(3)).toEqual(attempts.slice(0, 3));
+  expect([...receipts.values()]).toEqual(['search', 'search_advanced', 'personal_library', 'subjects']);
+  expect(attempts.slice(4)).toEqual(attempts.slice(0, 4));
 });
 
 test('a failed native opening stops persona setup and names the group, cause and retry', async () => {
