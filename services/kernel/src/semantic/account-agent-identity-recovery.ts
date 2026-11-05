@@ -27,7 +27,7 @@ import type {
   IdentityStepProgress,
 } from './identity-epoch-contract.ts';
 import { identityReceiptKey, serializeIdentityValue } from './identity-adapters/index.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import sourceSql from './account-agent-identity-recovery-source.sql';
 import jobSql from './account-agent-identity-recovery-job.sql';
 import acksSql from './account-agent-identity-recovery-acks.sql';

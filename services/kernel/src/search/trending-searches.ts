@@ -16,7 +16,7 @@ import { parseText } from './text.ts';
 import type { SearchRequest } from './service.ts';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerOperations } from './public-filter-consumer-contract.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 
 export const TRENDING = Object.freeze({
   days: 7,

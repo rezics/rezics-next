@@ -431,7 +431,7 @@ import {
 import type {
   SearchIdentityReceivingBinding,
   SearchIdentityReceivingRecord,
-} from '../../src/semantic/identity-receiving-native-contract.ts';
+} from '../../src/search/identity-receiving-native-contract.ts';
 
 test('the genuine six-method factory retains same-T acceptance rollback and refuses a crossed configured Pool', async () => {
   const input = await preparation(0xd710);

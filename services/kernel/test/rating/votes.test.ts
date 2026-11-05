@@ -7,7 +7,6 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { EVENT_TYPES } from '../../src/events/catalogue.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
@@ -85,12 +84,7 @@ beforeAll(async () => {
     actions: new Map([['subject:read', { anonymous: true }]]),
     accountEvidence: (actor) => accounts.get(actor.accountId) ?? null,
   });
-  commands = createVoteCommands({
-    pool: database.pool,
-    access,
-    clock,
-    createCommandRunner: createLibraryCommandRunner,
-  });
+  commands = createVoteCommands({ pool: database.pool, access, clock });
   subjectId = await createReadableSubject(voter, 'Rating target');
   unreadableSubjectId = await createReadableSubject(voter, 'Unreadable rating target');
   await database.admin.query(

@@ -1,5 +1,5 @@
 import { prepareEditionSubjectIdentities } from './edition-subject.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { partitionReadClients } from '../database/read-snapshot.ts';
 import readRevisionBatch from './read-revision-batch.sql';
 import readContainingThread from './read-containing-post-thread.sql';

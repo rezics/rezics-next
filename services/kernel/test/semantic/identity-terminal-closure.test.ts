@@ -10,7 +10,7 @@ import {
   admitIdentityTerminalCapture,
   runIdentityTerminalCommand,
 } from '../../src/semantic/identity-terminal-closure-command.ts';
-import { IdentityTerminalClaimReleaseError } from '../../src/identity-epoch/errors.ts';
+import { IdentityTerminalClaimReleaseError } from '../../src/semantic/identity-terminal-closure-errors.ts';
 import { home, seedLegacyRoot } from './support/identity-epoch.ts';
 import {
   appendEdge,

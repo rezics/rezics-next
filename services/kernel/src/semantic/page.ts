@@ -1,4 +1,4 @@
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

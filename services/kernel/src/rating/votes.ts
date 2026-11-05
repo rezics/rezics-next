@@ -5,16 +5,20 @@ import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, commandAttemptDeadline, type CommandEvent } from '../command/command.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import { withConnection } from '../database/pool.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import {
   createIdentityRatingCommitParticipant,
   readIdentityRatingReview,
   type IdentityRatingCommitParticipant,
   type IdentityRatingCommitPreparation,
 } from '../semantic/index.ts';
-import type { createLibraryCommandRunner } from '../library/command-support.ts';
-import { LibraryNotFoundError, requireRoute } from '../shared/library-not-found.ts';
-import { resolveSubject } from '../semantic/subject-anchor.ts';
+import {
+  LibraryNotFoundError,
+  createLibraryCommandRunner,
+  libraryCommandReceiptDigestForActor,
+  requireRoute,
+} from '../library/command-support.ts';
+import { resolveSubject } from '../library/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -137,8 +141,6 @@ export class RatingQuestionRetiredError extends Error {
 }
 
 type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
-/** The library command boundary, injected by the composition that wires rating; rating keeps no runtime import of it. */
-export type CreateCommandRunner = typeof createLibraryCommandRunner;
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type QuestionRow = NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
 type VoteRow = NonNullable<Awaited<ReturnType<typeof voteRead.run>>>;
@@ -331,13 +333,13 @@ function normalizePutVoteInput(input: PutVoteInput, participant: IdentityRatingC
 }
 
 /** Writes and reads the signed-in person's current rating vote on the account's partition. */
-export function createVoteCommands(config: Dependencies & { createCommandRunner: CreateCommandRunner }) {
+export function createVoteCommands(config: Dependencies) {
   const { pool, clock } = config;
-  const runner = config.createCommandRunner({
+  const runner = createLibraryCommandRunner({
     pool,
     ...(clock === undefined ? {} : { clock }),
   });
-  const guardedRunner = config.createCommandRunner({
+  const guardedRunner = createLibraryCommandRunner({
     pool,
     access: config.access,
     ...(clock === undefined ? {} : { clock }),
@@ -359,7 +361,7 @@ export function createVoteCommands(config: Dependencies & { createCommandRunner:
       input: normalized,
       receipt: Object.freeze({
         requestKey: idempotencyKey,
-        digest: runner.receiptDigestForActor(actor, PUT_VOTE_KIND, {
+        digest: libraryCommandReceiptDigestForActor(actor, PUT_VOTE_KIND, {
           ...normalized,
           ...(admission ? { admission: admission.input } : {}),
         }),

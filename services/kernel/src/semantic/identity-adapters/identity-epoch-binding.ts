@@ -27,7 +27,7 @@ import {
   type CommandTransaction,
 } from '../../command/command.ts';
 import { partitionOf, routeOf, newId } from '../../route/route.ts';
-import { withReadTransaction } from '../../access/read-transaction.ts';
+import { withReadTransaction } from '../read.ts';
 import {
   authorizeIdentityAdmission,
   identityReceiptKey,

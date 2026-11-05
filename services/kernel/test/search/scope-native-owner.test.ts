@@ -4,8 +4,7 @@ import type { CollectionSourceObservation } from '../../src/library/collection-s
 import type { NativeSourceIdentity } from '../../src/library/native-source-custody.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
 import { compileCurrentOwnerFilter } from '../../src/search/current-filter-plan.ts';
-import { evaluateScopeSubjects } from '../../src/search/scope-execution.ts';
-import { ScopeWork, scopeAllowance } from '../../src/work-ledger/scope-work.ts';
+import { evaluateScopeSubjects, ScopeWork, scopeAllowance } from '../../src/search/scope-execution.ts';
 import type { ScopeBasis } from '../../src/search/scope-source.ts';
 
 test('scope basis has exclusive real indexed and native owner source branches', () => {

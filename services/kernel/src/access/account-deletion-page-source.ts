@@ -10,7 +10,7 @@ import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from './read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { accessClock } from './access-clock.ts';
 import { readAccount } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';

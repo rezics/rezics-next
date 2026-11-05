@@ -31,7 +31,7 @@ import {
   verifyIdentitySourceConsumerCustody,
   type IdentitySourceConsumerCustody,
 } from '../semantic/identity-source-consumer-custody.ts';
-import { IdentityEpochStoreError } from '../identity-epoch/errors.ts';
+import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
 import {
   agentIdentityCopyRetention,
   prepareAgentIdentityCopyRetention,

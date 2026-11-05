@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 import type { WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import type { NativeStepWork } from './identity-epoch-contract.ts';
 import {

@@ -6,7 +6,7 @@ import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { PageCursorError, type PageComponent } from './page.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import candidatesStatement from './subject-page-candidates.sql';
 
 export type SubjectPageCandidateWindow = {

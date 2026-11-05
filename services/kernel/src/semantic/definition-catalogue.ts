@@ -21,7 +21,7 @@ import { releaseOperationalTime, type AuthoritativeTime } from '../command/comma
 import { readNativeAccessTime } from '../access/authenticate.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import { DefinitionAccessDeniedError, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { globalReadEligibility } from './eligibility.ts';
 import {

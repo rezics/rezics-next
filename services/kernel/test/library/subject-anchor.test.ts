@@ -17,7 +17,7 @@ import {
   type GrowthSample,
 } from '../support/growth.ts';
 import type { Pool } from 'pg';
-import { resolveSubject, readableSubjects } from '../../src/semantic/subject-anchor.ts';
+import { resolveSubject, readableSubjects } from '../../src/library/subject-anchor.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');

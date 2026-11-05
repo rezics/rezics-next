@@ -13,7 +13,7 @@ import {
 } from '../../../src/semantic/identity-epoch-bootstrap.ts';
 import * as commandTiming from '../../../src/command/timing.ts';
 import { CommandUnavailableError } from '../../../src/command/command.ts';
-import { withReadTransaction } from '../../../src/access/read-transaction.ts';
+import { withReadTransaction } from '../../../src/semantic/read.ts';
 import { createSubject } from '../../../src/semantic/subject.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { openGrowthDatabase, seed, type CountedValues, type Row } from '../../support/growth.ts';

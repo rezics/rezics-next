@@ -1,7 +1,7 @@
 import { accessCheck, type AccessCheck, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { partitionReadClients } from '../database/read-snapshot.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { FeedItem, FeedSubjectReactionKind, FeedSubjectReactions } from './feed-contract.ts';

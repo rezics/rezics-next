@@ -29,7 +29,7 @@ import releaseLength from './scope-leaf-selection-release-length.sql';
 import releaseBody from './scope-leaf-selection-release.sql';
 import kindTypeAnchor from './scope-leaf-selection-kind-type.sql';
 import kindTypeLock from './scope-leaf-selection-kind-type-lock.sql';
-import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { isDeepStrictEqual } from 'node:util';
 

@@ -5,7 +5,6 @@ import { createAccess } from '../../src/access/permission.ts';
 import type { Account } from '../../src/access/account-data.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
@@ -86,7 +85,7 @@ beforeAll(async () => {
     actions: new Map([['subject:read', { anonymous: true }]]),
     accountEvidence: () => account,
   });
-  commands = createVoteCommands({ pool: database.pool, access, createCommandRunner: createLibraryCommandRunner });
+  commands = createVoteCommands({ pool: database.pool, access });
   subjectId = await createGrowthTarget('Growth rating target');
 });
 

@@ -14,7 +14,7 @@ import {
   readNativePublicCollectionOutput,
   lockNativePublicCollectionOutput,
 } from '../../src/library/collection-source-native.ts';
-import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import { outputCaptureFootprint } from '../../src/semantic/identity-public-output-work.ts';
 import stageSQL from '../../src/semantic/identity-public-output-stage.sql';
 import transitionInsertSQL from '../../src/semantic/identity-public-output-transition.sql';

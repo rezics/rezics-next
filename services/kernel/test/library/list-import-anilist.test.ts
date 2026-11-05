@@ -6,7 +6,6 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
@@ -127,7 +126,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     subjects.push(result.value.id);
   }
   const subjectId = subjects[0]!;
-  const votes = createVoteCommands({ pool: f.pool, access: f.access, createCommandRunner: createLibraryCommandRunner });
+  const votes = createVoteCommands({ pool: f.pool, access: f.access });
   await votes.putVoteOutcome(
     importer.actor,
     { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 11 },

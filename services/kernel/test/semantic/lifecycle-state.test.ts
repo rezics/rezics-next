@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
 import { mintReadTime, type AuthoritativeTime } from '../../src/command/command.ts';
-import { withReadTransaction } from '../../src/access/read-transaction.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import * as semantic from '../../src/semantic/index.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';

@@ -21,7 +21,7 @@ import { readCollection } from './collection-store.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, workStepDeadline } from './command-support.ts';
 import type { Follow, FollowPageCursor, FollowTargetType } from './follow-model.ts';
 import { applyFollow, pageFollows, readFollow as readStoredFollow } from './follow-store.ts';
-import { resolveSubject } from '../semantic/subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
 import { consumeFollowWork, followAccountWork, withFollowWork } from './follow-operation-bounds.ts';
 
 const FOLLOW_EVENT = 'com.rezics.library.follow.updated.v1';

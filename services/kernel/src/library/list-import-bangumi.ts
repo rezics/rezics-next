@@ -29,7 +29,7 @@ import { accessCheck, type Access, type Actor, type AccountActor } from '../requ
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, routeOf } from '../route/route.ts';
 import readClaim from '../semantic/bulk-read-claim.sql';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError } from './entries.ts';

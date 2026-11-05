@@ -19,7 +19,7 @@ import {
   collectionKindInputWork,
   collectionKindInputWorkDimensions,
 } from '../../src/library/collection-kind-input-bounds.ts';
-import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import { readCollectionKindPreparationType } from '../../src/library/collection-kind-preparation.ts';
 import { newId } from '../../src/route/route.ts';
 import { resolveCollectionKindRawInput } from '../../src/library/collection-kind-input.ts';

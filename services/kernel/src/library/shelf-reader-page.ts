@@ -19,7 +19,7 @@ import all from './shelf-reader-created-desc.sql';
 import state from './shelf-reader-created-desc-state.sql';
 import type from './shelf-reader-created-desc-type.sql';
 import stateType from './shelf-reader-created-desc-state-type.sql';
-import { ShelfReadUnavailableError } from '../shared/shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 
 /** The sixth fixed native date shape, with the exact reverse tie/seek order of createdAt asc. */
 export function createShelfCreatedDescReader(): ShelfDateReader {

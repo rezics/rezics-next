@@ -21,7 +21,7 @@ import {
   type VoteCommandAdmission,
   type PreparedPutVote,
 } from '../rating/votes.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
@@ -452,7 +452,7 @@ export function createVndbImport(config: Config) {
   const { pool, access } = config;
   const runner = createLibraryCommandRunner(config),
     entries = createEntryCommands(config),
-    votes = createVoteCommands({ ...config, createCommandRunner: createLibraryCommandRunner }),
+    votes = createVoteCommands(config),
     sessions = createSessionCommands(config);
   const personalEntries = createEntryPersonalCommands(config);
   function owner(actor: Actor): AccountActor {

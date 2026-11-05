@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { mintReadTime, type AuthoritativeTime } from '../../src/command/command.ts';
-import { withReadTransaction } from '../../src/access/read-transaction.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
 import * as semantic from '../../src/semantic/index.ts';
 import { checkGrowth } from '../support/growth.ts';
 import { createGrowthDeletionFixture } from './support/deletion-fixture.ts';

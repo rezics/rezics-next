@@ -4,7 +4,7 @@ import type { subjectRoutes } from './subjects.ts';
 import { PageCursorError } from '../page.ts';
 import { GLOBAL_CONTEXT } from '../definitions.ts';
 import { globalReadEligibility } from '../eligibility.ts';
-import { withReadTransaction } from '../../access/read-transaction.ts';
+import { withReadTransaction } from '../read.ts';
 import type { Pool } from 'pg';
 import type { SubjectPageFeed } from '../subject-page-feed.ts';
 

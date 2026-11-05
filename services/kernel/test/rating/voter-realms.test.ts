@@ -7,7 +7,6 @@ import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { runCommand } from '../../src/command/command.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { createVoterRealmsEffect, finishVoterRealmRemoval } from '../../src/rating/voter-realms.ts';
 import { createRatingWorkModule } from '../../src/rating/work-module.ts';
 import type { Effect } from '../../src/events/effects.ts';
@@ -256,7 +255,7 @@ test('vote events list Global and only the applied side of each cursor and remov
     actions: new Map([['subject:read', { anonymous: true }]]),
     accountEvidence: () => account,
   });
-  const commands = createVoteCommands({ pool: database.pool, access, createCommandRunner: createLibraryCommandRunner });
+  const commands = createVoteCommands({ pool: database.pool, access });
   const requestKey = randomUUID();
   const subject = await createSubject(database.pool, {
     actor,

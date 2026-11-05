@@ -19,7 +19,7 @@ import {
 } from './statement-disclosure.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 import { activeRelease } from './definitions.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import type { Source } from '@rezics/definitions/bulk';
 import { SubjectRedirectError } from './merges.ts';
 import { checkSubjectInput } from '@rezics/definitions/validate';
@@ -45,7 +45,7 @@ import {
   type AgentSelfSource as CandidateAgentSelfSource,
   type CandidateSource,
 } from './fences.ts';
-import { checkMediaObject } from './cover-reference.ts';
+import { checkMediaObject } from '../content/cover-reference.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { factDataTypes, isRelationProperty, itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { SubjectInputError } from './item.ts';

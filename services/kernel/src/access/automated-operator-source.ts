@@ -10,7 +10,7 @@ import { withConnection } from '../database/pool.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from './read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { accessClock } from './access-clock.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';

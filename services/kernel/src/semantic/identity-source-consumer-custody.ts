@@ -20,12 +20,9 @@ import type {
 import { readLibraryScopeEffectsPage, verifyLibraryScopeEffectsSeal } from '../library/identity-scope-effects.ts';
 import type { LibraryExpectedEffectAfter } from '../library/identity-scope-effects.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
-import {
-  instrumentNativeCollectionWork,
-  requireNativeCollectionFootprint,
-} from '../work-ledger/native-collection-work.ts';
+import { instrumentNativeCollectionWork, requireNativeCollectionFootprint } from '../library/collection-source-work.ts';
 import { readIdentityPrearmCustodyPage, verifyIdentityPrearmCustodyCut } from './identity-epoch-prearm-custody.ts';
-import { identityScopeAddress, type scopeConsumerFootprint } from './identity-scoped-observations.ts';
+import { identityScopeAddress, scopeConsumerFootprint } from './identity-scoped-observations.ts';
 import { readIdentityReceivingSelection, reconcileIdentityReceivingEffect } from './identity-receiving-effects.ts';
 import type { IdentityReceivingSelection, IdentityReceivingRecord } from './identity-receiving-effects-types.ts';
 import { readAccountIdentitySource, type AccountIdentitySource } from '../access/agent-verification-identity.ts';
@@ -518,7 +515,7 @@ export async function readIdentitySourcePrepaidLibraryPage(
   const read = entry.value as (
     pool: Pool,
     pageInput: typeof input,
-    work: import('../work-ledger/native-collection-work.ts').NativeCollectionWork,
+    work: import('../library/collection-source-work.ts').NativeCollectionWork,
   ) => Promise<LibraryScopeEffectsPage>;
   // The installed Library body enforces its own exact literal policy on the
   // SAME ledger. Its Core controls are reserved by the private Source adapter

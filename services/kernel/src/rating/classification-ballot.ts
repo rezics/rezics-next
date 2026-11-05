@@ -4,7 +4,7 @@ import { AccessUnavailableError } from '../access/unavailable.ts';
 import { readAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
 import { noEffect, type CommandEvent, type CommandTransaction } from '../command/command.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import {
   readCurrentClassificationAssociation,
   type CurrentClassificationAssociation,

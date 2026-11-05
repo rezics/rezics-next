@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import type { ListingKey, ListingObservation } from './listing-freshness-contract.ts';
 import observation from './listing-source-observation.sql';
 import { LiveCopyPendingError, readLiveCopyDomain } from '../access/live-copy.ts';

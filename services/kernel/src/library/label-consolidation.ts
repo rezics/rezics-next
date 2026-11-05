@@ -32,7 +32,7 @@ import reservations from './label-assignment-reservations.sql';
 import parents from './label-consolidation-parents.sql';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
 import { readPersonalLabel } from './label-store.ts';
-import { resolveSubject } from '../semantic/subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
 import { workStepDeadline } from './command-support.ts';
 
 export const LABEL_CONSOLIDATION_LIMITS = Object.freeze({

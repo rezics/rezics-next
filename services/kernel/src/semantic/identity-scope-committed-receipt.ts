@@ -11,7 +11,7 @@ import {
 } from '../command/command.ts';
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
-import { instrumentNativeCollectionWork, type NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { instrumentNativeCollectionWork, type NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityScopeAddress } from './identity-scoped-observations.ts';
@@ -23,7 +23,7 @@ import {
   type IdentitySourceConsumerMaintenanceContext,
 } from './identity-source-consumer-maintenance.ts';
 import { serializeIdentityValue as json } from './identity-adapters/index.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import current from './identity-scope-committed-receipt-current.sql';
 import repair from './identity-scope-committed-receipt-repair.sql';
 import association from './identity-scope-committed-receipt-association.sql';

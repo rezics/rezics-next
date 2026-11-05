@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { accountAgentId, accountAgentsForSubjects } from '../semantic/agents.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { routeOf } from '../route/route.ts';

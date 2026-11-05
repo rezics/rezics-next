@@ -1,7 +1,7 @@
 import { classifyIdentityRemainder, type IdentityTransformSource } from '../identity-core/index.ts';
 import { assertIdentityTerminalGroupsOpen } from '../identity-terminal-closure.ts';
-import { IdentityEpochStoreError } from '../../identity-epoch/errors.ts';
-export { IdentityEpochStoreError } from '../../identity-epoch/errors.ts';
+import { IdentityEpochStoreError } from '../identity-terminal-closure-errors.ts';
+export { IdentityEpochStoreError } from '../identity-terminal-closure-errors.ts';
 import { recordPreparedIdentityPrearm, sealColocatedEmptyIdentityPrearm } from '../identity-epoch-prearm.ts';
 import admissionInsertJob from '../identity-epoch-admission-insert-job.sql';
 import admissionInsertBases from '../identity-epoch-admission-insert-bases.sql';

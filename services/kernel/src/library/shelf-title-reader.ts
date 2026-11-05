@@ -4,7 +4,7 @@ import type { ShelfDateReader, ShelfEntry, ShelfSeek } from './shelf-contract.ts
 import { isShelfEntryState, MAX_SHELF_PAGE_SIZE } from './shelf-contract.ts';
 import { shelfTitlePolicy, titleLanguages } from './shelf-title-source.ts';
 import { SHELF_TITLE_KEY_POLICY } from './shelf-title-key.ts';
-import { ShelfReadUnavailableError } from '../shared/shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 

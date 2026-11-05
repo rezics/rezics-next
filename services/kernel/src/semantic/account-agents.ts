@@ -5,7 +5,7 @@ import { subjectPageFacts, recordSubjectPageDiff } from './subject-page-publicat
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
 import { activeRelease, GLOBAL_CONTEXT } from './definitions.ts';

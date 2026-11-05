@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { resolveSubject, readableSubjects } from '../../src/semantic/subject-anchor.ts';
+import { resolveSubject, readableSubjects } from '../../src/library/subject-anchor.ts';
 import { epochFixture, type EpochFixture } from '../semantic/support/identity-epoch.ts';
 import { home, seedLegacyGroup, seedLegacyRoot } from '../semantic/support/identity-epoch.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';

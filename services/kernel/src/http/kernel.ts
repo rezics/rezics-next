@@ -54,7 +54,6 @@ import { readingInsightsRoutes } from '../library/reading-insights-routes.ts';
 import { yearlyCompletionGoalRoutes } from '../library/yearly-goal-routes.ts';
 import { diaryRoutes } from '../library/diary-routes.ts';
 import { createSessionCommands } from '../library/sessions.ts';
-import { createLibraryCommandRunner } from '../library/command-support.ts';
 import { ratingRoutes } from '../rating/routes.ts';
 import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
@@ -847,7 +846,6 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
         actions: actionCatalogue(sourceStatistics),
         realmRoleReader,
       }),
-    createCommandRunner: createLibraryCommandRunner,
   });
   declareKernelWriteRates(ratings);
   sourceStatistics = sourceStatisticRoutes(ratings as unknown as ReturnType<typeof definitionRoutes>, {

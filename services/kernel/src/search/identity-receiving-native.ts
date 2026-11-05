@@ -19,8 +19,8 @@ import type {
   SearchIdentityReceivingLocator,
   SearchIdentityReceivingNative,
   SearchIdentityReceivingResult,
-} from '../semantic/identity-receiving-native-contract.ts';
-import { snapshotSearchIdentityReceivingFrontier } from '../semantic/identity-receiving-native-contract.ts';
+} from './identity-receiving-native-contract.ts';
+import { snapshotSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
 import {
   createSearchIdentityReceivingNativeStore,
   type SearchNativeReceivingReleaseObservation,

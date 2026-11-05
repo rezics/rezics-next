@@ -7,7 +7,7 @@ import {
   completeCollectionSourceOutput,
 } from '../../src/library/collection-source-output.ts';
 import { readCollectionPublicationStagingSeal } from '../../src/library/collection-publication-staging.ts';
-import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import {
   sourceAllowance,
   sourceRuntimeFixture,

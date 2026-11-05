@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { isAdmittedSearchPrefix } from './consumer-name.ts';
 import { MAX_SUBJECT_GENERATIONS } from './indices.ts';
 

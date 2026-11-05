@@ -387,12 +387,7 @@ export function createAniListImport(deps: Dependencies) {
   const entries = createEntryCommands(deps);
   const personalEntries = createEntryPersonalCommands(deps);
   const sessions = createSessionCommands(deps);
-  const votes = createVoteCommands({
-    pool,
-    access,
-    ...(clock === undefined ? {} : { clock }),
-    createCommandRunner: createLibraryCommandRunner,
-  });
+  const votes = createVoteCommands({ pool, access, ...(clock === undefined ? {} : { clock }) });
   async function readScoreQuestion(actor: Actor) {
     try {
       return nativeQuestion(await votes.readRatingQuestion(actor, STANDARD_QUESTION_ID));

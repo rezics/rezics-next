@@ -4,16 +4,16 @@ import type { Release } from '@rezics/definitions';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
-import { zeroScopeWork } from '../work-ledger/scope-work.ts';
+import { zeroScopeWork } from '../search/scope-execution.ts';
 import { currentOwnerClauseKey } from '../search/current-filter-plan.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { readScopeLeafEvidence, type LeafEvidence, type LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import { readCanonicalSourceGroup, readCanonicalSourceState, type CanonicalRawKey } from './canonical-source-store.ts';
 import type { PreparedCollectionSource } from './collection-source.ts';
-import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import type { NativeCollectionWork } from './collection-source-work.ts';
 import type { OwnerFilterCandidateClosure, OwnerFilterReadBinding } from './owner-filter-plan.ts';
 import type { OwnerFilterFactLocator } from './owner-filter.ts';
-import { resolveSubject } from '../semantic/subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
 import {
   nativeOwnerFilterBinding,
   ownerFilterAccessContext,

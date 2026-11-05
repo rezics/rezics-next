@@ -17,8 +17,7 @@ import {
   compileCurrentRealmFilter,
   type CurrentRealmFilterPlan,
 } from './current-filter-plan.ts';
-import { evaluateScopeSubjects } from './scope-execution.ts';
-import { ScopeWork, zeroScopeWork } from '../work-ledger/scope-work.ts';
+import { evaluateScopeSubjects, ScopeWork, zeroScopeWork } from './scope-execution.ts';
 import type { RelationFacetMatch } from './source.ts';
 import { routeOf } from '../route/route.ts';
 

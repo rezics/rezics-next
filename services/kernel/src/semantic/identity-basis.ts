@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 
 /** Native structural tuple. Generation/pending remain Semantic's identity authority. */
 export type HomeIdentity = Readonly<{

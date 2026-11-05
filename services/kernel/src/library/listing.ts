@@ -10,7 +10,7 @@ import {
 } from '../command/command.ts';
 import { runOperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { partitionOf } from '../route/route.ts';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
 import { requireRoute } from './command-support.ts';

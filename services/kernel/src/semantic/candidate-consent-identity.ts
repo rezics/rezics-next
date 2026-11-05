@@ -5,7 +5,7 @@ import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from './eligibility.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import related from './read-related.sql';
 
 export type ConsentIdentity = {

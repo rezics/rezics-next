@@ -3,7 +3,7 @@ import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { redirectOf } from '../semantic/merges.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { readItemTypes } from '../semantic/subject.ts';
 
 type Client = Pick<PoolClient, 'query'>;

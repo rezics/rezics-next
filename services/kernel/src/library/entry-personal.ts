@@ -23,7 +23,7 @@ import {
   requireRoute,
   WORK_STEP_DEADLINE_MS,
 } from './command-support.ts';
-import { resolveSubject } from '../semantic/subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
 import {
   EntryAnnotationReviewStoppedError,
   LibraryConflictError,

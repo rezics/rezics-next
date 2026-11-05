@@ -39,7 +39,7 @@ import {
   beginCollectionSourceOutput,
   completeCollectionSourceOutput,
 } from './collection-source-output.ts';
-import { NativeCollectionWork, withNativeCollectionWorkAllowance } from '../work-ledger/native-collection-work.ts';
+import { NativeCollectionWork, withNativeCollectionWorkAllowance } from './collection-source-work.ts';
 import {
   COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST,
   collectionSelectedPublicationOutputReservation,
@@ -61,7 +61,7 @@ import {
   readOwnerFilterCandidateClosure,
   type OwnerFilterReadBinding,
 } from './owner-filter-plan.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from '../semantic/subject-anchor.ts';
+import { resolveSubject, SubjectIdentityUnavailableError } from './subject-anchor.ts';
 import { OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './owner-filter-native-closure.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };

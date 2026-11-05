@@ -1,6 +1,6 @@
 import { accessCheck } from '../request/access.ts';
 import { partitionReadClients } from '../database/read-snapshot.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { chooseLabel } from '../semantic/language.ts';
 import readLabels from '../semantic/read-related.sql';
 import type { EditionSubjectIdentity } from './edition-model.ts';

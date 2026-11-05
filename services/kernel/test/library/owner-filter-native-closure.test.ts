@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { readCanonicalSourceGroup, readCanonicalSourceState } from '../../src/library/canonical-source-store.ts';
 import { ownerFilterCanonicalAllowance } from '../../src/library/owner-filter-native-binding.ts';
-import { scopeAllowance } from '../../src/work-ledger/scope-work.ts';
+import { scopeAllowance } from '../../src/search/scope-execution.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { discoveryKey } from '../support/released-discovery.ts';

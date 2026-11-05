@@ -19,7 +19,7 @@ import readPopulationVoteForRekey from './population-vote-rekey-read.sql';
 import rekeyPopulationVote from './population-vote-rekey-upsert.sql';
 import { PopulationTotalCapture, flushPopulationTotalDeliveries } from './population-total.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import readQuestionScale from './question-read.sql';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { ratingQuestionIdentity, realmRankQuestionEligible } from './question-directory.ts';

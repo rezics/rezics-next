@@ -31,7 +31,7 @@ import * as store from './entry-store.ts';
 import { hasCopyStatus, resolveLibraryProfilePin } from './profile.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
-import { resolveSubject } from '../semantic/subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import {
   bindCopyCommandOperation,

@@ -7,7 +7,7 @@ import {
   type RealmSubjectSource,
   type RealmSubjectMembership,
 } from '../../src/search/realm-scope.ts';
-import { scopeAllowance, zeroScopeWork } from '../../src/work-ledger/scope-work.ts';
+import { scopeAllowance, zeroScopeWork } from '../../src/search/scope-execution.ts';
 import { createSearchService, requiresAdvancedSearch } from '../../src/search/service.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
 import { createRealmSubjectSource, type RealmSubjectDisclosure } from '../../src/content/realm-subject-source.ts';

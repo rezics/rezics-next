@@ -83,7 +83,7 @@ import type { ViewerActionBindings } from '../../access/viewer-actions.ts';
 import { requireAccessDeadline } from '../../access/unavailable.ts';
 import { PublicDocumentViewSchema } from '../../content/document-public.ts';
 import { readCharacterPublicDocuments } from '../character-public-reading-documents.ts';
-import { withReadTransaction } from '../../access/read-transaction.ts';
+import { withReadTransaction } from '../read.ts';
 import { readPartition } from '../../partition/partition.ts';
 import { readContributionLifecycle } from '../contribution-lifecycle-read.ts';
 import { compileViewerActionBindings } from '../../access/viewer-actions.ts';

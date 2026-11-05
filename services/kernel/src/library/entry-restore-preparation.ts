@@ -12,7 +12,7 @@ import { LibraryEntryLifecycleConflictError } from './entries.ts';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
 import { readRetainedEntryDeletion, type RetainedEntryDeletion } from './entry-retention-store.ts';
 import { hasEntryState, resolveLibraryProfilePin } from './profile.ts';
-import { resolveSubject } from '../semantic/subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
 
 type Input = { subjectId: string; deletionId: string; revision: number };
 type Reference = { releaseDigest: string; profileId: string; stateSetId: string; stateId: string };

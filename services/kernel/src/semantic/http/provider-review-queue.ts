@@ -23,7 +23,7 @@ import {
   ProviderReviewNotReadyError,
   type ProviderReviewCandidate,
 } from '../provider-review-queue.ts';
-import { withReadTransaction } from '../../access/read-transaction.ts';
+import { withReadTransaction } from '../read.ts';
 import { readStatementAs } from '../statement-disclosure.ts';
 import type { subjectRoutes } from './subjects.ts';
 

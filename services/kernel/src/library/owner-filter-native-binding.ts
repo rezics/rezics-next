@@ -19,7 +19,7 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { scopeAllowance, zeroScopeWork } from '../work-ledger/scope-work.ts';
+import { scopeAllowance, zeroScopeWork } from '../search/scope-execution.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import type { IdentityScopeLibraryIdentity, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { freeze } from '../semantic/definitions.ts';
@@ -32,7 +32,7 @@ import {
   type WorkDimensions,
 } from './collection-source.ts';
 import { readNativeCollectionMetadata, type NativeCollectionMetadata } from './collection-source-native.ts';
-import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from './collection-source-work.ts';
 import {
   prepareNativeCollectionMemberAuthority,
   readNativeCollectionMemberAdmission,
@@ -49,7 +49,7 @@ import type { PublicFilterQueriedObservation } from '../search/public-filter-con
 import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import type { PublicFilterSource, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { FilterDocument } from '@rezics/filter';
-import { resolveSubject } from '../semantic/subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
 import type { OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 
 type Dependencies = {

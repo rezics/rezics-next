@@ -10,7 +10,7 @@ import { createScopeOrderedNative } from './scope-ordered-native.ts';
 import { scopeOrderedNameKey, validateScopeOrderedHit, type ScopeOrderedPreparation } from './scope-ordered.ts';
 import type { ScopePreparationRecord, ScopeCaptureFrontier } from './scope-preparation-store.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import { type ScopeWork, zeroScopeWork } from '../work-ledger/scope-work.ts';
+import { ScopeWork, zeroScopeWork } from './scope-execution.ts';
 import stateSql from './scope-ordered-state.sql';
 import saveSql from './scope-ordered-save.sql';
 import pageSql from './scope-ordered-page.sql';

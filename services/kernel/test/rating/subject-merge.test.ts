@@ -8,7 +8,6 @@ import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { applyRatingChanges, applyRatingVoteEvent, readAggregate } from '../../src/rating/aggregate-effect.ts';
 import { processRatingSubjectMergePage, type RatingMergeCursor } from '../../src/rating/merge-job.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -142,7 +141,6 @@ beforeAll(async () => {
     accountEvidence: (actor) => accounts.get(actor.accountId) ?? null,
   });
   commands = createVoteCommands({
-    createCommandRunner: createLibraryCommandRunner,
     pool: database.pool,
     access,
     clock: () => new Date('2026-10-27T10:00:00.000Z'),

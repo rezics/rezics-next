@@ -19,7 +19,7 @@ import type { AccessClient, AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { addCollectionMemberIfAbsentNative, type CollectionBulkAddEffect } from './collections.ts';
 import { applyCollectionBulkTarget, pageCollectionBulkManifest, readCollectionBulk } from './collection-bulk-store.ts';
-import { resolveSubject, type ResolvedSubject } from '../semantic/subject-anchor.ts';
+import { resolveSubject, type ResolvedSubject } from './subject-anchor.ts';
 import type {
   AttemptResult,
   BulkDependencies,

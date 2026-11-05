@@ -33,7 +33,7 @@ import reserveStatement from './reserve-media.sql';
 import completeStatement from './complete-media.sql';
 import readStatement from './read-media.sql';
 import claimStatement from './claim-media.sql';
-import { claimCoverMedia } from '../semantic/cover-reference.ts';
+import { claimCoverMedia } from './cover-reference.ts';
 import {
   mediaParentBoard,
   mediaParentChain,

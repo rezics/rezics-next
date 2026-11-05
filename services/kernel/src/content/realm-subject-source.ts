@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
-import { type ScopeWork, zeroScopeWork } from '../work-ledger/scope-work.ts';
+import { ScopeWork, zeroScopeWork } from '../search/scope-execution.ts';
 import { ProblemError } from '../http/problem.ts';
 import {
   createRealmSubjectCandidates,

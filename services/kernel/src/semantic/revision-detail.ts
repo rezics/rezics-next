@@ -9,7 +9,7 @@ import { SubjectNotFoundError } from './candidates.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { readCandidateDisclosure } from './disclosure.ts';
 import { candidateSources, fencedIds } from './fences.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import { currentAcceptance, slotView } from './slots.ts';
 import { loadRelated, type SubjectComponent } from './subject.ts';
 import readContext from './context-public-exists.sql';

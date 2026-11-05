@@ -13,7 +13,7 @@ import {
   type CurrentClassificationAssociation,
 } from '../semantic/classification-association.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';

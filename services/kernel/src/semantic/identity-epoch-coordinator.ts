@@ -21,7 +21,7 @@ import type {
 import { stepIdentityEpochMapping } from './identity-epoch-mapping.ts';
 import { identityEpochStore, identityJobPartition, IdentityEpochStoreError } from './identity-adapters/index.ts';
 import control from './identity-epoch-coordinator-control.sql';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 
 const workflowName = 'semantic.identityEpoch';
 const segmentPages = 100;

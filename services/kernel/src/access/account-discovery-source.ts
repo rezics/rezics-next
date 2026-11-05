@@ -6,7 +6,7 @@ import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline 
 import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
 import { readPartitions } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from './read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import {

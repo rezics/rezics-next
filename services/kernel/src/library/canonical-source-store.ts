@@ -198,7 +198,7 @@ import type {
   IdentityScopeObservation,
   IdentityScopeWork,
 } from '../semantic/identity-scope-types.ts';
-import { CollectionSourceLedger } from '../work-ledger/native-collection-work.ts';
+import { CollectionSourceLedger } from './collection-source-work.ts';
 import {
   createNativeLibrarySourceCustody,
   type NativeSourceIdentity,

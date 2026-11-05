@@ -4,7 +4,7 @@ import pg from 'pg';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { isSpdxLicense } from '../../src/content/document.ts';
 import { validateImportedFieldMetadata } from '../../src/content/imported-contract.ts';
-import { validateCoverReferenceMetadata } from '../../src/semantic/cover-reference.ts';
+import { validateCoverReferenceMetadata } from '../../src/content/cover-reference.ts';
 import { newId } from '../../src/route/route.ts';
 
 const databaseUrl = process.env.DATABASE_URL;

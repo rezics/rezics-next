@@ -6,7 +6,7 @@ import type { SessionComponent } from '../tokens/session.ts';
 import readLinkCheckpoint from './read-link-checkpoint.sql';
 import readPendingMember from './links-read-pending-member.sql';
 import readProjectionPending from './merge-read-projection-pending.sql';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 
 export const FRESHNESS_WAIT_MS = 2_000;
 export const FRESHNESS_POLL_MS = 100;

@@ -7,7 +7,6 @@ import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createProfileEntryFixture } from '../library/support/profile-entry-fixture.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { STANDARD_QUESTION_ID, createVoteCommands } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { withConnection } from '../../src/database/pool.ts';
@@ -193,11 +192,7 @@ test('four provider review/apply paths commit local votes and preserve foreign-h
   const f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
   try {
     await installIdentityEpochBootstrap(f.pool);
-    const votes = createVoteCommands({
-      pool: f.pool,
-      access: f.access,
-      createCommandRunner: createLibraryCommandRunner,
-    });
+    const votes = createVoteCommands({ pool: f.pool, access: f.access });
     const tuples = [];
     for (const provider of ['vndb', 'bangumi', 'mal', 'anilist'] as const) {
       const { requested, sourceHome } = await localRatingSubject(f, `${provider} native score target`);
@@ -547,11 +542,7 @@ test('the authorized vote transaction excludes native control writes through com
     await installIdentityEpochBootstrap(f.pool);
     const { requested, sourceHome } = await localRatingSubject(f, 'Authorized guarded vote');
     const caller = await f.identity(['rating:vote', 'subject:read'], sourceHome);
-    const votes = createVoteCommands({
-      pool: f.pool,
-      access: f.access,
-      createCommandRunner: createLibraryCommandRunner,
-    });
+    const votes = createVoteCommands({ pool: f.pool, access: f.access });
     await grantStewardMerge(f);
     const original = await localRatingSubject(f, 'Publication original');
     const survivor = await localRatingSubject(f, 'Publication survivor');

@@ -11,7 +11,7 @@ import {
 } from '../identity-core/index.ts';
 import type { Pool } from 'pg';
 import { partitionOf, routeOf } from '../../route/route.ts';
-import { withReadTransaction } from '../../access/read-transaction.ts';
+import { withReadTransaction } from '../read.ts';
 import type { IdentityMapping } from './identity-epoch-contract.ts';
 import owners from '../identity-epoch-read-owners.sql';
 import sources from '../identity-epoch-read-sources.sql';

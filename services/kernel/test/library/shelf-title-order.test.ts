@@ -9,7 +9,7 @@ import {
 } from '../../src/library/shelf-title-reader.ts';
 import { shelfTitleObservations } from '../../src/library/shelf-title-maintenance.ts';
 import { currentShelfTitleBasis, shelfTitlePolicy } from '../../src/library/shelf-title-source.ts';
-import { ShelfReadUnavailableError } from '../../src/shared/shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from '../../src/library/shelf-reader-unavailable.ts';
 
 const route = 0x6a10,
   accountId = newId(route),

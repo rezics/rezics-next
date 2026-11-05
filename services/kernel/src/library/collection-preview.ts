@@ -3,7 +3,7 @@ import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { readCurrentSubjectSummaries } from '../semantic/current-subject-summaries.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import type { SubjectSummary } from '../semantic/summaries.ts';
 import type { PresentationDependencies } from './collection-presentation.ts';
 import { collectionPreviewStatements } from './collection-directory-bounds.ts';

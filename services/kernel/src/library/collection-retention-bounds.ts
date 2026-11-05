@@ -8,7 +8,7 @@ import readReceipt from '../command/read-receipt.sql';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { PARTITIONS } from '../route/route.ts';
 import { runLibraryBoundedStep } from './command-support.ts';
-import { WORK_STEP_DEADLINE_MS } from '../request/work-step-deadline.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND } from './native-source-custody-bounds.ts';
 import collectionRead from './collection-store-collection-read.sql';
 import collectionTombstone from './collection-store-collection-tombstone.sql';

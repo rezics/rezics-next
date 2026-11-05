@@ -75,7 +75,7 @@ import { createCollectionBatchCommands } from './collection-batch.ts';
 import batchParents from './collection-batch-parents.sql';
 import authorizationCollection from './collection-store-collection-authorization.sql';
 import restoreWindow from './collection-store-collection-restore-window.sql';
-import { resolveSubject } from '../semantic/subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
 import { recordPrivacyReduction } from '../semantic/public-filter-source.ts';
 import {
   admitCollectionRule,

@@ -2,7 +2,7 @@ import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
-import { checkMediaObjects, type CoverReference } from './cover-reference.ts';
+import { checkMediaObjects, type CoverReference } from '../content/cover-reference.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
@@ -20,7 +20,7 @@ import { slotId } from './slots.ts';
 import { chooseLabel } from './language.ts';
 import readSummaries from './summaries-read.sql';
 import readRepresentativeEditions from './summaries-representative-editions.sql';
-import { currentReadSnapshot, withReadTransaction } from '../access/read-transaction.ts';
+import { currentReadSnapshot, withReadTransaction } from './read.ts';
 
 export type CoverSummary = {
   media: string;

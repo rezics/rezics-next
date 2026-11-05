@@ -8,7 +8,7 @@ import * as summaries from '../../src/semantic/summaries.ts';
 import { createOwnVotesReader } from '../../src/rating/own-votes-page.ts';
 import { createOwnCountedVoteReader } from '../../src/rating/own-votes-counted.ts';
 import type { OwnCountedVoteReader, OwnCountedVoteRequest } from '../../src/rating/own-votes-counted.ts';
-import { withReadTransaction } from '../../src/access/read-transaction.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { accessCheck } from '../../src/request/access.ts';

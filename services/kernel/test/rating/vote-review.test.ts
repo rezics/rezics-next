@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createVoteCommands, STANDARD_QUESTION_ID, type VoteReviewGuard } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { admitIdentityRatingEffect } from '../../src/semantic/identity-rating-admission.ts';
-import { withReadTransaction } from '../../src/access/read-transaction.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { subjectTarget } from '../../src/semantic/subject.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -20,11 +19,7 @@ beforeAll(async () => {
   fixture = await createSourceStatisticLifecycleFixture();
   await installIdentityEpochBootstrap(fixture.database.pool);
   actor = (await fixture.identityCommand('rating:vote')).actor;
-  commands = createVoteCommands({
-    pool: fixture.database.pool,
-    access: fixture.access,
-    createCommandRunner: createLibraryCommandRunner,
-  });
+  commands = createVoteCommands({ pool: fixture.database.pool, access: fixture.access });
 }, 180_000);
 afterAll(async () => {
   await fixture?.close();
@@ -105,11 +100,7 @@ test('supported native guarded effects retain exact retries, current readback an
   try {
     await installIdentityEpochBootstrap(local.database.pool);
     const voter = (await local.identityCommand('rating:vote')).actor;
-    const votes = createVoteCommands({
-      pool: local.database.pool,
-      access: local.access,
-      createCommandRunner: createLibraryCommandRunner,
-    });
+    const votes = createVoteCommands({ pool: local.database.pool, access: local.access });
     // Select an ordinary native creation key; do not rewrite a Subject or its home.
     async function createLocalSubject() {
       let key = crypto.randomUUID();

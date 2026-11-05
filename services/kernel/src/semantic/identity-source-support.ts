@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { releaseDigest } from '@rezics/definitions';
 import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
 import { routeOf } from '../route/route.ts';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';

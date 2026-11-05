@@ -6,7 +6,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 
 // These are the reader locales, not a restriction on released label languages.
 export const TYPE_DIRECTORY_LOCALES = ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const;

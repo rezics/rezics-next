@@ -30,7 +30,7 @@ import { withPublicStatementReader } from './statement-disclosure.ts';
 import { readCandidateDisclosure } from './disclosure.ts';
 import { candidateSources, fencedIds } from './fences.ts';
 import { loadRelated } from './subject.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import locateCandidate from './moderation-read-live-candidate.sql';
 import {
   SUBJECT_PAGE_DEPENDENCIES_CHANGED,

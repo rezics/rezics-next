@@ -15,7 +15,7 @@ import {
   libraryIdentityFootprint,
 } from '../../src/library/identity-native-planner-work.ts';
 import { libraryIdentitySQL } from '../../src/library/identity-native-planner-statements.ts';
-import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import { readNativeCollectionMetadata } from '../../src/library/collection-source-native.ts';
 import {
   beginCollectionSourceOutput,

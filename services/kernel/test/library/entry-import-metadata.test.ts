@@ -10,7 +10,6 @@ import { bangumiMetadataProposals, createBangumiImport } from '../../src/library
 import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
 import { createVoteCommands } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { createMalImport, malMetadataProposals } from '../../src/library/list-import-mal.ts';
 import { parseMal } from '../../src/library/list-import-mal-parser.ts';
 import { createAniListImport, anilistMetadataProposals } from '../../src/library/list-import-anilist.ts';
@@ -193,7 +192,7 @@ test('retained metadata review adopts selected native facts, preserves partial w
     access: f.access,
     tokens: f.tokens,
     routeKey: testRouteKey(),
-    votes: createVoteCommands({ pool: f.pool, access: f.access, createCommandRunner: createLibraryCommandRunner }),
+    votes: createVoteCommands({ pool: f.pool, access: f.access }),
   });
   const partial = await engine.applyMetadata(
     f.owner.actor,

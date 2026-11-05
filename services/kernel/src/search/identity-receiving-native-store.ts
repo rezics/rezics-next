@@ -14,7 +14,7 @@ import {
   recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
 } from '../semantic/identity-adapters/index.ts';
-import { currentReadSnapshot, withReadTransaction } from '../access/read-transaction.ts';
+import { currentReadSnapshot, withReadTransaction } from '../semantic/read.ts';
 import { subjectPartition } from './source.ts';
 import { decodeSearchRepairWriterReceipt, validateSearchRepairWriterEvidence } from './writer-guard.ts';
 import type {
@@ -23,8 +23,8 @@ import type {
   SearchIdentityReceivingLocator,
   SearchIdentityReceivingSelection,
   SearchIdentityReceivingRecord,
-} from '../semantic/identity-receiving-native-contract.ts';
-import { snapshotSearchIdentityReceivingFrontier } from '../semantic/identity-receiving-native-contract.ts';
+} from './identity-receiving-native-contract.ts';
+import { snapshotSearchIdentityReceivingFrontier } from './identity-receiving-native-contract.ts';
 import type {
   CopyRow,
   HoldRow,
@@ -714,7 +714,7 @@ export function createSearchIdentityReceivingNativeStore(configuration: SearchNa
       tx: CommandTransaction,
       locator: SearchIdentityReceivingLocator,
       context: SearchIdentityReceivingContext,
-      binding?: import('../semantic/identity-receiving-native-contract.ts').SearchIdentityReceivingBinding,
+      binding?: import('./identity-receiving-native-contract.ts').SearchIdentityReceivingBinding,
     ) {
       return perform<SearchIdentityReceivingHold>(context, tx, true, async (work: SearchNativeReceivingWork) => {
         const own = await owner(tx, work, locator);

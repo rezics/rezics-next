@@ -43,7 +43,7 @@ import {
 import { subjectCollections } from './listing.ts';
 import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
-import { readableSubjects, resolveSubject } from '../semantic/subject-anchor.ts';
+import { readableSubjects, resolveSubject } from './subject-anchor.ts';
 import collectionRead from './collection-reads-collection.sql';
 import { collectionDirectoryPagePlan, collectionDirectoryRowPlan } from './collection-directory-bounds.ts';
 import memberPage from './collection-reads-members.sql';
@@ -71,7 +71,7 @@ import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { MAX_VIEWER_FACTS_ROWS } from './viewer-facts-schema.ts';
 import { specializeCollectionListPolicy } from './collection-list-policy.ts';
 import { createSearchScopeForService } from '../search/service-scope.ts';
-import { scopeAllowance, ScopeWork } from '../work-ledger/scope-work.ts';
+import { scopeAllowance, ScopeWork } from '../search/scope-execution.ts';
 
 type CuratorPageOptions = {
   curatorAccountId: string | null;

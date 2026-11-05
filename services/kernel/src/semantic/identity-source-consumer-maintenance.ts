@@ -16,7 +16,7 @@ import {
   NativeCollectionWork,
   bindNativeCollectionWorkLifetime,
   withNativeCollectionWorkAllowance,
-} from '../work-ledger/native-collection-work.ts';
+} from '../library/collection-source-work.ts';
 import {
   currentIdentityOriginalTransfer,
   identityOriginalRemainder,

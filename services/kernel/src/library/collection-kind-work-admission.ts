@@ -11,7 +11,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CollectionSourceObservation, WorkAllowance } from './collection-source.ts';
-import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from './collection-source-work.ts';
 import {
   createNativeLibrarySourceCustody,
   type NativeSourceIdentity,

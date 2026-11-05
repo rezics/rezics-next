@@ -8,7 +8,7 @@ import type {
 } from '../library/collection-kind-work-admission.ts';
 import type { CanonicalDerivedRow, CanonicalGroupProgress } from '../library/canonical-source-store.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
-import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { CollectionKindPreparationWorkContext } from '../search/scope-work-context.ts';
 import {
   currentOperationalResources,

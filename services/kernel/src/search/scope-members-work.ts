@@ -7,7 +7,7 @@ import { hasLiveOperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import {
   readCollectionSourceWorkGroup,
   readCollectionSourceWorkState,
@@ -42,7 +42,7 @@ import {
   meterMembersDefinition,
   withMembersWorkBudget,
 } from './scope-members-work-cost.ts';
-import { zeroScopeWork, type ScopeWork } from '../work-ledger/scope-work.ts';
+import { zeroScopeWork, type ScopeWork } from './scope-execution.ts';
 import type { ScopeEvaluationProgress } from './scope-source.ts';
 
 export type MembersWorkInput = Readonly<{

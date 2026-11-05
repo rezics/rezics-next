@@ -20,7 +20,7 @@ import {
   readNativeCollectionMetadata,
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
-import { CollectionSourceLedger, NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { CollectionSourceLedger, NativeCollectionWork } from './collection-source-work.ts';
 import type { WorkAllowance, WorkReceipt } from './collection-source.ts';
 import {
   COLLECTION_KIND_PREPARATION_OBSERVATION,

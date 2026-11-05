@@ -33,7 +33,6 @@ import {
 import { PublicFigureSchema, readSubjectPublicFigure } from './public-figure-http.ts';
 import {
   createVoteCommands,
-  type CreateCommandRunner,
   RatingQuestionNotFoundError,
   RatingQuestionRetiredError,
   VoteInvalidError,
@@ -84,14 +83,7 @@ import {
   RatingVoteResponseSchema,
 } from './schemas.ts';
 
-type Dependencies = {
-  pool: Pool;
-  access: () => Access;
-  tokens: KeyRing;
-  routeKey: Uint8Array;
-  clock?: KernelClock;
-  createCommandRunner: CreateCommandRunner;
-};
+type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
 type ReadDependencies = Pick<Dependencies, 'pool'> & { access: Access };
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });

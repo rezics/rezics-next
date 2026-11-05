@@ -9,7 +9,6 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { createBangumiImport } from '../../src/library/list-import-bangumi.ts';
 import { purgeExpiredBangumiUploadPage } from '../../src/library/list-import-bangumi-retention.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
@@ -277,7 +276,7 @@ test('mounted metadata retries recover only exact receipts after evidence expiry
     access: f.access,
     tokens: f.tokens,
     routeKey: testRouteKey(),
-    votes: createVoteCommands({ pool: f.pool, access: f.access, createCommandRunner: createLibraryCommandRunner }),
+    votes: createVoteCommands({ pool: f.pool, access: f.access }),
   });
   const unresolvedFields = [{ field: 'note', action: 'adopt' }];
   expect(
@@ -411,7 +410,7 @@ test('partial state application can stop after one accepted row and cancellation
     access: f.access,
     tokens: f.tokens,
     routeKey: testRouteKey(),
-    votes: createVoteCommands({ pool: f.pool, access: f.access, createCommandRunner: createLibraryCommandRunner }),
+    votes: createVoteCommands({ pool: f.pool, access: f.access }),
   });
   let probes = 0;
   const interrupted = {
@@ -520,11 +519,7 @@ test('score review retains source scale and native vote while requiring separate
     const setTarget = await score.createSubject('game');
     const clearTarget = await score.createSubject('game');
     const unsupportedTarget = await score.createSubject('game');
-    const votes = createVoteCommands({
-      pool: score.pool,
-      access: score.access,
-      createCommandRunner: createLibraryCommandRunner,
-    });
+    const votes = createVoteCommands({ pool: score.pool, access: score.access });
     for (const targetId of [setTarget, clearTarget])
       await votes.putVoteOutcome(
         score.owner.actor,
@@ -699,11 +694,7 @@ test('native redirect requires a deliberate review of the canonical Bangumi targ
         key: randomUUID(),
       },
     );
-    const native = createVoteCommands({
-      pool: score.pool,
-      access: score.access,
-      createCommandRunner: createLibraryCommandRunner,
-    });
+    const native = createVoteCommands({ pool: score.pool, access: score.access });
     let redirected = false;
     const importer = createBangumiImport({
       pool: score.pool,
@@ -793,11 +784,7 @@ test('uncertain score delivery retains exact native operands and a changed own v
   const score = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
   try {
     const target = await score.createSubject('game');
-    const native = createVoteCommands({
-      pool: score.pool,
-      access: score.access,
-      createCommandRunner: createLibraryCommandRunner,
-    });
+    const native = createVoteCommands({ pool: score.pool, access: score.access });
     const attempts: {
       actor: Parameters<typeof native.putVoteOutcome>[0];
       input: Parameters<typeof native.putVoteOutcome>[1];
@@ -908,11 +895,7 @@ test('source scrub retains only a started vote receipt and reconciles it with cu
   const score = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
   try {
     const target = await score.createSubject('game');
-    const native = createVoteCommands({
-      pool: score.pool,
-      access: score.access,
-      createCommandRunner: createLibraryCommandRunner,
-    });
+    const native = createVoteCommands({ pool: score.pool, access: score.access });
     const interrupted = createBangumiImport({
       pool: score.pool,
       access: score.access,

@@ -16,7 +16,7 @@ import { assertCataloguePublisherFrame } from './definition-catalogue-publicatio
 import { randomUUID } from 'node:crypto';
 import { catalogueBytes, catalogueDigest, type KindCataloguePin } from '@rezics/definitions';
 import type { Pool } from 'pg';
-import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import { CATALOGUE_COMMAND_BOUND } from './definition-catalogue-publication-work.ts';
 import enrollConsumer from './definition-catalogue-enroll.sql';
 import consumerRead from './definition-catalogue-consumer-read.sql';

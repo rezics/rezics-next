@@ -1,5 +1,5 @@
 import { enrollResourceRecordSources } from './record-purge-custody.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import type { Pool } from 'pg';
 import { createResourcePublicEligibility, initializeResourceGrants, type ParentAnchor } from '../access/index.ts';
 import { readAccount } from '../access/account-data.ts';

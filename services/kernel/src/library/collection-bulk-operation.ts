@@ -64,7 +64,7 @@ import {
 } from './collection-bulk-store.ts';
 import { pageBulkOutcomes } from './bulk-outcome-page.ts';
 import { createCollectionReads } from './collection-reads.ts';
-import { resolveSubject } from '../semantic/subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
 import creationReceipt from './collection-publication-episode-receipt.sql';
 import { captureCollectionBulkSource } from './collection-bulk-capture.ts';
 

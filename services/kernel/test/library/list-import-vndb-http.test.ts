@@ -7,7 +7,6 @@ import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { parseVndb, VNDB_LIMITS } from '../../src/library/list-import-vndb-parser.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
 import { OWNED_PHASES } from '../../src/library/erasure-owned-graph.ts';
@@ -407,7 +406,7 @@ async function sameHomeScoreCaller() {
     state = (await stepIdentityEpochBootstrap(f.pool, 0)).state;
   } while (state !== 'caught-up');
   const send = (method: string, path: string, body?: unknown) => json(method, path, body, scorer.bearer);
-  const votes = createVoteCommands({ pool: f.pool, access: f.access, createCommandRunner: createLibraryCommandRunner });
+  const votes = createVoteCommands({ pool: f.pool, access: f.access });
   const service = createVndbImport({ pool: f.pool, access: f.access, tokens: f.tokens, routeKey: testRouteKey() });
   const scoreReview = (id: string, units: number | null) =>
     send('POST', `${base}/${id}:review`, {

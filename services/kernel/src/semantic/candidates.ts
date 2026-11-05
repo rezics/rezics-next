@@ -7,7 +7,7 @@ import { collectSemanticCandidateSource } from './record-source-set.ts';
 import { retainSubjectPageSource } from './subject-page-publication-store.ts';
 import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
 import { disclosureAccount, keepStatementPrivate, statementAudience } from './statement-disclosure.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import { readConsentTarget, type ConsentIdentity, type ConsentIdentityReader } from './candidate-consent-identity.ts';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import type { Source, BatchReference } from '@rezics/definitions/bulk';

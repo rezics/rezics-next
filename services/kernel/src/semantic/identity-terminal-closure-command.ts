@@ -24,7 +24,7 @@ import {
   drainIdentityTerminalClosure,
   releaseIdentityTerminalClaim,
 } from './identity-terminal-closure.ts';
-import { IdentityTerminalClaimReleaseError } from '../identity-epoch/errors.ts';
+import { IdentityTerminalClaimReleaseError } from './identity-terminal-closure-errors.ts';
 
 type Drain = NonNullable<Awaited<ReturnType<typeof drainIdentityTerminalClosure>>>;
 type Scope = { pool: Pool; deadline: number; drained: Map<string, Drain> };

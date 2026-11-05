@@ -14,7 +14,7 @@ import { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from './bulk-limits
 import type { CollectionBulkTarget } from './collection-bulk-store.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 import { readCollection } from './collection-store.ts';
-import { readableSubjects } from '../semantic/subject-anchor.ts';
+import { readableSubjects } from './subject-anchor.ts';
 import { CollectionBulkSelectionTooLarge } from './collection-bulk-store.ts';
 
 export type ExplicitCollectionOccurrenceRemoval = Extract<BulkAdmission, { action: 'remove_from_collection' }> & {

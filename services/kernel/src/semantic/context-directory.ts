@@ -7,7 +7,7 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import { authorizedContextMetadata } from './context-lifecycle-read.ts';
 import { refreshSemanticErasureSourceRecord } from './account-erasure.ts';
 import {

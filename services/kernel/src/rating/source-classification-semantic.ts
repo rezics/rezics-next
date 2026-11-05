@@ -1,13 +1,13 @@
 import type { Pool } from 'pg';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from '../semantic/subject-anchor.ts';
+import { resolveSubject, SubjectIdentityUnavailableError } from '../library/subject-anchor.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readContext, publicContextEligibility } from '../semantic/context.ts';
 import { currentRelationFacts, currentRelationKey } from '../semantic/current-relations.ts';
 import { candidateSources } from '../semantic/fences.ts';
 import { readRelease } from '../semantic/definitions.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';

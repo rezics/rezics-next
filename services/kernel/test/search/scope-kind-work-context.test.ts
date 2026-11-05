@@ -12,7 +12,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { Access } from '../../src/request/access.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
 import { readScopeLeafEvidence } from '../../src/semantic/scope-leaf-evidence.ts';
-import { scopeAllowance } from '../../src/work-ledger/scope-work.ts';
+import { scopeAllowance } from '../../src/search/scope-execution.ts';
 import {
   readCollectionKindPreparationWorkDefinition,
   readMembersPreparationWorkDefinition,

@@ -25,7 +25,7 @@ import {
   type CollectionKindPreparationLocator,
   type CollectionKindWorkDefinition,
 } from '../library/collection-kind-work-admission.ts';
-import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import {
   admitCollectionPublicationStep,
   readCollectionPublicationWorkDefinition,

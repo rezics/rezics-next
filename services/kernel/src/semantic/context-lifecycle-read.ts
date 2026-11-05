@@ -6,7 +6,7 @@ import { requireAccessDeadline } from '../access/unavailable.ts';
 import { prepareReadDecisions, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import type { ContextDirectoryEntry } from './context-directory.ts';
 import { ContextDirectoryPreparingError } from './context-directory.ts';

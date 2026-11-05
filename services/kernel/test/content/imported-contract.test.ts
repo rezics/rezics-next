@@ -4,7 +4,7 @@ import type { BatchReference } from '@rezics/definitions/bulk';
 import type { CommandTransaction } from '../../src/command/command.ts';
 import type { Actor, Resource } from '../../src/request/access.ts';
 import { appendImportedField, type ImportedFieldResult } from '../../src/content/imported-fields.ts';
-import { checkMediaObject, type CoverReference } from '../../src/semantic/cover-reference.ts';
+import { checkMediaObject, type CoverReference } from '../../src/content/cover-reference.ts';
 import type {
   ImportedFieldInput,
   ImportedSource,

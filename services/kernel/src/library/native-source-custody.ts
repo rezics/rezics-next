@@ -12,7 +12,7 @@ import { currentOperationalResources, hasLiveOperationalTransaction } from '../c
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
 import {
   assertLibraryIdentityResources,
   revalidateBoundLibraryIdentityWork,

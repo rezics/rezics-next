@@ -10,7 +10,7 @@ import { readPartition } from '../partition/partition.ts';
 import { accessCheck, AuthenticationError, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { admitShelfRead } from './shelf-admission.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { shelfNeedsInitialization } from './shelf-reader-generation.ts';
@@ -34,7 +34,7 @@ import { shelfScoreBinding, validShelfScoreKey } from './shelf-score.ts';
 import { shelfTitleBinding, validShelfTitleSeek } from './shelf-title-reader.ts';
 import { currentShelfTitleBasis, titleLanguages } from './shelf-title-source.ts';
 import { validShelfPriorityKey } from './entry-priority-page.ts';
-import { ShelfReadUnavailableError } from '../shared/shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 
 function owner(actor: Actor, progress: boolean): AccountActor {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');

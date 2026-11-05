@@ -2,11 +2,11 @@ import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/defini
 import type { PoolClient } from 'pg';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { GLOBAL_CONTEXT } from './definitions.ts';
-import type { ClaimMediaInput } from '../content/media.ts';
-import claimCoverMediaStatement from '../content/claim-cover-media.sql';
-import type { ImportedSource, Rights } from '../content/imported-contract.ts';
-import readCoverReference from '../content/read-cover-reference.sql';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import type { ClaimMediaInput } from './media.ts';
+import claimCoverMediaStatement from './claim-cover-media.sql';
+import type { ImportedSource, Rights } from './imported-contract.ts';
+import readCoverReference from './read-cover-reference.sql';
 
 export type CoverReference = Readonly<{
   id: string;

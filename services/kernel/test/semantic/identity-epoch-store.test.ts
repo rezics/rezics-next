@@ -17,7 +17,7 @@ import {
   stepIdentityEpochBootstrap,
   stepIdentityEpochBootstrapWork,
 } from '../../src/semantic/identity-epoch-bootstrap.ts';
-import { resolveSubject, readableSubjects } from '../../src/semantic/subject-anchor.ts';
+import { resolveSubject, readableSubjects } from '../../src/library/subject-anchor.ts';
 import {
   digest,
   epochFixture,

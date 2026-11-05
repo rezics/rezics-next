@@ -16,7 +16,7 @@ import { accessCheck } from '../../src/request/access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { withReadTransaction } from '../../src/access/read-transaction.ts';
+import { withReadTransaction } from '../../src/semantic/read.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';

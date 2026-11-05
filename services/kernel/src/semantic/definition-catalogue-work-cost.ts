@@ -34,7 +34,7 @@ import ledgerOriginalAdmit from './definition-catalogue-original-admit.sql';
 import { CATALOGUE_MECHANICAL_REPRESENTATION } from './definition-catalogue-mechanical.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { ProblemError } from '../http/problem.ts';
-import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 
 /** Static catalogue operation bounds. Ordinary Core execution owns Access, receipts and transaction controls. */
 /** Native SQL components. Every operation has a closed SQL identity below.

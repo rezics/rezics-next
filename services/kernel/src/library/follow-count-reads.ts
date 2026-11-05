@@ -18,7 +18,7 @@ import {
   resolveCountDestination,
 } from './follow-count-target.ts';
 import type { FollowTarget } from './follows.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from '../semantic/subject-anchor.ts';
+import { resolveSubject, SubjectIdentityUnavailableError } from './subject-anchor.ts';
 
 type Dependencies = { pool: Pool; access: Access };
 export type CollectionDiscoveryFollowCountKey = Readonly<{ route: number; id: string }>;

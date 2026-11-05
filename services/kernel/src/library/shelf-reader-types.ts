@@ -3,7 +3,7 @@ import { applyShelfTypeDigest, sha256ShelfTypeDigest, type ShelfTypeDigest } fro
 import root from './shelf-reader-type-root.sql';
 import edge from './shelf-reader-type-edge.sql';
 import equal from './shelf-reader-type-equal.sql';
-import { ShelfReadUnavailableError } from '../shared/shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 
 /** Read-only consumer of the installed root/edge/value dictionary; no reservation or allocation. */
 export function createShelfTypeLookup(digest: ShelfTypeDigest = sha256ShelfTypeDigest): ShelfTypeKeys['lookup'] {

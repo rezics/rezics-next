@@ -18,7 +18,7 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { readItemTypes } from '../semantic/subject.ts';
 import { RealmConflictError, RealmInputError, type Realm, type RealmDependencies, type RealmContext } from './realm.ts';
 import { realmGovernanceAuthorization } from './realm-continuity.ts';

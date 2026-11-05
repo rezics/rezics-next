@@ -1,6 +1,6 @@
 import type { PoolClient, QueryConfig, QueryResult } from 'pg';
 import type { WorkDimensions } from './collection-source.ts';
-import type { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from './collection-source-work.ts';
 import {
   nativePublicOutputStatement,
   nativePublicOutputWorkDimensions,

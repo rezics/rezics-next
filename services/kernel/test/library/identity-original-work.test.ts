@@ -19,7 +19,7 @@ import {
   nativeSourceCustodyStatementBound,
   nativeSourceCustodyWorkDimensions,
 } from '../../src/library/native-source-custody-bounds.ts';
-import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import {
   readLibraryScopeEffectsPageWithWork,
   type LibraryScopeEffectsPageInput,

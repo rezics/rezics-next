@@ -2,7 +2,7 @@ import type { AccountActor } from '../request/access.ts';
 import { createHash } from 'node:crypto';
 import type { ShelfOwner } from './shelf-maintenance-ops-contract.ts';
 import { SHELF_TITLE_KEY_POLICY } from './shelf-title-key.ts';
-import { ShelfReadUnavailableError } from '../shared/shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 
 /** Content must cover title, identity disclosure, redirects and source-owner changes in this version. */
 export type ShelfTitleBasis = { status: 'current'; version: string } | { status: 'unavailable' };

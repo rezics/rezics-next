@@ -41,7 +41,7 @@ import type {
   PublicFilterSourceFactory,
 } from './public-filter-source-contract.ts';
 import readVisibility from './read-visibility.sql';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 
 type SubjectRow = {

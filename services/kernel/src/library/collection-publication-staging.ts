@@ -12,7 +12,7 @@ import {
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
-import { zeroScopeWork } from '../work-ledger/scope-work.ts';
+import { zeroScopeWork } from '../search/scope-execution.ts';
 import { createSearchScopeSource, type ScopeBasis } from '../search/scope-source.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
@@ -25,7 +25,7 @@ import {
 import type { CollectionOutputRef } from './collection-source-output.ts';
 import type { CollectionSourceObservation, WorkAllowance, WorkReceipt } from './collection-source.ts';
 import { readCollectionSourceWorkState } from './collection-source-work-native.ts';
-import { NativeCollectionWork } from '../work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from './collection-source-work.ts';
 import { createNativeLibrarySourceCustody, type NativeSourceIdentity } from './native-source-custody.ts';
 import {
   enterCollectionPublicationPrefix,

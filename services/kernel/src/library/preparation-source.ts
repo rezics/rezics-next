@@ -4,7 +4,7 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
 import { readItemTypes } from '../semantic/subject.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 
 export interface PreparationSourceExecution {
   transaction<T>(read: () => Promise<T>): Promise<T>;

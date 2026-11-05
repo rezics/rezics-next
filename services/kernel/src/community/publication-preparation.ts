@@ -5,7 +5,7 @@ import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import { spaceReadEligibility } from './space.ts';

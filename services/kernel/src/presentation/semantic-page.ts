@@ -15,7 +15,7 @@ import type { Pool } from 'pg';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { globalReadEligibility, relatedReadEligibility } from '../semantic/eligibility.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { readItemDetails } from '../semantic/subject.ts';
 import statesRead from '../semantic/subject-summary-states.sql';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';

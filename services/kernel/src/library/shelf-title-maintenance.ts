@@ -14,7 +14,7 @@ import {
   type ShelfTitleLabels,
   type ShelfTitleSource,
 } from './shelf-title-source.ts';
-import { ShelfReadUnavailableError } from '../shared/shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 import type { ShelfOwner } from './shelf-maintenance-ops-contract.ts';
 
 type Client = Pick<PoolClient, 'query'>;

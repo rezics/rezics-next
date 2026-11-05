@@ -5,12 +5,12 @@ import { admitFilter, parseFilter, type FilterDocument } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
 import type { WorkAllowance, WorkReceipt } from '../../src/library/collection-source.ts';
-import { NativeCollectionWork } from '../../src/work-ledger/native-collection-work.ts';
+import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import type { NativeOrdinalKey } from '../../src/library/collection-source-order.ts';
 import type { PreparationDefinition, PreparationLocator } from '../../src/library/members-preparation.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { scopeWorkAxes } from '../../src/work-ledger/scope-work.ts';
+import { scopeWorkAxes } from '../../src/search/scope-execution.ts';
 import { membersBounded } from '../../src/search/scope-members-work-cost.ts';
 import { createSearchScopeSource, type ScopeEvaluationProgress } from '../../src/search/scope-source.ts';
 import {

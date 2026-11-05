@@ -7,7 +7,7 @@ import {
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from './read.ts';
 import {
   IdentityEpochStoreError,
   identityJobPartition,

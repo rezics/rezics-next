@@ -7,7 +7,6 @@ import { createPersonalLabelCommands } from '../../src/library/label-commands.ts
 import { createLabelAssignmentCommands } from '../../src/library/label-assignment-commands.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
@@ -136,11 +135,11 @@ beforeAll(async () => {
     return (result.subject as { id: string }).id;
   }
   subjects = [await createSubject('archive first subject'), await createSubject('archive second subject')];
-  await createVoteCommands({
-    pool: f.pool,
-    access: f.access,
-    createCommandRunner: createLibraryCommandRunner,
-  }).putVoteOutcome(main.actor, { questionId: STANDARD_QUESTION_ID, targetId: subjects[0], units: 7 }, key());
+  await createVoteCommands({ pool: f.pool, access: f.access }).putVoteOutcome(
+    main.actor,
+    { questionId: STANDARD_QUESTION_ID, targetId: subjects[0], units: 7 },
+    key(),
+  );
   await f.commands.putEntry(source.actor, subjects[0], { state: 'planned' }, entryKey());
   await f.commands.putEntry(source.actor, subjects[1], { state: 'playing' }, entryKey());
 
@@ -330,11 +329,7 @@ afterAll(async () => {
 test('the actual installed archive is privately reviewed, explicitly merged and replayed through native commands', async () => {
   const wrong = framed(artifact.records);
   expect(wrong.manifest.version).toBe(3);
-  const publicVoteCommands = createVoteCommands({
-    pool: f.pool,
-    access: f.access,
-    createCommandRunner: createLibraryCommandRunner,
-  });
+  const publicVoteCommands = createVoteCommands({ pool: f.pool, access: f.access });
   const publicVoteBefore = await publicVoteCommands.readOwnVote(main.actor, STANDARD_QUESTION_ID, subjects[0]);
   expect(publicVoteBefore?.units).toBe(7);
   const acceptedArchive = await upload(main, wrong);

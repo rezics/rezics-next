@@ -5,7 +5,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { noEffect, principalCommandIdentity, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem.ts';
-import { withReadTransaction } from '../access/read-transaction.ts';
+import { withReadTransaction } from '../semantic/read.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
