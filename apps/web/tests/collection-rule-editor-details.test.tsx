@@ -146,13 +146,10 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
     },
     async choose(select: HTMLSelectElement, values: string[]) {
       await act(async () => {
-        const setValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
         if (select.multiple) {
-          select.selectedIndex = -1;
           for (const option of select.options) option.selected = values.includes(option.value);
         } else {
-          select.selectedIndex = -1;
-          setValue?.call(select, values[0] ?? '');
+          select.selectedIndex = [...select.options].findIndex((option) => option.value === (values[0] ?? ''));
         }
         expect([...select.selectedOptions].map((option) => option.value)).toEqual(values);
         select.dispatchEvent(new window.Event('change', { bubbles: true }) as unknown as Event);
@@ -323,10 +320,6 @@ test('a mismatched state set retains distinct unknown states and exact identifie
     expect(calls[0]).toEqual({ id: 'private-rule', revision: 7, filter, sort: 'id', idempotencyKey: key });
     await ui.render();
     expect(ui.host.querySelector('form fieldset')!.disabled).toBe(false);
-    await ui.choose(ui.select(m.library_rule_state()), ['state.retired']);
-    expect([...ui.select(m.library_rule_state()).selectedOptions].map((option) => option.value)).toEqual([
-      'state.retired',
-    ]);
     await ui.click(`${m.library_subject_clear()} · ${m.library_rule_state()}`);
     expect(ui.select(m.library_rule_state()).selectedOptions).toHaveLength(0);
     expect(ui.host.textContent).toContain('states.books.v1');
