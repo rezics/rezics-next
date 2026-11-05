@@ -3,9 +3,11 @@ import { dirname } from 'node:path';
 import { act, StrictMode, type ReactNode } from 'react';
 import { createKernelClient } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { isPlatformClosedError } from '../src/kernel/platform-closed';
 import type { CurrentViewerProgressIndex } from '../src/library/progress-server';
 import type { SessionEnv } from '../src/session/client';
 import type { ProgressPickerSubject } from '../src/library/progress-picker';
+import { readProgressIndex } from '../src/library/progress-server';
 
 // UNRUN: focused mounted/deferred regressions for controller execution. No native/browser proof.
 const { Window } = await import(
@@ -72,6 +74,17 @@ let credentials = 0;
 let naming = 0;
 let releases = 0;
 let deferLists = false;
+type ListFailure = 'forbidden' | 'closed' | 'not_found' | 'invalid_cursor' | 'stale_cursor' | 'unavailable';
+type ListOutcome = 'ok' | ListFailure;
+let listOutcome: ListOutcome = 'ok';
+const listFailures: Record<ListFailure, { status: number; code: string }> = {
+  forbidden: { status: 403, code: 'forbidden' },
+  closed: { status: 403, code: 'platform_closed' },
+  not_found: { status: 404, code: 'not_found' },
+  invalid_cursor: { status: 400, code: 'invalid_cursor' },
+  stale_cursor: { status: 409, code: 'stale_cursor' },
+  unavailable: { status: 500, code: 'internal_error' },
+};
 let listedRevision = 7;
 let listedState = 'active';
 let nextRelease: ReturnType<typeof deferred<typeof bundledRelease>> | undefined;
@@ -116,13 +129,20 @@ const kernel = createKernelClient('https://kernel.test', {
     };
     calls.push(call);
     if (request.method === 'GET' && !deferLists) {
-      const subjectId = new URL(request.url).searchParams.get('subjectId')!;
-      work.resolve(
-        Response.json({
-          progressSessions: [{ ...native(viewer, subjectId, listedRevision), state: listedState }],
-          next: `next-${viewer}`,
-        }),
-      );
+      const url = new URL(request.url);
+      const failure = listOutcome === 'stale_cursor' && !url.searchParams.has('cursor') ? undefined : listOutcome;
+      if (failure && failure !== 'ok') {
+        const { status, code } = listFailures[failure];
+        work.resolve(Response.json({ code }, { status }));
+      } else {
+        const subjectId = url.searchParams.get('subjectId')!;
+        work.resolve(
+          Response.json({
+            progressSessions: [{ ...native(viewer, subjectId, listedRevision), state: listedState }],
+            next: `next-${viewer}`,
+          }),
+        );
+      }
     }
     return work.promise;
   },
@@ -287,6 +307,7 @@ function reset() {
   admitted = true;
   locale = 'en';
   refusal = missingSubject = deferLists = false;
+  listOutcome = 'ok';
   credentials = naming = releases = 0;
   envelopeOverride = undefined;
   retainedRequest = undefined;
@@ -295,9 +316,9 @@ function reset() {
   nextRelease = undefined;
   calls.length = pickers.length = selections.length = buttons.length = dispatched.length = 0;
 }
-async function mount(hydrate = false) {
+async function mount(hydrate = false, initialLoader?: CurrentViewerProgressIndex) {
   reset();
-  let loader = await readCurrentViewerProgressIndex({ data: { subjectId: id(1) } });
+  let loader = initialLoader ?? (await readCurrentViewerProgressIndex({ data: { subjectId: id(1) } }));
   let requested: { subjectId?: string; cursor?: string } = { subjectId: id(1) };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const router = createRouter({
@@ -404,6 +425,10 @@ async function resolveList(call: (typeof calls)[number], subjectId = id(1), revi
     ),
   );
 }
+async function resolveListFailure(call: (typeof calls)[number], failure: ListFailure = 'forbidden') {
+  const { status, code } = listFailures[failure];
+  await tick(() => call.work.resolve(Response.json({ code }, { status })));
+}
 async function resolveWrite(
   call: (typeof calls)[number],
   state = new URL(call.request.url).pathname.endsWith(':abandon') ? 'abandoned' : 'completed',
@@ -464,6 +489,63 @@ test('actual preparation provenance is one reader, and refusal/absent identity c
     requested: { subjectId: '', cursor: null },
     page: { signedIn: false, sessions: [], selectedSubject: null, next: null },
   });
+});
+
+test('an ordinary denied progress list renders permission on the initial page and current-viewer refresh', async () => {
+  reset();
+  listOutcome = 'forbidden';
+  const direct = await readProgressIndex({ data: { subjectId: id(1) } });
+  const initial = await readCurrentViewerProgressIndex({ data: { subjectId: id(1) } });
+  expect(direct).toMatchObject({ signedIn: true, viewerState: 'forbidden', selectedSubject: null, sessions: [], next: null });
+  expect(initial).toMatchObject({ viewer: 'A', page: { signedIn: true, viewerState: 'forbidden', selectedSubject: null, sessions: [], next: null } });
+  expect([initial.page.emptyKind, initial.page.progressChoices, naming, releases]).toEqual([undefined, undefined, 0, 0]);
+  const h = await mount(true, initial);
+  try {
+    expect(h.serverHtml).toContain(m.library_progress_discovery_forbidden());
+    expect(h.host.textContent).toContain(m.library_progress_discovery_forbidden());
+    expect(h.hydrationErrors).toEqual([]);
+    expect(h.host.querySelector('form, button, a, [data-picker]')).toBeNull();
+    deferLists = true;
+    await h.refresh();
+    await resolveListFailure(listCall('A'));
+    expect(h.host.textContent).toContain(m.library_progress_discovery_forbidden());
+    expect(h.host.textContent).not.toContain(m.library_progress_discovery_empty_owner());
+    expect(h.host.querySelector('form, button, a, [data-picker]')).toBeNull();
+    expect(writes()).toHaveLength(0);
+    deferLists = false;
+    listOutcome = 'unavailable';
+    await h.refresh();
+    await tick();
+    expect(h.host.textContent).toContain(m.library_progress_unavailable());
+    expect(h.host.textContent).not.toContain(m.library_progress_discovery_forbidden());
+  } finally {
+    await h.close();
+  }
+});
+
+test('closed, concealed, invalid/stale cursor and unavailable list outcomes retain their reader meaning', async () => {
+  reset();
+  listOutcome = 'closed';
+  let closed: unknown;
+  try {
+    await readProgressIndex({ data: { subjectId: id(1) } });
+  } catch (error) {
+    closed = error;
+  }
+  expect(isPlatformClosedError(closed)).toBe(true);
+  listOutcome = 'not_found';
+  expect((await readProgressIndex({ data: { subjectId: id(1) } })).addressIssue).toBe('subjectId');
+  listOutcome = 'invalid_cursor';
+  expect((await readProgressIndex({ data: { subjectId: id(1), cursor: 'opaque/==' } })).addressIssue).toBe('cursor');
+  listOutcome = 'stale_cursor';
+  const staleFrom = calls.length;
+  expect((await readProgressIndex({ data: { subjectId: id(1), cursor: 'opaque/==' } })).sessions).toHaveLength(1);
+  expect(calls.slice(staleFrom).map(({ request }) => new URL(request.url).searchParams.get('cursor'))).toEqual([
+    'opaque/==',
+    null,
+  ]);
+  listOutcome = 'unavailable';
+  await expect(readProgressIndex({ data: { subjectId: id(1) } })).rejects.toThrow('Kernel library read failed');
 });
 
 test('loader SSR hydrates without another list; observed B/unknown/sign-out/admission immediately retire all private UI', async () => {
@@ -573,9 +655,10 @@ test('wrong server viewer/subject/cursor/locale and late old-address results nev
     await h.address({ subjectId: id(3), cursor: 'address-three' });
     const current = listCall('A');
     await resolveList(current, id(3));
-    await resolveList(old, id(2));
+    await resolveListFailure(old);
     expect(h.host.textContent).toContain(`A private ${id(3)}`);
     expect(h.host.textContent).not.toContain(`A private ${id(2)}`);
+    expect(h.host.textContent).not.toContain(m.library_progress_discovery_forbidden());
     for (const wrong of [
       (value: CurrentViewerProgressIndex) => ({ ...value, viewer: 'B' }),
       (value: CurrentViewerProgressIndex) => ({ ...value, requested: { ...value.requested, subjectId: id(9) } }),

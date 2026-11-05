@@ -9093,6 +9093,7 @@
   "library_progress_discovery_filter_value": "필터 값",
   "library_progress_discovery_empty_owner": "아직 기록된 진행 세션이 없습니다.",
   "library_progress_discovery_empty_filtered": "이 필터와 일치하는 세션이 없습니다.",
+  "library_progress_discovery_forbidden": "현재 권한으로는 진행 세션을 볼 수 없습니다.",
   "library_progress_discovery_stale": "목록이 변경되었습니다. 첫 페이지로 돌아가 계속하세요.",
   "library_progress_discovery_action_unavailable": "현재 세션에서는 이 작업을 사용할 수 없습니다.",
   "library_progress_discovery_loading": "진행 세션을 불러오는 중입니다.",

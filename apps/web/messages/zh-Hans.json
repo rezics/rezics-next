@@ -9093,6 +9093,7 @@
   "library_progress_discovery_filter_value": "筛选值",
   "library_progress_discovery_empty_owner": "尚未记录进度会话。",
   "library_progress_discovery_empty_filtered": "没有符合这些筛选条件的会话。",
+  "library_progress_discovery_forbidden": "当前权限不允许查看进度会话。",
   "library_progress_discovery_stale": "列表已更改。请返回第一页继续。",
   "library_progress_discovery_action_unavailable": "此会话当前无法执行该操作。",
   "library_progress_discovery_loading": "正在加载进度会话。",

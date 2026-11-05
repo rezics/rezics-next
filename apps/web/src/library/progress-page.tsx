@@ -775,9 +775,11 @@ function ProgressIndexPageContent({
         <p role="status">
           {viewerState === 'signed_out'
             ? m.library_progress_discovery_signed_out()
-            : viewerState === 'account_retired'
-              ? m.library_progress_discovery_account_retired()
-              : m.library_progress_unavailable()}
+            : viewerState === 'forbidden'
+              ? m.library_progress_discovery_forbidden()
+              : viewerState === 'account_retired'
+                ? m.library_progress_discovery_account_retired()
+                : m.library_progress_unavailable()}
         </p>
         {viewerState === 'unavailable' ? (
           <Button variant="outline" disabled={loading} onClick={retry}>

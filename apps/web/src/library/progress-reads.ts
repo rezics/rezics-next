@@ -10,6 +10,7 @@ import { prepareSession, viewerCredential } from '../session/request';
 import {
   libraryFullQuery,
   libraryListQuery,
+  LibraryReadForbiddenError,
   readLibraryResult,
   StaleCursorError,
   subjectOf as presentSubject,
@@ -222,7 +223,7 @@ export type ProgressSessionCore = Pick<
 
 export type ProgressIndex = {
   signedIn: boolean;
-  viewerState?: 'signed_in' | 'signed_out' | 'account_retired' | 'unavailable';
+  viewerState?: 'signed_in' | 'signed_out' | 'account_retired' | 'forbidden' | 'unavailable';
   addressIssue?: ProgressAddressField;
   subjectId: string;
   state?: string;
@@ -518,6 +519,15 @@ async function readList(client: KernelClient, subjectId: string, authorization: 
   return readAddressData<{ progressSessions: RawSession[]; next: string | null }>(result, 'cursor');
 }
 
+async function readIndexList(client: KernelClient, subjectId: string, authorization: string, cursor?: string) {
+  try {
+    return await readList(client, subjectId, authorization, cursor);
+  } catch (error) {
+    if (!(error instanceof StaleCursorError) || !cursor) throw error;
+  }
+  return readList(client, subjectId, authorization);
+}
+
 /** Resolve the one subject named by the page when no listed session embeds it. */
 async function readSelectedSubject(client: KernelClient, subjectId: string, authorization: string) {
   const result = await client.subjects({ id: subjectId }).get({
@@ -620,8 +630,18 @@ export async function loadProgressIndex(
   }
   let page: { progressSessions: RawSession[]; next: string | null };
   try {
-    page = await readList(client, subjectId, authorization, input.cursor);
+    page = await readIndexList(client, subjectId, authorization, input.cursor);
   } catch (error) {
+    if (error instanceof LibraryReadForbiddenError)
+      return {
+        signedIn: true,
+        viewerState: 'forbidden',
+        subjectId,
+        selectedSubject: null,
+        sessions: [],
+        next: null,
+        idempotencyKey,
+      };
     if (error instanceof ProgressAddressError || isNotFound(error))
       return {
         signedIn: true,
@@ -632,8 +652,7 @@ export async function loadProgressIndex(
         next: null,
         idempotencyKey,
       };
-    if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
-    page = await readList(client, subjectId, authorization);
+    throw error;
   }
   const sessions = page.progressSessions.map((session) => presentSession(session));
   const selectedSubject =

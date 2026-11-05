@@ -9093,6 +9093,7 @@
   "library_progress_discovery_filter_value": "Filterwert",
   "library_progress_discovery_empty_owner": "Es wurden noch keine Fortschrittssitzungen aufgezeichnet.",
   "library_progress_discovery_empty_filtered": "Keine Sitzungen entsprechen diesen Filtern.",
+  "library_progress_discovery_forbidden": "Mit deinen aktuellen Berechtigungen kannst du Fortschrittssitzungen nicht ansehen.",
   "library_progress_discovery_stale": "Diese Liste wurde geändert. Öffne die erste Seite erneut.",
   "library_progress_discovery_action_unavailable": "Diese Aktion ist für die aktuelle Sitzung nicht verfügbar.",
   "library_progress_discovery_loading": "Fortschrittssitzungen werden geladen.",

@@ -9096,6 +9096,7 @@
   "library_progress_discovery_filter_value": "篩選值",
   "library_progress_discovery_empty_owner": "尚未記錄任何進度工作階段。",
   "library_progress_discovery_empty_filtered": "沒有符合這些篩選條件的工作階段。",
+  "library_progress_discovery_forbidden": "目前的權限不允許檢視進度工作階段。",
   "library_progress_discovery_stale": "清單已變更。請回到第一頁繼續。",
   "library_progress_discovery_action_unavailable": "此工作階段目前無法執行這項操作。",
   "library_progress_discovery_loading": "正在載入進度工作階段。",

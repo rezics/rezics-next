@@ -9096,6 +9096,7 @@
   "library_progress_discovery_filter_value": "絞り込み値",
   "library_progress_discovery_empty_owner": "進捗セッションはまだ記録されていません。",
   "library_progress_discovery_empty_filtered": "条件に一致するセッションはありません。",
+  "library_progress_discovery_forbidden": "現在の権限では進捗セッションを表示できません。",
   "library_progress_discovery_stale": "一覧が更新されました。最初のページから開き直してください。",
   "library_progress_discovery_action_unavailable": "現在のセッションではこの操作を利用できません。",
   "library_progress_discovery_loading": "進捗セッションを読み込んでいます。",

@@ -109,6 +109,7 @@ function validateFinish(input: unknown): ProgressFinishInput {
 
 /** Presentation consumes the already bounded page; it never repeats authentication or the list. */
 async function presentProgressIndex(page: ProgressIndex, locale: string): Promise<ProgressIndex> {
+  if (page.viewerState === 'forbidden') return page;
   await nameSubjectTypes([
     page.selectedSubject,
     ...page.sessions.flatMap((session) => [session.subject, session.versionSubject]),
