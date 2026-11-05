@@ -1,4 +1,4 @@
-import type { KernelClient, RealmHomePage } from '@rezics/client';
+import type { KernelClient } from '@rezics/client';
 import type { CoverSummary } from '@rezics/ui/cover';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { boardCommunitySource } from '../threads/board-community-source';
@@ -9,7 +9,8 @@ type RealmRoute = ReturnType<KernelClient['realms']>;
 type Result<T> = { status: number; data?: T | null; error?: unknown };
 
 /** The mounted response is the only Home DTO authority. */
-export type NativeRealmHomePage = RealmHomePage;
+type HomeRead = Awaited<ReturnType<RealmRoute['home']['get']>>;
+export type NativeRealmHomePage = NonNullable<HomeRead['data']>;
 export type NativeRealmHomeObservation = {
   viewer:
     | { state: 'anonymous' }
