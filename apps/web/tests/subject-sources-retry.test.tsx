@@ -97,7 +97,7 @@ test('actual Sources retry returns focus locally and retires focus across reader
           release = resolve;
         });
         read = () => held;
-        await act(async () => {
+        act(() => {
           if (mode !== 'unfocused') opener.focus();
           opener.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: mode === 'pointer' ? 1 : 0 }));
           opener.click();
@@ -105,8 +105,8 @@ test('actual Sources retry returns focus locally and retires focus across reader
             outside.focus();
             opener.focus();
           }
-          await tick();
         });
+        await tick();
         expect(calls).toHaveLength(2);
         expect(calls[1]).toEqual({ id: page.id, locale: 'en', realm, reader: 'alice' });
         expect(host.querySelector('article')?.getAttribute('aria-busy'), mode).toBe('true');
@@ -148,12 +148,17 @@ test('actual Sources retry returns focus locally and retires focus across reader
         });
         if (mode === 'empty' || mode === 'error') {
           expect(host.textContent).toContain(m.sources_empty());
-          expect(document.activeElement).toBe(host.querySelector('[data-slot="view-heading"] h1'));
+          expect(
+            document.activeElement === host.querySelector('[data-slot="view-heading"] h1'),
+            `${mode}: ${document.activeElement?.outerHTML}`,
+          ).toBe(true);
           expect(host.querySelector('button')).toBeNull();
         } else if (mode === 'failed' || mode === 'denied') {
-          expect(document.activeElement).toBe(
-            opener.isConnected ? opener : host.querySelector('[data-slot="view-heading"] h1'),
-          );
+          expect(
+            document.activeElement ===
+              (opener.isConnected ? opener : host.querySelector('[data-slot="view-heading"] h1')),
+            `${mode}: ${document.activeElement?.outerHTML}`,
+          ).toBe(true);
           expect(host.querySelector('button')?.disabled).toBe(false);
         } else {
           expect(document.activeElement).not.toBe(host.querySelector('[data-slot="view-heading"] h1'));

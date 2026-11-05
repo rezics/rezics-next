@@ -12,6 +12,7 @@ import { revisionResource } from '../../src/semantic/authorship.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createRealAccess } from './real-access.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -294,12 +295,23 @@ test('native exact Sources admits the second same-language document and loses it
     const hold = observer.hold({ statement: metadata!.statement }, 'after');
     const pending = call('GET', path(input));
     await hold.entered;
+    const writerObserver = observeSql(admin);
+    const decisions: { action: string; allowed: boolean }[] = [];
     try {
       // A separate admin pool changes Content while the reader's real SQL is held.
       const writer = createKernel({
         receiptKeys: testReceiptKeys(),
         pool: admin,
-        access: realAccess.access,
+        access: (config) => {
+          const native = realAccess.access(config);
+          return deriveAccess(native, {
+            async authorize(...args) {
+              const allowed = await native.authorize(...args);
+              decisions.push({ action: args[2], allowed });
+              return allowed;
+            },
+          });
+        },
         tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) },
         routeKey: new Uint8Array(32).fill(4),
         writeRate: realAccess.writeRate,
@@ -313,11 +325,17 @@ test('native exact Sources admits the second same-language document and loses it
           },
         }),
       );
-      expect(erased.status, JSON.stringify({ body: await erased.text(), checks: realAccess.checks.slice(-8) })).toBe(
-        204,
-      );
+      expect(
+        erased.status,
+        JSON.stringify({
+          body: await erased.text(),
+          decisions,
+          queries: writerObserver.records.map(({ statement }) => statement.slice(0, 110)),
+        }),
+      ).toBe(204);
     } finally {
       hold.release();
+      await writerObserver.close();
     }
     const erased = await pending;
     expect(erased.status).toBe(200);
