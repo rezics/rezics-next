@@ -776,6 +776,11 @@ readback and survives an unavailable or subsequently changed membership. Matchin
 refusal or acknowledgement never erase an earlier unknown. Dismiss history hides presentation only; exact stored
 continuations and their native retry gates are unchanged. Ordinary fresh documents make no mounted-history claim.
 
+Decision: the maximum canonical membership command descriptor is 49,470 UTF-16 code units, using 36-unit UUIDs, a
+32-hex operation key, the longest role and boolean spellings, and both 4,096-code-unit optional text fields escaped
+as NULs; reads reject excess input before parsing and leave it stored, while writers use the same ceiling. This adds
+no native calls or native cost.
+
 Authority retirement closes callbacks before a synchronous React commit removes roster identity, exact review,
 confirmation and authentication inputs from the DOM, including before a cached page snapshot. A retained unknown
 uses only the installed exact continuation. Return and visible read Retry create fresh read generations; released

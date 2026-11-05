@@ -50,6 +50,19 @@ export type MembershipCommand = {
 };
 const storageKey = 'rezics.organization-membership.command';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_MEMBERSHIP_COMMAND_CODE_UNITS = JSON.stringify({
+  accountId: '00000000-0000-0000-0000-000000000000',
+  operationKey: '0'.repeat(32),
+  operation: {
+    kind: 'membership',
+    organizationId: '00000000-0000-0000-0000-000000000000',
+    memberAccountId: '00000000-0000-0000-0000-000000000000',
+    role: 'member',
+    reservationId: '\u0000'.repeat(4096),
+  },
+  reference: '\u0000'.repeat(4096),
+  unresolved: false,
+}).length;
 export function membershipId(value: unknown): value is string {
   return typeof value === 'string' && uuid.test(value);
 }
@@ -349,6 +362,7 @@ export function readMembershipCommand(): MembershipCommand | null | 'invalid' {
   try {
     const raw = window.sessionStorage.getItem(storageKey);
     if (raw === null) return null;
+    if (raw.length > MAX_MEMBERSHIP_COMMAND_CODE_UNITS) return 'invalid';
     const value: unknown = JSON.parse(raw);
     return validCommand(value) ? { ...value, operation: Object.freeze(value.operation) } : 'invalid';
   } catch {
@@ -358,7 +372,9 @@ export function readMembershipCommand(): MembershipCommand | null | 'invalid' {
 export function saveMembershipCommand(command: MembershipCommand): boolean {
   if (!validCommand(command)) return false;
   try {
-    window.sessionStorage.setItem(storageKey, JSON.stringify(command));
+    const raw = JSON.stringify(command);
+    if (raw.length > MAX_MEMBERSHIP_COMMAND_CODE_UNITS) return false;
+    window.sessionStorage.setItem(storageKey, raw);
     return true;
   } catch {
     return false;
