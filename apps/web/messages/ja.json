@@ -11243,5 +11243,10 @@
   "library_query_publication_complete": "クエリ全体が公開されました。コレクションを開くと、完了したバージョンを確認できます。",
   "library_query_publication_status": "公開状況を確認",
   "library_query_publication_loading": "公開状況を確認中…",
-  "library_query_publication_unknown": "結果を確認できていません。元のリクエストを再試行するか、状況を確認してください。リクエストキーと保存時のリビジョンは保持されています。"
+  "library_query_publication_unknown": "結果を確認できていません。元のリクエストを再試行するか、状況を確認してください。リクエストキーと保存時のリビジョンは保持されています。",
+  "moderation_manual_heading": "既知のモデレーションキューを開く",
+  "moderation_manual_hint": "掲示板 ID を入力するか、カタログの通報を開いてください。各キューで現在のアクセス権を個別に確認します。",
+  "moderation_manual_board": "掲示板 ID",
+  "moderation_manual_open": "掲示板のキューを開く",
+  "moderation_manual_catalogue": "カタログの通報を開く"
 }

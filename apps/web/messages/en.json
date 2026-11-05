@@ -11431,5 +11431,10 @@
   "library_vndb_progress_replace": "Replace an existing minute amount with the exported value",
   "library_vndb_progress_consent": "I selected this occurrence and consent to this minute measure change.",
   "library_vndb_progress_read_unavailable": "Current occurrences could not be read. Retry the selection or open Progress.",
-  "library_vndb_progress_more": "More occurrences are available on the Progress page."
+  "library_vndb_progress_more": "More occurrences are available on the Progress page.",
+  "moderation_manual_heading": "Open a known moderation queue",
+  "moderation_manual_hint": "Enter a board ID or open catalogue reports. Each queue checks your current access independently of discovery.",
+  "moderation_manual_board": "Board ID",
+  "moderation_manual_open": "Open board queue",
+  "moderation_manual_catalogue": "Open catalogue reports"
 }

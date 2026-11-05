@@ -17,6 +17,7 @@ export function createReportReviewAction(
 ) {
   const identity = createModerationIntent();
   let last: ReportActionInput | undefined;
+  let sender: ReportQueueAction | undefined;
   let result: ReportReviewResult | undefined;
   let pending = false;
   let sending = false;
@@ -45,6 +46,7 @@ export function createReportReviewAction(
     changed: identity.changed,
     retire() {
       retired = true;
+      sender = undefined;
     },
     get receipt() {
       return result?.ok === true;
@@ -55,12 +57,13 @@ export function createReportReviewAction(
     async submit(intent: Intent, action: ReportQueueAction): Promise<ReportReviewResult | undefined> {
       if (!current()) return;
       if (pending || result) return result;
+      sender = action;
       return send(Object.freeze({ ...intent, idempotencyKey: identity.keyFor(intent) }), action);
     },
-    async retry(action: ReportQueueAction): Promise<ReportReviewResult | undefined> {
+    async retry(_action: ReportQueueAction): Promise<ReportReviewResult | undefined> {
       if (!current()) return;
       if (pending || !last || !result || result.ok || result.state !== 'uncertain') return result;
-      return send(last, action);
+      return send(last, sender!);
     },
     async refresh(read: () => Promise<void>): Promise<void> {
       if (!current() || pending) return;
@@ -71,6 +74,7 @@ export function createReportReviewAction(
         if (!current() || generation() !== expected) return;
         identity.changed();
         last = undefined;
+        sender = undefined;
         result = undefined;
       } finally {
         pending = false;

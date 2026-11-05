@@ -11248,5 +11248,10 @@
   "library_query_publication_complete": "完整查詢已發佈。開啟收藏集即可查看已完成的版本。",
   "library_query_publication_status": "查詢發佈狀態",
   "library_query_publication_loading": "正在查詢發佈狀態…",
-  "library_query_publication_unknown": "尚未確認結果。請重試原始請求或查詢狀態；原始請求識別碼與已儲存的修訂版本仍會保留。"
+  "library_query_publication_unknown": "尚未確認結果。請重試原始請求或查詢狀態；原始請求識別碼與已儲存的修訂版本仍會保留。",
+  "moderation_manual_heading": "開啟已知的審核佇列",
+  "moderation_manual_hint": "輸入看板 ID，或開啟目錄檢舉。每個佇列都會獨立檢查你目前的存取權限。",
+  "moderation_manual_board": "看板 ID",
+  "moderation_manual_open": "開啟看板佇列",
+  "moderation_manual_catalogue": "開啟目錄檢舉"
 }

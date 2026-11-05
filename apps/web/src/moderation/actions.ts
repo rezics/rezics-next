@@ -61,7 +61,8 @@ export async function submitModerationAppealResolution(
     if (error && typeof error === 'object' && 'status' in error) {
       const status = Number(error.status);
       if (status === 403) return { state: 'forbidden' };
-      if (status === 409) return { state: 'conflict' };
+      if (status === 409 || (status === 422 && 'code' in error && error.code === 'idempotency_conflict'))
+        return { state: 'conflict' };
     }
     throw error;
   }
@@ -111,7 +112,13 @@ export async function sendModerationAppealResolution(
         },
       },
     );
-    if (result.error) throw Object.assign(new Error('Appeal resolution failed'), { status: result.status });
+    if (result.error)
+      throw Object.assign(new Error('Appeal resolution failed'), {
+        status: result.status,
+        code: result.error.value.code,
+      });
+    // A receipt for a different appeal cannot acknowledge this retained command.
+    if (result.data.id !== data.id) throw new Error('Appeal resolution acknowledgement does not match');
     return result.data;
   }, data);
 }

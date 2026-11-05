@@ -16,10 +16,12 @@ test('history keeps a board and queue cursor while preserving a separate opaque 
     realm: 'realm/one',
     board: 'board/one',
     cursor: 'case.cursor:opaque',
+    case: 'appeal94bb',
   });
   const opened = openWorkbenchHistory(queue);
   const history = workbenchSearch({ ...opened, historyCursor: 'native:cursor/opaque?x' });
   expect(history).toMatchObject({ board: 'board/one', queue: 'appeals', cursor: 'case.cursor:opaque', history: true });
+  expect(history.case).toBe('appeal94bb');
   expect(history.historyCursor).toBe('native:cursor/opaque?x');
 
   const returned = returnFromWorkbenchHistory(history);
@@ -28,6 +30,7 @@ test('history keeps a board and queue cursor while preserving a separate opaque 
     queue: 'appeals',
     cursor: 'case.cursor:opaque',
     historyReturn: true,
+    case: 'appeal94bb',
   });
   expect(returned.history).toBeUndefined();
   expect(returned.historyCursor).toBeUndefined();

@@ -47,6 +47,8 @@ queue at a time. Board and catalogue deep links may be entered directly; a board
 selected queue repeats its exact native authorization. A board grant does not grant Global catalogue access, and
 there is no platform-wide appeal adjudication or cross-board case search.
 
+Decision: discovery always retains manual Board-ID queue entry and an independent catalogue entry; native queue reads check access. Opening decision history retains the exact appeal ID, queue filters and cursor for return.
+
 Reports, pending board appeals and resolved reports are distinct queues. Reports use native `status=pending|resolved`
 with `targetKind` and `order`; appeals use the board's pending list. Continuation uses the native queue cursor. Each
 row retains its independent report or appeal ID and selected queue snapshot. Catalogue reports require current Global
@@ -111,7 +113,7 @@ target, identity or media hydration. Board targets remain operational appeals.
 
 Case dismissal and takedown continue to use the existing review commands. An uncertain command retains its original
 sender, credentials, idempotency key and operands for explicit retry; current readback does not replace that intent.
-Selected workbench retry stays inside its admitted private reader and preserves the exact search, including the appeal
+An appeal resolution acknowledges only its matched native appeal ID; RFC9457 `idempotency_conflict` remains a definitive conflict rather than uncertain delivery. Selected workbench retry stays inside its admitted private reader and preserves the exact search, including the appeal
 selection and captured cursor. Keyboard recovery returns to the retry control or workbench boundary unless focus moved
 or the owner retired. Pending or uncertain resolution blocks refresh until settlement.
 
