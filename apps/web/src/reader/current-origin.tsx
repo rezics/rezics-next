@@ -146,8 +146,9 @@ export function assertReaderCurrent(current: () => boolean, signal?: AbortSignal
 /** Router matches can retain the previous search while the actual address is already loading. */
 export function useReaderAddress(path: string | null, cursor: string | undefined, locale: string) {
   const router = useRouter({ warn: false });
+  const initialCursor = router ? undefined : cursor;
   const store = useMemo(() => {
-    let snapshot = { cursor: cursor || null, active: true, episode: 0, key: '' };
+    let snapshot = { cursor: initialCursor || null, active: true, episode: 0, key: '' };
     const observe = (location: { pathname: string; search: Record<string, unknown> }) => {
       const nextCursor = typeof location.search.cursor === 'string' ? location.search.cursor || null : null;
       const active = path === null || location.pathname.replace(/\/$/, '') === path;
@@ -166,7 +167,7 @@ export function useReaderAddress(path: string | null, cursor: string | undefined
             })
           : emptySubscribe(),
     };
-  }, [router, path, cursor]);
+  }, [router, path, initialCursor]);
   const snapshot = useSyncExternalStore(store.subscribe, store.read, store.read);
   const ref = useRef({ snapshot, locale, active: true, generation: 0 });
   if (!ref.current.active || ref.current.snapshot !== snapshot || ref.current.locale !== locale) {
