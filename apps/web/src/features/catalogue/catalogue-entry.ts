@@ -177,11 +177,24 @@ export const catalogueEntries = {
     id,
     label = '',
     locale,
-  }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
-    group: 'edit',
-    label: m.producer_history_title({}, options(locale)),
-    href: `${subject({ id, label, locale })}/producer`,
-  }),
+    context,
+    realm,
+  }: Locale & {
+    id: string;
+    label?: string | undefined;
+    context?: string | undefined;
+    realm?: string | undefined;
+  }): CatalogueEntry => {
+    const search = new URLSearchParams({
+      ...(context ? { context } : {}),
+      ...(realm ? { realm } : {}),
+    });
+    return {
+      group: 'edit',
+      label: m.producer_history_title({}, options(locale)),
+      href: `${subject({ id, label, locale })}/producer${search.size ? `?${search}` : ''}`,
+    };
+  },
   releaseFidelity: ({
     id,
     type,
