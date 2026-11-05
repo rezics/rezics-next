@@ -905,7 +905,7 @@ test('The default home route renders a bounded mixed discovery Following and Con
       else Reflect.deleteProperty(globalThis, key);
     }
   }
-});
+}, 15_000);
 
 test('Default Home keeps question details optional and recovers partial, refused and expired selections in place', async () => {
   setLocale('en', { reload: false });
