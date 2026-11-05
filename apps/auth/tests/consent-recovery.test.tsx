@@ -123,6 +123,10 @@ test('mounted history survives loss of current review, replacement, new acknowle
     expect(host.querySelector('[role=alert]')).not.toBeNull();
     expect(document.activeElement).toBe(button('Review current permissions'));
     await retry();
+    await answer(409, { error: 'authentication_denied', code: 'stale_review' });
+    privateGone();
+    expect(host.querySelector('[role=alert]')).not.toBeNull();
+    await retry();
     const replacement = {
       ...body,
       display_name: 'Current target',

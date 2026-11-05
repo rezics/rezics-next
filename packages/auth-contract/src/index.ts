@@ -1,3 +1,4 @@
+export * from './consent-response-bounds';
 export type * from './auth-erasure-live.ts';
 export * from './kind-consent.ts';
 export type * from './auth-receiving-closure.ts';

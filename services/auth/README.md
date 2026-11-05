@@ -733,6 +733,15 @@ body rules. Allow compares the reviewed account, request and exact reviewed unio
 mutation; it rereads and refuses `stale_review` if same-account grants were added after review. Nonempty Security
 reductions likewise bind their reviewed grant set before any reduction barrier; ordinary unguarded native callers and explicit remove-all remain
 unchanged.
+Decision: the fixed consent review projection and browser intake share the pure public
+`@rezics/auth-contract` consent response bounds. Native `consent-page` retains its existing exports.
+The response allowance includes every key/punctuation, both 1024-unit IDs, nullable 100-unit display name,
+254-unit email, all three 1000-entry arrays of 128 OAuth ASCII characters, pending state and decisions.
+Six bytes per UTF-16 text unit covers JSON escapes/UTF-8 conservatively; the 8192-byte requested query
+further reduces GET output. Native errors are closed `authentication_denied` with optional `stale_review`;
+only that shape determines the error allowance. This is separate from Security catalogue C and kind-consent.
+Browser admission adds no native query: the existing single current read, locks, decisions and issuance
+remain authoritative, and unreadable/over-limit preflight cannot authorize a reduction.
 The Cost table derives consent/session reads and single-session revocation,
 including their complete handler growth citations. `pages-consent-sessions.test.ts`
 exercises the real handlers and database.
