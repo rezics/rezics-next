@@ -10366,5 +10366,12 @@
   "library_rule_results_page_empty": "规则已就绪。此页没有成员；可能还有后续页。",
   "library_rule_results_incomplete": "部分条件未应用，因此此响应不能证明结果为空。",
   "library_rule_results_retry": "重新读取已保存规则",
-  "character_person_results": "角色与人物搜索结果"
+  "character_person_results": "角色与人物搜索结果",
+  "recipe_visit_invalid": "这个食谱修正网址无效。请重新打开食谱，再选择修正入口。",
+  "recipe_visit_unsupported": "修正与候选审查目前仅支持全局。此选定上下文并未作为全局阅读打开。",
+  "recipe_visit_return": "返回选定的食谱阅读",
+  "recipe_visit_global": "另外打开全局食谱编辑器",
+  "recipe_visit_context_global": "上下文：全局",
+  "recipe_visit_context_selected": "上下文：选定的阅读",
+  "recipe_visit_occurrence_missing": "请求的陈述已不在此阅读中公开，或其所属主题已变更。请在下方选择当前的陈述。"
 }

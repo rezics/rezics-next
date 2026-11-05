@@ -10502,5 +10502,12 @@
   "library_rule_results_page_empty": "The rule is ready. This page has no members; more pages may remain.",
   "library_rule_results_incomplete": "Some conditions were not applied, so this response cannot establish an empty result.",
   "library_rule_results_retry": "Retry reading the saved rule",
-  "character_person_results": "Character and People results"
+  "character_person_results": "Character and People results",
+  "recipe_visit_invalid": "This recipe correction address is invalid. Open the recipe again and choose its correction entry.",
+  "recipe_visit_unsupported": "Correction and candidate review currently support Global only. This selected Context has not been opened as a Global reading.",
+  "recipe_visit_return": "Return to the selected recipe reading",
+  "recipe_visit_global": "Open a separate Global recipe editor",
+  "recipe_visit_context_global": "Context: Global",
+  "recipe_visit_context_selected": "Context: selected reading",
+  "recipe_visit_occurrence_missing": "The requested assertion is no longer disclosed in this reading, or its holder changed. Choose a current assertion below."
 }

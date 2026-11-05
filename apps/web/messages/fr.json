@@ -10359,5 +10359,12 @@
   "library_rule_results_page_empty": "La règle est prête. Cette page ne contient aucun membre ; d’autres pages peuvent suivre.",
   "library_rule_results_incomplete": "Certaines conditions n’ont pas été appliquées ; cette réponse ne peut donc pas établir un résultat vide.",
   "library_rule_results_retry": "Relire la règle enregistrée",
-  "character_person_results": "Résultats des personnages et des personnes"
+  "character_person_results": "Résultats des personnages et des personnes",
+  "recipe_visit_invalid": "Cette adresse de correction de recette est invalide. Rouvrez la recette et choisissez son entrée de correction.",
+  "recipe_visit_unsupported": "La correction et la révision des propositions prennent actuellement en charge le contexte global uniquement. Le contexte sélectionné n’a pas été ouvert comme lecture globale.",
+  "recipe_visit_return": "Revenir à la lecture sélectionnée de la recette",
+  "recipe_visit_global": "Ouvrir un éditeur de recette global distinct",
+  "recipe_visit_context_global": "Contexte : global",
+  "recipe_visit_context_selected": "Contexte : lecture sélectionnée",
+  "recipe_visit_occurrence_missing": "L’assertion demandée n’est plus divulguée dans cette lecture, ou son sujet a changé. Choisissez une assertion actuelle ci-dessous."
 }

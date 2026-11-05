@@ -10359,5 +10359,12 @@
   "library_rule_results_page_empty": "규칙을 읽을 준비가 되었습니다. 이 페이지에는 항목이 없으며 다음 페이지가 있을 수 있습니다.",
   "library_rule_results_incomplete": "일부 조건이 적용되지 않아 이 응답만으로 결과가 비어 있다고 판단할 수 없습니다.",
   "library_rule_results_retry": "저장된 규칙 다시 읽기",
-  "character_person_results": "캐릭터 및 인물 검색 결과"
+  "character_person_results": "캐릭터 및 인물 검색 결과",
+  "recipe_visit_invalid": "레시피 수정 주소가 올바르지 않습니다. 레시피를 다시 열고 수정 항목을 선택하세요.",
+  "recipe_visit_unsupported": "수정과 후보 검토는 현재 전역만 지원합니다. 선택한 컨텍스트를 전역 읽기로 열지 않았습니다.",
+  "recipe_visit_return": "선택한 레시피 읽기로 돌아가기",
+  "recipe_visit_global": "별도의 전역 레시피 편집기 열기",
+  "recipe_visit_context_global": "컨텍스트: 전역",
+  "recipe_visit_context_selected": "컨텍스트: 선택한 읽기",
+  "recipe_visit_occurrence_missing": "요청한 진술이 현재 읽기에 공개되지 않거나 소속 주제가 변경되었습니다. 아래에서 현재 진술을 선택하세요."
 }

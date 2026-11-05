@@ -2,6 +2,8 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import { checkStatementInput, checkSubjectInput, type Violation } from '@rezics/definitions/validate';
+import type { CandidateViewerActions } from '../../subject/candidates';
+import { candidateContext } from '../../subject/candidates';
 import type { SessionEnv } from '../../session/client';
 import {
   initialTerms,
@@ -18,8 +20,8 @@ export type RecipeItem = InitialSubject & { statements: Record<string, Statement
 export type RecipeCommand = { item: RecipeItem; key: string };
 export type RecipeProperty = NonNullable<Release['properties'][string]>;
 export type RecipeRead =
-  | { ok: false; reason: 'concealed' | 'invalid' | 'unavailable' }
-  | { ok: true; release: Release; public: SubjectRead | null; fields: string[] };
+  | { ok: false; reason: 'concealed' | 'invalid' | 'unavailable' | 'unsupported-context' }
+  | { ok: true; release: Release; public: SubjectRead | null; fields: string[]; actions?: CandidateViewerActions };
 export type RecipeTransport = {
   load: () => Promise<RecipeRead>;
   /** Current parent subject.create observation. Fresh create only; later correction omits it. */
@@ -68,17 +70,24 @@ export function recipePropertyCompatible(previous: RecipeProperty, current: Reci
   };
   return meaning(previous) === meaning(current);
 }
-export async function readRecipeEditor(client: KernelClient, locale: string, id?: string): Promise<RecipeRead> {
+export async function readRecipeEditor(
+  client: KernelClient,
+  locale: string,
+  id?: string,
+  context = candidateContext,
+): Promise<RecipeRead> {
   if (id !== undefined && !recipeUuid.test(id)) return { ok: false, reason: 'concealed' };
   try {
     const [subject, active] = await Promise.all([
-      id ? client.subjects({ id }).get() : undefined,
+      id ? client.subjects({ id }).get({ query: { context }, fetch: { cache: 'no-store' } }) : undefined,
       client.definitions.active.get(),
     ]);
     if (subject && (subject.status === 403 || subject.status === 404 || subject.status === 308))
       return { ok: false, reason: 'concealed' };
     if ((id && (subject?.status !== 200 || subject.data?.subject.id !== id)) || active.status !== 200 || !active.data)
       return { ok: false, reason: 'unavailable' };
+    if (subject?.data && subject.data.subject.context !== context) return { ok: false, reason: 'unavailable' };
+    if (id && context !== candidateContext) return { ok: false, reason: 'unsupported-context' };
     if (subject?.data && subject.data.subject.type !== 'schema:Recipe') return { ok: false, reason: 'invalid' };
     const bundle = await client.definitions.releases({ digest: active.data.digest }).get();
     if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== active.data.digest)

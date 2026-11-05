@@ -10359,5 +10359,12 @@
   "library_rule_results_page_empty": "Die Regel ist bereit. Diese Seite enthält keine Mitglieder; weitere Seiten können folgen.",
   "library_rule_results_incomplete": "Einige Bedingungen wurden nicht angewendet. Diese Antwort kann daher kein leeres Ergebnis belegen.",
   "library_rule_results_retry": "Gespeicherte Regel erneut lesen",
-  "character_person_results": "Ergebnisse für Figuren und Personen"
+  "character_person_results": "Ergebnisse für Figuren und Personen",
+  "recipe_visit_invalid": "Diese Adresse zur Rezeptkorrektur ist ungültig. Öffnen Sie das Rezept erneut und wählen Sie den Korrektureintrag.",
+  "recipe_visit_unsupported": "Korrekturen und die Prüfung von Vorschlägen unterstützen derzeit nur den globalen Kontext. Der gewählte Kontext wurde nicht als globale Ansicht geöffnet.",
+  "recipe_visit_return": "Zur gewählten Rezeptansicht zurückkehren",
+  "recipe_visit_global": "Einen separaten globalen Rezepteditor öffnen",
+  "recipe_visit_context_global": "Kontext: global",
+  "recipe_visit_context_selected": "Kontext: gewählte Ansicht",
+  "recipe_visit_occurrence_missing": "Die angeforderte Aussage wird in dieser Ansicht nicht mehr offengelegt oder gehört nun zu einem anderen Thema. Wählen Sie unten eine aktuelle Aussage."
 }

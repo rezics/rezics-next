@@ -752,7 +752,13 @@ export function SubjectPage({
               <AlbumProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
             )}
           {read.subject.type === 'schema:Recipe' && (
-            <RecipeEditorEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+            <RecipeEditorEntry
+              id={read.subject.id}
+              label={subjectPageTitle(page, locale)}
+              locale={locale}
+              context={page.context?.id ?? read.subject.context}
+              realm={realm}
+            />
           )}
           {isScreenType(read.subject.type) && (
             <ScreenProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />

@@ -10359,5 +10359,12 @@
   "library_rule_results_page_empty": "La regla está lista. Esta página no tiene miembros; puede haber más páginas.",
   "library_rule_results_incomplete": "No se aplicaron algunas condiciones, por lo que esta respuesta no confirma un resultado vacío.",
   "library_rule_results_retry": "Volver a leer la regla guardada",
-  "character_person_results": "Resultados de personajes y personas"
+  "character_person_results": "Resultados de personajes y personas",
+  "recipe_visit_invalid": "Esta dirección de corrección de receta no es válida. Vuelve a abrir la receta y elige su entrada de corrección.",
+  "recipe_visit_unsupported": "La corrección y la revisión de propuestas solo admiten actualmente el contexto global. El contexto seleccionado no se ha abierto como una lectura global.",
+  "recipe_visit_return": "Volver a la lectura seleccionada de la receta",
+  "recipe_visit_global": "Abrir un editor global de recetas independiente",
+  "recipe_visit_context_global": "Contexto: global",
+  "recipe_visit_context_selected": "Contexto: lectura seleccionada",
+  "recipe_visit_occurrence_missing": "La afirmación solicitada ya no se muestra en esta lectura o su tema ha cambiado. Elige una afirmación actual a continuación."
 }

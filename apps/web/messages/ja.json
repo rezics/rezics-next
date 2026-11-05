@@ -10409,5 +10409,12 @@
   "library_rule_results_page_empty": "ルールの読み込みは完了しました。このページにメンバーはありません。続きのページがある場合があります。",
   "library_rule_results_incomplete": "一部の条件が適用されていないため、この応答から結果が空だとは判断できません。",
   "library_rule_results_retry": "保存済みルールを再読み込み",
-  "character_person_results": "キャラクターと人物の検索結果"
+  "character_person_results": "キャラクターと人物の検索結果",
+  "recipe_visit_invalid": "このレシピの修正アドレスは無効です。レシピを開き直して修正を選択してください。",
+  "recipe_visit_unsupported": "修正と候補のレビューは現在グローバルのみ対応しています。選択したコンテキストをグローバルとして開くことはありません。",
+  "recipe_visit_return": "選択したレシピの表示に戻る",
+  "recipe_visit_global": "別のグローバルレシピエディターを開く",
+  "recipe_visit_context_global": "コンテキスト：グローバル",
+  "recipe_visit_context_selected": "コンテキスト：選択した表示",
+  "recipe_visit_occurrence_missing": "指定した記述は現在の表示で公開されていないか、所属する主題が変わりました。以下から現在の記述を選択してください。"
 }
