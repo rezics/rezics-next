@@ -148,14 +148,14 @@ async function browser() {
 }
 
 test('Screen correction visits preserve the selected reading, exact occurrence and verified native Context', async () => {
-  const [{ ScreenProfileEntry }, { ScreenProfileReader }, currentVisit, subjectHref] = await Promise.all([
+  const [{ ScreenProfileEntry }, { ScreenProfileReader }, visitContract, subjectHref] = await Promise.all([
     import('../src/features/catalogue/screen-profile-entry'),
     import('../src/features/catalogue/screen-profile-reader'),
     import('../src/features/catalogue/screen-current-visit'),
     import('../src/subject/subject-href'),
   ]);
   const { screenCurrentRouteVisit, screenCurrentReturnHref, screenCurrentReturnValue, screenCurrentInspectionId } =
-    currentVisit;
+    visitContract;
   const source = `/en/subjects/${subjectId}/the-observatory?realm=${realmId}`;
   const visit: ScreenCurrentVisit = {
     version: 1,
@@ -212,7 +212,7 @@ test('Screen correction visits preserve the selected reading, exact occurrence a
     expect(admitted.visit).toMatchObject({ subject: subjectId, context: contextId, realm: realmId, source });
     expect(screenCurrentRouteVisit(correctionAddress.search, 'existing-classification-handoff').kind).toBe('invalid');
     const globalVisit = { ...admitted.visit, context: PAGE_GLOBAL_CONTEXT };
-    const globalHref = currentVisit.screenCurrentVisitHref(correctionAddress.pathname, globalVisit);
+    const globalHref = visitContract.screenCurrentVisitHref(correctionAddress.pathname, globalVisit);
     expect(globalHref).toBeDefined();
     expect(
       screenCurrentRouteVisit(new URL(globalHref!, 'https://site.invalid').search, 'existing-classification-handoff').kind,
