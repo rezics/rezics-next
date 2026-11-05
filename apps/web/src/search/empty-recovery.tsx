@@ -11,7 +11,7 @@ type Labels = Pick<SearchPageDataLike, 'typeLabels' | 'typeChoices' | 'selectedF
 type SearchPageDataLike = {
   typeLabels?: Record<string, string>;
   typeChoices: { id: string; labels: Record<string, string> }[];
-  selectedFacetLabels: Record<string, Record<string, string>>;
+  selectedFacetLabels: Record<string, Record<string, { text: string; lang?: string }>>;
   groups: { property: string; labels: Record<string, string> }[];
 };
 type Action = EmptyRecovery['actions'][number];
@@ -74,7 +74,7 @@ export function emptyRecoveryActionLinks(
       const remaining = facets[action.property]!.filter((value) => value !== action.value);
       if (remaining.length) facets[action.property] = remaining;
       else delete facets[action.property];
-      const value = labels.selectedFacetLabels[action.property]?.[action.value] ?? action.value;
+      const value = labels.selectedFacetLabels[action.property]?.[action.value]?.text ?? action.value;
       result.push({
         key: JSON.stringify(action),
         label: m.search_empty_remove_facet({ value }, options),
