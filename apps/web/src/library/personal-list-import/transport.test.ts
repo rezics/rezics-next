@@ -154,7 +154,7 @@ test('authenticated generated transport accepts conditional score and native Pro
 test('lost transport keeps the original command', async () => {
   const command = { kind: 'apply' as const, uploadId, body: { rows: [{ ordinal: 0, reviewId }] } };
   const client = createKernelClient('https://kernel.invalid', {
-    fetch: (async (_input, _init) => {
+    fetch: (async () => {
       throw new TypeError('lost acknowledgement');
     }) as unknown as typeof fetch,
   });
