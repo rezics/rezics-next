@@ -1,5 +1,44 @@
 import { m } from '../paraglide/messages.js';
+import type { CopyDraft } from './copy-fields';
 import type { CopyItem } from './copies-read';
+
+const empty = (value: string | null | undefined) => value ?? '';
+
+/** Keep local field edits and take newly read values only for fields the owner has not changed. */
+export function adoptCopyConflictDraft(
+  baseline: { draft: CopyDraft; kind: string },
+  local: { draft: CopyDraft; kind: string },
+  incoming: CopyItem,
+): { copy: CopyItem; draft: CopyDraft; kind: string } {
+  const incomingDraft: CopyDraft = {
+    status: incoming.status ?? '',
+    location: empty(incoming.location),
+    source: empty(incoming.source),
+    acquiredOn: empty(incoming.acquiredOn),
+    disposedOn: empty(incoming.disposedOn),
+    note: empty(incoming.note),
+  };
+  const draft = { ...incomingDraft };
+  for (const key of Object.keys(incomingDraft) as (keyof CopyDraft)[]) {
+    if (local.draft[key] !== baseline.draft[key]) draft[key] = local.draft[key];
+  }
+  const kind = local.kind !== baseline.kind ? local.kind : (incoming.kind ?? '');
+  const stored = (value: string) => (value === '' ? null : value);
+  return {
+    copy: {
+      ...incoming,
+      status: draft.status,
+      location: stored(draft.location),
+      source: stored(draft.source),
+      acquiredOn: stored(draft.acquiredOn),
+      disposedOn: stored(draft.disposedOn),
+      note: stored(draft.note),
+      kind: kind || incoming.kind,
+    },
+    draft,
+    kind,
+  };
+}
 
 export type ConflictReview =
   | { state: 'idle' | 'loading' | 'unavailable' | 'forbidden' }

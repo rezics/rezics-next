@@ -17,6 +17,15 @@ import { useCollectionDraftNavigation } from './collection-draft-navigation';
 import { CollectionMoveChooser, type CollectionMoveChoice } from './collection-move-chooser';
 import { readCollectionDestination } from './collection-read';
 import { readCollectionMovePlacements } from './collection-move-read';
+import {
+  collectionTransferReadback,
+  collectionTransferReceipt,
+  type CollectionTransferReceipt,
+  type CollectionTransferReview,
+  type CollectionTransferReviewState,
+} from './collection-placement-journey/transfer';
+import { CollectionTransferReceiptPanel } from './collection-transfer-receipt';
+import { CollectionTransferReviewPanel } from './collection-transfer-review';
 import { CollectionAddMembers } from './collection-add-members';
 import {
   CollectionMemberOccurrenceDetails,
@@ -313,28 +322,6 @@ type BoundaryMove = {
   refusal?: string;
 };
 
-type CollectionTransferReview = CollectionMoveChoice & {
-  sourceId: string;
-  sourceTitle: string;
-  sourceRevision: number;
-  sourceHref: string;
-  destinationHref: string;
-  occurrences: ReadonlyArray<{ id: string; title: string }>;
-  idempotencyKey: string;
-};
-
-type CollectionTransferReceipt = {
-  sourceId: string;
-  destinationId: string;
-  sourceTitle: string;
-  destinationTitle: string;
-  sourceHref: string;
-  destinationHref: string;
-  sourceRevision: number;
-  destinationRevision: number;
-  state: 'reading' | 'ready' | 'unavailable';
-};
-
 /** Members read recovery shares the active editor's fence, but never starts a writer. */
 export function CollectionMembersStatus({
   state,
@@ -493,11 +480,9 @@ function CollectionPageLifetime({
   const membersReadActive = useRef(false);
   const [adding, setAdding] = useState(false);
   const [moveChoice, setMoveChoice] = useState<CollectionMoveChoice | null>(null);
-  const [transfer, setTransfer] = useState<(CollectionTransferReview & { memberIds: string[] }) | null>(null);
+  const [transfer, setTransfer] = useState<CollectionTransferReview | null>(null);
   const [chooserEpoch, setChooserEpoch] = useState(0);
-  const [transferState, setTransferState] = useState<'review' | 'pending' | 'unknown' | 'refused' | 'confirmed' | null>(
-    null,
-  );
+  const [transferState, setTransferState] = useState<CollectionTransferReviewState>(null);
   const [transferReceipt, setTransferReceipt] = useState<CollectionTransferReceipt | null>(null);
   const transferReceiptHeading = useRef<HTMLHeadingElement>(null);
   const transferReviewHeading = useRef<HTMLHeadingElement>(null);
@@ -1358,17 +1343,11 @@ function CollectionPageLifetime({
       setConflictBasisState('idle');
       if (run.transfer && run.transferRevisions) {
         const capturedTransfer = run.transfer;
-        const receipt: CollectionTransferReceipt = {
-          sourceId: capturedTransfer.sourceId,
-          destinationId: capturedTransfer.destination.id,
-          sourceTitle: capturedTransfer.sourceTitle,
-          destinationTitle: capturedTransfer.destination.title,
-          sourceHref: capturedTransfer.sourceHref,
-          destinationHref: capturedTransfer.destinationHref,
-          sourceRevision: run.transferRevisions.source,
-          destinationRevision: run.transferRevisions.destination,
-          state: 'reading',
-        };
+        const receipt = collectionTransferReceipt(
+          capturedTransfer,
+          run.transferRevisions.source,
+          run.transferRevisions.destination,
+        );
         setTransferReceipt(receipt);
         const [sourceRead, destinationRead] = await Promise.allSettled([
           reloadCollection(true),
@@ -1378,10 +1357,18 @@ function CollectionPageLifetime({
         ]);
         if (!isCurrent()) return;
         const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
-        const sourceReady = !!sourcePage && sourcePage.id === capturedTransfer.sourceId;
-        const destinationReady = destinationRead.status === 'fulfilled';
+        const destinationPage = destinationRead.status === 'fulfilled' ? destinationRead.value : undefined;
+        const sourceReady = sourcePage?.id === capturedTransfer.sourceId;
         resetEditor(sourceReady ? sourcePage : run.page, true);
-        setTransferReceipt({ ...receipt, state: sourceReady && destinationReady ? 'ready' : 'unavailable' });
+        setTransferReceipt({
+          ...receipt,
+          state: collectionTransferReadback(
+            capturedTransfer.sourceId,
+            capturedTransfer.destination.id,
+            sourcePage,
+            destinationPage ? { id: capturedTransfer.destination.id } : undefined,
+          ),
+        });
         return;
       }
       const refreshed = await reloadCollection(true);
@@ -1907,58 +1894,12 @@ function CollectionPageLifetime({
         ) : null}
         {failure && isCurrent() ? <p role="alert">{failure}</p> : null}
         {transferReceipt && isCurrent() ? (
-          <section
-            className="space-y-3 rounded-xl border p-3"
-            data-collection-transfer-receipt
-            aria-labelledby="collection-transfer-receipt-heading"
-          >
-            <h2
-              id="collection-transfer-receipt-heading"
-              ref={transferReceiptHeading}
-              tabIndex={-1}
-              className="font-semibold"
-            >
-              {m.library_collection_move_receipt()}
-            </h2>
-            <p>
-              {m.library_collection_move_receipt_revisions({
-                source: transferReceipt.sourceRevision,
-                destination: transferReceipt.destinationRevision,
-              })}
-            </p>
-            {transferReceipt.state === 'reading' ? (
-              <p role="status">{m.library_collection_move_reconciling()}</p>
-            ) : null}
-            {transferReceipt.state === 'ready' ? <p role="status">{m.library_collection_move_reconciled()}</p> : null}
-            {transferReceipt.state === 'unavailable' ? (
-              <div role="alert" className="space-y-2">
-                <p>{m.library_collection_move_reconcile_failed()}</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
-                  disabled={pending}
-                  onClick={() => void rereadTransferReceipt()}
-                >
-                  {m.library_collection_move_read_current()}
-                </Button>
-              </div>
-            ) : null}
-            <nav className="flex min-w-0 flex-wrap gap-2" aria-label={m.library_collection_move_return_links()}>
-              <a
-                className="inline-flex min-h-11 max-w-full items-center break-words rounded-lg border px-3 py-2 underline-offset-4 hover:underline [overflow-wrap:anywhere]"
-                href={transferReceipt.sourceHref}
-              >
-                {m.library_collection_move_source_link({ title: transferReceipt.sourceTitle })}
-              </a>
-              <a
-                className="inline-flex min-h-11 max-w-full items-center break-words rounded-lg border px-3 py-2 underline-offset-4 hover:underline [overflow-wrap:anywhere]"
-                href={transferReceipt.destinationHref}
-              >
-                {m.library_collection_move_destination_link({ title: transferReceipt.destinationTitle })}
-              </a>
-            </nav>
-          </section>
+          <CollectionTransferReceiptPanel
+            receipt={transferReceipt}
+            pending={pending}
+            headingRef={transferReceiptHeading}
+            onReread={() => void rereadTransferReceipt()}
+          />
         ) : null}
         {boundary ? (
           <div role="status" className="space-y-2 rounded-xl bg-muted/40 p-3" data-collection-boundary>
@@ -2304,112 +2245,28 @@ function CollectionPageLifetime({
                 {m.library_collection_move_review_button()}
               </Button>
               {transfer ? (
-                <section
-                  className="basis-full space-y-3 rounded-xl border p-3"
-                  data-collection-transfer-review
-                  aria-labelledby="collection-transfer-review-heading"
-                >
-                  <h3
-                    id="collection-transfer-review-heading"
-                    ref={transferReviewHeading}
-                    tabIndex={-1}
-                    className="font-semibold"
-                  >
-                    {m.library_collection_move_review_heading()}
-                  </h3>
-                  <p>
-                    <strong>{m.library_collection_move_review_source()}</strong> {transfer.sourceTitle}
-                  </p>
-                  <p>{m.library_collection_move_review_occurrences({ count: transfer.occurrences.length })}</p>
-                  <ul className="min-w-0 space-y-1">
-                    {transfer.occurrences.map((occurrence) => (
-                      <li key={occurrence.id} className="min-w-0 break-words [overflow-wrap:anywhere]">
-                        {occurrence.title} <code className="break-all text-xs">{occurrence.id}</code>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="break-words [overflow-wrap:anywhere]">
-                    <strong>{m.library_collection_move_review_destination()}</strong>{' '}
-                    <a href={transfer.destinationHref} className="underline underline-offset-4">
-                      {transfer.destination.title}
-                    </a>{' '}
-                    {m.library_collection_move_review_revision({ revision: transfer.destination.revision })}
-                  </p>
-                  {transfer.anchor ? (
-                    <p>
-                      <strong>{m.library_collection_move_review_placement()}</strong>{' '}
-                      {m.library_collection_move_anchor_review({
-                        page: transfer.anchor.page,
-                        position: transfer.anchor.position,
-                        title: transfer.anchor.title,
-                      })}{' '}
-                      <code className="break-all text-xs">{transfer.anchor.id}</code>
-                    </p>
-                  ) : (
-                    <p>
-                      <strong>{m.library_collection_move_review_placement()}</strong>{' '}
-                      {m.library_collection_move_first()}
-                    </p>
-                  )}
-                  <p className="text-sm">{m.library_collection_move_atomic()}</p>
-                  {transferState === 'pending' ? <p role="status">{m.library_collection_move_sending()}</p> : null}
-                  {transferState === 'unknown' ? (
-                    <div role="alert" className="space-y-2">
-                      <p>{m.library_collection_move_unknown()}</p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
-                        disabled={pending || !isCurrent('collection_member.transfer')}
-                        onClick={() => void save(undefined, false, true)}
-                      >
-                        {m.library_collection_move_retry_exact()}
-                      </Button>
-                    </div>
-                  ) : null}
-                  {transferState === 'refused' ? (
-                    <div role="alert" className="space-y-2">
-                      <p>{failure || m.library_collection_move_refused()}</p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
-                        disabled={pending || !isCurrent()}
-                        onClick={() => void rereadRefusedTransfer()}
-                      >
-                        {m.library_collection_move_read_current()}
-                      </Button>
-                    </div>
-                  ) : null}
-                  {transferState === 'review' ? (
-                    <div className="flex min-w-0 flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
-                        disabled={pending || conflict || !isCurrent('collection_member.transfer')}
-                        onClick={() => void save(undefined, false, true)}
-                      >
-                        {m.library_collection_move_confirm()}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="min-h-11 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]"
-                        disabled={pending || draftFrozen || transferState !== 'review'}
-                        onClick={() => {
-                          if (!isCurrent() || saveIntent.current !== null) return;
-                          setTransfer(null);
-                          setTransferState(null);
-                          setMoveChoice(null);
-                          setChooserEpoch((value) => value + 1);
-                          setFailure('');
-                        }}
-                      >
-                        {m.library_collection_move_cancel_review()}
-                      </Button>
-                    </div>
-                  ) : null}
-                </section>
+                <CollectionTransferReviewPanel
+                  transfer={transfer}
+                  transferState={transferState}
+                  pending={pending}
+                  conflict={conflict}
+                  draftFrozen={draftFrozen}
+                  canWrite={isCurrent('collection_member.transfer')}
+                  canRead={isCurrent()}
+                  headingRef={transferReviewHeading}
+                  refusal={failure}
+                  onConfirm={() => void save(undefined, false, true)}
+                  onRetryExact={() => void save(undefined, false, true)}
+                  onReread={() => void rereadRefusedTransfer()}
+                  onCancel={() => {
+                    if (!isCurrent() || saveIntent.current !== null) return;
+                    setTransfer(null);
+                    setTransferState(null);
+                    setMoveChoice(null);
+                    setChooserEpoch((value) => value + 1);
+                    setFailure('');
+                  }}
+                />
               ) : null}
               {transferHasIndependentDraft && !transfer ? (
                 <p className="basis-full text-sm text-muted-foreground">{m.library_collection_move_save_first()}</p>

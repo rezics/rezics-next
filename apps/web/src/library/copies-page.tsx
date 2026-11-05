@@ -23,7 +23,8 @@ import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';
 
 import type { CopyProfile, CopySubjectResult } from './copies-profiles';
-import { CopyConflictReview, type ConflictReview } from './copy-conflict-review';
+import { adoptCopyConflictDraft, CopyConflictReview, type ConflictReview } from './copy-conflict-review';
+import type { CopiesWindowsControls } from './copies-windows/use-copies-windows';
 import { CopyEditionPicker } from './copy-edition-picker';
 import { CopyDraftNavigation, type CopyDraftNavigationHandle } from './copy-draft-navigation';
 import { CopiesFallback } from './copies-fallback';
@@ -43,7 +44,6 @@ import { useCopyInventoryReview } from './copy-inventory-review/selection';
 import { CopyInventorySelect } from './copy-inventory-review/select';
 import { CopyInventoryHistory, hasUnresolvedHistory } from './copy-inventory-review/history';
 import { CopyInventoryFilters } from './copy-inventory-filters';
-import type { CopiesWindowMove } from './copies-windows/model';
 export { CopiesFallback } from './copies-fallback';
 const target =
   'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -280,12 +280,12 @@ export function CopyForm({
     const request = lookup.current;
     const accept = () => {
       if (!current('copy.get') || request !== lookup.current || busy.current || intent.current) return;
-      const next = { ...accepted, idempotencyKey: crypto.randomUUID() };
-      const draft = draftOf(next);
+      const adopted = adoptCopyConflictDraft(originalDraft.current, { draft, kind }, accepted);
+      const next = { ...adopted.copy, idempotencyKey: crypto.randomUUID() };
       setCopy(next);
-      setDraft(draft);
-      setKind(next.kind ?? '');
-      originalDraft.current = { draft, kind: next.kind ?? '', editionId: null };
+      setDraft(adopted.draft);
+      setKind(adopted.kind);
+      originalDraft.current = { draft: adopted.draft, kind: adopted.kind, editionId: null };
       deleteStarted.current = null;
       setConfirming(false);
       setConflicted(false);
@@ -294,9 +294,7 @@ export function CopyForm({
       setShowFieldErrors(false);
       onReviewed?.(next);
     };
-    // Reuse the single existing departure choice when accepting would discard a draft.
-    if (departure.current) departure.current.requestClose(accept, m.library_copy_conflict_review_discard());
-    else if (!meaningfulChanges) accept();
+    accept();
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -978,11 +976,7 @@ export function CopiesPage({
   page: CopiesPageData;
   failure?: string | undefined;
   originating?: CopiesOrigin | undefined;
-  windows?: {
-    current: string | null | undefined;
-    previous: string | null | undefined;
-    move: (direction: CopiesWindowMove, target: string | null, keyboard: boolean) => boolean;
-  };
+  windows?: CopiesWindowsControls;
   onRetryInventory?: (() => void) | undefined;
 }) {
   const [loaded, setLoaded] = useState({ page, generation: 0 });
@@ -1010,11 +1004,7 @@ function LoadedCopiesPage({
   page: CopiesPageData;
   failure?: string | undefined;
   originating?: CopiesOrigin | undefined;
-  windows?: {
-    current: string | null | undefined;
-    previous: string | null | undefined;
-    move: (direction: CopiesWindowMove, target: string | null, keyboard: boolean) => boolean;
-  };
+  windows?: CopiesWindowsControls;
   onRetryInventory?: (() => void) | undefined;
 }) {
   const [copies, setCopies] = useState(page.copies);
@@ -1292,14 +1282,19 @@ function LoadedCopiesPage({
                       : m.library_copy_empty()
                   : m.library_copy_page_empty()}
           </p>
-          {page.inventoryState === 'forbidden' && onRetryInventory ? (
+          {(page.inventoryState === 'forbidden' || page.inventoryState === 'unavailable') && onRetryInventory ? (
             <button type="button" className={quiet} onClick={onRetryInventory}>
-              {m.subject_view_retry()}
+              {windows?.pending ? m.library_window_retry() : m.subject_view_retry()}
             </button>
           ) : null}
         </div>
       )}
-      {page.next || firstAvailable || previousAvailable ? (
+      {windows?.pending && onRetryInventory && !page.inventoryState ? (
+        <button type="button" className={quiet} onClick={onRetryInventory}>
+          {m.library_window_retry()}
+        </button>
+      ) : null}
+      {!windows?.pending && !page.inventoryState && (page.next || firstAvailable || previousAvailable) ? (
         <Exposure operation="copy.list">
           <nav aria-label={m.library_copy_heading()} className="flex flex-wrap gap-3">
             {previousAvailable ? (
