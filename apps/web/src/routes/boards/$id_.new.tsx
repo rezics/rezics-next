@@ -4,7 +4,7 @@ import { pageHeadContext } from '../../shell/head-context';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import type { QueryClient } from '@tanstack/react-query';
 import { createFileRoute, Link, notFound } from '@tanstack/react-router';
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { startThread } from '../../threads/actions';
