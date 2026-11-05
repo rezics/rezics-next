@@ -267,7 +267,11 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     });
     let search: Search = { q: 'Private', cursor: 'exact+/page==' };
     let initial = response('A', search);
-    const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
+    const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => ({
+      kind: 'loaded',
+      address: { valid: true, cursor: search.cursor ?? null, query: search.q ?? null },
+      result: initial,
+    }));
     const address = spyOn(Route, 'useSearch').mockImplementation(() => search);
     const Page = Route.options.component!;
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
