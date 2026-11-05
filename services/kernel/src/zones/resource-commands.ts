@@ -220,8 +220,6 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
         },
       );
     } catch (error) {
-      // TEMPORARY DIAGNOSTIC (reverted in the next commit): locate the denied create step.
-      console.error('ZONE-CREATE-DIAG', error instanceof Error ? error.stack : error);
       if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
       throw error;
     }
