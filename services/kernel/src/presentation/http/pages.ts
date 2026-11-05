@@ -245,7 +245,7 @@ function respond(status: number, body: unknown, session: string | null, cache: b
   return new Response(JSON.stringify(body), { status, headers });
 }
 
-function nativePageRoute<App>(
+function nativePageRoute<App, const Verb extends 'read' | 'previewDraft'>(
   app: App,
   {
     pool,
@@ -260,12 +260,13 @@ function nativePageRoute<App>(
     tokens: KeyRing;
     dispatch: (request: Request) => Promise<Response>;
   },
-  draftPreview: boolean,
+  verb: Verb,
 ) {
+  const draftPreview = verb === 'previewDraft';
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
   const routed = (app as ReturnType<typeof createApp>).post(
-    customMethod('/v1/pages', draftPreview ? 'previewDraft' : 'read'),
+    customMethod('/v1/pages', verb),
     {
       body: t.Any(),
       query: t.Object({ target: t.Optional(t.String()) }),
@@ -642,7 +643,7 @@ function nativePageRoute<App>(
 
 /** Two transports select a profile; both use the same native target resolver, planner and executor. */
 export function pageRoutes<App>(app: App, dependencies: Parameters<typeof nativePageRoute>[1]) {
-  return nativePageRoute(nativePageRoute(app, dependencies, false), dependencies, true);
+  return nativePageRoute(nativePageRoute(app, dependencies, 'read'), dependencies, 'previewDraft');
 }
 
 async function pageAnswer(input: {

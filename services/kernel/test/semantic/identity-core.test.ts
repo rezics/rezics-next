@@ -13,7 +13,7 @@ import {
 
 const job = { jobId: 'job', epoch: 7n };
 const request = [{ original: 'saved', sourceHome: 2 }];
-const unavailable = { state: 'unavailable', reason: 'bootstrap' };
+const unavailable = { state: 'unavailable', reason: 'bootstrap' } as const;
 function evidence(): IdentityMappingEvidence {
   return {
     sourceOwners: [{ partition_no: 2, epoch: 3, position: 100n, write_state: 'active' }],
@@ -171,7 +171,7 @@ test('immutable merge, unmerge and repoint preserve original references and cons
         ['member', 'saved'],
         ['other', 'other'],
       ].map(([original, previous]) => identityEpochChangeTerminal(intent, 'remainder', original!, previous!)),
-    ).toEqual(expected);
+    ).toEqual([...expected]);
   }
   const intent = Object.freeze({ kind: 'unmerge', original: 'saved' } as const);
   const source = Object.freeze({

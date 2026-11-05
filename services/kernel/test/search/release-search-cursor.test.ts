@@ -76,9 +76,9 @@ function fixture() {
 
 type Native = ReturnType<typeof fixture>;
 const groups = (native: Native, cursor?: string, overrides: Partial<typeof options> = {}) =>
-  readReleaseGroupsPage({ ...options, ...overrides, source: native.source, cursor });
+  readReleaseGroupsPage({ ...options, ...overrides, source: native.source, ...(cursor === undefined ? {} : { cursor }) });
 const children = (native: Native, cursor?: string, overrides: Partial<typeof options> = {}, work = 'work-secret') =>
-  readReleaseChildrenPage({ ...options, ...overrides, source: native.source, cursor, work });
+  readReleaseChildrenPage({ ...options, ...overrides, source: native.source, ...(cursor === undefined ? {} : { cursor }), work });
 async function firstPage(native: Native, overrides: Partial<typeof options> = {}) {
   const page = await groups(native, undefined, overrides);
   expect(page.groups).toHaveLength(1);

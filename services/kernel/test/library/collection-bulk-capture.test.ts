@@ -35,7 +35,7 @@ function readsFor(rows: string[], options: { revision?: () => number; preparing?
     async readCollection() {
       return descriptor(options.revision?.() ?? 7) as never;
     },
-    async readMembers(_actor, _sourceId, query) {
+    async readMembers(_actor: Parameters<Reads['readMembers']>[0], _sourceId: string, query: Parameters<Reads['readMembers']>[2]) {
       if (options.preparing) return { preparing: true } as never;
       const start = query.cursor == null ? 0 : Number(query.cursor);
       const page = rows.slice(start, start + (query.limit ?? 100));

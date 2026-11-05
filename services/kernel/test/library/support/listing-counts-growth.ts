@@ -218,7 +218,8 @@ export function assertListingCountReaderWork(report: GrowthReport, batch: Listin
       expect(statement).toContain('LIMIT 1');
       expect(statement).toMatch(/route >= .*partition_no \* 16/);
       expect(statement).toMatch(/route < \(.*partition_no \+ 1\) \* 16/);
-      const nodes = product[0]!.planDocuments.flatMap(planNodes);
+      expect(product[0]!.planDocuments).toBeDefined();
+      const nodes = product[0]!.planDocuments!.flatMap(planNodes);
       const scans = nodes.filter(
         (node) =>
           node.Schema === 'library' && node['Relation Name'] === 'subject_listing' && Number(node['Actual Loops']) > 0,

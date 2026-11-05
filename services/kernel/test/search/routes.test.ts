@@ -6,7 +6,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { AuthenticationError, type Access, type AccountActor, type Resource } from '../../src/request/access.ts';
-import type { SearchService } from '../../src/search/http/routes.ts';
+import type { SearchService } from '../../src/search/service-scope.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { readExposure } from '../../src/access/gates/catalogue.ts';
@@ -83,10 +83,11 @@ const asOf = '2026-10-25T00:00:00.000Z';
 const calls: unknown[][] = [];
 let failure: ProblemError | null = null;
 const service: SearchService = {
+  async releaseGroups() { throw new Error('Unexpected grouped release search'); },
   async search(principal, request) {
     calls.push(['search', principal, request]);
     if (failure) throw failure;
-    return { subjects: [{ ...result, figure: missingFigure }], next: null, as_of: asOf };
+    return { subjects: [{ ...result, figure: missingFigure, matchEvidence: { state: 'absent' } }], next: null, as_of: asOf };
   },
   async facets(principal, request) {
     calls.push(['facets', principal, request]);

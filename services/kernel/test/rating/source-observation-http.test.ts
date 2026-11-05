@@ -100,7 +100,7 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
     digests: [old, middle, latest],
   } = await history(['101', '102', '103']);
   await fence('102');
-  observer.records.length = 0;
+  const recordStart = observer.records.length;
   const first = await page(id);
   expect(first.head.digest).toBe(latest);
   expect(first.history!.items.map((item) => item.digest)).toEqual([latest!]);
@@ -114,7 +114,7 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   expect(last.head).toEqual(first.head);
   expect(last.history!.items.map((item) => item.digest)).toEqual([old!]);
   expect(last.history!.nextCursor).toBeNull();
-  const fetched = observer.records.filter((row) => row.statement === payloadQuery.sql);
+  const fetched = observer.records.slice(recordStart).filter((row) => row.statement === payloadQuery.sql);
   expect(fetched).toHaveLength(3);
   expect(JSON.stringify(fetched.map((row) => row.parameters))).not.toContain(middle!);
   await json(await inspect(id, `?digest=${middle}`), 404);
@@ -175,7 +175,7 @@ test('history continuation keeps its original native ceiling when a new head arr
   const added = await json(await write(id, newest));
   const continued = await page(id, cursor);
   expect(continued.head.digest).toBe(added.observation.digest);
-  expect(continued.history!.items.map((item) => item.digest)).toEqual([digests[1]]);
+  expect(continued.history!.items.map((item) => item.digest)).toEqual([digests[1]!]);
 });
 
 test('history fences each provider identity in its own home and keeps the cursor on the Subject home', async () => {
@@ -314,7 +314,7 @@ test('caller revocation and Subject identity changes during hydration withhold t
   }
   await json(await pending, 403);
   await fixture.grantImporter(fixture.actors.importer);
-  expect((await page(id, cursor)).history!.items.map((item) => item.digest)).toEqual([digests[1]]);
+  expect((await page(id, cursor)).history!.items.map((item) => item.digest)).toEqual([digests[1]!]);
 
   const identity = await history(['231', '232', '233']);
   const identityPage = await page(identity.id);

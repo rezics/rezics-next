@@ -171,7 +171,8 @@ function assertRetirementSample(path: Path, sample: ReportSample): void {
     expect(occurrence.error).toBeNull();
     expect(occurrence.statement).toMatch(/DELETE\s+FROM\s+core\.consumer_checkpoint/i);
     expect(occurrence.blocks).toBeGreaterThan(0);
-    const nodes = planNodes(occurrence.planDocuments);
+    expect(occurrence.planDocuments).toBeDefined();
+    const nodes = planNodes(occurrence.planDocuments!);
     const consumerIndex = nodes.find(
       (node) => node['Index Name'] === 'consumer_checkpoint_consumer_idx' && Number(node['Actual Loops'] ?? 0) > 0,
     );

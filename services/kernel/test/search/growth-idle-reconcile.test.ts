@@ -92,7 +92,7 @@ function removedRows(nodes: readonly Record<string, unknown>[]): number {
 
 function sampleRemoved(sample: ReportSample): number {
   return removedRows(
-    sample.occurrenceRepetitions.flatMap((run) => run.statements.flatMap((item) => planNodes(item.planDocuments))),
+    sample.occurrenceRepetitions.flatMap((run) => run.statements.flatMap((item) => planNodes(item.planDocuments!))),
   );
 }
 

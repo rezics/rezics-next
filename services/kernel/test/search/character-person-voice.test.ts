@@ -51,7 +51,7 @@ test('each repeated voice credit needs its own current permitted appearance at t
         facet: 'statement',
         property: p.property,
         values: [p.value],
-        qualifiers: p.qualifiers,
+        ...(p.qualifiers === undefined ? {} : { qualifiers: p.qualifiers }),
       })
         ? true
         : ('not_proven' as const),
@@ -309,11 +309,12 @@ test('rated first next and final retained pages stay ordered through dense curre
   for (let pageNumber = 0; pageNumber < 3; pageNumber++) {
     const page = await collectRetainedUsefulPage({
       limit: 2,
-      continuation,
+      ...(continuation === undefined ? {} : { continuation }),
       read: async (size) => {
         offset += consumed;
         const hits = subjects.slice(offset, offset + size).map((s) => ({
           id: s.id,
+          index: 'subjects-1',
           partition: 10,
           securityRevision: 1,
           matched: [],

@@ -348,8 +348,8 @@ function supervise(parent: OutcomeRpc) {
           const { source, ratings } = createRatedSubjectSource(config.pool, config.routeKey);
           return createKernel({
             ...config,
-            onAccessReady(access) {
-              config.onAccessReady?.(access);
+            onAccessReady(access, viewerActions) {
+              config.onAccessReady?.(access, viewerActions);
               publicFilters = createDefaultPublicFilterRuntime({
                 pool: config.pool,
                 routeKey: config.routeKey,

@@ -33,9 +33,9 @@ export type FactClause =
 const sortedValues = (values: readonly string[]) => [...new Set(values)].sort();
 
 /** Recheck candidates against current anchor snapshots; any failed read rejects the whole page. */
-export async function checkHits(
+export async function checkHits<NativeHit extends Hit>(
   source: SubjectSource,
-  hits: readonly Hit[],
+  hits: readonly NativeHit[],
   clauses: ReadonlyMap<string, FactClause>,
   options?: {
     concurrency?: number;
@@ -44,7 +44,7 @@ export async function checkHits(
     spoilerThreshold?: SpoilerThreshold;
     observeRelationRelease?: () => Promise<CurrentRelationRelease | null>;
   },
-): Promise<{ passed: { hit: Hit; subject: IndexedSubject }[]; dropped: number; relationRejected?: true }> {
+): Promise<{ passed: { hit: NativeHit; subject: IndexedSubject }[]; dropped: number; relationRejected?: true }> {
   const requestedConcurrency = options?.concurrency ?? 8;
   if (!Number.isSafeInteger(requestedConcurrency) || requestedConcurrency < 1)
     throw new RangeError('Concurrency must be a positive safe integer');
@@ -70,7 +70,7 @@ export async function checkHits(
     }
   }
 
-  const groups = new Map<number, { ids: Set<string>; candidates: { hit: Hit; index: number }[] }>();
+  const groups = new Map<number, { ids: Set<string>; candidates: { hit: NativeHit; index: number }[] }>();
   for (const [index, hit] of hits.entries()) {
     let partition: number;
     try {
@@ -89,7 +89,7 @@ export async function checkHits(
     group.candidates.push({ hit, index });
   }
 
-  const checked: ({ hit: Hit; subject: IndexedSubject } | undefined)[] = new Array(hits.length);
+  const checked: ({ hit: NativeHit; subject: IndexedSubject } | undefined)[] = new Array(hits.length);
   const partitions = [...groups];
   const lifetime = new RequestSourceLifetime();
   type Point = { probe: RelationFacetProbe; inverse?: true; result?: RelationFacetMatch };
@@ -118,7 +118,7 @@ export async function checkHits(
       }
       const points = new Map<string, Point>();
       const evaluations = new Map<string, () => { passed: boolean; relationRejected: boolean }>();
-      const eligible: { hit: Hit; subject: IndexedSubject; index: number }[] = [];
+      const eligible: { hit: NativeHit; subject: IndexedSubject; index: number }[] = [];
       for (const { hit, index } of group.candidates) {
         const subject = subjects.get(hit.id);
         if (

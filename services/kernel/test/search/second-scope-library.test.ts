@@ -6,7 +6,7 @@ import { readExposure } from '../../src/access/gates/catalogue.ts';
 import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { decodeSearchCursor, encodeSearchCursor, type SearchCursorBinding } from '../../src/search/cursor.ts';
-import type { SearchService } from '../../src/search/http/routes.ts';
+import type { SearchService } from '../../src/search/service-scope.ts';
 import { bindSearchScopeCursorRequest } from '../../src/search/service.ts';
 import type { PublicSearchPage } from '../../src/search/service.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -47,6 +47,7 @@ type SearchCall = {
 const observed: SearchCall[] = [];
 const page: PublicSearchPage = { subjects: [], next: null, as_of: asOf };
 const search: SearchService = {
+  async releaseGroups() { throw new Error('Unexpected grouped release search'); },
   async search(principal, request, _time, _active, context) {
     observed.push({ principal, request, context });
     await context?.complete(page);
