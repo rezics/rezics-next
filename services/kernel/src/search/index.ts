@@ -14,6 +14,10 @@ export type {
   DiscoveryHit,
   DiscoveryKey,
   DiscoveryKindMetadata,
+  DiscoveryMetadataKind,
+  DiscoveryMetadataProducer,
+  DiscoveryMetadataProducers,
+  DiscoveryMetadataRecord,
   DiscoveryOwnerAdapter,
   DiscoveryOwnerAdapterSlots,
   DiscoveryProducerEntry,
@@ -41,3 +45,4 @@ export type {
 } from './discovery-api.ts';
 export type { DiscoveryFilterDocument } from '@rezics/filter';
 export type { SerializableContinuation, Source, SourcePage } from './discovery-source-contract.ts';
+export type { SubjectListingSource, SubjectSource } from './source.ts';

@@ -5,7 +5,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import type { Access } from '../../src/request/access.ts';
 import { ProblemError } from '../../src/http/problem.ts';
-import { createDefaultDiscoverySearch } from '../../src/search/index.ts';
+import { createDefaultDiscoverySearch } from '../../src/search/default-discovery.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { createDiscoveryRegistry } from '../../src/search/discovery-registry.ts';
 import { admitDiscoveryRequest, type MixedDiscoveryRequest } from '../../src/search/discovery-request.ts';
