@@ -18,18 +18,21 @@ import { defaultReader } from '../src/subject/reader';
 
 const input = literaryGrainExample();
 const native = input.windows[0]!;
-test('released ancestry and one exact native window retain direction, strings, sources and opaque continuation', () => {
+test('released ancestry and every supplied native window retain exact direction, evidence and continuation', () => {
   expect(literaryGrain('bf:Instance', literaryDefinitions)).toBe('edition');
   expect(literaryGrain('schema:BookSeries', literaryDefinitions)).toBe('series');
   expect(literaryGrain('unreleased:Book', literaryDefinitions)).toBeUndefined();
   expect(
-    literaryWindows([native, { ...native, node: 'second' }], literaryDefinitions, 'second').map((w) => w.node),
-  ).toEqual(['second']);
+    literaryWindows([native, { ...native, node: 'second' }], literaryDefinitions).map((w) => w.node),
+  ).toEqual([native.node, 'second']);
   const page = literaryWindow(native, literaryIds.series, 'ja', defaultReader);
   expect(page.state).toBe('ready');
   expect(page.rows.map((row) => row.id)).toEqual([literaryIds.member]);
   expect(page.rows[0]!.statement.qualifiers[0]!.value.content).toBe('上巻・02a');
   expect(page.rows[0]!.statement.references[0]!.parts[0]!.value.content).toBe('https://bgm.tv/subject/1');
+  const duplicate = literaryWindow({ ...native, rows: [...native.rows, ...native.rows] }, literaryIds.series, 'ja', defaultReader);
+  expect(duplicate.rows.map((row) => row.statement.id)).toEqual([page.rows[0]!.statement.id, page.rows[0]!.statement.id]);
+  expect(new Set(duplicate.rows.map((row) => row.key)).size).toBe(2);
   const back = literaryAddress({
     id: literaryIds.series,
     label: 'Series',

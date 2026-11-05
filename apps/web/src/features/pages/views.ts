@@ -91,7 +91,7 @@ export function profileRelationWindows(page: {
   account?: { id: string; handle: string } | undefined;
   document: unknown;
   reads: Record<string, Read>;
-}): ProfileRelationWindow[] {
+}, options: { includeAliases?: boolean } = {}): ProfileRelationWindow[] {
   const document = page.document as CompositionDocument;
   const plan = planReads(platformRegistry, document, {
     subject: page.subject,
@@ -100,32 +100,36 @@ export function profileRelationWindows(page: {
     ...(page.continuation ? { continuation: page.continuation } : {}),
   });
   const pages: ProfileRelationWindow[] = [];
-  const seen = new Set<string>();
+  const seenNodes = new Set<string>();
+  const seenReads = new Set<string>();
+  const continuationRead = page.continuation ? plan.nodes[page.continuation.node] : undefined;
   for (const node of walk(document.content)) {
     const property = typeof node.props.property === 'string' ? node.props.property : undefined;
     if (!property) continue;
     const nodeId = typeof node.props.id === 'string' ? node.props.id : undefined;
-    const key = nodeId === undefined ? undefined : plan.nodes[nodeId];
-    if (key === undefined) continue;
+    if (nodeId === undefined || seenNodes.has(nodeId)) continue;
+    seenNodes.add(nodeId);
+    const key = plan.nodes[nodeId];
+    if (key === undefined || (!options.includeAliases && seenReads.has(key))) continue;
+    seenReads.add(key);
     const planned = plan.reads[key];
     const result = page.reads[key];
     if (!planned || (planned.kind !== 'links' && planned.kind !== 'relations')) continue;
-    const body = result?.status === 200 && isRecord(result.body) ? result.body : undefined;
+    // Identical native reads may share a plan key. A cursor supplied for one node belongs only to that node.
+    const borrowedContinuation = page.continuation !== undefined && nodeId !== page.continuation.node && key === continuationRead;
+    const body = !borrowedContinuation && result?.status === 200 && isRecord(result.body) ? result.body : undefined;
     const direction = planned.kind === 'links' ? 'inverse' : planned.kind === 'relations' ? 'forward' : undefined;
     const rows = body ? (planned.kind === 'links' ? body.links : body.relations) : undefined;
     const valid = Array.isArray(rows);
     const admittedRows = valid ? rows : [];
     if (!direction) continue;
-    const identity = key;
-    if (seen.has(identity)) continue;
-    seen.add(identity);
     const next = body && typeof body.next === 'string' ? body.next : undefined;
     const nativeCount =
       body && isRecord(body.count) && typeof body.count.value === 'number'
         ? countFromLinks({ value: body.count.value, exact: body.count.exact === true }, admittedRows.length)
         : undefined;
     pages.push({
-      node: typeof node.props.id === 'string' ? node.props.id : '',
+      node: nodeId,
       limit: planned.limit,
       ...(body && isRecord(body.freshness) && typeof body.freshness.caught_up === 'boolean'
         ? { caughtUp: body.freshness.caught_up }
@@ -133,7 +137,7 @@ export function profileRelationWindows(page: {
       property,
       direction,
       rows: admittedRows,
-      ...(result?.status !== undefined ? { status: result.status } : {}),
+      ...(borrowedContinuation ? { status: 409 } : result?.status !== undefined ? { status: result.status } : {}),
       valid,
       ...(next ? { next } : {}),
       complete: !!body && valid && body.next === null,
