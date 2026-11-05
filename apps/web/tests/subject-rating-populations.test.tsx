@@ -223,7 +223,7 @@ function signalServerFn() {
 mock.module('@tanstack/react-start', () => ({ ...start, createServerFn: signalServerFn }));
 mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => bffRequest }));
 mock.module('cloudflare:workers', () => ({ env: sessionEnv }));
-mock.module('../src/kernel/client', () => ({ kernelClient: () => native }));
+mock.module('../src/kernel/client', () => ({ kernelClient: () => native, requestLocale: () => 'en' }));
 mock.module('../src/settings/preferences', () => ({
   loadSettingsPage: async () => ({
     signedIn: true,
