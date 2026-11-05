@@ -202,8 +202,7 @@ test('default local adapter keeps character kinds separate from each anime appea
       },
     );
     const selectedNames = kindResult.proposals.flatMap((command) =>
-      command.op === 'propose' &&
-      ['schema:name', 'schema:alternateName'].includes(command.statement.property.id)
+      command.op === 'propose' && ['schema:name', 'schema:alternateName'].includes(command.statement.property.id)
         ? [command.statement.value]
         : [],
     );

@@ -227,7 +227,8 @@ test('selected anime character vocabulary is separately adopted and refreshed th
     const secondWork = subjectStatements(await publicClient.readSubject(workTwoId));
     const character = subjectStatements(await publicClient.readSubject(characterId));
     expect(character['schema:name']?.map((statement) => statement.value.content)).toContainEqual({
-      language: 'und', text: 'Okabe Rintaro',
+      language: 'und',
+      text: 'Okabe Rintaro',
     });
     const firstAppearance = firstWork['schema:character']?.find((statement) => statement.value.content === characterId);
     const secondAppearance = secondWork['schema:character']?.find(

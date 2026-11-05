@@ -21,9 +21,13 @@ const officialCharacter = JSON.parse(
   readFileSync(new URL('../../../specs/fixtures/imports/bangumi/character-api-names.json', import.meta.url), 'utf8'),
 ) as Record<string, unknown>;
 const api = (record: Record<string, unknown> = officialCharacter) =>
-  convertCrossMediaEntity({ external_id: 'character:1', record_revision: null, record }, {
-    source: 'bangumi_cross_media', subjectId: characterId,
-  });
+  convertCrossMediaEntity(
+    { external_id: 'character:1', record_revision: null, record },
+    {
+      source: 'bangumi_cross_media',
+      subjectId: characterId,
+    },
+  );
 const values = (output: ReturnType<typeof convert>, property: string) =>
   facts(output, property).map(({ value }) => value);
 const fresh = () => structuredClone(officialCharacter);
@@ -146,8 +150,16 @@ test('malformed alias groups preserve usable names and summary, while a removed 
 
 test('official parsed CharacterDetail names use only exact labelled API aliases and released cited statements', () => {
   const output = api();
-  expect(output.normalizedRecord).toMatchObject({ id: 1, type: 1, infobox_source: { kind: 'parsed', sha256: expect.any(String) },
-    api_name_evidence: { name: { status: 'admitted' }, name_cn: { status: 'null' }, type: { status: 'admitted', value: 1 } } });
+  expect(output.normalizedRecord).toMatchObject({
+    id: 1,
+    type: 1,
+    infobox_source: { kind: 'parsed', sha256: expect.any(String) },
+    api_name_evidence: {
+      name: { status: 'admitted' },
+      name_cn: { status: 'null' },
+      type: { status: 'admitted', value: 1 },
+    },
+  });
   expect(values(output, 'schema:name')).toEqual([
     { language: 'und', text: 'ルルーシュ・ランペルージ' },
     { language: 'zh-Hans', text: '鲁路修·兰佩路基' },
@@ -157,9 +169,12 @@ test('official parsed CharacterDetail names use only exact labelled API aliases 
     { language: 'zh', text: '鲁路修·冯·布里塔尼亚' },
     { language: 'ja', text: 'ルルーシュ・ヴィ・ブリタニア' },
   ]);
-  expect(output.diagnostics.map(({ code }) => code)).toEqual(expect.arrayContaining(['unlabelled_alias', 'unsupported_alias_label']));
-  for (const command of output.proposals.filter((item) =>
-    item.op === 'propose' && ['schema:name', 'schema:alternateName'].includes(item.statement.property.id))) {
+  expect(output.diagnostics.map(({ code }) => code)).toEqual(
+    expect.arrayContaining(['unlabelled_alias', 'unsupported_alias_label']),
+  );
+  for (const command of output.proposals.filter(
+    (item) => item.op === 'propose' && ['schema:name', 'schema:alternateName'].includes(item.statement.property.id),
+  )) {
     if (command.op !== 'propose') continue;
     expect(checkStatementInput(command.statement, bundledRelease).violations).toEqual([]);
     expect(command.statement.references?.[0]?.parts).toContainEqual({
@@ -183,9 +198,7 @@ test('parsed API conflicts, malformed rows, overflow and source refresh retain b
   const conflictingChinese = fresh();
   conflictingChinese.name_cn = 'A different Chinese name';
   const conflict = api(conflictingChinese);
-  expect(values(conflict, 'schema:name')).toEqual([
-    { language: 'und', text: 'ルルーシュ・ランペルージ' },
-  ]);
+  expect(values(conflict, 'schema:name')).toEqual([{ language: 'und', text: 'ルルーシュ・ランペルージ' }]);
   expect(conflict.diagnostics).toContainEqual({ pointer: '/infobox/简体中文名', code: 'conflicting_source_name' });
   expect(values(conflict, 'schema:alternateName')).toHaveLength(3);
 
@@ -204,9 +217,7 @@ test('parsed API conflicts, malformed rows, overflow and source refresh retain b
     value: 'A conflicting parsed Chinese name',
   });
   const duplicateResult = api(duplicateName);
-  expect(values(duplicateResult, 'schema:name')).toEqual([
-    { language: 'und', text: 'ルルーシュ・ランペルージ' },
-  ]);
+  expect(values(duplicateResult, 'schema:name')).toEqual([{ language: 'und', text: 'ルルーシュ・ランペルージ' }]);
   expect(duplicateResult.diagnostics.map(({ code }) => code)).toEqual(
     expect.arrayContaining(['duplicate_source_name', 'ambiguous_source_name', 'conflicting_source_name']),
   );
@@ -248,7 +259,9 @@ test('parsed API conflicts, malformed rows, overflow and source refresh retain b
   expect(() => api(wrongIdentity)).toThrow();
 
   const changed = fresh();
-  const changedAlias = (fields(changed)[1]!.value as { k?: string; v: string }[]).find((alias) => alias.k === '英文名')!;
+  const changedAlias = (fields(changed)[1]!.value as { k?: string; v: string }[]).find(
+    (alias) => alias.k === '英文名',
+  )!;
   changedAlias.v = 'Lelouch Lamperouge Revised';
   expect(api(changed).digest).not.toBe(baseline.digest);
   const absentNameCn = { ...officialCharacter };

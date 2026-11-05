@@ -82,7 +82,9 @@ test('ordinary selected Character registration converts captured CharacterDetail
       value: { type: 'value', content: 'https://bgm.tv/character/1' },
     });
   }
-  expect(result.diagnostics.map(({ code }) => code)).toEqual(expect.arrayContaining(['unlabelled_alias', 'unsupported_alias_label']));
+  expect(result.diagnostics.map(({ code }) => code)).toEqual(
+    expect.arrayContaining(['unlabelled_alias', 'unsupported_alias_label']),
+  );
 });
 
 test('Bangumi character facts retain source identities, concepts, citation, and unsupported order diagnostics', () => {

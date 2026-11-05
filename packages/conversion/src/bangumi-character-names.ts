@@ -43,11 +43,7 @@ function usableName(value: string): boolean {
   for (const _ of value) {
     if (++codepoints > bangumiCharacterNameLimits.maxScalarCodepoints) return false;
   }
-  return (
-    value.isWellFormed() &&
-    value.trim().length > 0 &&
-    !/[\u0000-\u001f\u007f]/u.test(value)
-  );
+  return value.isWellFormed() && value.trim().length > 0 && !/[\u0000-\u001f\u007f]/u.test(value);
 }
 
 function splitListedAliases(value: string, remaining: number): string[] | undefined {
@@ -110,19 +106,33 @@ export function parseBangumiCharacterInfoboxNames(value: unknown): BangumiCharac
     const addSourceScalar = (kind: string, raw: unknown): boolean => {
       if (typeof raw !== 'string') return addEvidence([kind, typeof raw]);
       if (raw.length > bangumiCharacterNameLimits.maxInfoboxBytes) {
-        addEvidence([kind, 'byte-limit', raw.length, fingerprint(raw.slice(0, bangumiCharacterNameLimits.maxScalarBytes))]);
+        addEvidence([
+          kind,
+          'byte-limit',
+          raw.length,
+          fingerprint(raw.slice(0, bangumiCharacterNameLimits.maxScalarBytes)),
+        ]);
         return false;
       }
       const bytes = scalarBytes(raw);
       if (raw.length > bangumiCharacterNameLimits.maxScalarBytes) {
         omittedSourceBytes += bytes;
-        return addEvidence([kind, 'value-limit', raw.length, fingerprint(raw.slice(0, bangumiCharacterNameLimits.maxScalarBytes))]) &&
-          scalarBytes(JSON.stringify(sourceEvidence)) + omittedSourceBytes <= bangumiCharacterNameLimits.maxInfoboxBytes;
+        return (
+          addEvidence([
+            kind,
+            'value-limit',
+            raw.length,
+            fingerprint(raw.slice(0, bangumiCharacterNameLimits.maxScalarBytes)),
+          ]) &&
+          scalarBytes(JSON.stringify(sourceEvidence)) + omittedSourceBytes <= bangumiCharacterNameLimits.maxInfoboxBytes
+        );
       }
       if (bytes > bangumiCharacterNameLimits.maxScalarBytes) {
         omittedSourceBytes += bytes;
-        return addEvidence([kind, 'value-limit', bytes, fingerprint(raw)]) &&
-          scalarBytes(JSON.stringify(sourceEvidence)) + omittedSourceBytes <= bangumiCharacterNameLimits.maxInfoboxBytes;
+        return (
+          addEvidence([kind, 'value-limit', bytes, fingerprint(raw)]) &&
+          scalarBytes(JSON.stringify(sourceEvidence)) + omittedSourceBytes <= bangumiCharacterNameLimits.maxInfoboxBytes
+        );
       }
       return addEvidence([kind, raw]);
     };
@@ -144,8 +154,11 @@ export function parseBangumiCharacterInfoboxNames(value: unknown): BangumiCharac
       const keyDescriptor = Object.getOwnPropertyDescriptor(field, 'key');
       const valueDescriptor = Object.getOwnPropertyDescriptor(field, 'value');
       if (
-        !keyDescriptor || !('value' in keyDescriptor) || typeof keyDescriptor.value !== 'string' ||
-        !valueDescriptor || !('value' in valueDescriptor)
+        !keyDescriptor ||
+        !('value' in keyDescriptor) ||
+        typeof keyDescriptor.value !== 'string' ||
+        !valueDescriptor ||
+        !('value' in valueDescriptor)
       ) {
         if (!addEvidence(['field', index, 'malformed'])) overLimit = true;
         addDiagnostic(`/infobox/${index}`, 'malformed_infobox_field');
@@ -212,11 +225,14 @@ export function parseBangumiCharacterInfoboxNames(value: unknown): BangumiCharac
         const textDescriptor = Object.getOwnPropertyDescriptor(alias, 'v');
         const label = labelDescriptor && 'value' in labelDescriptor ? labelDescriptor.value : undefined;
         const aliasText = textDescriptor && 'value' in textDescriptor ? textDescriptor.value : undefined;
-        const labelEvidence = typeof label === 'string'
-          ? label.length <= 64 && label.isWellFormed() && !/[\u0000-\u001f\u007f]/u.test(label)
-            ? label
-            : `${label.length}:${fingerprint(label.slice(0, 64))}`
-          : label === undefined ? 'missing' : typeof label;
+        const labelEvidence =
+          typeof label === 'string'
+            ? label.length <= 64 && label.isWellFormed() && !/[\u0000-\u001f\u007f]/u.test(label)
+              ? label
+              : `${label.length}:${fingerprint(label.slice(0, 64))}`
+            : label === undefined
+              ? 'missing'
+              : typeof label;
         if (!addEvidence(['alias', aliasIndex, labelEvidence, aliasText === undefined ? 'missing' : typeof aliasText]))
           overLimit = true;
         if (overLimit) break;

@@ -137,9 +137,15 @@ test('default selected Bangumi character names publish, retain adoption, and ref
         publicClient,
       });
     }
-    const capturedApiNameCommands = () => journal.acknowledgedCommands().filter(({ command }) =>
-      command.source.external_id === 'character:1' && command.op === 'propose' &&
-      ['schema:name', 'schema:alternateName'].includes(command.statement.property.id));
+    const capturedApiNameCommands = () =>
+      journal
+        .acknowledgedCommands()
+        .filter(
+          ({ command }) =>
+            command.source.external_id === 'character:1' &&
+            command.op === 'propose' &&
+            ['schema:name', 'schema:alternateName'].includes(command.statement.property.id),
+        );
     const first = await run(tables());
     const character = first.result.readings.find((row) => row.externalId === characterExternalId);
     const performer = first.result.readings.find((row) => row.externalId === performerExternalId);
@@ -262,7 +268,9 @@ test('default selected Bangumi character names publish, retain adoption, and ref
     expect(alternates).toContainEqual({ language: 'en', text: 'Chris Makise' });
 
     const apiFirst = await run(parsedCharacterTables());
-    expect(apiFirst.plan.entities.bangumi.find((record) => record.key === 'character:1')?.payload).toEqual(officialCharacter);
+    expect(apiFirst.plan.entities.bangumi.find((record) => record.key === 'character:1')?.payload).toEqual(
+      officialCharacter,
+    );
     const apiCharacterId = idOf(apiFirst.result.readings.find((row) => row.externalId === 'character:1')!);
     expect(apiCharacterId).toBeTruthy();
     await publish(apiFirst);
@@ -286,7 +294,10 @@ test('default selected Bangumi character names publish, retain adoption, and ref
       ]),
     );
     expect(apiPublic.statements['schema:alternateName']?.map(valueContent)).not.toEqual(
-      expect.arrayContaining([{ language: 'und', text: 'L.L.' }, { language: 'en', text: 'Lelouch Vie Britannia' }]),
+      expect.arrayContaining([
+        { language: 'und', text: 'L.L.' },
+        { language: 'en', text: 'Lelouch Vie Britannia' },
+      ]),
     );
     const sealedDigests = capturedApiNameCommands().map(({ command, commandDigest }) => [command.key, commandDigest]);
     expect(sealedDigests).toHaveLength(5);
@@ -295,7 +306,9 @@ test('default selected Bangumi character names publish, retain adoption, and ref
     const apiReplay = await run(parsedCharacterTables());
     expect(apiReplay.result.runs.bangumi?.counts.unchanged).toBeGreaterThan(0);
     expect(idOf(apiReplay.result.readings.find((row) => row.externalId === 'character:1')!)).toBe(apiCharacterId);
-    expect(capturedApiNameCommands().map(({ command, commandDigest }) => [command.key, commandDigest])).toEqual(sealedDigests);
+    expect(capturedApiNameCommands().map(({ command, commandDigest }) => [command.key, commandDigest])).toEqual(
+      sealedDigests,
+    );
   } finally {
     journal.close();
     await runtime.close();
