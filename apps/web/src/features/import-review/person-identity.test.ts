@@ -3,6 +3,8 @@ import { createKernelClient, reviewedPersonMergeInput, type ReviewedPersonRead }
 import {
   personComparison,
   readPersonComparison,
+  readPersonPublication,
+  personReviewPairInput,
   mergePersonComparison,
   type PersonReviewPair,
 } from './person-identity';
@@ -109,4 +111,53 @@ test('a current Person page reflects withdrawn and conflicting identifiers even 
     statement('s9'),
   ] as ReviewedPersonRead['subject']['statements'][string];
   expect(personCrossSourceIdentity(read)).toBe('conflicting');
+  read.subject.statements['wdt:P3180']![1]!.rank = 'deprecated';
+  expect(personCrossSourceIdentity(read)).toBe('current');
+});
+
+test('original showcase claims enable admission; publication waits for the native job and two independent public reads', async () => {
+  const pair = personReviewPairInput(originals.map((o) => ({ ...o, source: `${o.source}_cross_media` })));
+  const native = reads();
+  native.forEach((read, index) => { read.reviewedIdentity!.source = pair[index]!.source; });
+  const seen: Request[] = [];
+  let done = false;
+  let withdrawn = false;
+  let ineligible = false;
+  const operation = uuid(100);
+  const client = createKernelClient('https://kernel.test', { fetch: (async (input, init) => {
+    const request = new Request(input, init);
+    seen.push(request);
+    const url = new URL(request.url);
+    if (url.pathname.includes('subjectIdentityOperations'))
+      return Response.json({ operation: done
+        ? { id: operation, done: true, result: { survivor: uuid(7), redirected: uuid(8), revision: 10 } }
+        : { id: operation, done: false } });
+    if (request.method === 'POST') return Response.json({ operation: { id: operation } }, { status: 202 });
+    if (url.searchParams.has('reviewIdentitySource')) {
+      const read = structuredClone(native[url.pathname.endsWith(uuid(8)) ? 0 : 1]!);
+      if (ineligible) read.reviewedIdentity = null;
+      return Response.json(read);
+    }
+    const read = structuredClone(native[1]);
+    delete read.reviewedIdentity;
+    read.subject.statements = {
+      'wdt:P6298': [{ value: { type: 'value', content: '8' } }],
+      ...(!withdrawn ? { 'wdt:P3180': [{ value: { type: 'value', content: 's7' } }] } : {}),
+    } as ReviewedPersonRead['subject']['statements'];
+    return Response.json(read);
+  }) as typeof fetch });
+  const comparison = await readPersonComparison(client, 'Bearer reviewer', pair);
+  if (!comparison.ok || !comparison.merge) throw new Error('Missing showcase comparison');
+  const command = { body: comparison.merge, key: uuid(99) };
+  expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({ ok: true, admission: { operation: { id: operation } } });
+  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation })).toEqual({ ok: true, state: 'pending' });
+  expect(seen).toHaveLength(4);
+  done = true;
+  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation })).toMatchObject({ ok: true, state: 'published', read: { subject: { id: uuid(7) } } });
+  expect(seen.slice(-2).map((request) => new URL(request.url).pathname)).toEqual(pair.map((o) => `/v1/subjects/${o.subject}`));
+  expect(seen.slice(-2).every((request) => !request.headers.has('authorization'))).toBe(true);
+  withdrawn = true;
+  expect(await readPersonPublication(client, 'Bearer reviewer', { command, operation })).toEqual({ ok: true, state: 'unconfirmed' });
+  ineligible = true;
+  expect(await readPersonComparison(client, 'Bearer reviewer', pair)).toMatchObject({ ok: true, merge: null });
 });

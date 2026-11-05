@@ -704,8 +704,27 @@ export function createImportTransport(options: ImportTransportOptions) {
   // These use the same verified credentials, bounded fetch, session and native errors as imports.
   async function readReviewedSubject(id: string, signal?: AbortSignal): Promise<ReviewedSubjectRead> {
     mediaId(id);
-    const reply = await response(() => client.subjects({ id }).get(fetchOptions(signal)), 200, signal);
-    return reply.body as ReviewedSubjectRead;
+    const visited = new Set<string>();
+    let current = id;
+    while (!visited.has(current)) {
+      visited.add(current);
+      const reply = await response(
+        () => client.subjects({ id: current }).get({ fetch: { signal, redirect: 'manual' } }),
+        [200, 308],
+        signal,
+      );
+      if (reply.status === 200) {
+        const read = reply.body as ReviewedSubjectRead;
+        ensure(read?.subject?.id === current);
+        return read;
+      }
+      const redirected = reply.body as { redirect?: { from?: unknown; to?: unknown } };
+      ensure(redirected.redirect?.from === current && typeof redirected.redirect.to === 'string');
+      const target = redirected.redirect!.to as string;
+      mediaId(target);
+      current = target;
+    }
+    throw new TypeError('Cyclic reviewed subject redirect');
   }
   async function readReviewedPersonIdentity(
     id: string,

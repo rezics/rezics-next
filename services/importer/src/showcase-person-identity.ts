@@ -111,9 +111,10 @@ export function personIdentityForSource(
 export function observePersonIdentity(identity: PersonIdentity, read: ReviewedSubjectRead): PersonIdentityObservation {
   const subject = read.subject;
   if (subject.type !== 'schema:Person') return { state: 'wrong_type', identity };
-  const values = (subject.statements[identity.property] ?? []).flatMap((statement) =>
-    statement.value.type === 'value' && typeof statement.value.content === 'string' ? [statement.value.content] : [],
-  );
+  const selected = (subject.statements[identity.property] ?? []).filter((statement) => statement.rank !== 'deprecated');
+  if (selected.some((statement) => statement.value.type !== 'value' || typeof statement.value.content !== 'string'))
+    return { state: 'conflicting', identity };
+  const values = selected.map((statement) => statement.value.content as string);
   if (!values.length) return { state: 'missing', identity };
   const unique = new Set(values);
   if (unique.size !== 1 || !unique.has(identity.value)) return { state: 'conflicting', identity };

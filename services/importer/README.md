@@ -63,7 +63,7 @@ Bangumi PersonDetail fallback reads only selected actual Persons missing the arc
 
 ## Native execution boundary
 
-Kernel owns runtime, authorization, command execution and native reads. Importer does not add privileged writes, acceptance shortcuts or SQL adoption. Reviewed Person merging uses the generated asynchronous admission contract: exact paired original identities prepare explicit confirmation; HTTP 202 admission starts separate publication and current public readback. HTTP 200 or an application reread is not evidence of completion. Until producer read/query/merge/error types and independent publication routes are released together, retain original source bindings and sealed records and withhold dependent credits.
+Kernel owns runtime, authorization, command execution and native reads. Importer does not add privileged writes, acceptance shortcuts or SQL adoption. Decision: review exact original `bangumi_cross_media`/`vndb_cross_media` claims through the generated asynchronous merge contract; retain sealed intent and original bindings while observing native operation completion and separate public canonical reads. HTTP 202 is admission; HTTP 200 merge or an application reread is not completion. Current Person identifiers exclude deprecated rows and require every remaining value to agree. Native redirects resolve reads on the same API; manifest assertions and dependent credits keep original source ownership. Credits wait for current canonical delivery, not another binding or publisher.
 
 ## Deletion
 

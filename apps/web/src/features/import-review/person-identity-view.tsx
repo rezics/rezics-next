@@ -122,7 +122,7 @@ export function ProviderPersonReview({
                   required
                   maxLength={255}
                   pattern={source === 'bangumi' ? 'person:[1-9][0-9]*' : 's[1-9][0-9]*'}
-                  placeholder={source === 'bangumi' ? 'person:8' : 's7'}
+                  placeholder={source === 'bangumi' ? 'person:1916' : 's224'}
                 />
               </fieldset>
             ))}
