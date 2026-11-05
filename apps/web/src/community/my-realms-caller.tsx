@@ -1011,7 +1011,6 @@ export function MyRealmsCallerHost({
     browserHydration.getSnapshot,
     browserHydration.getServerSnapshot,
   );
-  const query = useQuery({ ...myRealmsQuery(cursor, caller), enabled: false });
   useSyncExternalStore(caller.subscribe, caller.getRevision, caller.getRevision);
   const address = {
     target: normalizedTarget(location.pathname),
@@ -1047,6 +1046,32 @@ export function MyRealmsCallerHost({
     );
   if (hydrated && caller.adoptionPending()) return null;
   if (hydrated && (session.state !== 'signed-in' || !caller.isCurrent())) throw new Error('Realm list is unavailable');
+  return (
+    <MyRealmsAdmittedPage
+      caller={caller}
+      initial={initial}
+      cursor={cursor}
+      onMove={onMove}
+      focusContinuation={focusContinuation}
+    />
+  );
+}
+
+/** Retired cached route matches must not recreate the target Query during caller capture. */
+function MyRealmsAdmittedPage({
+  caller,
+  initial,
+  cursor,
+  onMove,
+  focusContinuation,
+}: {
+  caller: MyRealmsCaller;
+  initial: { page: MyRealmsPage; visit: MyRealmsVisit };
+  cursor: string | undefined;
+  onMove: (kind: MyRealmsMovement, cursor: string | null, trigger?: HTMLElement) => boolean;
+  focusContinuation: (() => boolean) | undefined;
+}) {
+  const query = useQuery({ ...myRealmsQuery(cursor, caller), enabled: false });
   if (query.isError) throw query.error;
   const page = caller.acceptsQueryData(query.data)
     ? query.data

@@ -80,7 +80,7 @@ Sparse and empty terminal windows keep Previous and First. Coordinates stay opaq
 ceiling; no offset or predecessor is inferred. Only the current native window of at most 20 rows is displayed.
 
 The source transfers coordinates across the movement's caller-host remount while retiring each old address and
-exact Query normally. Reentrant activation cannot replace a staged target. Session success (including equal-data
+exact Query normally. Retired route matches do not recreate a disabled target Query while a new caller captures it. Reentrant activation cannot replace a staged target. Session success (including equal-data
 replacement), error/removal, credentials, locale, source, QueryClient and actual visit replacement clear coordinates
 and focus; ordinary query observation does not. Leaving the named route clears even a failed target. Late completion
 and cleanup cannot alter a new owner's history. No additional session observer, private storage or entry authority

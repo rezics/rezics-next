@@ -1,3 +1,5 @@
+import type { MyRealmsPage } from '../../community/space';
+import type { MyRealmsVisit } from '../../community/my-realms-caller';
 import { requirePrivatePageAccess } from '../../session/guard';
 import { loadPrivatePage } from '../../session/private-page';
 import { pageHead } from '../../shell/head';
@@ -21,7 +23,7 @@ export const Route = createFileRoute('/realms/')({
     typeof search.cursor === 'string' && search.cursor ? { cursor: search.cursor } : {},
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
   onLeave: ({ context }) => retireMyRealmsNavigation(context.queryClient),
-  loader: async ({ context, deps, abortController }) =>
+  loader: async ({ context, deps, abortController }): Promise<{ page: MyRealmsPage; visit: MyRealmsVisit }> =>
     loadPrivatePage(context.sessionAccess, async () => {
       const caller = await captureMyRealmsCaller(context.queryClient, {
         cursor: deps.cursor,
@@ -85,7 +87,7 @@ function MyRealmsErrorPage({ error, reset }: { error: unknown; reset?: () => voi
 
 function MyRealms() {
   useMyRealmsInventoryVisit();
-  const initial = Route.useLoaderData()!;
+  const initial = Route.useLoaderData();
   const { cursor } = Route.useSearch();
   return <MyRealmsCallerHost key={initial.visit.id} initial={initial} cursor={cursor} />;
 }
