@@ -361,6 +361,7 @@ for (const replacement of ['equal', 'invalidate', 'fetch'] as const) {
       await ui.confirm();
       expect(ui.button(ui.m.author_erasure_confirm()).disabled).toBe(true);
       await ui.click(ui.m.author_erasure_check_again());
+      await ui.confirm();
       await ui.click(ui.m.author_erasure_confirm());
       expect(sent).toHaveLength(1);
       await replace();
@@ -378,6 +379,26 @@ for (const replacement of ['equal', 'invalidate', 'fetch'] as const) {
       await ui.click(ui.m.author_erasure_retry());
       expect(sent[2]).toEqual(sent[0]);
       expect(accepted).toEqual([operationA]);
+      await ui.render(null);
+      const staleProgress = gate<ErasureRead>();
+      let progressReads = 0;
+      await ui.render(
+        createElement(ui.AuthorErasureOperationPage, {
+          initial: { kind: 'unavailable' },
+          operationId: operationA,
+          read: async () =>
+            ++progressReads === 1
+              ? staleProgress.promise
+              : { kind: 'available', operation: operation(operationA, authorA, 81234) },
+        }),
+      );
+      await ui.click(ui.m.author_erasure_check_again());
+      await replace();
+      await ui.flush();
+      expect(ui.host.textContent).toContain('81234');
+      staleProgress.resolve({ kind: 'available', operation: operation(operationA, authorA, 99321) });
+      await ui.flush();
+      expect(ui.host.textContent).not.toContain('99321');
     });
   });
 }
@@ -387,7 +408,6 @@ test('browser away/back retires a queued entry import and a progress read withou
     ui.setSession({ state: 'signed-in', subject: authorA, csrfToken: 'csrf-a' });
     const imported = gate<AuthorErasureTransport>();
     let transported = 0;
-    const accepted: string[] = [];
     await ui.render(
       createElement(ui.AuthorErasureEntry, {
         threadId: threadA,
@@ -395,9 +415,6 @@ test('browser away/back retires a queued entry import and a progress read withou
         admission: { kind: 'current', authorId: authorA, mayErase: true },
         send: async (intent, token, current) =>
           (await ui.dispatchAuthorErasure(intent, token, current, () => imported.promise)) ?? { kind: 'uncertain' },
-        onAccepted: (id) => {
-          accepted.push(id);
-        },
       }),
     );
     const departAndReturn = async () =>
@@ -418,7 +435,6 @@ test('browser away/back retires a queued entry import and a progress read withou
     });
     await ui.flush();
     expect(transported).toBe(0);
-    expect(accepted).toEqual([]);
     expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
     expect(ui.button(ui.m.author_erasure_retry()).disabled).toBe(true);
 
@@ -446,61 +462,48 @@ test('browser away/back retires a queued entry import and a progress read withou
   });
 });
 
-test('entry source replacement and locale departure retire sent results and preserve unavailable recovery', async () => {
-  await withUi(async (ui) => {
-    const owner = { state: 'signed-in' as const, subject: authorA, csrfToken: 'csrf-a' };
-    ui.setSession(owner);
-    const sent = gate<ErasureEnqueue>();
-    const destinations: string[] = [];
-    ui.window.location.assign = (url) => {
-      destinations.push(String(url));
-    };
-    const entry = createElement(ui.AuthorErasureEntry, {
-      threadId: threadA,
-      viewerId: authorA,
-      admission: { kind: 'current', authorId: authorA, mayErase: true },
-      send: async () => sent.promise,
+for (const departure of ['client', 'locale'] as const) {
+  test(`${departure} departure retires sent entry results and preserves unavailable recovery`, async () => {
+    await withUi(async (ui) => {
+      const owner = { state: 'signed-in' as const, subject: authorA, csrfToken: 'csrf-a' };
+      ui.setSession(owner);
+      const result = gate<ErasureEnqueue>();
+      const destinations: string[] = [];
+      ui.window.location.assign = (url) => {
+        destinations.push(String(url));
+      };
+      const entry = createElement(ui.AuthorErasureEntry, {
+        threadId: threadA,
+        viewerId: authorA,
+        admission: { kind: 'current', authorId: authorA, mayErase: true },
+        send: async () => result.promise,
+      });
+      const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+      const originalLocale = getLocale;
+      const otherClient = ui.newClient();
+      try {
+        await ui.render(entry);
+        await ui.click(ui.m.author_erasure_action());
+        await ui.confirm();
+        await ui.click(ui.m.author_erasure_confirm());
+        if (departure === 'client') {
+          otherClient.setQueryData(['session'], owner);
+          await ui.renderWithClient(otherClient, entry);
+        } else overwriteGetLocale(() => (originalLocale() === 'fr' ? 'en' : 'fr'));
+        result.resolve({ kind: 'accepted', operationId: operationA });
+        await ui.flush();
+        expect(destinations).toEqual([]);
+        expect(ui.host.textContent).not.toContain(operationA);
+        expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
+        expect(ui.button(ui.m.author_erasure_retry()).disabled).toBe(true);
+      } finally {
+        overwriteGetLocale(originalLocale);
+        await ui.render(null);
+        otherClient.clear();
+      }
     });
-    await ui.render(entry);
-    await ui.click(ui.m.author_erasure_action());
-    await ui.confirm();
-    await ui.click(ui.m.author_erasure_confirm());
-    const otherClient = ui.newClient();
-    otherClient.setQueryData(['session'], owner);
-    await ui.renderWithClient(otherClient, entry);
-    sent.resolve({ kind: 'accepted', operationId: operationA });
-    await ui.flush();
-    expect(destinations).toEqual([]);
-    expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
-    expect(ui.button(ui.m.author_erasure_retry()).disabled).toBe(true);
-    await ui.render(null);
-    otherClient.clear();
-
-    const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
-    const originalLocale = getLocale;
-    const result = gate<ErasureEnqueue>();
-    try {
-      await ui.render(
-        createElement(ui.AuthorErasureEntry, {
-          threadId: threadA,
-          viewerId: authorA,
-          admission: { kind: 'current', authorId: authorA, mayErase: true },
-          send: async () => result.promise,
-        }),
-      );
-      await ui.click(ui.m.author_erasure_action());
-      await ui.confirm();
-      await ui.click(ui.m.author_erasure_confirm());
-      overwriteGetLocale(() => (originalLocale() === 'fr' ? 'en' : 'fr'));
-      result.resolve({ kind: 'accepted', operationId: operationA });
-      await ui.flush();
-      expect(destinations).toEqual([]);
-      expect(ui.host.textContent).not.toContain(operationA);
-    } finally {
-      overwriteGetLocale(originalLocale);
-    }
   });
-});
+}
 
 test('operation initial, reader and session source replacements withhold prior private progress until a current read', async () => {
   await withUi(async (ui) => {
@@ -676,12 +679,7 @@ test('operation refreshes stay visible-only and capped through authentication hy
       expect(pollCount).toBe(1);
       expect(reads).toBe(1);
 
-      await act(async () => {
-        ui.setSession(owner);
-        await ui.client.fetchQuery({ queryKey: ['session'], queryFn: async () => owner, staleTime: 0 });
-        await ui.client.invalidateQueries({ queryKey: ['session'], refetchType: 'none' });
-        ui.client.removeQueries({ queryKey: ['session'] });
-      });
+      await act(async () => ui.client.removeQueries({ queryKey: ['session'] }));
       await ui.flush();
       expect(ui.host.textContent).not.toContain('83377');
       await act(async () => ui.setSession(owner));

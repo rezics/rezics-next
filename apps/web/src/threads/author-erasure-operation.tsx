@@ -331,7 +331,7 @@ export function AuthorErasureOperationPage({
   const stage = operation ? erasureStage(operation) : null;
   const remaining = visit.remaining();
   const automatic = visit.automatic;
-  const pending = visit.pending;
+  const pending = visit.pending && browser.current();
 
   useEffect(() => {
     if (!operation || operation.done || !automatic || remaining === 0 || pending) return;
