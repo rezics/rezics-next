@@ -382,6 +382,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       detail,
     }),
   );
+  const recordPath = '/v1/progressSessions/:sessionId/$record';
 
   const episodeRow = t.Object(
     {
@@ -860,7 +861,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       },
     )
     .post(
-      recordOperation.path,
+      recordPath,
       recordOperation.options,
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);

@@ -153,7 +153,7 @@ function phaseNames(file: string): string[] {
   return readFileSync(file, 'utf8')
     .trim()
     .split('\n')
-    .map((line) => line.split('\t')[0]);
+    .map((line) => line.replace(/\t.*$/, ''));
 }
 
 function writeExecutable(directory: string, name: string, script: string): void {

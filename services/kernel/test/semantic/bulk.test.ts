@@ -105,10 +105,13 @@ async function stableBatch(commands: BatchCommand[]) {
   const port = createImportTransport({
     origin: 'http://kernel.test',
     tokenProvider: async () => realAccess.bearer('importer'),
-    fetch: async (input, init) => {
-      response = await kernel.handle(input instanceof Request ? input : new Request(input, init));
-      return response;
-    },
+    fetch: Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        response = await kernel.handle(input instanceof Request ? input : new Request(input, init));
+        return response;
+      },
+      { preconnect: () => {} },
+    ),
   });
   const body = await port.batch({ commands });
   return { response: response!, body };
@@ -140,7 +143,10 @@ test('native sourced batch create, proposal and replay retain command history an
   const first = await stableBatch(commands);
   expect(first.response.status).toBe(200);
   expect(first.response.headers.get('rezics-session-token')).toBeString();
-  const id = first.body.results[0].value.id as string;
+  const firstResult = first.body.results[0];
+  if (!firstResult || !('value' in firstResult) || !('id' in firstResult.value))
+    throw new Error('The first batch result must create a subject');
+  const id = firstResult.value.id;
   expect(routeOf(id)).toBe(anchorRoute(routeKey, `openlibrary\n${externalId}`));
   expect(results(first.body)).toEqual([
     { key: 'create-facts', status: 201, value: { id, revision: 1 } },

@@ -6,7 +6,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { AuthenticationError, type Access, type AccountActor, type Resource } from '../../src/request/access.ts';
-import type { SearchService } from '../../src/search/http/routes.ts';
+import type { SearchService } from '../../src/search/service-scope.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { readExposure } from '../../src/access/gates/catalogue.ts';

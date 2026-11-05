@@ -454,8 +454,8 @@ function supervise(parent: OutcomeRpc) {
           const { source, ratings } = createRatedSubjectSource(config.pool, config.routeKey);
           return createKernel({
             ...config,
-            onAccessReady(access, readers) {
-              config.onAccessReady?.(access, readers);
+            onAccessReady(access, viewerActions) {
+              config.onAccessReady?.(access, viewerActions);
               const keys = createSubjectSourceKeyPages(config.pool, config.routeKey, access);
               nativeCoverage = async () => {
                 const generation = (await subjectGenerations(client, prefix)).active!;

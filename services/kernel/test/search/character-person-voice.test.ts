@@ -9,6 +9,8 @@ import { collectRetainedUsefulPage, type SearchConsumedWindow } from '../../src/
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { checkHits } from '../../src/search/disclosure/check.ts';
 import { withPublicRatings } from '../../src/search/rating-subject-source.ts';
+import { subjectIndexName } from '../../src/search/indices.ts';
+import type { SearchHit } from '../../src/search/query.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import type {
   IndexedStatement,
@@ -51,7 +53,7 @@ test('each repeated voice credit needs its own current permitted appearance at t
         facet: 'statement',
         property: p.property,
         values: [p.value],
-        qualifiers: p.qualifiers,
+        ...(p.qualifiers ? { qualifiers: p.qualifiers } : {}),
       })
         ? true
         : ('not_proven' as const),
@@ -210,11 +212,16 @@ test('one page authorizes all cuts and distinct work/character/threshold keys be
         qualifiers: [{ property: 'rezics:spoilerLevel', value: '0' }],
       },
     });
+  const plan = planCharacterPersonWitnesses(probes, f.rows);
+  expect(plan.touchedPools).toEqual([
+    { partition: 10, primaryKeys: 257, appearanceKeys: 2, primaryBatches: 2, appearanceBatches: 1, probeBatchBound: 3 },
+    { partition: 11, primaryKeys: 1, appearanceKeys: 1, primaryBatches: 1, appearanceBatches: 1, probeBatchBound: 2 },
+  ]);
   const page = await prepareCharacterPersonPage(probes, f.prepare);
   expect(f.dispatched).toEqual([]);
   expect(page.bounds).toEqual([
-    { partition: 10, primaryKeys: 257, appearanceKeys: 2, primaryBatches: 2, appearanceBatches: 1, probeBatchBound: 3 },
-    { partition: 11, primaryKeys: 1, appearanceKeys: 1, primaryBatches: 1, appearanceBatches: 1, probeBatchBound: 2 },
+    { partition: 10, probeBatchBound: 3 },
+    { partition: 11, probeBatchBound: 2 },
   ]);
   const preparedCount = f.prepared.length;
   f.onDispatch(() => expect(f.prepared).toHaveLength(preparedCount));
@@ -309,11 +316,12 @@ test('rated first next and final retained pages stay ordered through dense curre
   for (let pageNumber = 0; pageNumber < 3; pageNumber++) {
     const page = await collectRetainedUsefulPage({
       limit: 2,
-      continuation,
+      ...(continuation === undefined ? {} : { continuation }),
       read: async (size) => {
         offset += consumed;
-        const hits = subjects.slice(offset, offset + size).map((s) => ({
+        const hits: SearchHit[] = subjects.slice(offset, offset + size).map((s) => ({
           id: s.id,
+          index: subjectIndexName('voice', 1),
           partition: 10,
           securityRevision: 1,
           matched: [],
@@ -329,16 +337,21 @@ test('rated first next and final retained pages stay ordered through dense curre
           },
         };
       },
-      check: async (hits) =>
-        new Map(
-          (
-            await checkHits(source, hits, new Map(), {
-              filter: { statement: { property: 'wdt:P725', in: [id(2)] } },
-              relationProperties: ['wdt:P725'],
-              spoilerThreshold: 0,
-            })
-          ).passed.map(({ hit, subject }) => [hit, subject]),
-        ),
+      check: async (hits) => {
+        const checked = await checkHits(source, hits, new Map(), {
+          filter: { statement: { property: 'wdt:P725', in: [id(2)] } },
+          relationProperties: ['wdt:P725'],
+          spoilerThreshold: 0,
+        });
+        const passedSubjects = new Map<string, IndexedSubject>();
+        for (const { hit, subject } of checked.passed) passedSubjects.set(hit.id, subject);
+        const subjectsByHit = new Map<SearchHit, IndexedSubject>();
+        for (const hit of hits) {
+          const subject = passedSubjects.get(hit.id);
+          if (subject !== undefined) subjectsByHit.set(hit, subject);
+        }
+        return subjectsByHit;
+      },
       consume: async (prefix) => {
         consumed = prefix.consumed;
       },

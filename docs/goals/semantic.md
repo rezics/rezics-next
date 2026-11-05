@@ -20,6 +20,9 @@ Completion requires revision-bound native persona, growth, installation and rece
 
 Semantic owns Definitions, shared filters, native Semantic and Zones, their current consumer contracts, Concept policy, identity, names and qualified-credit meaning. Public inclusion and deferral follow [first public scope](../scope.md). Personal dynamic queries, custom catalogue publication and advanced identity remain deferred behind their existing grants. Library facts, profiles and common Collection storage remain with Commerce; rendering and navigation remain with Web.
 
+Decision: Kernel typecheck repairs update fixtures and call forms to current contracts while preserving assertions;
+production changes are limited to code that violates those contracts.
+
 ## Ownership
 
 Placement decision: each existing owner remains the sole authority for its contract: Definitions for vocabulary, Semantic for native behavior, Conversion for value fidelity, Imports for acquisition and publication, and Web for reading and correction. The [Semantic module](../../services/kernel/src/semantic/README.md), [Definitions](../../packages/definitions/README.md), [Conversion](../../packages/conversion/README.md), [filters](../../packages/filter/README.md), [Zones](../zones.md), [membership](../zone-membership.md), [Collection sources](../collection-source.md), [dynamic Collections](../dynamic-collections.md) and [deletion](../deletion.md) hold their contracts.

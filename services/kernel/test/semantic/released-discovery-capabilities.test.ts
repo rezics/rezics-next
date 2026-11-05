@@ -403,8 +403,8 @@ test('driver forwards the same trusted clock to installed Access and raw sign-in
       expect(config.clock).toBe(clock);
       return createKernel({
         ...config,
-        onAccessReady(access) {
-          config.onAccessReady?.(access);
+        onAccessReady(access, viewerActions) {
+          config.onAccessReady?.(access, viewerActions);
           installed = access;
         },
       });
