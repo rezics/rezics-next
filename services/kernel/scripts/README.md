@@ -56,3 +56,8 @@ Decision: SQL-derived work bounds include sqlcommenter bytes even though `.sql` 
 encoded source metadata; detached SQL declarations reserve a 512-byte comment envelope. Raw `.sql` dispatch may
 therefore consume less than its conservative declaration. Keep inferred cardinalities and nullability at call sites.
 The statement-byte regression test pins the envelope against all Kernel SQL paths and the actual Reylo transport.
+
+Compatibility follows the [0.7.0 release notes](https://github.com/colinhacks/reylo/releases/tag/v0.7.0).
+Decision: use one focused Kernel regression file for SQL transport byte bounds and the migrated server import graph;
+reuse workspace typechecks for inferred result contracts. Run it with
+`bun run --cwd services/kernel check scripts/statement-bytes.test.ts`.
