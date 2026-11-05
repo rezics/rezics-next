@@ -385,6 +385,7 @@ export type SubjectRead = MountedSubjectRead & {
     | { state: 'available'; actions: { action: string; operations: string[] }[] };
 };
 type MountedSubjectLinksResponse = NonNullable<Awaited<ReturnType<SubjectPath['links']['get']>>['data']>;
+export type SubjectLinksQuery = NonNullable<Parameters<SubjectPath['links']['get']>[0]>['query'];
 type WorkReleaseStatement = NonNullable<MountedSubjectLinksResponse['links'][number]['assertion']>;
 type WorkReleaseSummary = MountedSubjectLinksResponse['links'][number]['summary'];
 export type WorkReleaseCardProperty =

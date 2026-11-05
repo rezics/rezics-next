@@ -15,6 +15,7 @@ export type CurrentRelationCandidate = {
   target: string | null;
   external?: string | null;
   value?: 'value' | 'somevalue' | 'novalue';
+  anyResolvedTarget?: boolean;
   context?: string;
   defaults?: Readonly<Record<string, 'inherit' | 'suppress'>>;
   slot?: string;
@@ -55,7 +56,9 @@ async function matchesCandidate(
   const value = body.value;
   const expectedValue = candidate.value ?? (candidate.target === null ? 'somevalue' : 'value');
   if (value?.type !== expectedValue) return false;
-  if (candidate.target !== null && value?.content !== candidate.target) {
+  if (candidate.anyResolvedTarget) {
+    if (value?.type !== 'value') return false;
+  } else if (candidate.target !== null && value?.content !== candidate.target) {
     if (
       typeof value?.content !== 'string' ||
       routeOf(value.content) === null ||
@@ -63,7 +66,8 @@ async function matchesCandidate(
     )
       return false;
   }
-  if (candidate.target === null && (candidate.external ?? null) !== externalValue(fact)) return false;
+  if (!candidate.anyResolvedTarget && candidate.target === null && (candidate.external ?? null) !== externalValue(fact))
+    return false;
   if (
     candidate.filter !== undefined &&
     !candidate.filterProperties?.some((property) =>

@@ -20,6 +20,7 @@ export type ConnectionStream = {
   forwardLabel: string;
   language: string | null;
   filter?: string;
+  qualifier?: string;
 };
 export type ConnectionSelection = { stream: string; cursor?: string; reading?: string };
 export type ConnectionAddress = {
@@ -61,7 +62,7 @@ export function connectionStreams(release: GuideRelease, type: string, id: strin
     if (!relation || field.datatype !== 'wikibase-item') continue;
     const group: ConnectionGroup =
       relation.group === 'credit' ? 'credits' : relation.group === 'appearance' ? 'characters' : 'relations';
-    const add = (direction: 'in' | 'out', filter?: string) => {
+    const add = (direction: 'in' | 'out', filter?: string, qualifier?: string) => {
       const text = pickText(
         direction === 'in' && !relation.symmetric ? (relation.inverseLabels ?? field.labels) : field.labels,
         locale,
@@ -75,6 +76,7 @@ export function connectionStreams(release: GuideRelease, type: string, id: strin
         forwardLabel: pickText(field.labels, locale).text,
         language: text.lang,
         ...(filter ? { filter } : {}),
+        ...(qualifier ? { qualifier } : {}),
       });
     };
     if (forward.has(property)) add('out');
@@ -83,10 +85,13 @@ export function connectionStreams(release: GuideRelease, type: string, id: strin
     // A character's cast is qualified on its work, independent of that character's biography and appearances.
     if (
       !incoming &&
+      property === 'wdt:P725' &&
       relation.group === 'credit' &&
-      field.qualifiers.some((qualifier) => release.properties[qualifier]?.targets?.some((target) => types.has(target)))
+      relation.slotKey === 'wdt:P453' &&
+      field.qualifiers.includes('wdt:P453') &&
+      release.properties['wdt:P453']?.targets?.some((target) => types.has(target))
     )
-      add('in', id);
+      add('in', id, 'wdt:P453');
   }
   return result;
 }
@@ -127,6 +132,7 @@ export async function readConnectionStream(
     limit: CONNECTION_LIMIT,
     ...(context ? { context } : {}),
     ...(stream.filter ? { filter: stream.filter } : {}),
+    ...(stream.qualifier ? { qualifier: stream.qualifier } : {}),
     ...(cursor ? { cursor } : {}),
   };
   const options = {
@@ -155,6 +161,7 @@ export async function readConnectionStream(
       limit: CONNECTION_LIMIT,
       ...(context ? { context } : {}),
       ...(stream.filter ? { filter: stream.filter } : {}),
+      ...(stream.qualifier ? { qualifier: stream.qualifier } : {}),
       ...(cursor ? { cursor } : {}),
     },
   };

@@ -2542,6 +2542,7 @@ function subjectRoutes(
           ...pageQuery,
           property: t.Optional(t.String({ minLength: 1 })),
           filter: t.Optional(t.String({ format: 'uuid' })),
+          qualifier: t.Optional(t.String({ minLength: 1 })),
           type: t.Optional(t.String({ minLength: 1 })),
           language: t.Optional(t.String({ pattern: '^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$' })),
         }),
@@ -2609,7 +2610,18 @@ function subjectRoutes(
           throw new ProblemError('invalid_request');
         if ((query.filter !== undefined || query.type !== undefined) && query.property === undefined)
           throw new ProblemError('invalid_request');
-        if (query.filter !== undefined && !active.release.properties[query.property!]?.relation?.filter)
+        const property = query.property === undefined ? undefined : active.release.properties[query.property];
+        const relation = property?.relation;
+        const slotQualifier =
+          query.qualifier === 'wdt:P453' &&
+          query.property === 'wdt:P725' &&
+          query.filter !== undefined &&
+          relation?.group === 'credit' &&
+          relation.slotKey === 'wdt:P453' &&
+          property.qualifiers?.includes('wdt:P453') === true &&
+          active.release.properties['wdt:P453']?.targets?.includes('wd:Q95074') === true;
+        if (query.qualifier !== undefined && !slotQualifier) throw new ProblemError('invalid_request');
+        if (query.filter !== undefined && !relation?.filter && !slotQualifier)
           throw new ProblemError('invalid_request');
         if (query.filter !== undefined && routeOf(query.filter) === null) throw new ProblemError('invalid_request');
         if (query.type !== undefined && !Object.hasOwn(active.release.types, query.type))
@@ -2631,6 +2643,7 @@ function subjectRoutes(
                 property: query.property ?? null,
                 limit: query.limit ?? 20,
                 ...(query.filter === undefined ? {} : { filter: query.filter }),
+                ...(slotQualifier ? { qualifier: { property: 'wdt:P453', value: query.filter! } } : {}),
                 ...(query.type === undefined ? {} : { type: query.type }),
                 languages: languageRanges(request.headers.get('accept-language'), query.language),
                 release: active.release,
