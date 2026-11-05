@@ -152,13 +152,14 @@ are distinct mounted choices. Continue belongs to that choice, not merely the la
 cancelled at the server by changing browser presentation. Account-operation returns use the existing step-up selectors and
 confirmation helpers; a page review cannot complete or replay them.
 
-When authentication has no confirmed response, the page removes the old account label and offers Review current session.
-This makes exactly one bounded `POST /signin/page` read with the original query. It does not resend authentication. The
-review explains a changed account, signed-out state or unavailable observation before another explicit choice. Even a
-matching account is not evidence that the uncertain request succeeded. The person may deliberately continue a supported
-current-session return or choose credentials again; neither step claims the uncertain request failed or was cancelled.
-Review clears credentials, invalidates conditional mediation and never automatically starts another ceremony. No private
-choice or credential data survives pagehide; BFCache restoration starts with one fresh native observation.
+When authentication has no confirmed response, the page clears the password, removes the old account label and offers
+Review current session. The email remains only in mounted component state until review. This makes exactly one bounded
+`POST /signin/page` read with the original query. It does not resend authentication. The review explains a changed
+account, signed-out state or unavailable observation before another explicit choice. Even a matching account is not
+evidence that the uncertain request succeeded. The person may deliberately continue a supported current-session return
+or choose credentials again; neither step claims the uncertain request failed or was cancelled. Review clears
+credentials, invalidates conditional mediation and never automatically starts another ceremony. No private choice or
+credential data survives pagehide; BFCache restoration starts with one fresh native observation.
 
 Sign-in history uses the mounted lifetime above, with generic method/phase only. Idle autofill alone does not
 warn on departure; possibly sent autofill does. Switch retires previous autofill, Continue and completions
