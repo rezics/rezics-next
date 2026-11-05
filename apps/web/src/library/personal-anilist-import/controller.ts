@@ -956,7 +956,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
 
   async function confirmLabels(ordinal: number): Promise<AniListJourneySnapshot> {
     const labels = meta.get(ordinal)?.labels;
-    if (!importId || !labels?.review || labels.invalidated || !live() || busy || heldUnknown()) return snapshot();
+    if (!importId || !labels?.review || labels.invalidated || !live() || busy || heldUnknown() || cancelled)
+      return snapshot();
     return applyLabelCommand({
       kind: 'apply-labels',
       importId,
@@ -966,6 +967,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   }
 
   async function labelTargets(query: string, cursor?: string) {
+    if (!live() || heldUnknown()) return { kind: 'unavailable' as const };
     cost.recordCall('label-targets');
     return port.labelTargets(query, cursor);
   }

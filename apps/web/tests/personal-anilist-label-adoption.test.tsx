@@ -275,7 +275,22 @@ test('unknown delivery retains original sender and review; reads cannot release 
   await f.journey.confirmLabels(0);
   expect(f.commands).toHaveLength(before);
   f.visit.retire();
+  expect((await f.journey.labelTargets('late callback')).kind).toBe('unavailable');
   await f.journey.reviewLabels(0);
   await f.journey.confirmLabels(0);
   expect(f.commands).toHaveLength(before);
+});
+
+test('source cancellation prevents confirmation of a retained partial creation without deleting its identity', async () => {
+  const f = fixture();
+  await f.journey.loadPage(id, -1);
+  f.journey.chooseLabels(0, subject, [{ key: 'group:name', target: { name: 'Private' } }]);
+  await f.journey.reviewLabels(0);
+  await f.journey.confirmLabels(0);
+  const work = f.journey.snapshot().page[0]!.labelWork;
+  await f.journey.cancelAdmission();
+  const before = f.commands.length;
+  await f.journey.confirmLabels(0);
+  expect(f.commands).toHaveLength(before);
+  expect(f.journey.snapshot().page[0]!.labelWork).toEqual(work);
 });
