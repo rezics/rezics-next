@@ -240,6 +240,11 @@ retention distinct from dispatch authority; healthy same-account credential rota
 all prior callbacks retire. Copy and label reading require current read admission, not mutation credentials.
 Library action adapters continue to own exact uncertain-command recovery and original operands, credential and key.
 
+Decision: Label continuation claims synchronous admission for one bounded read per query/cursor lifetime, retaining
+it through owner callbacks. Only that request releases admission; replacement and unmount retire it. Ordinary
+failure retries the same query/cursor, while explicit stale-cursor recovery restarts the same query without a cursor.
+Owning currentness and page provenance remain authoritative.
+
 Presentation decision: the Library shows the source of its effective layout and sort, and flags saved sorts or table columns that current native reads cannot honor; navigation keeps inherited choices out of the URL.
 
 Collection action vocabulary is derived from the installed root `KernelClient.viewerActions.post` callable used

@@ -61,14 +61,17 @@ export function SubjectLabelMore({
   ) => boolean;
 }) {
   const requestId = useRef(0);
+  const inFlight = useRef<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string>();
   useEffect(() => {
     requestId.current++;
+    inFlight.current = null;
     setBusy(false);
     setFailure(undefined);
     return () => {
       requestId.current++;
+      inFlight.current = null;
     };
   }, [query, next]);
   if (!next) return null;
@@ -80,11 +83,13 @@ export function SubjectLabelMore({
         variant="outline"
         disabled={busy}
         onClick={async () => {
-          if (busy || (isCurrent && !isCurrent())) return;
+          if (inFlight.current !== null) return;
           const id = ++requestId.current;
+          inFlight.current = id;
           const request = { query, ...(failure === 'stale_cursor' ? {} : { cursor: next }) };
-          setBusy(true);
           try {
+            if (isCurrent && !isCurrent()) return;
+            setBusy(true);
             const page = await readSubjectLabelPage({
               data: request,
             });
@@ -98,7 +103,11 @@ export function SubjectLabelMore({
           } catch {
             if (id === requestId.current && (!isCurrent || isCurrent())) setFailure('unavailable');
           } finally {
-            if (id === requestId.current && (!isCurrent || isCurrent())) setBusy(false);
+            if (id === requestId.current) {
+              const current = !isCurrent || isCurrent();
+              inFlight.current = null;
+              if (current) setBusy(false);
+            }
           }
         }}
       >
