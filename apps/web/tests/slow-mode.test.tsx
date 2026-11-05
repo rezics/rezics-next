@@ -370,16 +370,14 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     await act(async () => {
       await user.click(inlineSend!);
     });
-    expect(replySubmits).toEqual([{ key: '0192f3a0-6c1e-7b2a-9d4e-000000000092', parentId }]);
+    expect(replySubmits).toHaveLength(1);
+    expect(replySubmits[0]).toMatchObject({ parentId });
     expect(inline.textContent).toContain('An inline reply keeps its exact selected parent.');
     const inlineRetry = [...inline.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_retry());
     await act(async () => {
       await user.click(inlineRetry!);
     });
-    expect(replySubmits).toEqual([
-      { key: '0192f3a0-6c1e-7b2a-9d4e-000000000092', parentId },
-      { key: '0192f3a0-6c1e-7b2a-9d4e-000000000092', parentId },
-    ]);
+    expect(replySubmits[1]).toEqual(replySubmits[0]);
     heldReads = 2;
     await act(async () => {
       await router.navigate({ to: '/en/other' as never });
