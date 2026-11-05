@@ -1,8 +1,11 @@
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { act, type ComponentProps } from 'react';
+import { act, createElement, type ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ProfilePreview } from '../src/settings/profile-preview';
+import { ProfileCard } from '../src/settings/profile';
+import { ProfileEditor } from '../src/settings/profile-write';
+import type { ProfileValues } from '../src/settings/profile-data';
 import { m } from '../src/paraglide/messages.js';
 
 const draft: ComponentProps<typeof ProfilePreview> = {
@@ -109,4 +112,33 @@ test('open, update, close and reopen the local draft without submitting or chang
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
   }
+});
+
+test('matching current fields do not mark the local preview as saved while the original is unacknowledged', async () => {
+  const initial: ProfileValues = {
+    accountId: '019a0000-0000-7000-8000-000000000001',
+    kind: 'actor',
+    displayName: 'Avery',
+    biography: 'Reading notes',
+    avatar: null,
+    links: [],
+    publicViews: { posts: true, reviews: true, collections: true, realms: false },
+  };
+  const editor = new ProfileEditor(
+    {
+      read: async () => initial,
+      save: async () => {
+        throw new Error('Response lost');
+      },
+    },
+    initial,
+  );
+  editor.edit({ displayName: 'Submitted name' });
+  await editor.submit('profile');
+  editor.edit({ displayName: initial.displayName });
+  expect(editor.snapshot().attempt).not.toBeNull();
+  expect(editor.snapshot().draft?.displayName).toBe(initial.displayName);
+  const html = renderToStaticMarkup(createElement(ProfileCard, { editor, previewActive: true }));
+  expect(html).toContain(m.settings_profile_preview_draft());
+  expect(html).not.toContain(m.settings_profile_preview_saved());
 });

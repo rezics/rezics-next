@@ -4,12 +4,15 @@ import * as v from 'valibot';
 import { MediaProblem } from '../media/kernel';
 import type { NativePreferenceFailure } from './preferences';
 
-type ProfileRead = ReturnType<KernelClient['accounts']>['profile']['get'];
-export type EditableProfile = NonNullable<Awaited<ReturnType<ProfileRead>>['data']>['profile'];
+type ProfileGet = ReturnType<KernelClient['accounts']>['profile']['get'];
+/** Official private GET body: closed `{ profile, editing }` from the installed client. */
+export type EditableProfileRead = NonNullable<Awaited<ReturnType<ProfileGet>>['data']>;
+export type EditableProfile = EditableProfileRead['profile'];
+export type ProfileEditing = EditableProfileRead['editing'];
 
 /** The private source uses the same server-held credential and account key as the existing PATCH. */
 export type EditableProfileSource = {
-  read: (authorization: string, accountId: string, signal?: AbortSignal) => Promise<EditableProfile>;
+  read: (authorization: string, accountId: string, signal?: AbortSignal) => Promise<EditableProfileRead>;
 };
 
 export type EditableProfileFailure = NativePreferenceFailure & { status: number };
@@ -82,13 +85,102 @@ const fields = {
     realms: v.boolean(),
   }),
 };
-// Mirror the integrated route's closed actor/organization bodies, including Content's actual avatar summary.
+const textAdvice = v.strictObject({ applicable: v.literal(true), maxLength: v.literal(4096) });
+const avatarAdvice = v.strictObject({ applicable: v.literal(true) });
+const linksAdvice = v.strictObject({
+  applicable: v.literal(true),
+  maxItems: v.literal(5),
+  labelMaxLength: v.literal(64),
+  urlMaxLength: v.literal(2048),
+});
+const publicViewsAdvice = v.strictObject({
+  applicable: v.literal(true),
+  flags: v.tuple([v.literal('posts'), v.literal('reviews'), v.literal('collections'), v.literal('realms')]),
+});
+const identityAdvice = {
+  displayName: textAdvice,
+  biography: textAdvice,
+  avatar: avatarAdvice,
+  links: linksAdvice,
+  publicViews: publicViewsAdvice,
+};
+const viewer = v.strictObject({ accountId: v.string() });
 const response = v.strictObject({
   profile: v.variant('kind', [
     v.strictObject({ ...fields, kind: v.literal('actor') }),
     v.strictObject({ ...fields, kind: v.literal('organization'), speakersListed: v.boolean() }),
   ]),
+  editing: v.union([
+    v.strictObject({
+      viewer,
+      target: v.strictObject({ accountId: v.string(), kind: v.literal('actor') }),
+      fields: v.strictObject(identityAdvice),
+    }),
+    v.strictObject({
+      viewer,
+      target: v.strictObject({ accountId: v.string(), kind: v.literal('organization') }),
+      fields: v.strictObject({
+        ...identityAdvice,
+        speakersListed: v.strictObject({ applicable: v.literal(true) }),
+      }),
+    }),
+  ]),
 });
+
+const patchAck = v.strictObject({ accountId: v.string() });
+
+/** Closed field advice for the official `{ profile, editing }` observation. */
+export function closedProfileEditing(
+  target: { id: string; kind: 'actor' | 'organization' },
+  viewerAccountId = target.id,
+): ProfileEditing {
+  const identity = {
+    displayName: { applicable: true as const, maxLength: 4096 as const },
+    biography: { applicable: true as const, maxLength: 4096 as const },
+    avatar: { applicable: true as const },
+    links: {
+      applicable: true as const,
+      maxItems: 5 as const,
+      labelMaxLength: 64 as const,
+      urlMaxLength: 2048 as const,
+    },
+    publicViews: {
+      applicable: true as const,
+      flags: ['posts', 'reviews', 'collections', 'realms'] as const,
+    },
+  };
+  return target.kind === 'organization'
+    ? {
+        viewer: { accountId: viewerAccountId },
+        target: { accountId: target.id, kind: 'organization' },
+        fields: { ...identity, speakersListed: { applicable: true as const } },
+      }
+    : {
+        viewer: { accountId: viewerAccountId },
+        target: { accountId: target.id, kind: 'actor' },
+        fields: identity,
+      };
+}
+
+export function officialProfileRead(
+  profile: EditableProfile,
+  viewerAccountId = profile.id,
+): { profile: EditableProfile; editing: ProfileEditing } {
+  return { profile, editing: closedProfileEditing(profile, viewerAccountId) };
+}
+
+export function parseEditableProfileRead(body: unknown, accountId: string): EditableProfileRead {
+  const { profile, editing } = v.parse(response, body);
+  if (profile.id !== accountId || editing.target.accountId !== accountId || editing.target.kind !== profile.kind)
+    throw new Error('Profile unavailable');
+  if (!editing.viewer.accountId) throw new Error('Profile unavailable');
+  return { profile, editing };
+}
+
+export function parseProfilePatchAck(body: unknown, accountId: string): { accountId: string } | undefined {
+  const parsed = v.safeParse(patchAck, body);
+  return parsed.success && parsed.output.accountId === accountId ? parsed.output : undefined;
+}
 
 export function createEditableProfileSource(client: KernelClient): EditableProfileSource {
   return {
@@ -105,9 +197,7 @@ export function createEditableProfileSource(client: KernelClient): EditableProfi
         const failure = nativeProfileFailure(result.status, result.error?.value, result.headers);
         throw new EditableProfileReadError(result.status, Object.keys(failure).length > 1 ? failure : undefined);
       }
-      const { profile } = v.parse(response, result.data);
-      if (profile.id !== accountId) throw new Error('Profile unavailable');
-      return profile;
+      return parseEditableProfileRead(result.data, accountId);
     },
   };
 }

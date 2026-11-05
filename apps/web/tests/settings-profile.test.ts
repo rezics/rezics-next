@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
 import type { EditableProfile } from '../src/settings/editable-profile-source';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
-import { EditableProfileReadError } from '../src/settings/editable-profile-source';
+import { EditableProfileReadError, officialProfileRead } from '../src/settings/editable-profile-source';
 import { ProfileEditor, ProfileEditorSession, type ProfileAttempt } from '../src/settings/profile-write';
 import { MediaProblem } from '../src/media/kernel';
 import { m } from '../src/paraglide/messages.js';
@@ -92,7 +92,7 @@ test('profile reads editable values once by immutable id through the authenticat
     expect(request.headers.get('authorization')).toBe('Bearer page-token');
     expect(request.headers.get('cache-control')).toBe('no-store');
     expect(request.cache).toBe('no-store');
-    return Response.json({ profile: nativeProfile }, { headers: { 'cache-control': 'private, no-store' } });
+    return Response.json(officialProfileRead(nativeProfile), { headers: { 'cache-control': 'private, no-store' } });
   });
   const profile = await loadProfileRecord(client, 'Bearer page-token', nativeProfile.id);
   expect(profile).toMatchObject({
@@ -117,7 +117,7 @@ test('profile reads editable values once by immutable id through the authenticat
 });
 
 test('profile save sends only changed fields and an idempotency key, then returns the confirmed values', async () => {
-  const { client, calls } = clientFor(() => Response.json({ ...account, displayName: 'Alice A.' }));
+  const { client, calls } = clientFor(() => Response.json({ accountId: 'alice' }));
   const before = account as unknown as ProfileValues;
   const result = await saveProfileRecord(
     client,
@@ -167,9 +167,7 @@ test('profile HTTP serialization preserves the semantic key and original patch o
 });
 
 test('public activity patches only the switched key and links reject a sixth row before a write', async () => {
-  const { client, calls } = clientFor(() =>
-    Response.json({ ...account, publicViews: { ...account.publicViews, posts: false } }),
-  );
+  const { client, calls } = clientFor(() => Response.json({ accountId: 'alice' }));
   await saveProfileRecord(
     client,
     'Bearer page-token',
@@ -199,7 +197,7 @@ test('public activity patches only the switched key and links reject a sixth row
 });
 
 test('removing an avatar sends null and link edits are sent as the complete labelled list', async () => {
-  const { client, calls } = clientFor(() => Response.json({ ...account, avatar: null }));
+  const { client, calls } = clientFor(() => Response.json({ accountId: 'alice' }));
   const before = account as unknown as ProfileValues;
   await saveProfileRecord(
     client,
@@ -231,7 +229,7 @@ test('removing an avatar sends null and link edits are sent as the complete labe
 
 test('an organization exposes speakersListed; API refusals retain their status for the form message', async () => {
   const organization = { ...account, id: 'org', kind: 'organization', speakersListed: false };
-  const { client, calls } = clientFor(() => Response.json({ ...organization, speakersListed: true }));
+  const { client, calls } = clientFor(() => Response.json({ accountId: 'org' }));
   const saved = await saveProfileRecord(
     client,
     'Bearer page-token',

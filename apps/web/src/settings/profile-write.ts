@@ -1,12 +1,15 @@
 import { withProfileDeadline } from './profile-request-deadline';
 import {
   profileChanges,
+  profileCommandValues,
+  profilePatchAdmitted,
   profileReadDenied,
+  type ObservedProfile,
   type ProfilePatch,
   type ProfileSaveResult,
   type ProfileValues,
 } from './profile-data';
-import { profileReadFailure, type EditableProfileFailure } from './editable-profile-source';
+import { profileReadFailure, type EditableProfileFailure, type ProfileEditing } from './editable-profile-source';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 
@@ -19,7 +22,7 @@ export type ProfileAttempt = Readonly<{
   scope: ProfileScope;
 }>;
 export type ProfileEditorIO = {
-  read: (signal?: AbortSignal) => Promise<ProfileValues>;
+  read: (signal?: AbortSignal) => Promise<ObservedProfile>;
   save: (attempt: ProfileAttempt, signal?: AbortSignal) => Promise<ProfileSaveResult>;
   confirmed?: (profile: ProfileValues) => void;
   isCurrent?: () => boolean;
@@ -37,8 +40,14 @@ export type ProfileEditorState = {
   readStatus?: 'checking' | 'confirming' | 'failed' | undefined;
   commandRetryAt: number;
   readRetryAt: number;
+  /** Current field advice; null retires action authority, undefined keeps test/local drafts writable. */
+  editing?: ProfileEditing | null;
   failure?: (EditableProfileFailure & { message: string }) | undefined;
 };
+
+function observationEditing(current: ObservedProfile): ProfileEditing | null | undefined {
+  return 'editing' in current ? (current.editing ?? null) : undefined;
+}
 
 function failureMetadata(error: unknown): EditableProfileFailure | undefined {
   return (
@@ -163,6 +172,7 @@ export class ProfileEditor {
       readStatus: undefined,
       commandRetryAt: 0,
       readRetryAt: 0,
+      editing: undefined,
       failure: undefined,
     });
     this.listeners.clear();
@@ -175,15 +185,17 @@ export class ProfileEditor {
       },
     };
   }
-  receive(current: ProfileValues) {
+  receive(current: ObservedProfile) {
     if (!this.current() || this.state.readAuthority === 'denied' || this.state.acknowledged) return;
     const { known, draft } = this.state;
     if (known && current.accountId !== known.accountId) throw new Error('Profile account changed');
+    const values = profileCommandValues(current);
     this.update({
-      known: current,
-      draft: known && draft ? this.preserveLaterEdits(rebaseProfile(known, draft, current), draft) : current,
+      known: values,
+      draft: known && draft ? this.preserveLaterEdits(rebaseProfile(known, draft, values), draft) : values,
       phase: this.state.phase === 'loading' || this.state.phase === 'unavailable' ? 'idle' : this.state.phase,
       readAuthority: 'allowed',
+      editing: observationEditing(current),
       ...(this.state.phase === 'loading' || this.state.phase === 'unavailable' ? { readStatus: undefined } : {}),
     });
   }
@@ -197,6 +209,7 @@ export class ProfileEditor {
       readStatus: 'failed',
       readRetryAt: extendRetryDeadline(this.state.readRetryAt, failure?.retryAfter),
       failure: failure ? { ...failure, message: '' } : undefined,
+      editing: null,
       ...(denied ? { readAuthority: 'denied' as const } : {}),
     });
   }
@@ -261,7 +274,19 @@ export class ProfileEditor {
     }
     const patch = profileChanges(known, after);
     if (!Object.keys(patch).length) return;
-    const next = frozen(structuredClone({ before: known, after, patch, scope, idempotencyKey: crypto.randomUUID() }));
+    if (!profilePatchAdmitted(patch, this.state.editing)) {
+      this.update({ phase: 'review', scope });
+      return;
+    }
+    const next = frozen(
+      structuredClone({
+        before: profileCommandValues(known),
+        after: profileCommandValues(after),
+        patch,
+        scope,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    );
     this.laterEdits = {};
     this.update({ attempt: next, acknowledged: false, scope });
     await this.send(false);
@@ -333,29 +358,32 @@ export class ProfileEditor {
       if (this.current() && version === this.readVersion) this.unavailable(error);
     }
   }
-  private finishRead(current: ProfileValues, acknowledged: boolean) {
+  private finishRead(current: ObservedProfile, acknowledged: boolean) {
     const { attempt, known, draft } = this.state;
-    if (known && known.accountId !== current.accountId) throw new Error('Profile account changed');
+    const values = profileCommandValues(current);
+    const editing = observationEditing(current);
+    if (known && known.accountId !== values.accountId) throw new Error('Profile account changed');
     if (!draft) {
       this.update({
-        known: current,
-        draft: current,
+        known: values,
+        draft: values,
         acknowledged: false,
         phase: 'idle',
         readAuthority: 'allowed',
         readStatus: undefined,
+        editing,
         failure: undefined,
       });
     } else if (attempt) {
       // Compare only the command's fields: unrelated current changes must not invalidate confirmation.
       const confirmed =
-        Object.keys(profileChanges(current, rebaseProfile(attempt.before, attempt.after, current))).length === 0;
+        Object.keys(profileChanges(values, rebaseProfile(attempt.before, attempt.after, values))).length === 0;
       const commandAcknowledged = acknowledged || this.state.acknowledged;
-      const rebased = rebaseProfile(commandAcknowledged || confirmed ? attempt.after : attempt.before, draft, current);
+      const rebased = rebaseProfile(commandAcknowledged || confirmed ? attempt.after : attempt.before, draft, values);
       const nextDraft = this.preserveLaterEdits(rebased, draft);
-      const hasDraftChanges = Object.keys(profileChanges(current, nextDraft)).length > 0;
+      const hasDraftChanges = Object.keys(profileChanges(values, nextDraft)).length > 0;
       this.update({
-        known: current,
+        known: values,
         draft: nextDraft,
         attempt: commandAcknowledged ? null : attempt,
         acknowledged: commandAcknowledged ? false : this.state.acknowledged,
@@ -363,17 +391,19 @@ export class ProfileEditor {
         failure: undefined,
         readAuthority: 'allowed',
         readStatus: undefined,
+        editing,
       });
     } else {
-      const nextDraft = this.preserveLaterEdits(known ? rebaseProfile(known, draft, current) : current, draft);
+      const nextDraft = this.preserveLaterEdits(known ? rebaseProfile(known, draft, values) : values, draft);
       this.update({
-        known: current,
+        known: values,
         draft: nextDraft,
         acknowledged: false,
-        phase: Object.keys(profileChanges(current, nextDraft)).length ? 'review' : 'idle',
+        phase: Object.keys(profileChanges(values, nextDraft)).length ? 'review' : 'idle',
         failure: undefined,
         readAuthority: 'allowed',
         readStatus: undefined,
+        editing,
       });
     }
     if (!this.state.attempt) this.laterEdits = {};

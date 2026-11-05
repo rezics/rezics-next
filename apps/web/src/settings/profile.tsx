@@ -9,7 +9,7 @@ import { coverSrc } from '../media/cover-src';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
 import { uploadAvatar } from '../threads/upload';
-import { profileChanges } from './profile-data';
+import { profileChanges, profilePatchAdmitted } from './profile-data';
 import { ProfileEditor, profileFieldErrors, type ProfileScope, type ProfileEditorState } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
 import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';
@@ -222,18 +222,21 @@ export function ProfileCard({
   const avatar = useProfileAvatarUpload(editor, unreadable, avatarUpload, avatarResume);
   useProfileNavigationUpload(avatar.controller);
   const uploading = avatar.blocked;
-  const changed =
-    !!profile &&
-    !!state.known &&
-    Object.keys(
-      profileChanges(state.known, {
-        ...state.known,
-        displayName: profile.displayName,
-        biography: profile.biography,
-        avatar: profile.avatar,
-        links: profile.links,
-      }),
-    ).length > 0;
+  const profilePatch =
+    profile && state.known
+      ? profileChanges(state.known, {
+          ...state.known,
+          displayName: profile.displayName,
+          biography: profile.biography,
+          avatar: profile.avatar,
+          links: profile.links,
+        })
+      : {};
+  const changed = Object.keys(profilePatch).length > 0;
+  const admitted = (field: 'displayName' | 'biography' | 'avatar' | 'links') =>
+    state.editing === undefined || (!!state.editing && field in state.editing.fields);
+  const canSubmitPatch = changed && profilePatchAdmitted(profilePatch, state.editing);
+  const localPreview = changed || !!avatar.state.url || !!state.attempt || state.acknowledged;
   const errorMessage = (field: string) =>
     errors[field] === 'text'
       ? m.settings_profile_text_limit()
@@ -334,7 +337,7 @@ export function ProfileCard({
                 }}
                 value={profile.displayName ?? ''}
                 maxLength={4096}
-                disabled={closed}
+                disabled={closed || !admitted('displayName')}
                 aria-invalid={!!errors.displayName}
                 aria-describedby={errors.displayName ? `${ids}-displayName-error` : undefined}
                 onChange={(event) => editor.edit({ displayName: event.target.value || null })}
@@ -351,7 +354,7 @@ export function ProfileCard({
                 value={profile.biography ?? ''}
                 rows={6}
                 maxLength={4096}
-                disabled={closed}
+                disabled={closed || !admitted('biography')}
                 aria-invalid={!!errors.biography}
                 aria-describedby={errors.biography ? `${ids}-biography-error` : undefined}
                 onChange={(event) => editor.edit({ biography: event.target.value || null })}
@@ -363,7 +366,7 @@ export function ProfileCard({
               known={state.known?.avatar ?? null}
               upload={avatar}
               disabled={unreadable || busy || !!state.attempt}
-              referenceDisabled={closed || busy || !!state.attempt}
+              referenceDisabled={closed || busy || !!state.attempt || !admitted('avatar')}
               saving={state.phase === 'saving' || state.phase === 'reloading' || state.phase === 'uncertain'}
             />
             <div
@@ -384,7 +387,7 @@ export function ProfileCard({
               {fieldError('links')}
               <ProfileLinks
                 links={profile.links}
-                disabled={closed}
+                disabled={closed || !admitted('links')}
                 onChange={(links) => editor.edit({ links })}
                 ids={ids}
                 errors={errors}
@@ -397,7 +400,7 @@ export function ProfileCard({
                 biography={profile.biography}
                 avatar={profile.avatar}
                 localAvatarUrl={avatar.state.url}
-                hasUnsavedChanges={changed || !!avatar.state.url}
+                hasUnsavedChanges={localPreview}
                 links={profile.links.slice(0, 5).map((link, index) => ({
                   label: link.label,
                   url: link.url,
@@ -409,7 +412,7 @@ export function ProfileCard({
               <Button
                 type="submit"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                disabled={closed || busy || uploading || !!state.attempt || commandWaiting || !changed}
+                disabled={closed || busy || uploading || !!state.attempt || commandWaiting || !canSubmitPatch}
               >
                 {state.phase === 'saving' && state.scope === 'profile'
                   ? m.settings_saving()

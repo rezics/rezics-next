@@ -8,6 +8,7 @@ import { loadAccountRenameRegion } from '../src/settings/account-rename-data';
 import type { AccountRenameResult } from '../src/settings/account-rename-actions';
 import { AccountRenameRegion, AccountSafetySection, readCurrentAccountRename } from '../src/settings/account-safety';
 import { loadSettingsPage } from '../src/settings/preferences';
+import { officialProfileRead } from '../src/settings/editable-profile-source';
 
 const accountId = '123e4567-e89b-42d3-a456-426614174000';
 const csrfToken = 'A'.repeat(22);
@@ -26,8 +27,8 @@ test('ordinary settings and recovery stay GET-only while the isolated rename rea
       if (path.endsWith('/preferences')) return Response.json({ spoilerLevel: 0, suitability: 'blur', version: 7 });
       expect(request.headers.get('cache-control')).toBe('no-store');
       if (path.endsWith('/profile'))
-        return Response.json({
-          profile: {
+        return Response.json(
+          officialProfileRead({
             id: accountId,
             kind: 'actor',
             handle: null,
@@ -36,8 +37,8 @@ test('ordinary settings and recovery stay GET-only while the isolated rename rea
             links: [],
             avatar: null,
             publicViews: { posts: true, reviews: true, collections: true, realms: true },
-          },
-        });
+          }),
+        );
       expect(path).toBe('/v1/viewerActions');
       expect(request.method).toBe('POST');
       expect(await request.json()).toEqual({ resources: [{ type: 'access.account', id: accountId }] });

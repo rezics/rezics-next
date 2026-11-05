@@ -4,8 +4,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
-import { loadProfileRecord, profileReadResult, saveProfileRecord } from './profile-data';
-import { EditableProfileReadError } from './editable-profile-source';
+import { runReadProfile, runSaveProfile } from './profile-data';
 import { parseProfileWrite } from './profile-write-input';
 import {
   loadManagedAccounts,
@@ -109,32 +108,11 @@ export const savePreferences = createServerFn({ method: 'POST' })
   });
 
 /** The supported self-profile projection starts only in the signed-in browser settings view. */
-export const readProfile = createServerFn({ method: 'GET' }).handler(async () => {
-  setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
-  const authorization = viewerCredential(request);
-  const accountId = sessionSubject(request);
-  return profileReadResult(async () => {
-    if (!authorization || !accountId) throw new EditableProfileReadError(401);
-    return loadProfileRecord(kernelClient(), authorization, accountId);
-  });
-});
+export const readProfile = createServerFn({ method: 'GET' }).handler(runReadProfile);
 
 export const saveProfile = createServerFn({ method: 'POST' })
   .validator(parseProfileWrite)
-  .handler(async ({ data }) => {
-    setResponseHeader('cache-control', 'private, no-store');
-    const request = getRequest();
-    await prepareSession(request, env as Partial<SessionEnv>);
-    const authorization = viewerCredential(request);
-    const accountId = sessionSubject(request);
-    if (!authorization || !accountId)
-      return { ok: false as const, status: 403, message: 'Sign in to change your profile.' };
-    if (data.before.accountId !== accountId || data.after.accountId !== accountId)
-      return { ok: false as const, status: 403, message: 'You can only change your own profile.' };
-    return saveProfileRecord(kernelClient(), authorization, accountId, data.before, data.after, data.idempotencyKey);
-  });
+  .handler(async ({ data }) => runSaveProfile(data));
 
 export const saveNotifications = createServerFn({ method: 'POST' })
   .validator((input: unknown) => {

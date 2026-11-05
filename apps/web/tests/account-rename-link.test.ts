@@ -17,6 +17,7 @@ import {
 import { AccountSafetyCard } from '../src/settings/account-safety';
 import { accountRenameHref, securityHrefFromIssuer } from '../src/settings/account-safety-links';
 import { m } from '../src/paraglide/messages.js';
+import { officialProfileRead } from '../src/settings/editable-profile-source';
 
 const accountId = '123e4567-e89b-42d3-a456-426614174000';
 const securityHref = securityHrefFromIssuer('https://auth.example.test');
@@ -60,8 +61,8 @@ function transport(handle: string | null, resource?: object, profileId = account
         });
       }
       expect(new URL(request.url).pathname).toBe(`/v1/accounts/${accountId}/profile`);
-      return Response.json({
-        profile: {
+      return Response.json(
+        officialProfileRead({
           id: profileId,
           kind: 'actor',
           handle,
@@ -70,8 +71,8 @@ function transport(handle: string | null, resource?: object, profileId = account
           links: [],
           avatar: null,
           publicViews: { posts: true, reviews: true, collections: true, realms: true },
-        },
-      });
+        }),
+      );
     }) as typeof fetch,
   });
   return { read: () => readAccountRenameContext(client, 'Bearer private-website-token', accountId), requests };
@@ -191,8 +192,8 @@ test('native profile and capability failures retain bounded status/problem/delay
                   },
                 ],
               })
-            : Response.json({
-                profile: {
+            : Response.json(
+                officialProfileRead({
                   id: accountId,
                   kind: 'actor',
                   handle: 'alice',
@@ -201,8 +202,8 @@ test('native profile and capability failures retain bounded status/problem/delay
                   links: [],
                   avatar: null,
                   publicViews: { posts: true, reviews: true, collections: true, realms: true },
-                },
-              });
+                }),
+              );
         }) as typeof fetch,
       });
       const result = JSON.parse(
