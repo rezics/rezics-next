@@ -309,7 +309,7 @@ test('ordinary members publish a Work Board post with an attachment, reply, reco
   const replyUploaded = replyPage.waitForResponse(
     (response) => /^\/media\/[^/]+$/.test(new URL(response.url()).pathname) && response.request().method() === 'PUT',
   );
-  await replaceRow.getByLabel('Replace image', { exact: true }).setInputFiles({
+  await replaceRow.locator('input[type="file"]').setInputFiles({
     name: 'reply.png',
     mimeType: 'image/png',
     buffer: png,
