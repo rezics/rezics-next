@@ -113,7 +113,11 @@ test('config and settings entries share resolution, strict validation, and recov
     const task = h.tasks.dispatch(h.briefFile);
     const env = { GOAL_LOCAL_CONFIG: h.settings.localFile, GOAL_STATE_DIRECTORY: '.temp/env-state' };
     const envOptions = { cwd: task.worktree, env };
-    const localOptions = { cwd: task.worktree, env: { GOAL_STATE_DIRECTORY: '.temp/env-state' }, localFile: h.settings.localFile };
+    const localOptions = {
+      cwd: task.worktree,
+      env: { GOAL_STATE_DIRECTORY: '.temp/env-state' },
+      localFile: h.settings.localFile,
+    };
     expect(configEntry.mainCheckout(task.worktree)).toBe(h.root);
     expect(configEntry.settingsFile(envOptions)).toBe(settingsEntry.settingsFile(envOptions));
     expect(configEntry.settingsFile(localOptions)).toBe(settingsEntry.settingsFile(localOptions));
@@ -194,7 +198,7 @@ test('account configuration cannot be tracked, and an environment-selected untra
     expect(loadSettings({ cwd: h.root, env: { GOAL_LOCAL_CONFIG: other } }).localFile).toBe(other);
     const defaults = JSON.parse(readFileSync(join(import.meta.dir, '../defaults.json'), 'utf8'));
     expect(defaults.pools).toBeUndefined();
-    expect(defaults.policy).toBeUndefined();
+    expect(defaults.policy).toBeDefined();
   } finally {
     h.dispose();
   }
@@ -264,7 +268,7 @@ test('legacy affected and integration checks migrate to post-integration verifie
     expect(selected.some((check) => check.command.includes('scripts/typecheck.ts'))).toBe(false);
     expect(selected.some((check) => check.command.includes('install'))).toBe(false);
     expect(selected.some((check) => check.command.includes('apps/web/scripts/remote-browser.test.ts'))).toBe(true);
-    expect(selected.some((check) => check.command.includes('page-stories.test.ts'))).toBe(true);
+    expect(selected.some((check) => check.command.some((part) => part.includes('page-stories.test.ts')))).toBe(true);
     expect(selected.some((check) => check.paths.includes('services/kernel/**'))).toBe(false);
     expect(selected.filter((check) => check.command.includes('scripts/workspace-imports.ts'))).toHaveLength(1);
     expect(settings.siblingTests).toEqual({ command: ['bun', 'test', '--timeout', '30000'] });

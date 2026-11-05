@@ -119,15 +119,15 @@ function verifierChecksFromLegacy(
 }
 export const packageDerivedFiles = readDerivedFiles();
 
-function object(value: unknown, label: string): Record<string, unknown> {
+export function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
   return value as Record<string, unknown>;
 }
-function text(value: unknown, label: string): string {
+export function text(value: unknown, label: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} must be a nonempty string`);
   return value;
 }
-function positive(value: unknown, label: string, zero = false): number {
+export function positive(value: unknown, label: string, zero = false): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < (zero ? 0 : 1))
     throw new Error(`invalid ${label}`);
   return value;
