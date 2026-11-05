@@ -220,6 +220,12 @@ mock.module('../src/kernel/exposure', () => ({
   useOperation: () => admitted,
   Exposure: ({ children }: { children: ReactNode }) => (admitted ? children : null),
 }));
+mock.module('../src/library/history-current-origin', () => ({
+  useHistoryAddress: (path: string, cursor: string | null | undefined, addressLocale: string) => ({
+    key: JSON.stringify([path, cursor, addressLocale]),
+    isCurrent: () => true,
+  }),
+}));
 const pickers: { label?: string; change: (value: ProgressPickerSubject[]) => unknown }[] = [];
 mock.module('../src/library/progress-picker', () => ({
   pickerSubject: (subject: { id: string; type: string; label: string; typeLabel?: string }) => ({
