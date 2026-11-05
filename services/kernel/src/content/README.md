@@ -3582,7 +3582,8 @@ cannot be associated with an account after migration; they contain no identifier
   statement counts and response bytes, then inspects the actor primary-key and active-permit physical paths. The
   remaining integrated growth check must also independently grow unrelated Boards, thread homes/posts and Access
   history at those scales, and account for every participating pool, control, preparation, evaluation, runner,
-  examined prefix, row, block, parameter copy and serialized byte.
+  examined prefix, row, block, parameter copy and serialized byte. Statement/response counts and EXPLAIN names are
+  regression aids only; this test does not claim an all-pool physical-work or retained-byte pass.
 
 ### Cost: setting changes
 

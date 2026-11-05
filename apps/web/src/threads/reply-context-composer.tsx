@@ -21,6 +21,7 @@ export function ThreadReplyComposer({
   pending: boolean;
   onCancel: () => void;
   initialKey: string;
+  initialBody?: import('@rezics/document').DocumentSnapshot;
   canSubmit?: boolean;
   slowModeAdvice?: import('./thread-page').ThreadPageObservation['slowMode'] | undefined;
   slowModeSource?: SlowModeVisitOwner;
