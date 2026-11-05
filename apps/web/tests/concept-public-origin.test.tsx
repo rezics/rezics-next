@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, type ReactNode } from 'react';
 import { candidateContext } from '../src/subject/candidates';
 import { subjectHref } from '../src/subject/subject-href';
-import { browserObservation } from '../src/session/observation';
 import {
   conceptPublicIntentFits,
   conceptPublicOriginHref,
@@ -127,18 +126,26 @@ test('production route admits public scope before the original session transport
   const { SourceConceptPublicSession } = await import('../src/features/catalogue/source-concept-explorer/session');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime');
   const { m } = await import('../src/paraglide/messages');
-  const { sessionQuery } = await import('../src/session/query');
+  const { sessionQuery, useSession } = await import('../src/session/query');
+  function SessionShell() {
+    const session = useSession();
+    return <span hidden data-session-state={session.state} />;
+  }
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
-  const stopObservation = browserObservation(client).subscribe(() => {});
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
   const render = async (node: ReactNode) =>
     act(async () => {
-      root.render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
+      root.render(
+        <QueryClientProvider client={client}>
+          <SessionShell />
+          {node}
+        </QueryClientProvider>,
+      );
       await Promise.resolve();
     });
   const loader = Route.options.loader;
@@ -274,7 +281,6 @@ test('production route admits public scope before the original session transport
       root.unmount();
       await Promise.resolve();
     });
-    stopObservation();
     client.clear();
     setLocale(previousLocale, { reload: false });
     for (const [name, descriptor] of saved)
