@@ -10162,5 +10162,9 @@
   "subject_choice_identity_difference": "Las identidades de oferta siguen separadas aunque sus condiciones comerciales sean idénticas.",
   "subject_choice_version_difference": "La coincidencia de revisión se considera junto con su edición registrada; el hash se compara por separado.",
   "subject_choice_licence_difference": "Solo se compara el texto de licencia recibido. Que coincida no acredita autoridad actual para licenciar.",
-  "subject_choice_digest_difference": "Los hashes coincidentes son identificadores recibidos, no una verificación independiente del contenido."
+  "subject_choice_digest_difference": "Los hashes coincidentes son identificadores recibidos, no una verificación independiente del contenido.",
+  "release_search_child_preview": "Vista previa de ediciones relacionadas.",
+  "release_search_child_window": "Ventana actual: {count} ediciones.",
+  "release_search_child_restart_needed": "Reinicia para explorar desde la primera ventana.",
+  "release_search_child_first": "Primera ventana"
 }

@@ -455,7 +455,7 @@ test('grouped responses retain current cards and render independent work expansi
     const html = renderToStaticMarkup(
       createElement(ReleaseSearchPage, { locale, parsed, state: { status: 'ready', page: page! } }),
     );
-    expect(html.match(/<details>/g)).toHaveLength(2);
+    expect(html.match(/<details(?:\s|>)/g)).toHaveLength(2);
     expect(html).toContain(`data-release-work="${workId}"`);
     expect(html).toContain(`data-release-work="${otherWorkId}"`);
     expect(html).toContain(m.release_search_related_releases({}, { locale }));
@@ -492,14 +492,14 @@ test('work expansions keep independent child progress and resume their own respo
         kind: 'work',
         id: firstWork,
         work: groupedCard({ year: 2024 }, firstWork, 'schema:CreativeWork', 'First work'),
-        releases: [],
+        releases: [groupedCard({ year: 2022 }, `${firstRelease}-preview`, releaseType, 'First preview')],
         next: 'preview-one',
       },
       {
         kind: 'work',
         id: secondWork,
         work: groupedCard({ year: 2024 }, secondWork, 'schema:CreativeWork', 'Second work'),
-        releases: [],
+        releases: [groupedCard({ year: 2022 }, `${secondRelease}-preview`, releaseType, 'Second preview')],
         next: 'preview-two',
       },
     ],
@@ -523,13 +523,19 @@ test('work expansions keep independent child progress and resume their own respo
     status: 'preparing',
     page: { status: 'preparing', children: [], next, as_of: asOf },
   });
+  let firstFailure = true;
   readChildren = ({ data }) => {
     calls.push(data);
     if (data.work === firstWork && data.cursor === 'preview-one') return firstPending;
     if (data.work === firstWork && data.cursor === 'resume-one')
       return Promise.resolve(ready([card({ year: 2024 }, firstRelease, 'First edition')], 'first-next'));
-    if (data.work === firstWork && data.cursor === 'first-next')
+    if (data.work === firstWork && data.cursor === 'first-next') {
+      if (firstFailure) {
+        firstFailure = false;
+        return Promise.resolve({ status: 'unavailable' });
+      }
       return Promise.resolve(ready([card({ year: 2025 }, `${firstRelease}-later`, 'First later edition')], null));
+    }
     if (data.work === secondWork && data.cursor === 'preview-two')
       return Promise.resolve(ready([card({ year: 2023 }, secondRelease, 'Second edition')], 'second-next'));
     if (data.work === secondWork && data.cursor === 'second-next')
@@ -552,6 +558,7 @@ test('work expansions keep independent child progress and resume their own respo
         }),
       ),
     );
+    expect(calls).toHaveLength(0);
     await act(async () => expand(firstWork));
     expect(work(firstWork).querySelector('details')!.open).toBe(true);
     expect(work(secondWork).querySelector('details')!.open).toBe(false);
@@ -559,7 +566,11 @@ test('work expansions keep independent child progress and resume their own respo
     expect(work(firstWork).querySelector('details')!.open).toBe(true);
     expect(work(secondWork).querySelector('details')!.open).toBe(true);
 
-    await act(async () => continueButton(firstWork).click());
+    await act(async () => {
+      continueButton(firstWork).click();
+      continueButton(firstWork).click();
+    });
+    expect(calls).toHaveLength(1);
     expect(continueButton(firstWork).disabled).toBe(true);
     expect(continueButton(secondWork).disabled).toBe(false);
     await act(async () => continueButton(secondWork).click());
@@ -581,9 +592,15 @@ test('work expansions keep independent child progress and resume their own respo
       [firstWork, 'resume-one'],
     ]);
     expect(work(firstWork).textContent).toContain('First edition');
+    expect(work(firstWork).textContent).not.toContain('First preview');
     expect(work(secondWork).textContent).toContain('Second edition');
 
     await act(async () => continueButton(secondWork).click());
+    continueButton(firstWork).focus();
+    await act(async () => continueButton(firstWork).click());
+    expect(work(firstWork).textContent).toContain('First edition');
+    expect(continueButton(firstWork).textContent).toBe(m.search_facet_retry({}, { locale: 'en' }));
+    expect(window.document.activeElement).toBe(continueButton(firstWork));
     await act(async () => continueButton(firstWork).click());
     expect(calls.map(({ work, cursor }) => [work, cursor])).toEqual([
       [firstWork, 'preview-one'],
@@ -591,12 +608,225 @@ test('work expansions keep independent child progress and resume their own respo
       [firstWork, 'resume-one'],
       [secondWork, 'second-next'],
       [firstWork, 'first-next'],
+      [firstWork, 'first-next'],
     ]);
     expect(work(firstWork).textContent).toContain('First later edition');
     expect(work(secondWork).textContent).toContain('Second later edition');
+    expect(work(firstWork).textContent).not.toContain('First edition');
+    expect(work(secondWork).textContent).not.toContain('Second edition');
+    expect(continueButton(firstWork)).toBeNull();
+    expect(work(firstWork).textContent).toContain(m.release_search_terminal({}, { locale: 'en' }));
+    expect(window.document.activeElement).toBe(work(firstWork).querySelector('details'));
+    expect(work(firstWork).querySelector('a')?.getAttribute('href')).toContain(firstRelease + '-later');
   } finally {
     readChildren = releaseSearchQuery.readReleaseSearchChildren;
     await act(async () => root.unmount());
+    window.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});
+
+test('current release visits retire pending windows and bound cursor progress without reviving prior visits', async () => {
+  const { QueryClient } = await import('@tanstack/react-query');
+  const { browserObservation } = await import('../src/session');
+  const { addressLease } = await import('../src/session/reader');
+  const { sessionQueryKey } = await import('../src/session/browser-state');
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/search/releases' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const client = new QueryClient();
+  client.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'reader', csrfToken: 'one' });
+  const observation = browserObservation(client);
+  const stop = observation.subscribe(() => {});
+  const makeReader = () => {
+    const snapshot = observation.getSnapshot();
+    const lease = addressLease(() => observation.getSnapshot() === snapshot);
+    return { lifetime: {}, isCurrent: lease.current };
+  };
+  let reader = makeReader();
+  const parsed = parseReleaseSearch(
+    { subtype: releaseType, language: 'ja, en', gte: '2024-02', threshold: '1' },
+    bundledRelease,
+    'en',
+  );
+  const workId = '018f0000-0000-7000-8000-000000000032';
+  const page = parseReleaseSearchGroupsPage({
+    status: 'ready',
+    groups: [
+      {
+        kind: 'work',
+        id: workId,
+        work: groupedCard({ year: 2024 }, workId, 'schema:CreativeWork', 'Window work'),
+        releases: [groupedCard({ year: 2024 }, releaseId, releaseType, 'Preview edition')],
+        next: 'initial',
+      },
+    ],
+    next: 'group-next',
+    as_of: '2026-11-04T00:00:00Z',
+  })!;
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host);
+  let locale = 'en';
+  let currentParsed = parsed;
+  let currentPage = page;
+  const render = () =>
+    act(async () =>
+      root.render(
+        createElement(ReleaseSearchPage, {
+          locale,
+          parsed: currentParsed,
+          reader,
+          state: { status: 'ready', page: currentPage },
+        }),
+      ),
+    );
+  const group = () => host.querySelector(`[data-release-work="${workId}"]`)!;
+  const button = () => group().querySelector('button') as HTMLButtonElement | null;
+  const open = async () =>
+    act(async () => {
+      group().querySelector('summary')!.click();
+    });
+  const click = async () =>
+    act(async () => {
+      button()!.click();
+    });
+  const deferred: { resolve: (result: ChildReaderResult) => void; signal: AbortSignal | undefined }[] = [];
+  const calls: ChildReaderInput[] = [];
+  readChildren = (input) => {
+    calls.push(input);
+    return new Promise((resolve) => deferred.push({ resolve, signal: input.signal }));
+  };
+  const ready = (next: string | null, count = 1): ChildReaderResult => ({
+    status: 'ready',
+    page: {
+      status: 'ready',
+      children: Array.from(
+        { length: count },
+        (_, i) =>
+          groupedCard(
+            { year: 2024 },
+            `${releaseId}-window-${i}`,
+            releaseType,
+            `Current edition ${i}`,
+          ) as unknown as ChildCard,
+      ),
+      next,
+      as_of: page.as_of,
+    },
+  });
+  const complete = async (result: ChildReaderResult) =>
+    act(async () => {
+      deferred.at(-1)!.resolve(result);
+    });
+  try {
+    await render();
+    await open();
+    await click();
+    await complete(ready('second', 20));
+    expect(group().querySelectorAll('ul > li')).toHaveLength(20);
+    expect(group().textContent).not.toContain('Preview edition');
+    await render(); // Equivalent values keep the same deliberate expansion and accepted window.
+    expect(group().querySelector('details')!.open).toBe(true);
+    expect(group().querySelectorAll('ul > li')).toHaveLength(20);
+    for (const replace of [
+      () => {
+        currentParsed = parseReleaseSearch({ ...parsed.form, q: 'B' }, bundledRelease, locale);
+      },
+      () => {
+        currentParsed = parsed;
+      }, // A/B/A cannot revive A's prior window.
+      () => {
+        locale = 'ja';
+      },
+      () => {
+        currentPage = { ...page, as_of: '2026-11-05T00:00:00Z' };
+      },
+      () => {
+        client.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'reader', csrfToken: 'two' });
+        expect(reader.isCurrent()).toBe(false); // Same principal, actual Web observation replacement.
+        reader = makeReader();
+      },
+    ]) {
+      await click();
+      const pending = deferred.at(-1)!;
+      replace();
+      await render();
+      expect(pending.signal?.aborted).toBe(true);
+      expect(group().textContent).not.toContain('Current edition');
+      expect(group().querySelector('details')!.open).toBe(false);
+      await complete(ready('stale'));
+      expect(group().textContent).not.toContain('Current edition');
+      await open();
+      await click();
+      await complete(ready('second'));
+    }
+    expect(JSON.parse(calls.at(-1)!.data.rawJson).language).toBe('ja, en');
+    expect(JSON.parse(calls.at(-1)!.data.rawJson).gte).toBe('2024-02');
+    expect(JSON.parse(calls.at(-1)!.data.rawJson).threshold).toBe('1');
+    await click();
+    await complete(ready('second', 0)); // A ready repeated token is not preparing or EOF.
+    expect(button()).toBeNull();
+    expect(group().textContent).toContain(m.release_search_child_window({ count: 0 }, { locale: 'ja' }));
+    expect(group().textContent).toContain(m.release_search_child_restart_needed({}, { locale: 'ja' }));
+    expect(group().textContent).not.toContain(m.release_search_terminal({}, { locale: 'ja' }));
+    expect(group().querySelector('a')!.getAttribute('href')).not.toContain('cursor=');
+
+    currentPage = { ...currentPage, as_of: '2026-11-06T00:00:00Z' };
+    await render();
+    await open();
+    await click();
+    await complete({
+      status: 'preparing',
+      page: { status: 'preparing', children: [], next: 'initial', as_of: page.as_of },
+    });
+    expect(button()).not.toBeNull(); // Native preparing can retry its own token deliberately.
+    expect(group().textContent).toContain('Preview edition');
+    for (let i = 1; i <= 12; i++) {
+      await click();
+      await complete(ready(`progress-${i}`));
+    }
+    expect(button()).toBeNull();
+    expect(group().textContent).toContain(m.release_search_child_restart_needed({}, { locale: 'ja' }));
+    expect(group().querySelectorAll('ul > li')).toHaveLength(1);
+
+    for (const status of ['restart', 'denied', 'invalid', 'unavailable'] as const) {
+      currentPage = { ...currentPage, as_of: `${currentPage.as_of}-new` };
+      await render();
+      await open();
+      await click();
+      await complete(ready('refusal'));
+      await click();
+      await complete({ status });
+      expect(group().textContent?.includes('Current edition')).toBe(status === 'unavailable');
+      expect(button() !== null).toBe(status === 'unavailable');
+    }
+    await click();
+    const pending = deferred.at(-1)!;
+    await act(async () => root.unmount());
+    expect(pending.signal?.aborted).toBe(true);
+    await complete(ready(null)); // Ignored cancellation must not apply after disposal.
+    expect(host.textContent).toBe('');
+  } finally {
+    readChildren = releaseSearchQuery.readReleaseSearchChildren;
+    await act(async () => root.unmount());
+    stop();
+    client.clear();
     window.close();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);

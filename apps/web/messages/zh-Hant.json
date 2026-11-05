@@ -10172,5 +10172,9 @@
   "subject_choice_identity_difference": "即使商業條款相同，不同報價身分也保持獨立。",
   "subject_choice_version_difference": "內容修訂需結合已記錄版本集比較，摘要另行比較。",
   "subject_choice_licence_difference": "僅比較已提供的授權條款文字。文字相同不能確認目前授權權限。",
-  "subject_choice_digest_difference": "相同雜湊是已提供識別資訊，不代表已獨立驗證任一內容本文。"
+  "subject_choice_digest_difference": "相同雜湊是已提供識別資訊，不代表已獨立驗證任一內容本文。",
+  "release_search_child_preview": "相關發行版本預覽。",
+  "release_search_child_window": "目前視窗：{count} 個發行版本。",
+  "release_search_child_restart_needed": "重新開始以從首個視窗瀏覽。",
+  "release_search_child_first": "首個視窗"
 }

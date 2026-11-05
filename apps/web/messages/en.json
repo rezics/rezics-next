@@ -10265,5 +10265,9 @@
   "subject_choice_identity_difference": "Separate offer identities stay separate even with identical commercial terms.",
   "subject_choice_version_difference": "A matching content revision is considered together with its captured Edition; the digest is compared separately.",
   "subject_choice_licence_difference": "Only the supplied licence text is compared. Matching text does not establish current licensing authority.",
-  "subject_choice_digest_difference": "Matching hashes are supplied identifiers, not an independent verification of either content body."
+  "subject_choice_digest_difference": "Matching hashes are supplied identifiers, not an independent verification of either content body.",
+  "release_search_child_preview": "Preview of related releases.",
+  "release_search_child_window": "Current window: {count} releases.",
+  "release_search_child_restart_needed": "Restart to explore from the first window.",
+  "release_search_child_first": "First window"
 }

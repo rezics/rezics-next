@@ -10162,5 +10162,9 @@
   "subject_choice_identity_difference": "거래 조건이 같아도 별개의 제안 식별자는 별개로 유지됩니다.",
   "subject_choice_version_difference": "콘텐츠 리비전은 기록된 에디션과 함께 비교하며 해시는 별도로 비교합니다.",
   "subject_choice_licence_difference": "제공된 라이선스 문구만 비교합니다. 문구가 같아도 현재 라이선스 허여 권한이 입증되지는 않습니다.",
-  "subject_choice_digest_difference": "일치하는 해시는 제공된 식별자이며 콘텐츠 본문을 독립적으로 검증했다는 뜻이 아닙니다."
+  "subject_choice_digest_difference": "일치하는 해시는 제공된 식별자이며 콘텐츠 본문을 독립적으로 검증했다는 뜻이 아닙니다.",
+  "release_search_child_preview": "관련 출시 미리보기입니다.",
+  "release_search_child_window": "현재 창: 출시 {count}개.",
+  "release_search_child_restart_needed": "첫 번째 창부터 탐색하려면 다시 시작하세요.",
+  "release_search_child_first": "첫 번째 창"
 }

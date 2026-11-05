@@ -10169,5 +10169,9 @@
   "subject_choice_identity_difference": "即使商业条款相同，不同报价身份也保持独立。",
   "subject_choice_version_difference": "内容修订需结合已记录版本集比较，摘要另行比较。",
   "subject_choice_licence_difference": "仅比较已提供的许可文本。文本相同不能确认当前许可授权。",
-  "subject_choice_digest_difference": "相同哈希是已提供标识，不代表已独立验证任一内容正文。"
+  "subject_choice_digest_difference": "相同哈希是已提供标识，不代表已独立验证任一内容正文。",
+  "release_search_child_preview": "相关发行版本预览。",
+  "release_search_child_window": "当前窗口：{count} 个发行版本。",
+  "release_search_child_restart_needed": "重新开始以从首个窗口浏览。",
+  "release_search_child_first": "首个窗口"
 }

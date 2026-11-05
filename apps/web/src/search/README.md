@@ -220,3 +220,33 @@ edits remain on their occurrence and block form Apply without publishing a repla
 survive Boolean wrapping and equivalent renders; property/mode, external request and reader replacement retire
 obsolete repair state. Coverage describes committed endpoints, precision and possible overlap, excluding missing
 dates, independently of raw edits. No date normalization, browser storage or second calendar authority is used.
+
+## Release child windows
+
+The released-edition journey consumes native grouped responses without reconstructing groups or cursors. Each work
+starts collapsed with its native preview (at most three children); rendering and expanding never read a continuation.
+An explicit Continue captures one request synchronously per work. Different works can read independently. The first
+successful ready child read replaces the preview; each later ready read replaces the accepted window, including an
+empty sparse window. Preparing retains the preview or last accepted window and exposes explicit Retry using the
+native next token. Unavailable reads retain the same accepted rows and requested token; denial, invalid input,
+unsupported input and native restart withhold them. No child data or cursor is stored in browser storage.
+
+At most 20 top-level groups render. With W work groups and S standalone releases (W + S <= 20), retained result
+rows are bounded by W * (1 work + 3 preview + 20 accepted children) + S <= 480; displayed rows are bounded by
+W * (1 work + max(3, 20) children) + S <= 420. The native page keeps its previews, but the UI never appends earlier
+accepted windows. Over-limit responses fail the installed native parser; they are never sliced. Preview size is not
+a release total. Current-window announcements include sparse windows and use the supplied locale.
+
+Decision: each work retains at most 12 distinct successful requested cursors, then offers First window rather than
+continuing; a ready response pointing to any retained token also requires restart. A preparing response can lawfully
+retry its own token. First window deliberately navigates to the same exact released form without the group-page
+cursor; it does not replay the child chain. This is a reversible visit-local ceiling, not a native expiry policy.
+
+The child owner includes exact form values, ordered operands, locale and the initial native group page/checkpoint.
+The route supplies Web's public reader origin, composing browserObservation, useReaderAddress and
+useReaderResponseOrigin; its lifetime changes on actual observation or response replacement even for an equal
+principal or equal response values. Search consumes addressLease/readLease through session/reader; it has no session
+registry or replacement detector. An owner change hides old windows during render, aborts pending requests and
+rejects late completions even if cancellation is ignored. Equivalent renders retain expansion and independent work
+state. Focus intent belongs only to an activated current action: completion keeps the surviving action or named
+work region, while closing, replacement, disposal or moving focus cancels recovery.

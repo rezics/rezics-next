@@ -10162,5 +10162,9 @@
   "subject_choice_identity_difference": "Des identités d’offre distinctes restent distinctes même avec des conditions commerciales identiques.",
   "subject_choice_version_difference": "Une même révision de contenu est considérée avec son édition enregistrée ; le condensat est comparé séparément.",
   "subject_choice_licence_difference": "Seul le texte de licence reçu est comparé. Un texte identique n’établit pas l’autorité actuelle de concéder une licence.",
-  "subject_choice_digest_difference": "Des condensats identiques sont des identifiants reçus, pas une vérification indépendante des contenus."
+  "subject_choice_digest_difference": "Des condensats identiques sont des identifiants reçus, pas une vérification indépendante des contenus.",
+  "release_search_child_preview": "Aperçu des éditions associées.",
+  "release_search_child_window": "Fenêtre actuelle : {count} éditions.",
+  "release_search_child_restart_needed": "Recommencez pour explorer depuis la première fenêtre.",
+  "release_search_child_first": "Première fenêtre"
 }

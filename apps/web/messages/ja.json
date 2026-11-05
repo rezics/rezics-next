@@ -10172,5 +10172,9 @@
   "subject_choice_identity_difference": "商業条件が同じでも、異なるオファー識別子は別々に扱います。",
   "subject_choice_version_difference": "コンテンツ改訂は記録されたエディションと併せて照合し、ハッシュは別の項目で比較します。",
   "subject_choice_licence_difference": "比較するのは提示されたライセンス文言だけです。同じ文言でも、現在の許諾権限を証明するものではありません。",
-  "subject_choice_digest_difference": "同じハッシュは提示された識別情報であり、いずれの本文も独自に検証したことを意味しません。"
+  "subject_choice_digest_difference": "同じハッシュは提示された識別情報であり、いずれの本文も独自に検証したことを意味しません。",
+  "release_search_child_preview": "関連リリースのプレビュー。",
+  "release_search_child_window": "現在のウィンドウ：{count}件のリリース。",
+  "release_search_child_restart_needed": "最初のウィンドウから表示するには再開してください。",
+  "release_search_child_first": "最初のウィンドウ"
 }
