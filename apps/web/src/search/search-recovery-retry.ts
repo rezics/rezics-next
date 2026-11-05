@@ -11,11 +11,19 @@ export function searchRetryAt(value: string | null, now: number): number | undef
 
 /** Enable a manual action after the native delay, without fetching or polling. */
 export function useSearchRetryWait(retryAt?: number): boolean {
-  const [now, setNow] = useState(Date.now);
+  // Server rendering and the first hydration render must agree even if the delay expires in transit.
+  // Keep a supplied deadline waiting until the mounted effect samples the current clock.
+  const [now, setNow] = useState<number>();
   useEffect(() => {
-    if (retryAt === undefined || retryAt <= Date.now()) return;
-    const timer = setTimeout(() => setNow(Date.now()), Math.min(retryAt - Date.now(), 2_147_483_647));
+    if (retryAt === undefined) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const update = () => {
+      const current = Date.now();
+      setNow(current);
+      if (retryAt > current) timer = setTimeout(update, Math.min(retryAt - current, 2_147_483_647));
+    };
+    update();
     return () => clearTimeout(timer);
-  }, [retryAt, now]);
-  return retryAt !== undefined && retryAt > Math.max(now, Date.now());
+  }, [retryAt]);
+  return retryAt !== undefined && (now === undefined || retryAt > now);
 }
