@@ -1147,6 +1147,7 @@
   "library_following_spaces": "空间",
   "library_following_subjects": "条目",
   "library_heading": "书架",
+  "library_label_cursor_rejected": "无法加载此标签的后续页面。",
   "library_label_shelf_closed": "此书架目前不可用。",
   "library_label_shelf_empty": "此标签下还没有作品。",
   "library_label_shelf_remove": "从此作品移除此标签",

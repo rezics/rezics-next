@@ -106,6 +106,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     response: Response;
   }[] = [];
   let hold: string | 'all' | null = null;
+  let assignmentOverride: { status: number; code: string } | null = null;
   let serial = 0;
   const name = (subject: string) =>
     subject === A ? 'A private shelf' : subject === B ? 'B private shelf' : 'C private shelf';
@@ -120,6 +121,8 @@ test('The actual named-label Library renders private FULL assignments and remove
     const subject = [...tokens].find(([, token]) => req.headers.get('authorization') === `Bearer ${token}`)?.[0];
     if (!subject) throw new Error('Assignment read has no associated actual credential');
     const label = url.searchParams.get('labelId')!;
+    if (assignmentOverride && url.searchParams.has('cursor'))
+      return Response.json({ code: assignmentOverride.code }, { status: assignmentOverride.status });
     const sequence = ++serial;
     const response = Response.json({
       label: { id: label, name: name(subject), revision: 3 },
@@ -330,6 +333,63 @@ test('The actual named-label Library renders private FULL assignments and remove
     await act(async () => {
       root = hydrateRoot(host, tree());
     });
+    visible(A, null);
+    for (const outcome of [
+      { status: 400, code: 'invalid_cursor' },
+      { status: 409, code: 'stale_cursor' },
+    ]) {
+      assignmentOverride = outcome;
+      const query = currentQuery();
+      const priorReads = reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments').length;
+      await act(async () => {
+        await client.invalidateQueries({ queryKey: query.queryKey, exact: true });
+      });
+      await settle();
+      const recovery = currentQuery().state.data as CurrentLabelShelfData;
+      expect(recovery).toMatchObject({
+        state: 'cursor-rejected',
+        labelId,
+        provenance: { subject: A, locale: 'en', source: { labelId, cursor: 'source-one' } },
+      });
+      expect(recovery).not.toHaveProperty('label');
+      expect(recovery).not.toHaveProperty('entries');
+      expect(recovery).not.toHaveProperty('undo');
+      expect(recovery).not.toHaveProperty('undoKey');
+      absent();
+      expect(host.textContent).not.toContain('No works have this label yet.');
+      expect(host.textContent).toContain(m.library_label_cursor_rejected());
+      expect(host.querySelector('form')).toBeNull();
+      expect(host.querySelector('button')).toBeNull();
+      expect(host.querySelector('[data-received-assignment-trigger]')).toBeNull();
+      const firstPageLink = host.querySelector<HTMLAnchorElement>('a[href*="/library?label="]');
+      expect(firstPageLink).not.toBeNull();
+      const firstPageAddress = new URL(firstPageLink!.href);
+      expect(firstPageAddress.pathname).toBe('/en/library');
+      expect(firstPageAddress.searchParams.get('label')).toBe(labelId);
+      expect(firstPageAddress.searchParams.get('cursor')).toBeNull();
+      expect(firstPageAddress.searchParams.get('layout')).toBe('list');
+      const assignmentReads = reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments');
+      expect(assignmentReads).toHaveLength(priorReads + 1);
+      expect(new URL(assignmentReads.at(-1)!.url).searchParams.get('cursor')).toBe('source-one');
+      const otherSource = {
+        ...recovery,
+        provenance: {
+          ...recovery.provenance,
+          source: { ...recovery.provenance.source, cursor: 'source-two' },
+        },
+      };
+      flushSync(() => client.setQueryData(query.queryKey, otherSource));
+      expect(host.querySelector('a[href*="/library?label="]')).toBeNull();
+      absent();
+      flushSync(() => client.setQueryData(query.queryKey, recovery));
+      expect(host.querySelector('a[href*="/library?label="]')).not.toBeNull();
+    }
+    assignmentOverride = null;
+    const rejectedQuery = currentQuery();
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: rejectedQuery.queryKey, exact: true });
+    });
+    await settle();
     visible(A, null);
     // Read admission is independent of missing CSRF and of unassign admission.
     const reading = () => host.querySelector('[data-received-assignment-reader]');

@@ -97,7 +97,8 @@ function matches(data: CurrentLabelShelfData, subject: string, source: LabelShel
     data.provenance.subject === subject &&
     data.provenance.locale === locale &&
     sourceKey(data.provenance.source) === sourceKey(source) &&
-    (data.state !== 'loaded' || data.label.id === source.labelId)
+    (data.state !== 'loaded' || data.label.id === source.labelId) &&
+    (data.state !== 'cursor-rejected' || data.labelId === source.labelId)
   );
 }
 

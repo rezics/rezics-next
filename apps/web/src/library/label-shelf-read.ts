@@ -39,6 +39,7 @@ export type LabelShelfPageData =
   | { state: 'denied' }
   | { state: 'preparing' }
   | { state: 'unavailable'; sessionUnavailable?: true }
+  | { state: 'cursor-rejected'; labelId: string }
   | {
       state: 'loaded';
       label: LibraryLabelSummary;
@@ -130,19 +131,31 @@ async function readLabelShelfPage(
       !admitted.includes('library_label.assignment_list')
     )
       return finish({ state: 'closed' });
-    const result = await client.libraryLabelAssignments.get({
-      query: {
-        labelId: input.labelId,
-        view: 'FULL',
-        limit: input.limit,
-        ...(input.cursor ? { cursor: input.cursor } : {}),
-      },
-      headers: { authorization },
-    });
+    let result: Awaited<ReturnType<typeof client.libraryLabelAssignments.get>>;
+    try {
+      result = await client.libraryLabelAssignments.get({
+        query: {
+          labelId: input.labelId,
+          view: 'FULL',
+          limit: input.limit,
+          ...(input.cursor ? { cursor: input.cursor } : {}),
+        },
+        headers: { authorization },
+      });
+    } catch (error) {
+      if (input.cursor && error instanceof Error && error.name === 'StaleCursorError')
+        return finish({ state: 'cursor-rejected', labelId: input.labelId });
+      throw error;
+    }
     if (isPlatformClosedProblem(result.status, result.error?.value)) return finish({ state: 'closed' });
     if (result.status === 401 || result.status === 403) return finish({ state: 'denied' });
     const problem: unknown = result.error?.value;
     const code = problem && typeof problem === 'object' && 'code' in problem ? problem.code : undefined;
+    if (
+      input.cursor &&
+      ((result.status === 400 && code === 'invalid_cursor') || (result.status === 409 && code === 'stale_cursor'))
+    )
+      return finish({ state: 'cursor-rejected', labelId: input.labelId });
     if (code === 'index_not_ready' || code === 'semantic_not_ready') return finish({ state: 'preparing' });
     const page = readLibraryResult(result);
     if (!('label' in page) || page.label.id !== input.labelId)

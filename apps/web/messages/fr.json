@@ -1147,6 +1147,7 @@
   "library_following_spaces": "Espaces",
   "library_following_subjects": "Fiches",
   "library_heading": "Bibliothèque",
+  "library_label_cursor_rejected": "Impossible de charger la suite de cette étiquette.",
   "library_label_shelf_closed": "Cette étagère est indisponible pour le moment.",
   "library_label_shelf_empty": "Aucune œuvre ne porte encore cette étiquette.",
   "library_label_shelf_remove": "Retirer cette étiquette de l’œuvre",
