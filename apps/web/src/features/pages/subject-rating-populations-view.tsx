@@ -188,24 +188,25 @@ export function useRatingPopulations(
     ]);
     const lease: PopulationLease = {
       key: JSON.stringify([registry.id, ++serial, input.subjectId, input.question, reader]),
-      isCurrent: () =>
-        live &&
-        registry.epoch === epoch &&
-        desired.current.signature === signature &&
-        desired.current.read === read &&
-        JSON.stringify([
-          observationStore.getSnapshot().state,
-          observationStore.getSnapshot().state === 'signed-in'
-            ? observationStore.getSnapshot().observation.subject
-            : null,
-          observationStore.getSnapshot().state === 'signed-in'
-            ? observationStore.getSnapshot().observation.id
-            : null,
-        ]) === observationIdentity &&
-        (anonymous
-          ? client.getQueryData<Session>(['session'])?.state === 'signed-out'
-          : client.getQueryData<Session>(['session'])?.state === 'signed-in' &&
-            client.getQueryData<Session>(['session'])?.subject === reader),
+      isCurrent: () => {
+        const currentObservation = observationStore.getSnapshot();
+        const currentObservationIdentity = JSON.stringify([
+          currentObservation.state,
+          currentObservation.state === 'signed-in' ? currentObservation.observation.subject : null,
+          currentObservation.state === 'signed-in' ? currentObservation.observation.id : null,
+        ]);
+        return (
+          live &&
+          registry.epoch === epoch &&
+          desired.current.signature === signature &&
+          desired.current.read === read &&
+          currentObservationIdentity === observationIdentity &&
+          (anonymous
+            ? client.getQueryData<Session>(['session'])?.state === 'signed-out'
+            : client.getQueryData<Session>(['session'])?.state === 'signed-in' &&
+              client.getQueryData<Session>(['session'])?.subject === reader)
+        );
+      },
       retire: () => {
         live = false;
       },
