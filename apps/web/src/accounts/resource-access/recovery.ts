@@ -161,6 +161,7 @@ export class AccessRecovery {
     await this.attempt(this.state.pending);
   }
   private async attempt(pending: Change | OwnerTransfer) {
+    const wasUncertain = this.state.phase === 'uncertain';
     const generation = ++this.generation;
     this.update({ busy: true });
     let result: WriteResult;
@@ -179,6 +180,9 @@ export class AccessRecovery {
       result = { status: 'uncertain' };
     }
     if (!this.owns(generation)) return;
+    // A refusal of this retry says nothing about an earlier dispatched attempt.
+    // Only a matching successful receipt can settle an already unknown outcome.
+    if (wasUncertain && result.status !== 'saved') result = { status: 'uncertain' };
     const movement = this.windows.stageAuthoritativeFirst();
     // Clear all old ACL data before a current authorization/disclosure read.
     this.update({

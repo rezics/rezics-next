@@ -28,7 +28,7 @@ const catalogue = compileNativePolicyCatalogue(actions, roles);
 function projection(overrides: Partial<NativePermissionProjection> = {}): NativePermissionProjection {
   return {
     assignmentValid: true,
-    deadlineLive: true,
+    live: true,
     localDenied: false,
     actorActionGrant: false,
     actorResourceRoleGrant: false,
@@ -88,6 +88,22 @@ test('Collection policy consumes separate actor and principal facts, never the l
     decision: 'deny',
     reason: 'grant',
   });
+});
+
+test('native live projection permits current grants and expires ordinary and explicit advice together', () => {
+  const facts = projection({
+    actorActionGrant: true,
+    principalActionGrant: true,
+    explicitActorActionGrant: true,
+    explicitPrincipalActionGrant: true,
+  });
+  for (const mode of ['ordinary', 'explicit'] as const) {
+    expect(decideNativePermission(catalogue, { ...collection, mode }, facts).decision).toBe('allow');
+    expect(decideNativePermission(catalogue, { ...collection, mode }, { ...facts, live: false })).toMatchObject({
+      decision: 'deny',
+      reason: 'deadline',
+    });
+  }
 });
 
 test('Collection floor remains public and scopeless while explicit advice drops floor and resource roles', () => {

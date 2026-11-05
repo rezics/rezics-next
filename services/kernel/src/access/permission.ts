@@ -88,7 +88,6 @@ import {
   decideNativePermission,
   hasNativePolicyProfile,
   uniqueNativePolicyResourceType,
-  type NativePermissionProjection,
 } from './policy-core.ts';
 import type { PolicyCatalogue } from '@rezics/access';
 // Only the Kind original invocation needs a Source-eight-axis declaration for
@@ -410,7 +409,6 @@ async function checkPreparedPermission(
       const resourceType = policyResourceType!;
       const hasPrincipal = facts.principalId !== null;
       const canEvaluateExplicit = includeExplicit && !facts.anonymous && facts.scope;
-      const project = (row: (typeof rows)[number]) => row as unknown as NativePermissionProjection;
       const ordinary = rows.map((row) =>
         decideNativePermission(
           facts.policyCatalogue,
@@ -424,7 +422,7 @@ async function checkPreparedPermission(
             floor,
             mode: 'ordinary',
           },
-          project(row),
+          row,
         ),
       );
       const explicit = canEvaluateExplicit
@@ -441,7 +439,7 @@ async function checkPreparedPermission(
                 floor: false,
                 mode: 'explicit',
               },
-              project(row),
+              row,
             ),
           )
         : [];
@@ -1263,15 +1261,10 @@ export function createAccess(config: PermissionConfig): Access {
                     scope,
                     floor: floor?.[id] === true,
                   };
-                  const projection = row as unknown as NativePermissionProjection;
-                  const ordinary = decideNativePermission(policyCatalogue, { ...input, mode: 'ordinary' }, projection);
+                  const ordinary = decideNativePermission(policyCatalogue, { ...input, mode: 'ordinary' }, row);
                   const explicit =
                     scope && identity.kind === 'account'
-                      ? decideNativePermission(
-                          policyCatalogue,
-                          { ...input, floor: false, mode: 'explicit' },
-                          projection,
-                        )
+                      ? decideNativePermission(policyCatalogue, { ...input, floor: false, mode: 'explicit' }, row)
                       : undefined;
                   result[id] = Object.freeze({
                     allowed: ordinary.decision === 'allow',
