@@ -22,6 +22,7 @@ const globals = {
   Node: window.Node,
   Element: window.Element,
   Event: window.Event,
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -87,6 +88,7 @@ const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, R
 const { createRoot, hydrateRoot } = await import('react-dom/client');
 const { deLocalizeUrl, localizeUrl, setLocale } = await import('../src/paraglide/runtime.js');
 const { sessionQuery } = await import('../src/session/query');
+const { m } = await import('../src/paraglide/messages.js');
 const { Route: MyRealmsRoute } = await import('../src/routes/realms/index');
 
 function signedIn(subject = 'realm-owner', csrfToken: string | null = 'csrf-original') {
@@ -122,6 +124,7 @@ type Surface = Awaited<ReturnType<typeof createSurface>>;
 async function createSurface(options: { locale?: 'en' | 'zh-Hant'; cursor?: string } = {}) {
   const locale = options.locale ?? 'en';
   await setLocale(locale, { reload: false });
+  window.document.head.innerHTML = '<link rel="canonical" href="https://site.example.test/en/realms">';
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   mockReaderSession = signedIn();
   client.setQueryData(sessionQuery.queryKey, signedIn());
@@ -668,11 +671,13 @@ test('equal source replacement and A/B/A retire staged return coordinates despit
       await until(() => readCalls.length === 3, 'pending return');
       if (replace === 'aba') await surface.setSession(signedIn('other-account'));
       await surface.setSession(signedIn());
+      const replacement = surface.client.getQueryCache().build(surface.client, { queryKey: ['my-realms', ''] });
+      replacement.setData(page('Replacement query'));
       response.resolve(page('Retired return'));
       await until(() => surface.router.state.status === 'idle', 'retired return');
       expect(surface.host.textContent).not.toContain('Retired return');
       expect(inventoryLink(surface, m.prq_previous())).toBeUndefined();
-      expect(surface.client.getQueryData(['my-realms', ''])).toBeUndefined();
+      expect(surface.client.getQueryCache().find({ queryKey: ['my-realms', ''], exact: true })).toBe(replacement);
       await surface.router.invalidate();
       await until(() => surface.host.textContent?.includes('Retired return') ?? false, 'fresh return');
       expect(inventoryLink(surface, m.prq_previous())).toBeUndefined();
