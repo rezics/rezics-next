@@ -137,6 +137,11 @@ test('mounted sort form retains score addresses until date selection and replace
   const submit = async () => {
     await act(async () => form().dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
   };
+  const navigation = () => {
+    const target = navigate.mock.calls.at(-1)?.[0];
+    if (!target || typeof target.search !== 'function') throw new Error('Expected a shelf address replacement');
+    return { to: target.to, search: target.search({ cursor: 'obsolete' }) };
+  };
   const retained = { state: 'completed', type: 'schema:Book', layout: 'table', size: 'l', columns: 'title,status' };
   try {
     for (const direction of ['asc', 'desc'] as const) {
@@ -149,7 +154,7 @@ test('mounted sort form retains score addresses until date selection and replace
       expect(submitted()).toEqual({ ...retained, orderBy: 'personalScore', direction });
       expect(new window.FormData(form()).getAll('orderBy')).toEqual(['personalScore']);
       await submit();
-      expect(navigate.mock.calls.at(-1)?.[0]).toEqual({
+      expect(navigation()).toEqual({
         to: '/library',
         search: { ...retained, orderBy: 'personalScore', direction },
       });
@@ -160,7 +165,7 @@ test('mounted sort form retains score addresses until date selection and replace
       await choose('direction', changedDirection);
       expect(submitted()).toEqual({ ...retained, orderBy: 'createdAt', direction: changedDirection });
       await submit();
-      expect(navigate.mock.calls.at(-1)?.[0]).toEqual({
+      expect(navigation()).toEqual({
         to: '/library',
         search: { ...retained, orderBy: 'createdAt', direction: changedDirection },
       });
@@ -196,7 +201,7 @@ test('mounted sort form retains score addresses until date selection and replace
     await choose('direction', 'desc');
     expect(submitted()).toEqual({ ...retained, orderBy: 'priority', direction: 'desc' });
     await submit();
-    expect(navigate.mock.calls.at(-1)?.[0]).toEqual({
+    expect(navigation()).toEqual({
       to: '/library',
       search: { ...retained, orderBy: 'priority', direction: 'desc' },
     });
