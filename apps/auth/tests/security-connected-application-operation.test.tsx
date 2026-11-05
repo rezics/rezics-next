@@ -94,7 +94,7 @@ test.each([200, 401, 403, 503])('consent review serializes security writes and p
   await flush(choose);
   expect(writes().every((item) => item.disabled)).toBe(true);
   const reloads = [...host.querySelectorAll<HTMLButtonElement>('button')].filter(
-    (item) => item.textContent === m.auth_inventory_reload(),
+    (item) => item.textContent === m.auth_inventory_reload() || item.textContent === m.auth_owned_reload(),
   );
   expect(reloads.map((item) => item.disabled)).toEqual([true, false, true]);
   await flush(() => reloads[1]!.click());

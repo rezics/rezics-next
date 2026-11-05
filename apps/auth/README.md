@@ -369,6 +369,35 @@ Only an unresolved destructive target's original account, kind and native id sur
 account, return requires fresh explicit readback and confirmation; a different account discards that target. Failed
 reads offer Reload, ended sessions offer sign-in, and return never replays a credential or consent command.
 
+Owned applications use the existing bounded native clients inventory, independently of granted consents.
+Each row shows its exact client identifier, admitted public name or localized unnamed fallback, and native
+enabled/disabled state. Local details show all returned configured scope tokens with the existing permission
+presentation, including unknown-token wording. These capabilities and ownership are not consent to act as the
+viewer or a current native permission decision. Disabled does not assert consent removal, completed erasure or
+cancellation. An empty scope list describes only that returned row.
+
+Each accepted page reports its returned row count and presence of a next cursor, never a total. Next, Previous,
+Reload current page and Retry this page each perform one bounded `loadInventory('clients', cursor, signal)` read
+through the installed BFF and `privateAuthRead`; the existing Origin/cookie checks, native session authority,
+owner keyset query, signed cursor validation and 20-row bound retain their costs. Within the existing read-only
+transaction, each clients read includes one issuer-client admission query and one ordered owner-page query,
+plus BEGIN/COMMIT and the installed human-proof preparation. These mounted read counts do not declare authority
+preparation free. No separate preparation or
+per-row authority calls are added. Expansion, collapse, copying, focus and locale changes perform zero native reads.
+The Security entry/return preparation and other inventory costs below remain additional whole-call terms.
+
+Replacement reads remove old rows and details while visibly pending. Failed navigation retains its exact intended
+cursor/direction for deliberate retry; only an accepted response commits navigation. Reload retains the accepted
+cursor, and an expired cursor offers a separate explicit first-page restart. Identifiers and scopes stay selectable
+text; deliberate local clipboard copy reports success or failure only within its exact expanded observation.
+Lifetime retirement synchronously clears private DOM, details, feedback and cursor-bearing controls. Source replacement,
+unmount and late read/clipboard replies cannot restore retired data; fresh reads require the current parent lifetime.
+No polling, background prefetch, command or consent-management authority is added. Phone/desktop light/dark stories
+and focused mounted tests describe presentation; native/browser and broader acceptance remain controller-owned.
+
+Decision: retain at most the last 32 accepted opaque previous-page targets in mounted memory; drop only the oldest
+at the bound, and clear history on an accepted explicit first-page restart or lifetime/source retirement.
+
 Connected-application reviews use one page-local controller and acquire the same write boundary until cancellation or a determinate result. Nonempty reductions carry the exact reviewed grant set to the native writer, which rechecks it under the consent lock before publishing a reduction barrier. If it changed, the page refreshes the current permissions and requires a new explicit decision; it never changes the reduction into Allow or resubmits. Explicit remove-all retains its existing meaning, pending reductions keep their ceiling, and uncertain reductions keep all security writes blocked without replay. Independent owned-client navigation remains available and consent navigation cannot discard a review.
 
 Connected-application history uses the mounted first-unknown plus latest-review limit. New deliberate review does
