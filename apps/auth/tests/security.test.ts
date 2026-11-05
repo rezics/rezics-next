@@ -433,7 +433,7 @@ test(
       expect(authCalls('/credential-effects/stage')).toHaveLength(0);
 
       stepUpRequired = false;
-      await page.goto(`${origin}/security`, { waitUntil: 'networkidle' });
+      await page.goto(`${origin}/security`, { waitUntil: 'domcontentloaded' });
       expect(await page.getByRole('heading', { name: 'Account security' }).count()).toBe(1);
       expect(await page.getByLabel('New password', { exact: true }).inputValue()).toBe('');
     } finally {
