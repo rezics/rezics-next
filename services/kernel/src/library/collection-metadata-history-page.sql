@@ -1,6 +1,6 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :collection_id::uuid AS collection_id,
-         :curator_account_id::uuid AS curator_account_id, :after_revision::integer AS after_revision,
+         :curator_account_id::uuid AS curator_account_id, :after_revision::nullable(integer) AS after_revision,
          :page_limit::integer AS page_limit
 )
 SELECT history.revision, history.transaction_id AS "transactionId", history.recorded_at AS "recordedAt",
