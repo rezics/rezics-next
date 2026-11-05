@@ -244,7 +244,7 @@ test('Default composed member recovery admits only its live reader and preserves
   const button = (node?: string) => list(node).querySelector('button')!;
   const flush = async () => {
     await act(async () => {
-      await Bun.sleep(0);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     });
   };
   const press = async (trigger = button()) => {
@@ -289,22 +289,6 @@ test('Default composed member recovery admits only its live reader and preserves
       firstRecovery(page([recording.members[0]!], 'opaque:next/=='));
     });
     await flush();
-    expect(
-      list(),
-      JSON.stringify({
-        html: host.innerHTML,
-        queries: client
-          .getQueryCache()
-          .getAll()
-          .map((query) => ({
-            key: query.queryKey,
-            status: query.state.status,
-            data: query.state.data,
-            error: String(query.state.error),
-          })),
-        aborted: nativeCalls.map((call) => call.signal?.aborted),
-      }),
-    ).not.toBeNull();
     expect(list().textContent).toContain('Snow Country');
     expect(list().textContent).not.toContain('The Tale of Genji');
 
