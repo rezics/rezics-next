@@ -410,6 +410,7 @@ export function CurrentProgressDetail({
   // A healthy same-viewer rotation pauses dispatch while its new scoped read is pending.
   // Keeping this already accepted read mounted preserves the existing publication editor.
   const healthyPause = browser && snapshot.healthyPause;
+  if (query.isError && visit.staged) visit.staged.keyboard = false;
   // Admission consumes actual returned cursors: a stale native cursor may have restarted.
   const focus = useRef<{ visit: Visit; section: HistorySection; element: Element | null } | null>(null);
   const admission = `${boundary.epoch}:${actualState?.dataUpdateCount}`;
@@ -450,6 +451,7 @@ export function CurrentProgressDetail({
         {viewer && allowed ? (
           <Button
             variant="outline"
+            className="min-h-11 min-w-11"
             disabled={query.isFetching}
             onClick={() => {
               if (isCurrent()) void query.refetch();
