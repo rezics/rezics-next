@@ -351,7 +351,7 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
           },
         ];
       });
-    const creditManifest = buildShowcaseManifest({
+    const manifest = buildShowcaseManifest({
       plan,
       readings: first.readings,
       acknowledgements,
@@ -403,7 +403,7 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
     expect(current.vndbCreditDiagnostics).toContainEqual(
       expect.objectContaining({ code: 'chardesign', reason: 'missing_concept' }),
     );
-    const manifest = buildShowcaseManifest({
+    const creditManifest = buildShowcaseManifest({
       plan,
       readings: current.readings,
       acknowledgements: journal.acknowledgedCommands(),
