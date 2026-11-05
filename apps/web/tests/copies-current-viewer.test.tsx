@@ -541,6 +541,16 @@ test('The actual Copies route retires retained private rows and editor state on 
   try {
     await show(viewer('A'));
     expect(host.textContent).not.toContain('FOREIGN');
+    await click(m.library_copy_compare_select());
+    await click(m.library_copy_compare_open());
+    const comparisonTrigger = button(m.library_copy_compare_selected());
+    const comparisonProps = Object.entries(button(m.library_copy_compare_close())).find(([key]) =>
+      key.startsWith('__reactProps$'),
+    )![1] as { onClick: () => void };
+    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(1);
+    expect(details).toHaveLength(0);
+    expect(editions).toHaveLength(0);
+    expect(writes).toHaveLength(0);
     const oldInspect = Object.entries(button(m.library_copy_edit())).find(([key]) =>
       key.startsWith('__reactProps$'),
     )![1] as { onClick: () => void };
@@ -553,6 +563,10 @@ test('The actual Copies route retires retained private rows and editor state on 
     absent('A');
     expect(form()).toBeNull();
     await acceptList('B');
+    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(0);
+    expect(comparisonTrigger.isConnected).toBe(false);
+    await act(async () => comparisonProps.onClick());
+    expect(document.activeElement).not.toBe(comparisonTrigger);
     const inspections = details.length;
     await act(async () => oldInspect.onClick());
     expect(details).toHaveLength(inspections);
@@ -816,6 +830,11 @@ test('The actual Copies route retires retained private rows and editor state on 
     await acceptList('A');
     await act(async () => pendingCreate.reject(new Error('Retired create failure')));
     absent('B');
+
+    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(0);
+    await act(async () => comparisonProps.onClick());
+    expect(document.activeElement).not.toBe(comparisonTrigger);
+    expect(button(m.library_copy_compare_select()).getAttribute('aria-pressed')).toBe('false');
 
     // Real deletion/Undo callbacks retain immutable episode, CAS, key and originating lifetime.
     await inspect('A');
