@@ -1,5 +1,10 @@
 import type { CheckResults } from './check-results.ts';
-import { gateRunner, processGroupRunner, type GateRunner } from './merge.ts';
+import {
+  gateRunner,
+  processGroupRunner,
+  type CheckResultGateOptions,
+  type GateRunner,
+} from './merge.ts';
 import {
   trainConfigurationRevision,
   type IntegrationCheck,
@@ -20,6 +25,40 @@ export type CheckRuntimeOptions = {
   deliverReuseAlert(managerId: string, summary: string): void;
 };
 
+function createTrainCheckRunners(
+  settings: Settings,
+  runGateOverride: GateRunner | undefined,
+  checkResultOptions: CheckResultGateOptions,
+) {
+  return {
+    runGate:
+      runGateOverride ??
+      gateRunner(
+        settings.integration.gateTimeoutMs,
+        settings.stateDirectory,
+        LANDING_CHECK_ENVIRONMENT,
+        checkResultOptions,
+        settings.policy?.merge,
+      ),
+    runTypecheck: processGroupRunner(
+      settings.integration.gateTimeoutMs,
+      settings.stateDirectory,
+      process.env,
+      true,
+      settings.policy?.merge,
+    ),
+    runControlPlaneGate:
+      runGateOverride ??
+      gateRunner(
+        settings.integration.gateTimeoutMs,
+        settings.stateDirectory,
+        LANDING_CHECK_ENVIRONMENT,
+        undefined,
+        settings.policy?.merge,
+      ),
+  };
+}
+
 export function createCheckRuntime(options: CheckRuntimeOptions) {
   const { settings } = options;
   const checkResultOptions = {
@@ -33,15 +72,8 @@ export function createCheckRuntime(options: CheckRuntimeOptions) {
         `Check result reuse alert: ${summary}`,
       ),
   };
-  const runGate: GateRunner =
-    options.runGate ??
-    gateRunner(
-      settings.integration.gateTimeoutMs,
-      settings.stateDirectory,
-      LANDING_CHECK_ENVIRONMENT,
-      checkResultOptions,
-      settings.policy?.merge,
-    );
+  const trainRunners = createTrainCheckRunners(settings, options.runGate, checkResultOptions);
+  const runGate = trainRunners.runGate;
   // Promotion runs the full root gate, which outlasts the integration gate's limit.
   const promotionGate: GateRunner =
     options.runGate ??
@@ -73,25 +105,12 @@ export function createCheckRuntime(options: CheckRuntimeOptions) {
       settings.policy?.merge,
     );
   // The compiler is the existing direct process group, separate from injected gate runners.
-  const typecheckGate = processGroupRunner(
-    settings.integration.gateTimeoutMs,
-    settings.stateDirectory,
-    process.env,
-    true,
-    settings.policy?.merge,
-  );
-  const runControlPlaneGate: GateRunner =
-    options.runGate ??
-    gateRunner(
-      settings.integration.gateTimeoutMs,
-      settings.stateDirectory,
-      LANDING_CHECK_ENVIRONMENT,
-      undefined,
-      settings.policy?.merge,
-    );
+  const typecheckGate = trainRunners.runTypecheck;
+  const runControlPlaneGate = trainRunners.runControlPlaneGate;
 
   const refreshTrainConfiguration: TrainConfigurationReloader = () => {
     const latest = loadSettings({ cwd: settings.mainCheckout, localFile: settings.localFile });
+    const refreshedRunners = createTrainCheckRunners(latest, options.runGate, checkResultOptions);
     const configuration = {
       policy: latest.policy,
       integration: latest.integration,
@@ -105,31 +124,7 @@ export function createCheckRuntime(options: CheckRuntimeOptions) {
       stabilizeBranch: latest.stabilizeBranch,
       supermanager: latest.integration.supermanager,
       inboxDirectory: latest.integration.inboxDirectory,
-      runGate:
-        options.runGate ??
-        gateRunner(
-          latest.integration.gateTimeoutMs,
-          latest.stateDirectory,
-          LANDING_CHECK_ENVIRONMENT,
-          checkResultOptions,
-          latest.policy?.merge,
-        ),
-      runTypecheck: processGroupRunner(
-        latest.integration.gateTimeoutMs,
-        latest.stateDirectory,
-        process.env,
-        true,
-        latest.policy?.merge,
-      ),
-      runControlPlaneGate:
-        options.runGate ??
-        gateRunner(
-          latest.integration.gateTimeoutMs,
-          latest.stateDirectory,
-          LANDING_CHECK_ENVIRONMENT,
-          undefined,
-          latest.policy?.merge,
-        ),
+      ...refreshedRunners,
     };
     return { ...configuration, configurationRevision: trainConfigurationRevision(configuration) };
   };
