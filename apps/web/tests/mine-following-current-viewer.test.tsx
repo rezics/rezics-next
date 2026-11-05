@@ -363,6 +363,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
       (item) => item.textContent === m.library_follow_unfollow(),
     );
     expect(action?.textContent).toBe(m.library_follow_unfollow());
+    expect((action as HTMLButtonElement).disabled).toBe(false);
     await act(async () => {
       action!.click();
       await tick();
