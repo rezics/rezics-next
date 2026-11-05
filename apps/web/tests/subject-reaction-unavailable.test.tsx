@@ -186,7 +186,18 @@ const fakeKernelClient = {
 };
 
 mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
+mock.module('@tanstack/react-start/server', () => ({
+  ...start,
+  getRequest: () => {
+    const request = start.getRequest();
+    const headers = new Headers(request.headers);
+    const cookie = request.headers.get('cookie');
+    // These server handlers copy Requests as well as cloning them. Use native headers in Bun;
+    // Storybook's browser-only Cookie getter cannot survive a Request constructor copy.
+    if (cookie) headers.set('cookie', cookie);
+    return new Request(request, { headers });
+  },
+}));
 mock.module('cloudflare:workers', () => ({ env: workerEnv }));
 const kernel = await import('../src/kernel/client');
 mock.module('../src/kernel/client', () => ({ ...kernel, kernelClient: () => fakeKernelClient }));
@@ -319,9 +330,20 @@ function tree(
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function until(check: () => boolean) {
-  const deadline = Date.now() + 5_000;
-  while (!check() && Date.now() < deadline) await tick();
-  expect(check()).toBe(true);
+  const deadline = Date.now() + 3_000;
+  while (!check() && Date.now() < deadline)
+    await act(async () => {
+      await tick();
+    });
+  expect({
+    ready: check(),
+    writes: nativeWrites.map((write) => write.kind),
+    chips: chips().map((button) => ({
+      text: button.textContent,
+      pressed: button.getAttribute('aria-pressed'),
+      disabled: button.disabled,
+    })),
+  }).toMatchObject({ ready: true });
 }
 async function paint(
   outcome: Parameters<typeof ZoneSubjectPage>[0]['outcome'],
@@ -690,7 +712,7 @@ test('failed own-reaction reads stay unavailable while the actual Zone personal 
   expect(personalCalls).toHaveLength(callsAtUnmount);
 });
 
-// UNRUN: both production consumers, the real session Query, own-query registry and shared queue are connected.
+// Both production consumers use the real session Query, own-query registry and shared queue.
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 async function paintOrdinary(id = subjectId, queryClient = client) {
   const outcome = zoneOutcome(id);
@@ -879,12 +901,13 @@ for (const source of ['manual', 'fetch'] as const)
     queueNativeRead(freshOwn);
     await paintOrdinary();
     await until(() => ownReads.length === 1 && chips().length > 0);
+    const initialCountReads = countReads.length;
     await equalSuccess(source, () => oldOwn.resolve({ status: 200, data: { kind: 'love' } }));
     await until(() => ownReads.length === 2);
     noSelection();
     expect(chips().every((button) => button.disabled)).toBe(true);
     expect(nativeWrites).toHaveLength(0);
-    expect(countReads).toHaveLength(1);
+    expect(countReads).toHaveLength(initialCountReads);
     await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
     await until(() => chips().some((button) => !button.disabled));
     noSelection();
@@ -898,6 +921,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
     else await paintOrdinary();
     await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+    const initialCountReads = countReads.length;
     const write = deferred<NativeWriteResult>();
     nativeWriteQueue.push(() => write.promise);
     await clickKind('like');
@@ -922,7 +946,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     expect(ownReads).toHaveLength(1);
     expect(nativeWrites.every((write) => write.authorization === 'Bearer token-reader-one')).toBe(true);
     if (surface === 'production Zone') independentZone(1, 1);
-    else expect(countReads).toHaveLength(4); // Initial public count and each of the three current callbacks.
+    else expect(countReads).toHaveLength(initialCountReads + 3); // Each current callback refreshes the mounted public baseline.
     // Only its eventual successful commit retires the observation.
     await act(async () => {
       sessionResponse.resolve(storySession());
@@ -994,6 +1018,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     if (surface === 'production Zone') await paint(zoneOutcome(subjectId));
     else await paintOrdinary();
     await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+    const initialCountReads = countReads.length;
     const freshOwn = deferred<NativeReactionRead>();
     queueNativeRead(freshOwn);
     const oldButton = chip('like');
@@ -1007,7 +1032,7 @@ for (const surface of ['ordinary Subject', 'production Zone'] as const)
     expect(nativeWrites).toHaveLength(0);
     noSelection();
     expect(chips().every((button) => button.disabled)).toBe(true);
-    expect(countReads).toHaveLength(1);
+    expect(countReads).toHaveLength(initialCountReads);
     if (surface === 'production Zone') independentZone(1, 1);
     await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
     await until(() => chips().some((button) => !button.disabled));
@@ -1061,6 +1086,7 @@ test('ordinary Subject does not start a later count refresh if an equal session 
   queueNativeRead({ status: 200, data: { kind: null } });
   await paintOrdinary();
   await until(() => ownReads.length === 1 && chips().some((button) => !button.disabled));
+  const initialCountReads = countReads.length;
   const oldOwnQuery = client
     .getQueryCache()
     .findAll({ queryKey: ['subject-own-reaction'] })
@@ -1082,12 +1108,12 @@ test('ordinary Subject does not start a later count refresh if an equal session 
   await until(() => ownReads.length === 2);
   expect(replacements).toBe(1);
   expect(nativeWrites).toHaveLength(1); // The accepted write remains accepted; the queued choice is retired.
-  expect(countReads).toHaveLength(1);
+  expect(countReads).toHaveLength(initialCountReads);
   noSelection();
   expect(chips().every((button) => button.disabled)).toBe(true);
   await flush(() => freshOwn.resolve({ status: 200, data: { kind: null } }));
   await until(() => chips().some((button) => !button.disabled));
   await clickKind('like');
-  await until(() => nativeWrites.length === 2 && countReads.length === 2);
+  await until(() => nativeWrites.length === 2 && countReads.length === initialCountReads + 1);
   expect(ownReads).toHaveLength(2);
 });
