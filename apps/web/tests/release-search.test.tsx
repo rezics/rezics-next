@@ -362,6 +362,7 @@ test('the release page localizes controls and distinguishes loading, unavailable
       page: { status: 'preparing', groups: [], next: 'resume', as_of: '2026-11-04T00:00:00Z' },
     });
     expect(preparing).toContain(m.discovery_preparing({}, { locale }));
+    expect(preparing).not.toContain(m.release_search_page_empty({}, { locale }));
     expect(preparing).toContain('aria-live="polite"');
     const withCursor = parseReleaseSearch({ subtype: releaseType, cursor: 'group-cursor' }, bundledRelease, locale);
     const restart = renderToStaticMarkup(

@@ -294,10 +294,10 @@ export function releaseSearchQueryOptions(locale: string, raw: Record<string, un
       try {
         assertReaderCurrent(current, signal);
         const result = await readReleaseSearch({ data: { locale, rawJson: JSON.stringify(raw) }, signal });
-        assertReaderCurrent(current, signal);
-        return result;
+        signal.throwIfAborted();
+        // A reader replacement is a settled unavailable read, never a route error or an accepted old DTO.
+        return current() ? result : { state: { status: 'unavailable' } };
       } catch (error) {
-        assertReaderCurrent(current, signal);
         if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
         return { state: { status: 'unavailable' } };
       } finally {
