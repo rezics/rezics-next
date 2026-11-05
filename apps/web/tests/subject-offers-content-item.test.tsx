@@ -231,7 +231,12 @@ test('disclosure: fixed captures unknown mapping money units missing labels and 
     );
     expect(markup).toContain(m.subject_choice_no_access({}, { locale }));
     expect(markup).toContain(m.subject_choice_capture_unknown({}, { locale }));
-    expect(markup).toContain(m.subject_purchase_price_unknown({}, { locale }));
+    expect(markup).toContain(
+      m.money_raw_minor_unknown_unit(
+        { amount: String(unknown.unitAmountMinor), currency: unknown.currency.toUpperCase() },
+        { locale },
+      ),
+    );
     expect(markup).not.toContain('subject_choice_');
   }
   await rendered(async ({ window, host, render, click }) => {
@@ -389,15 +394,32 @@ async function retainedSummaryContract() {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(1299);
+    const zeroCapture = m.money_formatted_recorded_minor(
+      { display: zeroPrice, amount: String(zero.unitAmountMinor), currency: zero.currency.toUpperCase(), exponent: '2' },
+      { locale },
+    );
+    const unknownCapture = m.money_raw_minor_unknown_unit(
+      { amount: String(unknown.unitAmountMinor), currency: unknown.currency.toUpperCase() },
+      { locale },
+    );
+    const wholeCapture = m.money_formatted_recorded_minor(
+      {
+        display: wholePrice,
+        amount: String(whole.unitAmountMinor),
+        currency: whole.currency.toUpperCase(),
+        exponent: '0',
+      },
+      { locale },
+    );
     expect(facts).toEqual([
       [
-        `${zeroPrice} · ${m.commerce_before_tax({}, { locale })}`,
+        `${zeroCapture} · ${m.commerce_before_tax({}, { locale })}`,
         m.benefit_fixed_version({}, { locale }),
         m.benefit_acquisition({}, { locale }),
         `${m.benefit_licence({}, { locale })}: ${zero.contentEdition!.source.licence}`,
       ],
-      [m.subject_purchase_price_unknown({}, { locale }), m.benefit_terms_unavailable({}, { locale })],
-      [wholePrice, m.benefit_terms_unavailable({}, { locale })],
+      [unknownCapture, m.benefit_terms_unavailable({}, { locale })],
+      [wholeCapture, m.benefit_terms_unavailable({}, { locale })],
     ]);
     expect(document.querySelector('a[href*="/editions/"], form')).toBeNull();
     const row = rows[0]!;
