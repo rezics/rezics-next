@@ -15,6 +15,7 @@ const uuid = (tail: string) => `00000000-0000-4000-8000-${tail.padStart(12, '0')
 test('selected VNDB relation handoff keeps mapped direction, cited source and exact current endpoint identities', async () => {
   const tables: CrossMediaTables = {
     async *rows(provider, table) {
+      if (provider === 'bangumi' && table === 'subject') yield { id: 51, name: 'CLANNAD', type: 2 };
       if (provider !== 'vndb') return;
       if (table === 'vn_titles') {
         yield { id: 'v4', lang: 'en', official: 't', title: 'CLANNAD', latin: null };

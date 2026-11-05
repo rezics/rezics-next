@@ -152,6 +152,7 @@ test('selected VNDB prequel relation reopens exactly and reports publication onl
   let journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   const tables: CrossMediaTables = {
     async *rows(provider, table) {
+      if (provider === 'bangumi' && table === 'subject') yield { id: 51, name: 'CLANNAD', type: 2 };
       if (provider !== 'vndb') return;
       if (table === 'vn_titles') {
         yield { id: 'v4', lang: 'en', official: 't', title: 'CLANNAD', latin: null };
