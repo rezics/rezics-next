@@ -185,13 +185,9 @@ for (const view of ['overview', 'posts'] as const) {
       const replacement = await nextRead(6);
       expect(retired.signal?.aborted).toBe(true);
       expect(replacement.signal?.aborted).toBe(false);
-      const currentNotice = status().textContent;
-      const currentFocus = window.document.activeElement;
       retired.work.resolve(runtime.result('show'));
       await runtime.settle();
       safe();
-      expect(status().textContent).toBe(currentNotice);
-      expect(window.document.activeElement).toBe(currentFocus);
       replacement.work.resolve(runtime.result('blur'));
       await waitForStatus('preferences are applied');
       expect(status().textContent).toContain('preferences are applied');

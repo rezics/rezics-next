@@ -51,7 +51,6 @@ const nativeReads: Array<{
   work: Deferred<PreferenceResult>;
 }> = [];
 const readerEnvelopes: Array<Record<string, unknown>> = [];
-const readerSignals: Array<AbortSignal | undefined> = [];
 
 function requestFor(reader: string | null, signal?: AbortSignal): Request {
   const id = reader ? ids.get(reader) : undefined;
@@ -102,8 +101,7 @@ function createServerFn() {
         const data = validate ? validate(input.data) : input.data;
         const isAgentReader = !!data && typeof data === 'object' && 'expectedReader' in data;
         if (isAgentReader) {
-          readerEnvelopes.push(data as Record<string, unknown>);
-          readerSignals.push(input.signal);
+          readerEnvelopes.push({ ...(data as Record<string, unknown>), signal: input.signal });
           if (failNextAgentAction) {
             failNextAgentAction = false;
             return Promise.reject(new Error('Reader BFF unavailable'));
@@ -687,7 +685,7 @@ test('public account readers retire old admissions across sign-out, replacement,
     const delayedPath = { kind: 'view' as const, view: 'posts' };
     await act(async () => renderInto(secondRoot, { path: delayedPath }, true));
     await preparation.entered.promise;
-    const abandonedSignal = readerSignals.at(-1);
+    const abandonedSignal = readerEnvelopes.at(-1)?.signal as AbortSignal | undefined;
     expect(abandonedSignal).toBeDefined();
     await act(async () => renderInto(secondRoot, { locale: 'fr', path: delayedPath }, true));
     expect(abandonedSignal?.aborted).toBe(true);
@@ -773,7 +771,19 @@ export const readerTestRuntime = {
   markCoversWithheld,
   result,
   nativeReads,
-  readerSignals,
+  delayNextPreparation() {
+    const gate = { entered: deferred<void>(), release: deferred<void>() };
+    nextPreparationGate = gate;
+    return gate;
+  },
+  async readSettings(signal: AbortSignal) {
+    const [{ kernelClient }, { loadSettingsPage }] = await Promise.all([
+      import('../src/kernel/client'),
+      import('../src/settings/preferences'),
+    ]);
+    const request = requestFor(sessionReader, signal);
+    return loadSettingsPage(kernelClient(), request, env, { signal: request.signal });
+  },
   setReader(reader: string | null) {
     sessionReader = reader;
     bffReader = reader;
@@ -781,7 +791,6 @@ export const readerTestRuntime = {
   reset() {
     nativeReads.length = 0;
     readerEnvelopes.length = 0;
-    readerSignals.length = 0;
     nextPreparationGate = undefined;
   },
 };
