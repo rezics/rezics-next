@@ -56,6 +56,8 @@ The command composition reuses Collection's native authorization, account sharin
 history producers, Source's native subject resolution and Shelf's owner costs. Access and Shelf consume their
 terms through their existing owners; disjoint Core/Library terms consume through the installed native translation.
 Covered retained SQL is not charged again. The compatibility removal's pre-command parent read is separate.
+The installed native dimension translation has a dependency-free module; publication retains its existing
+re-export, while retained SQL does not load the publication/Search runtime to translate a declaration.
 Undo preparation includes negative episode reads and native subject disclosure; the body rereads the original
 episode and performs the original placement and expiry CAS. Authorization still precedes receipt replay.
 The two original/terminal subject checks reuse the same native Access producer separately from the Collection

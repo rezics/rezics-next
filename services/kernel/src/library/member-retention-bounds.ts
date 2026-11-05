@@ -11,7 +11,7 @@ import {
   type PrincipalCommandOptions,
 } from '../command/command.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
-import { nativeWorkDimensions } from './collection-selected-publication-bounds.ts';
+import { nativeWorkDimensions } from './native-work-dimensions.ts';
 import { nativeCommandScaffoldPlan } from './shelf-maintenance-bounds.ts';
 import { COLLECTION_NATIVE_COST } from './collection-order-bounds.ts';
 import { sessionSourceWork } from './session-operation-bounds.ts';
