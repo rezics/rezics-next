@@ -195,7 +195,7 @@ function reviewWorld(journal: ShowcaseJournal) {
     if (!subject) throw new Error('Missing fixture subject');
     const identity = /^(?:(person|character):)?([0-9]+)$/u.exec(subject.sourceExternalId);
     const property =
-      identity?.[1] === 'person'
+      identity?.[1] === 'person' && subject.type === 'schema:Person'
         ? 'wdt:P6298'
         : identity?.[1] === 'character'
           ? 'wdt:P6296'
@@ -539,6 +539,11 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
     const publisherManifest = publication.manifest.records.find((record) => record.sourceKey === 'person:128');
     expect(publisherManifest?.nativeType).toBe('schema:Organization');
     expect(publisherManifest?.assertions.map((assertion) => assertion.property)).toContain('schema:name');
+    expect(
+      publication.published
+        .find((record) => record.sourceKey === 'person:128')
+        ?.assertions.map((assertion) => assertion.property),
+    ).toContain('schema:name');
     const publisherRead = (await world.publicClient.readSubject(publisherId)).subject as {
       type: string;
       statements: Record<string, { value?: { content?: unknown } }[]>;
