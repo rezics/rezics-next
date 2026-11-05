@@ -267,6 +267,10 @@ function mount({ focusTicket: initialTicket = null }: { focusTicket?: QuestionMa
     host,
     root,
     render,
+    setFocusTicket: (ticket: QuestionManagementFocusTicket | null) => {
+      focusTicket = ticket;
+      render('explicit-selection');
+    },
     movedFocus: () => {
       focusEpoch++;
       externalFocus.focus();
@@ -382,15 +386,23 @@ test('equal source replacement retires captured intent preparation', async () =>
 });
 
 test('the selected question heading receives focus only for a current selection ticket', async () => {
-  const view = mount({
-    focusTicket: { id: 1, questionId, focusEpoch: 0, afterRead: 1 },
-  });
+  const view = mount();
   try {
     await act(async () => view.render('explicit-selection'));
     await waitForWork();
     await act(async () => reads[0]!.resolve(readyRead()));
     await waitForWork();
-    expect(window.document.activeElement).toBe(view.host.querySelector('#realm-question-selected-heading'));
+    const heading = view.host.querySelector('#realm-question-selected-heading') as HTMLHeadingElement | null;
+    expect(heading).not.toBeNull();
+    let focusCalls = 0;
+    const focus = heading!.focus.bind(heading);
+    heading!.focus = () => {
+      focusCalls++;
+      focus();
+    };
+    await act(async () => view.setFocusTicket({ id: 1, questionId, focusEpoch: 0, afterRead: 1 }));
+    expect(focusCalls).toBe(1);
+    expect(window.document.activeElement?.id).toBe('realm-question-selected-heading');
   } finally {
     await view.cleanup();
   }

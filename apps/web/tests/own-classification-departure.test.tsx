@@ -63,7 +63,7 @@ test('Stay keeps the exact draft; confirmed Leave retires the original visit bef
     return { promise };
   };
   const button = (label: string) => {
-    const value = [...host.querySelectorAll('button')].find((node) => node.textContent?.trim() === label);
+    const value = [...document.querySelectorAll('button')].find((node) => node.textContent?.trim() === label);
     if (!value) throw new Error(`Missing button: ${label}`);
     return value;
   };
@@ -73,7 +73,7 @@ test('Stay keeps the exact draft; confirmed Leave retires the original visit bef
     expect(draft.value).toBe('Keep this exact unsent draft');
 
     const { promise: stayAttempt } = await startNavigation();
-    expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
     await act(async () => button(m.library_my_ratings_stay()).click());
     expect(await stayAttempt).toBe(true);
     expect(draft.value).toBe('Keep this exact unsent draft');
