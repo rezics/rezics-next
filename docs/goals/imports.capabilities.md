@@ -6,6 +6,8 @@ Authority split: module READMEs hold current contracts and costs; this file hold
 
 Decision: preserve original showcase claim aliases, source bindings and sealed replay; distinguish native merge admission, operation publication and independent canonical public reads. Focused caller/manifest/redirect cases supplement the unchanged native and browser outcome assertions.
 
+Decision: Character interaction acceptance attaches a citation before proposal review and preserves admitted public rows during session preparation, following the Subject page owner; Context replacement still retires pending rows and private actions retain their current observation requirements.
+
 ## User outcome
 
 Maintainers and community tools import licensed records through ordinary APIs and permissions, inspect omissions, and safely refresh changed or vanished facts. Pure revisioned converters produce proposals. Independent authorized review accepts and adopts them; separate current public reads verify the result. Refresh preserves source identity, existing adoption and unrelated editorial choices.

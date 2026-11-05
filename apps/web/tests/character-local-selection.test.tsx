@@ -181,12 +181,17 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     await choose(m.relation_target(), characterProfileId);
     const citation = canvas.getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement;
     await act(async () => user.type(citation, 'https://example.test/credit'));
+    await click(m.relation_add_citation());
+    await act(async () => user.type(citation, 'https://example.test/credit'));
     await click(m.relation_propose());
     const confirmation = within(
       canvas.getByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) }),
     );
     await click(m.relation_propose(), confirmation);
     await waitFor(() => expect(proposals).toHaveLength(1));
+    expect(proposals[0]!.statement.references[0]!.parts[0]!.value).toEqual({
+      type: 'value', content: 'https://example.test/credit',
+    });
     await click(m.fictional_work_choose_another());
     await waitFor(() => expect(dialog()?.textContent).toContain(m.thread_authoring_leave_pending()));
     expect(screen.getAllByRole('alertdialog')).toHaveLength(1);

@@ -229,7 +229,7 @@ test('mounted anonymous Character keeps assertions separate, retries only credit
     expect(document.activeElement?.closest('[data-work-statement]')?.getAttribute('data-work-statement')).toBe(id(11));
   }));
 
-test('session ABA retires pending public rows; Context replacements fence late A and whole-row spoilers hide evidence', async () =>
+test('session preparation preserves public rows; Context replacements fence late A and whole-row spoilers hide evidence', async () =>
   mounted(async (host, render, client) => {
     let settle!: (v: ConnectionVisit) => void;
     let count = 0;
@@ -245,7 +245,8 @@ test('session ABA retires pending public rows; Context replacements fence late A
       client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
     });
     await act(async () => settle(visit()));
-    expect(host.querySelectorAll('article')).toHaveLength(0);
+    expect(host.querySelectorAll('article')).toHaveLength(6);
+    expect(host.textContent).toContain('Work 10');
     let late!: (v: ConnectionVisit) => void;
     let reads = 0;
     const contextual = async () =>
