@@ -104,7 +104,7 @@ test('seed review keeps admitted source bytes and original bindings across canon
     const manifest = buildShowcaseManifest({ plan, readings: first.readings,
       acknowledgements: journal.acknowledgedCommands(), aliases: crossMediaAliases });
     for (const record of manifest.records) {
-      expect(record.subjectId).toBe(original.get(record.sourceKey));
+      expect(record.subjectId).toBe(original.get(record.sourceKey)!);
       expect(record.assertions.length).toBeGreaterThan(0);
     }
     expect(manifest.records).toHaveLength(2);
