@@ -28,7 +28,6 @@ import type {
 } from '../progress-reads';
 import { progressFailureMessage, progressView } from '../progress-label';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
-import { checklistSessionHref } from '../episode-checklist/navigation';
 
 const target =
   'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -297,7 +296,7 @@ export function ConfiguredProgressPanel({
           <a
             data-configured-progress-session
             className={linkClass}
-            href={checklistSessionHref(progress.session.id, locale)}
+            href={`/${locale}/library/progress/${encodeURIComponent(progress.session.id)}`}
           >
             {m.library_progress_open()}
           </a>
