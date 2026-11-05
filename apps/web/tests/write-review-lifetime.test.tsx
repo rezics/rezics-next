@@ -38,12 +38,63 @@ const credentialReads: { subject: string; csrfToken: string | null }[] = [];
 const responseHeaders: { name: string; value: string }[] = [];
 const membershipPlans: ((request: Request) => Promise<Response>)[] = [];
 let realmItems: { realmId: string; name: string; description?: string | null }[] = [];
-let boardResponse: (realmId: string, cursor: string | null) => Promise<Response> | Response = () =>
-  Response.json({ items: [], next: null });
 let serverReader = readerA;
 let serverCsrf: string | null = null;
 let currentRequest = new Request('https://site.review.test/en/subjects/book/reviews');
 let requestHeaders: HeadersInit = {};
+const subjectSource = { partition: 2, epoch: 1, position: '18' };
+const spaceId = '0192f3a0-6c1e-7b2a-9d4e-000000000501';
+const realmHeadRevisionId = '0192f3a0-6c1e-7b2a-9d4e-000000000502';
+
+function destinationItem(id: string, title: string, subjectId: string) {
+  return {
+    id,
+    title,
+    purpose: 'reviews' as const,
+    actions: { createReview: 'allowed' as const },
+    native: {
+      kind: 'review' as const,
+      boardId: id,
+      subjectIds: [subjectId] as [string],
+      subjectSource,
+      realmHeadRevisionId,
+      boardSecurityRevision: '1',
+    },
+  };
+}
+
+function destinationPage(
+  realmId: string,
+  subjectId: string,
+  items: ReturnType<typeof destinationItem>[],
+  next: string | null = null,
+  state: 'choices' | 'sparse' | 'no-destinations' | 'exhausted' =
+    items.length > 0 ? 'choices' : next ? 'sparse' : 'no-destinations',
+) {
+  return Response.json({
+    state,
+    viewer: { state: 'current' },
+    context: {
+      subject: { id: subjectId, label: null, source: subjectSource },
+      realm: {
+        id: realmId,
+        title: realmItems.find((entry) => entry.realmId === realmId)?.name ?? 'Realm',
+        spaceId,
+        headRevisionId: realmHeadRevisionId,
+      },
+    },
+    items,
+    next,
+  });
+}
+
+let destinationRead: (
+  realmId: string,
+  subjectId: string,
+  boardId: string | null,
+  cursor: string | null,
+) => Promise<Response> | Response = (realmId, subjectId) =>
+  destinationPage(realmId, subjectId, [destinationItem(boardA, 'Single review board', subjectId)]);
 
 const sessionEnv = {
   AUTH_ISSUER: 'https://auth.review.test',
@@ -83,8 +134,14 @@ const nativeClient = createKernelClient(origin, {
       const plan = membershipPlans.shift();
       return plan ? plan(request) : Response.json({ items: realmItems, next: null });
     }
-    const boardMatch = url.pathname.match(/^\/v1\/realms\/([^/]+)\/boards$/);
-    if (boardMatch) return boardResponse(decodeURIComponent(boardMatch[1]!), url.searchParams.get('cursor'));
+    const destinationMatch = url.pathname.match(/^\/v1\/realms\/([^/]+)\/review-destinations$/);
+    if (destinationMatch)
+      return destinationRead(
+        decodeURIComponent(destinationMatch[1]!),
+        url.searchParams.get('subjectId')!,
+        url.searchParams.get('boardId'),
+        url.searchParams.get('cursor'),
+      );
     throw new Error(`Unexpected native request: ${request.method} ${url.pathname}`);
   },
 });
@@ -164,14 +221,6 @@ const realm = (n: number) => ({
   name: `Realm ${n}`,
   description: null,
 });
-const reviewBoard = (id: string, title: string, realmId = realmA) => ({
-  id,
-  realmId,
-  title,
-  purpose: 'reviews',
-  availability: 'available',
-  visibility: 'protected',
-});
 const expectedReader = async (subject = readerA, csrfToken: string | null = null) => ({
   subject,
   csrfFingerprint: await fingerprintReviewCsrf(csrfToken),
@@ -193,8 +242,8 @@ function response(items: unknown[], next: string | null = null) {
 function membershipCalls() {
   return nativeCalls.filter((call) => call.path === '/v1/me/realms');
 }
-function boardCalls() {
-  return nativeCalls.filter((call) => call.path.endsWith('/boards'));
+function destinationCalls() {
+  return nativeCalls.filter((call) => call.path.endsWith('/review-destinations'));
 }
 
 async function createSurface(options: { strict?: boolean; session?: Session } = {}) {
@@ -219,9 +268,28 @@ async function createSurface(options: { strict?: boolean; session?: Session } = 
     if (next) target = next;
     await act(async () => root.render(tree()));
   };
-  const clickWrite = async () => {
-    const button = host.querySelector('button');
-    if (!button) throw new Error('The write-review button is missing');
+  const clickText = async (label: string) => {
+    await until(
+      () => [...host.querySelectorAll('button')].some((button) => button.textContent?.trim() === label),
+      label,
+    );
+    const button = [...host.querySelectorAll('button')].find((entry) => entry.textContent?.trim() === label);
+    if (!button) throw new Error(`The button is missing: ${label}`);
+    await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+  };
+  const clickWrite = () => clickText(m.thread_review_write());
+  const clickRealm = async (name: string) => {
+    await until(() => [...host.querySelectorAll('li')].some((item) => item.textContent?.trim() === name), name);
+    const item = [...host.querySelectorAll('li')].find((entry) => entry.textContent?.trim() === name);
+    const button = item?.querySelector('button');
+    if (!button) throw new Error(`The Realm choice is missing: ${name}`);
+    await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+  };
+  const clickBoard = async (title: string) => {
+    await until(() => [...host.querySelectorAll('li')].some((item) => item.textContent?.includes(title)), title);
+    const item = [...host.querySelectorAll('li')].find((entry) => entry.textContent?.includes(title));
+    const button = item?.querySelector('button');
+    if (!button) throw new Error(`The Board choice is missing: ${title}`);
     await act(async () => button.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
   };
   const unmount = async () => {
@@ -230,7 +298,7 @@ async function createSurface(options: { strict?: boolean; session?: Session } = 
     client.clear();
   };
   await render();
-  return { client, host, render, clickWrite, unmount };
+  return { client, host, render, clickText, clickWrite, clickRealm, clickBoard, unmount };
 }
 
 afterAll(async () => {
@@ -253,7 +321,7 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   serverReader = readerA;
   serverCsrf = null;
   requestHeaders = {};
-  boardResponse = () => response([]);
+  destinationRead = (realmId, subjectId) => destinationPage(realmId, subjectId, []);
 
   // These are the actual server wrappers. Each actual loadMyRealms or board read prepares once;
   // the server result carries only the identity fingerprint from that same Request object.
@@ -285,31 +353,33 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   expect(missingProvenance).toEqual({ kind: 'mismatch' });
   expect(JSON.stringify(missingProvenance)).not.toContain('Realm 1');
 
-  const boardCountBeforeMismatch = boardCalls().length;
+  const boardCountBeforeMismatch = destinationCalls().length;
   serverReader = readerB;
   const boardMismatch = await readReviewDestination({
     data: { realmId: realmA, subjectId: subjectA, locale: 'en', expected: expectedA },
   });
   expect(boardMismatch).toEqual({ kind: 'mismatch' });
-  expect(boardCalls()).toHaveLength(boardCountBeforeMismatch);
+  expect(destinationCalls()).toHaveLength(boardCountBeforeMismatch);
   expect(serverCalls.every(({ data }) => !JSON.stringify(data).includes('access-'))).toBe(true);
   expect(serverCalls.every(({ data }) => !JSON.stringify(data).includes('csrfToken'))).toBe(true);
 
-  // StrictMode replay retains the single initial null-CSRF read; expanding while it is pending
-  // queues the board lookup until that private result is admitted.
+  // StrictMode does not duplicate the user-triggered private read. Realm and Board destinations
+  // remain unopened until the reader chooses the exact Realm.
   serverReader = readerA;
   const pageGate = deferred<Response>();
   membershipPlans.push(() => pageGate.promise);
   const baselinePages = membershipCalls().length;
   const surface = await createSurface({ strict: true, session: signedIn(readerA, null) });
+  expect(membershipCalls()).toHaveLength(baselinePages);
+  await surface.clickWrite();
   await until(() => membershipCalls().length > baselinePages, 'the pending membership read');
   expect(membershipCalls().length - baselinePages).toBe(1);
-  await surface.clickWrite();
-  expect(boardCalls()).toHaveLength(boardCountBeforeMismatch);
+  expect(destinationCalls()).toHaveLength(boardCountBeforeMismatch);
   pageGate.resolve(response([realm(1)]));
-  await until(() => boardCalls().length > boardCountBeforeMismatch, 'the queued board lookup');
+  await surface.clickRealm('Realm 1');
+  await until(() => destinationCalls().length > boardCountBeforeMismatch, 'the queued board lookup');
   await until(() => (surface.host.textContent ?? '').includes(m.thread_review_no_board()), 'the empty board result');
-  expect(boardCalls().slice(boardCountBeforeMismatch)).toHaveLength(1);
+  expect(destinationCalls().slice(boardCountBeforeMismatch)).toHaveLength(1);
   expect(credentialReads.at(-1)).toEqual({ subject: readerA, csrfToken: null });
 
   const navigations: string[] = [];
@@ -318,73 +388,80 @@ test('one connected review-entry preparation and chooser admits only same-prepar
     value: (href: string) => navigations.push(href),
   });
 
-  // An equal successful session replacement retires the complete previous visit and starts one
-  // new preparation. A one-choice result still follows the existing automatic destination once.
-  boardResponse = () => response([reviewBoard(boardA, 'Single review board')]);
+  // An equal successful session replacement retires the visit. Even one eligible Board requires
+  // deliberate selection and exact native inspection before navigation.
+  destinationRead = (realmId, subjectId) =>
+    destinationPage(realmId, subjectId, [destinationItem(boardA, 'Single review board', subjectId)]);
   const pagesBeforeEqualReplacement = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
-  await until(() => membershipCalls().length > pagesBeforeEqualReplacement, 'the replacement membership read');
   await surface.clickWrite();
+  await until(() => membershipCalls().length > pagesBeforeEqualReplacement, 'the replacement membership read');
+  await surface.clickRealm('Realm 1');
+  await until(() => (surface.host.textContent ?? '').includes('Single review board'), 'the sole Board choice');
+  expect(navigations).toHaveLength(0);
+  await surface.clickBoard('Single review board');
   await until(() => navigations.length === 1, 'the single-choice navigation');
   expect(navigations).toEqual([`/en/boards/${boardA}/new?subject=${subjectA}&subjectTitle=Original%20title`]);
+  expect(destinationCalls().at(-1)?.query).toContain(`boardId=${boardA}`);
 
-  // The existing native board reader still pages in native order, filters purpose/availability/
-  // disclosure, and terminates when the cursor repeats. The connected chooser keeps two choices.
-  boardResponse = (_realmId, cursor) =>
-    cursor === null
-      ? response(
-          [
-            reviewBoard(boardA, 'First review board'),
-            { ...reviewBoard(boardB, 'Discussion board'), purpose: 'discussion', visibility: 'published' },
-            { ...reviewBoard(boardC, 'Unavailable review board'), availability: 'unavailable' },
-            { ...reviewBoard(boardD, 'Taken down review board'), visibility: 'taken_down' },
-          ],
-          'review-cursor',
-        )
-      : response([reviewBoard('0192f3a0-6c1e-7b2a-9d4e-000000000405', 'Second review board')], 'review-cursor');
+  // Sparse destination pages continue only on explicit More with the exact original cursor.
+  destinationRead = (realmId, subjectId, boardId, cursor) =>
+    boardId
+      ? destinationPage(realmId, subjectId, [destinationItem(boardA, 'First review board', subjectId)])
+      : cursor === null
+        ? destinationPage(realmId, subjectId, [], 'review-cursor', 'sparse')
+        : destinationPage(realmId, subjectId, [
+            destinationItem(boardA, 'First review board', subjectId),
+            destinationItem(boardB, 'Second review board', subjectId),
+          ]);
   const pagesBeforeMany = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
-  await until(() => membershipCalls().length > pagesBeforeMany, 'the many-choice membership read');
-  const boardsBeforeMany = boardCalls().length;
   await surface.clickWrite();
-  await until(() => boardCalls().length >= boardsBeforeMany + 2, 'both native board pages');
-  await until(() => surface.host.querySelectorAll('a[href*="/boards/"]').length === 2, 'the filtered chooser');
-  expect(
-    boardCalls()
-      .slice(boardsBeforeMany)
-      .map((call) => call.query),
-  ).toEqual(['?limit=100', '?limit=100&cursor=review-cursor']);
-  expect([...surface.host.querySelectorAll('a[href*="/boards/"]')].map((link) => link.textContent?.trim())).toEqual([
-    'First review boardRealm 1',
-    'Second review boardRealm 1',
-  ]);
+  await until(() => membershipCalls().length > pagesBeforeMany, 'the many-choice membership read');
+  const boardsBeforeMany = destinationCalls().length;
+  await surface.clickRealm('Realm 1');
+  await until(() => surface.host.textContent?.includes(m.thread_review_sparse()) === true, 'the sparse destination page');
+  expect(destinationCalls()).toHaveLength(boardsBeforeMany + 1);
+  await surface.clickText(m.thread_review_more());
+  await until(() => (surface.host.textContent ?? '').includes('Second review board'), 'the continued choices');
+  expect(destinationCalls()).toHaveLength(boardsBeforeMany + 2);
+  expect(destinationCalls()[boardsBeforeMany]?.query).not.toContain('cursor=');
+  expect(destinationCalls()[boardsBeforeMany + 1]?.query).toContain('cursor=review-cursor');
+  expect(surface.host.querySelectorAll('li')).toHaveLength(2);
   expect(navigations).toHaveLength(1);
 
   // A same-account-compatible component lifetime still retires on account replacement; the new
   // account performs its own prepared membership and board reads with its own reader provenance.
   serverReader = readerB;
   serverCsrf = 'csrf-b';
+  destinationRead = (realmId, subjectId) =>
+    destinationPage(realmId, subjectId, [destinationItem(boardA, 'Account replacement choice', subjectId)]);
   const pagesBeforeAccountReplacement = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerB, 'csrf-b')));
-  await until(() => membershipCalls().length > pagesBeforeAccountReplacement, 'the replacement-account page');
-  const boardsBeforeAccountReplacement = boardCalls().length;
   await surface.clickWrite();
-  await until(() => boardCalls().length >= boardsBeforeAccountReplacement + 2, 'the replacement-account board pages');
-  await until(() => (surface.host.textContent ?? '').includes('First review board'), 'the replacement-account choices');
+  await until(() => membershipCalls().length > pagesBeforeAccountReplacement, 'the replacement-account page');
+  const boardsBeforeAccountReplacement = destinationCalls().length;
+  await surface.clickRealm('Realm 1');
+  await until(() => destinationCalls().length > boardsBeforeAccountReplacement, 'the replacement-account destination');
+  await until(() => (surface.host.textContent ?? '').includes('Account replacement choice'), 'the replacement-account choice');
   expect(credentialReads.at(-1)).toEqual({ subject: readerB, csrfToken: 'csrf-b' });
   expect(navigations).toHaveLength(1);
 
   // A credential refresh for the same account also replaces the owner and binds the new read.
   serverReader = readerA;
   serverCsrf = 'csrf-a';
-  boardResponse = () =>
-    response([reviewBoard(boardA, 'Refreshed credential choice'), reviewBoard(boardB, 'Second choice')]);
+  destinationRead = (realmId, subjectId) =>
+    destinationPage(realmId, subjectId, [
+      destinationItem(boardA, 'Refreshed credential choice', subjectId),
+      destinationItem(boardB, 'Second choice', subjectId),
+    ]);
   const pagesBeforeCredentialChange = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, 'csrf-a')));
-  await until(() => membershipCalls().length > pagesBeforeCredentialChange, 'the refreshed-credential page');
-  const boardsBeforeCredentialChange = boardCalls().length;
   await surface.clickWrite();
-  await until(() => boardCalls().length > boardsBeforeCredentialChange, 'the refreshed-credential boards');
+  await until(() => membershipCalls().length > pagesBeforeCredentialChange, 'the refreshed-credential page');
+  const boardsBeforeCredentialChange = destinationCalls().length;
+  await surface.clickRealm('Realm 1');
+  await until(() => destinationCalls().length > boardsBeforeCredentialChange, 'the refreshed-credential boards');
   await until(
     () => (surface.host.textContent ?? '').includes('Refreshed credential choice'),
     'the refreshed-credential choices',
@@ -394,27 +471,32 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   serverReader = readerA;
   serverCsrf = null;
 
-  // Query fetch and observer notifications do not retire healthy work. The pending native board
+  // Query fetch and observer notifications do not retire healthy work. The pending native destination
   // page settles while a session fetch is merely in flight, then its successful replacement retires.
   const oldBoardGate = deferred<Response>();
-  boardResponse = () => oldBoardGate.promise;
+  destinationRead = (_realmId, _subjectId, boardId) =>
+    boardId ? destinationPage(realmA, subjectA, [destinationItem(boardA, 'Inspected Board', subjectA)]) : oldBoardGate.promise;
   const pagesBeforeFetch = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
+  await surface.clickWrite();
   await until(() => membershipCalls().length > pagesBeforeFetch, 'the fetch-control membership read');
+  await surface.clickRealm('Realm 1');
   const fetchObserver = new QueryObserver(surface.client, { ...sessionQuery, enabled: false });
   const stopObserver = fetchObserver.subscribe(() => undefined);
   await settle();
   stopObserver();
-  await surface.clickWrite();
-  const boardCallCountBeforeFetch = boardCalls().length;
-  await until(() => boardCalls().length > boardCallCountBeforeFetch, 'the board read before session fetch');
+  const boardCallCountBeforeFetch = destinationCalls().length;
+  await until(() => destinationCalls().length > boardCallCountBeforeFetch, 'the board read before session fetch');
   const sessionGate = deferred<Session>();
   const sessionFetch = surface.client
     .fetchQuery({ queryKey: sessionQuery.queryKey, queryFn: () => sessionGate.promise, staleTime: 0, retry: false })
     .catch(() => undefined);
   await until(() => surface.client.getQueryState(sessionQuery.queryKey)?.fetchStatus === 'fetching', 'fetch status');
   oldBoardGate.resolve(
-    response([reviewBoard(boardA, 'Healthy after fetch start'), reviewBoard(boardB, 'Second healthy choice')]),
+    destinationPage(realmA, subjectA, [
+      destinationItem(boardA, 'Healthy after fetch start', subjectA),
+      destinationItem(boardB, 'Second healthy choice', subjectA),
+    ]),
   );
   await until(
     () => (surface.host.textContent ?? '').includes('Healthy after fetch start'),
@@ -426,51 +508,62 @@ test('one connected review-entry preparation and chooser admits only same-prepar
     sessionGate.resolve(signedIn(readerA, null));
     await sessionFetch;
   });
+  await surface.clickWrite();
   await until(() => membershipCalls().length > pagesBeforeFetchSuccess, 'the successful session-fetch replacement');
 
-  // A current subject/title/locale change retires an outstanding automatic lookup. Resolving the
-  // old one-choice result cannot publish or navigate; the new target still gets its own result.
+  // A current subject/title/locale change retires an outstanding selected-Realm lookup. Resolving
+  // the old one-choice result cannot publish or navigate; the new target gets its own destinations.
   const targetGate = deferred<Response>();
   const newTargetGate = deferred<Response>();
-  let targetBoardCalls = 0;
-  boardResponse = () => (targetBoardCalls++ === 0 ? targetGate.promise : newTargetGate.promise);
-  await surface.clickWrite();
-  const targetBoardCount = boardCalls().length;
-  await until(() => boardCalls().length > targetBoardCount, 'the pending old-target boards');
+  destinationRead = (realmId, subjectId, boardId) =>
+    boardId
+      ? destinationPage(realmId, subjectId, [destinationItem(boardId, 'Exact inspected Board', subjectId)])
+      : subjectId === subjectA
+        ? targetGate.promise
+        : newTargetGate.promise;
+  const targetBoardCount = destinationCalls().length;
+  await surface.clickRealm('Realm 1');
+  await until(() => destinationCalls().length > targetBoardCount, 'the pending old-target boards');
   await surface.render({ subjectId: subjectB, subjectTitle: 'Changed title & name', locale: 'zh-Hant' });
   const pagesAfterTargetChange = membershipCalls().length;
-  await until(() => membershipCalls().length > pagesAfterTargetChange, 'the new-target membership read');
-  const newTargetBoardStart = boardCalls().length;
   await surface.clickWrite();
-  await until(() => boardCalls().length > newTargetBoardStart, 'the current target board read');
-  targetGate.resolve(response([reviewBoard(boardA, 'Obsolete single choice')]));
+  await until(() => membershipCalls().length > pagesAfterTargetChange, 'the new-target membership read');
+  const newTargetBoardStart = destinationCalls().length;
+  await surface.clickRealm('Realm 1');
+  await until(() => destinationCalls().length > newTargetBoardStart, 'the current target board read');
+  targetGate.resolve(destinationPage(realmA, subjectA, [destinationItem(boardA, 'Obsolete single choice', subjectA)]));
   await settle();
   expect(navigations).toHaveLength(1);
   expect(surface.host.textContent ?? '').not.toContain('Obsolete single choice');
   expect(surface.host.textContent ?? '').toContain(m.thread_review_boards_loading());
 
-  newTargetGate.resolve(
-    response([reviewBoard(boardB, 'Current target board'), reviewBoard(boardC, 'Another current board')]),
-  );
+  newTargetGate.resolve(destinationPage(realmA, subjectB, [
+    destinationItem(boardB, 'Current target board', subjectB),
+    destinationItem(boardC, 'Another current board', subjectB),
+  ]));
   await until(() => (surface.host.textContent ?? '').includes('Current target board'), 'the new target choices');
-  expect(surface.host.querySelector<HTMLAnchorElement>('a')?.getAttribute('href')).toContain(
+  await surface.clickBoard('Current target board');
+  await until(() => navigations.length === 2, 'the replacement-target navigation');
+  expect(navigations[1]).toBe(
     `/zh-Hant/boards/${boardB}/new?subject=${subjectB}&subjectTitle=Changed%20title%20%26%20name`,
   );
 
-  // The client admits only the first twenty memberships into the unchanged native paginated reader.
+  // The chooser retains the original twenty-Realm window and reads destinations only for the
+  // deliberately selected Realm, rather than walking membership or Board populations.
   realmItems = Array.from({ length: 25 }, (_, index) => realm(index + 1));
-  boardResponse = () => response([]);
+  destinationRead = (realmId, subjectId) => destinationPage(realmId, subjectId, []);
   const pagesBeforeFirstTwenty = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
-  await until(() => membershipCalls().length > pagesBeforeFirstTwenty, 'the bounded membership page');
-  const firstTwentyBoardStart = boardCalls().length;
   await surface.clickWrite();
-  await until(() => boardCalls().length >= firstTwentyBoardStart + 20, 'the first twenty Realm board reads');
-  const boundedReads = boardCalls().slice(firstTwentyBoardStart);
-  expect(boundedReads).toHaveLength(20);
-  expect(boundedReads.map((call) => call.path.split('/')[3])).toEqual(
-    Array.from({ length: 20 }, (_, index) => realm(index + 1).realmId),
-  );
+  await until(() => membershipCalls().length > pagesBeforeFirstTwenty, 'the bounded membership page');
+  const realmChoices = surface.host.querySelectorAll('section[aria-labelledby="review-realm-heading"] li');
+  expect(realmChoices).toHaveLength(20);
+  const firstDestination = destinationCalls().length;
+  await surface.clickRealm(realm(1).name);
+  await until(() => destinationCalls().length > firstDestination, 'the selected Realm destinations');
+  expect(destinationCalls().slice(firstDestination)).toHaveLength(1);
+  expect(destinationCalls().at(-1)?.path).toBe(`/v1/realms/${realm(1).realmId}/review-destinations`);
+  await until(() => (surface.host.textContent ?? '').includes(m.thread_review_no_board()), 'the selected Realm empty page');
 
   // A failed session read and removal retire in-flight membership data. After recovery the new
   // owner reads again; stale completion/finally cannot replace its pending state.
@@ -478,6 +571,7 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   membershipPlans.push(() => stalePageGate.promise);
   const pagesBeforeError = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
+  await surface.clickWrite();
   await until(() => membershipCalls().length > pagesBeforeError, 'the page pending session error');
   const failure = surface.client
     .fetchQuery({
@@ -498,20 +592,20 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   stalePageGate.resolve(response([realm(1)]));
   await failure;
   await settle();
-  expect(boardCalls().length).toBe(firstTwentyBoardStart + 20);
-  await surface.clickWrite();
+  expect(destinationCalls()).toHaveLength(firstDestination + 1);
   expect(surface.host.textContent ?? '').toContain(m.thread_review_unavailable());
-  expect(surface.host.querySelectorAll('a[href*="/boards/"]')).toHaveLength(0);
+  expect(surface.host.querySelectorAll('ul[aria-label]')).toHaveLength(0);
 
   const staleRemovedGate = deferred<Response>();
   membershipPlans.push(() => staleRemovedGate.promise);
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
   const pagesBeforeRemoval = membershipCalls().length;
+  await surface.clickWrite();
   await until(() => membershipCalls().length > pagesBeforeRemoval, 'the page pending cache removal');
   await act(async () => surface.client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true }));
   staleRemovedGate.resolve(response([realm(1)]));
   await settle();
-  expect(boardCalls().length).toBe(firstTwentyBoardStart + 20);
+  expect(destinationCalls()).toHaveLength(firstDestination + 1);
 
   // The observer records both sides of an A-to-B-to-A batch. The fresh owner remains usable while
   // the prior page settles without publication or a queued board read.
@@ -519,6 +613,7 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   membershipPlans.push(() => staleAbaGate.promise);
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
   const pagesBeforeAba = membershipCalls().length;
+  await surface.clickWrite();
   await until(() => membershipCalls().length > pagesBeforeAba, 'the page pending batched ABA');
   const freshPagesBeforeAba = membershipCalls().length;
   realmItems = [realm(1)];
@@ -528,13 +623,14 @@ test('one connected review-entry preparation and chooser admits only same-prepar
       surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null));
     }),
   );
+  await surface.clickWrite();
   await until(() => membershipCalls().length > freshPagesBeforeAba, 'the fresh ABA owner read');
   staleAbaGate.resolve(response([realm(1)]));
   await settle();
-  expect(boardCalls().length).toBe(firstTwentyBoardStart + 20);
-  const freshBoardsAfterAba = boardCalls().length;
-  await surface.clickWrite();
-  await until(() => boardCalls().length > freshBoardsAfterAba, 'the usable ABA replacement owner');
+  expect(destinationCalls()).toHaveLength(firstDestination + 1);
+  const freshBoardsAfterAba = destinationCalls().length;
+  await surface.clickRealm('Realm 1');
+  await until(() => destinationCalls().length > freshBoardsAfterAba, 'the usable ABA replacement owner');
   await until(
     () => (surface.host.textContent ?? '').includes(m.thread_review_no_board()),
     'the ABA owner empty choices',
@@ -559,12 +655,12 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   expect(membershipCalls()).toHaveLength(pagesBeforeNotReady);
 
   // A successful current page with zero realms is still a real empty result; the final unmount
-  // immediately disconnects pending work so its later one-choice settlement cannot navigate.
+  // immediately disconnects a pending exact Board inspection so its later settlement cannot navigate.
   realmItems = [];
   const pagesBeforeEmpty = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
-  await until(() => membershipCalls().length > pagesBeforeEmpty, 'the recovered current page');
   await surface.clickWrite();
+  await until(() => membershipCalls().length > pagesBeforeEmpty, 'the recovered current page');
   await until(
     () => (surface.host.textContent ?? '').includes(m.thread_review_no_realms()),
     'the empty membership result',
@@ -573,15 +669,24 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   realmItems = [realm(1)];
   const pagesBeforeFinal = membershipCalls().length;
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
-  await until(() => membershipCalls().length > pagesBeforeFinal, 'the final mounted page');
   const finalBoardGate = deferred<Response>();
-  boardResponse = () => finalBoardGate.promise;
+  destinationRead = (realmId, subjectId, boardId) =>
+    boardId
+      ? finalBoardGate.promise
+      : destinationPage(realmId, subjectId, [destinationItem(boardA, 'Unmounted single choice', subjectId)]);
   await surface.clickWrite();
-  const finalBoardStart = boardCalls().length;
-  await until(() => boardCalls().length > finalBoardStart, 'the final pending board lookup');
+  await until(() => membershipCalls().length > pagesBeforeFinal, 'the final mounted page');
+  await surface.clickRealm('Realm 1');
+  const finalBoardStart = destinationCalls().length;
+  await until(() => (surface.host.textContent ?? '').includes('Unmounted single choice'), 'the final Board choice');
+  await surface.clickBoard('Unmounted single choice');
+  await until(
+    () => destinationCalls().length > finalBoardStart && destinationCalls().at(-1)?.query.includes(`boardId=${boardA}`),
+    'the final pending exact inspection',
+  );
   const navigationCount = navigations.length;
   await surface.unmount();
-  finalBoardGate.resolve(response([reviewBoard(boardA, 'Unmounted single choice')]));
+  finalBoardGate.resolve(destinationPage(realmA, subjectA, [destinationItem(boardA, 'Unmounted single choice', subjectA)]));
   await settle();
   expect(navigations).toHaveLength(navigationCount);
   expect(serverCalls.every(({ data }) => !JSON.stringify(data).includes('access-'))).toBe(true);
