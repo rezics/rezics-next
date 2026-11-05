@@ -2,6 +2,8 @@ import { Menu } from '@rezics/ui/menu';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { EllipsisIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
+import { locales } from '../paraglide/runtime.js';
+export type { FollowState, FollowWriteInput, FollowWriteResult } from './follow-records';
 import { m } from '../paraglide/messages.js';
 import type { FollowState, FollowWriteInput, FollowWriteResult } from './follow-records';
 import { createFollowIntent } from './mine-following-intent';
@@ -14,6 +16,8 @@ export function followAction(state: FollowState, canFollow: boolean, canRemove: 
 }
 
 export type FollowControlProps = {
+  locale?: (typeof locales)[number];
+  labelContext?: string;
   targetId: string;
   initial: FollowState;
   canFollow: boolean;
@@ -95,6 +99,8 @@ export function FollowControl(props: FollowControlProps) {
 }
 
 function FollowControlState({
+  locale,
+  labelContext,
   targetId,
   initial,
   canFollow,
@@ -110,6 +116,8 @@ function FollowControlState({
   readLifetime,
   onAccepted,
 }: FollowControlProps) {
+  const options = locale ? { locale } : {};
+  const accessibleLabel = (label: string) => (labelContext ? `${label}: ${labelContext}` : label);
   const [current, setCurrent] = useState(initial);
   const [pendingState, setPending] = useState(false);
   const [failure, setFailure] = useState<Exclude<FollowWriteResult, { ok: true }>['reason'] | null>(null);
@@ -268,14 +276,14 @@ function FollowControlState({
       }
     }
   }
-  const label = action === 'follow' ? m.library_follow() : m.library_follow_unfollow();
+  const label = action === 'follow' ? m.library_follow({}, options) : m.library_follow_unfollow({}, options);
   const error =
     failure === 'conflict'
-      ? m.library_follow_conflict()
+      ? m.library_follow_conflict({}, options)
       : failure === 'forbidden' || failure === 'unauthorized' || failure === 'closed'
-        ? m.library_follow_forbidden()
+        ? m.library_follow_forbidden({}, options)
         : failure
-          ? m.error_message()
+          ? m.error_message({}, options)
           : '';
   return (
     <div
@@ -284,7 +292,7 @@ function FollowControlState({
       aria-busy={pending || reviewing}
     >
       {current.state === 'ready' && current.following && !menuTitle ? (
-        <span className="text-sm text-muted-foreground">{m.library_following()}</span>
+        <span className="text-sm text-muted-foreground">{m.library_following({}, options)}</span>
       ) : null}
       {action ? (
         menuTitle ? (
@@ -298,36 +306,48 @@ function FollowControlState({
             entries={[{ type: 'item', label, disabled, onSelect: () => void submit() }]}
           />
         ) : (
-          <Button type="button" variant="outline" disabled={disabled} onClick={() => void submit()}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            aria-label={accessibleLabel(label)}
+            onClick={() => void submit()}
+          >
             {label}
           </Button>
         )
       ) : null}
       {pending ? (
         <p role="status" className="text-sm">
-          {m.library_follow_pending()}
+          {m.library_follow_pending({}, options)}
         </p>
       ) : current.state === 'pending' ? (
         <p role="status" className="text-sm">
-          {m.library_follow_loading()}
+          {m.library_follow_loading({}, options)}
         </p>
       ) : null}
       {current.state !== 'ready' && current.state !== 'pending' && current.state !== 'signed-out' ? (
         <p role="status" className="text-sm text-muted-foreground">
-          {m.library_follow_unavailable()}
+          {m.library_follow_unavailable({}, options)}
         </p>
       ) : null}
       {conflict.current ? (
         <>
           {onReview ? (
-            <Button type="button" variant="ghost" disabled={reviewing} onClick={() => void reviewConflict()}>
-              {m.library_follow_conflict_recovery_review()}
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={reviewing}
+              aria-label={accessibleLabel(m.library_follow_conflict_recovery_review({}, options))}
+              onClick={() => void reviewConflict()}
+            >
+              {m.library_follow_conflict_recovery_review({}, options)}
             </Button>
           ) : null}
           {!onReview || reviewState === 'failed' ? (
             <>
               <p role="status" className="text-sm text-muted-foreground">
-                {m.library_follow_conflict_recovery_unavailable()}
+                {m.library_follow_conflict_recovery_unavailable({}, options)}
               </p>
               {canRemove ? (
                 <Button
@@ -339,11 +359,11 @@ function FollowControlState({
                     setReviewState('idle');
                   }}
                 >
-                  {m.library_follow_conflict_recovery_remove()}
+                  {m.library_follow_conflict_recovery_remove({}, options)}
                 </Button>
               ) : (
                 <a href="" className={buttonVariants({ variant: 'ghost' })}>
-                  {m.library_follow_conflict_recovery_reload()}
+                  {m.library_follow_conflict_recovery_reload({}, options)}
                 </a>
               )}
             </>
@@ -351,12 +371,12 @@ function FollowControlState({
         </>
       ) : onRetry && current.state !== 'ready' && current.state !== 'pending' ? (
         <Button type="button" variant="ghost" disabled={pending} onClick={onRetry}>
-          {m.library_follow_retry()}
+          {m.library_follow_retry({}, options)}
         </Button>
       ) : null}
       {reviewState === 'ready' ? (
         <p role="status" className="text-sm text-muted-foreground">
-          {m.library_follow_conflict_recovery_ready()}
+          {m.library_follow_conflict_recovery_ready({}, options)}
         </p>
       ) : null}
       {error ? (
@@ -366,7 +386,7 @@ function FollowControlState({
       ) : null}
       {removed ? (
         <p role="status" className="text-sm text-muted-foreground">
-          {m.library_follow_removed()}
+          {m.library_follow_removed({}, options)}
         </p>
       ) : null}
     </div>

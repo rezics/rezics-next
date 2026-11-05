@@ -17,6 +17,7 @@ import {
 import { collectionFollowSource } from '../src/search/collection-context/schema';
 import { DiscoveryResults } from '../src/search/discovery-results';
 import { discoveryExposureKey } from '../src/search/discovery-personal-capabilities';
+import { CollectionFollowControl } from '../src/search/collection-context/follow';
 import type { FollowWriteResult } from '../src/library/follow-records';
 import type { DiscoveryBoundPage } from '../src/search/discovery-personal-server';
 
@@ -143,6 +144,29 @@ test('real mixed row retains cover/count, actual curator/member links and honest
   const hit = current.hits[0]!;
   if (hit.summary.kind !== 'collection') throw new Error('Expected Collection');
   for (const locale of locales) {
+    const control = renderToStaticMarkup(
+      <CollectionFollowControl
+        row={{
+          targetId: collection,
+          targetType: 'collection',
+          source: 'source',
+          following: false,
+          actions: { follow: true, unfollow: true },
+        }}
+        binding={{ expectedReader: reader, expectedCredential: 'credential' }}
+        lifetime="page"
+        current={() => true}
+        locale={locale}
+        rowKey="row"
+        title="Current shelf"
+        reviewed={true}
+        refresh={async () => {}}
+        write={async () => ({ ok: false, reason: 'unavailable' })}
+      />,
+    );
+    expect(control).toContain(m.library_follow({}, { locale }));
+    expect(control).toContain(m.library_follow_conflict_recovery_ready({}, { locale }));
+    expect(control).toContain(`Current shelf (${collection})`);
     const html = renderToStaticMarkup(<DiscoveryResults state={{ status: 'ready', page: current }} locale={locale} />);
     expect(html).toContain(`href="/${locale}/@curator"`);
     expect(html).toContain(`/${locale}/subjects/${member}`);
@@ -220,6 +244,7 @@ test('mounted Search uses one aggregate read, native command results and termina
   client.setQueryData(viewerExposureQuery({ subject: reader, id: 1 }).queryKey, { subject: reader, admitted });
   let source: DiscoveryState = { status: 'ready', page: page() };
   let reads = 0;
+  let nativeFollowing = false;
   let write = deferred<FollowWriteResult>();
   const commands: unknown[] = [];
   function Live() {
@@ -231,7 +256,10 @@ test('mounted Search uses one aggregate read, native command results and termina
       returnTo: window.location.href,
       read: async () => {
         reads++;
-        return bound(source);
+        const result = bound(source);
+        if (result.state.status === 'ready' && result.state.page.collectionFollows?.state === 'current')
+          result.state.page.collectionFollows.rows[0]!.following = nativeFollowing;
+        return result;
       },
       writeFollow: async ({ data }) => {
         commands.push(data);
@@ -260,20 +288,51 @@ test('mounted Search uses one aggregate read, native command results and termina
     expect(button().disabled).toBe(true);
     expect(host.querySelectorAll<HTMLButtonElement>('[data-slot=collection-follow] button')[1]!.disabled).toBe(false);
     expect(host.textContent).not.toContain('Following');
-    await act(async () => write.resolve({ ok: true, following: true }));
+    // No refresh or invented state after the first uncertain dispatch.
+    await act(async () => write.resolve({ ok: false, reason: 'unavailable' }));
+    expect(button().disabled).toBe(false);
+    expect(button().textContent).toContain('Follow');
+    expect(reads).toBe(1);
+    const original = structuredClone(commands[0]);
+    write = deferred();
+    await act(async () => button().click());
+    expect(commands[1]).toEqual(original);
+    expect(commands).toHaveLength(2);
+    nativeFollowing = true;
+    await act(async () => write.resolve({ ok: true, following: false }));
+    // Only aggregate native observation is installed, even if the command response differs.
+    expect(reads).toBe(2);
     expect(button().textContent).toContain('Unfollow');
     expect(host.querySelectorAll('[data-slot=collection-follow] button')[1]!.textContent).not.toContain('Unfollow');
     expect(commands).toMatchObject([
       { targetId: collection, following: true, expectedReader: reader, expectedCredential: 'credential' },
+      { targetId: collection, following: true, expectedReader: reader, expectedCredential: 'credential' },
     ]);
     write = deferred();
     await act(async () => button().click());
-    await act(async () => write.resolve({ ok: false, reason: 'forbidden' }));
-    expect(host.querySelector('[role=alert]')?.textContent).toContain('unavailable');
+    await act(async () => write.resolve({ ok: false, reason: 'conflict' }));
     expect(button().disabled).toBe(true);
+    expect(reads).toBe(2);
+    const review = [...host.querySelectorAll<HTMLButtonElement>('[data-slot=collection-follow] button')].find((item) =>
+      item.textContent?.includes('Review current follow'),
+    )!;
+    review.focus();
+    await act(async () => review.click());
+    expect(reads).toBe(3);
+    expect(button().disabled).toBe(false);
+    expect(button().textContent).toContain('Unfollow');
+    expect(host.textContent).toContain('Current follow reviewed');
+    expect(window.document.activeElement).toBe(button());
+    write = deferred();
+    await act(async () => button().click());
+    expect(commands[3]).not.toEqual(commands[2]);
+    await act(async () => write.resolve({ ok: false, reason: 'forbidden' }));
+    expect(host.querySelector('[role=alert]')?.textContent).toContain('permissions');
+    expect(button().disabled).toBe(true);
+    nativeFollowing = false;
     source = { status: 'ready', page: page() };
     await act(async () => render());
-    expect(reads).toBe(2);
+    expect(reads).toBe(4);
     write = deferred();
     await act(async () => button().click());
     const oldWrite = write;
