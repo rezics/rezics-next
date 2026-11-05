@@ -11139,5 +11139,7 @@
   "library_mal_retry_source_evidence": "출처 증거 등록 재시도",
   "library_mal_score_zero_source": "{value} (0은 미평가를 뜻함)",
   "library_mal_score_source_details": "값: {value}; MAL 척도: {scale}",
-  "library_mal_score_source_scale": "MAL 척도 {min}~{max}, 간격 {step}"
+  "library_mal_score_source_scale": "MAL 척도 {min}~{max}, 간격 {step}",
+  "managed_create_automation": "소프트웨어 계정 만들기",
+  "managed_open_automation": "소프트웨어 계정 열기"
 }

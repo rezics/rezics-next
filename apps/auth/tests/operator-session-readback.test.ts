@@ -104,3 +104,12 @@ test('installed readback and metadata admit bounded native streams without comma
   ]);
   expect(exit, output + error).toBe(0);
 });
+
+test('returning from an operated session renews Web at the configured origin without carrying management command context', async () => {
+  const { operatorWebsiteHref } = await import('../src/operator-opening-navigation');
+  expect(operatorWebsiteHref('http://127.0.0.1:20000', 'ja', '/accounts')).toBe('http://127.0.0.1:20000/ja/accounts');
+  const next = new URL(operatorWebsiteHref('http://127.0.0.1:20000', 'zh-Hant', '/', true));
+  expect(next.origin).toBe('http://127.0.0.1:20000');
+  expect(next.pathname).toBe('/auth/sign-in');
+  expect([...next.searchParams]).toEqual([['return_to', '/zh-Hant/']]);
+});

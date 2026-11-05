@@ -30,6 +30,7 @@ import {
 import { usePreferenceRetry } from './preference-failure-retry';
 import {
   ManagedAccountsInventory,
+  managedAccountHref,
   type ManagedAccountsFailure,
   type ManagedAccountsIO,
   type ManagedAccountsSnapshot,
@@ -46,12 +47,21 @@ const stateClassName = 'h-auto min-h-5 max-w-full shrink whitespace-normal wrap-
 const identityRowClassName =
   'min-h-14 max-w-full wrap-anywhere [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-slot=list-row-link]]:min-h-11';
 
-function IdentityRow({ account, children }: { account: ManagedIdentity; children?: ReactNode }) {
+function IdentityRow({
+  account,
+  href,
+  children,
+}: {
+  account: ManagedIdentity;
+  href?: string | undefined;
+  children?: ReactNode;
+}) {
   const name = account.displayName || (account.handle ? `@${account.handle}` : m.managed_unnamed());
   return (
     <ContentItem
       className={identityRowClassName}
       title={name}
+      {...(href ? { href } : {})}
       headingLevel={4}
       visual={
         <Avatar aria-hidden="true">
@@ -258,6 +268,7 @@ function FeedActions({
 
 export function ManagedAccountsView({
   snapshot,
+  settingsHref,
   more,
   previousPage,
   firstPage,
@@ -350,12 +361,17 @@ export function ManagedAccountsView({
           ) : null}
           {account ? (
             <ul className="min-w-0 max-w-full" aria-label={m.managed_your_account()}>
-              <IdentityRow account={account} />
+              <IdentityRow
+                account={account}
+                href={snapshot.viewer ? managedAccountHref(settingsHref, account.id) : undefined}
+              />
             </ul>
           ) : null}
           {account ? (
             <div className="mt-3 space-y-3">
-              <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p>
+              {!snapshot.viewer ? (
+                <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p>
+              ) : null}
               {waiting ? (
                 <p id={inventoryWaitId} role="status" aria-labelledby={viewerHeadingId}>
                   {m.settings_managed_inventory_retry_wait()}
@@ -398,8 +414,12 @@ export function ManagedAccountsView({
                 </p>
               ) : organizations.items.length ? (
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_organizations_title()}>
-                  {organizations.items.map(({ account, role }) => (
-                    <IdentityRow key={account.id} account={account}>
+                  {organizations.items.map(({ account, role, navigation }) => (
+                    <IdentityRow
+                      key={account.id}
+                      account={account}
+                      href={navigation?.state === 'admitted' ? managedAccountHref(settingsHref, account.id) : undefined}
+                    >
                       <Badge variant="secondary" className={stateClassName}>
                         {role === 'owner' ? m.managed_owner() : m.managed_member()}
                       </Badge>
@@ -444,7 +464,15 @@ export function ManagedAccountsView({
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_operated_title()}>
                   {responsibilities.items.map((item) =>
                     item.account ? (
-                      <IdentityRow key={item.reservationId} account={item.account}>
+                      <IdentityRow
+                        key={item.reservationId}
+                        account={item.account}
+                        href={
+                          item.state === 'current' && item.navigation?.state === 'admitted'
+                            ? managedAccountHref(settingsHref, item.account.id)
+                            : undefined
+                        }
+                      >
                         <Badge variant="secondary" className={stateClassName}>
                           {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
                         </Badge>

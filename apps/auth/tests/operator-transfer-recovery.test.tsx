@@ -319,3 +319,21 @@ test.each(['failed-read', 'conflicting-read', 'replaced', 'retired', 'failed-sav
     }
   },
 );
+
+test('the management URL selects the exact software account without approving or executing a transfer', async () => {
+  const { transferSelection } = await import('../src/routes/operators.transfer');
+  const accountId = request.previous.subjectAccountId;
+  expect(transferSelection({ accountId })).toEqual({ accountId });
+  expect(transferSelection({ accountId: 'foreign?operation=execute' })).toEqual({ accountId: '' });
+  window.sessionStorage.clear();
+  const page = await open(<OperatorTransferPage initial={session} selectedSubject={accountId} />, sessionBody);
+  try {
+    await settle();
+    await settle(() => page.calls[0]!.resolve(response({ kind: 'readiness' })));
+    expect((page.host.querySelector('#transfer-subject') as HTMLInputElement).value).toBe(accountId);
+    expect(page.calls).toHaveLength(1);
+    expect(restoreTransferAttempt()).toBeNull();
+  } finally {
+    window.sessionStorage.clear();
+  }
+});

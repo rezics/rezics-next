@@ -11436,5 +11436,7 @@
   "moderation_manual_hint": "Enter a board ID or open catalogue reports. Each queue checks your current access independently of discovery.",
   "moderation_manual_board": "Board ID",
   "moderation_manual_open": "Open board queue",
-  "moderation_manual_catalogue": "Open catalogue reports"
+  "moderation_manual_catalogue": "Open catalogue reports",
+  "managed_create_automation": "Create a software account",
+  "managed_open_automation": "Open a software account"
 }

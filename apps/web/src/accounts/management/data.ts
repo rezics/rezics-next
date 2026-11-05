@@ -1,15 +1,22 @@
 import type { KernelClient } from '@rezics/client';
+import type { ManagedAccountsPage } from '../../settings/managed-accounts-read';
+import type { ManagementDetail } from '../../settings/managed-account-detail-read';
+import type { ManagedAuthNavigation } from '../../settings/managed-account-actions-read';
 import { readWithin } from './read-deadline';
 
-// Page contracts follow the generated client rather than introducing a second HTTP interface.
-type InventoryResponse = Awaited<ReturnType<KernelClient['me']['managedAccounts']['get']>>;
-type DetailResponse = Awaited<ReturnType<ReturnType<KernelClient['accounts']>['management']['get']>>;
-export type Inventory = NonNullable<InventoryResponse['data']>;
-export type Detail = NonNullable<DetailResponse['data']>;
+// Additive native response fields use the existing HTTP response seam until serial client publication.
+export type Inventory = ManagedAccountsPage;
+export type Detail = ManagementDetail & { authActions?: unknown };
 export type Identity = Inventory['account'];
 export type PageFailure = { state: 'denied' | 'unavailable' | 'preparing' | 'missing' | 'signed-out' };
 export type Page<T> =
-  | { state: 'ready'; value: T; issuer: string | null; organizationsAvailable: boolean | null }
+  | {
+      state: 'ready';
+      value: T;
+      issuer: string | null;
+      organizationsAvailable: boolean | null;
+      authNavigation?: ManagedAuthNavigation;
+    }
   | PageFailure;
 export type Cursors = { organizationsCursor?: string; operatorsCursor?: string; membersCursor?: string };
 
@@ -53,7 +60,7 @@ export async function loadInventory(
     );
     return result.error || !result.data
       ? failure(result.status, result.error?.value)
-      : { state: 'ready' as const, value: result.data };
+      : { state: 'ready' as const, value: result.data as Inventory };
   } catch {
     return { state: 'unavailable' as const };
   }
@@ -82,7 +89,7 @@ export async function loadDetail(
     );
     return result.error || !result.data
       ? failure(result.status, result.error?.value)
-      : { state: 'ready' as const, value: result.data };
+      : { state: 'ready' as const, value: result.data as Detail };
   } catch {
     return { state: 'unavailable' as const };
   }
@@ -102,7 +109,10 @@ export async function loadOrganizationsAvailable(client: KernelClient, authoriza
   }
 }
 
-export function issuerPage(issuer: string | null, path: '/organizations/new' | '/account/delete'): string | null {
+export function issuerPage(
+  issuer: string | null,
+  path: '/organizations/new' | '/account/delete' | '/automated/new' | '/automated/open',
+): string | null {
   if (!issuer) return null;
   try {
     const url = new URL(issuer);

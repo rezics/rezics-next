@@ -11253,5 +11253,7 @@
   "moderation_manual_hint": "輸入看板 ID，或開啟目錄檢舉。每個佇列都會獨立檢查你目前的存取權限。",
   "moderation_manual_board": "看板 ID",
   "moderation_manual_open": "開啟看板佇列",
-  "moderation_manual_catalogue": "開啟目錄檢舉"
+  "moderation_manual_catalogue": "開啟目錄檢舉",
+  "managed_create_automation": "建立軟體帳號",
+  "managed_open_automation": "開啟軟體帳號"
 }

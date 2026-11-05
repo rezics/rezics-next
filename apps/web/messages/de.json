@@ -11139,5 +11139,7 @@
   "library_mal_retry_source_evidence": "Quellennachweis erneut übermitteln",
   "library_mal_score_zero_source": "{value} (null bedeutet nicht bewertet)",
   "library_mal_score_source_details": "Wert: {value}; MAL-Skala: {scale}",
-  "library_mal_score_source_scale": "MAL-Skala von {min} bis {max}, Schrittweite {step}"
+  "library_mal_score_source_scale": "MAL-Skala von {min} bis {max}, Schrittweite {step}",
+  "managed_create_automation": "Softwarekonto erstellen",
+  "managed_open_automation": "Softwarekonto öffnen"
 }

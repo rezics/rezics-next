@@ -11139,5 +11139,7 @@
   "library_mal_retry_source_evidence": "Réessayer l’admission de la preuve de source",
   "library_mal_score_zero_source": "{value} (zéro signifie non noté)",
   "library_mal_score_source_details": "Valeur : {value} ; échelle MAL : {scale}",
-  "library_mal_score_source_scale": "Échelle MAL de {min} à {max}, pas de {step}"
+  "library_mal_score_source_scale": "Échelle MAL de {min} à {max}, pas de {step}",
+  "managed_create_automation": "Créer un compte logiciel",
+  "managed_open_automation": "Ouvrir un compte logiciel"
 }

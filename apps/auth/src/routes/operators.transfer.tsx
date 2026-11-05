@@ -48,8 +48,23 @@ import { OperatorTransferRecoveryView } from '../operator-transfer-recovery-view
 
 export const Route = createFileRoute('/operators/transfer')({
   head: () => ({ meta: [{ title: `${m.auth_transfer_heading()} · REZICS` }] }),
-  component: OperatorTransferPage,
+  validateSearch: transferSelection,
+  component: TransferRoute,
 });
+
+export function transferSelection(search: Record<string, unknown>) {
+  return {
+    accountId:
+      typeof search.accountId === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search.accountId)
+        ? search.accountId
+        : '',
+  };
+}
+function TransferRoute() {
+  const { accountId } = Route.useSearch();
+  return <OperatorTransferPage key={accountId} selectedSubject={accountId} />;
+}
 
 // The transfer page alone owns this guard; standalone fixtures need no router.
 function TransferDeparture({
@@ -151,7 +166,10 @@ function fileError(reason: HandoffError): string {
   }
 }
 
-export function OperatorTransferPage({ initial }: { initial?: AccountSessionResult } = {}) {
+export function OperatorTransferPage({
+  initial,
+  selectedSubject = '',
+}: { initial?: AccountSessionResult; selectedSubject?: string } = {}) {
   const router = useRouter({ warn: false });
   const [reload, setReload] = useState(0);
   const [history, setHistory] = useState<TransferReturnEntry[]>([]);
@@ -168,7 +186,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   }
   const [session, setSession] = useState<AccountSessionResult | null>(null);
   const [attempt, setAttempt] = useState<TransferAttempt | null>(null);
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState(selectedSubject);
   const [destination, setDestination] = useState('');
   const [requestText, setRequestText] = useState('');
   const [acceptance, setAcceptance] = useState('');
@@ -405,12 +423,12 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setPending(false);
     setPassword('');
     setEmail('');
-    setSubject('');
+    setSubject(selectedSubject);
     setDestination('');
     return () => {
       retire(false);
     };
-  }, [initial, reload]);
+  }, [initial, reload, selectedSubject]);
   useEffect(() => {
     readPage(() => loadPageSession(reload === 0 ? initial : undefined, reload > 0));
   }, [initial, reload]);

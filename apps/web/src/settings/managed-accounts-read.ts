@@ -10,16 +10,25 @@ const id = v.pipe(v.string(), v.uuid());
 const text = v.nullable(v.string());
 const cursor = v.nullable(v.pipe(v.string(), v.maxLength(4096)));
 const identity = v.strictObject({ id, kind: v.picklist(['actor', 'organization']), handle: text, displayName: text });
-const organization = v.strictObject({ account: identity, role: v.picklist(['owner', 'member']) });
+export const managedDirectoryNavigation = v.strictObject({
+  state: v.picklist(['admitted', 'unavailable', 'concealed']),
+});
+const organization = v.strictObject({
+  account: identity,
+  role: v.picklist(['owner', 'member']),
+  navigation: v.optional(managedDirectoryNavigation),
+});
 const responsibility = v.strictObject({
   reservationId: id,
   accountId: id,
   account: v.nullable(identity),
   state: v.picklist(['current', 'reconciling']),
+  navigation: v.optional(managedDirectoryNavigation),
 });
 // Native authority: access/account-management.ts managedAccountsSchema, 20 scanned entries per feed.
 const schema = v.strictObject({
   account: identity,
+  viewer: v.optional(v.strictObject({ state: v.literal('current'), account: identity })),
   organizations: v.strictObject({
     state: v.picklist(['ready', 'preparing']),
     items: v.pipe(v.array(organization), v.maxLength(20)),
@@ -146,6 +155,7 @@ type Feed<T> = {
 };
 export type ManagedAccountsSnapshot = {
   account: ManagedIdentity | null;
+  viewer?: ManagedAccountsPage['viewer'];
   loading: boolean;
   failure: ManagedAccountsFailure | null;
   /** Longest response-time deadline for the directory endpoint, shared by both feeds and refresh. */
@@ -265,6 +275,7 @@ export class ManagedAccountsInventory {
     this.resetCoordinates();
     this.publish({
       account: page.account,
+      viewer: page.viewer,
       loading: false,
       failure: null,
       retryAt: this.value.retryAt ?? 0,

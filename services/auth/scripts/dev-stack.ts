@@ -85,9 +85,13 @@ export function developmentWebsiteScopeConfiguration(
 export function developmentWebsiteBindings(
   keys: Pick<DevelopmentKeys, 'website'>,
   website: { scopes: readonly string[]; WEBSITE_CONFIGURATION_FILE?: string },
+  deployment: { AUTH_MANAGEMENT_PAGE_ROUTES?: string } = process.env,
 ) {
   return {
     AUTH_ISSUER: origins.issuer,
+    AUTH_MANAGEMENT_PAGE_ROUTES:
+      deployment.AUTH_MANAGEMENT_PAGE_ROUTES ??
+      JSON.stringify(['/account/rename', '/organizations/members', '/operators/transfer', '/organizations/delete']),
     API_RESOURCE: origins.audience,
     WEBSITE_CLIENT_ID: 'rezics-website',
     WEBSITE_CLIENT_KEY: JSON.stringify(keys.website),

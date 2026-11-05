@@ -238,6 +238,17 @@ test('generated Web bindings preserve literal JWK JSON and the selected deployme
       WEBSITE_CONFIGURATION_FILE: file,
     });
     expect(developmentWebsiteBindings({ website: key }, selected).WEBSITE_CONFIGURATION_FILE).toBe(file);
+    const routes = JSON.stringify([
+      '/account/rename',
+      '/organizations/members',
+      '/operators/transfer',
+      '/organizations/delete',
+    ]);
+    expect(developmentWebsiteBindings({ website: key }, selected, {}).AUTH_MANAGEMENT_PAGE_ROUTES).toBe(routes);
+    expect(
+      developmentWebsiteBindings({ website: key }, selected, { AUTH_MANAGEMENT_PAGE_ROUTES: '[]' })
+        .AUTH_MANAGEMENT_PAGE_ROUTES,
+    ).toBe('[]');
     expect(await readFile(file, 'utf8')).toBe(JSON.stringify({ WEBSITE_SCOPES }));
   } finally {
     await rm(directory, { recursive: true, force: true });
