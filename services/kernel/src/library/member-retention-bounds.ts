@@ -166,6 +166,23 @@ export type MemberRetentionExecution = Readonly<{
   identity?: Readonly<Episode>;
 }>;
 const observation = new AsyncLocalStorage<(execution: MemberRetentionExecution) => void>();
+type Composition = { total: Bound; native: Bound };
+const compositions = new AsyncLocalStorage<readonly Composition[]>();
+/** Sum disjoint declarations at their real dispatches, including every reached Core retry.
+ * Two fixed-depth accumulators retain nine counters each, never a vector of episode keys.
+ * Core contention uses jitter rather than a finite attempt cap, so an invented retry
+ * multiplier cannot enclose its work. Each original attempt still consumes before dispatch.
+ */
+async function composeMemberRetention<T>(operation: string, dispatch: () => Promise<T>): Promise<T> {
+  const result: Composition = { total: retentionCost(), native: retentionCost() };
+  return compositions.run([...(compositions.getStore() ?? []), result], async () => {
+    try {
+      return await dispatch();
+    } finally {
+      observation.getStore()?.(Object.freeze({ operation, total: result.total, native: result.native }));
+    }
+  });
+}
 /** Observe declarations bound to genuine dispatch, without manufacturing a work association or grant. */
 export function observeMemberRetentionExecution<T>(
   observe: (execution: MemberRetentionExecution) => void,
@@ -179,7 +196,12 @@ function bindNative<T>(
   native: Bound,
   dispatch: () => Promise<T>,
   identity?: Readonly<Episode>,
+  compositionCost: Bound = native,
 ): Promise<T> {
+  for (const composition of compositions.getStore() ?? []) {
+    composition.total = sumBounds(composition.total, compositionCost);
+    composition.native = sumBounds(composition.native, native);
+  }
   observation.getStore()?.(Object.freeze({ operation, total, native, ...(identity ? { identity } : {}) }));
   const association = currentCommandWorkAssociation();
   return association
@@ -431,7 +453,8 @@ export function runMemberRetentionCommand<T>(
   const plan = memberRetentionCommandPlan(pool, options, original);
   return withCommandAttemptWork(
     options,
-    () => bindNative(`${original.kind}-attempt`, plan.total, plan.native, async () => undefined, plan.identity),
+    () =>
+      bindNative(`${original.kind}-attempt`, plan.total, plan.native, async () => undefined, plan.identity, plan.total),
     () => covered.run(true, dispatch),
   );
 }
@@ -511,7 +534,9 @@ export function runMemberRetentionPage<T>(
   const plan = memberRetentionPagePlan(cutoff, start);
   // The enclosing declaration includes discovery attempts. Those attempts consume
   // their disjoint native terms at the actual registered-body dispatch below.
-  return bindNative('page-sdk', plan.total, plan.sdk, () => pageDeadline.run(deadline, dispatch));
+  return composeMemberRetention('page-complete', () =>
+    bindNative('page-sdk', plan.total, plan.sdk, () => pageDeadline.run(deadline, dispatch)),
+  );
 }
 export function memberRetentionSegmentPlan(input: { cutoff: string; cursor: MemberRetentionCursor }) {
   const page = memberRetentionPagePlan(input.cutoff, input.cursor);
@@ -529,7 +554,7 @@ export function runMemberRetentionSegment<T>(
   dispatch: () => Promise<T>,
 ): Promise<T> {
   const plan = memberRetentionSegmentPlan(input);
-  return bindNative('segment-sdk', plan.total, plan.sdk, dispatch);
+  return composeMemberRetention('segment-complete', () => bindNative('segment-sdk', plan.total, plan.sdk, dispatch));
 }
 export function runMemberRetentionContinuationStep<T>(input: unknown, dispatch: () => Promise<T>): Promise<T> {
   const plan = durableStepPlan([input], 4);

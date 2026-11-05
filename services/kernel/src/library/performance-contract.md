@@ -621,3 +621,5 @@ probes remain with the Semantic owner. Add those reached terms at those existing
 operation family complete; keep the current request deadline, attempts, receipt semantics and capacity unchanged.
 
 The native ordinal SQL bound lives in `collection-source-ordinal-bounds.ts` and retains its original Source export. Search imports this pure declaration directly so its enclosing declaration does not evaluate a partially initialized native Source runtime during member-retention bootstrap. SQL, capacities and allowances are unchanged.
+
+Page and segment completion declarations sum disjoint native declarations at each reached dispatch, including parent-owner lookups and every original purge command attempt. Core contention has no fixed attempt count; its original deadline and jitter remain authoritative. The structural page/segment plans describe discovery and SDK ceilings; the completed enclosing operation includes actual command attempts without inventing a retry cap. Two fixed-depth accumulators retain only nine-axis totals, including attempts that throw, with no episode-key vector or additional execution guard.
