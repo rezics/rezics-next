@@ -1,5 +1,6 @@
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
 import { supportsReleasedWorkNames } from '../catalogue/work-names/model';
+import { subjectCatalogueTagDefinitions } from './subject-catalogue-metadata/index';
 import { WorkNamesEntry } from '../catalogue/work-names/entry';
 import { GameProfileEntry, gameProfileEntry } from '../catalogue/game-profile-entry';
 import { GameOverview } from '../catalogue/game-reader/entry';
@@ -1122,7 +1123,7 @@ export function SubjectPage({
         <WorkConceptTagsRoute
           subject={read.subject}
           related={read.related}
-          definitions={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+          definitions={subjectCatalogueTagDefinitions(read.subject, page.catalogue)}
           locale={locale}
           realm={realm}
           spoilerThreshold={(reader ?? defaultReader).spoilerLevel}

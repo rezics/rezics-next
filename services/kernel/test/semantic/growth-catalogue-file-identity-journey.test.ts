@@ -9,7 +9,7 @@ import { bootstrapProfile } from '../../src/presentation/profiles.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { cataloguePageMetadata } from '../../src/presentation/semantic-page.ts';
+import { cataloguePageMetadata } from '../../src/presentation/catalogue-page-metadata/index.ts';
 import { openGrowthDatabase, checkGrowth, type GrowthDatabase } from '../support/growth.ts';
 import { seedSemanticPopulation, unrelatedSemanticPopulation } from './planner-fixtures.ts';
 import { verticalManifests } from '../support/manifests.ts';

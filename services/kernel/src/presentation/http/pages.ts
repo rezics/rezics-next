@@ -44,8 +44,8 @@ import { decodeSession, encodeSession, mergeSession, type SessionComponent } fro
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
 import { profileSnapshot, ProfileInputError } from '../profile-cache.ts';
+import { cataloguePageMetadata } from '../catalogue-page-metadata/index.ts';
 import {
-  cataloguePageMetadata,
   characterWorkIdentityOverlay,
   characterPageDocuments,
   copyWorkDisclosureOverlay,
