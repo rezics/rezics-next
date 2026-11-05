@@ -1,3 +1,4 @@
+import { mangaObservedOrigin } from '../catalogue/manga-public-visit';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { GameProfileEntry } from '../catalogue/game-profile-entry';
 import { EditorialEntry } from '../catalogue/editorial-entry';
@@ -356,7 +357,10 @@ export function SubjectFrame({
               {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
               {isScreenType(frame.type) && <ScreenProfileEntry id={frame.id} label={title} locale={locale} />}
               {(frame.type === 'schema:ComicSeries' || frame.type === 'schema:PublicationVolume') && (
-                <MangaProfileEntry id={frame.id} label={title} locale={locale} />
+                <MangaProfileEntry id={frame.id} label={title} locale={locale}
+                  origin={(context ?? frame.context) ? mangaObservedOrigin({ subject: frame.id,
+                    type: frame.type as 'schema:ComicSeries' | 'schema:PublicationVolume', context: (context ?? frame.context)!,
+                    ...(realm ? { realm } : {}), returnHref: contextHref(base, realm) }) : undefined} />
               )}
               {!realm && (context ?? frame.context) === candidateContext && frame.type === 'schema:MusicAlbum' && (
                 <AlbumProfileEntry id={frame.id} label={title} locale={locale} />

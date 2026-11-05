@@ -1,3 +1,5 @@
+import { candidateContext } from '../subject/candidates';
+import { mangaPublicCorrectionHref, mangaGlobalVisitHref, mangaObservedOrigin } from '../features/catalogue/manga-public-visit';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { pickText } from '@rezics/composition';
@@ -61,7 +63,9 @@ function supplyGroups() {
 function CorrectionFamily({
   signedOut = false,
   rtl = false,
+  origin = 'legacy',
 }: {
+  origin?: 'legacy' | 'global' | 'selected' | 'realm' | 'fresh';
   scenario?: MangaScenario;
   signedOut?: boolean;
   rtl?: boolean;
@@ -69,9 +73,14 @@ function CorrectionFamily({
   const locale = getLocale();
   const read = fixture.reads.get(mangaVolumeId)!;
   const href = subjectHref({ id: mangaVolumeId, label: pickText(read.subject.labels, locale).text }, locale).href;
+  const publicHref = origin === 'realm' ? `${href}?realm=00000000-0000-4000-8000-00000000d199` : href;
+  const path = origin === 'legacy' ? `${href}/manga` : origin === 'fresh' ? mangaGlobalVisitHref(mangaVolumeId, locale, href) :
+    mangaPublicCorrectionHref(`${href}/manga`, mangaObservedOrigin({ subject: mangaVolumeId, type: 'schema:PublicationVolume',
+      context: origin === 'selected' ? '00000000-0000-4000-8000-00000000d198' : candidateContext,
+      ...(origin === 'realm' ? { realm: '00000000-0000-4000-8000-00000000d199' } : {}), returnHref: publicHref }));
   return (
     <div dir={rtl ? 'rtl' : undefined}>
-      <PageStory visitor={signedOut ? 'Signed Out' : 'Signed In'} path={`${href}/manga`} />
+      <PageStory visitor={signedOut ? 'Signed Out' : 'Signed In'} path={path} />
     </div>
   );
 }
@@ -83,13 +92,13 @@ const meta = {
     viewport: {
       options: {
         phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '900px' } },
       },
     },
     docs: {
       description: {
         component:
-          'Actual correction route and whole-component independent mounts. Full supplied groups, native FactField controls and deliberate submission; phone390/desktop1280, locale/theme and RTL review. Every new assertion is UNRUN; geometry, native authorization and lifecycle acceptance remain deferred.',
+          'Actual correction route and whole-component independent mounts. Full supplied groups, native FactField controls and deliberate submission; phone390/desktop1440, locale/theme and RTL review. Every new assertion is UNRUN; geometry, native authorization and lifecycle acceptance remain deferred.',
       },
     },
   },
@@ -180,7 +189,7 @@ export const FullGroups: Story = {
   play: ({ canvasElement }) => inspectGroups(canvasElement),
 };
 export const Desktop: Story = {
-  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  globals: { viewport: { value: 'desktop1440', isRotated: false } },
   play: ({ canvasElement }) => inspectGroups(canvasElement),
 };
 export const Rtl: Story = { ...FullGroups, args: { rtl: true } };
@@ -332,3 +341,15 @@ export const DeliberateReload: Story = {
     await expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
   },
 };
+
+export const ObservedGlobal: Story = { args: { origin: 'global' } };
+export const SelectedContext: Story = { args: { origin: 'selected' }, play: async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  await expect(await canvas.findByRole('alert')).toHaveTextContent(m.manga_origin_unsupported({}, options()));
+  const choice = canvas.getByRole('link', { name: m.manga_origin_global({}, options()) });
+  choice.focus();
+  await expect(choice).toHaveFocus();
+  await expect(canvas.queryByRole('textbox')).toBeNull();
+} };
+export const RetainedRealm: Story = { args: { origin: 'realm' } };
+export const FreshGlobal: Story = { args: { origin: 'fresh' } };

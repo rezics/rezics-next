@@ -1,3 +1,4 @@
+import { mangaObservedOrigin } from '../catalogue/manga-public-visit';
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
 import { supportsReleasedWorkNames } from '../catalogue/work-names/model';
 import { WorkNamesEntry } from '../catalogue/work-names/entry';
@@ -1052,7 +1053,10 @@ export function SubjectPage({
             />
           )}
           {(read.subject.type === 'schema:ComicSeries' || read.subject.type === 'schema:PublicationVolume') && (
-            <MangaProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+            <MangaProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale}
+              origin={mangaObservedOrigin({ subject: read.subject.id, type: read.subject.type as 'schema:ComicSeries' | 'schema:PublicationVolume',
+                context: page.context?.id ?? read.subject.context, definition: page.catalogue?.digest ?? read.subject.release,
+                ...(realm ? { realm } : {}), returnHref: workReturn ?? '' })} />
           )}
           <SubjectTermsEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           <SubjectChangesLink id={read.subject.id} title={subjectPageTitle(page, locale)} locale={locale} />

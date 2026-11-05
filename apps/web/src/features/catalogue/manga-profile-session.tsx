@@ -1,3 +1,5 @@
+import { MangaPublicVisitNotice } from './manga-profile-view';
+import { mangaUnsupportedVisit, type MangaPublicVisit } from './manga-public-visit';
 import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
 import { editorRequest } from './editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
@@ -24,7 +26,7 @@ import {
 } from './authored-field-actions';
 import { EditorFailure } from './statement-editor-view';
 
-function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
+function MangaProfileSessionLive({ id, locale, visit, address }: MangaProfileSessionProps) {
   const editorWork = useCatalogueLifetime('transport');
   const { state, subject, csrfToken } = useSession();
   const session = useQuery({ ...sessionQuery, enabled: false });
@@ -37,6 +39,8 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
     <MangaProfileEditor
       id={id}
       locale={locale}
+      visit={visit}
+      address={address}
       session={state === 'unknown' && session.isError ? 'unavailable' : state}
       retrySession={() => session.refetch()}
       search={search}
@@ -160,4 +164,13 @@ function MangaAuthoredSession({ id, locale }: { id: string; locale: string }) {
   );
 }
 
-export const MangaProfileSession = candidateSession(MangaProfileSessionLive);
+export type MangaProfileSessionProps = { id?: string; locale: string; visit?: MangaPublicVisit | undefined; address?: string | undefined };
+function MangaProfileSessionGuard(props: MangaProfileSessionProps) {
+  if (props.id && (props.visit?.kind === 'invalid' || mangaUnsupportedVisit(props.visit)))
+    return <MangaPublicVisitNotice id={props.id} locale={props.locale} visit={props.visit} />;
+  return <MangaProfileSessionLive {...props} />;
+}
+const SupportedMangaSession = candidateSession(MangaProfileSessionGuard);
+export function MangaProfileSession(props: MangaProfileSessionProps) {
+  return <SupportedMangaSession {...props} address={JSON.stringify([props.address, props.visit])} />;
+}

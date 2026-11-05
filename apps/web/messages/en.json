@@ -1,4 +1,11 @@
 {
+  "manga_origin_invalid": "Invalid correction address. Open correction from the current comic reading.",
+  "manga_origin_unsupported": "This selected Context or Realm is unsupported by the Global correction editor.",
+  "manga_origin_changed": "The comic or its Definition changed. Read it again or start a fresh Global correction.",
+  "manga_origin_return": "Return to the current public comic reading",
+  "manga_origin_global": "Start a separate Global correction",
+  "manga_origin_no_exact_return": "Exact return to this selected Context is unsupported.",
+  "manga_origin_general": "Visit the general public comic page",
   "addon_origin_invalid": "This correction address is invalid. Open correction again from the current add-on reading.",
   "addon_origin_unsupported": "This add-on was read in a selected Context or Realm that this Global-only editor does not support. Return to the public reading, or deliberately start a fresh Global visit.",
   "addon_origin_changed": "The add-on or its Definition has changed since this public reading. Return to read it again, or start a fresh Global visit for current correction advice.",

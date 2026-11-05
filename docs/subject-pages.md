@@ -2807,3 +2807,25 @@ Readable facts do not grant mutation. Authored and relationship corrections cont
 operation advice and command recovery. The locator carries no draft, permission, credential or nested return address;
 it does not change Context resolution or choose a replacement assertion. The browser review at 390/1440, light/dark
 and keyboard-only remains an integration acceptance.
+
+### Manga correction public origin
+
+Decision: retain one observed comic origin as public intent; refuse non-Global Context and Realm correction before
+mounting the original Global editor, and offer a separately named fresh Global choice. An overview supplies no
+occurrence. Its return names the public heading; exact selected-Context return without a representable Realm address
+is unsupported, with a separately named general public visit.
+
+The entry and contribution collector carry the actual ComicSeries or PublicationVolume, Context, admitted Realm,
+and effective Definition when available, plus one same-locale immediate Subject address. The public visit validator
+and Manga navigation admit compatible reader returns. Incoming chains, duplicate or conflicting parameters,
+wrong identities, types or locales, external addresses and complete encoded addresses exceeding 2,048 characters or
+2,048 UTF-8 bytes are refused. Slug redirects retain intent; changed identity retires it. Public observations never
+select correction assertions, infer holders from links or grant authority. A fresh Global choice discards observed
+selection and rereads original Global data and advice, retaining only the compatible public return.
+
+The original current-read and candidate lifetimes own replacement and caller retirement. Current Subject, Type,
+Context and supplied Definition must match before nested correction composition. Correction drafts, departure and
+uncertain command recovery remain under their original owners. Return uses existing public admission and the reader's
+focus owner; no inner return effect or focus scheduler is added. Exact Sources receiving remains unsupported.
+Cost is one bounded descriptor and the existing chosen profile or public return read: no menu read, extra native
+window, membership scan, hydration, history retention or SQL.

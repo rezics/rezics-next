@@ -1,3 +1,4 @@
+import { parseMangaPublicVisit, mangaPublicIntentFits } from '../../features/catalogue/manga-public-visit';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
@@ -16,13 +17,15 @@ const canonicalManga = createServerFn({ method: 'GET', strict: false })
       input.slug.length > 128 ||
       typeof input.locale !== 'string' ||
       typeof input.search !== 'string' ||
-      input.search.length > 2048
+      !mangaPublicIntentFits(input.search)
     )
       throw notFound();
     return input;
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
+    const path = `${subjectHref({ id: data.id, label: data.slug }, data.locale).href}/manga`;
+    const visit = parseMangaPublicVisit(data.search, data.id, data.locale, path);
     const [{ kernelClient }, { loadSubject }] = await Promise.all([
       import('../../kernel/client'),
       import('../../subject/load-subject'),
@@ -33,10 +36,10 @@ const canonicalManga = createServerFn({ method: 'GET', strict: false })
       throw redirect(
         canonicalRedirect(
           `${subjectHref({ id: canonical.value.id, label: canonical.value.label }, data.locale).href}/manga`,
-          data.search,
+          canonical.value.id !== data.id && visit ? '?origin=!' : data.search,
         ),
       );
-    return { id: canonical.value.id };
+    return { id: canonical.value.id, visit, address: `${path}${data.search}` };
   });
 export const Route = createFileRoute('/subjects/$id_/$slug_/manga')({
   staticData: { publicCache: false },
@@ -48,5 +51,6 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/manga')({
   component: MangaRoute,
 });
 function MangaRoute() {
-  return <MangaProfileSession id={Route.useLoaderData().id} locale={getLocale()} />;
+  const data = Route.useLoaderData();
+  return <MangaProfileSession id={data.id} locale={getLocale()} visit={data.visit} address={data.address} />;
 }

@@ -1,4 +1,11 @@
 {
+  "manga_origin_invalid": "修正地址无效，请从当前漫画阅读页面重新打开。",
+  "manga_origin_unsupported": "Global 修正编辑器不支持此 Context 或 Realm。",
+  "manga_origin_changed": "漫画或 Definition 已更改，请重新阅读或开始新的 Global 修正。",
+  "manga_origin_return": "返回当前公开漫画阅读",
+  "manga_origin_global": "开始独立的 Global 修正",
+  "manga_origin_no_exact_return": "不支持精确返回所选 Context。",
+  "manga_origin_general": "访问一般公开漫画页面",
   "addon_origin_invalid": "此修正网址无效。请从当前的附加内容页面重新打开修正。",
   "addon_origin_unsupported": "此附加内容是在已选择的 Context 或 Realm 中阅读，本编辑器仅支持 Global。请返回公开页面，或另行打开全新的 Global 修正。",
   "addon_origin_changed": "自上次公开阅读后，此附加内容或其 Definition 已更改。请返回重新阅读，或另行打开 Global 以获取当前的修正建议。",
