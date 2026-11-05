@@ -13,7 +13,7 @@ import type {
   PublicSpaceDiscoverySummary,
 } from '../search/index.ts';
 import type { CollectionResourceView } from '../library/collection-reads.ts';
-import { CollectionHitSchema } from '../search/index.ts';
+import { CollectionDiscoverySummarySchema } from '../search/index.ts';
 import { continuePageSchema } from '../library/transport-contract.ts';
 import { REACTION_KINDS } from './events.ts';
 import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
@@ -248,7 +248,7 @@ const collectionSummary = t.Unsafe<Pick<CollectionResourceView, 'id' | 'title' |
   t.Object({ id: uuid, title: t.String(), description: nullable }, closed),
 );
 const discoveryCollectionSummary = t.Unsafe<PublicCollectionDiscoverySummary>(
-  CollectionHitSchema.properties.summary.properties.value,
+  CollectionDiscoverySummarySchema,
 );
 const discoveryReviewSummary = t.Unsafe<
   PublicReviewDiscoverySummary &
