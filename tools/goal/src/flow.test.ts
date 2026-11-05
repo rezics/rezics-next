@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
-import { checkFlowAlarms, dispatchDailyStepAudit, ensureFlow, flowReport, readFlow, recordFlow } from './flow.ts';
+import { checkFlowAlarms, dispatchDailyStepAudit, ensureFlow, flowReport, readFlow, recordFlow, type FlowTask } from './flow.ts';
 import type { Task } from './types.ts';
 import { readControlPolicy } from './policy.ts';
 
@@ -149,7 +149,7 @@ test('one ordered interval index keeps equal-time reports and does linear work a
   const measure = (copies: number) => {
     let visits = 0;
     const events: any[] = [];
-    const tasks: ReturnType<typeof task>[] = [];
+    const tasks: (ReturnType<typeof task> & Pick<FlowTask, 'terminalState'>)[] = [];
     const add = (event: { taskId: string; attempt: number; stage: string; action: string; at: string }) => {
       const taskId = event.taskId;
       events.push(
