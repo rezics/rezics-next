@@ -236,9 +236,7 @@ export function commitFinishedWork(settings: Settings, task: Task, attempt: numb
   if (task.workspace) return false;
   for (const state of ['rebase-merge', 'rebase-apply', 'MERGE_HEAD'])
     if (
-      existsSync(
-        resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state], settings.policy?.merge)),
-      )
+      existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state], settings.policy?.merge)))
     )
       return false;
   if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'], settings.policy?.merge)) return false;
