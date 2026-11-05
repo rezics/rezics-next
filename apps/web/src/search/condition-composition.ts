@@ -1,4 +1,4 @@
-import { useRef, type CompositionEvent, type KeyboardEvent } from "react";
+import { useRef, type CompositionEvent, type KeyboardEvent } from 'react';
 
 /** Native events update refs before React renders or an implicit form submit arrives. */
 export function useConditionComposition(owner: string) {
@@ -7,15 +7,12 @@ export function useConditionComposition(owner: string) {
     target: null as EventTarget | null,
     keyboard: false,
   });
-  if (current.current.owner !== owner)
-    current.current = { owner, target: null, keyboard: false };
+  if (current.current.owner !== owner) current.current = { owner, target: null, keyboard: false };
 
   const isComposing = (event?: KeyboardEvent<HTMLElement>) =>
     current.current.target !== null ||
     current.current.keyboard ||
-    Boolean(
-      event?.nativeEvent.isComposing || event?.nativeEvent.keyCode === 229,
-    );
+    Boolean(event?.nativeEvent.isComposing || event?.nativeEvent.keyCode === 229);
 
   return {
     isComposing,
@@ -29,12 +26,9 @@ export function useConditionComposition(owner: string) {
       },
       onKeyDownCapture(event: KeyboardEvent<HTMLElement>) {
         current.current.keyboard = Boolean(
-          current.current.target !== null ||
-          event.nativeEvent.isComposing ||
-          event.nativeEvent.keyCode === 229,
+          current.current.target !== null || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229,
         );
-        if (isComposing(event) && event.key === "Escape")
-          event.stopPropagation();
+        if (isComposing(event) && event.key === 'Escape') event.stopPropagation();
       },
       onKeyUpCapture() {
         current.current.keyboard = false;
