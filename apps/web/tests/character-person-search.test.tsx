@@ -292,10 +292,9 @@ test('shared operands keep exact identities through renamed or missing labels; a
   expect(labels.withheld).toEqual([secondWork]);
   expect(calls.every((url) => url.searchParams.has('id') && !url.searchParams.has('q'))).toBe(true);
   const parsed = parseCharacterPersonSearch({ work: [work, secondWork] }, 'ja');
-  expect(new URL(characterPersonHref('ja', parsed.search), 'https://rezics.test').searchParams.getAll('work')).toEqual([
-    work,
-    secondWork,
-  ]);
+  expect(
+    JSON.parse(new URL(characterPersonHref('ja', parsed.search), 'https://rezics.test').searchParams.get('work')!),
+  ).toEqual([work, secondWork]);
   let complete!: (value: Response) => void;
   globalThis.fetch = (() =>
     new Promise<Response>((resolve) => {
