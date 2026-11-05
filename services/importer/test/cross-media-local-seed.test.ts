@@ -187,6 +187,7 @@ for (const configured of [true, false])
         includeReleases: true,
       });
       expect(passedOptions).toMatchObject({
+        includeBooks: true,
         selection: developmentShowcaseSelection,
         composePersona: expect.any(Function),
       });
