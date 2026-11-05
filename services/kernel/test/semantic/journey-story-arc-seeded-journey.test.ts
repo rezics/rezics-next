@@ -152,14 +152,14 @@ test('a serial work lists its story arcs in native order beyond the preview, wit
 
 test('a story arc correction is proposed, accepted and adopted, then read back anonymously', async () => {
   const arc = await create('wd:Q2620972', 'Finale');
-  const genre = await create('skos:Concept', 'Mystery');
+  const contributor = await create('schema:Person', 'Ren Atsumi');
   const proposed = await call('editor', 'POST', `/v1/subjects/${arc.id}/candidates`, {
-    statement: cited('schema:genre', genre.id, 'https://guide.example.test/genre'),
+    statement: cited('schema:contributor', contributor.id, 'https://guide.example.test/contributor'),
   });
   expect({ status: proposed.status, body: proposed.body }).toMatchObject({ status: 201 });
   await catchUp();
   const pending = await readPage(null, arc.id);
-  expect(pageSubject(pending.body).related).not.toHaveProperty(genre.id);
+  expect(pageSubject(pending.body).related).not.toHaveProperty(contributor.id);
   const accepted = await call(
     'acceptor',
     'POST',
@@ -169,8 +169,8 @@ test('a story arc correction is proposed, accepted and adopted, then read back a
   expect(accepted.status).toBe(200);
   const adopted = await call('acceptor', 'POST', `/v1/subjects/${arc.id}:adopt`, {
     context: GLOBAL_CONTEXT,
-    property: 'schema:genre',
-    target: genre.id,
+    property: 'schema:contributor',
+    target: contributor.id,
     mode: 'replace',
     selection: [{ candidate: proposed.body.candidate, rank: 'normal' }],
     expected_head: null,
@@ -178,5 +178,5 @@ test('a story arc correction is proposed, accepted and adopted, then read back a
   expect(adopted.status).toBe(200);
   const readback = await readPage(null, arc.id);
   expect(readback.status).toBe(200);
-  expect(pageSubject(readback.body).related[genre.id].labels.en).toBe('Mystery');
+  expect(pageSubject(readback.body).related[contributor.id].labels.en).toBe('Ren Atsumi');
 });

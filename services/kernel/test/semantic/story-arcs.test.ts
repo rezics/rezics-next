@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -80,8 +80,7 @@ let role: string;
 beforeAll(async () => {
   for (const action of ['definitions:publish', 'definitions:activate', 'subject:create'])
     await access.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
-  const published = await call('POST', '/v1/definitions/releases', { release: bundledRelease });
-  await call('POST', `/v1/definitions/releases/${published.digest}:activate`, { expected_head: null });
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
   arcs = [];
   for (const name of ['Opening', 'Journey', 'Finale']) arcs.push(await create('wd:Q2620972', name));
   characters = [];
