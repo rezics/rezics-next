@@ -91,7 +91,8 @@ export function useConnectedApplicationReview({
   const acceptedCursorRef = useRef<string | undefined>(undefined);
   const historyRef = useRef<(string | undefined)[]>([]);
   const [observation, setObservation] = useState(() => ({ source, lifetime }));
-  const observationRetired = observation.source !== source || observation.lifetime !== lifetime || lifetime?.aborted === true;
+  const observationRetired =
+    observation.source !== source || observation.lifetime !== lifetime || lifetime?.aborted === true;
   const onSessionEndedRef = useRef(onSessionEnded);
   onSessionEndedRef.current = onSessionEnded;
 

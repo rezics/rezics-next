@@ -83,7 +83,8 @@ const ready = (rows: InventoryRows['consents'][], next: string | null = null): I
   rows,
   next,
 });
-const sourceFor = (read: Read): InventorySource =>
+const sourceFor =
+  (read: Read): InventorySource =>
   async <V extends InventoryView>(view: V, cursor?: string): Promise<InventoryPage<V>> => {
     if (view === 'clients') return { kind: 'ready', rows: [], next: null } as InventoryPage<V>;
     readCalls.push(cursor === undefined ? {} : { cursor });
@@ -119,7 +120,9 @@ async function waitReady(count?: number) {
   await waitFor(() => {
     const status = consentSection()?.querySelector<HTMLElement>('p[role="status"]')?.textContent;
     const counts = Array.from({ length: 21 }, (_, value) => m.auth_connected_page_count({ count: value }));
-    return status && counts.includes(status) && (count === undefined || status === m.auth_connected_page_count({ count }))
+    return status &&
+      counts.includes(status) &&
+      (count === undefined || status === m.auth_connected_page_count({ count }))
       ? status
       : null;
   });
@@ -171,9 +174,7 @@ afterAll(async () => {
 test('current reload keeps accepted history and backward navigation uses exact cursor targets', async () => {
   const first = consent('first', 'First observation', ['subject:read']);
   const middle = consent('middle', 'Middle observation', ['profile:write']);
-  await mount(
-    sourceFor((cursor) => (cursor === undefined ? ready([first], nextCursor) : ready([middle]))),
-  );
+  await mount(sourceFor((cursor) => (cursor === undefined ? ready([first], nextCursor) : ready([middle]))));
 
   await flush(() => click(m.auth_inventory_next()));
   await waitText('Middle observation');
@@ -298,7 +299,10 @@ test('mounted history retains only 32 previous targets and leaves first-page res
   await mount(
     sourceFor((cursor) => {
       const current = cursor === undefined ? 0 : Number(cursor.slice('page-'.length));
-      return ready([consent(`client-${current}`, `Page ${current}`, ['subject:read'])], current < 40 ? `page-${current + 1}` : null);
+      return ready(
+        [consent(`client-${current}`, `Page ${current}`, ['subject:read'])],
+        current < 40 ? `page-${current + 1}` : null,
+      );
     }),
   );
 
@@ -326,10 +330,12 @@ test('a selection after backward navigation rechecks and submits the accepted ro
   await flush(() => click(m.auth_inventory_previous()));
   await waitText('offline_access');
   await flush(() => click(m.auth_inventory_review_named({ name: 'Reading companion' })));
-  const removeOfflineAccess = [...(consentSection()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((candidate) => {
-    const description = candidate.getAttribute('aria-describedby');
-    return !!description && document.getElementById(description)?.textContent?.includes('offline_access');
-  })!;
+  const removeOfflineAccess = [...(consentSection()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+    (candidate) => {
+      const description = candidate.getAttribute('aria-describedby');
+      return !!description && document.getElementById(description)?.textContent?.includes('offline_access');
+    },
+  )!;
   await flush(() => removeOfflineAccess.click());
   await flush(() => click(m.auth_inventory_review_removal()));
 
@@ -346,7 +352,12 @@ test('a selection after backward navigation rechecks and submits the accepted ro
         scopes: ['subject:read', 'offline_access'],
       });
     if (path === '/consent' && method === 'POST')
-      return Response.json({ account_id: accountId, client_id: 'backward-client', requested: [], scope: ['subject:read'] });
+      return Response.json({
+        account_id: accountId,
+        client_id: 'backward-client',
+        requested: [],
+        scope: ['subject:read'],
+      });
     return Response.json({ error: 'unavailable' }, { status: 503 });
   };
   await flush(() => click(m.auth_inventory_reduce()));
