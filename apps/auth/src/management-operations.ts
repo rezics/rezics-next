@@ -118,7 +118,9 @@ function failure(
   return { kind: 'unavailable' };
 }
 
-function approvalFailure(result: Exclude<BoundedAuthPostResult, { ok: true }>): Exclude<ManagementApprovalResult, { kind: 'approved' }> {
+function approvalFailure(
+  result: Exclude<BoundedAuthPostResult, { ok: true }>,
+): Exclude<ManagementApprovalResult, { kind: 'approved' }> {
   const refusal = parseAccountOperationRefusal(result.body, result.status);
   if (refusal?.error === 'step_up_required') return { kind: 'step-up' };
   if (refusal?.error === 'account_operation_denied') return { kind: 'refused' };

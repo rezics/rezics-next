@@ -273,8 +273,7 @@ const nativeOpeningPage = createServerFn({ method: 'POST' })
 export const operatorOpeningBrowserTransport = {
   metadata: (input: OpeningInput, signal: AbortSignal) => nativeOpeningPage({ data: input, signal }),
   session: (input: OpeningInput, signal: AbortSignal) => nativeOpenedSession({ data: input, signal }),
-  issue: (issue: OperatorOpeningIssueInput, signal: AbortSignal) =>
-    nativeOperatorSessionIssue({ data: issue, signal }),
+  issue: (issue: OperatorOpeningIssueInput, signal: AbortSignal) => nativeOperatorSessionIssue({ data: issue, signal }),
 };
 export async function loadOpeningMetadata(input: OpeningInput, signal?: AbortSignal): Promise<OpeningRead> {
   if (!isOpeningInput(input)) return { kind: 'unavailable' };
@@ -401,13 +400,7 @@ export async function requestOperatorOpeningSession(
   } catch {
     return { kind: 'unknown' };
   }
-  return receiveOperatorOpeningSessionResponse(
-    response,
-    issue.input,
-    scopeCatalogueLimit,
-    forwardSetCookies,
-    signal,
-  );
+  return receiveOperatorOpeningSessionResponse(response, issue.input, scopeCatalogueLimit, forwardSetCookies, signal);
 }
 /** The readback admits the full native proof, independently of human advice.
  * Issuance acknowledgement retains its command parser above. */
@@ -492,7 +485,8 @@ export async function submitOperatorOpening(
   let result: OpeningOutcome;
   try {
     result = await privateAuthRead(
-      (readSignal) => operatorOpeningBrowserTransport.issue({ input: snapshot, reference: approved.reference }, readSignal),
+      (readSignal) =>
+        operatorOpeningBrowserTransport.issue({ input: snapshot, reference: approved.reference }, readSignal),
       signal,
     );
   } catch {

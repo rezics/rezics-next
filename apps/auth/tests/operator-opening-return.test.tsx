@@ -125,7 +125,9 @@ test('oversized native approval is unavailable and never crosses the submission 
   await flush(() => send(page.host));
   expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
   await flush(() =>
-    page.calls[0]!.resolve(new Response(' '.repeat(ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES + 1), { status: 200 })),
+    page.calls[0]!.resolve(
+      new Response(' '.repeat(ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES + 1), { status: 200 }),
+    ),
   );
   expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
   expect(readPendingManagementOperationStepUp()?.phase).not.toBe('submitted');

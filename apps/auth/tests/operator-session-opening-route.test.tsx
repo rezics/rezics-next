@@ -365,9 +365,9 @@ test('only closed native refusal and effect combinations settle issuance', async
 
 test('malformed and over-budget issuance bodies stay unknown before proof projection', async () => {
   const budget = opening.operatorOpeningSessionResponseBudget(4).maxBytes;
-  expect(
-    await opening.receiveOperatorOpeningSessionResponse(new Response('{"account_id":'), responseInput, 4),
-  ).toEqual({ kind: 'unknown' });
+  expect(await opening.receiveOperatorOpeningSessionResponse(new Response('{"account_id":'), responseInput, 4)).toEqual(
+    { kind: 'unknown' },
+  );
   expect(
     await opening.receiveOperatorOpeningSessionResponse(
       new Response(' '.repeat(budget + 1), { status: 200 }),
