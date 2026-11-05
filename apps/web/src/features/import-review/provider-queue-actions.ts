@@ -1,3 +1,9 @@
+import {
+  personReviewPairInput,
+  personReviewCommandInput,
+  readPersonComparison,
+  mergePersonComparison,
+} from './person-identity';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -192,5 +198,24 @@ export const resolveProviderContextAction = createServerFn({ method: 'GET', stri
     const result = prepared.authorization
       ? await readContextChoice(kernelClient(), prepared.authorization, data.id, prepared.request.signal)
       : { kind: 'denied' as const };
+    return { reader: prepared.reader, result };
+  });
+
+export const compareProviderPersonsAction = createServerFn({ method: 'POST', strict: false })
+  .validator(personReviewPairInput)
+  .handler(async ({ data }) => {
+    const prepared = await preparedProviderReader();
+    const result = prepared.authorization
+      ? await readPersonComparison(kernelClient(), prepared.authorization, data, prepared.request.signal)
+      : { ok: false as const, reason: 'denied' as const };
+    return { reader: prepared.reader, result };
+  });
+export const mergeProviderPersonsAction = createServerFn({ method: 'POST', strict: false })
+  .validator(personReviewCommandInput)
+  .handler(async ({ data }) => {
+    const prepared = await preparedProviderReader(true);
+    const result = prepared.authorization
+      ? await mergePersonComparison(kernelClient(), prepared.authorization, data, prepared.request.signal)
+      : { ok: false as const, reason: 'denied' as const };
     return { reader: prepared.reader, result };
   });

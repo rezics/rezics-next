@@ -47,6 +47,12 @@ Explicit retries keep the original command; native controller success classifica
 Losing authority suppresses later effects without pretending to cancel an already admitted durable write. Readback
 and execution finally blocks cannot unlock a replacement visit. Focus and navigation callbacks check the same visit.
 
+## Cross-provider Person comparison
+
+The mounted journey compares exactly two original Person records, Bangumi `person:N`/`wdt:P6298` and VNDB `sN`/`wdt:P3180`, with current names, identifiers and independent statement citations. An explicit independent-evidence URL and reviewer consent precede confirmation. Neither names nor shared credits prove equivalence. Missing coherent native evidence or merge action availability keeps the comparison readable without enabling a write. The adopted Semantic producer remains responsible for atomic current authority, revision, claim and effective identifier checks; no application preread substitutes for it.
+
+An uncertain command retains its original body, ordered endpoints, idempotency key and reader-bound transport for exact retry. Definite refusal requires a fresh comparison before another decision. Admission is reported separately from publication, and acceptance/adoption remain separate editorial operations. Session replacement retires this surface through the existing mounted reader visit.
+
 ## Bounds and retained verification
 
 One explicit directory action reads at most20; no auto-refill or enumeration. Existing queue limit20, selection20,

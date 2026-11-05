@@ -208,3 +208,96 @@ test('VNDB Person credits stay unresolved when the current exact provider identi
     database.close();
   }
 });
+
+test('review transport keeps original source observations, decimal security revisions and exact uncertain retries', async () => {
+  const { createImportTransport, ImportTransportError } = await import('../src/import-client.ts');
+  const original = '00000000-0000-4000-8000-000000000008';
+  const other = '00000000-0000-4000-8000-000000000007';
+  const endpoint = {
+    subject: original,
+    revision: 9,
+    securityRevision: '9007199254740993',
+    source: 'bangumi' as const,
+    externalId: 'person:8',
+    claimTransactionId: '00000000-0000-4000-8000-000000000088',
+    property: 'wdt:P6298' as const,
+    value: '8',
+  };
+  const body = {
+    subjects: [original, other],
+    expectedIdentity: {
+      endpoints: [
+        endpoint,
+        {
+          ...endpoint,
+          subject: other,
+          source: 'vndb',
+          externalId: 's7',
+          property: 'wdt:P3180',
+          value: 's7',
+        },
+      ],
+    },
+  } as import('@rezics/client').ReviewedPersonMerge;
+  const requests: { url: URL; headers: Headers; body: string }[] = [];
+  let attempt = 0;
+  const transport = createImportTransport({
+    origin: 'https://kernel.import.test',
+    tokenProvider: async () => 'original-token',
+    session: 'original-session',
+    maxAttempts: 1,
+    fetch: (async (request: Request) => {
+      requests.push({ url: new URL(request.url), headers: request.headers, body: await request.text() });
+      if (request.method === 'GET')
+        return Response.json({
+          subject: { id: original, type: 'schema:Person', statements: {} },
+          reviewedIdentity: endpoint,
+        });
+      if (++attempt === 1) return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+      return Response.json({ operation: { id: currentPersonId } }, { status: 202 });
+    }) as typeof fetch,
+  });
+  const observed = await transport.readReviewedPersonIdentity(original, { source: 'bangumi', externalId: 'person:8' });
+  expect(observed.reviewedIdentity?.securityRevision).toBe('9007199254740993');
+  expect(requests[0]!.url.searchParams.get('reviewIdentitySource')).toBe('bangumi');
+  expect(requests[0]!.url.searchParams.get('reviewIdentityExternalId')).toBe('person:8');
+  await expect(transport.mergeReviewedPersons(body, 'review-intent')).rejects.toBeInstanceOf(ImportTransportError);
+  expect(await transport.mergeReviewedPersons(body, 'review-intent')).toEqual({ operation: { id: currentPersonId } });
+  expect(requests[1]!.url.pathname).toBe('/v1/subjects:merge');
+  expect(requests[2]!.body).toBe(requests[1]!.body);
+  expect(JSON.parse(requests[2]!.body)).toEqual(body);
+  for (const request of requests.slice(1)) {
+    expect(request.headers.get('idempotency-key')).toBe('"review-intent"');
+    expect(request.headers.get('authorization')).toBe('Bearer original-token');
+    expect(request.headers.get('rezics-session-token')).toBe('original-session');
+  }
+});
+
+test('an identity observation for a followed endpoint cannot stand in for the reviewed original', async () => {
+  const { createImportTransport } = await import('../src/import-client.ts');
+  const transport = createImportTransport({
+    origin: 'https://kernel.import.test',
+    tokenProvider: async () => 'token',
+    maxAttempts: 1,
+    fetch: (async () =>
+      Response.json({
+        subject: { id: currentPersonId, type: 'schema:Person', statements: {} },
+        reviewedIdentity: {
+          subject: currentPersonId,
+          revision: 1,
+          securityRevision: '1',
+          source: 'vndb',
+          externalId: 's7',
+          claimTransactionId: currentPersonId,
+          property: 'wdt:P3180',
+          value: 's7',
+        },
+      })) as typeof fetch,
+  });
+  await expect(
+    transport.readReviewedPersonIdentity('00000000-0000-4000-8000-000000000007', {
+      source: 'vndb',
+      externalId: 's7',
+    }),
+  ).rejects.toThrow('Invalid import transport data');
+});
