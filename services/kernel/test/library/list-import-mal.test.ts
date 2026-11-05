@@ -442,12 +442,12 @@ test('MAL score review records explicit native units, preserves corrections and 
       await json(
         'POST',
         `${base}/${id}/apply`,
-        { confirm: true, rows: [{ row: 2, version: omitted, fields: ['score'] }] },
+        { confirm: true, rows: [{ row: 2, version: omitted, fields: ['status', 'score'] }] },
         randomUUID(),
         actor.bearer,
       )
     ).outcomes[0],
-  ).toMatchObject({ status: 'unsupported', score: { status: 'unsupported', reason: 'score-action-not-reviewed' } });
+  ).toMatchObject({ status: 'unsupported', applied: ['status'], score: { status: 'unsupported', reason: 'score-action-not-reviewed' } });
 
   const unsupported = await reviewScore(3, adopt(13)),
     refreshed = await reviewScore(3, adopt(15));

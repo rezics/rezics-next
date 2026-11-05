@@ -1510,8 +1510,8 @@ export function createMalImport(deps: Dependencies) {
           outcome.reason = null;
         }
       }
-      if (outcome.score && ['stale', 'unavailable', 'failed'].includes(outcome.score.status)) {
-        outcome.status = outcome.score.status as 'stale' | 'unavailable' | 'failed';
+      if (outcome.score && ['stale', 'unavailable', 'failed', 'unsupported'].includes(outcome.score.status)) {
+        outcome.status = outcome.score.status as 'stale' | 'unavailable' | 'failed' | 'unsupported';
         outcome.reason = outcome.score.reason;
       }
       // Failed dispatches retain the intent but permit resumption; acknowledged outcomes never change.
