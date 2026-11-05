@@ -2291,6 +2291,11 @@ executable and configuration directory, interactive window and turn-accounting h
 The Stdio and WebSocket transports share one internal JSON-RPC implementation for request tracking, deadlines,
 notifications, response decoding, initialization and terminal rejection; framing, connection, readiness and owned
 child lifecycle remain with the transports ([control-plane simplification research](research/control-plane-simplification.md)).
+Decision: ManagerSessions is the durable Goal coordinator; `manager-session-transport.ts` owns the provider connection
+cache, concrete Codex/Claude session requests, viewer argv and window prompt/respawn. Prompt rendering, launch-manifest
+accounting, inbox delivery, renewal and budget stay with ManagerSessions. Extraction tests pin saved-thread ordering,
+retired-thread notifications, once-per-identity start, interrupt fallback, reconnect after a failed connect, and close
+flushing pending work.
 Every Codex manager `turn/start` pins `gpt-6.1-sol` and the manager's configured effort, including the opening,
 idle inbox wakes, and renewed continuation threads. The app-server `turn/steer` request accepts input and an
 `expectedTurnId`, but no model or effort override, so steering keeps the active turn's pinned settings. Recovery and
