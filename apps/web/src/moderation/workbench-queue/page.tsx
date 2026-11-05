@@ -332,6 +332,8 @@ export function WorkbenchPage({
     }
   }
   useLayoutEffect(() => {
+    if (search.queue === 'appeals')
+      console.log('appeal page admission gate', navigation?.visitId, search.case, owner?.available(), owner?.healthy(), isCurrent());
     if (owner && (!owner.available() || !isCurrent())) {
       if (navigation?.isCurrent() !== false && !owner.healthy()) {
         windowHistory?.clearForVisit(navigation?.visitId);
