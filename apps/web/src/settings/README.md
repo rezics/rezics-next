@@ -153,7 +153,12 @@ the observation with the private pages; detail, Auth and independent Settings en
 
 **Decision:** Directory Refresh is a separate deliberate cursor-free action; Retry preserves the failed feed request,
 and both obey the longest response deadline. Refresh clears old pages only when dispatch is eligible.
-Managed action reads publish their response-time Retry-After deadline in the viewer/target snapshot. The recovery control uses that same absolute deadline after reattachment; expiry enables deliberate retry only.
+Managed action reads publish their response-time Retry-After deadline in the viewer/target snapshot. The recovery
+control uses that same absolute deadline after reattachment; expiry enables deliberate retry only.
+
+**Decision:** Managed-detail identity, role, operator and target characteristics follow the latest admitted read.
+An older sibling may settle its selected feed page and loading state without replacing newer shared detail or
+navigation observations. Native restrictions still withdraw proof and invalidate sibling reads.
 
 Directory identities, membership roles and responsibility holds supply no detail admission. Until Content's serial successor to `d9c5a408-5c67-4d33-bf97-76a9918a21b5` installs the complete native viewer/navigation envelope and callable/root, identity rows have no detail links and show explicit unavailable feedback; the strict transport decoder continues to reject incompatible responses. This consumer does not publish declarations or infer missing authority.
 
