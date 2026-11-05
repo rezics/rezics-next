@@ -132,6 +132,8 @@ adapter for the selected receiver's unknown result. Production does not mount th
 
 The prepared watch control also requires an exact surviving occurrence and the original host's current operation
 lease. It delegates the command, captured reader/credential, uncertain recovery and deliberate retry to `ThreadWatch`.
+Decision: bind the watch owner's read authority to that operation lease, so an equal current advice readback cannot
+retire its unresolved command; episode replacement still retires the original lease.
 A Post uses its original containing thread and opening revision. A status read cannot settle its uncertain command;
 the native owner retains that command for exact retry. A successful watch needs fresh advice before its inverse can
 appear. No native writer, transport or session observation is copied into this account module.

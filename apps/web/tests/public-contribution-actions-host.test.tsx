@@ -634,6 +634,12 @@ test('prepared current advice keeps native watch custody through uncertain readb
       return { kind: commands.length === 1 ? ('unknown' as const) : ('confirmed' as const) };
     },
   };
+  const watchLease = {
+    reader: id,
+    operation: 'watch' as const,
+    current: () => true,
+    credential: () => 'original-credential',
+  };
   const scope = {
     input,
     row,
@@ -641,12 +647,7 @@ test('prepared current advice keeps native watch custody through uncertain readb
     reader: id,
     locale: 'en' as const,
     isCurrent: () => true,
-    operation: () => ({
-      reader: id,
-      operation: 'watch' as const,
-      current: () => true,
-      credential: () => 'original-credential',
-    }),
+    operation: () => watchLease,
   };
   const render = async (children: ReactNode) =>
     act(async () => {
@@ -670,6 +671,14 @@ test('prepared current advice keeps native watch custody through uncertain readb
     await click('Watch');
     expect(commands[0]).toMatchObject({ threadId: id, viewerId: id, csrfToken: 'original-credential', watching: true });
     await click('Check watch status');
+    await render(
+      <ContributionWatch
+        presentation={{ ...scope, source: structuredClone(source) }}
+        watching={false}
+        returnTo="/en/accounts/author/discussion"
+        native={native}
+      />,
+    );
     expect(node.textContent).toContain('Retry the same action');
     expect(commands).toHaveLength(1);
     await click('Retry the same action');
