@@ -25,6 +25,9 @@ export type PendingAccountOperationStepUpState =
 
 const storageKey = 'rezics.account-operation.step-up';
 const queryKey = 'account_operation';
+/** UTF-16 code units (`String.length`): delete stores the account ID twice. */
+export const ACCOUNT_OPERATION_STEP_UP_STORAGE_LIMIT = 64 * 1024;
+const maxAccountIdCodeUnits = 4096;
 const returnTargets = {
   organization: '/organizations/new',
   delete: '/account/delete',
@@ -34,25 +37,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function hasExactKeys(value: Record<string, unknown>, required: string[], optional: string[] = []): boolean {
+  const keys = Object.keys(value);
+  return (
+    required.every((key) => Object.hasOwn(value, key)) &&
+    keys.length === required.length + optional.filter((key) => Object.hasOwn(value, key)).length &&
+    keys.every((key) => required.includes(key) || optional.includes(key))
+  );
+}
+
 function isOperation(value: unknown, kind: AccountOperationStepUpKind): value is AccountOperation {
   if (!isRecord(value) || value.kind !== kind) return false;
-  const keys = Object.keys(value).sort().join(',');
   if (kind === 'organization')
     return (
-      keys === 'handle,kind' &&
+      hasExactKeys(value, ['kind', 'handle']) &&
       typeof value.handle === 'string' &&
       /^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$/.test(value.handle)
     );
-  return keys === 'accountId,kind' && typeof value.accountId === 'string' && value.accountId.length > 0;
+  return (
+    hasExactKeys(value, ['kind', 'accountId']) &&
+    typeof value.accountId === 'string' &&
+    value.accountId.length > 0 &&
+    value.accountId.length <= maxAccountIdCodeUnits
+  );
 }
 
 function isPending(value: unknown): value is PendingAccountOperationStepUp {
-  if (!isRecord(value) || (value.kind !== 'organization' && value.kind !== 'delete')) return false;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['version', 'kind', 'accountId', 'operationKey', 'operation', 'returnTo'], ['submitted']) ||
+    (value.kind !== 'organization' && value.kind !== 'delete')
+  )
+    return false;
   const kind = value.kind;
   return (
     value.version === 1 &&
     typeof value.accountId === 'string' &&
     value.accountId.length > 0 &&
+    value.accountId.length <= maxAccountIdCodeUnits &&
     typeof value.operationKey === 'string' &&
     /^[a-f0-9]{32}$/.test(value.operationKey) &&
     value.returnTo === returnTargets[kind] &&
@@ -61,6 +83,28 @@ function isPending(value: unknown): value is PendingAccountOperationStepUp {
     (kind === 'organization' ||
       (value.operation as Extract<AccountOperation, { kind: 'delete' }>).accountId === value.accountId)
   );
+}
+
+function canonicalOperation(value: unknown, kind: AccountOperationStepUpKind): AccountOperation | null {
+  if (!isOperation(value, kind)) return null;
+  return kind === 'organization'
+    ? { kind, handle: value.handle }
+    : { kind, accountId: value.accountId };
+}
+
+function canonicalPending(value: unknown): (PendingAccountOperationStepUp & { version: 1 }) | null {
+  if (!isPending(value)) return null;
+  const operation = canonicalOperation(value.operation, value.kind);
+  if (!operation) return null;
+  return {
+    kind: value.kind,
+    accountId: value.accountId,
+    operationKey: value.operationKey,
+    operation,
+    returnTo: value.returnTo,
+    ...(typeof value.submitted === 'boolean' ? { submitted: value.submitted } : {}),
+    version: 1,
+  };
 }
 
 export function accountOperationProfile(kind: AccountOperationStepUpKind) {
@@ -85,10 +129,35 @@ export function accountOperationSessionMatches(
 }
 
 export function storePendingAccountOperationStepUp(input: Omit<PendingAccountOperationStepUp, 'returnTo'>): boolean {
-  const pending = { ...input, returnTo: returnTargets[input.kind], version: 1 };
-  if (!isPending(pending)) return false;
+  const candidate: unknown = input;
+  if (
+    !isRecord(candidate) ||
+    !hasExactKeys(candidate, ['kind', 'accountId', 'operationKey', 'operation'], ['submitted']) ||
+    (candidate.kind !== 'organization' && candidate.kind !== 'delete') ||
+    typeof candidate.accountId !== 'string' ||
+    candidate.accountId.length === 0 ||
+    candidate.accountId.length > maxAccountIdCodeUnits ||
+    typeof candidate.operationKey !== 'string' ||
+    !/^[a-f0-9]{32}$/.test(candidate.operationKey) ||
+    (candidate.submitted !== undefined && typeof candidate.submitted !== 'boolean')
+  )
+    return false;
+  const operation = canonicalOperation(candidate.operation, candidate.kind);
+  if (!operation) return false;
+  const pending = canonicalPending({
+    kind: candidate.kind,
+    accountId: candidate.accountId,
+    operationKey: candidate.operationKey,
+    operation,
+    returnTo: returnTargets[candidate.kind],
+    ...(typeof candidate.submitted === 'boolean' ? { submitted: candidate.submitted } : {}),
+    version: 1,
+  });
+  if (!pending) return false;
+  const serialized = JSON.stringify(pending);
+  if (serialized.length > ACCOUNT_OPERATION_STEP_UP_STORAGE_LIMIT) return false;
   try {
-    window.sessionStorage.setItem(storageKey, JSON.stringify(pending));
+    window.sessionStorage.setItem(storageKey, serialized);
     return true;
   } catch {
     return false;
@@ -104,14 +173,16 @@ export function pendingAccountOperationStepUpState(): PendingAccountOperationSte
     return { kind: 'absent' };
   }
   if (stored === null) return { kind: 'absent' };
+  if (stored.length > ACCOUNT_OPERATION_STEP_UP_STORAGE_LIMIT) return { kind: 'invalid' };
   let value: unknown;
   try {
     value = JSON.parse(stored);
   } catch {
     return { kind: 'invalid' };
   }
-  if (!isPending(value)) return { kind: 'invalid' };
-  const { version: _version, ...pending } = value as PendingAccountOperationStepUp & { version: 1 };
+  const canonical = canonicalPending(value);
+  if (!canonical) return { kind: 'invalid' };
+  const { version: _version, ...pending } = canonical;
   return { kind: 'pending', value: pending };
 }
 

@@ -15,6 +15,7 @@ export type AccountOperationResult =
 
 const operationStorageKey = 'rezics.account-operation.pending';
 const organizationHandleStorageKey = 'rezics.organization.pending-handle';
+const maxAccountIdCodeUnits = 4096;
 
 type StoredOperationKey = { signature: string; key: string };
 let memoryOperationKey: StoredOperationKey | null = null;
@@ -38,7 +39,8 @@ export async function loadAccountSession(signal?: AbortSignal): Promise<AccountS
         typeof body !== 'object' ||
         !('account_id' in body) ||
         typeof body.account_id !== 'string' ||
-        !body.account_id
+        !body.account_id ||
+        body.account_id.length > maxAccountIdCodeUnits
       )
         return { kind: 'failure', message: m.auth_account_operation_failure() };
       const clientId = 'client_id' in body ? body.client_id : undefined;

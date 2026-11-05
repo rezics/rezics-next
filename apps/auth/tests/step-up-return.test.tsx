@@ -3,6 +3,7 @@ import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { creationFixture, button, dom, fill, flush, open as mount, send } from './creation-page-fixture';
 import { m } from '../src/paraglide/messages.js';
 import {
+  RENAME_REVIEW_STEP_UP_STORAGE_LIMIT,
   managementOperationStepUpUrl,
   pendingRenameReviewStepUpState,
   storePendingRenameReviewStepUp,
@@ -230,5 +231,30 @@ test('a replaced management marker fails its released read without consuming rep
   await settle();
   expect(page.host.textContent).toContain(m.auth_step_up_return_unknown());
   expect(page.assign).not.toHaveBeenCalled();
+  request.mockRestore();
+});
+
+test('an oversized rename-review marker refuses the old return before a native session read', async () => {
+  const search = new URL(managementOperationStepUpUrl('rename'), 'https://auth.test').search;
+  const raw = '['.repeat(RENAME_REVIEW_STEP_UP_STORAGE_LIMIT + 1);
+  window.sessionStorage.setItem('rezics.management-operation.review-step-up', raw);
+  const original = globalThis.fetch;
+  const requests: string[] = [];
+  const request = spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    requests.push(String(input));
+    return original(input, init);
+  });
+
+  const page = await setup(search);
+  await settle();
+  await pageshow();
+  await settle();
+
+  expect(pendingRenameReviewStepUpState()).toEqual({ kind: 'invalid' });
+  expect(requests).not.toContain('/session');
+  expect(page.calls.map((call) => call.path)).not.toContain('/signin');
+  expect(button(page.host, m.auth_step_up_return_continue())).toBeUndefined();
+  expect(page.assign).not.toHaveBeenCalled();
+  expect(window.sessionStorage.getItem('rezics.management-operation.review-step-up')).toBe(raw);
   request.mockRestore();
 });
