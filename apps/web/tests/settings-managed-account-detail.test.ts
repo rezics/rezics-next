@@ -397,9 +397,20 @@ test('detail Refresh and feed reads drop stale Auth links immediately and older 
   await olderMembers;
   expect(reader.snapshot().detail).toMatchObject({ account: value.account, role: 'member', operator: value.operator });
   expect(reader.snapshot().authNavigation).toBeUndefined();
+  const oldFailure = reader.load('members', memberCursor);
+  const currentSuccess = reader.load('responsibilities', operatorCursor);
+  pending[7]!(positive);
+  await currentSuccess;
+  const currentDetail = reader.snapshot().detail;
+  pending[6]!({ ok: false, failure: detailFailure(503, { code: 'dependency_unavailable' }) });
+  await oldFailure;
+  expect(reader.snapshot().members.failure?.status).toBe(503);
+  expect(reader.snapshot().authNavigation).toBe(authNavigation);
+  expect(reader.snapshot().detail).toBe(currentDetail);
+  expect(markup(reader)).toContain('/organizations/delete');
   const stale = reader.load();
   reader.clear(); // Viewer, CSRF and target changes replace/clear this immutable reader.
-  pending[6]!(positive);
+  pending[8]!(positive);
   await stale;
   expect(reader.snapshot().authNavigation).toBeUndefined();
   const switched = new ManagedAccountReader(viewerId, actorId, async () => positive);

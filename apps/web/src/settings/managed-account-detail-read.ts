@@ -315,7 +315,8 @@ export class ManagedAccountReader {
         this.publish({
           ...this.state,
           retryAt,
-          authNavigation: undefined,
+          // A failed older feed owns its feedback, not a newer observation's action advice.
+          authNavigation: observation === this.actionObservation ? undefined : this.state.authNavigation,
           [section]: {
             ...this.state[section],
             page: failure.transient ? this.state[section].page : undefined,

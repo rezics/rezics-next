@@ -2,7 +2,16 @@ import { WatchesSection } from './watches';
 import type { WatchManagementIO } from './watch-native';
 import { exposureQuery, sessionQuery, useSession } from '../session/query';
 import { useQuery, useQueryClient, type QueryClient, type QueryState } from '@tanstack/react-query';
-import { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore, useCallback, type ReactNode } from 'react';
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+  useCallback,
+  type MouseEventHandler,
+  type ReactNode,
+} from 'react';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -89,13 +98,20 @@ type PreferenceIO = {
   ) => ReturnType<NotificationEditorIO['save']>;
 };
 
-export function ManagedAccountSelectionUnavailable({ backHref }: { backHref: string }) {
+export function ManagedAccountSelectionUnavailable({
+  backHref,
+  onBack,
+}: {
+  backHref: string;
+  onBack?: MouseEventHandler<HTMLAnchorElement> | undefined;
+}) {
   return (
     <Card className="min-w-0 max-w-full">
       <CardHeader className="min-w-0">
         <a
           className="inline-flex min-h-11 max-w-full items-center rounded-2xl px-3 py-2 text-sm leading-5 whitespace-normal break-words text-primary underline underline-offset-4 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
           href={backHref}
+          onClick={onBack}
         >
           {m.managed_back()}
         </a>
@@ -348,6 +364,12 @@ function SettingsSections({
   // The official generated native viewer/navigation callable is not installed yet.
   const managedTarget = selectAdmittedManagedAccountTarget(requestedManagedTarget, null);
   const managedSelectionUnavailable = requestedManagedTarget !== undefined && managedTarget === undefined;
+  const managedBackHref = managedAccountsBackHref(location.publicHref);
+  const returnToManagedDirectory: MouseEventHandler<HTMLAnchorElement> = (event) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    event.preventDefault();
+    void router.navigate({ href: managedBackHref, hashScrollIntoView: false });
+  };
   useEffect(() => {
     if (owner.readCurrent() && 'preferences' in page)
       setVersion((current) => Math.max(current, page.preferences.version));
@@ -457,9 +479,13 @@ function SettingsSections({
     account: (
       <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
         {managedTarget !== undefined ? (
-          <ManagedAccountDetail accountId={managedTarget} backHref={managedAccountsBackHref(location.publicHref)} />
+          <ManagedAccountDetail
+            accountId={managedTarget}
+            backHref={managedBackHref}
+            onBack={returnToManagedDirectory}
+          />
         ) : managedSelectionUnavailable ? (
-          <ManagedAccountSelectionUnavailable backHref={managedAccountsBackHref(location.publicHref)} />
+          <ManagedAccountSelectionUnavailable backHref={managedBackHref} onBack={returnToManagedDirectory} />
         ) : (
           <>
             <AccountSafetySection
@@ -470,9 +496,9 @@ function SettingsSections({
               csrfToken={csrfToken}
               onReload={() => window.location.reload()}
             />
-            <ManagedAccountsSection io={managedAccountsIO} />
           </>
         )}
+        <ManagedAccountsSection io={managedAccountsIO} />
       </section>
     ),
   };
