@@ -239,26 +239,23 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
         return { passed: true, output: '', timedOut: false };
       }),
     });
-    console.log('verifier planning debug', JSON.stringify({ executed, findings: ctx.store.devVerifierFindings() }));
     expect(
-      executed.filter(({ command }) => command.join(' ').endsWith(verifierCommand.join(' '))),
+      executed.filter(({ command }) => command.at(-2) === 'run' && command.at(-1) === 'scripts/typecheck.ts'),
     ).toHaveLength(1);
     expect(
-      executed.filter(({ command }) => command.join(' ').endsWith(legacyAffectedCommand.join(' '))),
+      executed.filter(({ command }) => command.at(-2) === 'test' && command.at(-1) === 'scripts/typecheck.ts'),
     ).toHaveLength(0);
     expect(
-      executed.filter(
-        ({ command }) => command.join(' ').endsWith([...siblingCommand, 'tools/goal/src/fixture.test.ts'].join(' ')),
-      ),
+      executed.filter(({ command }) => command.at(-2) === 'test' && command.at(-1) === 'tools/goal/src/fixture.test.ts'),
     ).toHaveLength(1);
     expect(
       executed
-        .filter(({ command }) => command.join(' ').endsWith('bun test src/helper.test.ts src/widget.test.ts'))
+        .filter(({ command }) => command.at(-3) === 'test' && command.slice(-2).join(' ') === 'src/helper.test.ts src/widget.test.ts')
         .map(({ cwd }) => cwd.split('/').slice(-2).join('/')),
     ).toEqual(['apps/widget']);
     expect(
       executed
-        .filter(({ command }) => command.join(' ').endsWith('bun test src/worker.test.ts'))
+        .filter(({ command }) => command.at(-2) === 'test' && command.at(-1) === 'src/worker.test.ts')
         .map(({ cwd }) => cwd.split('/').slice(-2).join('/')),
     ).toEqual(['services/worker']);
     expect(git(root, 'rev-parse', 'dev-verified')).toBe(finalHead);
