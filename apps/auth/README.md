@@ -1077,77 +1077,73 @@ permission loss retire authority without prompting away an unresolved send.
 
 ## Rename account
 
-Rename review belongs to the mounted page and its native source. A definitive native execution acknowledgement
-and a current handle observation are separate facts. Observing the desired handle after an unknown send never
-claims success or consumes its descriptor. An explicit exact retry can submit only the original key and operation;
-native approval and execution remain authoritative. Acknowledgement with failed or changed readback has its own
-notice and offers current review without another command.
+Rename review belongs to the mounted page and native source. Only a closed native acknowledgement bound to the
+original account settles its command. Current desired-handle equality never establishes which execution changed it.
+Acknowledgement survives failed/changed readback and retirement during observation; its generic mounted notice
+allows explicit current review without another command. Unknown work retains its original key and descriptor after
+conflict, refusal or account replacement. New input cannot replace it; another viewer cannot review or retry it.
+No outcome history is persisted in storage, URLs, cookies or browser history. Reload without a retained descriptor
+makes no historical claim.
 
-retain only a generic mounted outcome classification across authority loss and cached-document return;
-keep the admitted original descriptor in its existing storage until definitive acknowledgement, including after
-conflict, refusal or account replacement. A replacement viewer cannot review or retry the former account's work.
-New input cannot replace unknown work. No history summary is stored in browser storage, URLs, history or cookies.
-An ordinary reload without a retained descriptor makes no historical claim.
+Decision: rename alone uses the public approval/execution DTOs and byte allowances in
+`account-operation-response-bounds.ts`. Approval is exactly `{reference,expiresAt}`: Access `workflow-approvals`
+seals a base64url body plus a 43-character SHA-256 MAC separated by a dot; native unseal and execute text admission
+cap it at 4,096 ASCII characters. Expiry is the producer's canonical `Date.toISOString()` (at most 27 ASCII bytes,
+including extended years) and must still be future before execute. The allowance is the closed empty-string JSON
+skeleton plus `4096 + 27`. References are opaque sealed text, never assumed UUIDs. Only reference and expiry stay
+in authorized live memory; locally expired references require deliberate approval again for the same descriptor.
 
-Refusal, signed-out and management-auth-required states hide all private labels and command controls immediately,
-but show unresolved history independently. Current review is explicit and read-only, with visible pending/failure
-states and a useful focus destination. Same-account management authentication uses the existing exact continuation
-and requires deliberate confirmation on return. References remain in the authorized live attempt only; restoration
-never reconstructs a reference or credentials. Expired references require native approval again with the same key.
-A newer descriptor or marker cannot be consumed by an older completion.
+Native rename workflow and replay return exactly `{accountId}`. Its allowance is the closed empty-string skeleton
+plus `6 * 4096` bytes, covering worst-case escaping of legal opaque IDs, including lone surrogates. Browser equality
+binds it to the original account. Registration `expired`/error objects, extra fields, missing/mismatched IDs and
+unreadable projections cannot acknowledge rename. An incompatible native completion projects `{error:'unavailable'}`
+with 503, without `not_applied`. Invalid approval projection cannot authorize execute. Other operation shapes stay
+unchanged. The fixed error allowance is the maximum serialized length of the closed
+`{error:'account_operation_denied',effect_status:'not_applied'}` and
+`{error:'step_up_required',effect_status:'not_applied'}` envelopes. The former supports native
+400/401/403/409/413/415/503, the latter only 401. Only admitted refusal with existing 401/403/409 handling can reset
+an initially unsent command; no later refusal or current conflict erases an earlier unknown execution.
 
-Page retirement aborts bounded reads, clears private cached DOM and retires callbacks before the next browser stage.
-It does not cancel a dispatched native effect. Stay retains current review and focus; Leave preserves unknown history
-and its admitted descriptor, without implying cancellation or starting background reconciliation. Known unsent drafts
-can be discarded. Focus, language changes and history restoration never retry a command.
+Each approval and execution POST independently retains its existing five-second lifetime through headers and body,
+including abort-ignoring transports. Actual bytes pass `readJsonBounded` before fatal UTF-8 decoding and JSON parsing;
+Content-Length cannot raise a limit. Malformed/excess/stalled replies are unavailable before execution and unknown
+after dispatch. Retirement releases the wait, prevents installing approval or starting the next stage, and cannot
+undo native work. The submitted marker is installed at the actual send boundary. Approval resolution, fresh human
+proof, exact expectedHandle, management profile, Access preparation, native context deadline and workflow CAS/replay
+remain authoritative. No automatic replay, native query, permission or effect is added.
 
-Decision: rename-page receiving uses `RENAME_PAGE_MAX_RESPONSE_BYTES` exported by
-`@rezics/auth-contract`, independent of mounted scope catalogues. Identity copies follow SessionProof's
-native `securityId` contract: nonempty opaque strings of at most 1,024 UTF-16 units, including historical
-escaped/Unicode identifiers; oversized projected identities return unavailable, without normalization or truncation.
-The finite allowance counts all closed keys/punctuation, two worst-case escaped identities, nullable ASCII
-handle64, exact management client/scope, safe-integer epoch/time, one pwd/pop method and up to eight retained
-rename/account:update descriptors with case-insensitive UUID36 resource IDs and signed safe-integer routes.
-Retained descriptors force both account copies to the same UUID36; the bound takes the larger compatible case.
-The browser counts bytes before fatal UTF-8 decoding and JSON parsing, within its existing five-second whole-call
-signal. Overflow, malformed bytes/JSON, stalls and retirement are unavailable and authorize no command.
-This costs one existing rename-page POST and no additional native read; the preceding `/session` receiving
-remains separately required and is not bounded by this rename-page allowance. Native proof revalidation and
-the three-second native deadline remain required.
+Refused, signed-out and management-auth-required review hides private labels and controls immediately while generic
+history remains. Same-account step-up uses the existing exact continuation and requires current advice and separate
+confirmation on return. Restoration never reconstructs references or credentials. Stay/Leave is one decision:
+Stay preserves review/focus; Leave retires callbacks and private cached DOM while retaining unknown history and its
+descriptor. Known unsent drafts can be discarded. Focus, locale changes and cached return never retry commands.
 
-Decision: the actual rename command uses a compatible 4,096 UTF-16-code-unit account-ID ceiling,
-matching accepted native descriptor/continuation callers and covering SessionProof/rename-page's 1,024-unit
-opaque IDs without UUID-only rules or truncation. Its raw `String.length` allowance is exactly
-`129 + 2 * 6 * 4096 + 32 + 2 * 64 = 49441` code units. The 129-unit empty-string skeleton
-counts all closed keys, quotes, punctuation, `kind: "rename"` and the longer boolean `false`; both account-ID
-copies allow six JSON output units per input unit (including control escapes and lone surrogates). The generated
-key is 32 lowercase hex characters; the normalized new handle and nullable prior handle each allow ASCII64
-without escaping (a maximum prior string exceeds `null`). The raw reader refuses excess text before parsing,
-copying or reserialization. The canonical writer enforces the same fields and bound and excludes credentials
-and approval references. Sources used for this local decision: the rename writer/parser, signup normalization,
-accepted account-operation and management descriptor contracts, and the rename-page response-bound contract.
+Rename-page retains `RENAME_PAGE_MAX_RESPONSE_BYTES`, independent of scope catalogues. SessionProof `securityId`
+allows nonempty opaque IDs up to 1,024 UTF-16 units. The bound includes closed keys/punctuation, two worst-case
+escaped identities, nullable ASCII handle64, exact management client/scope, safe-integer epoch/time, one pwd/pop
+method and up to eight rename/account:update actions with UUID36 resource IDs and signed safe-integer routes.
+Retained actions force both account copies to UUID36; the allowance takes the larger compatible case. Oversized
+projected IDs return unavailable without truncation. Each existing read has its five-second body-inclusive lifetime;
+native proof revalidation and the three-second native page deadline remain. The preceding common `/session` reader
+uses `AUTH_SECURITY_SCOPE_CONFIGURATION` independently, not the rename-page allowance.
 
-Absent, valid and refused/unavailable storage are distinct. Malformed, oversized, unknown-field or unreadable
-storage stays untouched; refusal or a different command encountered during a read, approval or handoff leaves the
-mounted review read-only, using existing unavailable text. Only explicit current-state reads and navigation remain;
-there is no repair, migration, fresh key, approval, execution or step-up overwrite. Cleanup requires a valid exact
-expected command and submitted marker; an unconditional clear does nothing. Another valid command cannot be
-silently displaced. A failed write still permits the original exact in-memory send/retry, but does not claim
-persistence and cannot authorize a handoff. Submitted live work remains unknown across current observations until
-its original protocol acknowledges it; matching handles do not acknowledge execution. Stay/Leave remains one
-decision, and retirement clears private presentation while retaining generic history. Recovery from refused bytes
-requires resolving the original command outside this page; current-state Retry cannot repair or erase them.
-This adds finite local parsing/serialization and zero native calls. Focused raw and mounted tests qualify the local
-boundary and replacement behavior; browser/native qualification, broader acceptance and integration remain pending
-with the controller. No locale changes.
+The retained command keeps its compatible 4,096-unit opaque account-ID ceiling. Its raw UTF-16 allowance remains
+`129 + 2 * 6 * 4096 + 32 + 2 * 64 = 49441`: closed skeleton, two escaped ID copies, generated hex32 key and two
+ASCII64 handles (a maximum string exceeds null). Raw excess is refused before parsing/copying; canonical writing
+uses the same fields/bound and excludes credentials and references. Absent, valid and refused storage are distinct.
+Malformed, excessive, unknown-field or unreadable bytes stay untouched. Refusal/replacement before any later browser
+stage leaves review read-only. Cleanup requires the exact original descriptor and submitted marker; unconditional
+clear does nothing. Failed writes still permit the exact live send/retry but cannot authorize a handoff. Current
+read Retry cannot repair storage or erase unknown work. No storage, modal or queue is added.
 
-`nativeRenameSource` uses one `GET /session` and one cookie-authenticated `POST /account-management/rename-page`
-per current review, with the existing finite native projection and `account:update` management profile. Each browser
-read has the existing five-second bound, including its body. Entry, cached-document return and explicit read Retry
-each cost at most two Auth requests. One explicit command turn costs at most six Auth requests: two current-review
-pairs plus at most one approval and one execution. A 409 uses the second pair for current advice instead of readback;
-reusing a live reference omits approval. No polling, inventory scan, per-row loop or new native read is added.
-Authentication handoff retains its existing sign-in/session costs and adds no rename command on return.
+`nativeRenameSource` current review costs one `GET /session` plus one cookie-authenticated rename-page POST.
+Entry, cached return and read Retry cost two requests and zero commands. A fresh acknowledged turn costs six:
+preflight pair, one approval, one execution, observation pair. Unknown execution costs four; exact live-reference
+retry costs three while unknown or five when acknowledged. Renewing expired approval adds one. A supported 409
+uses the second pair for current advice instead of readback; failed/changed readback adds no probe. Authentication
+retains its existing sign-in/session costs and sends no rename command on return. No polling or native read is added.
+Focused transport/raw/mounted tests qualify local boundaries; native/browser qualification, broader acceptance and
+integration remain pending with the controller. No locale changes.
 
 ## Operated session opening
 

@@ -1,3 +1,4 @@
+const nativeReference = 'AQ.' + 'a'.repeat(43);
 import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -147,13 +148,15 @@ const send = (host: HTMLElement) =>
 function commandReplies(execute: () => Response | Promise<Response>) {
   globalThis.fetch = (async (path) =>
     String(path).endsWith('/approve')
-      ? Response.json({ reference: 'private-reference', expiresAt: new Date(Date.now() + 60000).toISOString() })
+      ? Response.json({ reference: nativeReference, expiresAt: new Date(Date.now() + 60000).toISOString() })
       : execute()) as typeof fetch;
 }
 
 test('a first known refusal is discardable, while refusal after a lost send preserves generic history', async () => {
   let response = 403;
-  commandReplies(() => new Response(null, { status: response }));
+  commandReplies(() =>
+    Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: response }),
+  );
   const { host, selected } = await savedReview();
   await send(host);
   expect(readRenameContinuation()).toBeNull();
@@ -402,4 +405,22 @@ test('failed submitted-marker persistence keeps the original live unknown throug
     if (descriptor) Object.defineProperty(window, 'sessionStorage', descriptor);
     else Reflect.deleteProperty(window, 'sessionStorage');
   }
+});
+
+test('retirement during post-acknowledgement readback retains acknowledgement and clears only original storage', async () => {
+  const observation = Promise.withResolvers<RenameRead>();
+  let reads = 0;
+  commandReplies(() => Response.json({ accountId: target.accountId }));
+  const { host } = await savedReview(async () => (++reads === 3 ? observation.promise : ready()));
+  await send(host);
+  expect(reads).toBe(3);
+  expect(readRenameContinuation()).toBeNull();
+  const replacement = createRenameAttempt({ ...target, accountId: 'replacement' }, 'other')!;
+  saveRenameContinuation(replacement);
+  await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
+  expect(host.textContent).toContain(m.auth_rename_acknowledged());
+  expect(host.textContent).not.toContain('private_');
+  await flush(() => observation.resolve(ready()));
+  expect(readRenameContinuation()).toEqual(replacement);
+  expect(host.textContent).toContain(m.auth_rename_acknowledged());
 });

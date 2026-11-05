@@ -132,7 +132,7 @@ function RenameReview({
   const storageRefused = useRef(false);
   const refuseStorage = useCallback(() => {
     storageRefused.current = true;
-    if (attempt.current?.submitted) remember('unknown');
+    if (attempt.current?.submitted) remember(attempt.current.acknowledged ? 'acknowledged' : 'unknown');
     if (attempt.current) delete attempt.current.reference;
     setCurrent({ kind: 'unavailable' });
     setHandle('');
@@ -174,7 +174,7 @@ function RenameReview({
       remember('unknown');
     } else setOutcome(history.current);
     const retireReview = () => {
-      if (attempt.current?.submitted) history.current = 'unknown';
+      if (attempt.current?.submitted) history.current = attempt.current.acknowledged ? 'acknowledged' : 'unknown';
       active = false;
       reads.current?.abort();
       attempt.current = null;
@@ -226,7 +226,7 @@ function RenameReview({
       const saved = stored && expected && sameRenameContinuation(stored, expected) ? stored : null;
       const candidate = attempt.current ?? retainedCommand.current;
       const live = !stored || (candidate && sameRenameContinuation(stored, candidate)) ? candidate : null;
-      if (live?.submitted || stored?.submitted) remember('unknown');
+      if (live?.submitted || stored?.submitted) remember(live?.acknowledged ? 'acknowledged' : 'unknown');
       const recovered =
         history.current === 'unknown' && saved && !saved.submitted && !live?.submitted
           ? null
@@ -331,7 +331,7 @@ function RenameReview({
       );
       if (!isCurrent() || !permitsCommand(selected)) return;
       setLocked(selected.submitted);
-      if (selected.submitted) remember('unknown');
+      if (selected.submitted) remember(selected.acknowledged ? 'acknowledged' : 'unknown');
       if (result.kind === 'renamed') {
         // Acknowledgement settles this command even if its submitted-marker write failed.
         const stored = readRenameContinuationState();
@@ -379,11 +379,11 @@ function RenameReview({
       } else if (result.kind === 'conflict' || result.kind === 'denied') {
         if (!selected.submitted) clearRenameContinuation(selected);
         receiveCurrent(result.kind === 'conflict' ? result.current : (result.current ?? { kind: 'refused' }), selected);
-        if (selected.submitted) remember('unknown');
+        if (selected.submitted) remember(selected.acknowledged ? 'acknowledged' : 'unknown');
         setMessage(result.kind === 'conflict' ? m.auth_rename_conflict() : m.auth_rename_denied());
       } else {
         if (result.current) receiveCurrent(result.current, selected);
-        if (selected.submitted) remember('unknown');
+        if (selected.submitted) remember(selected.acknowledged ? 'acknowledged' : 'unknown');
         setMessage(result.kind === 'unknown' ? m.auth_rename_unknown() : m.auth_rename_unavailable());
       }
     } catch {
@@ -391,7 +391,7 @@ function RenameReview({
         if (departure) departure.current.allow = false;
         if (!permitsCommand(selected)) return;
         setLocked(selected.submitted);
-        if (selected.submitted) remember('unknown');
+        if (selected.submitted) remember(selected.acknowledged ? 'acknowledged' : 'unknown');
         setMessage(selected.submitted ? m.auth_rename_unknown() : m.auth_rename_unavailable());
       }
     } finally {

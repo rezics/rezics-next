@@ -4,7 +4,7 @@ import {
   RENAME_PAGE_MAX_ACTIONS,
   RENAME_PAGE_MAX_ID_LENGTH,
 } from '@rezics/auth-contract';
-import { authPost } from './api';
+import { sendRenameApproval, sendRenameExecution } from './rename-command';
 import { readJsonBounded } from './private-auth-json';
 import { privateAuthRead } from './private-auth-read';
 import { loadAccountSession } from './account-operations';
@@ -197,7 +197,12 @@ export type RenameContinuation = {
   readonly operation: RenameOperation;
   submitted: boolean;
 };
-export type RenameAttempt = RenameContinuation & { reference?: string };
+export type RenameAttempt = RenameContinuation & {
+  reference?: string;
+  referenceExpiresAt?: string;
+  /** Live acknowledgement survives a failed or retired current observation. */
+  acknowledged?: boolean;
+};
 const storageKey = 'rezics.account-rename.pending';
 // Compatible with native descriptor/continuation callers (the native page uses 1024).
 export const RENAME_CONTINUATION_MAX_ID_CODE_UNITS = 4096;
@@ -368,6 +373,7 @@ export async function runRenameAttempt(
   attempt: RenameAttempt,
   readCurrent: () => Promise<RenameRead>,
   isCurrent: () => boolean = () => true,
+  signal?: AbortSignal,
 ): Promise<RenameResult> {
   const closed = parseRenameContinuation({
     accountId: attempt.accountId,
@@ -376,9 +382,10 @@ export async function runRenameAttempt(
     submitted: attempt.submitted,
   });
   if (!closed) return { kind: 'denied' };
-  if (!isCurrent() || !renameContinuationPermits(attempt)) return { kind: 'unavailable' };
+  const owns = () => !signal?.aborted && isCurrent() && renameContinuationPermits(attempt);
+  if (!owns()) return { kind: 'unavailable' };
   const current = await readCurrent();
-  if (!isCurrent() || !renameContinuationPermits(attempt)) return { kind: 'unavailable' };
+  if (!owns()) return { kind: attempt.submitted ? 'unknown' : 'unavailable' };
   if (current.kind !== 'ready') return { kind: attempt.submitted ? 'unknown' : 'unavailable', current };
   if (current.target.accountId !== closed.accountId) return { kind: 'denied', current };
   if (!renameSessionMatches(current.target)) return { kind: 'step-up' };
@@ -389,58 +396,63 @@ export async function runRenameAttempt(
     return { kind: 'conflict', current };
   }
   const body = { operationKey: closed.operationKey, operation: closed.operation };
+  if (attempt.referenceExpiresAt && Date.parse(attempt.referenceExpiresAt) <= Date.now()) {
+    delete attempt.reference;
+    delete attempt.referenceExpiresAt;
+  }
   if (!attempt.reference) {
-    const approval = await authPost<unknown>('/account-operations/approve', body);
-    if (!approval.ok) {
-      if (approval.code === 'step_up_required' && approval.status === 401) return { kind: 'step-up' };
+    const approval = await sendRenameApproval(body, owns, signal);
+    if (!owns()) return { kind: attempt.submitted ? 'unknown' : 'unavailable' };
+    if (approval.kind === 'unavailable') return { kind: attempt.submitted ? 'unknown' : 'unavailable' };
+    if (approval.kind === 'refused') {
+      if (approval.value.error === 'step_up_required') return { kind: 'step-up' };
       if (approval.status === 409) return { kind: 'conflict', current: await readCurrent() };
       return { kind: approval.status === 401 || approval.status === 403 ? 'denied' : 'unavailable' };
     }
-    if (
-      !record(approval.body) ||
-      typeof approval.body.reference !== 'string' ||
-      !approval.body.reference ||
-      typeof approval.body.expiresAt !== 'string' ||
-      !Number.isFinite(Date.parse(approval.body.expiresAt)) ||
-      Date.parse(approval.body.expiresAt) <= Date.now()
-    )
-      return { kind: 'unavailable' };
-    attempt.reference = approval.body.reference;
+    if (Date.parse(approval.value.expiresAt) <= Date.now())
+      return { kind: attempt.submitted ? 'unknown' : 'unavailable' };
+    attempt.reference = approval.value.reference;
+    attempt.referenceExpiresAt = approval.value.expiresAt;
   }
-  // Retirement stops the next browser stage, including retries of an older send.
-  if (!isCurrent() || !renameContinuationPermits(attempt)) return { kind: 'unavailable' };
   const previouslySubmitted = attempt.submitted;
-  attempt.submitted = true;
-  saveRenameContinuation(attempt);
-  // A quota error preserves the live send; a refused/replaced slot never does.
-  if (!renameContinuationPermits(attempt)) {
-    attempt.submitted = previouslySubmitted;
-    return { kind: previouslySubmitted ? 'unknown' : 'unavailable' };
-  }
-  const executed = await authPost<unknown>('/account-operations/execute', { ...body, reference: attempt.reference });
-  if (!isCurrent() || !renameContinuationPermits(attempt)) return { kind: 'unknown' };
-  if (!executed.ok) {
+  let dispatched = false;
+  const executed = await sendRenameExecution(
+    { ...body, reference: attempt.reference },
+    () => {
+      if (!owns()) return false;
+      attempt.submitted = true;
+      saveRenameContinuation(attempt);
+      // A quota error preserves the live send; a refused/replaced slot never does.
+      if (!owns()) {
+        attempt.submitted = previouslySubmitted;
+        return false;
+      }
+      dispatched = true;
+      return true;
+    },
+    signal,
+  );
+  if (!owns()) return { kind: attempt.submitted ? 'unknown' : 'unavailable' };
+  if (executed.kind === 'unavailable') return { kind: dispatched || previouslySubmitted ? 'unknown' : 'unavailable' };
+  if (executed.kind === 'refused') {
     if ([401, 403, 409].includes(executed.status)) {
       if (!previouslySubmitted) clearRenameContinuation(attempt);
       attempt.submitted = previouslySubmitted;
     }
     if (executed.status === 409) return { kind: 'conflict', current: await readCurrent() };
-    if (executed.status === 401 && executed.code === 'step_up_required') {
+    if (executed.value.error === 'step_up_required') {
       delete attempt.reference;
+      delete attempt.referenceExpiresAt;
       return { kind: 'step-up' };
     }
     if (executed.status === 401 || executed.status === 403) return { kind: 'denied' };
     return { kind: 'unknown' };
   }
-  if (
-    !record(executed.body) ||
-    executed.body.accountId !== closed.accountId ||
-    executed.body.error ||
-    executed.body.expired
-  ) {
-    if (record(executed.body) && executed.body.expired) delete attempt.reference;
-    return { kind: 'unknown' };
-  }
+  if (executed.value.accountId !== closed.accountId) return { kind: 'unknown' };
+  attempt.acknowledged = true;
+  // Settle only the admitted original descriptor, including a failed marker write.
+  const stored = readRenameContinuationState();
+  if (stored.kind === 'valid' && sameRenameContinuation(stored.value, attempt)) clearRenameContinuation(stored.value);
   // A workflow receipt alone never establishes the currently effective handle.
   let observed: RenameRead;
   try {
@@ -448,6 +460,7 @@ export async function runRenameAttempt(
   } catch {
     observed = { kind: 'unavailable' };
   }
+  if (!owns()) return { kind: 'acknowledged', current: { kind: 'unavailable' } };
   return observed.kind === 'ready' &&
     observed.target.accountId === closed.accountId &&
     renameSessionMatches(observed.target) &&
@@ -468,7 +481,7 @@ export interface RenameSource {
 export const nativeRenameSource: RenameSource = {
   readCurrent: (signal) => loadRenameTarget(undefined, signal),
   run: (attempt, isCurrent, signal) =>
-    runRenameAttempt(attempt, () => nativeRenameSource.readCurrent(signal), isCurrent),
+    runRenameAttempt(attempt, () => nativeRenameSource.readCurrent(signal), isCurrent, signal),
   stepUp: async (attempt, isCurrent = () => true) => {
     if (!renameContinuationPermits(attempt)) return false;
     const input = { accountId: attempt.accountId, operationKey: attempt.operationKey, operation: attempt.operation };
