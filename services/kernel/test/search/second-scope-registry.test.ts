@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Release } from '@rezics/definitions';
 import release from '../../../../packages/definitions/release/rezics.json';
+import type { PublicCollectionDiscoverySummary } from '../../src/library/index.ts';
 import { hydrateOwnerDiscoveryHits, type DiscoveryOwnerCandidate } from '../../src/search/discovery-hydration.ts';
 import {
   createDiscoveryRegistry,
@@ -21,11 +22,19 @@ const subjectId = '018f0000-0000-7000-8000-00a000000003';
 const noRead = async (): Promise<never> => {
   throw new Error('This registry test must not read existing producer sources');
 };
-function collectionCard(currentId: string) {
+function collectionCard(currentId: string): PublicCollectionDiscoverySummary {
   return {
     id: currentId,
     title: 'Collection',
     description: null,
+    presentationKind: null,
+    presentationKindSource: 'mixed',
+    cover: null,
+    coverSource: 'none',
+    curator: { state: 'unavailable', reason: 'deidentified' },
+    preview: { state: 'empty' },
+    kind: 'collection',
+    destination: `/collections/${currentId}`,
     visibility: 'public' as const,
     revision: 1,
     sourceGeneration: 'generation-1',
