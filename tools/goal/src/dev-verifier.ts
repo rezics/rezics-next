@@ -576,6 +576,8 @@ export type DevVerifierOptions = {
   /** Local boot-smoke runner; defaults to `runGate` so tests can spy on one path. */
   runBootSmoke?: GateRunner;
   dispatchRepair?: (repair: BootSmokeRepair) => void;
+  /** Runs the separately scheduled seeded page-data stack when the policy interval is due. */
+  runPageData?: () => Promise<unknown>;
 };
 
 const revisionSources = new WeakMap<DevVerifierOptions, Map<string, RevisionSource>>();
@@ -1620,6 +1622,7 @@ async function smokeNewestHeads(options: DevVerifierOptions, verified: string): 
 export async function verifyDev(options: DevVerifierOptions): Promise<void> {
   const { settings, store } = options,
     checkout = settings.mainCheckout;
+  await options.runPageData?.();
   const lock = acquireDirectoryLease(join(settings.stateDirectory, 'dev-verifier.lease'), settings.policy?.leases);
   try {
     const captured = head(checkout, settings.integrationBranch);

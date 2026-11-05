@@ -72,6 +72,14 @@ import {
 import type { PriorityGrant } from './types.ts';
 
 type FrozenTask = Task & { frozenFiles?: Pick<FrozenFile, 'path' | 'hash'>[] };
+
+export class PageDataSessionUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PageDataSessionUnavailableError';
+  }
+}
+
 function normalizedBriefText(markdown: string): string {
   return markdown.replace(/\r\n?/g, '\n').trimEnd();
 }
@@ -312,6 +320,8 @@ export type RetryOptions = {
   expectedAttempt?: number;
   /** Start the next attempt in a new provider session, keeping the branch and worktree. */
   freshSession?: boolean;
+  /** The page-data controller may resume one integrated task when its retained provider session is available. */
+  pageDataRepairKey?: string;
 };
 /** Metadata-only first/future proof registration, including stopped/exited runs with historical reservations. */
 export type ProofStartOptions = {
@@ -1650,7 +1660,21 @@ export class WorkerTasks {
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
       this.store.assertRetryAllowed({ taskId, attempt: task.currentAttempt });
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
-      if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
+      const pageDataRepair = Boolean(options.pageDataRepairKey);
+      if (pageDataRepair && !/^[a-f0-9]{64}$/.test(options.pageDataRepairKey!))
+        throw new Error('page-data repair key must be a SHA-256 identifier');
+      if (pageDataRepair && !['integrated', 'merged'].includes(task.state))
+        throw new Error(`page-data repair cannot resume a ${task.state} task`);
+      if (pageDataRepair) {
+        const previous = this.store.attempt({ taskId, attempt: task.currentAttempt });
+        if (
+          ['pending', 'running', 'waiting'].includes(previous.state) ||
+          !attemptSession(previous, this.settings.policy?.records) ||
+          !agentAdapter(previous.profile.cli).canResume
+        )
+          throw new PageDataSessionUnavailableError('page-data repair has no retained resumable session');
+      }
+      if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state) && !pageDataRepair)
         throw new Error(`cannot retry ${task.state} task`);
       const reshaped = options.brief === undefined ? undefined : this.validateBrief(options.brief, taskId);
       if (reshaped && (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager))
@@ -1851,6 +1875,8 @@ export class WorkerTasks {
         old!.profile.model === profile.model
           ? oldSession
           : undefined;
+      if (pageDataRepair && (!resumeSession || !old || old.pool !== pool.name))
+        throw new PageDataSessionUnavailableError('page-data repair cannot resume the retained session on its original provider pool');
       const make = (n: number): Attempt => ({
         taskId,
         attempt: n,
@@ -1890,7 +1916,9 @@ export class WorkerTasks {
               make,
               oldConfigDirectory,
               nextBrief.kind === 'verification',
+              pageDataRepair,
             );
+      if (options.pageDataRepairKey) this.store.event(next, 'page-data-repair', { repairKey: options.pageDataRepairKey });
       this.writeTaskPriority(this.store.task(taskId));
       // Include older groups after a controller crash between superseding and termination.
       for (const previous of this.store

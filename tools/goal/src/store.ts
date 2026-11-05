@@ -1686,13 +1686,19 @@ export class WorkerStore implements AttemptFence {
       throw new StaleAttemptError(ref, task.currentAttempt);
   }
   /** Superseding and publishing the next sequence are atomic, before stopping any external process. */
-  nextAttempt(ref: AttemptRef, make: (n: number) => Attempt, configDirectory?: string, admitProof = false): Attempt {
+  nextAttempt(
+    ref: AttemptRef,
+    make: (n: number) => Attempt,
+    configDirectory?: string,
+    admitProof = false,
+    pageDataRepair = false,
+  ): Attempt {
     return this.write(ref, () => {
       this.assertRetryAllowed(ref);
       const task = this.task(ref.taskId);
       if (
-        task.state === 'integrated' ||
-        task.state === 'merged' ||
+        (!pageDataRepair && task.state === 'integrated') ||
+        (!pageDataRepair && task.state === 'merged') ||
         task.state === 'verified' ||
         task.state === 'cancelled'
       )
