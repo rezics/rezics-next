@@ -83,6 +83,7 @@ test('canonical log and progress stories retain real owner plays and historic gu
   expect([...progress.matchAll(/export const (\w+): Story/g)].map((match) => match[1])).toEqual([
     'SignedIn',
     'ProfileUnits',
+    'ContinuedIndexReturn',
     'ProfileUnitsRecordingUnavailable',
     'DeclaredRecordingRefused',
     'RetiredPair',
@@ -99,6 +100,9 @@ test('canonical log and progress stories retain real owner plays and historic gu
     'WithheldSummaries',
     'OriginalHistoryRoute',
     'IndependentHistoryRecovery',
+    'NarrowOriginalHistoryRoute',
+    'StaleChangesRecovery',
+    'StaleUnitsRecovery',
   ]);
   expect(progress).toContain('render: () => manualStory(manualScalarId)');
   expect(progress).toContain(

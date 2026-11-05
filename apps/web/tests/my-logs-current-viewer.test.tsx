@@ -88,7 +88,7 @@ test('actual My Logs viewer export refuses stale or missing preparation without 
     current.status = 'active';
     current.subject = undefined;
     actualRequest = request();
-    expect(await server.readMyPublishedLogHistoryForViewer({ data: { cursor: '' } })).toEqual({
+    expect(await server.readMyPublishedLogHistoryForViewer({ data: {} })).toEqual({
       sessionSubject: null,
       cursor: null,
       locale: 'en',
@@ -262,6 +262,7 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     Event: window.Event,
     MouseEvent: window.MouseEvent,
     PointerEvent: window.PointerEvent,
+    scrollTo: () => {},
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
