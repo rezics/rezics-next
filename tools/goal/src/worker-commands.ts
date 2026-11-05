@@ -199,9 +199,7 @@ export async function runWorkerCommand(
       const spanMs = settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs;
       const now = Date.now();
       const readings = readRetainedPoolReadings(settings.stateDirectory);
-      const table = settings.routingFile
-        ? readRouting(settings.routingFile, settings.policy?.routing)
-        : undefined;
+      const table = settings.routingFile ? readRouting(settings.routingFile, settings.policy?.routing) : undefined;
       const waiting = table
         ? countAllowanceWaiting(
             selectedTasks.flatMap((task) => {
