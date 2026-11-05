@@ -18,12 +18,36 @@ import {
 import { m } from '../src/paraglide/messages.js';
 import { locales } from '../src/paraglide/runtime.js';
 import { readFileSync } from 'node:fs';
+import type { SessionEnv } from '../src/session/client';
+import type { SessionStore } from '../src/session/store';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const saved = { id: 'saved-dynamic', curatorAccountId: 'owner', membershipKind: 'dynamic' as const };
 const key = '0192f3a0-6c1e-7b2a-9d4e-0000000000aa';
 const input: PublicationInput = { collectionId: 'saved-dynamic', revision: 7, subjectIds: [], idempotencyKey: key };
+const csrfToken = 'A'.repeat(22);
+const write = () => new Request('https://site.test/_serverFn/publication', {
+  method: 'POST',
+  headers: {
+    authorization: 'Bearer owner-token',
+    cookie: `__Host-rezics_session=${'a'.repeat(43)}`,
+    origin: 'https://site.test',
+    'X-CSRF-Token': csrfToken,
+  },
+});
+const sessionEnv: Partial<SessionEnv> = {
+  SITE_ORIGINS: 'https://site.test',
+  AUTH_ISSUER: 'https://auth.test',
+  API_RESOURCE: 'https://kernel.test',
+  WEBSITE_SCOPES: 'openid',
+  WEBSITE_CLIENT_ID: 'publication-test',
+  WEBSITE_CLIENT_KEY: 'unused',
+  SESSIONS: {
+    idFromName: (id: string) => id,
+    get: () => ({ signedIn: async () => ({ signedIn: true, csrfToken }) }),
+  } as unknown as DurableObjectNamespace<SessionStore>,
+};
 
 function action(
   collection: Parameters<typeof SavedQueryPublicationAction>[0]['collection'],
@@ -100,11 +124,8 @@ test('generated publishSelected keeps revision, unique IDs, credentials and key'
   });
   const result = await publishSelectedNative(
     client,
-    new Request('https://site.test/_serverFn/publication', {
-      method: 'POST',
-      headers: { authorization: 'Bearer owner-token' },
-    }),
-    {},
+    write(),
+    sessionEnv,
     input,
   );
   expect(result).toEqual({

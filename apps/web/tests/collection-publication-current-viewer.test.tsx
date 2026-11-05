@@ -98,6 +98,7 @@ async function mount() {
     window,
     document: window.document,
     navigator: window.navigator,
+    scrollTo: () => undefined,
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
@@ -118,6 +119,7 @@ async function mount() {
   const { collectionPublicationQuery, publicationCandidates } = await import('../src/library/collection-publication');
   const { publicationExample } = await import('../src/kernel/fake/collection-publication');
   const { sessionQuery } = await import('../src/session/query');
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
   const previousLocale = getLocale;
@@ -128,6 +130,8 @@ async function mount() {
   document.body.append(host);
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const exposure = viewerExposureLifetime(client);
+  const stopExposure = exposure.subscribe(() => {});
   const router = createRouter({
     routeTree: createRootRoute(),
     history: createMemoryHistory({ initialEntries: ['/en/collections/publication-example/publish'] }),
@@ -166,13 +170,24 @@ async function mount() {
       <RouterContextProvider router={router}>{node}</RouterContextProvider>
     </QueryClientProvider>
   );
-  const show = (nextSession = session, nextAddress = currentAddress) =>
-    flush(() => {
+  const show = async (nextSession = session, nextAddress = currentAddress) => {
+    await flush(() => {
       session = nextSession;
       currentAddress = nextAddress;
       client.setQueryData(sessionQuery.queryKey, session);
+    });
+    const snapshot = exposure.getSnapshot();
+    if (snapshot.state === 'signed-in')
+      await flush(() =>
+        client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+          subject: snapshot.observation.subject,
+          admitted: ['collections'],
+        }),
+      );
+    await flush(() => {
       root.render(tree(<CollectionPublicationPage address={currentAddress} />));
     });
+  };
   const button = (label: string) => {
     const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === label);
     expect(node).toBeDefined();
@@ -242,6 +257,7 @@ async function mount() {
     async dispose() {
       await act(async () => root.unmount());
       client.clear();
+      stopExposure();
       host.remove();
       overwriteGetLocale(previousLocale);
       await window.happyDOM.close();

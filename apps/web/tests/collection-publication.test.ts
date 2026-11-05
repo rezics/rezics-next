@@ -29,11 +29,29 @@ import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
 
 const key = '0192f3a0-6c1e-7b2a-9d4e-0000000000aa';
 const input: PublicationInput = { collectionId: 'saved-dynamic', revision: 7, subjectIds: [], idempotencyKey: key };
+const csrfToken = 'A'.repeat(22);
 const write = () =>
   new Request('https://site.test/_serverFn/publication', {
     method: 'POST',
-    headers: { authorization: 'Bearer owner-token' },
+    headers: {
+      authorization: 'Bearer owner-token',
+      cookie: `__Host-rezics_session=${'a'.repeat(43)}`,
+      origin: 'https://site.test',
+      'X-CSRF-Token': csrfToken,
+    },
   });
+const sessionEnv: Partial<SessionEnv> = {
+  SITE_ORIGINS: 'https://site.test',
+  AUTH_ISSUER: 'https://auth.test',
+  API_RESOURCE: 'https://kernel.test',
+  WEBSITE_SCOPES: 'openid',
+  WEBSITE_CLIENT_ID: 'publication-test',
+  WEBSITE_CLIENT_KEY: 'unused',
+  SESSIONS: {
+    idFromName: (id: string) => id,
+    get: () => ({ signedIn: async () => ({ signedIn: true, csrfToken }) }),
+  } as unknown as DurableObjectNamespace<SessionStore>,
+};
 
 test('explicit empty and nonempty requests retain native revision and unique IDs, with a hard 100 selection limit', () => {
   expect(publicationInput(input)).toEqual(input);
@@ -148,8 +166,8 @@ test('the installed generated operation sends the exact selected request; unknow
     },
   });
   const selected = { ...input, subjectIds: ['canonical-a'] };
-  expect(await publishSelectedNative(client, write(), {}, selected)).toEqual({ ok: false, reason: 'unknown' });
-  expect(await publishSelectedNative(client, write(), {}, selected)).toEqual({ ok: false, reason: 'unavailable' });
+  expect(await publishSelectedNative(client, write(), sessionEnv, selected)).toEqual({ ok: false, reason: 'unknown' });
+  expect(await publishSelectedNative(client, write(), sessionEnv, selected)).toEqual({ ok: false, reason: 'unavailable' });
   expect(calls).toHaveLength(2);
   for (const call of calls) {
     expect(call.method).toBe('POST');
@@ -170,7 +188,7 @@ test('the installed generated operation sends the exact selected request; unknow
       method: 'POST',
       headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}`, origin: 'https://foreign.test' },
     }),
-    {},
+    sessionEnv,
     input,
   );
   expect(refused).toEqual({ ok: false, reason: 'denied' });
