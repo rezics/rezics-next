@@ -662,7 +662,11 @@
         "apps/web/src/session/index.ts",
         "apps/web/src/session/reader.ts",
         "apps/web/src/subject/definitions.ts",
-        "apps/web/src/subject/quantity-presentation.ts"
+        "apps/web/src/subject/quantity-presentation.ts",
+        "apps/web/src/paraglide/messages.js",
+        "apps/web/src/paraglide/messages.d.ts",
+        "apps/web/src/paraglide/runtime.js",
+        "apps/web/src/paraglide/runtime.d.ts"
       ],
       "allowedDependencies": [
         "client",
