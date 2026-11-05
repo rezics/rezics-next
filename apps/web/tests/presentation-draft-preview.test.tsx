@@ -45,6 +45,7 @@ const input = (): DraftPreviewInput => ({
   target: { subject: recorded.subject.id, view: 'details' },
   locale: 'en',
 });
+const signal = new AbortController().signal;
 function native(value: DraftPreviewInput, failed = false) {
   const document = resolveView(
     value.profile,
@@ -80,7 +81,7 @@ test('detached complete input binds the reader, digest and companion while prese
           expect(body).toEqual({ profile, target: captured.target, languages: ['en'] });
           expect(options).toEqual({
             headers: { authorization: 'Bearer curator' },
-            fetch: { cache: 'no-store', redirect: 'manual' },
+            fetch: { cache: 'no-store', redirect: 'manual', signal },
           });
           return { status: 200, data: native(captured, true) };
         },
@@ -88,10 +89,10 @@ test('detached complete input binds the reader, digest and companion while prese
     },
   };
   expect(
-    await loadDraftPreview(client, captured, { reader: 'another-reader', authorization: 'Bearer curator' }),
+    await loadDraftPreview(client, captured, { reader: 'another-reader', authorization: 'Bearer curator' }, signal),
   ).toEqual({ ok: false, reason: 'denied' });
   expect(calls).toBe(0);
-  const result = await loadDraftPreview(client, captured, { reader, authorization: 'Bearer curator' });
+  const result = await loadDraftPreview(client, captured, { reader, authorization: 'Bearer curator' }, signal);
   expect(result.ok).toBe(true);
   if (result.ok) {
     expect(result.digest).toBe(profileDigest(profile));
@@ -105,6 +106,7 @@ test('detached complete input binds the reader, digest and companion while prese
     { pages: { $previewDraft: { post: async () => ({ status: 200, data: corrected }) } } },
     captured,
     { reader, authorization: 'Bearer curator' },
+    signal,
   );
   expect(current.ok && current.page.subject).toBe(corrected.subject);
   expect(current.ok && current.target).toEqual(captured.target);
@@ -115,6 +117,7 @@ test('detached complete input binds the reader, digest and companion while prese
       { pages: { $previewDraft: { post: async () => ({ status: 200, data: wrong }) } } },
       captured,
       { reader, authorization: 'Bearer curator' },
+      signal,
     ),
   ).toEqual({ ok: false, reason: 'unavailable' });
 });

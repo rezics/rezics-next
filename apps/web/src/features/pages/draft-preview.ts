@@ -29,7 +29,7 @@ export type DraftPreviewResult =
   | { ok: true; digest: string; target: DraftPreviewTarget; locale: string; page: SubjectPageData }
   | { ok: false; reason: 'invalid' | 'denied' | 'missing' | 'unavailable' | 'interrupted' }
   | { ok: false; reason: 'redirect'; handle: string };
-export type DraftPreviewRead = (input: DraftPreviewInput) => Promise<DraftPreviewResult>;
+export type DraftPreviewRead = (input: DraftPreviewInput, signal: AbortSignal) => Promise<DraftPreviewResult>;
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -74,7 +74,10 @@ export interface DraftPreviewClient {
     $previewDraft: {
       post(
         input: { profile: PresentationProfile; target: DraftPreviewTarget; languages: string[] },
-        options: { headers: { authorization: string }; fetch: { cache: 'no-store'; redirect: 'manual' } },
+        options: {
+          headers: { authorization: string };
+          fetch: { cache: 'no-store'; redirect: 'manual'; signal: AbortSignal };
+        },
       ): Promise<{ status: number; data?: unknown; error?: { value: unknown } | null }>;
     };
   };
@@ -85,13 +88,17 @@ export async function loadDraftPreview(
   client: DraftPreviewClient,
   input: DraftPreviewInput,
   admission: { reader: string | null | undefined; authorization: string | null | undefined },
+  signal: AbortSignal,
 ): Promise<DraftPreviewResult> {
   if (!admission.authorization || admission.reader !== input.expectedReader) return { ok: false, reason: 'denied' };
   const digest = profileDigest(input.profile);
   try {
     const response = await client.pages.$previewDraft.post(
       { profile: input.profile, target: input.target, languages: requestLanguages(input.locale) },
-      { headers: { authorization: admission.authorization }, fetch: { cache: 'no-store', redirect: 'manual' } },
+      {
+        headers: { authorization: admission.authorization },
+        fetch: { cache: 'no-store', redirect: 'manual', signal },
+      },
     );
     const raw = response.data ?? response.error?.value;
     if (

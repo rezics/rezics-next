@@ -164,6 +164,7 @@ export function DraftPreviewPanel({
   const sequence = useRef(0);
   const mounted = useRef(false);
   const pendingRef = useRef(false);
+  const visit = useRef<AbortController | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const captureButton = useRef<HTMLButtonElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
@@ -213,6 +214,10 @@ export function DraftPreviewPanel({
       return null;
     return captureDraftPreview({ expectedReader: lease.reader, profile, locale, target: candidateTarget });
   }, [candidateTarget, lease.reader, locale, localErrors, profile]);
+  function abortVisit() {
+    visit.current?.abort();
+    visit.current = null;
+  }
   const currentProfileDigest = useMemo(() => {
     try {
       return profileDigest(profile);
@@ -224,6 +229,7 @@ export function DraftPreviewPanel({
   function stopPendingForCandidateChange() {
     if (!pendingRef.current) return;
     sequence.current++;
+    abortVisit();
     pendingRef.current = false;
     setPending(false);
     setOutput({ ok: false, reason: 'interrupted' });
@@ -233,6 +239,7 @@ export function DraftPreviewPanel({
     const document = sectionRef.current?.ownerDocument;
     if (document && outputRef.current?.contains(document.activeElement)) restoreCaptureFocus.current = true;
     sequence.current++;
+    abortVisit();
     pendingRef.current = false;
     setCapture(null);
     setOutput(null);
@@ -244,6 +251,7 @@ export function DraftPreviewPanel({
     return () => {
       mounted.current = false;
       sequence.current++;
+      abortVisit();
       pendingRef.current = false;
     };
   }, []);
@@ -293,6 +301,7 @@ export function DraftPreviewPanel({
     () =>
       lease.onRetire((silent) => {
         sequence.current++;
+        abortVisit();
         pendingRef.current = false;
         if (!silent && mounted.current) {
           setCapture(null);
@@ -365,6 +374,9 @@ export function DraftPreviewPanel({
     const document = sectionRef.current?.ownerDocument;
     if (document && outputRef.current?.contains(document.activeElement)) restoreCaptureFocus.current = true;
     const serial = ++sequence.current;
+    abortVisit();
+    const controller = new AbortController();
+    visit.current = controller;
     const profileAtStart = profileRevision.current.value;
     const localeAtStart = localeRevision.current.value;
     pendingRef.current = true;
@@ -372,12 +384,14 @@ export function DraftPreviewPanel({
     setOutput(null);
     let next: DraftPreviewResult;
     try {
-      next = await captured.owner.read(structuredClone(captured.input));
+      next = await captured.owner.read(structuredClone(captured.input), controller.signal);
     } catch {
       next = { ok: false, reason: 'unavailable' };
     }
     if (
       !mounted.current ||
+      controller.signal.aborted ||
+      visit.current !== controller ||
       serial !== sequence.current ||
       !captured.owner.lease.isCurrent() ||
       !sameOwner(captured.owner, currentOwner.current) ||
@@ -385,6 +399,7 @@ export function DraftPreviewPanel({
       localeAtStart !== localeRevision.current.value
     )
       return;
+    visit.current = null;
     pendingRef.current = false;
     setPending(false);
     setOutput(next);
@@ -404,6 +419,7 @@ export function DraftPreviewPanel({
   function interrupt() {
     if (!active || !busy) return;
     sequence.current++;
+    abortVisit();
     pendingRef.current = false;
     setPending(false);
     setOutput({ ok: false, reason: 'interrupted' });
