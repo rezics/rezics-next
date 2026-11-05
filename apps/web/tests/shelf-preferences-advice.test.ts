@@ -7,6 +7,39 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const owner = { canRead: () => true, canWrite: () => true, version: () => 1, onVersionChange() {} };
 
+function controlledDeadlines() {
+  const setTimeoutBefore = globalThis.setTimeout;
+  const clearTimeoutBefore = globalThis.clearTimeout;
+  const scheduled: { callback: () => void; delay: number; canceled: boolean }[] = [];
+  globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
+    if (typeof callback !== 'function') throw new Error('Unexpected string timer');
+    const timer = { callback: callback as () => void, delay: Number(delay ?? 0), canceled: false };
+    scheduled.push(timer);
+    return timer as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = ((handle?: ReturnType<typeof setTimeout>) => {
+    if (handle) (handle as unknown as (typeof scheduled)[number]).canceled = true;
+  }) as typeof clearTimeout;
+  return {
+    scheduled,
+    fireNext() {
+      const timer = scheduled.find((item) => !item.canceled);
+      if (!timer) return false;
+      timer.canceled = true;
+      timer.callback();
+      return true;
+    },
+    restore() {
+      globalThis.setTimeout = setTimeoutBefore;
+      globalThis.clearTimeout = clearTimeoutBefore;
+    },
+  };
+}
+
+async function flushMicrotasks() {
+  for (let turn = 0; turn < 8; turn++) await Promise.resolve();
+}
+
 test('missing or denied shelf advice cannot edit, while an original uncertain command stays put', async () => {
   const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
   const { ownerMayChangeShelf } = await import('../src/settings/preferences');
@@ -74,6 +107,69 @@ test('missing or denied shelf advice cannot edit, while an original uncertain co
   await pending.retry();
   expect(commands).toHaveLength(1);
   expect(commands[0]).toBe(original);
+});
+
+test('a stalled reset becomes uncertain and its late receipt cannot settle the original', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const timers = controlledDeadlines();
+  const initial = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 1,
+    shelf: { layouts: { all: 'list' }, gridSize: 'large' },
+  });
+  const receipt = withShelfAdvice({ ...initial, version: 2, shelf: {} });
+  let finish!: (result: { ok: true; preferences: ReadingPreferences }) => void;
+  let saveInput: Readonly<PreferenceChange> | undefined;
+  let reads = 0;
+  const draft = new ShelfPreferenceDraftRecovery(
+    initial,
+    {
+      read: async () => {
+        reads++;
+        return { signedIn: true, preferences: receipt, securityHref: null };
+      },
+      save: (input) => {
+        saveInput = input;
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      },
+    },
+    owner,
+  );
+
+  try {
+    let settled = false;
+    const sending = draft.submit(true).then(() => {
+      settled = true;
+    });
+    expect(timers.scheduled.map(({ delay }) => delay)).toEqual([10_000]);
+    expect(saveInput).toBeDefined();
+    const original = saveInput!;
+    expect(original).toMatchObject({ expectedVersion: 1, shelf: null, idempotencyKey: expect.any(String) });
+    expect(timers.fireNext()).toBe(true);
+    await flushMicrotasks();
+    expect(settled).toBe(true);
+    await sending;
+
+    expect(draft.snapshot().phase).toBe('uncertain');
+    expect(draft.snapshot().writeBusy).toBe(false);
+    expect(draft.snapshot().pending?.input).toBe(original);
+    expect(draft.snapshot().writeResponse.failure).toEqual({ status: null, code: 'local_timeout' });
+    expect(draft.snapshot().writeResponse.retryAt).toBe(0);
+
+    finish({ ok: true, preferences: receipt });
+    await flushMicrotasks();
+    expect(reads).toBe(0);
+    expect(draft.snapshot().phase).toBe('uncertain');
+    expect(draft.snapshot().known).toEqual({ shelf: initial.shelf, version: 1 });
+    expect(draft.snapshot().pending?.input).toBe(original);
+    expect(draft.snapshot().confirmedWrite).toBeNull();
+    expect(draft.snapshot().writeReceipt).toBeNull();
+  } finally {
+    timers.restore();
+  }
 });
 
 test('changed native advice fences a captured type callback and its dispatch', async () => {
