@@ -7,17 +7,18 @@ export const ENTRY_STATE_HISTORY_RETAINED_LIMIT = 64;
 
 type PageInput = Parameters<typeof page.run>[1];
 
-const byteWork = (bytes: number): Bound => declareBound({
-  candidateKeys: 0,
-  nativeRows: 0,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 0,
-  witnessKeys: 0,
-  statements: 0,
-  bytes,
-  engineRequests: 0,
-});
+const byteWork = (bytes: number): Bound =>
+  declareBound({
+    candidateKeys: 0,
+    nativeRows: 0,
+    identityMetadataRows: 0,
+    emptySeeks: 0,
+    nativePoints: 0,
+    witnessKeys: 0,
+    statements: 0,
+    bytes,
+    engineRequests: 0,
+  });
 
 // JSON escaping is at most six bytes per character. States are 64 ASCII characters;
 // command kind is one of the two native state-history writers. PostgreSQL integer
