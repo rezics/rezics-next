@@ -951,9 +951,6 @@ export async function retireNativeCollectionCapturePage(
   const [capture] = await run<NativeSourceIdentity & { captureId: string; sourceGeneration: string | null }>(
     nextCapture,
     { route: routeOf(input.collectionId), collection_id: input.collectionId, capture_id: input.captureId ?? null },
-    32,
-    2,
-    1,
   );
   if (!capture) return { status: 'retired', removed: 0, work: work.receipt() };
   if (capture.scope === 'public_output' || capture.accountId !== input.accountId || capture.sourceGeneration === null)
