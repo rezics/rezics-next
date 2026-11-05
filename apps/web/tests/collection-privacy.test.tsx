@@ -162,16 +162,18 @@ test('review keeps a retained unsupported visibility labelled and offers Use cur
         [...host.querySelectorAll('button')]
           .find((button) => button.textContent?.trim() === m.settings_privacy_reload_row())!
           .click();
+        for (let index = 0; index < 8; index++) await Promise.resolve();
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
+      expect(host.textContent).toContain(m.settings_privacy_review_title());
       const select = host.querySelector('select');
       expect(select?.value).toBe('unlisted');
       expect([...select!.querySelectorAll('option')].some((option) => option.value === 'unlisted')).toBe(true);
-      expect(
-        [...host.querySelectorAll('button')].find(
-          (button) => button.textContent?.trim() === m.settings_privacy_save_choice(),
-        )?.disabled,
-      ).toBe(true);
+      const save = [...host.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === m.settings_privacy_save_choice(),
+      );
+      expect(save).toBeDefined();
+      expect(save?.disabled).toBe(true);
       expect(
         [...host.querySelectorAll('button')].some(
           (button) => button.textContent?.trim() === m.settings_privacy_use_current(),
