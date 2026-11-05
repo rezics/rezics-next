@@ -164,6 +164,32 @@ async function boot(env: NodeJS.ProcessEnv) {
   const pool = new Pool({ connectionString: databaseUrl });
   try {
     await synchronizeAccountAgent(pool, personaId);
+    const { accountAgentId } = await import('../../src/semantic/agents.ts');
+    const { SUBJECT_REVISED } = await import('../../src/semantic/events.ts');
+    const { createRealmSubjectLifecycle } = await import('../../src/content/realm-subject-lifecycle.ts');
+    const row = (
+      await pool.query(
+        `SELECT o.*, r.transaction_id FROM core.outbox o LEFT JOIN core.receipt r
+       USING (partition_no, epoch, position) WHERE o.subject=$1 AND o.type=$2 ORDER BY o.position DESC LIMIT 1`,
+        [accountAgentId(personaId), SUBJECT_REVISED],
+      )
+    ).rows[0];
+    expect(row).toBeDefined();
+    expect(row.transaction_id).toBeNull();
+    const event = {
+      specversion: '1.0' as const,
+      id: row.id,
+      source: `urn:rezics:log:${row.partition_no}.${row.epoch}`,
+      type: row.type,
+      subject: row.subject,
+      time: row.recorded_at.toISOString(),
+      datacontenttype: 'application/json' as const,
+      sequence: String(row.position).padStart(19, '0'),
+      data: row.data,
+    };
+    const lifecycle = createRealmSubjectLifecycle({ pool });
+    await lifecycle.effect.run(event);
+    await expect(lifecycle.effect.run({ ...event, id: crypto.randomUUID() })).rejects.toThrow('native outbox anchor');
   } finally {
     await pool.end();
   }

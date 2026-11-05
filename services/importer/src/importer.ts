@@ -85,7 +85,7 @@ import { RETENTION_LOCAL_MAINTENANCE } from './retention.ts';
 
 export type ImportMediaResolution =
   | { status: 'available'; mediaIds: Readonly<Record<string, string>> }
-  | { status: 'pending' | 'rejected' };
+  | { status: 'pending' | 'rejected' | 'unavailable' };
 /** Actual public media availability, never a URL statement or locally allocated ID. */
 export interface ImportMediaResolver {
   resolve(input: {
@@ -1885,6 +1885,7 @@ export class Importer {
     let omissions = await this.fences(owner, signal);
     const recordState = store.key(row.source, row.recordKey, run);
     const acknowledged = recordState.acknowledged;
+    const unsubmittedMedia = this.session.bindings.hasUnsubmittedMedia(owner, row.digest);
     // Disappearance has no source projection or references to resolve. Its exact
     // owner still supplies the candidates to retract through ordinary reconciliation.
     const ownReferences =
@@ -1899,6 +1900,7 @@ export class Importer {
       if (
         isDeepStrictEqual(acknowledged, row) &&
         prior === ownReferences.signature &&
+        !unsubmittedMedia &&
         !this.options.classificationAdmission &&
         !this.options.vocabularyAdmission
       ) {
@@ -1907,6 +1909,7 @@ export class Importer {
       store.stageReferenceSignature(run, row.recordKey, ownReferences.signature);
     } else if (
       isDeepStrictEqual(acknowledged, row) &&
+      !unsubmittedMedia &&
       !this.options.classificationAdmission &&
       !this.options.vocabularyAdmission &&
       !this.options.identifierLookup
@@ -1919,6 +1922,7 @@ export class Importer {
     let subject: string | null = null;
     let deferredCover = false;
     let skipCover = false;
+    let unavailableCover = false;
     let statisticWritten = false;
     let classificationWritten = false;
     let conversionContext:
@@ -1986,7 +1990,8 @@ export class Importer {
           } else {
             skipCover = true;
             deferredCover = resolution.status === 'pending';
-            this.progress(signal)?.onMedia?.(resolution.status === 'pending' ? 'deferred' : 'rejected');
+            unavailableCover = resolution.status === 'unavailable';
+            this.progress(signal)?.onMedia?.(resolution.status === 'rejected' ? 'rejected' : 'deferred');
           }
         }
       }
@@ -2127,7 +2132,7 @@ export class Importer {
         // replacing any acknowledged semantic candidate or its immutable journal.
         store.acknowledgeStatisticRefresh(run, row.recordKey);
       } else if (
-        (this.options.vocabularyAdmission || this.options.identifierLookup) &&
+        (this.options.vocabularyAdmission || this.options.identifierLookup || unavailableCover) &&
         conversion &&
         retainedCandidates.size === candidates.length &&
         conversion.proposals.every((command) => command.op === 'create' || retainedProposals.has(command))
@@ -2202,7 +2207,7 @@ export class Importer {
         this.progress(signal)?.onMedia?.('deferred');
         return { outcome: 'pending', kind: deferred.kind };
       }
-      this.progress(signal)?.onMedia?.('rejected');
+      this.progress(signal)?.onMedia?.(resolution.status === 'rejected' ? 'rejected' : 'deferred');
       const rejected = this.session.store.resolveDeferredCover(run, row.recordKey);
       if (rejected.resolved) this.acknowledged(row.recordKey);
       return { outcome: rejected.resolved ? 'resolved' : 'failed', kind: rejected.kind };
