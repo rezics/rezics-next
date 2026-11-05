@@ -12,7 +12,10 @@ import {
   subjectVisitHref,
 } from '../src/features/pages/source-concept-reading/navigation';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
-import type { ConceptHierarchyAddress, ConceptVisitDescriptor } from '../src/features/pages/source-concept-reading/navigation';
+import type {
+  ConceptHierarchyAddress,
+  ConceptVisitDescriptor,
+} from '../src/features/pages/source-concept-reading/navigation';
 import type { ConceptInput } from '../src/features/pages/source-concept-reading/visit';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -107,9 +110,7 @@ async function nativeRead(
                 : [],
             next: id === parent && !input.cursor ? next : null,
             freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true },
-            ...(id !== parent || options.concealChild
-              ? { count: { value: 0, exact: true } }
-              : {}),
+            ...(id !== parent || options.concealChild ? { count: { value: 0, exact: true } } : {}),
           },
         }),
       },
@@ -130,10 +131,7 @@ function position(id: string = parent): ConceptHierarchyAddress {
 }
 
 async function mounted(
-  run: (page: {
-    host: HTMLElement;
-    render: (node: ReactNode) => Promise<void>;
-  }) => Promise<void>,
+  run: (page: { host: HTMLElement; render: (node: ReactNode) => Promise<void> }) => Promise<void>,
 ) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
@@ -151,9 +149,7 @@ async function mounted(
         'DocumentFragment',
         'MutationObserver',
         'ShadowRoot',
-      ].map(
-        (key) => [key, window[key]],
-      ),
+      ].map((key) => [key, window[key]]),
     ),
     window,
     getComputedStyle: window.getComputedStyle.bind(window),
@@ -254,13 +250,20 @@ test('walks to a child and back to the freshly admitted Concept window with its 
       section: 'hierarchy',
       row: child,
     });
-    const resultHref = subjectVisitHref(`/en/subjects/${work}/steins-gate`, previousAddress.pathname + previousAddress.search);
+    const resultHref = subjectVisitHref(
+      `/en/subjects/${work}/steins-gate`,
+      previousAddress.pathname + previousAddress.search,
+    );
     expect(subjectVisitReturn(new URL(resultHref, window.location.href).searchParams.get('via'), 'en')).toBe(
       previousAddress.pathname + previousAddress.search,
     );
 
     const returned = parseConceptVisitDescriptor(previousAddress.searchParams.get('conceptVisit'))!;
-    await show(parent, { conceptVisit: returned, hierarchyAddress: conceptVisitPosition(returned), worksRoute: conceptVisitWorkIntent(returned) });
+    await show(parent, {
+      conceptVisit: returned,
+      hierarchyAddress: conceptVisitPosition(returned),
+      worksRoute: conceptVisitWorkIntent(returned),
+    });
     await pending.complete(3);
     expect(pending.calls[4]!.input).toEqual({ cursor: next, session: 'fresh-3' });
     await pending.complete(4);
@@ -299,7 +302,9 @@ test('a changed binding never restores its old cursor; a concealed row announces
     expect(pending.calls).toHaveLength(1);
     expect(host.textContent).toContain('changed while you were away');
     expect(document.activeElement?.id).toBe('concept-narrower-heading');
-    expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Restart hierarchy')).toBe(true);
+    expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Restart hierarchy')).toBe(
+      true,
+    );
   });
 
   await mounted(async ({ host, render }) => {
@@ -316,7 +321,9 @@ test('a changed binding never restores its old cursor; a concealed row announces
     await pending.complete(1, { concealChild: true });
     expect(host.textContent).toContain('selected row is no longer disclosed');
     expect(document.activeElement?.id).toBe('concept-narrower-heading');
-    expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Restart hierarchy')).toBe(true);
+    expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Restart hierarchy')).toBe(
+      true,
+    );
   });
 });
 
@@ -350,13 +357,9 @@ test('strict visit and Subject-return bounds reject malformed, oversized, and re
   const base = await nativeRead(parent);
   if (!base.ok) throw new Error('fixture Concept was not admitted');
   const { originatingConceptReturn } = await import('../src/features/pages/source-concept-reading/origin');
-  const encoded = conceptVisitDescriptorFor(
-    base,
-    { addresses: [undefined, next], truncated: false },
-    1,
-    route,
-    { section: 'works' },
-  )!;
+  const encoded = conceptVisitDescriptorFor(base, { addresses: [undefined, next], truncated: false }, 1, route, {
+    section: 'works',
+  })!;
   expect(parseConceptVisitDescriptor(encoded)?.subject).toBe(parent);
   expect(parseConceptVisitDescriptor(`${encoded}!`)).toBeUndefined();
   expect(parseConceptVisitDescriptor('a'.repeat(8193))).toBeUndefined();

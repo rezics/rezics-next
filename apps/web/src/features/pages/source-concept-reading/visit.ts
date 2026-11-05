@@ -39,7 +39,8 @@ type VisitState = Position & {
 type Admission = ReturnType<typeof useCatalogueLifetime>;
 
 function appendConceptPage(history: ChangePageHistory, cursor: string): ChangePageHistory {
-  if (!cursor || new TextEncoder().encode(cursor).byteLength > 4096 || history.addresses.at(-1) === cursor) return history;
+  if (!cursor || new TextEncoder().encode(cursor).byteLength > 4096 || history.addresses.at(-1) === cursor)
+    return history;
   const addresses = [...history.addresses, cursor];
   const truncated = history.truncated || addresses.length > conceptVisitHistoryLimit;
   if (addresses.length > conceptVisitHistoryLimit) addresses.shift();
@@ -177,7 +178,9 @@ export function useConceptVisit({
   initial: ConceptRead | undefined;
   admission: Admission;
   address?: ConceptHierarchyAddress | undefined;
-  onAddressChange?: ((address: ConceptHierarchyAddress | undefined, options?: { replace?: boolean }) => void) | undefined;
+  onAddressChange?:
+    | ((address: ConceptHierarchyAddress | undefined, options?: { replace?: boolean }) => void)
+    | undefined;
 }) {
   const seed: VisitState = {
     history: firstChangePage(),
@@ -268,11 +271,7 @@ export function useConceptVisit({
     }
     if (published.read && !published.error && !published.failed) {
       if (destination.mode === 'next' || destination.mode === 'previous' || destination.mode === 'restart') {
-        const nextAddress = conceptHierarchyAddressFor(
-          published.read,
-          published.history,
-          published.index,
-        );
+        const nextAddress = conceptHierarchyAddressFor(published.read, published.history, published.index);
         const key = addressKey(nextAddress);
         expectedAddressKey.current = key;
         onAddressChange?.(nextAddress, { replace: destination.mode === 'restart' });
@@ -306,7 +305,8 @@ export function useConceptVisit({
 
   useEffect(() => {
     const pending = pendingRestore.current;
-    if (!pending || pending.waitingForFreshRead || state.loading || state.busy || !state.read || !admission.active()) return;
+    if (!pending || pending.waitingForFreshRead || state.loading || state.busy || !state.read || !admission.active())
+      return;
     pendingRestore.current = undefined;
     const wanted = pending.address;
     if (!wanted) {

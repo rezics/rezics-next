@@ -48,7 +48,8 @@ function AssociationValue({
       (summary.type === conceptRequested.type || summary.type === conceptRequested.scheme)
         ? catalogueEntries.concepts({ id, label: label.text, locale })
         : subjectHref({ id, label: label.text }, locale);
-    const href = hrefFor?.(entry.href, focus) ?? (returnTo ? `${entry.href}?${new URLSearchParams({ returnTo })}` : entry.href);
+    const href =
+      hrefFor?.(entry.href, focus) ?? (returnTo ? `${entry.href}?${new URLSearchParams({ returnTo })}` : entry.href);
     return (
       <a
         className={linkClass}
@@ -92,7 +93,15 @@ function EvidenceParts({
               {label?.text || m.candidate_value_unavailable({}, { locale: locale as never })}
             </dt>
             <dd>
-              <AssociationValue part={part} read={read} locale={locale} returnTo={returnTo} hrefFor={hrefFor} section={section} focus={focus} />
+              <AssociationValue
+                part={part}
+                read={read}
+                locale={locale}
+                returnTo={returnTo}
+                hrefFor={hrefFor}
+                section={section}
+                focus={focus}
+              />
             </dd>
           </div>
         );
@@ -127,7 +136,15 @@ function Association({
       {!!statement.qualifiers.length && (
         <section aria-label={m.correction_qualifiers({}, o)}>
           <h3 className="font-medium">{m.correction_qualifiers({}, o)}</h3>
-          <EvidenceParts parts={statement.qualifiers} read={read} locale={locale} returnTo={returnTo} hrefFor={hrefFor} section={section} focus={focus} />
+          <EvidenceParts
+            parts={statement.qualifiers}
+            read={read}
+            locale={locale}
+            returnTo={returnTo}
+            hrefFor={hrefFor}
+            section={section}
+            focus={focus}
+          />
         </section>
       )}
       {!!statement.references.length && (
@@ -136,7 +153,15 @@ function Association({
           <ol className="space-y-3">
             {statement.references.map((reference, index) => (
               <li key={index}>
-                <EvidenceParts parts={reference.parts} read={read} locale={locale} returnTo={returnTo} hrefFor={hrefFor} section={section} focus={focus} />
+                <EvidenceParts
+                  parts={reference.parts}
+                  read={read}
+                  locale={locale}
+                  returnTo={returnTo}
+                  hrefFor={hrefFor}
+                  section={section}
+                  focus={focus}
+                />
               </li>
             ))}
           </ol>

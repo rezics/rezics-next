@@ -113,18 +113,15 @@ function ConceptsRoute() {
   const hierarchyMismatch =
     !!hierarchyAddress && (hierarchyAddress.subject !== id || hierarchyAddress.role !== roleValue);
   const effectiveHierarchy =
-    !hierarchyMismatch && hierarchyAddress
-      ? hierarchyAddress
-      : resume
-        ? conceptVisitPosition(resume)
-        : undefined;
+    !hierarchyMismatch && hierarchyAddress ? hierarchyAddress : resume ? conceptVisitPosition(resume) : undefined;
   const onWorksChange = (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => {
     void navigate({
       replace: options?.replace === true,
       search: (previous) => {
         const next = { ...previous } as Record<string, unknown>;
         const savedWorks = conceptVisitDescriptor?.subject === id ? conceptVisitDescriptor.works : undefined;
-        const retainedCondition = typeof next.conditionText === 'string' ? next.conditionText : savedWorks?.conditionText;
+        const retainedCondition =
+          typeof next.conditionText === 'string' ? next.conditionText : savedWorks?.conditionText;
         const retainedTagQualifiers =
           typeof next.tagQualifiersText === 'string' ? next.tagQualifiersText : savedWorks?.tagQualifiersText;
         const retainedChildren = next.includeChildren === true || savedWorks?.includeChildren === true;
@@ -170,7 +167,10 @@ function ConceptsRoute() {
       },
     });
   };
-  const onHierarchyChange = (address: Parameters<typeof encodeConceptHierarchyAddress>[0], options?: { replace?: boolean }) => {
+  const onHierarchyChange = (
+    address: Parameters<typeof encodeConceptHierarchyAddress>[0],
+    options?: { replace?: boolean },
+  ) => {
     const encoded = encodeConceptHierarchyAddress(address);
     void navigate({
       replace: options?.replace === true,

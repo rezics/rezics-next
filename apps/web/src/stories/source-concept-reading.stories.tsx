@@ -6,7 +6,10 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { SourceConceptView } from '../features/pages/source-concept-view';
 import { readSourceConcept, type ConceptRead } from '../features/catalogue/source-concept-explorer';
 import { catalogueEntries } from '../features/catalogue/catalogue-entry';
-import type { ConceptHierarchyAddress, ConceptVisitDescriptor } from '../features/pages/source-concept-reading/navigation';
+import type {
+  ConceptHierarchyAddress,
+  ConceptVisitDescriptor,
+} from '../features/pages/source-concept-reading/navigation';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 

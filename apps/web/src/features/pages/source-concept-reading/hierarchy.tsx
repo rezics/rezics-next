@@ -31,11 +31,7 @@ export function HierarchyLinks({
         const href = hrefFor?.(base, row) ?? (returnTo ? `${base}?${new URLSearchParams({ returnTo })}` : base);
         return (
           <li key={`${row.direction}:${row.id}`} data-concept-hierarchy-row={row.id}>
-            <a
-              className={linkClass}
-              href={href}
-              lang={row.lang ?? undefined}
-            >
+            <a className={linkClass} href={href} lang={row.lang ?? undefined}>
               {row.label}
             </a>
             <p className="text-sm text-muted-foreground">

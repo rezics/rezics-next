@@ -127,9 +127,7 @@ function ConceptVisitView({
       (item) => item.action === 'statement:propose' && item.operations.includes('subject.propose'),
     );
   const immediateReturn =
-    conceptVisit && conceptVisit.subject !== id
-      ? conceptVisitHref(conceptVisit, locale, returnTo)
-      : undefined;
+    conceptVisit && conceptVisit.subject !== id ? conceptVisitHref(conceptVisit, locale, returnTo) : undefined;
 
   const addressFor = (focus: ConceptFocus) => {
     if (!read?.admitted) return;
@@ -137,8 +135,7 @@ function ConceptVisitView({
   };
   const hierarchyHrefFor = (base: string, row: { id: string; conceptPage: boolean }) => {
     if (!read?.admitted) return base;
-    if (!row.conceptPage)
-      return subjectVisitHref(base, addressFor({ section: 'hierarchy', row: row.id }));
+    if (!row.conceptPage) return subjectVisitHref(base, addressFor({ section: 'hierarchy', row: row.id }));
     const descriptor = conceptVisitDescriptorFor(read, visit.history, visit.index, worksRoute, {
       section: 'hierarchy',
       row: row.id,
@@ -165,7 +162,10 @@ function ConceptVisitView({
     if (focus.row && focus.section === 'hierarchy') {
       target = focusWithin('[data-concept-hierarchy-row]', 'conceptHierarchyRow')?.querySelector('a') ?? undefined;
     } else if (focus.row && ['scheme', 'code', 'broader'].includes(focus.section)) {
-      target = focusWithin('[data-concept-association-row]', 'conceptAssociationRow')?.querySelector('a[data-concept-target]') ?? undefined;
+      target =
+        focusWithin('[data-concept-association-row]', 'conceptAssociationRow')?.querySelector(
+          'a[data-concept-target]',
+        ) ?? undefined;
     } else if (focus.section === 'works') {
       target = document.getElementById('concept-tagged-works-heading') ?? undefined;
     }
@@ -229,11 +229,7 @@ function ConceptVisitView({
             variant="outline"
             className={actionClass}
             disabled={busy}
-            onClick={() =>
-              onHierarchyChange
-                ? onHierarchyChange(undefined, { replace: true })
-                : void visit.restart()
-            }
+            onClick={() => (onHierarchyChange ? onHierarchyChange(undefined, { replace: true }) : void visit.restart())}
           >
             {m.concept_visit_restart({}, o)}
           </Button>

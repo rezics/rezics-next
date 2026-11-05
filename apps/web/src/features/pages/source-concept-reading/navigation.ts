@@ -107,7 +107,10 @@ function validAddresses(value: unknown, index: unknown): value is (string | null
     value.every(
       (cursor, addressIndex) =>
         (cursor === null && addressIndex === 0) ||
-        (typeof cursor === 'string' && cursor.length > 0 && byteLength(cursor) <= 4096 && !/[\u0000-\u001f\u007f]/u.test(cursor)),
+        (typeof cursor === 'string' &&
+          cursor.length > 0 &&
+          byteLength(cursor) <= 4096 &&
+          !/[\u0000-\u001f\u007f]/u.test(cursor)),
     )
   );
 }
@@ -155,7 +158,8 @@ function validWorks(value: unknown): value is ConceptWorkIntent {
     (works.scheme === undefined || (typeof works.scheme === 'string' && uuid.test(works.scheme))) &&
     (works.includeChildren === undefined || typeof works.includeChildren === 'boolean') &&
     (works.spoilerThreshold === undefined || [0, 1, 2].includes(works.spoilerThreshold as number)) &&
-    (works.conditionText === undefined || (typeof works.conditionText === 'string' && works.conditionText.length <= 16_384)) &&
+    (works.conditionText === undefined ||
+      (typeof works.conditionText === 'string' && works.conditionText.length <= 16_384)) &&
     (works.tagQualifiersText === undefined ||
       (typeof works.tagQualifiersText === 'string' && works.tagQualifiersText.length <= 2048))
   );
@@ -336,7 +340,11 @@ export function encodeConceptHierarchyAddress(position: ConceptHierarchyAddress 
   return encodePosition(position);
 }
 
-export function conceptVisitHref(descriptor: ConceptVisitDescriptor, locale: string, returnTo?: string): string | undefined {
+export function conceptVisitHref(
+  descriptor: ConceptVisitDescriptor,
+  locale: string,
+  returnTo?: string,
+): string | undefined {
   const encoded = encodeConceptVisitDescriptor(descriptor);
   if (!encoded) return;
   const base = catalogueEntries.concepts({ id: descriptor.subject, label: '', locale }).href;
@@ -359,11 +367,7 @@ export function conceptVisitAddressFor(
   return descriptor ? conceptVisitHref(descriptor, locale, returnTo) : undefined;
 }
 
-export function conceptTargetHref(
-  base: string,
-  descriptor: string | undefined,
-  returnTo?: string,
-): string {
+export function conceptTargetHref(base: string, descriptor: string | undefined, returnTo?: string): string {
   const url = new URL(base, 'https://rezics.invalid');
   if (descriptor) url.searchParams.set('conceptVisit', descriptor);
   if (returnTo) url.searchParams.set('returnTo', returnTo);
