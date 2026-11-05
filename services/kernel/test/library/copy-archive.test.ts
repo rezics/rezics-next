@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { isDeepStrictEqual } from 'node:util';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import {
   fixture,
@@ -16,8 +17,28 @@ import { routeOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 
+type ArchiveSectionTotal = { rows: number; recordBytes: number; [key: string]: unknown };
+type ArchiveTestManifest = {
+  format: string;
+  version: number;
+  exportId: string;
+  capturedAt: string;
+  expiresAt: string;
+  privacy: 'private';
+  completeness: 'supported-native-facts';
+  sections: string[];
+  omissions: Record<string, string>;
+  fullExport: false;
+  rows: number;
+  recordBytes: number;
+  coverage?: string;
+  sectionTotals?: Record<string, ArchiveSectionTotal>;
+  [key: string]: unknown;
+};
+type ArchiveTestRecord = { section: string; [key: string]: unknown };
+type ArchiveTestArtifact = { manifest: ArchiveTestManifest; records: ArchiveTestRecord[] };
 let f: NativeProfileFixture, owner: Awaited<ReturnType<NativeProfileFixture['identity']>>, other: typeof owner;
-let artifact: { manifest: Record<string, any>; records: Record<string, any>[] };
+let artifact: ArchiveTestArtifact;
 let subjectId: string;
 let sourceSessions: { id: string; unit: string }[] = [];
 let currentDigest: string;
@@ -41,6 +62,68 @@ const scopes = [
 ];
 const path = '/v1/libraryCopyArchives';
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function isArchiveTestRecord(value: unknown): value is ArchiveTestRecord {
+  return isRecord(value) && typeof value.section === 'string';
+}
+function isArchiveSectionTotal(value: unknown): value is ArchiveSectionTotal {
+  return isRecord(value) && typeof value.rows === 'number' && typeof value.recordBytes === 'number';
+}
+function isArchiveTestManifest(value: unknown): value is ArchiveTestManifest {
+  if (
+    !isRecord(value) ||
+    typeof value.format !== 'string' ||
+    typeof value.version !== 'number' ||
+    typeof value.exportId !== 'string' ||
+    typeof value.capturedAt !== 'string' ||
+    typeof value.expiresAt !== 'string' ||
+    value.privacy !== 'private' ||
+    value.completeness !== 'supported-native-facts' ||
+    !Array.isArray(value.sections) ||
+    !value.sections.every((section) => typeof section === 'string') ||
+    !isRecord(value.omissions) ||
+    !Object.values(value.omissions).every((omission) => typeof omission === 'string') ||
+    value.fullExport !== false ||
+    typeof value.rows !== 'number' ||
+    typeof value.recordBytes !== 'number'
+  )
+    return false;
+  if (Object.hasOwn(value, 'coverage') && typeof value.coverage !== 'string') return false;
+  if (
+    Object.hasOwn(value, 'sectionTotals') &&
+    (!isRecord(value.sectionTotals) || !Object.values(value.sectionTotals).every(isArchiveSectionTotal))
+  )
+    return false;
+  return true;
+}
+function archiveExportPage(value: unknown): {
+  manifest: ArchiveTestManifest | null;
+  records: ArchiveTestRecord[];
+  next: string | null;
+} {
+  if (!isRecord(value)) throw new Error('Library export page has an invalid record shape');
+  const records = value.records;
+  if (!Array.isArray(records) || !records.every(isArchiveTestRecord))
+    throw new Error('Library export page has an invalid record shape');
+  const manifest = value.manifest;
+  if (manifest !== null && !isArchiveTestManifest(manifest))
+    throw new Error('Library export page has an invalid manifest shape');
+  const next = value.next;
+  if (next !== null && typeof next !== 'string')
+    throw new Error('Library export page has an invalid cursor');
+  return {
+    manifest,
+    records: records.filter(isArchiveTestRecord),
+    next,
+  };
+}
+function archiveSectionTotal(manifest: ArchiveTestManifest, section: string): ArchiveSectionTotal {
+  const total = manifest.sectionTotals?.[section];
+  if (!total) throw new Error(`Library export is missing ${section} totals`);
+  return total;
+}
 const additionalUnits = ['volume', 'page', 'minute', 'episode', 'percent', 'plot-key.v2', 'edition.v1'];
 let archivedUnits: { sessionId: string; memberId: string; detachedId: string };
 const statement = (property: string, content: string) => ({
@@ -169,7 +252,13 @@ beforeAll(async () => {
       statements: { 'schema:isPartOf': [statement('schema:isPartOf', subjectId)] },
     });
     if (response.status !== 201) throw new Error(`${response.status}: ${await response.text()}`);
-    return (await response.json()).subject as { id: string; statements: Record<string, { id: string }[]> };
+    const body: unknown = await response.json();
+    if (!isRecord(body) || !isRecord(body.subject) || typeof body.subject.id !== 'string')
+      throw new Error('Episode response is missing its subject');
+    return {
+      id: body.subject.id,
+      statements: isRecord(body.subject.statements) ? body.subject.statements : {},
+    };
   };
   const member = await createEpisode('Archive member'),
     detached = await createEpisode('Archive detached member');
@@ -205,24 +294,24 @@ beforeAll(async () => {
   currentDigest = await f.publish(await archiveRelease(['lent']));
   await f.activate(currentDigest); // Current profile drops the old progress vocabulary.
   const status = await json(await f.send(owner.bearer, 'POST', '/v1/libraryExports'));
-  const records: Record<string, any>[] = [];
+  const records: ArchiveTestRecord[] = [];
   let cursor = status.first,
-    manifest: Record<string, any> | null = null;
+    manifest: ArchiveTestManifest | null = null;
   for (let n = 0; cursor && n < 100; n++) {
-    const page = await json(
+    const page = archiveExportPage(await json(
       await f.send(
         owner.bearer,
         'GET',
         `/v1/libraryExports/${status.exportId}/pages?cursor=${encodeURIComponent(cursor)}`,
       ),
-    );
+    ));
     records.push(...page.records);
     cursor = page.next;
     manifest = page.manifest;
   }
   expect(cursor).toBeNull();
-  expect(manifest).not.toBeNull();
-  artifact = { manifest: manifest!, records };
+  if (!manifest) throw new Error('Completed library export is missing its final manifest');
+  artifact = { manifest, records };
 }, 120000);
 afterAll(async () => {
   await workClient?.close();
@@ -275,7 +364,7 @@ test('actual installed export retains independent holdings, all pins and exact d
 });
 
 test('installed final manifest, counts, envelopes and admission bounds are mandatory', () => {
-  const reject = (change: (a: typeof artifact) => void, recount = false) => {
+  const reject = (change: (a: ArchiveTestArtifact) => void, recount = false) => {
     const a = structuredClone(artifact);
     change(a);
     if (recount) {
@@ -287,9 +376,7 @@ test('installed final manifest, counts, envelopes and admission bounds are manda
   reject((a) => {
     a.manifest.version = 4;
   });
-  reject((a) => {
-    a.manifest = null as any;
-  });
+  expect(() => parseCopyArchive(bytes({ manifest: null, records: artifact.records }))).toThrow('invalid_request');
   reject((a) => {
     a.manifest.rows++;
   });
@@ -297,7 +384,7 @@ test('installed final manifest, counts, envelopes and admission bounds are manda
     a.manifest.recordBytes++;
   });
   reject((a) => {
-    a.manifest.sections = a.manifest.sections.filter((s: string) => s !== 'holdings');
+    a.manifest.sections = a.manifest.sections.filter((section) => section !== 'holdings');
   });
   reject((a) => {
     a.records[0]!.acquired_on = '2020-02';
@@ -343,8 +430,10 @@ function artifactVersion(version: number) {
       evidence: { private_note: 'unsupported provider evidence' },
     });
     if (version === 3)
-      for (const row of a.records.filter((r) => r.section === 'journals'))
+      for (const row of a.records.filter((record) => record.section === 'journals')) {
+        if (!isRecord(row.journal)) throw new Error('Missing journal payload in exported journal record');
         row.journal.assessment = { meaningRevision: 1, units: 17 };
+      }
     a.manifest.sectionTotals = Object.fromEntries(
       exportSectionsV2.map((section) => {
         const rows = a.records.filter((row) => row.section === section);
@@ -366,11 +455,11 @@ test('fixed V1 and current V2/V3 preserve exact accounting and unsupported facts
     expect(parsed.holdings).toHaveLength(12);
     expect(parsed.progress).toHaveLength(6);
     if (parsed.manifest === null) throw new Error('A complete archive parse is missing its manifest');
-    expect(parsed.manifest).toEqual(a.manifest);
+    expect(isDeepStrictEqual(parsed.manifest, a.manifest)).toBe(true);
     const firstHolding = parsed.holdings[0];
     const capturedHolding = a.records.find((row) => row.section === 'holdings');
     if (!firstHolding || !capturedHolding) throw new Error('The expected holding record is missing');
-    expect(firstHolding.evidence).toEqual(capturedHolding);
+    expect(isDeepStrictEqual(firstHolding.evidence, capturedHolding)).toBe(true);
     if (version === 1) expect(parsed.coverage.some((row) => row.section === 'annotations')).toBe(false);
     if (version !== 1) {
       expect(parsed.coverage.find((row) => row.section === 'journals')).toMatchObject({
@@ -381,33 +470,36 @@ test('fixed V1 and current V2/V3 preserve exact accounting and unsupported facts
         records: 0,
         support: 'unsupported',
       });
-      for (const mutate of [
-        (m: any) => {
-          m.sectionTotals.journals.recordBytes++;
+      const mutations: ((manifest: ArchiveTestManifest) => void)[] = [
+        (manifest) => {
+          archiveSectionTotal(manifest, 'journals').recordBytes++;
         },
-        (m: any) => {
-          delete m.sectionTotals.annotations;
+        (manifest) => {
+          if (!manifest.sectionTotals) throw new Error('Versioned manifest has no section totals');
+          delete manifest.sectionTotals.annotations;
         },
-        (m: any) => {
-          m.sectionTotals.journals.extra = 1;
+        (manifest) => {
+          archiveSectionTotal(manifest, 'journals').extra = 1;
         },
-        (m: any) => {
-          m.coverage = 'private-library-owner-facts-v4';
+        (manifest) => {
+          manifest.coverage = 'private-library-owner-facts-v4';
         },
-        (m: any) => {
-          m.sections.reverse();
+        (manifest) => {
+          manifest.sections.reverse();
         },
-      ]) {
+      ];
+      for (const mutate of mutations) {
         const malformed = structuredClone(a);
         mutate(malformed.manifest);
         expect(() => parseCopyArchive(bytes(malformed))).toThrow('invalid_request');
       }
-      const journal = a.records.find((row) => row.section === 'journals')!;
+      const journal = a.records.find((row) => row.section === 'journals');
+      if (!journal || !isRecord(journal.journal)) throw new Error('Missing exported journal record');
       const before = bytes(journal).length;
       journal.journal.extra = true;
       const delta = bytes(journal).length - before;
       a.manifest.recordBytes += delta;
-      a.manifest.sectionTotals.journals.recordBytes += delta;
+      archiveSectionTotal(a.manifest, 'journals').recordBytes += delta;
       expect(() => parseCopyArchive(bytes(a))).toThrow('invalid_request');
     }
   }

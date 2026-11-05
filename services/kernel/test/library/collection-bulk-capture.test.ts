@@ -30,7 +30,7 @@ const descriptor = (revision = 7) => ({
   membershipKind: 'dynamic' as const,
   visibility: 'private' as const,
   presentationKind: null,
-  presentationKindSource: 'empty' as const,
+  presentationKindSource: 'mixed' as const,
   cover: null,
   coverSource: 'none' as const,
 });
@@ -41,7 +41,7 @@ function readsFor(rows: string[], options: { revision?: () => number; preparing?
     async readCollection() {
       return descriptor(options.revision?.() ?? 7);
     },
-    async readMembers(_actor, _sourceId, query) {
+    async readMembers(_actor, _sourceId, query = {}) {
       if (options.preparing) return { preparing: true };
       const start = query.cursor == null ? 0 : Number(query.cursor);
       const page = rows.slice(start, start + (query.limit ?? 100));

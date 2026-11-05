@@ -9,7 +9,7 @@ import {
   type ImportConsumptionDateReview,
 } from '../../src/library/import-consumption.ts';
 
-const journal = {
+const journal: ImportConsumptionDateReview['journal'] = {
   sessionId: 'session',
   revision: 3,
   startDate: { year: 2020 },

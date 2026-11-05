@@ -134,8 +134,13 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
       new Date().toISOString(),
     );
     if (section === 'sessions') {
-      const sessionRows = page.records.filter((row) => row.section === 'sessions');
-      expect(sessionRows.map((row) => row.session_id)).toEqual([repeat.id]);
+      const sessionIds = page.records.flatMap((row) => {
+        if (row.section !== 'sessions') return [];
+        if (!('session_id' in row) || typeof row.session_id !== 'string')
+          throw new Error('The exported session row is missing its session ID');
+        return [row.session_id];
+      });
+      expect(sessionIds).toEqual([repeat.id]);
     } else {
       expect(page.records).toEqual([]);
     }

@@ -320,6 +320,11 @@ test('default finite Bangumi selection imports a direct Character image through 
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
   const mediaIds = new Map<string, string>();
+  const requireMediaId = (key: string): string => {
+    const mediaId = mediaIds.get(key);
+    if (mediaId === undefined) throw new Error(`Missing media receipt for ${key}`);
+    return mediaId;
+  };
   const requestBodies = new Map<string, string>();
   const requestKeys = new Map<string, string>();
   const characterAttempts: { body: string; key: string; mediaId: string }[] = [];
