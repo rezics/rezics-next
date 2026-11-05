@@ -82,7 +82,7 @@ export function PeopleSelectedItems({
   search?: EntityPickerSearch;
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
-  restoredAssertion?: string;
+  restoredAssertion?: string | undefined;
 }) {
   const active = useCurrentReadingActive();
   const visible = useCurrentReadingVisible();

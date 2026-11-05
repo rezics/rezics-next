@@ -23,7 +23,7 @@ export function PeopleBiographyDocuments({
   field: PeopleBiographyField;
   read: FactsCurrent;
   locale: string;
-  restoredAssertion?: string;
+  restoredAssertion?: string | undefined;
 }) {
   const o = { locale: locale as never };
   const subject = read.public.subject;

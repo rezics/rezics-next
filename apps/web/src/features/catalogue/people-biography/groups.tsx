@@ -61,7 +61,7 @@ function BiographyGroup({
   search?: EntityPickerSearch | undefined;
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
-  restoredAssertion?: string;
+  restoredAssertion?: string | undefined;
 }) {
   const o = { locale: locale as never };
   return (
@@ -101,7 +101,7 @@ function BiographyGroup({
           />
         ) : (
           <p key={field.id} id={peopleBiographyFieldAnchor(field.id)} tabIndex={-1} role="status">
-            {field.status === 'unsupported' ? m.people_biography_unsupported({}, o) : field.label.text}
+            {field.label.text}
           </p>
         ),
       )}
@@ -173,7 +173,7 @@ export function PeopleBiographyGroups({
     target?.focus();
     target?.scrollIntoView({ block: 'nearest' });
   }, [active, groups, visit, visible]);
-  const restore = (window: PeopleBiographyReturn['window']) =>
+  const restore = (window: PersonBiographyReturn['window']) =>
     (() => {
       if (!visit?.current || visit.locator.window !== window || !visit.locator.assertion) return undefined;
       const fact = groups
@@ -182,7 +182,7 @@ export function PeopleBiographyGroups({
         ?.facts.find((entry) => entry.id === visit.locator.assertion);
       return fact && spoilerLevel(fact.statement) <= defaultReader.spoilerLevel ? visit.locator.assertion : undefined;
     })();
-  const returnAddress = (window: PeopleBiographyReturn['window'], field: string, assertion?: string) =>
+  const returnAddress = (window: PersonBiographyReturn['window'], field: string, assertion?: string) =>
     peopleBiographyAddress(subject.id, title, locale, subject.context, window, field, assertion);
   const affiliationField = groups.find((group) => group.kind === 'affiliations')?.fields[0];
   const historyReturn = affiliationField
