@@ -11,6 +11,7 @@ import {
   type CollectionPrivacyFailure,
   type CollectionPrivacyRead,
 } from './collection-privacy-data';
+import { withManagedReadDeadline } from './managed-read-deadline';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 
 export type VisibilityAttempt = Readonly<{
@@ -27,6 +28,8 @@ type VisibilityReceipt = { id: string; revision: number; visibility: CollectionV
 type EditorState = {
   current: OwnedCollection | null;
   desired: CollectionVisibility;
+  /** Only a later deliberate choice; a consumed original never becomes the next draft. */
+  intent: CollectionVisibility | undefined;
   attempt: VisibilityAttempt | null;
   receipt: VisibilityReceipt | null;
   outcomeUnknown: boolean;
@@ -89,6 +92,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       {
         current,
         desired: current.visibility,
+        intent: undefined,
         attempt: null,
         receipt: null,
         outcomeUnknown: false,
@@ -118,6 +122,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     this.state = {
       current: null,
       desired: 'private',
+      intent: undefined,
       attempt: null,
       receipt: null,
       outcomeUnknown: false,
@@ -133,6 +138,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     const current = this.state.current;
     return (
       this.state.attempt !== null ||
+      this.state.intent !== undefined ||
       (this.state.phase !== 'abandoned' && current !== null && this.state.desired !== current.visibility) ||
       this.state.phase === 'saving' ||
       this.state.phase === 'reloading'
@@ -155,6 +161,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     this.update({
       current,
       desired: current.visibility,
+      intent: undefined,
       phase: this.state.phase === 'abandoned' ? 'abandoned' : 'idle',
     });
   }
@@ -169,7 +176,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       return;
     if (this.state.readRefusal) return;
     this.edits++;
-    this.update({ desired });
+    this.update({ desired, intent: desired === current.visibility ? undefined : desired });
     if (this.state.phase === 'idle' || this.state.phase === 'saved') await this.submit();
   }
   async submit() {
@@ -209,21 +216,48 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     this.update({
       attempt: null,
       receipt: null,
+      intent: undefined,
       desired: this.state.current?.visibility ?? this.state.desired,
       phase: 'abandoned',
       failure: undefined,
       nativeFailure: undefined,
     });
   }
+  useCurrent() {
+    const current = this.state.current;
+    if (
+      !this.live() ||
+      !current ||
+      this.state.attempt ||
+      this.state.phase === 'abandoned' ||
+      this.state.phase === 'saving' ||
+      this.state.phase === 'reloading'
+    )
+      return;
+    this.update({
+      desired: current.visibility,
+      intent: undefined,
+      phase: this.state.phase === 'saved' ? 'saved' : 'idle',
+      failure: undefined,
+      nativeFailure: undefined,
+    });
+  }
+  private laterIntent(original: CollectionVisibility) {
+    return this.state.intent !== undefined && this.state.intent !== original
+      ? this.state.intent
+      : this.state.desired !== original
+        ? this.state.desired
+        : undefined;
+  }
   private async send(recovering: boolean) {
     if (!this.live() || !this.canWrite() || this.commandWaiting() || (recovering && !this.hasCurrentUpdateAdvice()))
       return;
     const attempt = this.state.attempt;
     if (!attempt) return;
-    const generation = this.generation;
+    const generation = ++this.generation;
     this.update({ phase: 'saving', failure: undefined, nativeFailure: undefined });
     try {
-      const answer = await this.io.save(attempt);
+      const answer = await withManagedReadDeadline(() => this.io.save(attempt));
       if (!this.live() || !this.canWrite() || generation !== this.generation) return;
       if (!answer.ok) {
         this.retainCommandWait(answer.failure);
@@ -262,12 +296,15 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       }
       if (!recovering) {
         this.commandRetryAt = 0;
+        const later = this.laterIntent(receipt.visibility);
         this.update({
           current: receipt,
+          desired: later ?? receipt.visibility,
+          intent: later,
           attempt: null,
           receipt: null,
           outcomeUnknown: false,
-          phase: this.state.desired === receipt.visibility ? 'saved' : 'review',
+          phase: later ? 'review' : 'saved',
         });
         return;
       }
@@ -282,7 +319,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         nativeFailure: undefined,
       });
       if (readWaiting) return;
-      const read = await this.io.read(attempt.collectionId);
+      const read = await withManagedReadDeadline(() => this.io.read(attempt.collectionId));
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
         this.retainCurrentReadWait(read.failure);
@@ -308,12 +345,15 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         this.update({ phase: 'readback', failure: 'unavailable' });
         return;
       }
+      const later = this.laterIntent(attempt.visibility);
       this.update({
         current,
+        desired: later ?? current.visibility,
+        intent: later,
         attempt: null,
         receipt: null,
         outcomeUnknown: false,
-        phase: this.state.desired === current.visibility ? 'saved' : 'review',
+        phase: later ? 'review' : 'saved',
         readRefusal: null,
       });
     } catch (error) {
@@ -342,20 +382,19 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       this.state.phase === 'abandoned'
     )
       return;
-    const generation = this.generation;
-    const edits = this.edits;
+    const generation = ++this.generation;
     const previous = this.state.phase;
     const receipt = this.state.receipt;
     this.update({ phase: 'reloading', nativeFailure: undefined });
     try {
-      const read = await this.io.read(collectionId);
+      const read = await withManagedReadDeadline(() => this.io.read(collectionId));
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
         this.retainCurrentReadWait(read.failure);
         const readRefusal = isCollectionPrivacyReadRefusal(read.reason) ? read.reason : null;
         const refused = readRefusal !== null;
         this.update({
-          ...(refused ? { current: null, ...(attempt ? {} : { desired: 'private' as const }) } : {}),
+          ...(refused ? { current: null } : {}),
           phase: refused ? (attempt ? (receipt ? 'readback' : 'uncertain') : 'refused') : previous,
           failure: read.reason,
           nativeFailure: read.failure,
@@ -390,15 +429,17 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         });
         return;
       }
-      const desired = attempt ? this.state.desired : edits === this.edits ? read.value.visibility : this.state.desired;
+      const later = attempt && receipt ? this.laterIntent(attempt.visibility) : this.state.intent;
+      const desired = later ?? read.value.visibility;
       this.update({
         current: read.value,
         desired,
+        intent: later,
         attempt: null,
         receipt: null,
         outcomeUnknown: false,
         readRefusal: null,
-        phase: desired === read.value.visibility ? 'idle' : 'review',
+        phase: desired === read.value.visibility ? (attempt ? 'saved' : 'idle') : 'review',
         failure: undefined,
         nativeFailure: undefined,
       });
@@ -495,7 +536,7 @@ export class CollectionPrivacyPager extends Observable<PageState> {
   private async requestPage(request: { cursor: string | null; replace: boolean }) {
     if (!this.live() || this.waitingFor()) return;
     if (this.state.loading || this.hasUnresolvedRows()) return;
-    const generation = this.generation;
+    const generation = ++this.generation;
     this.update({
       loading: true,
       failure: null,
@@ -503,7 +544,7 @@ export class CollectionPrivacyPager extends Observable<PageState> {
       ...(request.replace ? { restarting: true } : {}),
     });
     try {
-      const read = await this.read(request.cursor);
+      const read = await withManagedReadDeadline(() => this.read(request.cursor));
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
         this.retainRetryWait(read.failure);

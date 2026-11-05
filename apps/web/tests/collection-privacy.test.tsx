@@ -137,6 +137,50 @@ test('a retired viewer cannot restore its old credential after A to B to A', () 
   client.clear();
 });
 
+test('review keeps a retained unsupported visibility labelled and offers Use current', async () => {
+  const current = {
+    ...privateCurated,
+    visibility: 'public' as const,
+    allowedVisibilityActions: ['private'] as const,
+  };
+  await mounted(
+    createElement(CollectionRow, {
+      collection: privateCurated,
+      io: {
+        save: async () => ({ ok: false as const, reason: 'conflict' as const }),
+        read: async () => ({ ok: true as const, value: current }),
+      },
+    }),
+    async (host) => {
+      await act(async () => {
+        const select = host.querySelector('select')!;
+        select.value = 'unlisted';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      await act(async () => {
+        [...host.querySelectorAll('button')]
+          .find((button) => button.textContent?.trim() === m.settings_privacy_reload_row())!
+          .click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      const select = host.querySelector('select');
+      expect(select?.value).toBe('unlisted');
+      expect([...select!.querySelectorAll('option')].some((option) => option.value === 'unlisted')).toBe(true);
+      expect(
+        [...host.querySelectorAll('button')].find(
+          (button) => button.textContent?.trim() === m.settings_privacy_save_choice(),
+        )?.disabled,
+      ).toBe(true);
+      expect(
+        [...host.querySelectorAll('button')].some(
+          (button) => button.textContent?.trim() === m.settings_privacy_use_current(),
+        ),
+      ).toBe(true);
+    },
+  );
+});
+
 test('both rendered list recovery controls honor a failed continuation wait', async () => {
   const reads: (string | null)[] = [];
   await mounted(

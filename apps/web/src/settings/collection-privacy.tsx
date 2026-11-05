@@ -376,6 +376,17 @@ function CollectionRowView({
                       {m.settings_privacy_save_choice()}
                     </Button>
                   ) : null}
+                  {!state.attempt && desired !== current.visibility ? (
+                    <Button
+                      className={preferenceActionClassName}
+                      type="button"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => editor.useCurrent()}
+                    >
+                      {m.settings_privacy_use_current()}
+                    </Button>
+                  ) : null}
                   {abandonAction}
                   <Button
                     className={preferenceActionClassName}
