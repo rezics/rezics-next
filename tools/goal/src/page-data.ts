@@ -807,8 +807,10 @@ async function runDedicatedPageDataStack(
   let child: ChildProcess | undefined;
   try {
     await runCommand(bun, ['run', '--cwd', 'services/kernel', 'db', 'up'], worktree, env, policy.commandTimeoutMs, policy.outputBytes, 'boot', [0], policy.stopTimeoutMs);
+    env = stackEnvironment(worktree, config, names, settings.mainCheckout);
     await runCommand(bun, ['run', '--cwd', 'services/kernel', 'search', 'up'], worktree, env, policy.commandTimeoutMs, policy.outputBytes, 'boot', [0], policy.stopTimeoutMs);
     await runCommand(bun, ['services/auth/scripts/dev-stack.ts', 'setup'], worktree, env, policy.commandTimeoutMs, policy.outputBytes, 'boot', [0], policy.stopTimeoutMs);
+    env = stackEnvironment(worktree, config, names, settings.mainCheckout);
 
     try {
       child = spawn(bun, ['services/auth/scripts/dev-stack.ts', 'start'], {
