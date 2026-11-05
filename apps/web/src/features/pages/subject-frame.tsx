@@ -319,13 +319,7 @@ export function SubjectFrame({
         </div>
         {!realm && (
           <div data-slot="actions">
-            <EditorialEntry
-              id={frame.id}
-              label={title}
-              locale={locale}
-              context={observedContext}
-              realm={realm}
-            >
+            <EditorialEntry id={frame.id} label={title} locale={locale} context={observedContext} realm={realm}>
               {frame.type === 'wd:Q209163' ? (
                 <AddonProfileEntry id={frame.id} label={title} locale={locale} />
               ) : (
@@ -392,26 +386,14 @@ export function SubjectFrame({
               />
               <CatalogueFileProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
               {view === 'contents' && (
-                <WorkPartsEntry
-                  id={frame.id}
-                  label={title}
-                  locale={locale}
-                  context={observedContext}
-                  realm={realm}
-                />
+                <WorkPartsEntry id={frame.id} label={title} locale={locale} context={observedContext} realm={realm} />
               )}
               <SubjectChangesLink id={frame.id} title={title} locale={locale} />
             </EditorialEntry>
           </div>
         )}
         {realm && view === 'contents' && (
-          <WorkPartsEntry
-            id={frame.id}
-            label={title}
-            locale={locale}
-            context={observedContext}
-            realm={realm}
-          />
+          <WorkPartsEntry id={frame.id} label={title} locale={locale} context={observedContext} realm={realm} />
         )}
       </header>
       <OrganizationHistorySlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />

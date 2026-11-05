@@ -32,7 +32,8 @@ function releaseOrigin(
   const keys = [...url.searchParams.keys()];
   if (
     (context === undefined && keys.length !== 0) ||
-    (context !== undefined && (keys.length !== 1 || keys[0] !== 'context' || url.searchParams.get('context') !== context))
+    (context !== undefined &&
+      (keys.length !== 1 || keys[0] !== 'context' || url.searchParams.get('context') !== context))
   )
     return;
   return accepted;
@@ -248,9 +249,7 @@ export const catalogueEntries = {
     context?: string | undefined;
     returnHref?: string | undefined;
     release?: Pick<Release, 'types' | 'properties'> | undefined;
-  }):
-    | CatalogueEntry
-    | undefined => {
+  }): CatalogueEntry | undefined => {
     if (
       !id ||
       (release

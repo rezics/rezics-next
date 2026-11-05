@@ -24,7 +24,13 @@ const id = '00000000-0000-4000-8000-000000000101';
 const label = 'A published edition';
 const selectedContext = '00000000-0000-4000-8000-000000000202';
 const base = subjectHref({ id, label }, 'en').href;
-const frame = { ...subjectFrame(recording as unknown as SubjectPageData, 'en')!, id, type: 'bf:Instance', context: selectedContext, title: { text: label, lang: 'en' } };
+const frame = {
+  ...subjectFrame(recording as unknown as SubjectPageData, 'en')!,
+  id,
+  type: 'bf:Instance',
+  context: selectedContext,
+  title: { text: label, lang: 'en' },
+};
 const validator = Route.options.validateSearch as (input: Record<string, unknown>) => Record<string, unknown>;
 
 async function mountedFrame(context = selectedContext, realm?: string) {
@@ -86,18 +92,26 @@ test('SubjectFrame, editorial collection and the installed release route retain 
   const mounted = (await mountedFrame()).replaceAll('&amp;', '&');
   expect(mounted).toContain('data-slot="subject-contribute"');
   expect(mounted).toContain(collected.href);
-  expect((await mountedFrame(selectedContext, '00000000-0000-4000-8000-000000000303')).includes('subject-contribute')).toBe(
-    false,
-  );
+  expect(
+    (await mountedFrame(selectedContext, '00000000-0000-4000-8000-000000000303')).includes('subject-contribute'),
+  ).toBe(false);
 });
 
 test('Global, legacy, malformed and unavailable-origin entries keep their route meaning and eligibility', () => {
-  const global = catalogueEntries.releaseFidelity({ id, type: 'bf:Instance', label, locale: 'en', context: candidateContext })!;
+  const global = catalogueEntries.releaseFidelity({
+    id,
+    type: 'bf:Instance',
+    label,
+    locale: 'en',
+    context: candidateContext,
+  })!;
   const legacy = catalogueEntries.releaseFidelity({ id, type: 'bf:Instance', label, locale: 'en' })!;
   expect(new URL(global.href, 'https://rezics.invalid').searchParams.get('context')).toBe(candidateContext);
   expect(new URL(legacy.href, 'https://rezics.invalid').searchParams.has('context')).toBe(false);
   expect(validator({}).context).toBe(candidateContext);
-  expect(() => catalogueEntries.releaseFidelity({ id, type: 'bf:Instance', label, locale: 'en', context: 'bad' })).toThrow();
+  expect(() =>
+    catalogueEntries.releaseFidelity({ id, type: 'bf:Instance', label, locale: 'en', context: 'bad' }),
+  ).toThrow();
   expect(() => validator({ context: 'bad' })).toThrow();
   expect(catalogueEntries.releaseFidelity({ id, type: 'schema:Book', label, locale: 'en' })).toBeUndefined();
   const unavailable = catalogueEntries.releaseFidelity({
