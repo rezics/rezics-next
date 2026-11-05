@@ -1119,7 +1119,7 @@ Closed `{ error, effect_status: "not_applied" }` pairs: `account_operation_denie
 Errors fit 69 bytes. Bytes are admitted before fatal UTF-8/JSON despite Content-Length.
 Malformed output cannot acknowledge; refusal/session equality cannot settle prior unknown.
 
-Each POST retains five seconds through body, even for abort-ignoring I/O. Retirement sends no later command;
+Each POST keeps five seconds through body, even for abort-ignoring I/O. Retirement sends no later command;
 abort cannot undo effects. Native freshness, scope, gate, approval, preparation, uniqueness and CAS/replay stay
 authoritative. Organization retries supported unavailable approval once; execution never automatically retries or
 renews approval. Entry/session/approval/execution/final-session costs five calls, six with approval retry; deliberate
