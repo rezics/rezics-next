@@ -17,14 +17,19 @@ afterAll(() => {
 });
 
 function streamed(bytes: Uint8Array, split?: number, headers?: HeadersInit, uncooperative = false) {
-  return new Response(new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(bytes.slice(0, split ?? bytes.length));
-      if (split !== undefined) controller.enqueue(bytes.slice(split));
-      if (!uncooperative) controller.close();
-    },
-    cancel() { if (uncooperative) return new Promise<void>(() => {}); },
-  }), { headers });
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, split ?? bytes.length));
+        if (split !== undefined) controller.enqueue(bytes.slice(split));
+        if (!uncooperative) controller.close();
+      },
+      cancel() {
+        if (uncooperative) return new Promise<void>(() => {});
+      },
+    }),
+    { headers },
+  );
 }
 
 function read(response: Response) {
@@ -38,7 +43,10 @@ function read(response: Response) {
     expect(path).toBe('/account-management/deletion-page');
     expect(init).toMatchObject({
       method: 'POST',
-      body: '{}', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+      body: '{}',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      redirect: 'error',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     });
     expect(init?.signal).toBeInstanceOf(AbortSignal);
@@ -77,7 +85,14 @@ test('one closed same-origin page read rejects authority and unrecognized advice
     { kind: 'available' },
     { kind: 'review', accountId: 'self', action: 'available' },
     { kind: 'authentication-required', accountId: 'self', token: 'secret' },
-    { kind: 'review', accountId: 'self', email: null, action: 'available', policy: 'personal-deletion', targetAccountId: 'other' },
+    {
+      kind: 'review',
+      accountId: 'self',
+      email: null,
+      action: 'available',
+      policy: 'personal-deletion',
+      targetAccountId: 'other',
+    },
   ])
     expect(await readBody(body)).toEqual({ kind: 'unavailable' });
 });
