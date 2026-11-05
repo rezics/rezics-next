@@ -929,10 +929,9 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 
 ### Delivery flow telemetry
 
-`report --flow [--since <time>] [--json]` reads durable, timestamped per-task and per-attempt flow events. It reports
-stage totals and p50/p90 durations, Goal totals and percentiles, working-time efficiency from dispatch through
-integration, attempts per integrated task, and the length and oldest age of the start, check, landing, verification
-and promotion queues. Its guard ledger prices registered attempt endings and landing refusals over seven days by
+`report --flow [--since <time>] [--json]` reads durable flow events. Decision: after one stable sort, `flowReport`
+builds one in-memory next-boundary and integration index; no per-request history rescan or second event store. It
+reports stage/Goal totals, efficiency, attempts per integrated task, and queue length and age. Its guard ledger prices registered attempt endings and landing refusals over seven days by
 firings, attempt-hours, next-attempt hours, tokens, rewritten share and landed share; repeated guards with at least 20
 firings and under 10% rewritten are marked `repairable in place`. The hourly report groups guard endings by GuardId.
 It also counts launched worker and manager prompts over budget by layer. Missing lifecycle
