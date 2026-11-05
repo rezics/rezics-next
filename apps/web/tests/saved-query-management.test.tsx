@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
-import { act, createContext, useContext, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { act, createContext, useContext, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { CollectionWriteResult } from '../src/library/collection-edit';
 import type { ManagedSavedQuery } from '../src/library/saved-query-management/controller';
@@ -37,33 +37,21 @@ mock.module('../src/library/collection-current-admission', () => ({
   }),
 }));
 mock.module('../src/library/saved-query-publication', () => ({ SavedQueryPublicationAction: () => null }));
-const dialogOpenChange = createContext<(open: boolean, details: { cancel: () => void }) => void>(() => {});
-type DialogRootProps = {
-  open: boolean;
-  onOpenChange: (open: boolean, details: { cancel: () => void }) => void;
-  children: ReactNode;
-};
-type DialogButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode };
+type DialogRoot = { open: boolean; onOpenChange: (open: boolean) => void; children: ReactNode };
+type DialogButton = { children: ReactNode; disabled?: boolean; onClick?: () => void };
+const dialogOpenChange = createContext<(open: boolean) => void>(() => {});
 const dialogPart = ({ children }: { children: ReactNode }) => <div>{children}</div>;
 mock.module('@rezics/ui/shadcn/alert-dialog', () => ({
-  AlertDialog: ({ open, onOpenChange, children }: DialogRootProps) =>
+  AlertDialog: ({ open, onOpenChange, children }: DialogRoot) =>
     open ? <dialogOpenChange.Provider value={onOpenChange}>{children}</dialogOpenChange.Provider> : null,
-  AlertDialogAction: ({ children, ...props }: DialogButtonProps) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
+  AlertDialogAction: ({ children, onClick, disabled }: DialogButton) => (
+    <button type="button" disabled={disabled} onClick={onClick}>{children}</button>
   ),
-  AlertDialogCancel: ({ children, ...props }: DialogButtonProps) => {
+  AlertDialogCancel: ({ children, disabled }: DialogButton) => {
     const onOpenChange = useContext(dialogOpenChange);
-    return (
-      <button type="button" {...props} onClick={() => onOpenChange(false, { cancel: () => {} })}>
-        {children}
-      </button>
-    );
+    return <button type="button" disabled={disabled} onClick={() => onOpenChange(false)}>{children}</button>;
   },
-  AlertDialogContent: ({ children }: { children: ReactNode }) => (
-    <div data-slot="alert-dialog-content">{children}</div>
-  ),
+  AlertDialogContent: ({ children }: { children: ReactNode }) => <div data-slot="alert-dialog-content">{children}</div>,
   AlertDialogDescription: dialogPart,
   AlertDialogFooter: dialogPart,
   AlertDialogHeader: dialogPart,
@@ -108,33 +96,21 @@ async function installBrowser() {
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const browser = new Window({ url: 'https://site.test/en/collections/saved-query-1' });
-  const keys = [
-    'window',
-    'document',
-    'navigator',
-    'HTMLElement',
-    'HTMLButtonElement',
-    'HTMLInputElement',
-    'HTMLTextAreaElement',
-    'Node',
-    'IS_REACT_ACT_ENVIRONMENT',
-  ];
   const globals = new Map<string, PropertyDescriptor | undefined>();
-  const values = [
-    browser,
-    browser.document,
-    browser.navigator,
-    browser.HTMLElement,
-    browser.HTMLButtonElement,
-    browser.HTMLInputElement,
-    browser.HTMLTextAreaElement,
-    browser.Node,
-    true,
-  ];
-  keys.forEach((key, index) => {
+  for (const [key, value] of Object.entries({
+    window: browser,
+    document: browser.document,
+    navigator: browser.navigator,
+    HTMLElement: browser.HTMLElement,
+    HTMLButtonElement: browser.HTMLButtonElement,
+    HTMLInputElement: browser.HTMLInputElement,
+    HTMLTextAreaElement: browser.HTMLTextAreaElement,
+    Node: browser.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  })) {
     globals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: values[index] });
-  });
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  }
   return {
     browser,
     restore() {
@@ -191,7 +167,7 @@ function makeController({
   });
 }
 
-test('owner metadata edits use the current revision and unknown retry keeps the exact sender, credential, key, and operands', async () => {
+test('metadata recovery admits once, retries the exact command, and retires detached callbacks', async () => {
   const requests: unknown[] = [];
   let attempt = 0;
   let observed: ManagedSavedQuery | undefined;
@@ -209,9 +185,13 @@ test('owner metadata edits use the current revision and unknown retry keeps the 
       }),
   });
   await controller.open();
+  const detachedSetTitle = controller.setTitle;
   controller.setTitle('New title');
   controller.setDescription('New description');
-  await controller.save();
+  const firstSave = controller.save();
+  const duplicateSave = controller.save();
+  expect(controller.getSnapshot().busy).toBe(true);
+  await Promise.all([firstSave, duplicateSave]);
 
   const first = controller.getSnapshot().intent;
   expect(first?.operation).toBe('collection.update');
@@ -235,6 +215,12 @@ test('owner metadata edits use the current revision and unknown retry keeps the 
   expect(controller.getSnapshot().snapshot?.revision).toBe(8);
   expect(controller.getSnapshot().snapshot?.title).toBe('New title');
   expect(observed?.description).toBe('New description');
+  controller.retire();
+  const nextVisit = makeController();
+  await nextVisit.open();
+  detachedSetTitle('Must stay with retired visit');
+  expect(controller.getSnapshot().phase).toBe('closed');
+  expect(nextVisit.getSnapshot().title).toBe('Current title');
 });
 
 test('delete requires review and retries the same revisioned request before returning success', async () => {
@@ -405,45 +391,3 @@ test('mounted manager callbacks keep their originating controller state and port
   }
 });
 
-test('recovery admits one command, retries its exact request, and keeps detached callbacks retired', async () => {
-  let resolveFirst!: (result: CollectionWriteResult) => void;
-  const firstResult = new Promise<CollectionWriteResult>((resolve) => {
-    resolveFirst = resolve;
-  });
-  const requests: unknown[] = [];
-  let attempts = 0;
-  const controller = makeController({
-    update: (data, csrf) =>
-      captureCollectionCommand(data, csrf, async (request) => {
-        requests.push(request);
-        attempts++;
-        return attempts === 1
-          ? firstResult
-          : ({ ok: true, id: 'saved-query-1', revision: 8 } satisfies CollectionWriteResult);
-      }),
-  });
-  await controller.open();
-  const detachedSetTitle = controller.setTitle;
-  controller.setTitle('Draft title');
-
-  const pending = controller.save();
-  await controller.save();
-  expect(controller.getSnapshot().busy).toBe(true);
-  expect(requests).toHaveLength(1);
-  const original = controller.getSnapshot().intent;
-  if (original?.operation !== 'collection.update') throw new Error('Expected a retained metadata command');
-
-  resolveFirst({ ok: false, reason: 'unavailable' });
-  await pending;
-  expect(controller.getSnapshot().outcome).toBe('unknown');
-  await controller.retryOriginal();
-  expect(requests).toHaveLength(2);
-  expect(requests[1]).toBe(original.command.request);
-
-  controller.retire();
-  const nextVisit = makeController();
-  await nextVisit.open();
-  detachedSetTitle('Must stay with retired visit');
-  expect(controller.getSnapshot().phase).toBe('closed');
-  expect(nextVisit.getSnapshot().title).toBe('Current title');
-});
