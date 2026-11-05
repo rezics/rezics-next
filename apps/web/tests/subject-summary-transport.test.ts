@@ -30,7 +30,11 @@ mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => request,
   setResponseHeader: (name: string, value: string) => headers.set(name, value),
 }));
-mock.module('../src/kernel/client', () => ({ kernelClient }));
+mock.module('../src/kernel/client', () => ({
+  configuredKernelOrigin: () => undefined,
+  kernelClient,
+  requestLocale: () => 'en',
+}));
 mock.module('../src/session/request', () => ({
   prepareSession,
   sessionSubject: () => null,
