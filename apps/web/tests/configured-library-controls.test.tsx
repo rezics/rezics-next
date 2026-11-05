@@ -43,13 +43,17 @@ mock.module('../src/library/library-workspace-admission', () => ({
   useLibraryWorkspaceAdmission: () => ({ store: { allowed: () => true } }),
 }));
 
+const startCalls: unknown[] = [];
 const recordCalls: unknown[] = [];
 let startResult: { ok: true; id: string } | { ok: false; reason: string } = { ok: false, reason: 'unavailable' };
 let recordResult:
   | { ok: true; session: { id: string; revision: number; amount: string } }
   | { ok: false; reason: string } = { ok: false, reason: 'conflict' };
 mock.module('../src/library/progress-server', () => ({
-  startProgressSession: async () => startResult,
+  startProgressSession: async (input: { data: unknown }) => {
+    startCalls.push(input);
+    return startResult;
+  },
   recordProgressSession: async (input: { data: unknown; headers: unknown }) => {
     recordCalls.push(input);
     return recordResult;
@@ -488,6 +492,7 @@ test('conflict keeps the draft and the next save uses a new key', async () => {
       unitLabel: 'Chapters',
     },
   };
+  startCalls.length = 0;
   recordCalls.length = 0;
   recordResult = { ok: false, reason: 'conflict' };
   const host = window.document.createElement('div');
@@ -570,6 +575,93 @@ test('conflict keeps the draft and the next save uses a new key', async () => {
     measureId: 'chapter',
     amount: '3',
   });
+  startResult = { ok: false, reason: 'unavailable' };
+  await act(async () => {
+    root.unmount();
+  });
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
+  for (const [key, descriptor] of previous)
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+});
+
+test('retrying Start tracking keeps the start key and then records the drafted amount', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/library' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    Element: window.Element,
+    Node: window.Node,
+    MutationObserver: window.MutationObserver,
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  startCalls.length = 0;
+  recordCalls.length = 0;
+  startResult = { ok: false, reason: 'unavailable' };
+  recordResult = { ok: true, session: { id: id(12), revision: 1, amount: '18' } };
+  const host = window.document.createElement('div');
+  window.document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      createElement(ConfiguredProgressPanel, {
+        subjectId: SERIES,
+        type: MANGA_SERIES_TYPE,
+        locale: 'en',
+        release,
+        progress: {
+          meaning: 'absent',
+          measure: {
+            mode: 'scalar_amount',
+            unit: { id: 'chapter', minimum: '0', precision: 0, totalPolicy: 'optional' },
+          },
+          rules: { min: '0', step: '1', total: 'optional' },
+        },
+        credential: 'csrf',
+        current: () => true,
+        onAcknowledged() {},
+      }),
+    );
+  });
+  const input = host.querySelector('input')!;
+  const propsKey = Object.keys(input).find((key) => key.startsWith('__reactProps$'))!;
+  await act(async () => Reflect.get(input, propsKey).onChange({ currentTarget: { value: '18' } }));
+  await act(async () => {
+    [...host.querySelectorAll('button')]
+      .find((button) => button.textContent === m.library_configured_start_progress())!
+      .click();
+  });
+  expect(host.textContent).toContain(m.library_progress_unavailable());
+  expect(startCalls).toHaveLength(1);
+  expect(recordCalls).toHaveLength(0);
+  const startKey = (startCalls[0] as { data: { idempotencyKey: string } }).data.idempotencyKey;
+  startResult = { ok: true, id: id(12) };
+  await act(async () => {
+    [...host.querySelectorAll('button')]
+      .find((button) => button.textContent === m.library_configured_retry())!
+      .click();
+  });
+  expect(startCalls).toHaveLength(2);
+  expect((startCalls[1] as { data: { idempotencyKey: string } }).data.idempotencyKey).toBe(startKey);
+  expect((recordCalls[0] as { data: unknown }).data).toMatchObject({
+    sessionId: id(12),
+    revision: 1,
+    measureId: 'chapter',
+    amount: '18',
+  });
+  expect(host.textContent).toContain(m.library_configured_saved());
   startResult = { ok: false, reason: 'unavailable' };
   await act(async () => {
     root.unmount();

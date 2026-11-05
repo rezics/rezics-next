@@ -107,20 +107,37 @@ export function ConfiguredProgressPanel({
     `${subjectId}:${progress.meaning}:${'session' in progress ? progress.session.id : ''}:${draft}`,
   );
 
+  function settle(result: GuardedOutcome) {
+    setOutcome(result);
+    if (result.state === 'acknowledged' || result.state === 'conflict') {
+      startIntent.current = null;
+      recordIntent.current = null;
+      onAcknowledged();
+    }
+  }
+
+  async function recordAmount(sessionId: string, revision: number, measureId: string) {
+    const record =
+      recordIntent.current ??
+      createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
+        sessionId,
+        revision,
+        measureId,
+        amount: draft.trim(),
+        idempotencyKey: crypto.randomUUID(),
+      });
+    recordIntent.current = record;
+    const recorded = await dispatchGuardedCommand(record, current);
+    if (!recorded || !current()) return;
+    settle(progressWriteOutcome(recorded));
+  }
+
   async function save() {
     if (!current() || progress.meaning === 'unsupported' || pending) return;
     setSubmitted(true);
     if (issue) return;
     setPending(true);
     setOutcome(null);
-    const settle = (result: GuardedOutcome) => {
-      setOutcome(result);
-      if (result.state === 'acknowledged' || result.state === 'conflict') {
-        startIntent.current = null;
-        recordIntent.current = null;
-        onAcknowledged();
-      }
-    };
     try {
       if (progress.meaning === 'absent' && !('session' in progress)) {
         const start =
@@ -139,35 +156,11 @@ export function ConfiguredProgressPanel({
           settle(startOutcome);
           return;
         }
-        const record =
-          recordIntent.current ??
-          createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
-            sessionId: started.id,
-            revision: 1,
-            measureId: progress.measure.unit.id,
-            amount: draft.trim(),
-            idempotencyKey: crypto.randomUUID(),
-          });
-        recordIntent.current = record;
-        const recorded = await dispatchGuardedCommand(record, current);
-        if (!recorded || !current()) return;
-        settle(progressWriteOutcome(recorded));
+        await recordAmount(started.id, 1, progress.measure.unit.id);
         return;
       }
       if (!('session' in progress)) return;
-      const record =
-        recordIntent.current ??
-        createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
-          sessionId: progress.session.id,
-          revision: progress.session.revision,
-          measureId: progress.session.unit,
-          amount: draft.trim(),
-          idempotencyKey: crypto.randomUUID(),
-        });
-      recordIntent.current = record;
-      const recorded = await dispatchGuardedCommand(record, current);
-      if (!recorded || !current()) return;
-      settle(progressWriteOutcome(recorded));
+      await recordAmount(progress.session.id, progress.session.revision, progress.session.unit);
     } finally {
       if (current()) setPending(false);
     }
@@ -203,22 +196,24 @@ export function ConfiguredProgressPanel({
   }
 
   async function retry() {
-    if (!current()) return;
+    if (!current() || progress.meaning === 'unsupported') return;
     setPending(true);
     try {
-      const result = recordIntent.current
-        ? await dispatchGuardedCommand(recordIntent.current, current)
-        : startIntent.current
-          ? await dispatchGuardedCommand(startIntent.current, current)
-          : undefined;
-      if (!result || !current()) return;
-      const next = progressWriteOutcome(result);
-      setOutcome(next);
-      if (next.state === 'acknowledged') {
-        recordIntent.current = null;
-        startIntent.current = null;
-        onAcknowledged();
+      if (recordIntent.current) {
+        const recorded = await dispatchGuardedCommand(recordIntent.current, current);
+        if (!recorded || !current()) return;
+        settle(progressWriteOutcome(recorded));
+        return;
       }
+      if (!startIntent.current) return;
+      const started = await dispatchGuardedCommand(startIntent.current, current);
+      if (!started || !current()) return;
+      const startOutcome = progressWriteOutcome(started);
+      if (startOutcome.state !== 'acknowledged' || !started.ok) {
+        settle(startOutcome);
+        return;
+      }
+      await recordAmount(started.id, 1, progress.measure.unit.id);
     } finally {
       if (current()) setPending(false);
     }
