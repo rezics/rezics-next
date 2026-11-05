@@ -53,6 +53,7 @@ import {
 import { promote } from './promotion.ts';
 import { preparePromotionGate } from './promotion-placement.ts';
 import { bootSmokeRepairBrief, verifyDev, type BootSmokeRepair } from './dev-verifier.ts';
+import { runPageDataCycle, type PageDataRepair } from './page-data.ts';
 import { gateRunner, processGroupRunner, type GateRunner } from './merge.ts';
 import { bootSmokeEnvironment } from './verification.ts';
 import { randomUUID } from 'node:crypto';
@@ -160,6 +161,66 @@ function dispatchBootSmokeRepair(
     kind: 'instruction',
     summary: `Urgent boot-smoke repair for ${repair.test} at ${repair.commit}.`,
   });
+}
+
+function pageDataRepairBrief(repair: PageDataRepair, goal: string, manager: string): string {
+  return `---\n${JSON.stringify(
+    {
+      goal,
+      manager,
+      kind: 'implementation',
+      paths: repair.section.files,
+      riskAreas: [],
+      urgent: true,
+      acceptance: { failing: true },
+      estimate: { lines: 700, files: 12 },
+      criticalPath: false,
+      waiting: [],
+      after: [],
+    },
+    null,
+    2,
+  )}\n---\n\n# Repair a seeded page-data defect\n\npage-data-repair-key: ${repair.repairKey}\n\nRepair section \`${repair.section.page}/${repair.section.persona}/${repair.section.section}\` in class \`${repair.section.class}\` (previously \`${repair.previousClass}\`).\n\nIntegrated dev head: \`${repair.head}\`. First error line: \`${repair.section.firstErrorLine ?? 'unavailable'}\`.\n`;
+}
+
+export async function routePageDataRepair(
+  tasks: WorkerTasks,
+  store: WorkerStore,
+  job: WorkerJob,
+  inbox: SqliteManagerInbox,
+  settings: Settings,
+  repair: PageDataRepair,
+): Promise<'resumed' | 'dispatched'> {
+  if (await job.resumePageDataRepair(repair)) return 'resumed';
+  const existing = store
+    .tasks()
+    .find((task) => task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`));
+  const goal = repair.owner?.brief.goal ?? repair.section.goal;
+  const manager = repair.owner?.brief.manager ?? goal;
+  if (existing) {
+    inbox.deliver({
+      managerId: existing.brief.manager,
+      taskId: existing.id,
+      kind: 'instruction',
+      summary: `Seeded page-data section ${repair.section.page}/${repair.section.section} is ${repair.section.class}; first error line: ${repair.section.firstErrorLine ?? 'unavailable'}.`,
+    });
+    return 'dispatched';
+  }
+  const markdown = pageDataRepairBrief(repair, goal, manager);
+  const briefPath = join(settings.stateDirectory, 'page-data-repairs', `${repair.repairKey}.brief.md`);
+  mkdirSync(dirname(briefPath), { recursive: true });
+  if (existsSync(briefPath)) {
+    if (readFileSync(briefPath, 'utf8') !== markdown)
+      throw new Error('page-data repair brief changed for an existing cause');
+  } else writeFileSync(briefPath, markdown, { flag: 'wx', mode: 0o600 });
+  const task = tasks.dispatch(briefPath, null, true, 'verifier');
+  inbox.deliver({
+    managerId: task.brief.manager,
+    taskId: task.id,
+    kind: 'instruction',
+    summary: `Seeded page-data repair for ${repair.section.page}/${repair.section.section}: ${repair.section.class}; first error line: ${repair.section.firstErrorLine ?? 'unavailable'}.`,
+  });
+  return 'dispatched';
 }
 
 /** The only production composition: every module shares this database connection and worker fence. */
@@ -577,6 +638,14 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         runGate: verifierGate,
         runBootSmoke: bootSmokeGate,
         dispatchRepair: (repair) => dispatchBootSmokeRepair(tasks, store, inbox, settings, repair),
+        runPageData: async () =>
+          runPageDataCycle({
+            settings,
+            db,
+            tasks: store,
+            inbox,
+            routeDefect: (repair) => routePageDataRepair(tasks, store, job, inbox, settings, repair),
+          }),
       }),
     async evaluateFlow() {
       const flowInbox = new SqliteManagerInbox(

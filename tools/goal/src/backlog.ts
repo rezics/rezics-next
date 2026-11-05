@@ -1089,8 +1089,9 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
           goalId: goal,
           kind: 'instruction',
           summary:
-            `Backlog low: ${ready} ready brief(s) in ${directory}. Write ready briefs there to keep at least ${(runtime.policy ?? defaultPolicy).backlog.lowWater}; ` +
-            'the controller dispatches the oldest whenever worker slots are free.',
+            `Backlog low: ${ready} ready brief(s) in ${directory}. Write ready briefs there to keep about ${(runtime.policy ?? defaultPolicy).backlog.lowWater}, ` +
+            "each a complete outcome from your Goal definition's Done when list not yet accepted; when fewer exist, say so in a handoff instead of writing slivers. " +
+            'The controller dispatches the oldest whenever worker slots are free.',
         });
         return true;
       })

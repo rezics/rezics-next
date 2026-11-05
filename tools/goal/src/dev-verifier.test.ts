@@ -158,6 +158,14 @@ function landedTask(from: string, commitHead: string, id = 'kernel-task'): Task 
   } as Task;
 }
 
+test('the resident verifier polls the page-data interval even when dev has no unverified commits', async () => {
+  const root = repo();
+  const ctx = setup(root);
+  let pageDataRuns = 0;
+  await verifyDev({ ...ctx, runPageData: async () => void (pageDataRuns += 1) });
+  expect(pageDataRuns).toBe(1);
+});
+
 test('classifies check outcomes and runs Web tests from their workspace', () => {
   expect(classifyRun({ passed: true, timedOut: false, output: '' })).toBe('pass');
   expect(classifyRun({ passed: false, timedOut: false, output: 'assertion failed' })).toBe('fail');

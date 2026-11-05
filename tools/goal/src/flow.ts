@@ -51,6 +51,11 @@ export const flowMigrations = [
     version: 5,
     sql: `CREATE INDEX flow_events_wait_action ON flow_events(task_id, attempt, stage, action, at DESC, sequence DESC);`,
   },
+  {
+    module: 'flow',
+    version: 6,
+    sql: `CREATE TABLE page_data_repairs (repair_key TEXT PRIMARY KEY, created_at TEXT NOT NULL, status TEXT NOT NULL, detail TEXT NOT NULL); CREATE INDEX page_data_repairs_status ON page_data_repairs(status, created_at);`,
+  },
 ];
 export function ensureFlow(db: Database): void {
   migrate(db, flowMigrations);
@@ -93,6 +98,87 @@ const summarize = (values: number[]) => {
     p90Ms: percentile(sorted, 0.9),
   };
 };
+
+const PAGE_DATA_CLASSES = ['DATA', 'EMPTY', 'UNAUTHORIZED', 'UNAVAILABLE', 'API', 'WEB', 'SEED'] as const;
+type PageDataClass = (typeof PAGE_DATA_CLASSES)[number];
+type PageDataReportSection = {
+  page: string;
+  persona: string;
+  section: string;
+  name: string;
+  class: PageDataClass;
+  firstErrorLine?: string;
+};
+export type PageDataFlowRun = {
+  runId: number;
+  at: string;
+  head: string;
+  classes: Partial<Record<PageDataClass, number>>;
+  sections: Partial<Record<PageDataClass, PageDataReportSection[]>>;
+  failure?: { phase: 'boot' | 'check'; firstErrorLine: string };
+};
+
+export function pageDataFlowRuns(
+  events: readonly FlowEvent[],
+  limit = defaultPolicy.pageData.reportRuns,
+): PageDataFlowRun[] {
+  const pageEvents = events.filter((event) => event.taskId === 'page-data' && event.stage === 'verification');
+  const runs = pageEvents.filter((event) => event.action === 'page-data-run');
+  const report: PageDataFlowRun[] = runs.map((event) => {
+    const metadata = JSON.parse(event.detail ?? '{}') as {
+      head?: string;
+      classes?: Partial<Record<PageDataClass, number>>;
+    };
+    const sections: Partial<Record<PageDataClass, PageDataReportSection[]>> = {};
+    for (const row of pageEvents.filter(
+      (candidate) => candidate.attempt === event.attempt && candidate.action === 'page-data-section',
+    )) {
+      const section = JSON.parse(row.detail ?? '{}') as PageDataReportSection;
+      (sections[section.class] ??= []).push(section);
+    }
+    return {
+      runId: event.attempt,
+      at: event.at,
+      head: metadata.head ?? '',
+      classes: metadata.classes ?? {},
+      sections,
+    };
+  });
+  for (const event of pageEvents.filter(
+    (candidate) => candidate.action === 'page-data-boot-failure' || candidate.action === 'page-data-check-failure',
+  )) {
+    const metadata = JSON.parse(event.detail ?? '{}') as { head?: string; firstErrorLine?: string };
+    report.push({
+      runId: event.attempt,
+      at: event.at,
+      head: metadata.head ?? '',
+      classes: {},
+      sections: {},
+      failure: {
+        phase: event.action === 'page-data-boot-failure' ? 'boot' : 'check',
+        firstErrorLine: metadata.firstErrorLine ?? 'Page-data run failed without an error line',
+      },
+    });
+  }
+  return report.sort((a, b) => a.at.localeCompare(b.at) || a.runId - b.runId).slice(-limit);
+}
+
+export function formatPageDataFlowRuns(runs: readonly PageDataFlowRun[]): string[] {
+  if (!runs.length) return ['Page-data runs: none recorded.'];
+  return runs.flatMap((run) => {
+    if (run.failure)
+      return [`Page-data ${run.failure.phase} failure at ${run.at} (${run.head}): ${run.failure.firstErrorLine}`];
+    const counts = PAGE_DATA_CLASSES.map((className) => `${className}=${run.classes[className] ?? 0}`).join(' ');
+    return [
+      `Page-data run at ${run.at} (${run.head}): ${counts}.`,
+      ...PAGE_DATA_CLASSES.map((className) => {
+        const sections =
+          run.sections[className]?.map((section) => `${section.page}/${section.persona}/${section.section}`) ?? [];
+        return `  ${className} (${sections.length}): ${sections.join(', ') || 'none'}`;
+      }),
+    ];
+  });
+}
 const startActions: Record<LifecycleStage, string[]> = {
   dispatch: ['dispatched'],
   start: ['requested'],
@@ -447,6 +533,7 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       ? [...integrated].reduce((n, id) => n + (attemptCounts.get(id) ?? 0), 0) / integrated.size
       : null,
     overBudgetLaunchesByLayer,
+    pageDataRuns: pageDataFlowRuns(ordered),
   };
 }
 
