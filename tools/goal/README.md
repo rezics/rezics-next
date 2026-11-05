@@ -717,6 +717,8 @@ protocol or representation meaning; they are not operator limits.
 | `policy.process.signalDiagnosticCharacters`           | `4096`                               | Maximum retained signal-helper stderr characters.                                                                                                                                           |
 | `policy.process.resolverTerminationGraceMs`           | `1000`                               | Termination grace for resolver recovery without a task runtime (ms).                                                                                                                        |
 | `policy.host.stateSweepIntervalMs`                    | `60000`                              | Host state-directory sweep interval (ms).                                                                                                                                                   |
+| `policy.host.codePollMs`                              | `1000`                               | Host poll for a newer published tools/goal revision (ms).                                                                                                                                   |
+| `policy.host.restartIntervalMs`                       | `600000`                             | Minimum host run before it retires for a newer tools/goal (ms).                                                                                                                             |
 | `policy.host.recoveryIntervalMs`                      | `60000`                              | Orphan recovery and host periodic work interval (ms).                                                                                                                                       |
 | `policy.host.recoveryReadinessMs`                     | `100`                                | Recovery progress wait before publishing host readiness (ms).                                                                                                                               |
 | `policy.host.requestTimeoutMs`                        | `60000`                              | Default manager host RPC deadline (ms).                                                                                                                                                     |
@@ -2582,6 +2584,13 @@ finish, stops at the next command boundary, releases its lanes and exits; its su
 resident host, which runs attempt supervision, is restarted by systemd: it finishes its active requests on SIGTERM, and
 workers keep their scopes. No process is killed by hand.
 
+A resident host also notices a publication that cp-sync did not make, such as a control-plane train release that moves
+`main`. It polls `main:tools/goal` every `policy.host.codePollMs`. Once it has run for `policy.host.restartIntervalMs`
+and `main` names another revision, it starts no new attempt, finishes its active requests, and exits; systemd starts it
+on the published code, and its successor adopts the running attempts. A host restarts this way at most once per
+interval. cp-sync restarts the host after its own publication whatever the interval, and a host that cannot read `main`
+keeps its revision.
+
 cp-sync refuses when the main checkout has uncommitted or untracked files under the synced paths, when `main`
 moved, when stabilize changed control-plane paths that dev lacks, or while another run holds `.temp/goal/cp-sync.lock`.
 `--dry-run` does everything except moving refs and the checkout, prints the diff stat, step results and the ref moves
@@ -2794,6 +2803,8 @@ falling by more than half, or no landing merged in the window while landings alr
 restores the previous tree in a forward commit. Lower counts within half and quiet windows are normal.
 Decision: after publication a stale train lets its running control-plane command finish and hands off at the next command
 boundary instead of cancelling it, so the release does not restart a running check; the successor runs the published code.
+Decision: a resident host retires once main publishes another tools/goal, at most once per restartIntervalMs. A retiring
+host starts no new attempt, finishes its active requests and exits; systemd starts it on the published code.
 After publishing, a missing environment file or resident code unit triggers `goal service install` from the newly published
 main. Installation enables the resident units, stops the legacy transient `rezics-goal-supervisor`
 unit and any recorded supervisor and host by birth identity, then starts the units and waits for host readiness. It signals individual
