@@ -56,12 +56,15 @@ export function QueryPublicationView({
       if (!isRecord(data)) throw new Error('Invalid retained publication request');
       const { id: retainedId, ...request } = data;
       const input = queryPublicationInput(request);
-      const id = retainedId === null ? null : queryPublicationAddress({ collectionId: input.collectionId, id: retainedId }).id;
+      const id =
+        retainedId === null ? null : queryPublicationAddress({ collectionId: input.collectionId, id: retainedId }).id;
       const transport = capture();
       if (input.collectionId === collectionId && transport) setAttempt({ input, id, transport });
     }
     setLoaded(true);
-    return () => { live.current = false; };
+    return () => {
+      live.current = false;
+    };
   }, [storageKey]);
 
   function retain(current: Attempt) {
@@ -79,7 +82,10 @@ export function QueryPublicationView({
       const response = current.id
         ? current.transport.read({ collectionId, id: current.id })
         : current.transport.begin(current.input);
-      const result = await publicationReadWithin<QueryPublicationResult>(response, 25_000, { ok: false, reason: 'unknown' });
+      const result = await publicationReadWithin<QueryPublicationResult>(response, 25_000, {
+        ok: false,
+        reason: 'unknown',
+      });
       if (!live.current || !isCurrent()) return;
       if (!result.ok) {
         setFailure(result.reason);
@@ -87,7 +93,8 @@ export function QueryPublicationView({
       }
       retain({ ...current, id: result.status.id });
       setStatus(result.status);
-      if (result.status.phase === 'complete' || result.status.phase === 'refused') sessionStorage.removeItem(storageKey);
+      if (result.status.phase === 'complete' || result.status.phase === 'refused')
+        sessionStorage.removeItem(storageKey);
     } catch (error) {
       // A failed fetch cannot tell whether a dispatched command committed. Keep the original request.
       if (!(error instanceof TypeError)) throw error;
@@ -99,7 +106,7 @@ export function QueryPublicationView({
   }
 
   function begin() {
-    if (!loaded || !confirmed || !canBegin() || attempt) return;
+    if (running.current || !loaded || !confirmed || !canBegin() || attempt) return;
     const transport = capture();
     if (!transport) return;
     const current: Attempt = {
@@ -115,22 +122,33 @@ export function QueryPublicationView({
   const refused = status?.phase === 'refused';
   return (
     <section className="space-y-4 rounded-xl border border-border p-5" aria-labelledby="query-publication-heading">
-      <h2 id="query-publication-heading" className="text-xl font-semibold">{m.library_query_publication_heading()}</h2>
+      <h1 id="query-publication-heading" className="text-xl font-semibold">
+        {m.library_query_publication_heading()}
+      </h1>
       <p className="text-muted-foreground">{m.library_query_publication_description()}</p>
       <p>{m.library_publication_privacy()}</p>
       {!attempt ? (
         <>
           <label className="flex flex-wrap items-center gap-3">
             {m.library_query_publication_visibility()}
-            <select value={target} onChange={(event) => setTarget(event.target.value as 'public' | 'unlisted')}
-              className="min-h-11 rounded-md border border-border bg-background px-3" disabled={busy}>
+            <select
+              value={target}
+              onChange={(event) => setTarget(event.target.value as 'public' | 'unlisted')}
+              className="min-h-11 rounded-md border border-border bg-background px-3"
+              disabled={busy}
+            >
               <option value="unlisted">{m.library_visibility_unlisted()}</option>
               <option value="public">{m.library_visibility_public()}</option>
             </select>
           </label>
           <label className="flex items-start gap-3">
-            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)}
-              className="mt-1 size-5 shrink-0" disabled={busy} />
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(event) => setConfirmed(event.target.checked)}
+              className="mt-1 size-5 shrink-0"
+              disabled={busy}
+            />
             <span>{m.library_query_publication_confirm()}</span>
           </label>
           <Button disabled={!loaded || !confirmed || busy || !canBegin()} onClick={begin}>
@@ -145,8 +163,13 @@ export function QueryPublicationView({
           {complete ? (
             <div role="status" className="space-y-2">
               <p>{m.library_query_publication_complete()}</p>
-              <p className="break-all">{m.library_publication_published_generation({ generation: status.publication.generation })}</p>
-              <a className="inline-flex min-h-11 items-center text-primary underline" href={`/collections/${encodeURIComponent(collectionId)}`}>
+              <p className="break-all">
+                {m.library_publication_published_generation({ generation: status.publication.generation })}
+              </p>
+              <a
+                className="inline-flex min-h-11 items-center text-primary underline"
+                href={`/collections/${encodeURIComponent(collectionId)}`}
+              >
                 {m.library_publication_view()}
               </a>
             </div>
@@ -158,12 +181,23 @@ export function QueryPublicationView({
         </>
       )}
       {busy ? <p role="status">{m.library_query_publication_loading()}</p> : null}
-      {failure ? <p role="alert">{
-        failure === 'denied' ? m.library_publication_denied()
-          : failure === 'stale' ? m.library_publication_stale()
-            : failure === 'closed' ? m.platform_closed_heading()
-              : m.library_query_publication_unknown()
-      }</p> : null}
+      {failure ? (
+        <p role="alert">
+          {failure === 'denied'
+            ? m.library_publication_denied()
+            : failure === 'stale'
+              ? m.library_publication_stale()
+              : failure === 'closed'
+                ? m.platform_closed_heading()
+                : m.library_query_publication_unknown()}
+        </p>
+      ) : null}
+      <a
+        className="inline-flex min-h-11 items-center text-primary underline"
+        href={`/collections/${encodeURIComponent(collectionId)}`}
+      >
+        {m.library_publication_back()}
+      </a>
     </section>
   );
 }

@@ -69,6 +69,23 @@ export const SelectedEmpty: Story = {
   },
 };
 
+export const WholeQueryReview: Story = {
+  render: () => publishRoute(publicationStoryIds.ready),
+  play: async ({ canvasElement }) => {
+    const canvas = await readyPublication(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_query_publication_heading() }));
+    await expect(canvas.getByRole('heading', { name: m.library_query_publication_heading() })).toBeVisible();
+    const publish = canvas.getByRole('button', { name: m.library_query_publication_publish() });
+    await expect(publish).toBeDisabled();
+    await userEvent.click(canvas.getByRole('checkbox', { name: m.library_query_publication_confirm() }));
+    await expect(publish).toBeEnabled();
+    await expect(canvas.getByRole('combobox', { name: m.library_query_publication_visibility() })).toHaveValue(
+      'unlisted',
+    );
+    await expect(canvas.getByRole('link', { name: m.library_publication_back() })).toBeVisible();
+  },
+};
+
 export const SelectedNonempty: Story = {
   render: () => publishRoute(publicationStoryIds.ready),
   play: async ({ canvasElement }) => {
