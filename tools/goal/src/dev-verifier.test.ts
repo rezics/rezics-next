@@ -1,6 +1,8 @@
 import { afterEach, expect, test } from 'bun:test';
+import { Database } from 'bun:sqlite';
 import { readControlPolicy } from './policy.ts';
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -16,6 +18,8 @@ import { spawnSync } from 'node:child_process';
 import { acquireDirectoryLease } from './lease.ts';
 import { parseBrief } from './briefs.ts';
 import { bootSmokeEnvironment } from './verification.ts';
+import { openDb } from './db.ts';
+import { WorkerStore } from './store.ts';
 import {
   bootSmokeRepairBrief,
   classifyRun,
@@ -723,4 +727,122 @@ test('one existing-failure probe leaves unsampled prefixes unproven without reve
   expect(ctx.updates).toEqual([]);
   expect(git(root, 'rev-parse', 'dev')).toBe(head);
   expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
+});
+
+test('verifier evidence persistence keeps store writes authoritative, tolerates failures, and falls back to SQLite', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev-verified');
+  const head = commit(root, 'services/kernel/persisted.ts', 'export const persisted = true;\n', 'landing');
+  git(root, 'branch', '-f', 'dev', head);
+  const ctx = setup(root, [landedTask(base, head)]);
+  ctx.settings.policy = readControlPolicy({ verifier: { runRows: 2, findingRows: 1 } });
+  const databasePath = join(ctx.settings.stateDirectory, 'goal.sqlite');
+  const database = new WorkerStore(openDb(databasePath));
+  let databaseOpen = true;
+  const attemptedFindings: DevVerifierFinding[] = [];
+  const failingStore = {
+    ...ctx.store,
+    db: database.db,
+    saveDevVerifierRun: () => {
+      throw new Error('run write failed');
+    },
+    saveDevVerifierFinding: (finding: DevVerifierFinding) => {
+      attemptedFindings.push(finding);
+      throw new Error('finding write failed');
+    },
+  };
+  const runGate = async (command: readonly string[]) =>
+    command[0] === 'affected-check'
+      ? { passed: false, output: 'AssertionError: retained verifier failure', timedOut: false }
+      : { passed: true, output: '', timedOut: false };
+
+  try {
+    await verifyDev({ ...ctx, store: failingStore, runGate });
+    expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
+    expect(attemptedFindings.some((finding) => finding.status === 'existing')).toBe(true);
+    expect((database.db.query('SELECT count(*) AS count FROM dev_verifier_runs').get() as { count: number }).count).toBe(0);
+    expect(
+      (database.db.query('SELECT count(*) AS count FROM dev_verifier_findings').get() as { count: number }).count,
+    ).toBe(0);
+
+    git(root, 'branch', '-f', 'dev-verified', base);
+    const fallbackStore = {
+      db: database.db,
+      tasks: ctx.store.tasks,
+      task: ctx.store.task,
+      updateTask: ctx.store.updateTask,
+    };
+    await verifyDev({ ...ctx, store: fallbackStore, runGate });
+
+    const run = database.db.query('SELECT cache_key, created_at, body FROM dev_verifier_runs ORDER BY rowid DESC').get() as
+      | { cache_key: string; created_at: string; body: string }
+      | undefined;
+    expect(run).toBeDefined();
+    const decodedRun = JSON.parse(run!.body) as DevVerifierRun;
+    expect([run!.cache_key, run!.created_at, decodedRun.key, decodedRun.createdAt]).toEqual([
+      decodedRun.key,
+      decodedRun.createdAt,
+      decodedRun.key,
+      decodedRun.createdAt,
+    ]);
+    expect(decodedRun.evidence).toHaveProperty('result');
+    expect(
+      (database.db.query('SELECT count(*) AS count FROM dev_verifier_runs').get() as { count: number }).count,
+    ).toBeLessThanOrEqual(2);
+
+    const findingRow = database.db
+      .query('SELECT range_key, identity, signature, base_commit, head_commit, status, created_at, body FROM dev_verifier_findings')
+      .get() as
+      | {
+          range_key: string;
+          identity: string;
+          signature: string;
+          base_commit: string;
+          head_commit: string;
+          status: string;
+          created_at: string;
+          body: string;
+        }
+      | undefined;
+    expect(findingRow).toBeDefined();
+    const decodedFinding = JSON.parse(findingRow!.body) as DevVerifierFinding;
+    expect([
+      findingRow!.range_key,
+      findingRow!.identity,
+      findingRow!.signature,
+      findingRow!.base_commit,
+      findingRow!.head_commit,
+      findingRow!.status,
+      findingRow!.created_at,
+    ]).toEqual([
+      decodedFinding.rangeKey,
+      decodedFinding.identity,
+      decodedFinding.signature,
+      decodedFinding.baseCommit,
+      decodedFinding.headCommit,
+      decodedFinding.status,
+      decodedFinding.createdAt,
+    ]);
+    expect(decodedFinding.status).toBe('existing');
+    expect(
+      (database.db.query('SELECT count(*) AS count FROM dev_verifier_findings').get() as { count: number }).count,
+    ).toBeLessThanOrEqual(1);
+
+    database.db.close();
+    databaseOpen = false;
+    chmodSync(databasePath, 0o444);
+    try {
+      expect(devVerificationState(root, ctx.settings.stateDirectory).findings).toEqual({ existing: 1, new: 0, unknown: 0 });
+    } finally {
+      chmodSync(databasePath, 0o644);
+    }
+
+    const absentState = join(root, '.no-finding-table');
+    mkdirSync(absentState, { recursive: true });
+    const absentDatabase = new Database(join(absentState, 'goal.sqlite'));
+    absentDatabase.close();
+    expect(devVerificationState(root, absentState).findings).toEqual({ existing: 0, new: 0, unknown: 0 });
+  } finally {
+    if (databaseOpen) database.db.close();
+  }
 });

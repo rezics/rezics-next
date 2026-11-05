@@ -2603,6 +2603,8 @@ unknown rather than clean baseline results. Findings and exact run evidence are 
 unchanged finding does not start another sweep after restart. Baseline runs, probes and retries all share the ordinary
 three-check concurrency cap.
 
+Decision: run and finding persistence live in `dev-verifier-storage.ts`; the verifier retains execution order and the existing store-method precedence, SQLite fallbacks and failure behavior.
+
 Decision: the landing train and dev verifier share pure changed-path selection. Each caller retains its configured order,
 closures, exclusions, workspace placement and execution authority.
 
