@@ -1,4 +1,11 @@
 import {
+  readRetainedCollection,
+  retainedMemberBuiltin,
+  runMemberRetentionCommand,
+  withMemberRetentionEpisode,
+  MEMBER_RETENTION_SQL,
+} from './member-retention-bounds.ts';
+import {
   createCollectionPublicationEpisodes,
   retireCollectionPublicationWork,
   type CollectionPublicationEpisodes,
@@ -603,7 +610,7 @@ export function createCollectionCommands(config: {
         kind === 'library.collection.rule.update')
     ) {
       const builtins = createBuiltinRuntime({ pool });
-      if (await builtins.read(owner, collectionId, action))
+      if (await retainedMemberBuiltin(() => builtins.read(owner, collectionId, action)))
         throw new ProblemError(kind === 'library.collection.delete' ? 'conflict' : 'dynamic_membership_immutable');
       if (destinationCollectionId && (await builtins.read(owner, destinationCollectionId, action)))
         throw new ProblemError('dynamic_membership_immutable');
@@ -712,7 +719,7 @@ export function createCollectionCommands(config: {
         authorization,
       };
       const dispatch = () =>
-        runCommand(pool, commandOptions, async (tx, command) => {
+        runMemberRetentionCommand(pool, commandOptions, async (tx, command) => {
           const current = await authorizedCollection(tx, owner, route, collectionId, command.time, allowDeleted);
           if (current.curatorAccountId === null) throw new GrantDeniedError();
           await enterShelfWrite({ client: tx, route, accountId: current.curatorAccountId });
@@ -1113,24 +1120,36 @@ export function createCollectionCommands(config: {
     const expectedRevision =
       typeof revisionOrKey === 'number'
         ? revisionOf(revisionOrKey)
-        : (await readCollection(pool, route, collectionId))?.revision;
+        : (await readRetainedCollection(() => readCollection(pool, route, collectionId)))?.revision;
     if (!expectedRevision) throw notFound();
     const deletionId = newId(route);
-    return mutate(
-      actor,
-      collectionId,
-      'collection:update',
-      'library.collection.member.remove',
-      requestKey,
-      { collectionId, memberId, revision: expectedRevision },
-      async (tx, command) => {
-        const current = await activeCollection(tx, route, collectionId);
-        if (current.revision !== expectedRevision) throw new ProblemError('conflict');
-        const value = await deleteMemberRow(tx, route, collectionId, memberId, expectedRevision, deletionId, command);
-        if (!value) throw new ProblemError('conflict');
-        if (listed(current)) await recordPublicCollectionReduction(tx, route, collectionId, command.transactionId);
-        return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
-      },
+    return withMemberRetentionEpisode(
+      { kind: 'remove', route, collectionId, memberId, deletionId, revision: expectedRevision, requestKey },
+      () =>
+        mutate(
+          actor,
+          collectionId,
+          'collection:update',
+          'library.collection.member.remove',
+          requestKey,
+          { collectionId, memberId, revision: expectedRevision },
+          async (tx, command) => {
+            const current = await activeCollection(tx, route, collectionId);
+            if (current.revision !== expectedRevision) throw new ProblemError('conflict');
+            const value = await deleteMemberRow(
+              tx,
+              route,
+              collectionId,
+              memberId,
+              expectedRevision,
+              deletionId,
+              command,
+            );
+            if (!value) throw new ProblemError('conflict');
+            if (listed(current)) await recordPublicCollectionReduction(tx, route, collectionId, command.transactionId);
+            return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
+          },
+        ),
     );
   }
 
@@ -1146,55 +1165,68 @@ export function createCollectionCommands(config: {
     if (typeof deletion?.deletionId !== 'string') throw invalid();
     const expectedRevision = revisionOf(deletion.revision);
     let readableOriginal: string | null = null;
-    return mutate(
-      actor,
-      collectionId,
-      'collection:update',
-      'library.collection.member.restore',
-      requestKey,
-      { collectionId, memberId, deletionId: deletion.deletionId, revision: expectedRevision },
-      async (tx, command) => {
-        const parent = await activeCollection(tx, route, collectionId);
-        const saved = await readMemberDeletion(tx, route, collectionId, memberId);
-        if (!saved || saved.deletionId !== deletion.deletionId) throw notFound();
-        if (!saved.purgeAfter || Date.parse(saved.purgeAfter) <= Date.parse(command.time))
-          throw new ProblemError('member_restore_expired');
-        if (saved.deletionRevision !== BigInt(expectedRevision)) throw new ProblemError('member_restore_stale');
-        if (readableOriginal !== saved.subjectId) throw notFound();
-        if (parent.memberCount >= MAX_MEMBER_COUNT) throw new ProblemError('collection_full');
-        const collision = await tx.query(
-          `SELECT 1 FROM library.collection_member
-            WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND ordinal_key=$3 AND member_id<>$4 LIMIT 1`,
-          [route, collectionId, saved.ordinalKey, memberId],
-        );
-        if (collision.rows.length) throw new ProblemError('member_restore_occupied');
-        const value = await restoreMemberRow(
-          tx,
-          route,
+    return withMemberRetentionEpisode(
+      {
+        kind: 'restore',
+        route,
+        collectionId,
+        memberId,
+        deletionId: deletion.deletionId,
+        revision: expectedRevision,
+        requestKey,
+      },
+      () =>
+        mutate(
+          actor,
           collectionId,
-          memberId,
-          deletion.deletionId,
-          expectedRevision,
-          command,
-        );
-        if (!value) throw new ProblemError('member_restore_stale');
-        return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
-      },
-      undefined,
-      async (time) => {
-        const saved = await readMemberDeletion(pool, route, collectionId, memberId);
-        if (!saved || saved.deletionId !== deletion.deletionId) return;
-        const subject = await resolveSubject(
-          { pool, access, ...(clock ? { clock } : {}) },
-          accountActor(actor),
-          saved.subjectId,
-          time,
-        );
-        readableOriginal =
-          subject && (subject.subjectId === saved.subjectId || subject.requestedSubjectId === saved.subjectId)
-            ? saved.subjectId
-            : null;
-      },
+          'collection:update',
+          'library.collection.member.restore',
+          requestKey,
+          { collectionId, memberId, deletionId: deletion.deletionId, revision: expectedRevision },
+          async (tx, command) => {
+            const parent = await activeCollection(tx, route, collectionId);
+            const saved = await readMemberDeletion(tx, route, collectionId, memberId);
+            if (!saved || saved.deletionId !== deletion.deletionId) throw notFound();
+            if (!saved.purgeAfter || Date.parse(saved.purgeAfter) <= Date.parse(command.time))
+              throw new ProblemError('member_restore_expired');
+            if (saved.deletionRevision !== BigInt(expectedRevision)) throw new ProblemError('member_restore_stale');
+            if (readableOriginal !== saved.subjectId) throw notFound();
+            if (parent.memberCount >= MAX_MEMBER_COUNT) throw new ProblemError('collection_full');
+            const collision = await tx.query(MEMBER_RETENTION_SQL.collision, [
+              route,
+              collectionId,
+              saved.ordinalKey,
+              memberId,
+            ]);
+            if (collision.rows.length) throw new ProblemError('member_restore_occupied');
+            const value = await restoreMemberRow(
+              tx,
+              route,
+              collectionId,
+              memberId,
+              deletion.deletionId,
+              expectedRevision,
+              command,
+            );
+            if (!value) throw new ProblemError('member_restore_stale');
+            return { value, events: [memberEvent(collectionId, value.id, value.subjectId)] };
+          },
+          undefined,
+          async (time) => {
+            const saved = await readMemberDeletion(pool, route, collectionId, memberId);
+            if (!saved || saved.deletionId !== deletion.deletionId) return;
+            const subject = await resolveSubject(
+              { pool, access, ...(clock ? { clock } : {}) },
+              accountActor(actor),
+              saved.subjectId,
+              time,
+            );
+            readableOriginal =
+              subject && (subject.subjectId === saved.subjectId || subject.requestedSubjectId === saved.subjectId)
+                ? saved.subjectId
+                : null;
+          },
+        ),
     );
   }
 }

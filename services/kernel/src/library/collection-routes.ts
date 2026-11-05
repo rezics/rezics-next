@@ -1,3 +1,4 @@
+import { serializeMemberRetention } from './member-retention-bounds.ts';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
@@ -1399,8 +1400,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           epoch: result.epoch,
           position: result.position,
         });
-        set.headers['Library-Collection-Member-Deletion-Id'] = result.value.deletionId;
-        set.headers['Library-Collection-Member-Deletion-Revision'] = String(result.value.revision);
+        const responseHeaders = await serializeMemberRetention('mounted-remove', {
+          'Library-Collection-Member-Deletion-Id': result.value.deletionId,
+          'Library-Collection-Member-Deletion-Revision': String(result.value.revision),
+        });
+        Object.assign(set.headers, responseHeaders);
         set.status = 204;
       },
     )
@@ -1424,7 +1428,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           epoch: result.epoch,
           position: result.position,
         });
-        return { member: memberView(result.value) };
+        return serializeMemberRetention('mounted-undo', { member: memberView(result.value) });
       },
     )
     .post(

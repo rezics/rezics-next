@@ -260,16 +260,21 @@ const currentCaptureProjectionBytes = Buffer.byteLength(
     version: 2147483647,
   }),
 );
-const basisProjectionBytes = new Map<Query, number>([
+// basisQueries defensively copies imported query objects. Keep declaration lookup
+// on the same normalized SQL identity used by execution, rather than object identity.
+const basisProjectionBytes = new Map<string, number>([
   [
-    nativeIdentityPartitionQuery,
+    normalize(nativeIdentityPartitionQuery.sql),
     Buffer.byteLength(
       JSON.stringify({ epoch: 2147483647, position: boundDecimal, writeState: 'active', movedTo: null }),
     ),
   ],
-  [accountQuery, Buffer.byteLength(JSON.stringify({ state: 'suspended', fenced: false, epoch: boundDecimal }))],
   [
-    sourceQuery,
+    normalize(accountQuery.sql),
+    Buffer.byteLength(JSON.stringify({ state: 'suspended', fenced: false, epoch: boundDecimal })),
+  ],
+  [
+    normalize(sourceQuery.sql),
     Buffer.byteLength(
       JSON.stringify({
         accountId: boundId,
@@ -284,7 +289,7 @@ const basisProjectionBytes = new Map<Query, number>([
     ),
   ],
   [
-    outputQuery,
+    normalize(outputQuery.sql),
     Buffer.byteLength(
       JSON.stringify({
         generation: boundId,
@@ -298,7 +303,7 @@ const basisProjectionBytes = new Map<Query, number>([
     ),
   ],
   [
-    fencesQuery,
+    normalize(fencesQuery.sql),
     Buffer.byteLength(
       JSON.stringify([
         { kind: 'collection', generation: boundDecimal },
@@ -306,17 +311,20 @@ const basisProjectionBytes = new Map<Query, number>([
       ]),
     ),
   ],
-  [identityCapture, currentCaptureProjectionBytes],
-  [proofQuery, Buffer.byteLength(JSON.stringify({ transactionId: boundId, position: boundDecimal }))],
+  [normalize(identityCapture.sql), currentCaptureProjectionBytes],
+  [normalize(proofQuery.sql), Buffer.byteLength(JSON.stringify({ transactionId: boundId, position: boundDecimal }))],
 ]);
-const basisWork = new Map<Query, Bound>([
-  [nativeIdentityPartitionQuery, bound({ nativeRows: 16, nativePoints: 1, identityMetadataRows: 1, emptySeeks: 1 })],
-  [accountQuery, bound({ nativeRows: 16, nativePoints: 1 })],
-  [sourceQuery, bound({ nativeRows: 16, nativePoints: 1 })],
-  [outputQuery, bound({ nativeRows: 56, nativePoints: 7, identityMetadataRows: 1, emptySeeks: 1 })],
-  [fencesQuery, bound({ nativeRows: 32, nativePoints: 2 })],
-  [identityCapture, bound({ nativeRows: 32, nativePoints: 1 })],
-  [proofQuery, bound({ nativeRows: 64, nativePoints: 3, identityMetadataRows: 1, emptySeeks: 1 })],
+const basisWork = new Map<string, Bound>([
+  [
+    normalize(nativeIdentityPartitionQuery.sql),
+    bound({ nativeRows: 16, nativePoints: 1, identityMetadataRows: 1, emptySeeks: 1 }),
+  ],
+  [normalize(accountQuery.sql), bound({ nativeRows: 16, nativePoints: 1 })],
+  [normalize(sourceQuery.sql), bound({ nativeRows: 16, nativePoints: 1 })],
+  [normalize(outputQuery.sql), bound({ nativeRows: 56, nativePoints: 7, identityMetadataRows: 1, emptySeeks: 1 })],
+  [normalize(fencesQuery.sql), bound({ nativeRows: 32, nativePoints: 2 })],
+  [normalize(identityCapture.sql), bound({ nativeRows: 32, nativePoints: 1 })],
+  [normalize(proofQuery.sql), bound({ nativeRows: 64, nativePoints: 3, identityMetadataRows: 1, emptySeeks: 1 })],
 ]);
 const basisBindBounds = new Map(
   basisQueries.map((query) => [
@@ -465,9 +473,8 @@ export function nativeIdentitySourceBasisBound(sql: string, values: readonly unk
     return undefined;
   const queryBound = base(sql, values);
   if (!queryBound) return undefined;
-  // basisQueries holds frozen copies; the work and projection tables are keyed by the original queries.
-  const original = [...basisWork.keys()].find((item) => item.sql === query.sql)!;
-  return sumBounds(queryBound, basisWork.get(original)!, bound({ bytes: basisProjectionBytes.get(original)! }));
+  const nativeWork = basisWork.get(normalize(query.sql))!;
+  return sumBounds(queryBound, nativeWork, bound({ bytes: basisProjectionBytes.get(normalize(query.sql))! }));
 }
 export function nativeIdentitySourceBasisFootprint(
   sql: string,

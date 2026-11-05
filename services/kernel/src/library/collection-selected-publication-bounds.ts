@@ -1,3 +1,5 @@
+import { nativeWorkDimensions } from './native-work-dimensions.ts';
+export { nativeWorkDimensions } from './native-work-dimensions.ts';
 /** Static bounds for the retained finite selected-set publication command. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-native.ts';
@@ -326,22 +328,6 @@ export function collectionSelectedPublicationPlan(selectionCount: number): Colle
     perAttempt,
     ceiling,
     bindingWork: nativeWorkDimensions(binder),
-  });
-}
-
-/** Named 9-axis to legacy native 8-axis translation; engine work cannot disappear at this boundary. */
-export function nativeWorkDimensions(value: Bound): WorkDimensions {
-  const bound = declareBound(value);
-  if (bound.engineRequests !== 0) throw new RangeError('Native Collection work cannot fund engine requests');
-  return Object.freeze({
-    candidateKeys: bound.candidateKeys,
-    identityMetadataRows: bound.identityMetadataRows,
-    nativeRows: bound.nativeRows,
-    nativePoints: bound.nativePoints,
-    witnessKeys: bound.witnessKeys,
-    statements: bound.statements,
-    bytes: bound.bytes,
-    emptySeeks: bound.emptySeeks,
   });
 }
 
