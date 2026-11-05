@@ -94,3 +94,7 @@ keeps the exact target for Retry. Stale remains a separate deliberate Restart. M
 anchors and do not transfer the mounted path. Refresh reads the exact current cursor and retires selection and
 coordinate history on replacement, even for an equal response. Focus follows only an eligible initiating keyboard
 movement; focus changes, failed admission, replacement and disposal cancel that handoff.
+
+Decision: a staged movement is admitted only by the exact read returned for its initiating router location. A
+cancelled movement keeps its target retryable through the existing reader; a different route or read observation
+retires the pending path and focus.
