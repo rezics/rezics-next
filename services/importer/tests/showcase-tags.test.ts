@@ -284,6 +284,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
       [
         vndbPublicTagScheme('cont'),
         vndbPublicTagScheme('ero'),
+        vndbPublicTagConceptUri('cont', 'g12'),
         vndbPublicTagConceptUri('cont', 'g311'),
         vndbPublicTagConceptUri('ero', 'g44'),
       ].sort(),
