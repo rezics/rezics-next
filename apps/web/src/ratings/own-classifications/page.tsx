@@ -88,7 +88,7 @@ export function OwnClassificationsWorkspace({
   async function move(cursor: string | null, keyboard: boolean) {
     if (!current() || moving.current) return;
     moving.current = true;
-    const decision = commands?.confirmMovement?.current;
+    const decision = selected ? commands?.confirmMovement?.current : null;
     const leave = decision ? await decision() : !protectedEditor;
     moving.current = false;
     if (!leave || !current()) return;
