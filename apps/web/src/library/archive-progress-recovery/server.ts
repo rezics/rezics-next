@@ -67,27 +67,28 @@ export const progressRecoveryCall = createServerFn({ method: 'POST' })
     if (!authorization) throw new Error('Archive sender changed');
     const client = kernelClient(),
       port = progressRecoveryNative(client, authorization);
+    // The generated evidence contains opaque historical JSON. Carry it as JSON text through the RPC serializer.
     switch (data.operation) {
       case 'upload':
-        return port.upload(...data.args);
+        return JSON.stringify(await port.upload(...data.args));
       case 'holdings':
-        return port.holdings(...data.args);
+        return JSON.stringify(await port.holdings(...data.args));
       case 'occurrences':
-        return port.occurrences(...data.args);
+        return JSON.stringify(await port.occurrences(...data.args));
       case 'units':
-        return port.units(...data.args);
+        return JSON.stringify(await port.units(...data.args));
       case 'review':
-        return port.review(...data.args);
+        return JSON.stringify(await port.review(...data.args));
       case 'apply':
-        return port.apply(...data.args);
+        return JSON.stringify(await port.apply(...data.args));
       case 'result':
-        return port.result(...data.args);
+        return JSON.stringify(await port.result(...data.args));
       case 'cancel':
-        return port.cancel(...data.args);
+        return JSON.stringify(await port.cancel(...data.args));
       case 'remove':
-        return port.remove(...data.args);
+        return JSON.stringify(await port.remove(...data.args));
       case 'subject':
-        return port.subject(...data.args);
+        return JSON.stringify(await port.subject(...data.args));
     }
   });
 

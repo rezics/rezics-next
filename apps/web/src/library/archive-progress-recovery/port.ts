@@ -1,10 +1,8 @@
 import type { ExpectedReader } from '../../session/expected-reader';
 import { archiveTransportLost } from '../archive-entry-recovery/native';
 import type { ProgressChoices } from '../progress-profile';
-import type { NativePort } from './native';
-export type Port = Omit<NativePort, 'subject'> & {
-  choices(subjectId: string): Promise<{ subjectId: string; choices: ProgressChoices }>;
-};
+import type { NativePort, ProgressRecoveryPort } from './native';
+export type Port = ProgressRecoveryPort<ProgressChoices>;
 
 export async function browserProgressRecoveryPort(expected: ExpectedReader): Promise<Port> {
   const { progressRecoverySender, progressRecoveryCall, progressRecoveryChoices } = await import('./server');
@@ -17,10 +15,12 @@ export async function browserProgressRecoveryPort(expected: ExpectedReader): Pro
     const data = { ...expected, ...(sender === undefined ? {} : { sender }), operation, args } as NonNullable<
       Parameters<typeof progressRecoveryCall>[0]
     >['data'];
-    return progressRecoveryCall({ data, headers }).catch((error) => {
-      if (archiveTransportLost(error)) return { kind: 'uncertain' as const };
-      throw error;
-    }) as ReturnType<NativePort[K]>;
+    return progressRecoveryCall({ data, headers })
+      .then((text) => JSON.parse(text) as Awaited<ReturnType<NativePort[K]>>)
+      .catch((error) => {
+        if (archiveTransportLost(error)) return { kind: 'uncertain' as const };
+        throw error;
+      }) as ReturnType<NativePort[K]>;
   }
   return {
     upload: (bytes, key) => call('upload', [bytes, key]),
