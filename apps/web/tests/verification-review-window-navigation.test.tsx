@@ -15,6 +15,20 @@ const reads: PendingRead[] = [];
 const reviewerA = '0192f3a0-6c1e-7b2a-9d4e-000000000101';
 const reviewerB = '0192f3a0-6c1e-7b2a-9d4e-000000000102';
 let currentSession = { state: 'signed-in', subject: reviewerA, csrfToken: 'token-a1' };
+let currentObservation: {
+  state: 'signed-in';
+  observation: { subject: string; id: number };
+} = { state: 'signed-in', observation: { subject: reviewerA, id: 1 } };
+let nextObservationId = 1;
+const observationListeners = new Set<() => void>();
+const reviewObservation = {
+  subscribe: (listener: () => void) => {
+    observationListeners.add(listener);
+    return () => observationListeners.delete(listener);
+  },
+  getSnapshot: () => currentObservation,
+  getServerSnapshot: () => currentObservation,
+};
 const readReviewPage = (input: { data: { cursor?: string } }) =>
   new Promise<ReviewRead>((resolve) => reads.push({ cursor: input.data.cursor, resolve }));
 
@@ -32,6 +46,7 @@ mock.module('../src/session/query', () => ({
   },
   sessionQuery: { queryKey: ['session'] },
 }));
+mock.module('../src/session/observation', () => ({ browserObservation: () => reviewObservation }));
 afterAll(() => mock.restore());
 
 const ready = (viewerId: string, next: string | null, requests: ReviewPage['requests'] = []): ReviewRead => ({
@@ -93,7 +108,9 @@ test('review windows browse only admitted targets, retry exact failures, cap his
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const setSession = (subject: string, csrfToken: string) => {
     currentSession = { state: 'signed-in', subject, csrfToken };
+    currentObservation = { state: 'signed-in', observation: { subject, id: ++nextObservationId } };
     queryClient.setQueryData(sessionQueryKey, currentSession);
+    for (const listener of observationListeners) listener();
   };
   setSession(reviewerA, 'token-a1');
   const render = async () =>
