@@ -1,3 +1,4 @@
+import { publicCollectionDirectoryHref } from './address';
 import { CollectionDiscoveryCard } from '../showcase-collection/discovery-card';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../../shell/page-heading';
@@ -9,10 +10,6 @@ function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
 }
 
-function collectionListHref(locale: string, cursor?: string) {
-  const path = `/${locale}/collections`;
-  return cursor === undefined ? path : `${path}?cursor=${encodeURIComponent(cursor)}`;
-}
 
 function collectionHref(locale: string, id: string) {
   return `/${locale}/collections/${encodeURIComponent(id)}`;
@@ -76,7 +73,7 @@ export function PublicCollectionDiscoveryPage({
             </p>
           )}
           {state.next ? (
-            <a href={collectionListHref(locale, state.next)} className={buttonVariants({ variant: 'outline' })}>
+            <a href={publicCollectionDirectoryHref(locale, { cursor: state.next })} className={buttonVariants({ variant: 'outline' })}>
               {m.collection_discovery_more({}, options)}
             </a>
           ) : null}
@@ -110,7 +107,7 @@ export function PublicCollectionDiscoveryPage({
             </Button>
           )}
           {continuation ? (
-            <a href={collectionListHref(locale)} className={buttonVariants({ variant: 'outline' })}>
+            <a href={publicCollectionDirectoryHref(locale)} className={buttonVariants({ variant: 'outline' })}>
               {m.collection_discovery_restart({}, options)}
             </a>
           ) : null}
