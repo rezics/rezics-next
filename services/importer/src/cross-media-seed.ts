@@ -3403,7 +3403,7 @@ export async function runCrossMediaSeedCli(
           bindings: currentReleaseClassifications.bindings,
           preservedBindings: result.bindings,
           groups: currentReleaseClassifications.groups,
-          configuredGroups: vndbReleaseStateBindings?.groups,
+          ...(vndbReleaseStateBindings ? { configuredGroups: vndbReleaseStateBindings.groups } : {}),
         });
         publicationPlan = structuredClone(plan);
         result = await seedShowcaseVndbReleases({
@@ -3448,7 +3448,7 @@ export async function runCrossMediaSeedCli(
       selectedReleaseContext = composeShowcaseVndbReleaseContext({
         bindings: result.bindings,
         groups: releaseClassificationPreparation.groups,
-        configuredGroups: vndbReleaseStateBindings?.groups,
+        ...(vndbReleaseStateBindings ? { configuredGroups: vndbReleaseStateBindings.groups } : {}),
       });
     }
     let publicTags: Awaited<ReturnType<typeof importShowcaseTags>> | Awaited<ReturnType<typeof prepareShowcaseTags>>;
