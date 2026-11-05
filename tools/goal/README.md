@@ -100,6 +100,9 @@ verifier runs the root typecheck after integration. The train does not run affec
 import or page-story checks before dev advances. Promotion runs the full gate on the candidate before advancing
 `main`.
 
+Decision: The main/dev queue drain, lane leases, outcome replay and post-release recheck have one owner in
+`src/train-queue.ts`; `MergeTrain` supplies typed candidate, check, resolver and publication callbacks.
+
 Decision: A missing local `.sql` declaration followed by at least two TS18046/TS7006 cascades that outnumber
 cascades in changed files is an infrastructure result; landing proceeds and the independent verifier checks the root
 after integration.

@@ -110,6 +110,66 @@ test('a train finishes its landing after its code changes and the next train tak
   }
 }, 15_000);
 
+test('a request queued while the processed lane releases its lease is drained by the same public run', async () => {
+  const s = setup();
+  try {
+    s.queue.enqueue(s.repo.branch('first', 'first-result'));
+    let queuedDuringRelease = false;
+    await new MergeTrain({
+      ...s.options,
+      async beforeRelease() {
+        if (queuedDuringRelease) return;
+        queuedDuringRelease = true;
+        s.queue.enqueue(s.repo.branch('during-release', 'during-release-result'));
+      },
+      async runGate() {
+        return { passed: true, output: '', timedOut: false };
+      },
+    }).runWaiting();
+
+    expect(queuedDuringRelease).toBe(true);
+    expect(s.outcomes.map((outcome) => outcome.taskId)).toEqual(['first', 'during-release']);
+    expect(s.queue.next()).toBeUndefined();
+  } finally {
+    s.close();
+  }
+});
+
+test('a finished outcome is replayed after sink failure without repeating candidate integration', async () => {
+  const s = setup();
+  try {
+    s.queue.enqueue(s.repo.branch('first', 'first-result'));
+    let failDelivery = true;
+    let integrations = 0;
+    const train = new MergeTrain({
+      ...s.options,
+      sink: {
+        onGateOutcome(outcome: GateOutcome) {
+          if (failDelivery) {
+            failDelivery = false;
+            throw new Error('sink unavailable');
+          }
+          s.outcomes.push(outcome);
+        },
+      },
+      async runGate() {
+        integrations++;
+        return { passed: true, output: '', timedOut: false };
+      },
+    });
+
+    await expect(train.run()).rejects.toThrow('sink unavailable');
+    expect(s.queue.next()?.outcome).toMatchObject({ taskId: 'first', passed: true });
+    await train.runWaiting();
+
+    expect(integrations).toBe(1);
+    expect(s.outcomes.map((outcome) => [outcome.taskId, outcome.passed])).toEqual([['first', true]]);
+    expect(s.queue.next()).toBeUndefined();
+  } finally {
+    s.close();
+  }
+});
+
 test('a detached train that finds the lease held exits at once, leaving the request to the owner', async () => {
   const s = setup();
   const request = s.repo.branch('waiting', 'waiting-result');

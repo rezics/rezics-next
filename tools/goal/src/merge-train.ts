@@ -38,6 +38,7 @@ import { ensureGateOutcomeRefusal } from './guards.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
+import { TrainQueue, taskIntegrationTarget, type BatchLandingResult, type DevResolutionHandoff } from './train-queue.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import type { IntegrationTarget, Task, Tokens } from './types.ts';
 import { WorkerStore } from './store.ts';
@@ -774,37 +775,6 @@ function localBranchSettings(mainCheckout: string): { stabilizeBranch?: string; 
     };
   } catch {
     return {};
-  }
-}
-
-function taskIntegrationTarget(
-  stateDirectory: string,
-  taskId: string,
-  policy = defaultPolicy.storage,
-): { target?: string; manager?: string; goal?: string; kind?: string; base?: string; workspace?: Task['workspace'] } {
-  const path = join(stateDirectory, 'goal.sqlite');
-  if (!existsSync(path)) return {};
-  const db = new Database(path, { readonly: true, strict: true });
-  db.exec(`PRAGMA busy_timeout = ${policy.sqliteBusyTimeoutMs}`);
-  try {
-    const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string } | null;
-    if (!row) return {};
-    const task = JSON.parse(row.body) as {
-      base?: unknown;
-      workspace?: Task['workspace'];
-      brief?: { target?: unknown; manager?: unknown; goal?: unknown; kind?: unknown };
-    };
-    const brief = task.brief;
-    return {
-      ...(task.workspace ? { workspace: task.workspace } : {}),
-      ...(typeof brief?.target === 'string' ? { target: brief.target } : {}),
-      ...(typeof brief?.manager === 'string' ? { manager: brief.manager } : {}),
-      ...(typeof brief?.goal === 'string' ? { goal: brief.goal } : {}),
-      ...(typeof brief?.kind === 'string' ? { kind: brief.kind } : {}),
-      ...(typeof task.base === 'string' ? { base: task.base } : {}),
-    };
-  } finally {
-    db.close();
   }
 }
 
@@ -1552,20 +1522,6 @@ type PreparedLanding = {
   commits: string[];
   started: number;
 };
-type BatchLandingResult = {
-  outcomes: { entry: LandingEntry; outcome: GateOutcome }[];
-  deferredIds: number[];
-  skippedIds: number[];
-  resolution?: DevResolutionHandoff;
-};
-
-type DevResolutionHandoff = {
-  kind: 'dev-resolution';
-  entry: LandingEntry;
-  outcome: GateOutcome;
-  targetHead: string;
-  paths: string[];
-};
 
 function emptyTokens(): Tokens {
   return { input: 0, cached: 0, output: 0 };
@@ -1917,279 +1873,54 @@ export class MergeTrain {
   }
 
   async run(): Promise<void> {
-    await this.drainBoth(true);
+    await this.queueOwner().run(true);
   }
 
-  /**
-   * A detached train runs only if it can take the lease. Every settle spawns one, so waiting for the owner made them
-   * pile up: 304 trains polling every 50 ms took the host to load 111. The owner drains the queue and checks its code
-   * version before each request, and the host's sweep starts a train for any request left behind.
-   */
+  /** A detached train returns on initial lease contention; the current owner or a later pump drains the queue. */
   async runWaiting(refreshConfiguration?: TrainConfigurationReloader): Promise<void> {
-    await this.drainBoth(false, refreshConfiguration);
+    await this.queueOwner().run(false, refreshConfiguration);
   }
 
-  /** Background pumps are best-effort: a current lease owner will see any request queued during shutdown. */
+  /** Background pumps are best-effort and use the same queue owner as explicit runs. */
   async pump(refreshConfiguration?: TrainConfigurationReloader): Promise<void> {
-    await this.drainBoth(false, refreshConfiguration);
+    await this.queueOwner().run(false, refreshConfiguration);
   }
 
-  private async drainBoth(
-    failWhenInitiallyHeld: boolean,
-    refreshConfiguration?: TrainConfigurationReloader,
-  ): Promise<void> {
-    // Spawn only after both lanes have released. A child that starts while either lease is held exits at once
-    // and consumes the only wake, leaving remaining work stranded.
-    let handOffRequested = false;
-    const requestHandOff = () => {
-      handOffRequested = true;
-      return Promise.resolve();
-    };
-    const start = (lane: 'main' | 'dev') =>
-      new Promise<void>((resolve, reject) => {
-        const train = refreshConfiguration ? new MergeTrain({ ...this.options }) : this;
-        if (train !== this) train.workspaceFailures = this.workspaceFailures;
-        setTimeout(
-          () => train.drain(lane, failWhenInitiallyHeld, requestHandOff, refreshConfiguration).then(resolve, reject),
-          0,
-        );
-      });
-    // Start dev first: a strict run must not mistake its own main release's dev lease for another train.
-    // Once dev has acquired its lane, later contention already uses the normal quiet return path.
-    await Promise.all([start('dev'), start('main')]);
-    if (handOffRequested) await Promise.resolve(this.options.handOff?.());
-  }
-
-  private trainLeaseExtras(): { codeVersion: string } | undefined {
-    return this.options.startedCodeVersion ? { codeVersion: this.options.startedCodeVersion } : undefined;
-  }
-
-  private async drain(
-    lane: 'main' | 'dev',
-    failWhenInitiallyHeld: boolean,
-    handOff: () => Promise<void>,
-    refreshConfiguration?: TrainConfigurationReloader,
-  ): Promise<void> {
+  private queueOwner(): TrainQueue<TrainConfigurationSnapshot> {
     const o = this.options;
-    mkdirSync(o.stateDirectory, { recursive: true });
-    const leasePath = join(o.stateDirectory, lane === 'main' ? 'train-main.lease' : 'train.lease');
-    let acquired = false;
-    const retryDeferred = new Set<number>();
-    const stale = () => Boolean(o.codeIsCurrent && !o.codeIsCurrent());
-    for (;;) {
-      // Check immediately before every acquisition attempt. A process that turns stale while queued must
-      // leave the request for a fresh train instead of briefly taking the lease to discover that fact.
-      if (stale()) {
-        await handOff();
-        return;
-      }
-      let lease: ReturnType<typeof acquireDirectoryLease>;
-      try {
-        lease = acquireDirectoryLease(leasePath, this.options.policy?.leases, this.trainLeaseExtras());
-      } catch (error) {
-        if (error instanceof LeaseHeldError) {
-          if (failWhenInitiallyHeld && !acquired) throw error;
-          return;
-        }
-        throw error;
-      }
-      acquired = true;
-      const roundHead = this.integrationHead();
-      const deferred = new Set<number>();
-      const pendingDevResolutions: DevResolutionHandoff[] = [];
-      let processedEntry = false;
-      let retire = false;
-      let stop = false;
-      try {
-        if (stale()) {
-          retire = true;
-        } else {
-          for (;;) {
-            if (stale()) {
-              retire = true;
-              break;
-            }
-            if (refreshConfiguration) Object.assign(o, await refreshConfiguration());
-            o.configurationRevision ??= trainConfigurationRevision(o);
-            const entry = o.queue.nextBatch(1, [...deferred], lane)[0];
-            if (!entry) break;
-            processedEntry = true;
-            try {
-              if (entry.outcome) {
-                o.sink.onGateOutcome(entry.outcome);
-                o.queue.acknowledge(entry.id);
-                retryDeferred.delete(entry.id);
-                continue;
-              }
-              o.fence.assertCurrent(entry.request);
-              const batchSize = o.integration?.batchSize ?? 1;
-              const batch: LandingEntry[] = [];
-              const scanned = new Set<number>([entry.id]);
-              if (this.canBatch(entry)) batch.push(entry);
-              while (batch.length < batchSize && batch.length > 0) {
-                const candidate = o.queue.nextBatch(1, [...deferred, ...scanned], lane)[0];
-                if (!candidate) break;
-                scanned.add(candidate.id);
-                if (candidate.outcome || !this.canBatch(candidate)) continue;
-                try {
-                  o.fence.assertCurrent(candidate.request);
-                } catch (error) {
-                  if (!(error instanceof StaleAttemptError)) throw error;
-                  o.queue.acknowledge(candidate.id);
-                  retryDeferred.delete(candidate.id);
-                  continue;
-                }
-                batch.push(candidate);
-              }
-              if (batch.length > 1 || (batch.length === 1 && retryDeferred.has(batch[0]!.id))) {
-                const integrated = await this.integrateBatch(batch, lane);
-                if (integrated.resolution) {
-                  o.queue.beginResolution(integrated.resolution.entry.id);
-                  pendingDevResolutions.push(integrated.resolution);
-                }
-                for (const id of integrated.skippedIds) {
-                  o.queue.acknowledge(id);
-                  retryDeferred.delete(id);
-                }
-                for (const id of integrated.deferredIds) {
-                  deferred.add(id);
-                  retryDeferred.add(id);
-                }
-                for (const { entry: member, outcome } of integrated.outcomes) {
-                  try {
-                    o.queue.finish(member.id, outcome);
-                    o.sink.onGateOutcome(outcome);
-                    o.queue.acknowledge(member.id);
-                    retryDeferred.delete(member.id);
-                  } catch (error) {
-                    if (!(error instanceof StaleAttemptError)) throw error;
-                    o.queue.acknowledge(member.id);
-                    retryDeferred.delete(member.id);
-                  }
-                }
-              } else {
-                const integration = await this.integrateOrdinary(entry, lane, handOff);
-                if (!integration) {
-                  // Leave the request pending for the next pump, without retrying contention in this drain.
-                  if (stale()) retire = true;
-                  stop = true;
-                  break;
-                }
-                if (isDevResolutionHandoff(integration)) {
-                  o.queue.beginResolution(entry.id);
-                  pendingDevResolutions.push(integration);
-                  continue;
-                }
-                const outcome = integration;
-                const workspaceFailures = this.workspaceFailures.get(entry.id);
-                this.workspaceFailures.delete(entry.id);
-                if (workspaceFailures) {
-                  for (const failure of workspaceFailures) {
-                    if (failure.taskId === entry.request.taskId) continue;
-                    const store = o.fence as WorkerStore;
-                    try {
-                      store.assertCurrent(failure);
-                    } catch (error) {
-                      if (error instanceof StaleAttemptError) continue;
-                      throw error;
-                    }
-                    if (store.record(failure)) o.sink.onGateOutcome(failure);
-                    else {
-                      const task = store.task(failure.taskId);
-                      new SqliteManagerInbox(
-                        store.db,
-                        o.inboxDirectory ?? join(o.stateDirectory, 'inboxes'),
-                        undefined,
-                        o.policy?.inbox,
-                      ).deliver({
-                        managerId: task.brief.manager,
-                        taskId: task.id,
-                        kind: 'instruction',
-                        summary:
-                          `Shared workspace landing failed in your work: ${failure.firstFailure?.assertion ?? failure.stage}. See ${failure.logPath}`.replace(
-                            /[\r\n]+/g,
-                            ' ',
-                          ),
-                      });
-                    }
-                  }
-                  if (!workspaceFailures.some((failure) => failure.taskId === entry.request.taskId)) {
-                    deferred.add(entry.id);
-                    continue;
-                  }
-                }
-
-                o.queue.finish(entry.id, outcome);
-                // Sink delivery is at least once; obsolete entries must never block the current attempt.
-                o.sink.onGateOutcome(outcome);
-                o.queue.acknowledge(entry.id);
-                retryDeferred.delete(entry.id);
-              }
-            } catch (error) {
-              if (!(error instanceof StaleAttemptError)) throw error;
-              o.queue.acknowledge(entry.id);
-              retryDeferred.delete(entry.id);
-            }
-          }
-        }
-        // The main and dev lanes drain concurrently. A hook intended to observe a finished landing must not
-        // be consumed by the idle lane before the lane with queued work reaches its handoff.
-        if (processedEntry) await o.beforeRelease?.();
-      } finally {
-        lease.release();
-      }
-
-      if (pendingDevResolutions.length) {
-        for (const pending of pendingDevResolutions) await this.resolveDevLanding(pending);
-        if (retire || stale()) {
-          await handOff();
-          return;
-        }
-        continue;
-      }
-
-      if (retire || stale()) {
-        await handOff();
-        return;
-      }
-      if (stop) return;
-      // The empty check is outside the lease: enqueueing while we drained can wake no owner, so retry if needed.
-      if (o.queue.nextBatch(1, [...deferred], lane).length) continue;
-      if (o.queue.nextBatch(1, [], lane).length) {
-        if (deferred.size) {
-          if (roundHead !== this.integrationHead()) continue;
-          return;
-        }
-        continue;
-      }
-      await o.promote?.();
-      if (stale()) {
-        await handOff();
-        return;
-      }
-      if (!o.queue.nextBatch(1, [], lane).length) return;
-    }
-  }
-
-  private integrationHead(): string | undefined {
-    const branch = this.options.integrationBranch;
-    if (!branch) return undefined;
-    try {
-      return this.git(this.options.mainCheckout, 'rev-parse', `refs/heads/${branch}`);
-    } catch {
-      return undefined;
-    }
-  }
-
-  private canBatch(entry: LandingEntry): boolean {
-    const o = this.options;
-    if (entry.request.unchangedClaim) return false;
-    if (entry.request.devResolution) return false;
-    if (entry.request.managerLanding) return false;
-    if (!o.integrationBranch || !o.fence.commitBatchMerge) return false;
-    if ((entry.request.affectedTests ?? []).some((test) => test.status === 'failed')) return false;
-    const recorded = taskIntegrationTarget(o.stateDirectory, entry.request.taskId, o.policy?.storage);
-    return !recorded.workspace && recorded.target !== 'stabilize' && !controlPlaneReleaseBrief(recorded);
+    return new TrainQueue({
+      mainCheckout: o.mainCheckout,
+      stateDirectory: o.stateDirectory,
+      integrationBranch: o.integrationBranch,
+      storagePolicy: o.policy?.storage,
+      mergePolicy: o.policy?.merge,
+      leasePolicy: o.policy?.leases,
+      inboxDirectory: o.inboxDirectory,
+      inboxPolicy: o.policy?.inbox,
+      batchSize: o.integration?.batchSize,
+      codeIsCurrent: o.codeIsCurrent,
+      startedCodeVersion: o.startedCodeVersion,
+      queue: o.queue,
+      fence: o.fence,
+      sink: o.sink,
+      workspaceFailures: this.workspaceFailures,
+      beforeRelease: o.beforeRelease,
+      promote: o.promote,
+      handOff: o.handOff,
+      applyConfiguration: (configuration) => Object.assign(o, configuration),
+      ensureConfigurationRevision: () => {
+        o.configurationRevision ??= trainConfigurationRevision(o);
+      },
+      cloneForRefresh: () => {
+        const train = new MergeTrain({ ...this.options });
+        train.workspaceFailures = this.workspaceFailures;
+        return train.queueOwner();
+      },
+      integrateBatch: (entries, lane) => this.integrateBatch(entries, lane),
+      integrateOrdinary: (entry, lane, handOff, drainDev) =>
+        this.integrateOrdinary(entry, lane, handOff, drainDev),
+      resolveDevLanding: (pending) => this.resolveDevLanding(pending),
+    });
   }
 
   private async integrateBatch(entries: readonly LandingEntry[], lane: 'main' | 'dev'): Promise<BatchLandingResult> {
@@ -2887,6 +2618,7 @@ export class MergeTrain {
     entry: LandingEntry,
     lane: 'main' | 'dev',
     handOff: () => Promise<void>,
+    drainDev: () => Promise<void>,
   ): Promise<GateOutcome | DevResolutionHandoff | undefined> {
     const o = this.options;
     if (
@@ -2896,7 +2628,6 @@ export class MergeTrain {
     )
       return this.integrate(entry);
 
-    const drainDev = () => this.drain('dev', false, handOff);
     const devPending = () => o.queue.nextBatch(1, [], 'dev').length > 0;
     const policy = o.policy ?? defaultPolicy;
     const timeoutMs = o.controlPlaneDevLeaseTimeoutMs ?? policy.controlPlane.devLeaseWaitMs;
@@ -2921,7 +2652,7 @@ export class MergeTrain {
         lease = acquireDirectoryLease(
           join(o.stateDirectory, 'train.lease'),
           this.options.policy?.leases,
-          this.trainLeaseExtras(),
+          this.options.startedCodeVersion ? { codeVersion: this.options.startedCodeVersion } : undefined,
         );
       } catch (error) {
         if (!(error instanceof LeaseHeldError)) throw error;
