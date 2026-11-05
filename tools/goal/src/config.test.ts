@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as configEntry from './config.ts';
 import { checkSettings, createRuntime, loadSettings, readDerivedFiles } from './config.ts';
+import { routePageDataRepair as runtimePageDataRepair } from './runtime-repair-routing.ts';
 import { configurationProblem } from './local-settings.ts';
 import * as settingsEntry from './settings.ts';
 import { run } from './cli.ts';
@@ -97,6 +98,7 @@ test('settings anchor to the main checkout from a linked worktree; local setting
 });
 
 test('config and settings entries share resolution, strict validation, and recovery identity', () => {
+  expect(configEntry.routePageDataRepair).toBe(runtimePageDataRepair);
   for (const name of [
     'mainCheckout',
     'settingsFile',
