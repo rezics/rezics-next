@@ -488,9 +488,9 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
         ),
       ),
     ).toBe(true);
-    expect(createHash('sha256').update(changedBytes).digest('hex')).toBe(
-      changedPlan.personCareerSources?.[0]?.responseDigest,
-    );
+    const changedCareerDigest = changedPlan.personCareerSources?.[0]?.responseDigest;
+    if (changedCareerDigest === undefined) throw new Error('Missing changed person career response digest');
+    expect(createHash('sha256').update(changedBytes).digest('hex')).toBe(changedCareerDigest);
 
     await editor.takedown(crossMediaAliases.bangumi, 'person:8101', 'facts');
     const fencedBytes = JSON.stringify({ id: 8101, type: 1, career: ['actor'] });

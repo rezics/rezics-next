@@ -119,11 +119,13 @@ test('local publication accepts only its acknowledged plan after authorization a
       publicClient,
     });
     expect(published.status).toBe('published');
+    const publishedWork = published.manifest.records[0];
+    if (!publishedWork) throw new Error('Missing published work record');
     const publicRead = await publicClient.readSubject(workId);
     const subject = publicRead.subject as { id: string; type: string; statements: Record<string, BatchStatement[]> };
     expect(subject.id).toBe(workId);
-    expect(subject.type).toBe(published.manifest.records[0]?.nativeType);
-    const expected = published.manifest.records[0]!.assertions.map(({ property, statement }) => ({
+    expect(subject.type).toBe(publishedWork.nativeType);
+    const expected = publishedWork.assertions.map(({ property, statement }) => ({
       property,
       value: valueContent(statement.value),
     }));
