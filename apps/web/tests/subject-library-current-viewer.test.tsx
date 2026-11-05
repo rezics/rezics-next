@@ -510,6 +510,9 @@ test('The complete mounted Subject Library workflow accepts only its actual curr
     });
   });
   await submit('[data-subject-label-picker]');
+  expect(labels).toHaveLength(2);
+  expect(host.querySelector('[data-subject-label-review]')?.textContent).toContain('Propose creating');
+  await click(m.library_subject_label_review_apply());
   expect(labels[2]!.data).toEqual({
     intent: 'create-and-assign',
     subjectId: subject.id,
@@ -691,6 +694,13 @@ test('Subject label input explains native failures locally and preserves valid r
     await act(async () => prefixes.at(-1)!.resolve({ ...page('A', raw), labels: [] }));
   }
   await click(m.library_subject_label_create({ name: 'A B' }));
+  expect(labels).toHaveLength(0);
+  expect(host.querySelector('[data-subject-label-review]')?.textContent).toContain(input.value);
+  await click(m.library_subject_label_review_edit());
+  expect(host.querySelector<HTMLInputElement>('input[name="name"]')!.value).toBe(input.value);
+  expect(window.document.activeElement).toBe(host.querySelector('input[name="name"]'));
+  await submit('[data-subject-label-picker]');
+  await click(m.library_subject_label_review_apply());
   expect(labels[0]!.data).toMatchObject({ intent: 'create-and-assign', name: input.value });
 });
 
@@ -710,7 +720,39 @@ test('Correcting invalid Subject label input settles one search and fences earli
   expect(host.textContent).not.toContain('A choice');
   expect(host.textContent).not.toContain(m.library_label_more());
   await submit('[data-subject-label-picker]');
-  expect(labels[0]!.data).toMatchObject({ intent: 'assign', labelId: id(22) });
+  expect(labels).toHaveLength(0);
+  expect(host.querySelector('[data-subject-label-review]')?.textContent).toContain('A choice');
+  await click(m.library_subject_label_review_apply());
+  expect(labels[0]!.data).toMatchObject({ intent: 'capture-assign', labelId: id(22) });
+});
+
+test('an uncertain applied review stays separate from new choices and retries its original create request', async () => {
+  await paint();
+  await openLabels();
+  await labelName('Original reviewed name');
+  await act(async () => prefixes.at(-1)!.resolve({ ...page('A', 'Original reviewed name'), labels: [] }));
+  await submit('[data-subject-label-picker]');
+  expect(labels).toHaveLength(0);
+  await click(m.library_subject_label_review_apply());
+  const original = labels[0]!.data;
+  expect(original).toMatchObject({ intent: 'create-and-assign', name: 'Original reviewed name' });
+  await act(async () => labels[0]!.reject(new Error('Unknown Label outcome')));
+  expect(host.querySelector('[data-subject-label-review]')).toBeNull();
+  expect(host.querySelector('[data-subject-label-picker]')).toBeNull();
+  expect(host.textContent).toContain(m.library_selection_retry());
+  await act(async () => client.setQueryData(['session'], viewer('A', 'rotated')));
+  await settle();
+  expect(labels).toHaveLength(1);
+  await click(m.library_selection_retry());
+  expect(labels[1]!.data).toEqual(original);
+  expect(labels[1]!.csrf).toBe('csrf-A');
+  await act(async () =>
+    labels[1]!.resolve({
+      ok: true,
+      assignment: { id: id(25), revision: 1 },
+      label: { id: id(26), name: 'Original reviewed name', revision: 1 },
+    }),
+  );
 });
 
 test('Empty normalized Subject prefixes list labels with null CSRF; empty creation has field feedback and reads never admit writes', async () => {

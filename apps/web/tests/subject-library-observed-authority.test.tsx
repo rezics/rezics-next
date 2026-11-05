@@ -449,7 +449,10 @@ test('Complete Subject Library entry labels and member chooser authority preserv
   await labelName('Existing');
   await act(async () => prefixes.at(-1)!.resolve(page('A', 'Existing')));
   await click('A choice');
-  expect(labels.at(-1)!.data).toMatchObject({ intent: 'assign', labelId: id(21), idempotencyKey: id(32) });
+  expect(labels).toHaveLength(0);
+  expect(host.querySelector('[data-subject-label-review]')?.textContent).toContain('Use the existing Label');
+  await click(m.library_subject_label_review_apply());
+  expect(labels.at(-1)!.data).toMatchObject({ intent: 'capture-assign', labelId: id(21), idempotencyKey: id(32) });
   await act(async () => labels.at(-1)!.resolve({ ok: true, assignment: { id: id(20), revision: 10 } }));
   await openLabels();
   await labelName('New label');
@@ -462,6 +465,8 @@ test('Complete Subject Library entry labels and member chooser authority preserv
     }),
   );
   await submit('[data-subject-label-picker]');
+  expect(host.querySelector('[data-subject-label-review]')?.textContent).toContain('Propose creating');
+  await click(m.library_subject_label_review_apply());
   expect(labels.at(-1)!.data).toMatchObject({ intent: 'create-and-assign', name: 'New label', createKey: id(31) });
   expect(labels.at(-1)!.data.idempotencyKey).not.toBe(id(32));
   await act(async () =>

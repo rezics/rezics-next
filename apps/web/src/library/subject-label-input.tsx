@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type Ref } from 'react';
 import { m } from '../paraglide/messages.js';
 import type { SubjectLabelInputIssue } from './subject-label-input.ts';
 
@@ -15,10 +15,12 @@ export function SubjectLabelInput({
   value,
   issue,
   onChange,
+  inputRef,
 }: {
   value: string;
   issue: SubjectLabelInputIssue | undefined;
   onChange: (value: string) => void;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -28,6 +30,7 @@ export function SubjectLabelInput({
       <label className="grid gap-1 text-sm font-medium">
         {m.library_subject_label_input()}
         <input
+          ref={inputRef}
           name="name"
           aria-label={m.library_subject_label_name()}
           autoComplete="off"

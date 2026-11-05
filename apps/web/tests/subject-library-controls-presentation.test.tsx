@@ -510,7 +510,24 @@ test('Existing and create Label choices expose their whole names, keep search or
   await openLabels();
   await resolveSearch();
   await click(longLabel);
-  expect(labels[0]!.data).toEqual({ intent: 'assign', subjectId: subject.id, labelId: id(28), idempotencyKey: id(32) });
+  expect(labels).toHaveLength(0);
+  expect(host.querySelector('[data-subject-label-review]')?.textContent).toContain(longLabel);
+  await click(m.library_subject_label_review_discard());
+  expect(labels).toHaveLength(0);
+  expect(host.querySelector('[data-subject-label-review]')).toBeNull();
+  expect(window.document.activeElement).toBe(button(longLabel));
+  await click(longLabel);
+  await click(m.library_subject_label_review_edit());
+  expect(button(longLabel).getAttribute('aria-pressed')).toBe('true');
+  expect(window.document.activeElement).toBe(button(longLabel));
+  await click(longLabel);
+  await click(m.library_subject_label_review_apply());
+  expect(labels[0]!.data).toEqual({
+    intent: 'capture-assign',
+    subjectId: subject.id,
+    labelId: id(28),
+    idempotencyKey: id(32),
+  });
   await act(async () => labels[0]!.resolve({ ok: true, assignment: { id: id(29), revision: 1 } }));
   await openLabels();
   const name = 'New family reading '.repeat(11).slice(0, 200).trim();
@@ -520,6 +537,13 @@ test('Existing and create Label choices expose their whole names, keep search or
   expect(create.textContent).toBe(m.library_subject_label_create({ name }));
   await focusOnly([create, pickerSubmit()]);
   await click(create.textContent!);
+  expect(labels).toHaveLength(1);
+  expect(host.querySelector('[data-subject-label-review]')?.textContent).toContain(name);
+  await click(m.library_subject_label_review_edit());
+  expect(host.querySelector<HTMLInputElement>('input[name="name"]')!.value).toBe(name);
+  expect(window.document.activeElement).toBe(host.querySelector('input[name="name"]'));
+  await click(m.library_subject_label_create({ name }));
+  await click(m.library_subject_label_review_apply());
   expect(labels[1]!.data).toEqual({
     intent: 'create-and-assign',
     subjectId: subject.id,
@@ -530,6 +554,50 @@ test('Existing and create Label choices expose their whole names, keep search or
   expect(labels[1]!.data.idempotencyKey).not.toBe(id(32));
   await act(async () => labels[1]!.resolve({ ok: false, reason: 'capacity' }));
   expect(host.textContent).toContain(m.library_subject_label_capacity());
+});
+
+test('a lost create gate leaves an existing Label review and its admitted assignment available beside neighboring actions', async () => {
+  await ready();
+  await openLabels();
+  await resolveSearch();
+  await click(longLabel);
+  expect(labels).toHaveLength(0);
+  expect(host.querySelector('[data-subject-label-review]')?.textContent).toContain(longLabel);
+  await act(async () => {
+    client.setQueryData(scopedKey(), {
+      subject: 'A',
+      admitted: admitted.filter((gate) => gate !== 'library_label.create'),
+    });
+    await tick();
+  });
+  await settle();
+  expect(host.querySelector('[data-subject-label-review]')?.textContent).toContain(longLabel);
+  expect(button(m.library_subject_label_review_apply()).disabled).toBe(false);
+  expect(host.querySelector('[data-library-entry]')).not.toBeNull();
+  expect(host.querySelector('[data-add-to-collection]')).not.toBeNull();
+  await click(m.library_subject_label_review_apply());
+  expect(labels[0]!.data).toEqual({
+    intent: 'capture-assign',
+    subjectId: subject.id,
+    labelId: id(28),
+    idempotencyKey: id(32),
+  });
+  await act(async () => labels[0]!.resolve({ ok: true, assignment: { id: id(29), revision: 1 } }));
+});
+
+test('a private Label review cannot return after viewer A to B to A retirement', async () => {
+  await ready();
+  await openLabels();
+  await resolveSearch();
+  await click(longLabel);
+  expect(host.querySelector('[data-subject-label-review]')?.textContent).toContain(longLabel);
+  expect(labels).toHaveLength(0);
+  await observe('B', { ...baseline('B'), labels: [] });
+  expect(host.querySelector('[data-subject-label-review]')).toBeNull();
+  await observe('A', { ...baseline(), labels: [] });
+  expect(host.querySelector('[data-subject-label-review]')).toBeNull();
+  expect(labels).toHaveLength(0);
+  expect(host.querySelector('[data-library-entry]')).not.toBeNull();
 });
 
 function pickerSubmit() {
@@ -593,7 +661,7 @@ test('Viewer replacement and admission/address ABA retire held choices, remove a
   });
   await settle();
   expect(labels).toHaveLength(1);
-  expect(host.querySelector('[data-subject-labels]')).toBeNull();
+  expect(host.querySelector('[data-subject-labels]')).not.toBeNull();
   await ready();
   await submit('[data-subject-label-remove]');
   await act(async () => labels[1]!.resolve({ ok: true, assignment: { id: id(20), revision: 9 }, restoreRevision: 12 }));
