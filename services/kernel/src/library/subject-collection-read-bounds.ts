@@ -157,20 +157,6 @@ function partitionPoint(partition: number): Bound {
   );
 }
 
-function bytes(amount: number): Bound {
-  return declareBound({
-    candidateKeys: 0,
-    nativeRows: 0,
-    identityMetadataRows: 0,
-    nativePoints: 0,
-    witnessKeys: 0,
-    statements: 0,
-    bytes: amount,
-    emptySeeks: 0,
-    engineRequests: 0,
-  });
-}
-
 function queryBytes(sql: string, input: unknown, projection: unknown, rows = 1): number {
   return Buffer.byteLength(sql) + jsonBytes(input) + 2 + rows * (jsonBytes(projection) + 1);
 }
