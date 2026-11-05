@@ -873,13 +873,15 @@ function ShelfEntriesPage({
           {m.library_bulk_status_preview_error()}
         </p>
       ) : null}
-      <SelectedEntryCorrection
-        entries={shelfRows.rows.map((row) => row.entry)}
-        selected={shelfRows.selected}
-        isCurrent={shelfRows.isCurrent}
-        lease={mutationLease}
-        refreshEntries={refreshEntries ?? (async () => {})}
-      />
+      {refreshEntries ? (
+        <SelectedEntryCorrection
+          entries={shelfRows.rows.map((row) => row.entry)}
+          selected={shelfRows.selected}
+          isCurrent={shelfRows.isCurrent}
+          lease={mutationLease}
+          refreshEntries={refreshEntries}
+        />
+      ) : null}
       <ShelfSelectionBar controls={controls} bulkRemoval={bulkRemoval} selectionLimitReached={selectionLimitReached} />
       <BulkStatusReview controls={controls} />
       <BulkLibraryRemovalReviewView controller={bulkRemoval} pending={shelfRows.pending} />
