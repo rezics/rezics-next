@@ -529,6 +529,13 @@ and visibly announces that it restarted at page one.
 Decision: FULL Copies preserves each native copy row and its existing `subject` summary, and adds per-copy `context` with the current bounded Semantic facts; only a completeness-aware disclosed `schema:exampleOfWork` result may identify a work/edition association, dates retain their native calendar granularity, and context grants no copy action. Until Semantic supplies that result, the association is `unsupported` and the 65,536-byte context budget refuses the rich page as `unavailable` without truncating identities.
 Detail/edit return and page recovery keep that subject. Decision: changed drafts prompt before closure or internal
 navigation; an unresolved command allows only Stay until its exact intent resolves.
+Decision: The received private Copies page compares at most four exact IDs and observed revisions, in native page
+order, using only supplied reading facts. Comparison stays inline, labels missing personal observations explicitly,
+retires changed or missing selections until deliberate reselection, and clears with the current private origin.
+Its explicit Edit hands the selected current row to the existing point reader only when no editor is open; otherwise
+it directs the person to the existing editor controls. Web retains ResponsiveDialog editor/detail continuity,
+focus, correction and closing; native commands and Undo retain their owners.
+
 Decision: A definitive Copy update/delete conflict blocks new commands until explicit current-detail review and acceptance; accepting replaces the draft under the existing discard choice, uses a fresh key, and never submits a write. A concealed or unavailable detail cannot be accepted; uncertain commands keep their exact original retry.
 
 The destinations are **Library**, **Following** and **History**. Library contains a bounded Continue row, Everything,

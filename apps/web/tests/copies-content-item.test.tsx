@@ -283,3 +283,88 @@ describe('Copy items retain exact edition identity historical disclosure and ind
     }
   });
 });
+
+describe('Received-page exact-copy comparison', () => {
+  test('keeps distinct copies in native order, bounds selection and labels only supplied observations', async () => {
+    const first = copy(11, {
+      location: null, source: null, note: null, acquiredOn: null, disposedOn: null,
+      kindLabel: undefined, statusLabel: undefined, meaning: 'unknown',
+      readingContext: { state: 'withheld' },
+    });
+    const second = copy(12, { note: 'Line one\nLine two\nLine three', source: 'Shop\nReceipt', readingContext: { state: 'unsupported', facts: [] } });
+    const hidden = copy(13, { subject: null, readingContext: { state: 'missing' } });
+    const fourth = copy(14, { readingContext: { state: 'unavailable' } });
+    const outside = copy(15, { note: 'Unselected observation' });
+    const h = await mount([first, second, hidden, fourth, outside]);
+    try {
+      const select = (position: number) => within(h.rows()[position]! as unknown as HTMLElement).getByRole('button', { name: /^Compare copy/ });
+      await h.click(select(1));
+      await h.click(select(0));
+      await h.click(select(2));
+      await h.click(select(3));
+      expect(select(4).hasAttribute('disabled')).toBe(true);
+      await h.click(h.body.getByRole('button', { name: m.library_copy_compare_open() }));
+      const region = h.body.getByRole('region', { name: m.library_copy_compare_heading() });
+      const cards = [...region.querySelectorAll<HTMLElement>('article')];
+      expect(cards.map((card) => card.dataset.copyComparisonId)).toEqual([first.id, second.id, hidden.id, fourth.id]);
+      expect(cards[0]!.querySelector('h3')?.textContent).toBe(cards[1]!.querySelector('h3')?.textContent);
+      expect(cards[0]!.textContent).toContain(m.library_copy_compare_not_recorded());
+      expect(cards[0]!.textContent).toContain(m.library_copy_compare_label_missing());
+      expect(cards[0]!.textContent).toContain(m.library_copy_meaning_unknown());
+      expect(cards[0]!.textContent).toContain(m.library_copy_reading_context_withheld());
+      expect(cards[1]!.textContent).toContain(m.library_copy_reading_context_unsupported());
+      expect(cards[2]!.textContent).toContain(m.library_copy_reading_context_missing());
+      expect(cards[3]!.textContent).toContain(m.library_copy_reading_context_unavailable());
+      expect(cards[2]!.querySelector('a')).toBeNull();
+      expect(region.textContent).not.toContain(outside.note);
+      expect(region.textContent).toContain(m.library_copy_compare_different());
+      expect(region.textContent).toContain(m.library_copy_compare_same());
+      const secondUI = within(cards[1]!);
+      await h.click(secondUI.getByRole('button', { name: m.library_copy_note_reader_expand_note() }));
+      expect(secondUI.getByRole('button', { name: m.library_copy_note_reader_collapse_note() }).getAttribute('aria-expanded')).toBe('true');
+      expect(cards[1]!.textContent).toContain(second.note);
+      await h.show([fourth, hidden, second, first, outside]);
+      expect([...region.querySelectorAll<HTMLElement>('article')].map((card) => card.dataset.copyComparisonId)).toEqual([fourth.id, hidden.id, second.id, first.id]);
+      await h.click(within(region.querySelector('article')!).getByRole('button', { name: m.library_copy_compare_remove() }));
+      expect(select(4).hasAttribute('disabled')).toBe(false);
+      expect(h.readDetail).not.toHaveBeenCalled();
+      expect(unexpectedIO).not.toHaveBeenCalled();
+    } finally { await h.close(); }
+  });
+});
+
+describe('Received comparison replacement and focus', () => {
+  test('requires deliberate revision reselection, forgets missing rows and returns only to a connected originating row', async () => {
+    const first = copy(21, { note: 'Before replacement' });
+    const second = copy(22, { note: 'Retained other record' });
+    const h = await mount([first, second]);
+    try {
+      const select = (position: number) => within(h.rows()[position]! as unknown as HTMLElement).getByRole('button', { name: /^Compare copy/ });
+      const firstTrigger = select(0);
+      await h.click(firstTrigger);
+      await h.click(h.body.getByRole('button', { name: m.library_copy_compare_open() }));
+      await h.click(h.body.getByRole('button', { name: m.library_copy_compare_close() }));
+      expect(window.document.activeElement).toBe(firstTrigger);
+      await h.click(select(1));
+      await h.click(h.body.getByRole('button', { name: m.library_copy_compare_open() }));
+      const current = { ...first, revision: first.revision + 1, note: 'Current replacement' };
+      await h.show([current]);
+      const region = h.body.getByRole('region', { name: m.library_copy_compare_heading() });
+      expect(region.querySelectorAll('article')).toHaveLength(0);
+      expect(region.textContent).toContain(m.library_copy_compare_changed());
+      expect(region.textContent).toContain(m.library_copy_compare_missing());
+      expect(region.textContent).not.toContain('Before replacement');
+      await h.show([current, second]);
+      expect(region.querySelectorAll('article')).toHaveLength(0);
+      expect(select(0).getAttribute('aria-pressed')).toBe('false');
+      await h.click(select(0));
+      expect(region.querySelector('article')?.textContent).toContain('Current replacement');
+      await h.show([second]);
+      await h.click(h.body.getByRole('button', { name: m.library_copy_compare_close() }));
+      expect(firstTrigger.isConnected).toBe(false);
+      expect(window.document.activeElement).not.toBe(firstTrigger);
+      expect(h.readDetail).not.toHaveBeenCalled();
+      expect(unexpectedIO).not.toHaveBeenCalled();
+    } finally { await h.close(); }
+  });
+});

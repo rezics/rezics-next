@@ -36,6 +36,11 @@ import {
   invalidCopyFields,
   type CopyDraft as Draft,
 } from './copy-fields';
+import { CopyTextReader, dateText } from './copy-inventory-review/text-reader';
+import { CopyInventoryReview } from './copy-inventory-review/view';
+import { useCopyInventoryReview } from './copy-inventory-review/selection';
+import { CopyInventorySelect } from './copy-inventory-review/select';
+import { CopyInventoryHistory, hasUnresolvedHistory } from './copy-inventory-review/history';
 import { CopyInventoryFilters } from './copy-inventory-filters';
 export { CopiesFallback } from './copies-fallback';
 const target =
@@ -43,10 +48,6 @@ const target =
 const button = `${target} inline-flex items-center justify-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`;
 const quiet = `${target} inline-flex items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
 const locale = () => getLocale();
-const dateText = (value: string) =>
-  value
-    ? new Intl.DateTimeFormat(locale(), { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`))
-    : '';
 const blank = (value: string): string | null => (value === '' ? null : value);
 
 const draftOf = (copy?: CopyItem): Draft => ({
@@ -808,55 +809,25 @@ export function CopyForm({
   );
 }
 
-const hasUnresolvedHistory = (copy: CopyItem) => copy.meaning !== 'known' || !copy.kindLabel || !copy.statusLabel;
-
-function CopyTextReader({
-  label,
-  value,
-  expandLabel,
-  collapseLabel,
-}: {
-  label: string;
-  value: string;
-  expandLabel: string;
-  collapseLabel: string;
-}) {
-  const id = useId();
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div role="group" aria-labelledby={`${id}-label`} className="min-w-0 max-w-full text-sm text-muted-foreground">
-      <p id={`${id}-label`} className="font-medium">
-        {label}
-      </p>
-      <p
-        id={id}
-        className={`min-w-0 max-w-full whitespace-break-spaces [overflow-wrap:anywhere] ${expanded ? '' : 'line-clamp-2'}`}
-      >
-        {value}
-      </p>
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={id}
-        className="min-h-11 max-w-full cursor-pointer rounded-md py-2 text-left whitespace-normal text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        onClick={() => setExpanded((value) => !value)}
-      >
-        {expanded ? collapseLabel : expandLabel}
-      </button>
-    </div>
-  );
-}
 
 export function CopyRow({
   copy,
   onEdit,
   ratio,
   returnTo,
+  comparison,
 }: {
   copy: CopyItem;
   onEdit: (launcher: HTMLButtonElement | null) => void;
   ratio: CoverRatio;
   returnTo?: string | undefined;
+  comparison?: {
+    selected: boolean;
+    disabled: boolean;
+    position: number;
+    controls: string;
+    onSelect: (trigger: HTMLButtonElement) => void;
+  };
 }) {
   const launcher = useRef<HTMLButtonElement>(null);
   const pageLocale = locale();
@@ -933,37 +904,12 @@ export function CopyRow({
               collapseLabel={m.library_copy_note_reader_collapse_note()}
             />
           ) : null}
-          {hasUnresolvedHistory(copy) ? (
-            <div className="mt-2">
-              <details className="text-sm">
-                <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                  {m.library_copy_history_details()}
-                </summary>
-                <div className="space-y-2 pt-2 text-muted-foreground">
-                  <p>
-                    {copy.meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable()}
-                  </p>
-                  <dl className="space-y-2">
-                    <div>
-                      <dt>{m.library_copy_kind()}</dt>
-                      <dd className="break-all text-foreground">
-                        <code>{copy.kind ?? 'null'}</code>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{m.library_copy_status()}</dt>
-                      <dd className="break-all text-foreground">
-                        <code>{copy.status}</code>
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-              </details>
-            </div>
-          ) : null}
+          <CopyInventoryHistory copy={copy} />
         </div>
       }
       trailing={
+        <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
+          {comparison ? <CopyInventorySelect {...comparison} title={title} /> : null}
         <Menu
           title={m.library_copy_more_actions()}
           trigger={
@@ -984,6 +930,7 @@ export function CopyRow({
             },
           ]}
         />
+        </div>
       }
     />
   );
@@ -1054,6 +1001,12 @@ function LoadedCopiesPage({
   }, []);
   const currentPage = (operation?: GatedOperation) =>
     active.current && (!originating || originating.isCurrent(operation));
+  const comparisonId = useId();
+  const comparison = useCopyInventoryReview({
+    copies,
+    scope: returnTo,
+    current: () => currentPage('copy.list'),
+  });
   const currentEditor = (operation: GatedOperation = editing ? 'copy.get' : 'copy.create') =>
     currentPage(operation) && editorKey === inspection.current;
   const closeEditor = () => {
@@ -1089,6 +1042,7 @@ function LoadedCopiesPage({
       } else {
         setDetailState(result.reason);
         if (result.reason === 'forbidden') {
+          comparison.reset();
           // Keep only the previously readable raw row; never retain point-detail presentation after denial.
           setCopies((copies) =>
             copies.map((item) =>
@@ -1201,18 +1155,44 @@ function LoadedCopiesPage({
           </Exposure>
         </p>
       ) : null}
+      {copies.length || comparison.open || comparison.retired.length ? (
+        <CopyInventoryReview
+          id={comparisonId}
+          selection={comparison}
+          copies={copies}
+          returnTo={returnTo}
+          editorOpen={editing !== undefined}
+          onEdit={(copy, trigger) => {
+            if (editing === undefined && currentPage('copy.get')) void inspect(copy, trigger);
+          }}
+          onReturnToEditor={() => {
+            if (!currentPage() || editing === undefined) return;
+            const form = document.querySelector<HTMLFormElement>(
+              `form[data-idempotency-key="${editing?.idempotencyKey ?? addKey}"]`,
+            );
+            form?.querySelector<HTMLElement>('input, textarea, select, button')?.focus();
+          }}
+        />
+      ) : null}
       {copies.length ? (
         <>
           {copies.some(hasUnresolvedHistory) ? (
             <p className="text-sm text-muted-foreground">{m.library_copy_history_notice()}</p>
           ) : null}
           <ul className="m-0 list-none p-0">
-            {copies.map((copy) => (
+            {copies.map((copy, position) => (
               <CopyRow
                 key={`${copy.id}:${copy.revision}`}
                 copy={copy}
                 ratio={rowRatio([copy.subject])}
                 returnTo={returnTo}
+                comparison={{
+                  selected: comparison.selected(copy),
+                  disabled: !comparison.canSelect(copy),
+                  position: position + 1,
+                  controls: comparisonId,
+                  onSelect: (trigger) => comparison.toggle(copy, trigger),
+                }}
                 onEdit={(launcher) => void inspect(copy, launcher)}
               />
             ))}
