@@ -10825,5 +10825,6 @@
   "identifiers_inspect_holder": "Subject",
   "identifiers_inspect_property": "Property",
   "identifiers_inspect_rank": "Rank",
-  "identifiers_inspect_continue": "Continue the public read"
+  "identifiers_inspect_continue": "Continue the public read",
+  "identifiers_public_reload": "Refresh public reading"
 }

@@ -90,7 +90,7 @@ export const UncertainResultReadRecovery: Story = {
     const canvas = within(canvasElement);
     const visit = within(canvasElement.querySelector('[data-slot="identifier-current-visit"]') as HTMLElement);
     await expect(visit.findByText(m.identifiers_origin_unavailable())).resolves.toBeVisible();
-    await userEvent.click(visit.getByRole('button', { name: m.correction_reload() }));
+    await userEvent.click(visit.getByRole('button', { name: m.identifiers_public_reload() }));
     await expect(visit.findByText('ISBN-13')).resolves.toBeVisible();
     const field = within(await canvas.findByRole('region', { name: 'ISBN-13' }));
     await userEvent.click(field.getByRole('button', { name: m.facts_edit_field() }));

@@ -240,7 +240,7 @@ test('mounted visits retire delayed A/B/A, equal-principal observations, new rev
     expect(host.querySelector('[data-slot="identifier-exact-occurrence"]')).toBeNull();
     expect(button('Inspect this exact assertion')).toBeUndefined();
     expect(host.textContent).toContain('unavailable');
-    await click('Reload current values');
+    await click('Refresh public reading');
     await finish();
     await click('Inspect this exact assertion');
     await click('Return to the refreshed public reading');

@@ -260,7 +260,7 @@ function IdentifierVisitReader({
               void query.refetch();
             }}
           >
-            {m.correction_reload({}, o)}
+            {m.identifiers_public_reload({}, o)}
           </button>
         </>
       )}
