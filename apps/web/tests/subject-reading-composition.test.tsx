@@ -175,6 +175,14 @@ test('The default Subject reader does not describe admitted incoming editions as
     return renderPage(loaded.page);
   };
   const incoming = await renderLoaded(ownEmpty);
+  const editionStart = incoming.indexOf('id="editions"');
+  console.log('edition diagnostic', JSON.stringify({
+    editionKey,
+    planned: plan.reads[editionKey],
+    node: plan.nodes.editions,
+    result: ownEmpty.reads[editionKey],
+    section: editionStart < 0 ? null : incoming.slice(editionStart, editionStart + 1200),
+  }));
   expect(incoming).toContain('The Little Prince (Reynal &amp; Hitchcock, 1943)');
   expect(incoming).not.toContain('data-slot="invitation"');
   expect(incoming).not.toContain(m.subject_empty());
