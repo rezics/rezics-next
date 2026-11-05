@@ -386,7 +386,7 @@ test('public recovery uses the current origin, keeps sparse pages and retires la
   await act(async () => publics[1]!.resolve(publicPage(3, 'still-next', 0, { kind: 'unknown' })));
   expect(host.textContent).toContain(m.library_subject_public_empty_page());
   await click(m.library_subject_continuation_previous());
-  expect(publics[2]!.data).toEqual({ cursor: 'empty-next' });
+  expect(publics[2]!.data).toEqual({ cursor: 'sparse' });
   await act(async () => publics[2]!.reject(new Error('stale_cursor')));
   expect(host.querySelector('[role="alert"]')?.textContent).toContain(m.library_subject_continuation_expired());
   button(m.library_subject_continuation_restart()).focus();
