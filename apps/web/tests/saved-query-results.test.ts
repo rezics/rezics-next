@@ -4,7 +4,12 @@ import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { withPlatformClosedRecognition } from '../src/kernel/platform-closed.ts';
-import { isOrdinarySavedQuery, RuleEditLink } from '../src/library/saved-query-results.tsx';
+import {
+  isOrdinarySavedQuery,
+  RuleEditLink,
+  savedQueryResultsAddress,
+  savedQueryRuleReturn,
+} from '../src/library/saved-query-results.tsx';
 import { m } from '../src/paraglide/messages.js';
 import { locales } from '../src/paraglide/runtime.js';
 
@@ -103,6 +108,35 @@ test('ordinary saved identities omit builtinKind and never offer a built-in or p
       createElement(RuleEditLink, { collection: { ...saved, builtinKind: 'liked' }, viewerId: 'owner', allowed: true }),
     ),
   ).toBe('');
+});
+
+test('rule returns retain the directory origin and reset only the result cursor after save', () => {
+  const collection = { id: 'saved/query', curatorAccountId: 'owner', membershipKind: 'dynamic' as const };
+  const directoryHref = '/en/library/collections?cursor=directory%2B%2F%3D%3D&layout=previews';
+  const resultsHref = savedQueryResultsAddress('en', collection.id, 'results+/==', {}, {
+    layout: 'list',
+    returnTo: directoryHref,
+  });
+  const html = renderToStaticMarkup(
+    createElement(RuleEditLink, { collection, viewerId: 'owner', allowed: true, resultsHref }),
+  );
+  const editHref = [...html.matchAll(/href="([^"]+)"/g)]
+    .map((match) => match[1])
+    .find((href) => href.includes('/rule?returnTo='));
+  expect(editHref).toBeDefined();
+  const resultAddress = new URL(editHref!, 'https://rezics.invalid').searchParams.get('returnTo');
+  expect(resultAddress).toBe(savedQueryRuleReturn(resultsHref, collection.id, 'en'));
+
+  const afterSave = new URL(
+    savedQueryRuleReturn(resultAddress!, collection.id, 'en', true),
+    'https://rezics.invalid',
+  );
+  expect(afterSave.searchParams.get('cursor')).toBeNull();
+  expect(afterSave.searchParams.get('layout')).toBe('list');
+  expect(afterSave.searchParams.get('returnTo')).toBe(directoryHref);
+  expect(savedQueryRuleReturn('/en/collections/other?cursor=unsafe', collection.id, 'en')).toBe(
+    savedQueryResultsAddress('en', collection.id, undefined),
+  );
 });
 
 test('a saved results page keeps unique subjects, omits counts, notes and the built-in rule copy', () => {

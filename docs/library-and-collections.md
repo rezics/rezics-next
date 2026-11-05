@@ -507,7 +507,8 @@ its separate notice, and current viewer/address retirement applies through malfo
 Decision: Collection owner pages, saved rules and publication preview/review refresh use authenticated read identity without CSRF; writes require a current token, uncertain retries retain their original sender, credential, key and operands, and publication previews exclude occurrence notes.
 
 Decision: Populated saved-query directories expose the supplied opaque next cursor in rows and previews through
-the existing page link, preserving layout and each result's bounded return origin.
+the existing page link, preserving layout and each result's bounded return origin; Edit rule uses that row's existing
+result address as its bounded return through the rule page and back to the same result and directory.
 
 The Subject Library slot owns one complete Subject-to-Collection visit: the public Collections that contain the
 current Subject, opaque continuation of that public list, return to the same reader, and adding the exact Subject to

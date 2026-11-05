@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { MineCollection } from '../src/library/mine-collections';
 import { SavedQueryDirectory } from '../src/library/saved-query-directory';
+import { savedQueryRuleReturn } from '../src/library/saved-query-results';
 import { m } from '../src/paraglide/messages.js';
 
 function collection(id: string, changes: Partial<MineCollection> = {}): MineCollection {
@@ -52,7 +53,14 @@ test.each(['rows', 'previews'] as const)(
     expect(html).toContain(m.library_collection_more());
     expect(html).toContain(`href="/en/library/collections?cursor=next%2B%2Fcursor%3D%3D&amp;layout=${layout}"`);
     expect(html).toContain(`href="/en/collections/saved%2Fquery?returnTo=${encodeURIComponent(currentHref)}"`);
-    expect(html).toContain('href="/en/collections/saved%2Fquery/rule"');
+    const editHref = [...html.matchAll(/href="([^"]+)"/g)]
+      .map((match) => match[1])
+      .find((href) => href.includes('/rule?returnTo='));
+    expect(editHref).toBeDefined();
+    const resultAddress = new URL(editHref!, 'https://rezics.invalid').searchParams.get('returnTo');
+    const expectedResultAddress = `/en/collections/saved%2Fquery?returnTo=${encodeURIComponent(currentHref)}`;
+    expect(resultAddress).toBe(expectedResultAddress);
+    expect(savedQueryRuleReturn(resultAddress!, 'saved/query', 'en')).toBe(expectedResultAddress);
     expect(html).not.toContain('other-owner');
     expect(html).not.toContain('state-view');
     expect(html).not.toContain('curated');

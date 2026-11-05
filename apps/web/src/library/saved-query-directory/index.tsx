@@ -83,6 +83,7 @@ export function SavedQueryDirectory({
                         collection={collection}
                         viewerId={viewerId}
                         allowed={canEditRules}
+                        resultsHref={href}
                         className={buttonVariants({ variant: 'outline', size: 'lg' })}
                       />
                     ) : null
