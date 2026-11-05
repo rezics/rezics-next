@@ -222,6 +222,9 @@ type BanFocusRecovery = {
   sequence: number;
 };
 
+type BanWindowAddress = { realmId: string; visit: number; cursor: string | undefined };
+type BanWindowDirection = 'next' | 'previous' | 'refresh' | 'restart';
+
 type PageReadFocusIntent = {
   source: HTMLButtonElement;
   ticket: number;
@@ -358,8 +361,17 @@ function RealmBansVisit({
   const generation = useRef(0);
   const renderGeneration = generation.current;
   const pageReady = useRef(initial?.state === 'ready');
-  // Retain only this visit's last bounded page input, including a failed continuation.
-  const pageRead = useRef<{ cursor?: string | undefined; focus: PageReadFocusIntent | null }>({ focus: null });
+  // Addresses never retain a body or outlive this admitted Realm visit.
+  const windows = useRef<{
+    active: BanWindowAddress;
+    previous: BanWindowAddress[];
+    discarded: boolean;
+  }>({ active: { realmId, visit: gate.id, cursor: undefined }, previous: [], discarded: false });
+  const pageRead = useRef<{
+    cursor?: string | undefined;
+    direction?: BanWindowDirection;
+    focus: PageReadFocusIntent | null;
+  }>({ focus: null });
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const currentListHeading = useRef<HTMLHeadingElement>(null);
   const banTrigger = useRef<HTMLButtonElement>(null);
@@ -514,7 +526,7 @@ function RealmBansVisit({
   }
 
   const unresolved = () => gate.current() && (working.current !== null || uncertain.current !== null);
-  useAuthoringDeparture(
+  const departure = useAuthoringDeparture(
     () =>
       gate.current() &&
       (queryNow.current.length > 0 ||
@@ -539,16 +551,35 @@ function RealmBansVisit({
       pageReady.current = false;
       cancelPageReadFocus();
       pageRead.current = { focus: null };
+      windows.current = { active: { realmId, visit: gate.id, cursor: undefined }, previous: [], discarded: false };
     },
     'realm-ban',
+    undefined,
+    undefined,
+    () => {
+      // Local browse departure retires the page review, preserving this visit's addresses and receipts.
+      invalidateTarget();
+      unbanReview.current = null;
+      setConfirm(null);
+      setQuery('');
+      setReason('');
+      pageReady.current = false;
+      generation.current++;
+    },
   );
 
   const refresh = useCallback(
-    async (cursor?: string, focusSource?: HTMLButtonElement) => {
+    async (cursor?: string, focusSource?: HTMLButtonElement, direction: BanWindowDirection = 'restart') => {
       if (!gate.current() || working.current || uncertain.current) return;
       cancelPageReadFocus();
       pageReady.current = false;
-      pageRead.current = { cursor, focus: null };
+      // Restart is deliberate recovery even when its new first-page read fails.
+      if (direction === 'restart') {
+        cursor = undefined;
+        windows.current.previous = [];
+        windows.current.discarded = false;
+      }
+      pageRead.current = { cursor, direction, focus: null };
       const ticket = gate.ticket();
       const current = ++generation.current;
       if (focusSource) pageRead.current.focus = createPageReadFocusIntent(focusSource, ticket, current);
@@ -573,8 +604,21 @@ function RealmBansVisit({
       if (generation.current !== current) return;
       if (!gate.owns(ticket)) return;
       pageReady.current = next.state === 'ready';
+      if (next.state === 'ready') {
+        const history = windows.current;
+        if (direction === 'next') {
+          history.previous.push(history.active);
+          if (history.previous.length > 8) {
+            history.previous.shift();
+            history.discarded = true;
+          }
+        } else if (direction === 'previous') history.previous.pop();
+        history.active = { realmId, visit: gate.id, cursor };
+      }
       setView(next);
       if (next.state === 'forbidden' || next.state === 'closed' || next.state === 'signed-out') {
+        windows.current = { active: { realmId, visit: gate.id, cursor: undefined }, previous: [], discarded: false };
+        pageRead.current = { focus: pageRead.current.focus };
         setResult(null);
         setReceipts([]);
         setRetry(null);
@@ -586,8 +630,28 @@ function RealmBansVisit({
         setReason('');
       }
     },
-    [read, invalidateTarget, gate, setConfirm, setQuery, setReason, setSelectedReview, setSelectedReviewReason],
+    [
+      read,
+      realmId,
+      invalidateTarget,
+      gate,
+      setConfirm,
+      setQuery,
+      setReason,
+      setSelectedReview,
+      setSelectedReviewReason,
+    ],
   );
+
+  function browse(direction: BanWindowDirection, cursor: string | undefined, event: MouseEvent<HTMLButtonElement>) {
+    if (!gate.current() || working.current || uncertain.current || generation.current !== renderGeneration) return;
+    const ticket = gate.ticket();
+    const source = keyboardActivationSource(event);
+    departure.requestNavigation(() => {
+      if (!gate.owns(ticket) || working.current || uncertain.current) return;
+      void refresh(cursor, source && document.activeElement === source ? source : undefined, direction);
+    });
+  }
 
   useEffect(() => {
     setBusy(false);
@@ -815,22 +879,29 @@ function RealmBansVisit({
         <h2 ref={pageHeading} tabIndex={-1} id={`${id}-title`} className="text-xl font-semibold">
           {m.realm_bans_heading()}
         </h2>
-        <Button
-          ref={restartAction}
-          type="button"
-          variant="outline"
-          className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
-          disabled={disabled || view.state === 'loading'}
-          onClick={(event) => {
-            if (!gate.current() || generation.current !== renderGeneration) return;
-            setConfirm(null);
-            void refresh(undefined, keyboardActivationSource(event));
-          }}
-        >
-          {view.state === 'unavailable' || view.state === 'invalid-cursor'
-            ? m.realm_bans_restart()
-            : m.realm_bans_refresh()}
-        </Button>
+        <div className="flex min-w-0 flex-wrap gap-2">
+          {view.state === 'ready' ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+              disabled={disabled}
+              onClick={(event) => browse('refresh', windows.current.active.cursor, event)}
+            >
+              {m.realm_bans_refresh()}
+            </Button>
+          ) : null}
+          <Button
+            ref={restartAction}
+            type="button"
+            variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+            disabled={disabled || view.state === 'loading'}
+            onClick={(event) => browse('restart', undefined, event)}
+          >
+            {m.realm_bans_restart()}
+          </Button>
+        </div>
       </div>
       {view.state !== 'ready' ? (
         <div className="space-y-3">
@@ -846,7 +917,7 @@ function RealmBansVisit({
               disabled={disabled}
               onClick={(event) => {
                 if (!gate.current() || generation.current !== renderGeneration) return;
-                void refresh(pageRead.current.cursor, keyboardActivationSource(event));
+                browse(pageRead.current.direction ?? 'refresh', pageRead.current.cursor, event);
               }}
             >
               {m.realm_bans_read_retry()}
@@ -1334,20 +1405,33 @@ function RealmBansVisit({
               ))}
             </ul>
           )}
-          {view.page.next ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
               className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
-              disabled={disabled}
-              onClick={(event) => {
-                if (!gate.current() || generation.current !== renderGeneration) return;
-                setConfirm(null);
-                void refresh(view.page.next ?? undefined, keyboardActivationSource(event));
-              }}
+              disabled={disabled || windows.current.previous.length === 0}
+              onClick={(event) => browse('previous', windows.current.previous.at(-1)!.cursor, event)}
             >
-              {m.realm_bans_next()}
+              {m.realm_bans_previous()}
             </Button>
+            {view.page.next ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                disabled={disabled}
+                onClick={(event) => {
+                  if (!gate.current() || generation.current !== renderGeneration) return;
+                  browse('next', view.page.next ?? undefined, event);
+                }}
+              >
+                {m.realm_bans_next()}
+              </Button>
+            ) : null}
+          </div>
+          {windows.current.discarded && windows.current.previous.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{m.realm_bans_history_discarded()}</p>
           ) : null}
         </>
       )}

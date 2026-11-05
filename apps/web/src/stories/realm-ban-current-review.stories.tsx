@@ -187,3 +187,35 @@ export const SelectedEpisodeUnbanReview: Story = {
     await expect(canvas.getByRole('button', { name: m.realm_bans_confirm() })).toBeEnabled();
   },
 };
+
+const windowRead = async (cursor?: string): Promise<BanReadState> => ({
+  ...page,
+  page: {
+    ...page.page,
+    next: cursor ? null : 'native-opaque-next',
+    items: page.page.items.map((ban) => ({ ...ban, reason: cursor ? 'Later window episode' : 'First window episode' })),
+  },
+});
+
+export const LaterWindowReview: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/spaces/quiet-novel-club">
+      <AppShell>
+        <RealmBansControl
+          realmId={realmId}
+          initial={{ ...page, page: { ...page.page, next: 'native-opaque-next' } }}
+          ready
+          read={windowRead}
+          write={write}
+        />
+      </AppShell>
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_next() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_refresh() }));
+    await expect(canvas.getByRole('button', { name: m.realm_bans_previous() })).toBeEnabled();
+    await expect(canvas.getAllByText('Later window episode')[0]!).toBeVisible();
+  },
+};

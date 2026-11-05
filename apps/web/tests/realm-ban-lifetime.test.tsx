@@ -714,6 +714,7 @@ test('default caller retires private facts and late reads on locale replacement 
       await list();
       await review();
       await click(m.realm_bans_refresh());
+      await click(m.thread_authoring_leave());
       const obsolete = lists.at(-1)!;
       const replacement = locales.find((value) => value !== locale)!;
       setLocale(replacement, { reload: false });

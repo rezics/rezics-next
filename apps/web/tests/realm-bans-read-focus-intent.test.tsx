@@ -1,96 +1,12 @@
-import { afterAll, afterEach, expect, test } from 'bun:test';
-import { dirname } from 'node:path';
-import { act } from 'react';
+import { expect, test } from 'bun:test';
 import type { BanReadState } from '../src/community/realm-bans';
-import type { RealmBansControlProps } from '../src/community/realm-bans-control';
+import { banReadHarness } from './realm-bans-read-harness';
 
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
-const window = new Window({ url: 'https://site.test/en/realms/one' });
-const globals = {
-  window,
-  document: window.document,
-  navigator: window.navigator,
-  location: window.location,
-  HTMLElement: window.HTMLElement,
-  HTMLButtonElement: window.HTMLButtonElement,
-  Element: window.Element,
-  Node: window.Node,
-  Document: window.Document,
-  DocumentFragment: window.DocumentFragment,
-  MutationObserver: window.MutationObserver,
-  ResizeObserver: window.ResizeObserver,
-  getComputedStyle: window.getComputedStyle.bind(window),
-  requestAnimationFrame: window.requestAnimationFrame.bind(window),
-  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-  matchMedia: window.matchMedia.bind(window),
-  IS_REACT_ACT_ENVIRONMENT: true,
-};
-const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-
-const { createRoot } = await import('react-dom/client');
-const { RealmBansControl } = await import('../src/community/realm-bans-control');
-const { m } = await import('../src/paraglide/messages.js');
-const host = document.createElement('main');
-const outside = document.createElement('button');
-document.body.append(host, outside);
-let root: ReturnType<typeof createRoot> | undefined;
-const ready = (next: string | null): BanReadState => ({ state: 'ready', page: { items: [], next } });
-const write: RealmBansControlProps['write'] = async () => ({ ok: false, reason: 'unavailable' });
-function props(realmId: string, initial: BanReadState | undefined, read: RealmBansControlProps['read']) {
-  return { realmId, initial, ready: true, read, write };
-}
-async function paint(next: RealmBansControlProps) {
-  await act(async () => {
-    root!.render(<RealmBansControl {...next} />);
-    await Promise.resolve();
-  });
-}
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => (resolve = done));
-  return { promise, resolve };
-}
-function button(label: string) {
-  return [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === label)!;
-}
-async function activate(label: string, detail = 0) {
-  await act(async () => {
-    const target = button(label);
-    target.focus();
-    if (detail) target.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
-    target.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail }));
-    await Promise.resolve();
-  });
-}
-async function settle(read: ReturnType<typeof deferred<BanReadState>>, state: BanReadState) {
-  await act(async () => {
-    read.resolve(state);
-    await read.promise;
-  });
-}
-afterEach(() => {
-  if (root) act(() => root!.unmount());
-  root = undefined;
-  host.replaceChildren();
-});
-afterAll(() => {
-  host.remove();
-  outside.remove();
-  for (const [key, descriptor] of previous) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  window.close();
-});
+const { host, outside, ready, props, paint, deferred, button, activate, settle, m, window } = await banReadHarness();
 
 test('keyboard continuation focuses its result only after the deferred read', async () => {
   const read = deferred<BanReadState>();
   const cursors: (string | undefined)[] = [];
-  root = createRoot(host);
   await paint(props('one', ready('page-two'), (cursor) => (cursors.push(cursor), read.promise)));
   await activate(m.realm_bans_next());
   expect(cursors).toEqual(['page-two']);
@@ -102,7 +18,6 @@ test('keyboard continuation focuses its result only after the deferred read', as
 test('pointer activation, later pointer, focus movement, and Tab cancel the handoff', async () => {
   const reads = Array.from({ length: 3 }, () => deferred<BanReadState>());
   let index = 0;
-  root = createRoot(host);
   await paint(props('one', ready('page-two'), () => reads[index++]!.promise));
   await activate(m.realm_bans_next(), 1);
   await settle(reads[0]!, ready('page-three'));
@@ -123,7 +38,6 @@ test('a failed continuation focuses retry and preserves its exact cursor', async
   const failed = deferred<BanReadState>();
   const retried = deferred<BanReadState>();
   const cursors: (string | undefined)[] = [];
-  root = createRoot(host);
   await paint(
     props('one', ready('page-two'), (cursor) => {
       cursors.push(cursor);
@@ -145,7 +59,6 @@ test('an ABA caller replacement retires a deferred read focus intent', async () 
   let reads = 0;
   const readA = () => (++reads === 1 ? oldRead.promise : Promise.resolve(ready(null)));
   const propsA = props('one', initial, readA);
-  root = createRoot(host);
   await paint(propsA);
   await activate(m.realm_bans_next());
   await paint(props('two', ready(null), async () => ready(null)));
@@ -153,4 +66,35 @@ test('an ABA caller replacement retires a deferred read focus intent', async () 
   await settle(oldRead, ready(null));
   expect(reads).toBe(2);
   expect(document.activeElement).not.toBe(host.querySelector('h2'));
+});
+
+test('Previous, current Refresh and Restart focus only their newly admitted region', async () => {
+  const reads = Array.from({ length: 4 }, () => deferred<BanReadState>());
+  const cursors: (string | undefined)[] = [];
+  await paint(props('one', ready('two'), (cursor) => (cursors.push(cursor), reads[cursors.length - 1]!.promise)));
+  for (const [index, label] of [
+    m.realm_bans_next(),
+    m.realm_bans_refresh(),
+    m.realm_bans_previous(),
+    m.realm_bans_restart(),
+  ].entries()) {
+    await activate(label);
+    expect(document.activeElement).not.toBe(host.querySelector('h2'));
+    await settle(reads[index]!, ready('two'));
+    expect(document.activeElement).toBe(host.querySelector('h2'));
+  }
+  expect(cursors).toEqual(['two', 'two', undefined, undefined]);
+});
+
+test('initial replacement fences late focus even when an equal page settles', async () => {
+  const pending = deferred<BanReadState>();
+  const same = ready('two');
+  const read = () => pending.promise;
+  await paint(props('one', same, read));
+  await activate(m.realm_bans_next());
+  await paint(props('one', ready(null), read));
+  outside.focus();
+  await settle(pending, same);
+  expect(document.activeElement).toBe(outside);
+  expect(button(m.realm_bans_next())).toBeUndefined();
 });
