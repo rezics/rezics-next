@@ -100,6 +100,12 @@ now measures same-parent and other-parent histories independently, mounted remov
 due populations at 64/512/4096 through actual SDK/page/segment SQL and repeated post-drain empty seeks. The five
 Search receiving suites and affected Kernel/root receiving remain integration acceptance.
 
+The native ordinal SQL bound lives in `collection-source-ordinal-bounds.ts` and retains its original Source export. Search imports this pure declaration directly so its enclosing declaration does not evaluate a partially initialized native Source runtime during member-retention bootstrap. SQL, capacities and allowances are unchanged.
+
+Page and segment completion declarations sum disjoint native declarations at each reached dispatch, including parent-owner lookups and every original purge command attempt. Core contention has no fixed attempt count; its original deadline and jitter remain authoritative. The structural page/segment plans describe discovery and SDK ceilings; the completed enclosing operation includes actual command attempts without inventing a retry cap. Two fixed-depth accumulators retain only nine-axis totals, including attempts that throw, with no episode-key vector or additional execution guard.
+
+Retention resolves the installed ordinal command-cost producer at execution rather than during module initialization. This avoids the concrete native Access `MEMBERSHIP_LIMIT` initialization cycle without changing Access, duplicating its declarations or altering command inputs.
+
 ## Whole-query publication
 
 The 50-original branch is inadmissible. Its two `resolveSubject` disclosure passes alone require
@@ -619,9 +625,3 @@ catalogue root also owns partition/cursor decoding and continuation-name rereads
 preparation/fence branches remain with their import callers. Semantic FULL disclosure and its repeated source/profile
 probes remain with the Semantic owner. Add those reached terms at those existing boundaries before calling the
 operation family complete; keep the current request deadline, attempts, receipt semantics and capacity unchanged.
-
-The native ordinal SQL bound lives in `collection-source-ordinal-bounds.ts` and retains its original Source export. Search imports this pure declaration directly so its enclosing declaration does not evaluate a partially initialized native Source runtime during member-retention bootstrap. SQL, capacities and allowances are unchanged.
-
-Page and segment completion declarations sum disjoint native declarations at each reached dispatch, including parent-owner lookups and every original purge command attempt. Core contention has no fixed attempt count; its original deadline and jitter remain authoritative. The structural page/segment plans describe discovery and SDK ceilings; the completed enclosing operation includes actual command attempts without inventing a retry cap. Two fixed-depth accumulators retain only nine-axis totals, including attempts that throw, with no episode-key vector or additional execution guard.
-
-Retention resolves the installed ordinal command-cost producer at execution rather than during module initialization. This avoids the concrete native Access `MEMBERSHIP_LIMIT` initialization cycle without changing Access, duplicating its declarations or altering command inputs.
