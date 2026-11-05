@@ -1,16 +1,17 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import {
-  WorkbenchQueueWindowHistory,
-  WORKBENCH_PRIOR_WINDOW_LIMIT,
-  workbenchReaderFence,
-  type WorkbenchQueuePage,
-} from '../src/moderation/workbench-queue/window-history';
-import { workbenchSearch, type WorkbenchSearch } from '../src/moderation/workbench-queue/scope';
+import type { WorkbenchQueuePage } from '../src/moderation/workbench-queue/window-history';
+import type { WorkbenchSearch } from '../src/moderation/workbench-queue/scope';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
+const {
+  WorkbenchQueueWindowHistory,
+  WORKBENCH_PRIOR_WINDOW_LIMIT,
+  workbenchReaderFence,
+} = await import('../src/moderation/workbench-queue/window-history');
+const { workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
 const { readWorkbenchPage } = await import('../src/moderation/workbench-queue/read');
 const { WorkbenchView } = await import('../src/moderation/workbench-queue/view');
 
