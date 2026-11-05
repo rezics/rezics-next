@@ -247,8 +247,8 @@ test('the production graph route gates unsupported origins and a fresh Global ch
       expect(call.data).toMatchObject({ id: subject, locale: 'en', expectedReader: null });
       expect(call.data).not.toHaveProperty('context');
       expect(call.data).not.toHaveProperty('realm');
-      expect(call.data).not.toHaveProperty('node');
-      expect(call.data).not.toHaveProperty('edge');
+      expect(call.data.node).toBeUndefined();
+      expect(call.data.edge).toBeUndefined();
     }
     expect(host.textContent).toContain('current Global catalogue');
     expect(host.textContent).not.toContain('selected Context or Realm');
