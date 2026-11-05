@@ -84,6 +84,7 @@ these commands for the files the branch already changes, including the sibling t
 call with a yield of at least 300 seconds. A supplied acceptance command defines the worker's check. For an ordinary
 dev product brief without one, the worker chooses focused validation and reports its exact command and actual result;
 the missing command never counts as a pass.
+Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
 
 A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
 served from its own worktree (`storybook.ts`). Each catalogue gets a loopback port derived from the worktree path, so
