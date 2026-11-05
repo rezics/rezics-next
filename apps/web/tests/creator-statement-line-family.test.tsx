@@ -167,7 +167,8 @@ test('Creator statement lines use the shared item surface while retaining every 
       expect(row.firstElementChild?.className).toContain('has-[:focus-visible]:before:opacity-100');
       expect(row.classList.contains('border')).toBe(false);
       expect(row.firstElementChild?.classList.contains('bg-card')).toBe(false);
-      expect(row.querySelector('a, li, [data-content-item-slot="preview"]')).toBeNull();
+      expect(row.querySelector('li, [data-content-item-slot="preview"]')).toBeNull();
+      expect(row.querySelector('a')?.getAttribute('href')).toBe(`/en/offers/${line.offerId}`);
       expect(field(row, m.statements_recording_month()).textContent).toBe(line.period);
       expect(field(row, m.statements_royalty_basis()).textContent).toBe(index === 0 ? '9,001' : '9,000');
       expect(field(row, m.statements_created()).querySelector('time')?.dateTime).toBe(line.created);
@@ -190,20 +191,29 @@ test('Creator statement lines use the shared item surface while retaining every 
         expect(field(row, label!).closest('[data-slot="accordion-content"]')).not.toBeNull();
       }
     }
-    expect(field(rows[0]!, m.statements_gross()).textContent).toBe('-$90,071,992,547,409.91');
-    expect(field(rows[0]!, m.statements_tax()).textContent).toBe('-$1.01');
-    expect(field(rows[0]!, m.statements_fee()).textContent).toBe('$0.57');
-    expect(field(rows[0]!, m.statements_dispute_fee()).textContent).toBe('-$0.02');
-    expect(field(rows[0]!, m.statements_net()).textContent).toBe('-$11.01');
-    expect(field(rows[1]!, m.statements_net()).textContent).toBe('-¥315');
-    for (const label of [
-      m.statements_gross(),
-      m.statements_tax(),
-      m.statements_fee(),
-      m.statements_dispute_fee(),
-      m.statements_net(),
+    for (const [label, display, amount] of [
+      [m.statements_gross(), '-$90,071,992,547,409.91', '-9007199254740991'],
+      [m.statements_tax(), '-$1.01', '-101'],
+      [m.statements_fee(), '$0.57', '57'],
+      [m.statements_dispute_fee(), '-$0.02', '-2'],
+      [m.statements_net(), '-$11.01', '-1101'],
     ])
-      expect(field(rows[2]!, label).textContent).toBe(m.statements_amount_unavailable());
+      expect(field(rows[0]!, label!).textContent).toBe(
+        m.money_formatted_recorded_minor({ display: display!, amount: amount!, currency: 'USD', exponent: '2' }),
+      );
+    expect(field(rows[1]!, m.statements_net()).textContent).toBe(
+      m.money_formatted_recorded_minor({ display: '-¥315', amount: '-315', currency: 'JPY', exponent: '0' }),
+    );
+    for (const [label, amount] of [
+      [m.statements_gross(), '1000'],
+      [m.statements_tax(), '200'],
+      [m.statements_fee(), '50'],
+      [m.statements_dispute_fee(), '0'],
+      [m.statements_net(), '750'],
+    ])
+      expect(field(rows[2]!, label!).textContent).toBe(
+        m.money_raw_minor_unknown_unit({ amount: amount!, currency: 'USD' }),
+      );
     expect(rows[2]!.textContent).not.toContain('$7.50');
 
     const triggers = rows.map((row) => row.querySelector<HTMLButtonElement>('[data-slot="accordion-trigger"]')!);
@@ -246,6 +256,9 @@ test('Creator statement source and bounded first-page next refresh and from navi
     ]);
     expect(host.textContent).not.toContain(cursor);
     expect(host.textContent).not.toContain(from);
+    const offer = link(host, m.creator_sale_open_offer());
+    expect([offer.pathname, offer.search, offer.hash]).toEqual([`/en/offers/${creatorLineFixture.offerId}`, '', '']);
+    expect(host.querySelector(`a[href*="${creatorLineFixture.orderId}"]`)).toBeNull();
     await hoverLinks();
 
     await show({

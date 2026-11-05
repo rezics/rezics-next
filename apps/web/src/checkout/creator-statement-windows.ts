@@ -85,8 +85,8 @@ function previous(
   pending: Pending | null,
 ): Position | undefined {
   if (pending && sameStatementsAddress(pending.target, address)) {
-    if (pending.movement === 'list-next' && address.kind === 'list') return pending.source.cursor ?? undefined;
-    if (pending.movement === 'line-next' && address.kind === 'detail') return pending.source.cursor ?? undefined;
+    if (pending.movement === 'list-next' && address.kind === 'list') return pending.source.cursor;
+    if (pending.movement === 'line-next' && address.kind === 'detail') return pending.source.cursor;
   }
   const value = path?.previous.at(-1);
   return value !== undefined && value !== address.cursor ? value : undefined;

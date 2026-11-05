@@ -99,7 +99,12 @@ test('Creator Statement shared summaries retain historical money month currency 
     const originalRows = rows();
     expect(originalRows).toHaveLength(4);
     const titles = ['October 2026 · USD', 'September 2026 · EUR', 'December 2024 · JPY', 'September 2025 · USD'];
-    const amounts = ['-$3.15', '€6.75', '¥0', m.statements_amount_unavailable()];
+    const amounts = [
+      m.money_formatted_recorded_minor({ display: '-$3.15', amount: '-315', currency: 'USD', exponent: '2' }),
+      m.money_formatted_recorded_minor({ display: '€6.75', amount: '675', currency: 'EUR', exponent: '2' }),
+      m.money_formatted_recorded_minor({ display: '¥0', amount: '0', currency: 'JPY', exponent: '0' }),
+      m.money_raw_minor_unknown_unit({ amount: '675', currency: 'USD' }),
+    ];
     for (const [index, row] of originalRows.entries()) {
       const heading = row.querySelector('h2')!;
       expect(row.getAttribute('data-slot')).toBe('list-row');
