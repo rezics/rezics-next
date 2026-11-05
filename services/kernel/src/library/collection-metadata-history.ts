@@ -189,7 +189,7 @@ export function collectionMetadataHistoryEntry(row: {
   revision: number;
   transactionId: string;
   recordedAt: string;
-  changedFields: string[];
+  changedFields: readonly (string | null)[];
   beforeTitle: string;
   afterTitle: string;
   beforeDescription: string | null;

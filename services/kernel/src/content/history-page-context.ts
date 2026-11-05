@@ -202,7 +202,7 @@ function identityViews(ids: readonly string[], summaries: AccountSummaryMap) {
           state: 'available' as const,
           displayName: summary.displayName,
           handle: summary.handle,
-          avatar: summary.avatar,
+          avatar: summary.avatar ? { ...summary.avatar, variants: [...summary.avatar.variants] } : null,
         }
       : { id, state: 'concealed' as const };
   });

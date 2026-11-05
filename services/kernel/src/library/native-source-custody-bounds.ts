@@ -153,7 +153,18 @@ const holdProjectionBytes = Buffer.byteLength(JSON.stringify({ transactionId: ma
 const retainedProjectionBytes = Buffer.byteLength(JSON.stringify({ transactionId: maxUuid }));
 const terminalProjectionBytes = Buffer.byteLength(JSON.stringify({ version: maxInt, outcome: maxEscapedText(32) }));
 
-const rawQueries = Object.freeze({
+const rawQueries: Readonly<{
+  member: typeof rawMember;
+  entry: typeof rawEntry;
+  entry_deleted: typeof rawEntryDeleted;
+  label: typeof rawLabel;
+  assignment: typeof rawAssignment;
+  session: typeof rawSession;
+  unit: typeof rawUnit;
+  change: typeof rawChange;
+  copy: typeof rawCopy;
+  output: typeof rawOutput;
+}> = Object.freeze({
   member: rawMember,
   entry: rawEntry,
   entry_deleted: rawEntryDeleted,
@@ -167,7 +178,39 @@ const rawQueries = Object.freeze({
 });
 
 /** The canonical SQL objects used by the native adapter and the executable plan. */
-export const nativeSourceCustodyQueries = Object.freeze({
+export const nativeSourceCustodyQueries: Readonly<{
+  partition: typeof nativeIdentityPartitionQuery;
+  source: typeof sourceQuery;
+  account: typeof accountQuery;
+  output: typeof outputQuery;
+  ensure: typeof ensureQuery;
+  fences: typeof fencesQuery;
+  read: typeof readQuery;
+  start: typeof startQuery;
+  advance: typeof advanceQuery;
+  identityCapture: typeof identityCapture;
+  proof: typeof proofQuery;
+  finish: typeof finishQuery;
+  hold: typeof holdQuery;
+  held: typeof heldQuery;
+  retained: typeof retainedQuery;
+  release: typeof releaseQuery;
+  terminalScope: typeof terminalScope;
+  raw: typeof rawQueries;
+  rawExplicitOutput: typeof rawExplicitOutput;
+  retirement: Readonly<{
+  partition: typeof partitionQuery;
+  source: typeof retireSource;
+  receipt: typeof retireReceipt;
+  active: typeof retireActive;
+  holds: typeof retireHolds;
+  children: typeof retireChildren;
+  proof: typeof retireProof;
+  capture: typeof retireCapture;
+  identityRetention: typeof identityRetention;
+  nextCapture: typeof nextCapture;
+  }>;
+}> = Object.freeze({
   partition: nativeIdentityPartitionQuery,
   source: sourceQuery,
   account: accountQuery,

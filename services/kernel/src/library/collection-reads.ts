@@ -967,8 +967,8 @@ export function createCollectionReads(
           rows.length !== result.members.length
             ? { state: 'unavailable', reason: 'identity', retryable: true }
             : await dependencies.viewerPersonalActions(viewer, rows, STANDARD_QUESTION_ID, deadline);
+        if (!(await subjects.current())) facts = { state: 'unavailable', reason: 'currentness', retryable: true };
       }
-      if (!(await subjects.current())) facts = { state: 'unavailable', reason: 'currentness', retryable: true };
     } catch (error) {
       // Operand/size violations are errors, never a truncated or successful private result.
       if (error instanceof RangeError) throw error;
