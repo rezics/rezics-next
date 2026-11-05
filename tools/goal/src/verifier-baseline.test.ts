@@ -10,6 +10,7 @@ import { gateRunner, type GateRunner } from './merge.ts';
 
 const roots: string[] = [];
 const temporaryRoot = join(import.meta.dir, '../../../.temp/goal-verifier-baseline');
+const fixturePackageManager = `bun@${Bun.version}`;
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -36,6 +37,26 @@ function repository(): string {
     join(root, 'scripts/legacy-failure.ts'),
     "console.error('AssertionError: existing acceptance failure'); process.exitCode = 1;\n",
   );
+  writeFileSync(join(root, '.gitignore'), 'node_modules/\n');
+  mkdirSync(join(root, 'toolchain/bin'), { recursive: true });
+  writeFileSync(
+    join(root, 'toolchain/package.json'),
+    JSON.stringify({ name: 'bun', version: Bun.version, bin: { bun: 'bin/bun.exe' } }),
+  );
+  writeFileSync(join(root, 'toolchain/bin/bun.exe'), `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
+  writeFileSync(
+    join(root, 'package.json'),
+    JSON.stringify({
+      name: 'baseline-fixture',
+      packageManager: fixturePackageManager,
+      dependencies: { bun: 'file:./toolchain' },
+    }),
+  );
+  const lock = spawnSync(process.execPath, ['install', '--lockfile-only', '--ignore-scripts'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  if (lock.status !== 0) throw new Error(lock.stderr);
   git(root, 'add', '.');
   git(root, 'commit', '-m', 'base');
   const base = git(root, 'rev-parse', 'HEAD');
