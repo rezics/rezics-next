@@ -40,7 +40,11 @@ const { SettingsNavigationDrafts } = await import('../src/settings/reading-navig
 const { m } = await import('../src/paraglide/messages.js');
 
 function CollectionsAdmissionProbe() {
-  return <output id="collections-admission">{useOperationAdmission('account.collections')}</output>;
+  return createElement(
+    'output',
+    { id: 'collections-admission' },
+    useOperationAdmission('account.collections'),
+  );
 }
 
 const identity = { state: 'signed-in' as const, subject: 'alice', csrfToken: 'original-token' };
