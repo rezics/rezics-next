@@ -7,6 +7,9 @@ Draft selection edits hide results until Apply. The labelled-selection module co
 Decision: this route supplies exact first address, cursor, address construction, native status/checkpoint and public
 reader currentness to Search's shared window adapter; it never implements another history or focus mechanism.
 
+Decision: Character and People navigation uses admitted cursor addresses for Previous and First; browser return runs
+one fresh native read, and browser history retains no result rows or result-derived data.
+
 The route's query observer dispatches one fresh native read per visit. There is no additional loader read under an
 unknown reader key. The public retiring reader lease owns dispatch and completion; a transport that ignores abort
 cannot publish a retired result. While a router transition still renders old match props, those props cannot dispatch
@@ -17,7 +20,7 @@ its cursor. A sparse ready page with a continuation shows the sparse-page messag
 Preparing and unavailable reads permit deliberate retry of the same address. Native restart offers First and never
 automatically reads it. Result rendering and native destination construction remain in `DiscoveryResults`.
 
-The installed shared adapter currently accepts only General Search state and builds General Search addresses.
-Until its owner publishes the specialized-route binding, this route exposes native First/Continue links and truthful
-unknown-address orientation. Previous, admitted bounded browser-entry history, ancestor-token refusal and activated
-focus recovery must bind through that public adapter; they are not implemented locally.
+The route binds the public Search window adapter with its exact address builder, currentness, readiness, recovery and
+checkpoint. The visit owner is keyed by the cursor-free executed form so cursor changes preserve admitted browser-entry
+history while replacing the query reader. Shared controls build every destination from the route's href function;
+Previous, First and browser return each execute one fresh native query.
