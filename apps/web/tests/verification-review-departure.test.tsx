@@ -136,6 +136,11 @@ test('verification departures preserve all reviewed drafts and original commands
     act(async () => {
       await user.click(node);
     });
+  const keyClick = async (node: HTMLElement) =>
+    act(async () => {
+      node.focus();
+      await user.keyboard('{Enter}');
+    });
   const button = (label: string, scope: ParentNode = document) =>
     [...scope.querySelectorAll('button')].find((node) => node.textContent?.trim() === label)!;
   const fields = () => [...host.querySelectorAll('textarea')];
@@ -207,7 +212,7 @@ test('verification departures preserve all reviewed drafts and original commands
     expect(host.textContent).toContain(m.av_confirm({ action: m.av_reject() }));
     expect(unload()).toBe(true);
     const previous = button(m.av_previous_page());
-    await click(previous);
+    await keyClick(previous);
     expect(page).toBe(1);
     expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
     const beforePreviousLeave = movements;
