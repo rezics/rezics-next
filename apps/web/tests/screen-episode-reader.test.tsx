@@ -7,9 +7,8 @@ const { ScreenEpisodeList } = await import('../src/features/catalogue/screen-epi
 const { screenEpisodeContinuationHref } = await import('../src/features/catalogue/screen-episode-reader/navigation');
 const { subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
 const { subjectHref } = await import('../src/subject/subject-href');
-const { readScreenEpisodePage, SCREEN_EPISODE_PAGE_MAX_BYTES } = await import(
-  '../src/features/catalogue/screen-episode-reader/read'
-);
+const { readScreenEpisodePage, SCREEN_EPISODE_PAGE_MAX_BYTES } =
+  await import('../src/features/catalogue/screen-episode-reader/read');
 type ScreenEpisodeEntry = import('../src/features/catalogue/screen-episode-reader/read').ScreenEpisodeEntry;
 const { screenProfileFixture } = await import('../src/kernel/fake/catalogue-screen-profile');
 
@@ -278,7 +277,8 @@ test('unknown totals keep a sparse disclosed window continuable and oversized ev
       }}
       visit={
         {
-          previousHref: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory?screenCursor=opaque-previous',
+          previousHref:
+            '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory?screenCursor=opaque-previous',
         } as unknown as NonNullable<Parameters<typeof ScreenEpisodeList>[0]['visit']>
       }
     />,
