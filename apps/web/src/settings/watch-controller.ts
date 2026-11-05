@@ -12,6 +12,82 @@ import type {
 } from './watch-native';
 
 export const watchPageLimit = 20;
+export const watchPreviousLimit = 8;
+export const watchCursorLimit = 4096;
+export const watchPageByteLimit = 262_144;
+
+export type WatchAddress = Readonly<{ kind: WatchKind; cursor: string | null }>;
+export type WatchReturnReceipt = Readonly<{
+  locator: Readonly<{ current: WatchAddress; previous: readonly WatchAddress[] }>;
+  identity: Readonly<{ subscriptionId: string; kind: WatchKind; revision: number }>;
+  focusRequested: boolean;
+}>;
+
+export type WatchReturnOutcome = 'restored' | 'missing' | 'changed' | 'withheld';
+
+type ReadRequest = Readonly<{
+  kind: WatchKind;
+  cursor: string | null;
+  previousAfter: readonly WatchAddress[];
+  previousOnStart?: readonly WatchAddress[];
+  returnReceipt?: WatchReturnReceipt;
+}>;
+
+function validAddress(value: unknown, kind?: WatchKind): value is WatchAddress {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const address = value as Record<string, unknown>;
+  return (
+    Object.keys(address).length === 2 &&
+    (address.kind === 'thread' || address.kind === 'board') &&
+    (kind === undefined || address.kind === kind) &&
+    (address.cursor === null ||
+      (typeof address.cursor === 'string' && address.cursor.length > 0 && address.cursor.length <= watchCursorLimit))
+  );
+}
+
+function fitsPageBudget(page: WatchPage): boolean {
+  try {
+    const encoded = JSON.stringify(page);
+    return typeof encoded === 'string' && new TextEncoder().encode(encoded).byteLength <= watchPageByteLimit;
+  } catch {
+    return false;
+  }
+}
+
+/** Validate the small browser-history locator without admitting it as a row or command. */
+export function isWatchReturnReceipt(value: unknown): value is WatchReturnReceipt {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const receipt = value as Record<string, unknown>;
+  if (Object.keys(receipt).length !== 3 || typeof receipt.focusRequested !== 'boolean') return false;
+  const locator = receipt.locator;
+  const identity = receipt.identity;
+  if (!locator || typeof locator !== 'object' || Array.isArray(locator) || !identity || typeof identity !== 'object' || Array.isArray(identity))
+    return false;
+  const location = locator as Record<string, unknown>;
+  const selected = identity as Record<string, unknown>;
+  if (
+    Object.keys(location).length !== 2 ||
+    !validAddress(location.current) ||
+    !Array.isArray(location.previous) ||
+    location.previous.length > watchPreviousLimit ||
+    !location.previous.every((address) => validAddress(address, (location.current as WatchAddress).kind)) ||
+    Object.keys(selected).length !== 3 ||
+    typeof selected.subscriptionId !== 'string' ||
+    selected.subscriptionId.length === 0 ||
+    (selected.kind !== 'thread' && selected.kind !== 'board') ||
+    selected.kind !== (location.current as WatchAddress).kind ||
+    !Number.isSafeInteger(selected.revision) ||
+    (selected.revision as number) < 1
+  )
+    return false;
+  try {
+    // Keep the structured-clone payload finite even if an admitted native identifier is unusually large.
+    const encoded = JSON.stringify(value);
+    return typeof encoded === 'string' && new TextEncoder().encode(encoded).byteLength <= 65_536;
+  } catch {
+    return false;
+  }
+}
 
 type WatchOwner = {
   subject: string;
@@ -25,6 +101,7 @@ export type WatchState = Readonly<{
   rows: readonly ManagedWatch[];
   cursor: string | null;
   next: string | null;
+  previous: readonly WatchAddress[];
   viewer: WatchViewer | null;
   actions: WatchActions | null;
   readProblem: NativeWatchProblem | null;
@@ -33,6 +110,8 @@ export type WatchState = Readonly<{
   writeRetryAt: number;
   command: StopWatchIntent | null;
   write: 'idle' | 'sending' | 'uncertain' | 'rejected' | 'removed' | 'removed_current' | 'conflict' | 'denied';
+  returnOutcome: WatchReturnOutcome | null;
+  returnFocus: (WatchReturnReceipt & { outcome: WatchReturnOutcome }) | null;
   retired: boolean;
 }>;
 const initial: WatchState = {
@@ -41,6 +120,7 @@ const initial: WatchState = {
   rows: [],
   cursor: null,
   next: null,
+  previous: [],
   viewer: null,
   actions: null,
   readProblem: null,
@@ -49,6 +129,8 @@ const initial: WatchState = {
   writeRetryAt: 0,
   command: null,
   write: 'idle',
+  returnOutcome: null,
+  returnFocus: null,
   retired: false,
 };
 
@@ -59,6 +141,7 @@ export class WatchController {
   private generation = 0;
   private request: AbortController | undefined;
   private unsubscribe: (() => void) | undefined;
+  private recovery: ReadRequest | undefined;
   constructor(
     private io: WatchManagementIO,
     private owner: WatchOwner,
@@ -89,6 +172,7 @@ export class WatchController {
     if (this.state.retired) return;
     ++this.generation;
     this.request?.abort();
+    this.recovery = undefined;
     this.unsubscribe?.();
     this.unsubscribe = undefined;
     // Neither private data nor an old account's recovery callback survives retirement.
@@ -105,18 +189,76 @@ export class WatchController {
     this.state.actions?.remove === 'available' &&
     Date.now() >= this.state.writeRetryAt;
 
-  refresh = () => this.load(this.state.cursor);
-  first = () => this.load(null);
+  refresh = () => {
+    const request = this.recovery ?? {
+      kind: this.state.kind,
+      cursor: this.state.cursor,
+      previousAfter: this.state.previous,
+    };
+    return this.load(request);
+  };
+  first = () =>
+    this.load({ kind: this.state.kind, cursor: null, previousAfter: [], previousOnStart: [] });
   next = () =>
-    this.state.read === 'ready' && this.state.next !== null ? this.load(this.state.next) : Promise.resolve();
+    this.state.read === 'ready' && this.state.next !== null
+      ? this.load({
+          kind: this.state.kind,
+          cursor: this.state.next,
+          previousAfter: [...this.state.previous, { kind: this.state.kind, cursor: this.state.cursor }].slice(
+            -watchPreviousLimit,
+          ),
+        })
+      : Promise.resolve();
+  previous = () => {
+    const address = this.state.previous.at(-1);
+    if (this.state.read !== 'ready' || !address || address.kind !== this.state.kind) return Promise.resolve();
+    return this.load({
+      kind: address.kind,
+      cursor: address.cursor,
+      previousAfter: this.state.previous.slice(0, -1),
+    });
+  };
+
+  captureReturn = (subscriptionId: string, focusRequested: boolean): WatchReturnReceipt | null => {
+    if (!this.current() || this.state.read !== 'ready' || !this.state.viewer || !this.state.actions) return null;
+    const row = this.state.rows.find(
+      (candidate) => candidate.subscriptionId === subscriptionId && candidate.kind === this.state.kind,
+    );
+    if (!row?.target) return null;
+    const receipt: WatchReturnReceipt = {
+      locator: {
+        current: { kind: this.state.kind, cursor: this.state.cursor },
+        previous: this.state.previous.map((address) => ({ ...address })),
+      },
+      identity: { subscriptionId: row.subscriptionId, kind: row.kind, revision: row.revision },
+      focusRequested,
+    };
+    return isWatchReturnReceipt(receipt) ? receipt : null;
+  };
+
+  returnTo = (receipt: WatchReturnReceipt) => {
+    if (!isWatchReturnReceipt(receipt) || !this.current()) return Promise.resolve();
+    return this.load({
+      kind: receipt.locator.current.kind,
+      cursor: receipt.locator.current.cursor,
+      previousAfter: receipt.locator.previous,
+      previousOnStart: receipt.locator.previous,
+      returnReceipt: receipt,
+    });
+  };
+
+  finishReturnFocus = () => {
+    if (this.state.returnFocus) this.update({ returnFocus: null });
+  };
 
   selectKind = (kind: WatchKind) => {
     if (!this.current() || this.state.command || this.state.kind === kind) return Promise.resolve();
-    return this.load(null, kind);
+    return this.load({ kind, cursor: null, previousAfter: [], previousOnStart: [] });
   };
 
-  private validPage(page: WatchPage) {
+  private validPage(page: WatchPage, kind: WatchKind) {
     return (
+      fitsPageBudget(page) &&
       page.viewer.state === 'current' &&
       page.viewer.accountId === this.owner.subject &&
       (page.actions.remove === 'available' || page.actions.remove === 'denied') &&
@@ -124,7 +266,7 @@ export class WatchController {
       new Set(page.watches.map((row) => row.subscriptionId)).size === page.watches.length &&
       page.watches.every(
         (row) =>
-          row.kind === this.state.kind &&
+          row.kind === kind &&
           Number.isSafeInteger(row.revision) &&
           row.revision > 0 &&
           typeof row.createdAt === 'string' &&
@@ -135,12 +277,14 @@ export class WatchController {
           (row.target === null ||
             (typeof row.target.title === 'string' &&
               typeof row.target.href === 'string' &&
-              row.target.href.startsWith('/'))),
+              row.target.href.startsWith('/') &&
+              !row.target.href.startsWith('//'))),
       ) &&
-      (page.next === null || (typeof page.next === 'string' && page.next.length > 0))
+      (page.next === null ||
+        (typeof page.next === 'string' && page.next.length > 0 && page.next.length <= watchCursorLimit))
     );
   }
-  private async load(cursor: string | null, kind: WatchKind = this.state.kind) {
+  private async load(request: ReadRequest) {
     if (
       !this.current() ||
       this.state.read === 'loading' ||
@@ -148,34 +292,65 @@ export class WatchController {
       Date.now() < this.state.readRetryAt
     )
       return;
+    this.recovery = request;
     const generation = ++this.generation;
     this.request = new AbortController();
     // A failed refresh cannot lend its previous rows current read or command authority.
     this.update({
       read: 'loading',
       rows: [],
-      cursor,
+      cursor: request.cursor,
       next: null,
-      kind,
+      ...(request.previousOnStart ? { previous: request.previousOnStart } : {}),
+      kind: request.kind,
       viewer: null,
       actions: null,
       readProblem: null,
+      returnOutcome: null,
+      returnFocus: null,
     });
     try {
       const result = await withManagedReadDeadline(
-        (signal) => this.io.read({ accountId: this.owner.subject, kind, limit: watchPageLimit, cursor, signal }),
+        (signal) =>
+          this.io.read({
+            accountId: this.owner.subject,
+            kind: request.kind,
+            limit: watchPageLimit,
+            cursor: request.cursor,
+            signal,
+          }),
         this.request.signal,
       );
       if (!this.current() || generation !== this.generation) return;
-      if (result.kind === 'page' && this.validPage(result.page)) {
+      if (result.kind === 'page' && this.validPage(result.page, request.kind)) {
+        let returnOutcome: WatchReturnOutcome | null = null;
+        let returnFocus: (WatchReturnReceipt & { outcome: WatchReturnOutcome }) | null = null;
+        if (request.returnReceipt) {
+          const { identity } = request.returnReceipt;
+          const row = result.page.watches.find(
+            (candidate) => candidate.subscriptionId === identity.subscriptionId && candidate.kind === identity.kind,
+          );
+          returnOutcome = !row
+            ? 'missing'
+            : row.revision !== identity.revision
+              ? 'changed'
+              : row.target === null
+                ? 'withheld'
+                : 'restored';
+          returnFocus = { ...request.returnReceipt, outcome: returnOutcome };
+        }
+        this.recovery = undefined;
         this.update({
           read: 'ready',
           rows: result.page.watches,
           next: result.page.next,
+          previous: request.previousAfter,
           viewer: result.page.viewer,
           actions: result.page.actions,
           readProblem: null,
           readRetryAt: 0,
+          returnOutcome,
+          returnFocus,
         });
       } else if (result.kind === 'invalid_cursor' || result.kind === 'denied' || result.kind === 'unavailable') {
         this.update({

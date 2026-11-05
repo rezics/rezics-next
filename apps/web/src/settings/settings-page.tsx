@@ -8,11 +8,16 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { ProfileSection } from './profile';
 import { ReadingCard } from './reading-card';
 import { ShelfPreferencesCard } from './shelf-preferences';
-import { ReadingNavigation, SettingsNavigationProvider } from './reading-navigation';
+import {
+  ReadingNavigation,
+  SettingsNavigationProvider,
+  useSettingsNavigationOwner,
+} from './reading-navigation';
 import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
@@ -36,6 +41,48 @@ import { readSettingsPage, saveNotifications, savePreferences } from './actions'
 import type { ReadingIO } from './reading-preferences';
 import type { NotificationEditorIO } from './notification-recovery';
 import { SettingsSessionContext, useSettingsSessionOwner } from './settings-session-owner';
+import { isWatchReturnReceipt, type WatchReturnReceipt } from './watch-controller';
+
+const settingsWatchReturnKey = '__rezicsSettingsWatchReturn';
+type SettingsWatchReturnCarrier = Readonly<{
+  version: 1;
+  origin: string;
+  pathname: string;
+  hash: string;
+  locale: string;
+  receipt: WatchReturnReceipt;
+}>;
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readSettingsWatchReturn(state: unknown): { receipt: WatchReturnReceipt | null; present: boolean } {
+  if (typeof globalThis.window === 'undefined' || !record(state)) return { receipt: null, present: false };
+  const value = state[settingsWatchReturnKey];
+  if (value === undefined) return { receipt: null, present: false };
+  const keys = record(value) ? Object.keys(value).sort().join(',') : '';
+  const carrier = value as Partial<SettingsWatchReturnCarrier>;
+  const current = globalThis.window.location;
+  const valid = keys === 'hash,locale,origin,pathname,receipt,version';
+  if (
+    !valid ||
+    carrier.version !== 1 ||
+    carrier.origin !== current.origin ||
+    carrier.pathname !== current.pathname ||
+    carrier.hash !== current.hash ||
+    carrier.locale !== getLocale() ||
+    !isWatchReturnReceipt(carrier.receipt)
+  )
+    return { receipt: null, present: true };
+  return { receipt: carrier.receipt, present: true };
+}
+
+function withoutSettingsWatchReturn(state: unknown): Record<string, unknown> {
+  const next = record(state) ? { ...state } : {};
+  delete next[settingsWatchReturnKey];
+  return next;
+}
 
 type PreferenceIO = {
   read: ReadingIO['read'];
@@ -212,6 +259,50 @@ function RetainedSettingsPanel({
   );
 }
 
+/** The Settings route owns the one-shot browser-history locator for a disclosed watch visit. */
+export function SettingsWatchesOwner({ io }: { io?: WatchManagementIO | undefined }) {
+  const location = useLocation();
+  const navigation = useSettingsNavigationOwner();
+  const [watchReturnEntry] = useState(() =>
+    typeof globalThis.window === 'undefined' ? { receipt: null, present: false } : readSettingsWatchReturn(window.history.state),
+  );
+  useLayoutEffect(() => {
+    if (watchReturnEntry.present && typeof globalThis.window !== 'undefined') {
+      window.history.replaceState(withoutSettingsWatchReturn(window.history.state), '', window.location.href);
+    }
+  }, [watchReturnEntry]);
+  const visitWatchTarget = useCallback(
+    (receipt: WatchReturnReceipt, href: string) => {
+      if (typeof globalThis.window === 'undefined') return true;
+      const current = globalThis.window.location;
+      let target: URL;
+      try {
+        if (!href.startsWith('/') || href.startsWith('//')) return false;
+        target = new URL(href, current.origin);
+      } catch {
+        return false;
+      }
+      if (target.origin !== current.origin || !isWatchReturnReceipt(receipt)) return false;
+      const carrier: SettingsWatchReturnCarrier = {
+        version: 1,
+        origin: current.origin,
+        pathname: current.pathname,
+        hash: current.hash,
+        locale: getLocale(),
+        receipt,
+      };
+      const commit = () => {
+        const state = withoutSettingsWatchReturn(window.history.state);
+        state[settingsWatchReturnKey] = carrier;
+        window.history.replaceState(state, '', window.location.href);
+      };
+      return navigation?.prepareDeparture(location.pathname, target.pathname, commit) ?? (commit(), true);
+    },
+    [location.pathname, navigation],
+  );
+  return <WatchesSection io={io} initialReturn={watchReturnEntry.receipt} onVisitTarget={visitWatchTarget} />;
+}
+
 function SettingsSections({
   page,
   csrfToken,
@@ -348,7 +439,7 @@ function SettingsSections({
           )}
         </section>
       ) : null,
-    watches: <WatchesSection io={watchesIO} />,
+    watches: <SettingsWatchesOwner io={watchesIO} />,
     privacy: <CollectionPrivacySection />,
     verification: (
       <section id="verification" aria-label={m.settings_verification_heading()} className="scroll-mt-6" tabIndex={-1}>

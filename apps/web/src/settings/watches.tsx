@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
@@ -6,7 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { useSettingsDisposal, useSettingsSessionOwner } from './settings-session-owner';
 import { useSettingsNavigationDraft } from './reading-navigation';
 import { usePreferenceRetry } from './preference-failure-retry';
-import { WatchController } from './watch-controller';
+import { WatchController, type WatchReturnReceipt } from './watch-controller';
 import { readWatchInventory, removeWatchSubscription } from './actions';
 import type { WatchManagementIO } from './watch-native';
 
@@ -22,31 +23,81 @@ const nativeWatchManagement: WatchManagementIO = {
     }),
 };
 
-/** Visited Settings panels keep this controller and its unresolved command alive across category changes. */
-export function WatchesSection({ io = nativeWatchManagement }: { io?: WatchManagementIO | undefined }) {
-  const owner = useSettingsSessionOwner(undefined);
-  const [controller] = useState(() =>
-    owner
-      ? new WatchController(io, {
-          subject: owner.subject ?? '',
-          readCurrent: owner.readCurrent,
-          credential: owner.credential,
-          subscribe: owner.subscribe,
-        })
-      : null,
-  );
-  if (!controller || !owner) return null;
-  return <OwnedWatches controller={controller} />;
+type WatchesSectionProps = {
+  io?: WatchManagementIO | undefined;
+  initialReturn?: WatchReturnReceipt | null;
+  onVisitTarget?: (receipt: WatchReturnReceipt, href: string) => boolean;
+};
+
+function createController(io: WatchManagementIO, owner: NonNullable<ReturnType<typeof useSettingsSessionOwner>>) {
+  return new WatchController(io, {
+    subject: owner.subject ?? '',
+    readCurrent: owner.readCurrent,
+    credential: owner.credential,
+    subscribe: owner.subscribe,
+  });
 }
 
-function OwnedWatches({ controller }: { controller: WatchController }) {
+/** Visited Settings panels keep this controller and its unresolved command alive across category changes. */
+export function WatchesSection({
+  io = nativeWatchManagement,
+  initialReturn = null,
+  onVisitTarget,
+}: WatchesSectionProps) {
+  const owner = useSettingsSessionOwner(undefined);
+  const [entry, setEntry] = useState(() => ({ io, owner, controller: owner ? createController(io, owner) : null }));
+  if (!owner) return null;
+  if (entry.io !== io || entry.owner !== owner) {
+    setEntry({ io, owner, controller: createController(io, owner) });
+    return null;
+  }
+  if (!entry.controller) return null;
+  return (
+    <OwnedWatches
+      controller={entry.controller}
+      initialReturn={initialReturn}
+      onVisitTarget={onVisitTarget}
+    />
+  );
+}
+
+function OwnedWatches({
+  controller,
+  initialReturn,
+  onVisitTarget,
+}: {
+  controller: WatchController;
+  initialReturn: WatchReturnReceipt | null;
+  onVisitTarget?: WatchesSectionProps['onVisitTarget'];
+}) {
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const returnStop = useRef<HTMLButtonElement>(null);
+  const focusMovement = useRef(0);
   useLayoutEffect(controller.mount, [controller]);
   useSettingsDisposal(controller.retire);
   useSettingsNavigationDraft('watches', state.command !== null, controller.needsDecision, controller);
   useEffect(() => {
-    if (controller.snapshot().read === 'idle') void controller.first();
-  }, [controller]);
+    const moved = () => {
+      focusMovement.current++;
+    };
+    document.addEventListener('focusin', moved, true);
+    return () => document.removeEventListener('focusin', moved, true);
+  }, []);
+  useEffect(() => {
+    if (controller.snapshot().read !== 'idle') return;
+    if (initialReturn) void controller.returnTo(initialReturn);
+    else void controller.first();
+  }, [controller, initialReturn]);
+  useLayoutEffect(() => {
+    const receipt = state.returnFocus;
+    if (!receipt) return;
+    if (receipt.focusRequested && focusMovement.current === 0) {
+      if (receipt.outcome === 'restored') returnStop.current?.focus();
+      else heading.current?.focus();
+    }
+    controller.finishReturnFocus();
+  }, [controller, state.returnFocus]);
   const readWaiting = usePreferenceRetry(undefined, state.readRetryAt);
   const originalWaiting = usePreferenceRetry(undefined, state.writeRetryAt);
   if (state.retired) return null;
@@ -76,7 +127,14 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
       <Card>
         <CardHeader>
           <CardTitle>
-            <h2 id="settings-watches-heading">{m.settings_watches_heading()}</h2>
+            <h2
+              ref={heading}
+              id="settings-watches-heading"
+              tabIndex={-1}
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {m.settings_watches_heading()}
+            </h2>
           </CardTitle>
           <CardDescription>{m.settings_watches_text()}</CardDescription>
         </CardHeader>
@@ -103,6 +161,11 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
               {m.settings_watches_board()}
             </Button>
           </div>
+          {state.returnOutcome === 'restored' ? (
+            <p role="status">{m.settings_watches_returned()}</p>
+          ) : state.returnOutcome ? (
+            <p role="status">{m.settings_watches_return_missing()}</p>
+          ) : null}
           {state.write === 'sending' ? <p role="status">{m.settings_watches_stopping()}</p> : null}
           {state.write === 'removed' ? <p role="status">{m.settings_watches_removed()}</p> : null}
           {state.write === 'removed_current' ? <p role="status">{m.settings_watches_removed_current()}</p> : null}
@@ -200,12 +263,30 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
                           {row.kind === 'thread' ? m.settings_watches_thread() : m.settings_watches_board()}
                         </p>
                         {row.target ? (
-                          <a
-                            href={row.target.href}
+                          <Link
+                            to={row.target.href as never}
+                            onClick={(event) => {
+                              if (
+                                !onVisitTarget ||
+                                event.defaultPrevented ||
+                                event.button !== 0 ||
+                                event.metaKey ||
+                                event.ctrlKey ||
+                                event.altKey ||
+                                event.shiftKey ||
+                                (event.currentTarget.target && event.currentTarget.target !== '_self')
+                              )
+                                return;
+                              const receipt = controller.captureReturn(
+                                row.subscriptionId,
+                                event.detail === 0 && document.activeElement === event.currentTarget,
+                              );
+                              if (receipt && !onVisitTarget(receipt, row.target.href)) event.preventDefault();
+                            }}
                             className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
                           >
                             {row.target.title}
-                          </a>
+                          </Link>
                         ) : (
                           <>
                             <p className="font-medium">{m.settings_watches_target_unavailable()}</p>
@@ -214,6 +295,14 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
                         )}
                       </div>
                       <Button
+                        ref={
+                          state.returnFocus?.outcome === 'restored' &&
+                          state.returnFocus.identity.subscriptionId === row.subscriptionId &&
+                          state.returnFocus.identity.kind === row.kind &&
+                          state.returnFocus.identity.revision === row.revision
+                            ? returnStop
+                            : undefined
+                        }
                         className={controlClass}
                         variant="outline"
                         disabled={disabled}
@@ -234,6 +323,16 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
                 >
                   {m.settings_watches_refresh()}
                 </Button>
+                {state.previous.length > 0 ? (
+                  <Button
+                    className={controlClass}
+                    variant="outline"
+                    disabled={readWaiting}
+                    onClick={() => void controller.previous()}
+                  >
+                    {m.settings_watches_previous()}
+                  </Button>
+                ) : null}
                 {state.next !== null ? (
                   <Button
                     className={controlClass}

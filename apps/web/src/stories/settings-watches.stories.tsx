@@ -6,10 +6,11 @@ import type { SettingsPage } from '../settings/preferences';
 import { SettingsPageView } from '../settings/settings-page';
 import type { ManagedWatch, StopWatch, WatchKind, WatchManagementIO } from '../settings/watch-native';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
-type View = 'populated' | 'inaccessible' | 'failed' | 'uncertain';
+type View = 'populated' | 'inaccessible' | 'failed' | 'uncertain' | 'returned';
 const meta = {
   title: 'Pages/Account/Settings watches',
   parameters: { layout: 'fullscreen' },
@@ -38,15 +39,43 @@ function previewWatch(
 /** Connected fixtures illustrate Settings watch states without claiming native or rendered acceptance. */
 function Preview({ view, attempts }: { view: View; attempts: StopWatch[] }) {
   const [page, setPage] = useState<SettingsPage | null>(null);
+  useState(() => {
+    if (view !== 'returned' || typeof globalThis.window === 'undefined') return;
+    const current = window.location;
+    window.history.replaceState(
+      {
+        ...(window.history.state && typeof window.history.state === 'object' ? window.history.state : {}),
+        __rezicsSettingsWatchReturn: {
+          version: 1,
+          origin: current.origin,
+          pathname: current.pathname,
+          hash: current.hash,
+          locale: getLocale(),
+          receipt: {
+            locator: {
+              current: { kind: 'board', cursor: 'returned-window' },
+              previous: [{ kind: 'board', cursor: null }],
+            },
+            identity: { subscriptionId: 'private-board', kind: 'board', revision: 5 },
+            focusRequested: false,
+          },
+        },
+      },
+      '',
+      current.href,
+    );
+  });
   const [io] = useState<WatchManagementIO>(() => ({
-    read: async ({ kind }) => {
+    read: async ({ kind, cursor }) => {
       if (view === 'failed') throw new Error('Illustrative read failure');
+      if (view === 'returned' && cursor !== 'returned-window')
+        return { kind: 'unavailable', problem: { status: null, code: 'return_window_not_selected' } };
       const concealed = view === 'inaccessible' || view === 'uncertain';
       return {
         kind: 'page',
         page: {
           ...envelope,
-          next: null,
+          next: view === 'returned' ? 'returned-next' : null,
           watches: concealed
             ? kind === 'thread'
               ? [previewWatch(kind, { subscriptionId: 'private-unavailable', revision: 7, target: null })]
@@ -112,6 +141,10 @@ function story(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light' 
         await canvas.findByText(m.settings_watches_uncertain_text());
         await expect(attempts).toHaveLength(2);
         await expect(attempts[1]).toBe(attempts[0]);
+      } else if (view === 'returned') {
+        await canvas.findByText(m.settings_watches_returned());
+        await expect(canvas.getByRole('link', { name: 'Books and reading' })).toBeVisible();
+        await expect(canvas.getByRole('button', { name: m.settings_watches_previous() })).toBeEnabled();
       } else {
         await canvas.findByRole('link', { name: 'Reading together: autumn discoveries' });
       }
@@ -123,6 +156,7 @@ export const PopulatedPhone = story('populated', 'phone390');
 export const PopulatedDesktop = story('populated', 'desktop1280');
 export const InaccessibleTargetPhone = story('inaccessible', 'phone390');
 export const InaccessibleTargetDesktop = story('inaccessible', 'desktop1280');
+export const ReturnedLaterWindowPhone = story('returned', 'phone390');
 export const FailedPhone = story('failed', 'phone390');
 export const FailedDesktop = story('failed', 'desktop1280');
 export const UncertainUnwatchPhoneLight = story('uncertain', 'phone390', 'light');
