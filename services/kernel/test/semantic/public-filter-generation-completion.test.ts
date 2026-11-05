@@ -6,7 +6,10 @@ import {
 } from '../../src/semantic/public-filter-source-binding.ts';
 import { createSubjectSourceKeyPages } from '../../src/semantic/subject-source-key-pages.ts';
 import { createSearchGenerationPublication } from '../../src/search/generation-publication.ts';
-import { createPublicFilterCustody } from '../../src/search/public-filter-custody.ts';
+import {
+  createPublicFilterCustody,
+  decodePublicFilterNativeState,
+} from '../../src/search/public-filter-custody.ts';
 import { createOpenSearch, SearchUnavailableError } from '../../src/search/opensearch.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName, subjectGenerations } from '../../src/search/indices.ts';
 import { createSearchWriterGuard } from '../../src/search/writer-guard.ts';
@@ -202,6 +205,18 @@ test('generation restart keeps the original Source proof through lost observatio
     expect(readerBlocked).toBe(true);
     expect(completed.publication).toEqual(original!);
     expect(completed.observation.changed.length).toBeGreaterThan(0);
+    const proof = (
+      await f.db.pool.query(
+        `SELECT o.consumer_work,o.expires_at::text FROM search.public_filter_observation o
+         JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
+         WHERE r.physical_target=$1`,
+        [target],
+      )
+    ).rows;
+    // Temporary materialization has retired; only payload-free original proof custody remains.
+    expect(proof).toHaveLength(1);
+    expect(decodePublicFilterNativeState(proof[0].consumer_work)).toMatchObject({ prepared: [], preparedRows: [] });
+    expect(proof[0].expires_at).toBe(String(Number.MAX_SAFE_INTEGER));
     expect((await subjectGenerations(search, prefix)).active).toBe(2);
     const restarted = open();
     expect((await restarted.activate(job, readContext())).status).toBe('activated');
