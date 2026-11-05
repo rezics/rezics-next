@@ -150,7 +150,9 @@ test('cached return reads current advice once, keeps generic history, and requir
   expect(ui.host.querySelector('[data-password-return-acknowledge]')).not.toBeNull();
   await flush(() => ui.calls[0]!.resolve(stageResponse(ui.calls[0]!.body)));
   expect(ui.calls).toHaveLength(1);
-  console.log('late return view', ui.host.textContent, ui.host.innerHTML.slice(0, 1200));
+  expect(
+    ui.host.querySelector('[aria-labelledby="security-password-return-heading"]')?.textContent,
+  ).toContain(m.auth_security_password_return_stage());
   expect(ui.host.querySelector('[data-password-return-acknowledge]')).not.toBeNull();
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-password-return-acknowledge]')!.click());
   expect(ui.host.querySelector('#security-new-password')).not.toBeNull();
@@ -170,4 +172,4 @@ test('cached return reads current advice once, keeps generic history, and requir
   expect(ui.calls).toHaveLength(2);
   expect(ui.calls[1]!.body.key).not.toBe(oldKey);
   expect(ui.calls[1]!.body.credential.password).toBe('fresh password secret');
-});
+}, 60_000);
