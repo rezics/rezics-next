@@ -137,9 +137,7 @@ export function SubjectExploreSlot({
           ...address,
           context,
           realm,
-          ...(returnTo === undefined
-            ? {}
-            : { returnTo: quotationOrigin(returnTo, subjectId, locale, context) }),
+          ...(returnTo === undefined ? {} : { returnTo: quotationOrigin(returnTo, subjectId, locale, context) }),
         })
       : undefined;
   const concepts =

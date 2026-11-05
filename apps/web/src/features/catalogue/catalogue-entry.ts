@@ -13,12 +13,14 @@ import { releaseEntryHref, RELEASE_ENTRY_BYTES } from './release-fidelity/naviga
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
 type QuotationUnsupported = 'realm' | 'context' | 'origin' | 'address';
-export type QuotationEntry = CatalogueEntry | {
-  group: 'read';
-  label: string;
-  unsupported: QuotationUnsupported;
-  generalHref?: string;
-};
+export type QuotationEntry =
+  | CatalogueEntry
+  | {
+      group: 'read';
+      label: string;
+      unsupported: QuotationUnsupported;
+      generalHref?: string;
+    };
 type Locale = { locale: string };
 type Subject = Locale & { id: string; label: string };
 const options = (locale: string) => ({ locale: locale as never });

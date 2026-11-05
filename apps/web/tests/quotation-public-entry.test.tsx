@@ -21,7 +21,9 @@ mock.module('../src/features/catalogue/quotation/actions', () => ({
   },
 }));
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: `https://site.invalid/en/subjects/${work}/the-harbor` });
 const globals = {
   window,
@@ -68,13 +70,7 @@ afterAll(async () => {
   }
 });
 
-function slot(props: {
-  subjectType?: string;
-  context?: string;
-  realm?: string;
-  returnTo?: string;
-  label?: string;
-}) {
+function slot(props: { subjectType?: string; context?: string; realm?: string; returnTo?: string; label?: string }) {
   const host = document.createElement('div');
   host.innerHTML = renderToStaticMarkup(
     <SubjectExploreSlot
@@ -162,7 +158,10 @@ test('SubjectFrame carries its observed Context through the installed quotation 
     await act(async () => {});
     expect(nativeReads.at(-1)?.data.context).toBe(candidateContext);
 
-    const global = new URL(link(slot({ context: candidateContext }), m.quotation_title())!.href, window.location.origin);
+    const global = new URL(
+      link(slot({ context: candidateContext }), m.quotation_title())!.href,
+      window.location.origin,
+    );
     expect(global.searchParams.get('context')).toBe(candidateContext);
     const legacy = new URL(link(slot({}), m.quotation_title())!.href, window.location.origin);
     expect(legacy.searchParams.has('context')).toBe(false);
