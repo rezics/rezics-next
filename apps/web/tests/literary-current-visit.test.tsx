@@ -121,6 +121,7 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
   mock.module('cloudflare:workers', () => ({ env: {} }));
   mock.module('@tanstack/react-start', () => start);
   mock.module('@tanstack/react-start/server', () => start);
+  mock.module('../src/features/pages/showcase-work/tags-view', () => ({ WorkConceptTagsRoute: () => null }));
 
   const { literaryFixture, literaryWorkId } = await import('../src/kernel/fake/catalogue-literary-profile');
   const { Window } = await import(createRequire(createRequire(import.meta.url).resolve('@puckeditor/core')).resolve('happy-dom'));
