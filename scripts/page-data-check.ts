@@ -521,6 +521,15 @@ async function observeSection(
   return { observation, timedOut };
 }
 
+export function signInRequestBody(email: string, password: string): {
+  email: string;
+  password: string;
+  client_id: 'login';
+  scope: [];
+} {
+  return { email, password, client_id: 'login', scope: [] };
+}
+
 async function memberTokenFromAuth(
   signIn: { origin: string; email: string; password: string },
   send: typeof fetch,
