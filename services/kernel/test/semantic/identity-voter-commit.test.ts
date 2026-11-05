@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { noEffect, runCommand, withSingleCommandAttempt } from '../../src/command/command.ts';
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import lockOwner from '../../src/semantic/identity-rating-commit-participant-lock-owner.sql';
 import { randomUUID } from 'node:crypto';
 import { createProfileEntryFixture } from '../library/support/profile-entry-fixture.ts';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
@@ -89,44 +90,51 @@ test('reviewed identity admission returns the native owner and published head an
   }
 }, 180_000);
 
-test('four real provider review/apply paths retain eligible and foreign requested, canonical, voter and control homes', async () => {
+async function localRatingSubject(f: Awaited<ReturnType<typeof createProfileEntryFixture>>, label: string) {
+  const key = randomUUID();
+  const requested = (
+    await createSubject(f.pool, {
+      actor: f.owner.actor,
+      target: { route: 1, id: newId(1) },
+      item: { type: 'ex:Child', labels: { en: label } },
+      idempotencyKey: key,
+      digest: digest(key),
+      release: { digest: f.originalDigest, release: f.original },
+      authorization: await accessCommandAuthorization(
+        f.access,
+        f.owner.actor,
+        'subject:create',
+        { route: 0, id: GLOBAL_CONTEXT },
+        { pool: f.pool, deadline: Date.now() + 5000 },
+        () => new Error('Native Subject creation denied'),
+      ),
+    })
+  ).subject.id;
+  const sourceHome = partitionOf(routeOf(requested)!);
+  for (let n = 0; n < 1000; n++) {
+    if ((await stepIdentityEpochBootstrap(f.pool, sourceHome)).state === 'caught-up') break;
+    if (n === 999) throw new Error('Provider source bootstrap did not finish');
+  }
+  return { requested, sourceHome };
+}
+
+test('four provider review/apply paths commit local votes and preserve foreign-home refusal', async () => {
   const f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
   try {
     await installIdentityEpochBootstrap(f.pool);
     const votes = createVoteCommands({ pool: f.pool, access: f.access });
     const tuples = [];
     for (const provider of ['vndb', 'bangumi', 'mal', 'anilist'] as const) {
-      const key = randomUUID();
-      const requested = (
-        await createSubject(f.pool, {
-          actor: f.owner.actor,
-          target: { route: 1, id: newId(1) },
-          item: { type: 'ex:Child', labels: { en: `${provider} native score target` } },
-          idempotencyKey: key,
-          digest: digest(key),
-          release: { digest: f.originalDigest, release: f.original },
-          authorization: await accessCommandAuthorization(
-            f.access,
-            f.owner.actor,
-            'subject:create',
-            { route: 0, id: GLOBAL_CONTEXT },
-            { pool: f.pool, deadline: Date.now() + 5000 },
-            () => new Error('Native Subject creation denied'),
-          ),
-        })
-      ).subject.id;
-      const sourceHome = partitionOf(routeOf(requested)!);
-      for (let n = 0; n < 1000; n++) {
-        if ((await stepIdentityEpochBootstrap(f.pool, sourceHome)).state === 'caught-up') break;
-        if (n === 999) throw new Error('Provider source bootstrap did not finish');
-      }
+      const { requested, sourceHome } = await localRatingSubject(f, `${provider} native score target`);
       for (const callerHome of [sourceHome, (sourceHome + 1) % 4096]) {
         const caller = await f.identity(f.owner.actor.scopes, callerHome);
         await f.grantLibraryGate(caller.actor.accountId);
+        let appliedRequest!: { path: string; body: unknown; key: string; data: unknown };
         const request = async (path: string, body: unknown, key = randomUUID()) => {
           const response = await f.send(caller.bearer, 'POST', `/v1/libraryImports/${provider}${path}`, body, key);
           const data = await response.json();
           expect({ status: response.status, data }).toMatchObject({ status: 200 });
+          if (path.endsWith(':apply') || path.endsWith('/apply')) appliedRequest = { path, body, key, data };
           return data;
         };
         let outcome: unknown;
@@ -211,7 +219,7 @@ test('four real provider review/apply paths retain eligible and foreign requeste
             })
           ).outcomes[0].score;
         }
-        expect(outcome).toMatchObject({ status: 'unavailable' });
+        expect(outcome).toMatchObject({ status: callerHome === sourceHome ? 'applied' : 'unavailable' });
         const native = await votes.readVoteReview(caller.actor, STANDARD_QUESTION_ID, requested);
         const review = await readIdentityRatingReview(f.pool, {
           requestedOriginalId: requested,
@@ -245,7 +253,17 @@ test('four real provider review/apply paths retain eligible and foreign requeste
           sourceHomes: review.operand.sourceHomes,
           controls: review.operand.controlLocators,
         });
-        expect(await votes.readOwnVote(caller.actor, STANDARD_QUESTION_ID, requested)).toBeNull();
+        const own = await votes.readOwnVote(caller.actor, STANDARD_QUESTION_ID, requested);
+        if (commandHome === sourceHome) {
+          expect(own).toMatchObject({ units: 16, revision: 1, targetId: requested });
+          expect(native.currentVote).toMatchObject({ state: 'counted', units: 16, countedRevision: 1 });
+          const { path, body, key, data } = appliedRequest;
+          expect(await request(path, body, key)).toEqual(data);
+          expect(await votes.readOwnVote(caller.actor, STANDARD_QUESTION_ID, requested)).toEqual(own);
+        } else {
+          expect(own).toBeNull();
+          expect(native.currentVote.state).toBe('absent');
+        }
       }
     }
     console.info('Native provider Rating caller tuples', tuples);
@@ -312,7 +330,7 @@ test('persisted control replacement invalidates the exact review without changin
 
 /** Limit only this attempt's actual native writer, without changing its SQL or executor. */
 async function contendedWriter(
-  f: Awaited<ReturnType<typeof createIdentityMappingFixture>>,
+  f: { pool: Pool },
   write: () => Promise<unknown>,
 ) {
   const originals = new Map<PoolClient, PoolClient['query']>();
@@ -446,6 +464,77 @@ test('preparation rejects extra, duplicated and oversized reviewed evidence', as
         evidence: JSON.stringify({ mapping: 'x'.repeat(16_500), subjects: [] }),
       }),
     ).toThrow(TypeError);
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
+test('the authorized vote transaction excludes native control writes through commit and rollback and replays after a changed review', async () => {
+  const f = await createProfileEntryFixture({ ownerScopes: ['rating:vote'] });
+  try {
+    await installIdentityEpochBootstrap(f.pool);
+    const { requested, sourceHome } = await localRatingSubject(f, 'Authorized guarded vote');
+    const caller = await f.identity(['rating:vote', 'subject:read'], sourceHome);
+    const votes = createVoteCommands({ pool: f.pool, access: f.access });
+    const input = async (units: number) => ({
+      questionId: STANDARD_QUESTION_ID, targetId: requested, units,
+      guard: (await votes.readVoteReview(caller.actor, STANDARD_QUESTION_ID, requested)).guard,
+    });
+    let committed!: Awaited<ReturnType<typeof votes.putVoteOutcome>>;
+    const first = await input(16);
+    const key = randomUUID();
+    for (const rollback of [false, true]) {
+      const request = rollback ? await input(15) : first;
+      let resume!: () => void;
+      let locked!: () => void;
+      const barrier = new Promise<void>((resolve) => (resume = resolve));
+      const ready = new Promise<void>((resolve) => (locked = resolve));
+      const originals = new Map<PoolClient, PoolClient['query']>();
+      const acquire = (client: PoolClient) => {
+        if (originals.has(client)) return;
+        const query = client.query;
+        originals.set(client, query);
+        client.query = async function (...args: unknown[]) {
+          const result = await Reflect.apply(query, client, args);
+          const sql = typeof args[0] === 'string' ? args[0] : (args[0] as { text?: string }).text;
+          if (sql === lockOwner.sql) {
+            locked();
+            await barrier;
+            if (rollback) throw new Error('authorized vote rollback');
+          }
+          return result;
+        } as PoolClient['query'];
+      };
+      f.pool.on('acquire', acquire);
+      const command = votes.putVoteOutcome(caller.actor, request, rollback ? randomUUID() : key);
+      try {
+        await Promise.race([ready, command]);
+        await contendedWriter(f, () => drainIdentityTerminalClosure(f.pool, requested, randomUUID()));
+      } finally {
+        resume();
+        try {
+          if (rollback) await expect(command).rejects.toThrow('authorized vote rollback');
+          else committed = await command;
+        } finally {
+          f.pool.off('acquire', acquire);
+          for (const [client, query] of originals) client.query = query;
+        }
+      }
+      expect(await votes.readOwnVote(caller.actor, STANDARD_QUESTION_ID, requested)).toMatchObject({
+        units: 16, revision: 1,
+      });
+    }
+    expect(committed.vote).toMatchObject({ units: 16, revision: 1 });
+    expect(committed.component).not.toBeNull();
+    const stale = await input(14);
+    await drainIdentityTerminalClosure(f.pool, requested, randomUUID());
+    await expect(votes.putVoteOutcome(caller.actor, stale, randomUUID())).rejects.toMatchObject({
+      reason: 'identity_epoch_changed',
+    });
+    expect(await votes.putVoteOutcome(caller.actor, first, key)).toEqual(committed);
+    expect(await votes.readOwnVote(caller.actor, STANDARD_QUESTION_ID, requested)).toMatchObject({
+      units: 16, revision: 1,
+    });
   } finally {
     await f.close();
   }
