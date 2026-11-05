@@ -57,9 +57,7 @@ test('native request errors are API and explicit readiness is UNAVAILABLE', () =
   expect(nativeKind(native(200, { admitted: ['collection.list'] }), '/admitted', 'library_entry.list')).toBe(
     'unavailable',
   );
-  expect(nativeKind(native(200, { admitted: ['library_entry.list'] }), '/admitted', 'library_entry.list')).toBe(
-    'data',
-  );
+  expect(nativeKind(native(200, { admitted: ['library_entry.list'] }), '/admitted', 'library_entry.list')).toBe('data');
   expect(classifySection(native(401, { code: 'expired' }, true), page({ text: 'Sign in' }), '/feedItems', null)).toBe(
     'API',
   );
@@ -400,7 +398,10 @@ test('fixture pages exercise classification, reader readiness and coverage after
     const result = await runPageDataCheck({
       baseUrl: `http://127.0.0.1:${web.port}`,
       kernel: `http://127.0.0.1:${kernel.port}`,
-      manifest: fixtureManifest({ web: '/en/web', empty: '/en/empty', readers: '/en/readers', slow: '/en/slow' }, '/v1'),
+      manifest: fixtureManifest(
+        { web: '/en/web', empty: '/en/empty', readers: '/en/readers', slow: '/en/slow' },
+        '/v1',
+      ),
       memberToken: 'secret-member-token',
       browser,
       pageTimeoutMs: 250,
@@ -446,7 +447,10 @@ test('fixture pages exercise classification, reader readiness and coverage after
     expect(printed).toContain('slow-navigation anonymous bounded-reader UNAVAILABLE');
     expect(printed).toContain('after-timeout anonymous continues EMPTY');
     expect(diagnosticText).toContain('Page navigation timed out for slow-navigation anonymous');
-    expect(result.results.find((entry) => entry.page === 'reader-states' && entry.section === 'root-item')?.evidence.pageItems).toBe(2);
+    expect(
+      result.results.find((entry) => entry.page === 'reader-states' && entry.section === 'root-item')?.evidence
+        .pageItems,
+    ).toBe(2);
     expect(result.incomplete).toBe(true);
     expect(result.defects).toBeGreaterThan(0);
     expect(result.results.every((entry) => printed.includes(formatLine(entry)))).toBe(true);

@@ -400,12 +400,22 @@ async function nativeCall(
       try {
         body = JSON.parse(text);
       } catch {
-        return { status: response.status, body: null, authorized: Boolean(token), error: 'Native response was not valid JSON' };
+        return {
+          status: response.status,
+          body: null,
+          authorized: Boolean(token),
+          error: 'Native response was not valid JSON',
+        };
       }
     }
     return { status: response.status, body, authorized: Boolean(token) };
   } catch (error) {
-    return { status: 0, body: null, authorized: Boolean(token), error: `Native request failed: ${displayError(error)}` };
+    return {
+      status: 0,
+      body: null,
+      authorized: Boolean(token),
+      error: `Native request failed: ${displayError(error)}`,
+    };
   }
 }
 
@@ -434,7 +444,11 @@ async function observeSection(
             /\b(loading|preparing)\b/i.test(element.innerText ?? element.textContent ?? '')
           )
             return true;
-          return [...element.querySelectorAll<HTMLElement>('[aria-busy="true"],[data-state="loading"],[data-feed-result-state="loading"],[role="status"],[aria-live]')].some(
+          return [
+            ...element.querySelectorAll<HTMLElement>(
+              '[aria-busy="true"],[data-state="loading"],[data-feed-result-state="loading"],[role="status"],[aria-live]',
+            ),
+          ].some(
             (child) =>
               child.getAttribute('aria-busy') === 'true' ||
               child.getAttribute('data-state') === 'loading' ||
@@ -455,11 +469,16 @@ async function observeSection(
           if (label) return label;
           const headingNode = element.querySelector<HTMLElement>('h1,h2,h3,h4,h5,h6,[role="heading"]');
           if (headingNode?.textContent?.trim()) return headingNode.textContent.trim();
-          return element.matches('a[href],button,[role="link"],[role="button"]') ? element.textContent?.trim() ?? '' : '';
+          return element.matches('a[href],button,[role="link"],[role="button"]')
+            ? (element.textContent?.trim() ?? '')
+            : '';
         };
         const matches = [...document.querySelectorAll<HTMLElement>(selector)];
         const wanted = heading?.trim().toLocaleLowerCase();
-        const node = wanted === undefined ? matches[0] : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
+        const node =
+          wanted === undefined
+            ? matches[0]
+            : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
         return node !== undefined && !loading(node);
       },
       { selector: section.selector, heading: section.heading },
@@ -479,7 +498,11 @@ async function observeSection(
           /\b(loading|preparing)\b/i.test(element.innerText ?? element.textContent ?? '')
         )
           return true;
-        return [...element.querySelectorAll<HTMLElement>('[aria-busy="true"],[data-state="loading"],[data-feed-result-state="loading"],[role="status"],[aria-live]')].some(
+        return [
+          ...element.querySelectorAll<HTMLElement>(
+            '[aria-busy="true"],[data-state="loading"],[data-feed-result-state="loading"],[role="status"],[aria-live]',
+          ),
+        ].some(
           (child) =>
             child.getAttribute('aria-busy') === 'true' ||
             child.getAttribute('data-state') === 'loading' ||
@@ -500,11 +523,16 @@ async function observeSection(
         if (label) return label;
         const headingNode = element.querySelector<HTMLElement>('h1,h2,h3,h4,h5,h6,[role="heading"]');
         if (headingNode?.textContent?.trim()) return headingNode.textContent.trim();
-        return element.matches('a[href],button,[role="link"],[role="button"]') ? element.textContent?.trim() ?? '' : '';
+        return element.matches('a[href],button,[role="link"],[role="button"]')
+          ? (element.textContent?.trim() ?? '')
+          : '';
       };
       const matches = [...document.querySelectorAll<HTMLElement>(selector)];
       const wanted = heading?.trim().toLocaleLowerCase();
-      const node = wanted === undefined ? matches[0] : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
+      const node =
+        wanted === undefined
+          ? matches[0]
+          : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
       if (!node) return { present: false, itemCount: 0, text: '', dataState: null, busy: true };
       const items = itemSelector ? Number(node.matches(itemSelector)) + node.querySelectorAll(itemSelector).length : 0;
       const unsettled = loading(node);
@@ -526,7 +554,10 @@ async function clickSectionAction(page: Page, section: ManifestSection, timeoutM
   await page.getByRole(action.role, { name: action.name, exact: true }).click({ timeout: timeoutMs });
 }
 
-export function signInRequestBody(email: string, password: string): {
+export function signInRequestBody(
+  email: string,
+  password: string,
+): {
   email: string;
   password: string;
   client_id: 'login';
@@ -657,7 +688,9 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
               if (!isTimeout(error)) throw error;
               navigationTimedOut = true;
               incomplete = true;
-              report(`Page navigation timed out for ${manifestPage.id} ${persona}; continuing bounded section coverage`);
+              report(
+                `Page navigation timed out for ${manifestPage.id} ${persona}; continuing bounded section coverage`,
+              );
             }
 
             const evaluateSection = async (section: ManifestSection): Promise<SectionResult> => {
@@ -686,7 +719,14 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                 }
               }
               const [native, read] = await Promise.all([
-                nativeCall(kernel, section.native, vars, persona === 'member' ? token : undefined, send, requestTimeout),
+                nativeCall(
+                  kernel,
+                  section.native,
+                  vars,
+                  persona === 'member' ? token : undefined,
+                  send,
+                  requestTimeout,
+                ),
                 navigationTimedOut
                   ? Promise.resolve({
                       observation: { present: false, itemCount: 0, text: '', dataState: null, busy: true },
@@ -702,14 +742,18 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                   report(`SQL seed count unavailable for ${manifestPage.id} ${persona} ${section.id}: no database URL`);
                 } else if (sqlInfrastructureFailure) {
                   incomplete = true;
-                  report(`SQL seed count not retried for ${manifestPage.id} ${persona} ${section.id}: ${sqlInfrastructureFailure}`);
+                  report(
+                    `SQL seed count not retried for ${manifestPage.id} ${persona} ${section.id}: ${sqlInfrastructureFailure}`,
+                  );
                 } else {
                   try {
                     seedCount = await queryCount(bound.text, bound.values);
                   } catch (error) {
                     incomplete = true;
                     sqlInfrastructureFailure = displayError(error);
-                    report(`SQL seed count failed for ${manifestPage.id} ${persona} ${section.id}: ${sqlInfrastructureFailure}`);
+                    report(
+                      `SQL seed count failed for ${manifestPage.id} ${persona} ${section.id}: ${sqlInfrastructureFailure}`,
+                    );
                   }
                 }
               }
@@ -718,7 +762,8 @@ export async function runPageDataCheck(options: RunOptions): Promise<{
                 incomplete = true;
                 report(`Reader readiness timed out for ${manifestPage.id} ${persona} ${section.id}`);
               }
-              const observed = actionFailed || navigationTimedOut ? { ...read.observation, busy: true } : read.observation;
+              const observed =
+                actionFailed || navigationTimedOut ? { ...read.observation, busy: true } : read.observation;
               const classified = classifySection(
                 native,
                 observed,

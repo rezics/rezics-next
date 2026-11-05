@@ -19,9 +19,7 @@
               "target": {
                 "route": "/"
               },
-              "languages": [
-                "en"
-              ]
+              "languages": ["en"]
             },
             "items": "/reads"
           }
@@ -29,9 +27,7 @@
         {
           "id": "public-feed",
           "name": "Public feed",
-          "personas": [
-            "anonymous"
-          ],
+          "personas": ["anonymous"],
           "selector": "section[aria-label]",
           "heading": "Home",
           "itemSelector": "[data-feed-id]",
@@ -48,9 +44,7 @@
         {
           "id": "home-feed",
           "name": "Home feed",
-          "personas": [
-            "member"
-          ],
+          "personas": ["member"],
           "selector": "section[data-feed-result-state], section[aria-label]",
           "heading": "Home",
           "itemSelector": "[data-feed-id]",
@@ -67,9 +61,7 @@
         {
           "id": "following-feed",
           "name": "Following feed",
-          "personas": [
-            "member"
-          ],
+          "personas": ["member"],
           "selector": "section[data-feed-result-state], section[aria-label]",
           "heading": "Home",
           "itemSelector": "[data-feed-id]",
@@ -90,9 +82,7 @@
         {
           "id": "follows",
           "name": "Following communities",
-          "personas": [
-            "member"
-          ],
+          "personas": ["member"],
           "selector": "nav",
           "heading": "Following",
           "itemSelector": "a[href*='/realms'], a[href*='/spaces']",
@@ -109,9 +99,7 @@
         {
           "id": "library-nav",
           "name": "Library navigation",
-          "personas": [
-            "member"
-          ],
+          "personas": ["member"],
           "selector": "nav a[href*='/library']:not([href*='collections']), nav [role='link'][aria-disabled='true']",
           "itemSelector": "a[href*='/library']:not([href*='collections'])",
           "native": {
@@ -125,9 +113,7 @@
         {
           "id": "collections-nav",
           "name": "Collections navigation",
-          "personas": [
-            "member"
-          ],
+          "personas": ["member"],
           "selector": "nav a[href*='/library/collections'], nav [role='link'][aria-disabled='true']",
           "itemSelector": "a[href*='/library/collections']",
           "native": {
@@ -162,10 +148,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -186,11 +169,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -211,11 +190,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -236,11 +211,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -261,11 +232,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -286,11 +253,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -311,10 +274,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -335,10 +295,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -372,10 +329,7 @@
           "property": "schema:genre",
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           }
         },
         {
@@ -391,10 +345,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           }
         },
         {
@@ -462,10 +413,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
@@ -488,10 +436,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
@@ -514,10 +459,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         }
@@ -545,11 +487,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -570,11 +508,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -596,11 +530,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           }
         },
         {
@@ -615,10 +545,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-slot='summary-disclosure'], #subject-summary-reading > .max-w-prose"
         },
@@ -635,10 +562,7 @@
           "property": "schema:genre",
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           }
         },
         {
@@ -705,11 +629,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']",
           "heading": "Relations"
@@ -733,10 +653,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
@@ -759,10 +676,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         }
@@ -790,10 +704,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -808,9 +719,7 @@
               "target": {
                 "subject": "01a1a8f0-a734-762b-b0ef-adbbf390a859"
               },
-              "languages": [
-                "en"
-              ]
+              "languages": ["en"]
             },
             "items": "/catalogue/directions"
           },
@@ -833,11 +742,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -853,10 +758,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-slot='summary-disclosure'], #subject-summary-reading > .max-w-prose"
         },
@@ -872,10 +774,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "li"
         },
@@ -943,11 +842,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']",
           "heading": "Relations"
@@ -971,10 +866,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         }
@@ -1030,10 +922,7 @@
           },
           "sql": {
             "text": "SELECT count(*)::int AS n FROM semantic.candidate WHERE subject_id = $1::uuid AND property = $2",
-            "params": [
-              "subject",
-              "property"
-            ]
+            "params": ["subject", "property"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']",
           "heading": "Character identities and relationships"
@@ -1057,11 +946,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
@@ -1085,11 +970,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         }
@@ -1146,11 +1027,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         },
@@ -1176,9 +1053,7 @@
         {
           "id": "library-nav",
           "name": "Library navigation",
-          "personas": [
-            "member"
-          ],
+          "personas": ["member"],
           "selector": "nav a[href*='/library']:not([href*='collections']), nav [role='link'][aria-disabled='true']",
           "itemSelector": "a[href*='/library']:not([href*='collections'])",
           "native": {
@@ -1192,9 +1067,7 @@
         {
           "id": "collections-nav",
           "name": "Collections navigation",
-          "personas": [
-            "member"
-          ],
+          "personas": ["member"],
           "selector": "nav a[href*='/library/collections'], nav [role='link'][aria-disabled='true']",
           "itemSelector": "a[href*='/library/collections']",
           "native": {
@@ -1228,11 +1101,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-slot='cover-card']"
         },
@@ -1270,11 +1139,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']",
           "heading": "Relations"
@@ -1299,11 +1164,7 @@
           },
           "sql": {
             "text": "SELECT COALESCE(SUM(value), 0)::int AS n FROM semantic.inbound_link_count WHERE route = ((get_byte(uuid_send($1::uuid), 10) * 256) + get_byte(uuid_send($1::uuid), 11)) AND subject_id = $1::uuid AND context_id = '00000000-0000-8000-8000-000000000000'::uuid AND property = $2 AND filter_value = $3::uuid",
-            "params": [
-              "subject",
-              "property",
-              "filter"
-            ]
+            "params": ["subject", "property", "filter"]
           },
           "itemSelector": "[data-work-statement], [data-slot='cover-card'], [data-row-key], [data-slot='list-row']"
         }
@@ -1325,9 +1186,7 @@
               "representation": "discovery-v1",
               "text": "Steins",
               "limit": 100,
-              "languages": [
-                "en"
-              ],
+              "languages": ["en"],
               "descriptions": true,
               "kindPage": {
                 "limit": 8
@@ -1348,9 +1207,7 @@
               "representation": "discovery-v1",
               "text": "Steins",
               "limit": 100,
-              "languages": [
-                "en"
-              ],
+              "languages": ["en"],
               "descriptions": true,
               "kindPage": {
                 "limit": 8
@@ -1376,17 +1233,13 @@
             "body": {
               "representation": "discovery-v1",
               "limit": 24,
-              "languages": [
-                "en"
-              ],
+              "languages": ["en"],
               "descriptions": true,
               "filter": {
                 "and": [
                   {
                     "kind": {
-                      "in": [
-                        "collection"
-                      ]
+                      "in": ["collection"]
                     }
                   }
                 ]
@@ -1403,16 +1256,12 @@
     {
       "id": "library",
       "path": "/en/library",
-      "personas": [
-        "member"
-      ],
+      "personas": ["member"],
       "sections": [
         {
           "id": "shelf",
           "name": "Personal library shelf",
-          "personas": [
-            "member"
-          ],
+          "personas": ["member"],
           "selector": "main, [data-slot='cover-grid'], [data-slot='cover-card']",
           "itemSelector": "[data-slot='cover-card'], [data-slot='list-row']",
           "native": {
