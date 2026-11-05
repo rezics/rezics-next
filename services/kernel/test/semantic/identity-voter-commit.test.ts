@@ -7,7 +7,7 @@ import { STANDARD_QUESTION_ID, createVoteCommands } from '../../src/rating/votes
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochMapping } from '../../src/semantic/identity-epoch-mapping.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
-import { cleanIdentityTerminalClosure } from '../../src/semantic/identity-terminal-closure.ts';
+import { drainIdentityTerminalClosure } from '../../src/semantic/identity-terminal-closure.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { readIdentityRatingReview } from '../../src/semantic/identity-adapters/read.ts';
 import { createIdentityRatingCommitParticipant } from '../../src/semantic/identity-rating-commit-participant.ts';
@@ -150,7 +150,7 @@ test('four real provider review/apply paths retain their requested, canonical, v
 test('persisted control replacement invalidates the exact review without changing the source epoch', async () => {
   const f = await createIdentityMappingFixture({ poolMax: 1 });
   try {
-    const selected = await reviewedSelf(f, 0x5d10);
+    const selected = await reviewedSelf(f, 0x5d30);
     const participant = createIdentityRatingCommitParticipant();
     const prepared = participant.prepare(selected.operand);
     const before = (await f.admin.query('SELECT epoch FROM semantic.identity_epoch_mapping WHERE original=$1', [selected.subjectId])).rows;
@@ -192,9 +192,9 @@ async function contendedWriter(f: Awaited<ReturnType<typeof createIdentityMappin
 test('real admission, mapping, dirty capture and terminal closure cannot commit through a held reviewed command', async () => {
   const f = await createIdentityMappingFixture({ poolMax: 3 });
   try {
-    const selected = await reviewedSelf(f, 0x5d10);
-    const survivor = (await f.create('Native writer survivor', 0x5d10)).id;
-    const original = (await f.create('Native writer original', 0x5d10)).id;
+    const selected = await reviewedSelf(f, 0x5d40);
+    const survivor = (await f.create('Native writer survivor', 0x5d40)).id;
+    const original = (await f.create('Native writer original', 0x5d40)).id;
     await f.bootstrapHomes([survivor, original]);
     const participant = createIdentityRatingCommitParticipant();
     // Real released JSON transport, including the complete persisted-control operand.
@@ -225,9 +225,12 @@ test('real admission, mapping, dirty capture and terminal closure cannot commit 
     const job = await held(() => f.admit(intent), false);
     await held(() => stepIdentityEpochMapping(f.pool, job), true);
     await f.drainMapping(job, 512);
-    await held(() => f.create('Native birth and dirty capture', 0x5d10), false);
+    await held(() => f.create('Native birth and dirty capture', 0x5d40), false);
     await held(() => stepIdentityEpochBootstrap(f.pool, selected.home), true);
-    await held(() => cleanIdentityTerminalClosure(f.pool, selected.subjectId), false);
+    const claim = randomUUID();
+    await held(() => drainIdentityTerminalClosure(f.pool, selected.subjectId, claim), false);
+    await expect(runCommand(f.pool, { partition: selected.home }, async (tx) => noEffect(await participant.admit(tx, prepared))))
+      .rejects.toMatchObject({ name: 'VoteReviewStaleError', reason: 'identity_epoch_changed' });
   } finally {
     await f.close();
   }
