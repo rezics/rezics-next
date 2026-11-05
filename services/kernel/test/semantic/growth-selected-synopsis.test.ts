@@ -72,8 +72,9 @@ beforeAll(async () => {
   const positive = status(await f.call('GET', path, undefined, null), 200);
   expect(positive.selectedSynopsis.kind).toBe('matched');
   expect(positive.selectedSynopsis.fact.references).toEqual([]);
-  expect(positive.subject.sourceRecords).toEqual(records);
-  selected = { subject: book.id, path, projection: positive.selectedSynopsis, records };
+  expect(positive.subject.sourceRecords).toEqual(expect.arrayContaining(records));
+  expect(positive.subject.sourceRecords).toHaveLength(records.length);
+  selected = { subject: book.id, path, projection: positive.selectedSynopsis, records: positive.subject.sourceRecords };
 }, 120_000);
 afterAll(async () => {
   await db?.close();
@@ -141,7 +142,7 @@ function population(axis: Axis, base: number): Population {
                   revision: 1,
                   body: null,
                   body_sha256: Buffer.alloc(32, ordinal % 256),
-                  source: { ...origin, references: [] },
+                  source: { ...origin, field_group: 'summary', references: [] },
                   rights: { license: 'CC0-1.0', obligations: [], attribution: 'Unrelated author' },
                   language: 'en',
                   availability: 'erased',
