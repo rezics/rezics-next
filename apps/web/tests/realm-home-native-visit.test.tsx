@@ -151,11 +151,19 @@ function fixture(
     boards: { items: [], next: 'boards-one' },
     publications: {
       items: Array.from({ length: count }, (_, n) => ({
-        publication: { realmId: id(1), subjectId: id(20 + n), publicationId: id(40 + n) },
+        publication: {
+          realmId: id(1),
+          subjectId: id(20 + n),
+          publicationId: id(40 + n),
+          verdict: 'adopt',
+          subjectRevisionId: null,
+          publishedAt: '2026-10-01T00:00:00.000Z',
+        },
         summary: {
           id: id(20 + n),
           type: 'schema:Book',
           types: ['schema:Book'],
+          creativeWork: false,
           label: { value: `Work ${n}`, language: 'en' },
           cover: null,
         },
