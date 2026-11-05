@@ -5,6 +5,19 @@ import { browserObservation, type BrowserObservationSnapshot } from '../../../se
 
 export type ContributionOperation = 'reaction' | 'watch' | 'report' | 'reply';
 
+let nextOperationLeaseId = 1;
+const operationLeaseIds = new WeakMap<object, number>();
+
+export function contributionOperationLeaseId(lease: object | undefined): number | null {
+  if (!lease) return null;
+  let id = operationLeaseIds.get(lease);
+  if (!id) {
+    id = nextOperationLeaseId++;
+    operationLeaseIds.set(lease, id);
+  }
+  return id;
+}
+
 /** Domain custody of one original page. Session identity belongs exclusively to Web's observer. */
 export class ContributionActionsAddress {
   private attached = true;

@@ -117,6 +117,20 @@ reader, credential and key through advice/count echoes; deliberate retry replays
 read can reconcile its projection. The account module owns no reaction transport or recovery engine. A supplied
 projection watermark keeps the native owner's existing settlement rule.
 
+Decision: account replies target the selected post's containing thread and exact row as parent, or the original opening post for a Discussion or Review; reports keep the selected row and revision.
+
+`contribution-actions/report.tsx` composes current `report:create` / `report.create` advice with `PostActions` for
+that exact selected row and revision. `PostActions` retains private report details, sender, credential, key and
+target across an uncertain result; a later advice read cannot settle it or replace its retry operands. Current
+denial prevents a new report while the original report owner remains available for deliberate retry or discard.
+
+`contribution-actions/reply.tsx` composes current `post:create` / `post.create` advice with `PostComposer` and its
+existing `ReplyIntent`. The command keeps the original thread, immediate parent, draft and operation lease. Local
+draft restoration is off for this private visit; a replaced operation lease remounts the composer with fresh advice
+and no earlier uncertain intent. Advice readback never acknowledges the native write. Both compositions are
+prepared for the official mounted adapter; production remains unavailable until the publisher installs the public
+callable and DTO.
+
 The mounted contribution response adapter and production controls still require the publisher's official callable
-and DTO. Report and reply owner composition remains to be completed. Existing public links and the shared host
-retirement and recovery notice continue to own the production journey meanwhile.
+and DTO. Existing public links and the shared host retirement and recovery notice continue to own the production
+journey meanwhile.

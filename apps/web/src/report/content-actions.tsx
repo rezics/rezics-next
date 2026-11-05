@@ -223,6 +223,7 @@ export function PostActions({
   extraEntries,
   canonicalHref,
   commandLease,
+  canStartReport = true,
 }: {
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   revisionId?: string;
@@ -232,6 +233,8 @@ export function PostActions({
   canonicalHref?: string;
   /** Optional original native operation lease for a mounted contribution action. */
   commandLease?: OperationLease<'report'>;
+  /** Current native advice gates new reports while an admitted uncertain report keeps its owner. */
+  canStartReport?: boolean;
 }) {
   const client = useContext(QueryClientContext);
   const observation = useMemo(() => observeSession(client), [client]);
@@ -262,6 +265,7 @@ export function PostActions({
       target={target}
       {...(revisionId !== undefined ? { revisionId } : {})}
       verification={verification}
+      canStartReport={canStartReport}
       {...(commandLease ? { commandLease } : {})}
       {...(extraEntries ? { extraEntries } : {})}
       {...(canonicalHref ? { canonicalHref } : {})}
@@ -278,6 +282,7 @@ function ReportActionsVisit({
   target,
   revisionId,
   verification,
+  canStartReport,
   extraEntries,
   canonicalHref,
   commandLease,
@@ -290,6 +295,7 @@ function ReportActionsVisit({
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   revisionId?: string;
   verification: VerificationConfig;
+  canStartReport: boolean;
   extraEntries?: MenuEntry[];
   canonicalHref?: string;
   commandLease?: OperationLease<'report'>;
@@ -400,6 +406,7 @@ function ReportActionsVisit({
 
   const currentAuthority = observation.read();
   const canReport =
+    canStartReport &&
     Boolean(reportCredential(currentAuthority)) &&
     currentAuthority.fingerprint === admittedFingerprint &&
     reportLeaseMatchesAuthority(commandLease, currentAuthority);
@@ -521,6 +528,7 @@ function ReportActionsVisit({
     (next: boolean) => {
       if (!currentOwner() || renderIncarnation !== openIncarnation.current) return;
       if (next) {
+        if (!canReport) return;
         if (reportAttemptRef.current) return;
         if (reportOpenRef.current) return;
         retireCopyResult();
@@ -551,7 +559,7 @@ function ReportActionsVisit({
       setToken({ value: '', revision: tokenRevision.current });
       setReportOpen(false);
     },
-    [currentOwner, renderIncarnation, retireCopyResult],
+    [canReport, currentOwner, renderIncarnation, retireCopyResult],
   );
 
   const report = useCallback(

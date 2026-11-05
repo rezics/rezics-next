@@ -54,12 +54,15 @@ export function ContributionAdvicePresentation({
   label,
   locale,
   retry,
+  retainChildren = false,
   children,
 }: {
   state: ContributionAdviceState;
   label: string;
   locale: Locale;
   retry?: (() => Promise<void>) | undefined;
+  /** Keep an already admitted command owner mounted while its exact uncertain write is retained. */
+  retainChildren?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -69,11 +72,8 @@ export function ContributionAdvicePresentation({
       data-advice-state={state}
       className="min-w-0 space-y-2 text-sm [overflow-wrap:anywhere]"
     >
-      {state === 'available' ? (
-        children
-      ) : (
-        <p role={state === 'failed' ? 'alert' : 'status'}>{adviceText(state, locale)}</p>
-      )}
+      {state === 'available' ? children : <p role={state === 'failed' ? 'alert' : 'status'}>{adviceText(state, locale)}</p>}
+      {state !== 'available' && retainChildren ? children : null}
       {state === 'failed' && retry ? (
         <Button type="button" variant="outline" onClick={() => void retry()}>
           {m.public_account_retry({}, { locale })}

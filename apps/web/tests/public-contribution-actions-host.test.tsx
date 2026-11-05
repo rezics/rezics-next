@@ -8,6 +8,100 @@ import { dirname } from 'node:path';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
+type MockPostActionsProps = {
+  target: { kind: string; id: string };
+  revisionId?: string;
+  canonicalHref?: string;
+  canStartReport?: boolean;
+  commandLease?: object;
+};
+const reportActionMounts: MockPostActionsProps[] = [];
+mock.module('../src/report/content-actions', () => ({
+  PostActions: (props: MockPostActionsProps) => {
+    reportActionMounts.push(props);
+    return createElement('div', {
+      'data-slot': 'mock-post-actions',
+      'data-target-kind': props.target.kind,
+      'data-target-id': props.target.id,
+      'data-revision-id': props.revisionId,
+      'data-report-allowed': String(props.canStartReport),
+    });
+  },
+}));
+
+type MockReplyCommand = {
+  title: string;
+  body: unknown;
+  mediaIds: string[];
+  idempotencyKey: string;
+  parentId?: string;
+  submissionContext?: unknown;
+};
+type MockWriteResult = { ok: true; value: unknown } | { ok: false; reason: string };
+type MockComposerProps = {
+  initialKey: string;
+  localDraft: boolean;
+  canSubmit: boolean;
+  containerId?: string;
+  boardId?: string;
+  replyTargetId?: string | null;
+  submissionContext?: unknown;
+  onSubmit: (command: MockReplyCommand) => Promise<MockWriteResult>;
+  onSuccess: (value: unknown) => void;
+  onIntentLockChange: (locked: boolean) => void;
+};
+const mountedComposerProps: MockComposerProps[] = [];
+const replyWrites: { data: Record<string, unknown>; headers: Headers; fetch: typeof fetch }[] = [];
+const replyDraftBodies: unknown[] = [];
+let submitMockReply: (() => Promise<void>) | undefined;
+let replyResult: unknown = { ok: true, post: { id: 'created-reply' } };
+mock.module('../src/threads/composer', () => ({
+  draftFetch: (body: unknown) => {
+    replyDraftBodies.push(body);
+    return globalThis.fetch;
+  },
+  PostComposer: (props: MockComposerProps) => {
+    mountedComposerProps.push(props);
+    const command = {
+      title: '',
+      body: { profile: 'blocks', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Private reply' }] }] },
+      mediaIds: [],
+      idempotencyKey: '00000000-0000-4000-8000-000000000099',
+      parentId: props.replyTargetId ?? undefined,
+      submissionContext: props.submissionContext,
+    };
+    return createElement(
+      'div',
+      { 'data-slot': 'mock-reply-composer' },
+      createElement(
+        'button',
+        {
+          type: 'button',
+          'data-slot': 'send-mock-reply',
+          onClick: () => {
+            submitMockReply = async () => {
+              const result = await props.onSubmit(command);
+              if (result.ok) props.onSuccess(result.value);
+            };
+          },
+        },
+        'Send reply',
+      ),
+      createElement(
+        'button',
+        { type: 'button', 'data-slot': 'lock-mock-reply', onClick: () => props.onIntentLockChange(true) },
+        'Retain uncertain reply',
+      ),
+    );
+  },
+}));
+mock.module('../src/threads/actions', () => ({
+  replyToThread: async (request: { data: Record<string, unknown>; headers: HeadersInit; fetch: typeof fetch }) => {
+    replyWrites.push({ ...request, headers: new Headers(request.headers) });
+    return replyResult;
+  },
+}));
+
 const { AccountPosts } = await import('../src/features/pages/account');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const {
@@ -27,6 +121,10 @@ const { rememberContribution, restoreContributionRecovery, contributionReturnOcc
 const { ContributionAdvicePresentation, ContributionWatch } =
   await import('../src/accounts/public-profile/contribution-actions/presentation');
 const { ContributionReaction } = await import('../src/accounts/public-profile/contribution-actions/reaction');
+const { ContributionReport } = await import('../src/accounts/public-profile/contribution-actions/report');
+const { ContributionReply, contributionReplyTarget } = await import(
+  '../src/accounts/public-profile/contribution-actions/reply'
+);
 const { m } = await import('../src/paraglide/messages.js');
 const { originalContributionReference, contributionCommandTarget, contributionOperationAdvice } =
   await import('../src/accounts/public-profile/contribution-actions/advice');
@@ -123,12 +221,13 @@ test('only surviving original Discussion, Review and Post occurrences select adv
     originalContributionReference(postInput, { ...post, thread: { ...thread, boardId: 'replacement-board' } }),
   ).toBeUndefined();
   expect(contributionCommandTarget(postReference, 'watch')).toEqual({ type: 'content.thread', id, revisionId: id });
-  for (const operation of ['reaction', 'report', 'reply'] as const)
+  for (const operation of ['reaction', 'report'] as const)
     expect(contributionCommandTarget(postReference, operation)).toEqual({
       type: 'content.post',
       id: postId,
       revisionId: postRevision,
     });
+  expect(contributionCommandTarget(postReference, 'reply')).toEqual({ type: 'content.thread', id, revisionId: id });
 });
 
 function episode(client: QueryClient, row: Record<string, unknown>): ContributionActionsEpisode {
@@ -736,6 +835,252 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
     } finally {
       await act(async () => root.unmount());
       client.clear();
+      node.remove();
+      await dom.close();
+    }
+  },
+);
+
+test('prepared report keeps the selected post target and uncertain owner while current advice changes', async () => {
+  const dom = await installDom();
+  const node = document.createElement('div');
+  document.body.append(node);
+  const root = createRoot(node);
+  reportActionMounts.length = 0;
+  const threadId = id;
+  const postId = '00000000-0000-4000-8000-000000000002';
+  const openingRevision = '00000000-0000-4000-8000-000000000003';
+  const postRevision = '00000000-0000-4000-8000-000000000004';
+  const boardId = '00000000-0000-4000-8000-000000000005';
+  const openingPostId = '00000000-0000-4000-8000-000000000006';
+  const publicState = { availability: 'available', visibility: 'published' };
+  const input = {
+    accountId: id,
+    view: 'posts' as const,
+    cursor: 'original+/=',
+    proof: 'native-proof',
+    references: [
+      {
+        type: 'content.post' as const,
+        id: postId,
+        threadId,
+        placeId: boardId,
+        threadRevisionId: openingRevision,
+        sourceRevisionId: postRevision,
+      },
+    ],
+  };
+  const row = {
+    ...publicState,
+    id: postId,
+    authorId: id,
+    threadId,
+    revisionId: postRevision,
+    thread: {
+      ...publicState,
+      id: threadId,
+      boardId,
+      firstPost: { ...publicState, id: openingPostId, threadId, revisionId: openingRevision },
+    },
+  };
+  const lease = {
+    reader: id,
+    operation: 'report' as const,
+    current: () => true,
+    credential: () => 'original-credential',
+  };
+  const reportSource = (state: 'available' | 'denied'): NativeAdvice => ({
+    viewer: { kind: 'account', id },
+    currentness: { actions: 'current' },
+    actions: {
+      state: 'current',
+      retryable: false,
+      references: [
+        {
+          type: 'content.post',
+          id: postId,
+          sourceRevisionId: postRevision,
+          state: 'current',
+          operations: [{ action: 'report:create', operationId: 'report.create', state }],
+        },
+      ],
+    },
+  });
+  const scope = {
+    input,
+    row,
+    reader: id,
+    locale: 'en' as const,
+    isCurrent: () => true,
+    operation: () => lease,
+  };
+  const canonicalHref = '/en/threads/original?post=original-post';
+  const paint = async (source: NativeAdvice, proof = input.proof, currentLease = lease) =>
+    act(async () =>
+      root.render(
+        <ContributionReport
+          presentation={{ ...scope, input: { ...input, proof }, source, operation: () => currentLease }}
+          canonicalHref={canonicalHref}
+          verification={{ sitekey: '', scriptUrl: '' }}
+        />,
+      ),
+    );
+  try {
+    await paint(reportSource('denied'));
+    expect(node.querySelector('[data-slot="mock-post-actions"]')).toBeNull();
+    await paint(reportSource('available'));
+    expect(node.querySelector('[data-slot="mock-post-actions"]')?.getAttribute('data-target-kind')).toBe('post');
+    expect(node.querySelector('[data-slot="mock-post-actions"]')?.getAttribute('data-target-id')).toBe(postId);
+    expect(node.querySelector('[data-slot="mock-post-actions"]')?.getAttribute('data-revision-id')).toBe(postRevision);
+    expect(node.querySelector('[data-slot="mock-post-actions"]')?.getAttribute('data-report-allowed')).toBe('true');
+    expect(reportActionMounts.at(-1)?.canonicalHref).toBe(canonicalHref);
+    expect(reportActionMounts.at(-1)?.commandLease).toBe(lease);
+    await paint(reportSource('denied'));
+    expect(node.querySelector('[data-slot="mock-post-actions"]')?.getAttribute('data-report-allowed')).toBe('false');
+    const newLease = { ...lease };
+    await paint(reportSource('denied'), 'replacement-proof', newLease);
+    expect(node.querySelector('[data-slot="mock-post-actions"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    node.remove();
+    await dom.close();
+  }
+});
+
+test.each(['discussion', 'reviews', 'posts'] as const)(
+  'prepared %s reply uses the selected thread, immediate parent and original credential', async (view) => {
+    const dom = await installDom();
+    const node = document.createElement('div');
+    document.body.append(node);
+    const root = createRoot(node);
+    mountedComposerProps.length = 0;
+    replyWrites.length = 0;
+    replyDraftBodies.length = 0;
+    submitMockReply = undefined;
+    replyResult = { ok: true, post: { id: 'created-reply' } };
+    const threadId = id;
+    const boardId = '00000000-0000-4000-8000-000000000005';
+    const openingPostId = '00000000-0000-4000-8000-000000000006';
+    const openingRevision = '00000000-0000-4000-8000-000000000003';
+    const postId = '00000000-0000-4000-8000-000000000002';
+    const postRevision = '00000000-0000-4000-8000-000000000004';
+    const publicState = { availability: 'available', visibility: 'published' };
+    const thread = {
+      ...publicState,
+      id: threadId,
+      authorId: id,
+      boardId,
+      kind: view === 'reviews' ? 'review' : 'discussion',
+      firstPost: { ...publicState, id: openingPostId, threadId, revisionId: openingRevision },
+    };
+    const reference =
+      view === 'posts'
+        ? {
+            type: 'content.post' as const,
+            id: postId,
+            threadId,
+            placeId: boardId,
+            threadRevisionId: openingRevision,
+            sourceRevisionId: postRevision,
+          }
+        : { type: 'content.thread' as const, id: threadId, placeId: boardId, sourceRevisionId: openingRevision };
+    const input = {
+      accountId: id,
+      view,
+      cursor: 'original+/=',
+      proof: 'native-proof',
+      references: [reference],
+    };
+    const row =
+      view === 'posts'
+        ? { ...publicState, id: postId, authorId: id, threadId, revisionId: postRevision, thread }
+        : thread;
+    const actionReference = {
+      type: 'content.thread' as const,
+      id: threadId,
+      sourceRevisionId: openingRevision,
+      state: 'current' as const,
+      operations: [
+        { action: 'post:create', operationId: 'post.create', state: 'available' as const },
+      ],
+    };
+    const source: NativeAdvice = {
+      viewer: { kind: 'account', id },
+      currentness: { actions: 'current' },
+      actions: { state: 'current', retryable: false, references: [actionReference] },
+    };
+    const denied: NativeAdvice = {
+      ...source,
+      actions: {
+        ...source.actions,
+        references: [
+          {
+            ...actionReference,
+            operations: [{ action: 'post:create', operationId: 'post.create', state: 'denied' }],
+          },
+        ],
+      },
+    };
+    let activeLease = {
+      reader: id,
+      operation: 'reply' as const,
+      current: () => true,
+      credential: () => 'original-credential',
+    };
+    const scope = {
+      input,
+      row,
+      reader: id,
+      locale: 'en' as const,
+      isCurrent: () => true,
+      operation: () => activeLease,
+    };
+    const expectedParent = view === 'posts' ? postId : openingPostId;
+    const canonicalHref = `/en/threads/${threadId}?post=${expectedParent}`;
+    const paint = async (advice: NativeAdvice, proof = input.proof) =>
+      act(async () =>
+        root.render(
+          <ContributionReply
+            presentation={{ ...scope, input: { ...input, proof }, source: advice }}
+            canonicalHref={canonicalHref}
+          />,
+        ),
+      );
+    try {
+      expect(contributionReplyTarget(input, row)).toMatchObject({ threadId, boardId, parentId: expectedParent });
+      await paint(denied);
+      expect(node.querySelector('[data-slot="mock-reply-composer"]')).toBeNull();
+      await paint(source);
+      expect(node.querySelector('[data-slot="mock-reply-composer"]')).not.toBeNull();
+      const props = mountedComposerProps.at(-1)!;
+      expect(props).toMatchObject({
+        localDraft: false,
+        canSubmit: true,
+        containerId: threadId,
+        boardId,
+        replyTargetId: expectedParent,
+      });
+      expect(JSON.stringify(props.submissionContext)).toContain(`"operationLease":`);
+      expect(node.querySelector('a[href]')?.getAttribute('href')).toBe(canonicalHref);
+      await act(async () => node.querySelector<HTMLButtonElement>('[data-slot="lock-mock-reply"]')!.click());
+      await paint(denied);
+      expect(node.querySelector('[data-slot="mock-reply-composer"]')).not.toBeNull();
+      await act(async () => node.querySelector<HTMLButtonElement>('[data-slot="send-mock-reply"]')!.click());
+      await act(async () => submitMockReply?.());
+      expect(replyWrites).toHaveLength(1);
+      expect(replyWrites[0]!.data).toMatchObject({
+        threadId,
+        parentId: expectedParent,
+        idempotencyKey: '00000000-0000-4000-8000-000000000099',
+      });
+      expect(replyWrites[0]!.data.body).toEqual(replyDraftBodies[0]);
+      expect(replyWrites[0]!.headers.get('X-CSRF-Token')).toBe('original-credential');
+      const replacementLease = { ...activeLease };
+      activeLease = replacementLease;
+      await paint(denied, 'replacement-proof');
+      expect(node.querySelector('[data-slot="mock-reply-composer"]')).toBeNull();
+    } finally {
+      await act(async () => root.unmount());
       node.remove();
       await dom.close();
     }
