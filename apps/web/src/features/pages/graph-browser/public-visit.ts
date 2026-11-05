@@ -23,6 +23,10 @@ const selectorKeys = ['property', 'direction', 'depth', 'node', 'edge', 'from', 
 const routeKeys = new Set([...selectorKeys, 'origin', 'publicReturn']);
 const selectorId = /^[0-9a-f-]{36}$/i;
 
+function validContext(value: string): boolean {
+  return value === candidateContext || uuid.test(value);
+}
+
 export function graphPublicIntentFits(address: string): boolean {
   return address.length <= graphPublicIntentLimit && encoder.encode(address).byteLength <= graphPublicIntentLimit;
 }
@@ -78,7 +82,7 @@ export function graphPublicSourceReturnHref({
   context: string;
   realm?: string;
 }): string | undefined {
-  if (!uuid.test(id) || !uuid.test(context) || (realm !== undefined && !uuid.test(realm))) return;
+  if (!uuid.test(id) || !validContext(context) || (realm !== undefined && !uuid.test(realm))) return;
   const query = new URLSearchParams({
     ...(context !== candidateContext ? { context } : {}),
     ...(realm ? { realm } : {}),
@@ -155,7 +159,7 @@ function originOf(value: unknown, id: string, locale: string): GraphPublicOrigin
     !uuid.test(id) ||
     input.locale !== locale ||
     typeof input.context !== 'string' ||
-    !uuid.test(input.context) ||
+    !validContext(input.context) ||
     (input.realm !== undefined && (typeof input.realm !== 'string' || !uuid.test(input.realm))) ||
     typeof input.returnHref !== 'string'
   )
