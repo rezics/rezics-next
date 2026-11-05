@@ -305,7 +305,7 @@ test('reviewed Person requests use native evidence query and preserve ordered de
   };
   const remote = kernel([
     () => json(200, { subject, reviewedIdentity: endpoint }),
-    () => json(200, { survivor: ID, redirected: other.subject, revision: 8 }),
+    () => json(202, { operation: { id: ID } }),
   ]);
   const client = createKernelClient(ORIGIN, { fetch: remote.fetch });
   const reviewed = reviewedPersonRequests(client);

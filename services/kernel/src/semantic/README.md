@@ -773,6 +773,7 @@ unavailable. Later drift after durable preparation retains recovery, never effec
 
 Ordinary `POST /v1/subjects:merge` keeps its native body, Global authorization and quoted Idempotency-Key.
 Only actual admission returns `202 {operation: {id}}` with `Location: /v1/subjectIdentityOperations/{id}`.
+`mergeSubjects` keeps the completed callable DTO; HTTP never treats a completed 200 as admission.
 Current-authority replay finds that same operation. The existing GET poll pending/completed DTOs and concealed
 unknown/denied behavior remain; a redirect/revision alone cannot complete it. Suspension follows the [native bearer contract](identity-epoch-contract.md#ordinary-http-asynchronous-identity-operation).
 

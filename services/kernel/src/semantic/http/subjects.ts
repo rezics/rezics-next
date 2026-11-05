@@ -16,7 +16,12 @@ import { readSubjectSummaries, summaryAuthorization } from '../summaries.ts';
 import { languageRanges } from '../language.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from './summaries.ts';
 import { SourceSchema, BatchReferenceSchema } from '@rezics/definitions/bulk';
-import { mergeSubjects, SubjectRedirectError } from '../merges.ts';
+import {
+  admitMergeSubjects,
+  observeSubjectIdentityOperation,
+  SubjectRedirectError,
+} from '../merges.ts';
+import { IdentityEpochStoreError } from '../identity-adapters/index.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { KeyRing } from '../../tokens/seal.ts';
@@ -262,6 +267,11 @@ function candidateError(error: unknown): never {
   if (error instanceof StatementDisclosureNotFoundError) throw new ProblemError('not_found');
   if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
   if (error instanceof SubjectRedirectError) throw new ProblemError('conflict');
+  if (error instanceof IdentityEpochStoreError) {
+    if (error.code === 'identity_group_overflow') throw new ProblemError('identity_group_overflow');
+    if (error.code === 'identity_epoch_busy') throw new ProblemError('overloaded');
+    throw new ProblemError('partition_unavailable');
+  }
   if (error instanceof SubjectNotFoundError) throw new ProblemError('not_found');
   if (error instanceof ContextNotFoundError) throw new ProblemError('not_found');
   if (error instanceof EditorialConflictError) throw new ProblemError('conflict');
@@ -959,22 +969,23 @@ function subjectRoutes(
           { additionalProperties: false },
         ),
         response: {
-          200: withHeaders(
+          202: withHeaders(
             t.Object(
               {
-                survivor: t.String({ format: 'uuid' }),
-                redirected: t.String({ format: 'uuid' }),
-                revision: t.Integer({ minimum: 2 }),
+                operation: t.Object(
+                  { id: t.String({ format: 'uuid' }) },
+                  { additionalProperties: false },
+                ),
               },
               { additionalProperties: false },
             ),
-            { [SESSION_HEADER]: t.String() },
+            { [SESSION_HEADER]: t.String(), location: t.String() },
           ),
           400: problemSchema('invalid_request'),
           401: unauthorized,
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
-          409: problemSchema('conflict'),
+          409: problemSchema('conflict', 'identity_group_overflow'),
           422: problemSchema('idempotency_conflict'),
           503: problemSchema(
             'semantic_not_ready',
@@ -992,7 +1003,7 @@ function subjectRoutes(
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ body, headers, actor, authorizeCommand, admission, job, session }) => {
+      async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         if (body.expectedIdentity && !validReviewedPersonExpectation(body.subjects, body.expectedIdentity))
           throw new ProblemError('invalid_request');
@@ -1013,7 +1024,7 @@ function subjectRoutes(
         });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
-            mergeSubjects(pool, {
+            admitMergeSubjects(pool, {
               subjects: body.subjects,
               ...(body.expectedIdentity
                 ? { expectedIdentity: body.expectedIdentity, routeKey }
@@ -1028,8 +1039,95 @@ function subjectRoutes(
             }),
           );
           session.record(component);
+          set.status = 202;
+          set.headers.location = `/v1/subjectIdentityOperations/${result.operation.id}`;
           return result;
         } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
+      '/v1/subjectIdentityOperations/:id',
+      {
+        params: t.Object({ id: t.String({ format: 'uuid' }) }),
+        response: {
+          200: t.Object(
+            {
+              operation: t.Union([
+                t.Object(
+                  { id: t.String({ format: 'uuid' }), done: t.Literal(false) },
+                  { additionalProperties: false },
+                ),
+                t.Object(
+                  {
+                    id: t.String({ format: 'uuid' }),
+                    done: t.Literal(true),
+                    result: t.Object(
+                      {
+                        survivor: t.String({ format: 'uuid' }),
+                        redirected: t.String({ format: 'uuid' }),
+                        revision: t.Integer({ minimum: 2 }),
+                      },
+                      { additionalProperties: false },
+                    ),
+                  },
+                  { additionalProperties: false },
+                ),
+              ]),
+            },
+            { additionalProperties: false },
+          ),
+          401: unauthorized,
+          404: problemSchema('not_found'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'subjectIdentityOperation.get',
+          'x-exposure': 'gate:subject_identity',
+          'x-action': 'subject:merge',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, actor, admission, job }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const mergeGrant = await accessCheck(
+          access(),
+          actor,
+          'subject:merge',
+          { route: 0, id: GLOBAL_CONTEXT },
+          { pool, deadline: job.deadline },
+        );
+        const conceal = () => {
+          throw new ProblemError('not_found');
+        };
+        try {
+          const observed = await admission.run('normal', job, () =>
+            withReadTransaction(pool, async (tx) => {
+              if (!(await mergeGrant(tx))) return null;
+              const saved = await observeSubjectIdentityOperation(tx, params.id);
+              if (!saved) return null;
+              for (const subject of [saved.original, saved.terminal]) {
+                const route = routeOf(subject);
+                if (route === null) return null;
+                const readable = await accessCheck(
+                  access(),
+                  actor,
+                  'subject:read',
+                  { route, id: subject, eligibility: subjectReadEligibility({ route, id: subject }) },
+                  { pool, deadline: job.deadline },
+                );
+                if (!(await readable(tx))) return null;
+                const visible = await readVisibility.run(tx, { route, subject_id: subject });
+                if (!visible || visible.visibility !== 'visible') return null;
+              }
+              return saved;
+            }, job.deadline),
+          );
+          if (!observed) return conceal();
+          return { operation: observed.operation };
+        } catch (error) {
+          if (error instanceof GrantDeniedError) return conceal();
           return candidateError(error);
         }
       },
