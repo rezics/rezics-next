@@ -170,6 +170,8 @@ describe('architecture boundaries', () => {
       const indirect = local();
       const callback = [1].map(() => remote.count);
       const immediate = (() => remote.count)();
+      const nested = (() => { function read() { return remote; } return read(); })();
+      const nestedArrow = (() => { const read = () => remote; return read(); })();
       const deferred = () => remote.count;
       function later(value = remote) { return value; }
       function shadowed(remote: Value) { return remote.count; }
@@ -188,6 +190,8 @@ describe('architecture boundaries', () => {
       'immediate',
       'indirect',
       'namespace',
+      'nested',
+      'nestedArrow',
     ]);
     expect(reads.every((read) => read.line > 0 && read.column > 0 && read.specifier === './peer')).toBe(true);
   });

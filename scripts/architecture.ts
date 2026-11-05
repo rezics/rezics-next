@@ -950,6 +950,14 @@ export function findLoadTimeReads(
     const seen = new Set<string>();
     const activeCalls = new Set<Node>();
     const activeValues = new Set<Node>();
+    const callScopes: { bindings: Set<string>; functions: Map<string, Node> }[] = [];
+    const calledFunction = (name: string, shadowed: Set<string>): Node | undefined => {
+      for (let index = callScopes.length - 1; index >= 0; index--) {
+        const scope = callScopes[index]!;
+        if (scope.bindings.has(name)) return scope.functions.get(name);
+      }
+      return shadowed.has(name) ? undefined : functions.get(name);
+    };
     let initializer = '';
     const report = (node: Node & { name: string }): void => {
       const specifier = imports.get(node.name);
@@ -982,19 +990,34 @@ export function findLoadTimeReads(
         node.type === 'FunctionExpression' ||
         node.type === 'ArrowFunctionExpression'
       ) {
-        for (const parameter of node.params) bindNames(parameter, local);
+        const bindings = new Set<string>();
+        for (const parameter of node.params) bindNames(parameter, bindings);
+        const localFunctions = new Map<string, Node>();
         const collectLocals = (child: Node): void => {
           if (child.type === 'FunctionDeclaration') {
-            if (child.id) local.add(child.id.name);
+            if (child.id) {
+              bindings.add(child.id.name);
+              localFunctions.set(child.id.name, child);
+            }
             return;
           }
           if (child.type === 'FunctionExpression' || child.type === 'ArrowFunctionExpression') return;
-          if (child.type === 'VariableDeclarator') bindNames(child.id, local);
+          if (child.type === 'VariableDeclarator') {
+            bindNames(child.id, bindings);
+            if (child.id.type === 'Identifier' && child.init) {
+              const value = runtimeExpression(child.init);
+              if (value.type === 'ArrowFunctionExpression' || value.type === 'FunctionExpression')
+                localFunctions.set(child.id.name, value);
+            }
+          }
           for (const next of syntaxChildren(child)) collectLocals(next);
         };
         if (node.body) collectLocals(node.body);
+        for (const name of bindings) local.add(name);
+        callScopes.push({ bindings, functions: localFunctions });
         for (const parameter of node.params) walk(parameter, local);
         if (node.body) walk(node.body, local);
+        callScopes.pop();
       }
       activeCalls.delete(node);
     };
@@ -1076,15 +1099,15 @@ export function findLoadTimeReads(
               const callback = runtimeExpression(argument);
               if (callback.type === 'ArrowFunctionExpression' || callback.type === 'FunctionExpression')
                 invoke(callback, shadowed);
-              else if (callback.type === 'Identifier' && !shadowed.has(callback.name)) {
-                const fn = functions.get(callback.name);
+              else if (callback.type === 'Identifier') {
+                const fn = calledFunction(callback.name, shadowed);
                 if (fn) invoke(fn, shadowed);
               }
             }
           }
           const callee = runtimeExpression(node.callee);
-          if (callee.type === 'Identifier' && !shadowed.has(callee.name)) {
-            const fn = functions.get(callee.name);
+          if (callee.type === 'Identifier') {
+            const fn = calledFunction(callee.name, shadowed);
             if (fn) invoke(fn, shadowed);
           } else if (callee.type === 'FunctionExpression' || callee.type === 'ArrowFunctionExpression') {
             invoke(callee, shadowed);

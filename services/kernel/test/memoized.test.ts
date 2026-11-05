@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { memoizedValue } from './memoized.ts';
+import { memoizedValue } from '../src/memoized.ts';
 
 test('module getters compute on use and preserve identity, including undefined', () => {
   const key = {};

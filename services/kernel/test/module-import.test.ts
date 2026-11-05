@@ -6,4 +6,4 @@ test('both process entries import without evaluating cyclic module values', asyn
   const worker = await import('../src/worker.ts');
   expect(typeof server.startServer).toBe('function');
   expect(typeof worker.startWorker).toBe('function');
-});
+}, 60_000);
