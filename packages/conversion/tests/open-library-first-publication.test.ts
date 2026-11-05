@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkStatementInput } from '@rezics/definitions/validate';
+import { ConversionError } from '../src/index.ts';
 import { converter_revision, convertOpenLibrary } from '../src/open-library.ts';
 
 const subjectId = '00000000-0000-4000-8000-000000000001';
