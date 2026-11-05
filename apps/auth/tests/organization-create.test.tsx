@@ -63,7 +63,8 @@ for (const result of ['success', 'step-up', 'approval'] as const)
       storePendingOrganizationHandle('new-team');
       const operation = { kind: 'organization' as const, handle: 'new-team' };
       storePendingAccountOperationStepUp({
-        ...readPendingAccountOperationStepUp()!,
+        kind: 'organization',
+        operationKey: readPendingAccountOperationStepUp()!.operationKey,
         accountId: 'replacement',
         operation,
       });

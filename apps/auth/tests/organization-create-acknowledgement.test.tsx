@@ -141,7 +141,8 @@ for (const adopted of [false, true])
     });
     storePendingOrganizationHandle('replacement-draft');
     storePendingAccountOperationStepUp({
-      ...page.original,
+      kind: 'organization',
+      operationKey: page.original.operationKey,
       accountId: 'replacement-account',
       operation: { kind: 'organization', handle: 'replacement-team' },
     });
@@ -161,7 +162,12 @@ test('replacement during final advice cannot consume another descriptor or draft
   const page = await begin();
   await acknowledge(page);
   storePendingOrganizationHandle('replacement-draft');
-  storePendingAccountOperationStepUp({ ...page.original, accountId: 'replacement-account' });
+  storePendingAccountOperationStepUp({
+    kind: 'organization',
+    operationKey: page.original.operationKey,
+    operation: page.original.operation,
+    accountId: 'replacement-account',
+  });
   const replacement = window.sessionStorage.getItem('rezics.account-operation.step-up');
   await flush(() => page.reads[0]!(Response.json(body)));
   privateGone(page.host);

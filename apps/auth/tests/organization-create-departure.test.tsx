@@ -89,7 +89,7 @@ test('Stay retains unresolved command identity; Leave retires late approval and 
   await flush(() => page.calls[1]!.resolve(Response.json({ accountId: 'created-organization' })));
   expect(page.host.textContent).not.toContain('@team-alpha');
   expect(page.calls).toHaveLength(2);
-  expect(readPendingAccountOperationStepUp()).toEqual(original);
+  expect(readPendingAccountOperationStepUp()).toEqual({ ...original, submitted: true });
   await page.render(page.view({ ...initial }));
   await flush(() => send(page.host));
   expect(page.calls[2]!.body.operationKey).toBe(original!.operationKey);
@@ -100,7 +100,11 @@ test('step-up continuation and completed destination bypass departure warnings',
   try {
     await flush(() => fill(page.input, 'team-alpha'));
     await flush(() => send(page.host));
-    await flush(() => page.calls[0]!.resolve(Response.json({ error: 'step_up_required' }, { status: 401 })));
+    await flush(() =>
+      page.calls[0]!.resolve(
+        Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
+      ),
+    );
     expect(assign).toHaveBeenCalledTimes(1);
     expect(page.unload()).toBe(false);
     await page.render(page.view({ ...initial }));
