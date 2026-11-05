@@ -125,6 +125,16 @@ keeping canonical profile, locale, unrelated query bytes and hash. Failed moveme
 Source, account, locale, publication replacement and disposal retire coordinates and callbacks, including equal
 address replacement and A/B/A. Only unavailable reads offer Retry; invalid cursors offer deliberate First.
 Keyboard focus transfers on admission only while the original action remains eligible.
+
+Web public Collections keeps eight admitted preceding cursors plus current in the local named-view visit,
+with one replacing BASIC window at the existing plan limit (at most 24 rows). Previous rereads an admitted
+coordinate; direct later entry invents none. First removes only cursor fields. Failed movement preserves its
+exact retry target and history; only admission commits movement, including an empty final window. Account,
+view, locale, changed public profile projection, native denial/exposure loss and disposal retire the visit
+permanently. Equivalent profile projections from rereads keep the visit. No predecessor bodies or persistent
+storage are retained. The public publication and exposure gates remain required. See the
+[receiver](../apps/web/src/accounts/public-profile/collection-windows/README.md).
+
 Web public account reads use ten-second phase deadlines through body decoding (primary/overview together,
 former-handle lookup, continuation, and Realm directory plus bounded hydration); optional operator labels use two
 seconds, caller cancellation composes with each deadline, and failures retain the existing unavailable/retry UI.

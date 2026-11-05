@@ -1,10 +1,14 @@
+import {
+  CollectionWindowControls,
+  CollectionWindowsContext,
+} from '../../accounts/public-profile/collection-windows/host';
 import { PublicAccountState } from '../../accounts/public-profile/view';
 import { readFailure } from '../../accounts/public-profile/read';
 import { useOperation } from '../../kernel/exposure';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { useId, useSyncExternalStore, type ReactNode, type SyntheticEvent } from 'react';
+import { useContext, useId, useSyncExternalStore, type ReactNode, type SyntheticEvent } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { accountOf, viewIsPublic, accountOperationAllowed, readAccountViewerActions } from './account-read';
@@ -252,6 +256,8 @@ type ListSpec = {
 /** The first page of one of the account's lists. A preview links to the view; a view links to the next page. */
 function AccountList({ props, spec }: { props: Record<string, unknown>; spec: ListSpec }) {
   const collectionPagesAdmitted = useOperation('account.collections');
+  const collectionWindows = useContext(CollectionWindowsContext);
+  const windowed = spec.kind === 'accountCollections' && props.paged === true && collectionWindows !== null;
   const state = useOverview(props.id);
   const actionPage = useContributionActionsPageScope();
   if (!state?.section || !state.value.account) return null;
@@ -270,7 +276,9 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
           {title}
         </h2>
         <PublicAccountState state={failure} />
-        {failure === 'invalid-cursor' ? (
+        {windowed && failure !== 'denied' ? (
+          <CollectionWindowControls locale={value.locale} failed invalid={failure === 'invalid-cursor'} />
+        ) : failure === 'invalid-cursor' ? (
           canOpenView && view ? (
             <a data-slot="restart" href={view} className={`${linkClass} inline-flex min-h-11 items-center`}>
               {m.public_account_start_again({}, options)}
@@ -336,7 +344,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
     if (items.length === 0 && !next)
       return (
         <section data-slot={spec.slot} aria-labelledby={`${id}-title`} className={sectionClass}>
-          <h2 id={`${id}-title`} className="sr-only">
+          <h2 id={`${id}-title`} className="sr-only" tabIndex={-1}>
             {title}
           </h2>
           {actionView ? <ContributionReturnRecovery rows={items} locale={value.locale} /> : null}
@@ -346,24 +354,30 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
               <EmptyDescription>{m.agent_empty({}, { locale: value.locale as never })}</EmptyDescription>
             </EmptyHeader>
           </Empty>
+          {windowed && <CollectionWindowControls locale={value.locale} />}
         </section>
       );
     return (
       <section data-slot={spec.slot} aria-labelledby={`${id}-title`} className={sectionClass}>
-        <h2 id={`${id}-title`} className="sr-only">
+        <h2 id={`${id}-title`} className="sr-only" tabIndex={-1}>
           {title}
         </h2>
         {actionView ? <ContributionReturnRecovery rows={items} locale={value.locale} /> : null}
         {actionList}
-        {next && (spec.kind !== 'accountCollections' || collectionPagesAdmitted) && (
-          <a
-            data-slot="continuation"
-            rel="next"
-            href={`?cursor=${encodeURIComponent(next)}`}
-            className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center text-sm font-medium hover:underline`}
-          >
-            {m.threads_next_page({}, { locale: value.locale as never })}
-          </a>
+        {windowed ? (
+          <CollectionWindowControls next={next} locale={value.locale} />
+        ) : (
+          next &&
+          (spec.kind !== 'accountCollections' || collectionPagesAdmitted) && (
+            <a
+              data-slot="continuation"
+              rel="next"
+              href={`?cursor=${encodeURIComponent(next)}`}
+              className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center text-sm font-medium hover:underline`}
+            >
+              {m.threads_next_page({}, { locale: value.locale as never })}
+            </a>
+          )
         )}
       </section>
     );
