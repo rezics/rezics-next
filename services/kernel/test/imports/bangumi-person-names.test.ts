@@ -23,7 +23,11 @@ test('ordinary selected-family names are separately accepted and read on the ack
     transport: {
       batchWrite: (request) => runtime.importTransport.batch(request),
       readFence: (tuple) =>
-        runtime.importTransport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }),
+        runtime.importTransport.fence({
+          source: tuple.source,
+          externalId: tuple.external_id,
+          fieldGroup: tuple.field_group,
+        }),
     },
   });
   try {

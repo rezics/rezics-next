@@ -126,10 +126,12 @@ test('ordinary Bangumi CLI proposes, adopts, reopens and facts-fences TVAnime na
       language: 'zh',
       text: '中文题名',
     });
-    expect(adopted.subject?.statements['schema:alternateName']?.map((item) => valueContent(item.value))).toContainEqual({
-      language: 'und',
-      text: 'クラナド',
-    });
+    expect(adopted.subject?.statements['schema:alternateName']?.map((item) => valueContent(item.value))).toContainEqual(
+      {
+        language: 'und',
+        text: 'クラナド',
+      },
+    );
 
     const reopened = await cli.invoke(initialFeed);
     expect(reopened.code).toBe(0);
@@ -155,7 +157,9 @@ test('ordinary Bangumi CLI proposes, adopts, reopens and facts-fences TVAnime na
       [alternate],
     );
     const recoveredAdopted = await cli.runtime.importTransport.readReviewedSubject(id);
-    expect(recoveredAdopted.subject?.statements['schema:alternateName']?.map((item) => valueContent(item.value))).toEqual(
+    expect(
+      recoveredAdopted.subject?.statements['schema:alternateName']?.map((item) => valueContent(item.value)),
+    ).toEqual(
       expect.arrayContaining([
         { language: 'und', text: 'クラナド' },
         { language: 'und', text: 'Recovered scalar' },

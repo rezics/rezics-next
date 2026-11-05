@@ -212,10 +212,10 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       ),
     ).toBe(false);
     const proposedPage = await runtime.importTransport.reviewedCandidates(personId, {
-        property: 'schema:name',
-        context: GLOBAL_CONTEXT,
-        limit: 100,
-      });
+      property: 'schema:name',
+      context: GLOBAL_CONTEXT,
+      limit: 100,
+    });
     const proposedNames = currentCandidates(proposedPage.candidates).map(({ statement }) =>
       valueContent(statement.value),
     );
@@ -337,9 +337,7 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     expect(careerBodies).toHaveLength(2);
     expect(careerBodies[0]).toBe(careerBodies[1]);
     expect(
-      replayedCareerCommands[0]?.op === 'propose'
-        ? valueContent(replayedCareerCommands[0].statement.value)
-        : null,
+      replayedCareerCommands[0]?.op === 'propose' ? valueContent(replayedCareerCommands[0].statement.value) : null,
     ).toBe(producer?.id);
     await publishShowcase({
       plan,
@@ -469,10 +467,10 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     expect(publicRead['schema:abstract']).toHaveLength(1);
     expect(publicRead['wdt:P106']?.map(({ value }) => value.content)).toContain(actor?.id);
     const occupationPage = await runtime.importTransport.reviewedCandidates(personId, {
-        property: 'wdt:P106',
-        context: GLOBAL_CONTEXT,
-        limit: 100,
-      });
+      property: 'wdt:P106',
+      context: GLOBAL_CONTEXT,
+      limit: 100,
+    });
     const occupation = currentCandidates(occupationPage.candidates).find(
       (candidate) => candidate.statement.value.type === 'value' && candidate.statement.value.content === actor?.id,
     );

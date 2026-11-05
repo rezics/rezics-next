@@ -97,9 +97,7 @@ test('Book names move through explicit publication and same-UUID refresh without
       text: 'Source Chinese title',
     });
     expect(
-      firstCandidates.some((candidate) =>
-        JSON.stringify(candidate.statement.value.content).includes('Must not leak'),
-      ),
+      firstCandidates.some((candidate) => JSON.stringify(candidate.statement.value.content).includes('Must not leak')),
     ).toBe(false);
     expect(
       await runtime.importTransport

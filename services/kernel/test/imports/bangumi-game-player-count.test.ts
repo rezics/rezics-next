@@ -114,9 +114,9 @@ test('selected Game player-count range is independently adopted and current, and
       context: globalContext,
       limit: 100,
     });
-    expect(currentCandidates(missing.candidates).filter((candidate) => candidate.source?.external_id === gameId)).toEqual(
-      [],
-    );
+    expect(
+      currentCandidates(missing.candidates).filter((candidate) => candidate.source?.external_id === gameId),
+    ).toEqual([]);
     expect(playerStatement(await publicClient.readSubject(first.id))).toBeUndefined();
 
     const corrected = await importSelected(rangeInfobox);

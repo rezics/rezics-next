@@ -273,10 +273,10 @@ test('default anime staff and voice publication adopts exact cited endpoints and
     });
     const candidateId = (wrongScheme.results[0] as { value: { candidate: string } }).value.candidate;
     const candidatePage = await runtime.importTransport.reviewedCandidates(role.conceptId, {
-        property: 'skos:inScheme',
-        context: globalContext,
-        limit: 100,
-      });
+      property: 'skos:inScheme',
+      context: globalContext,
+      limit: 100,
+    });
     const candidate = currentCandidates(candidatePage.candidates).find((item) => item.id === candidateId);
     if (!candidate) throw new Error('Accepted credit candidate is missing');
     const accept = await runtime.importTransport.acceptReviewedCandidate(
