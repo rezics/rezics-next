@@ -104,19 +104,40 @@ test(
 );
 
 test(
-  'direct subject-in-Zone URLs stay closed while the global subject URL remains available',
+  'member Subject and selected view routes render inside the Zone while nonmembers stay concealed',
   async () => {
-    for (const path of [
-      `/en/zones/${zoneId}/subjects/${subjectId}`,
-      `/en/zones/${zoneId}/subjects/${subjectId}/details`,
-    ]) {
+    for (const [path, expectedText, canonical, view] of [
+      [
+        `/en/zones/${zoneId}/subjects/${subjectId}`,
+        'Kokoro',
+        `/en/subjects/${subjectId}/kokoro`,
+        'overview',
+      ],
+      [
+        `/en/zones/${zoneId}/subjects/${subjectId}/details`,
+        'Kokoro details in the Zone',
+        `/en/subjects/${subjectId}/kokoro/details`,
+        'details',
+      ],
+    ] as const) {
       const response = await fetch(`${await site()}${path}`);
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(200);
       const html = await response.text();
-      expect(html).toContain('Page not found');
-      expect(html).not.toContain('data-zone-shell');
-      expect(html).not.toContain('Kokoro details in the Zone');
+      expect(html).toContain('data-zone-shell');
+      expect(html).toContain('Field Notes');
+      expect(html).toContain('aria-label="Zone navigation"');
+      expect(html).toContain(expectedText);
+      expect(canonicalPath(html)).toBe(canonical);
+      expect(alternatePath(html, 'zh-Hans')).toContain(`/zh-Hans/subjects/${subjectId}/`);
+      if (view !== 'overview') expect(alternatePath(html, 'zh-Hans')).toEndWith(`/${view}`);
     }
+
+    const outsider = await fetch(`${await site()}/en/zones/${withinBudgetZoneId}/subjects/${subjectId}`);
+    expect(outsider.status).toBe(404);
+    const outsiderHtml = await outsider.text();
+    expect(outsiderHtml).toContain('Page not found');
+    expect(outsiderHtml).not.toContain('data-zone-shell');
+    expect(outsiderHtml).not.toContain('Kokoro');
 
     const subject = await fetch(`${await site()}/en/subjects/${subjectId}/kokoro`);
     expect(subject.status).toBe(200);
@@ -425,4 +446,12 @@ function pageResponse() {
 function canonicalPath(html: string): string | undefined {
   const tag = html.match(/<link\b(?=[^>]*\brel="canonical")(?=[^>]*\bhref="([^"]+)")[^>]*>/)?.[1];
   return tag ? new URL(tag).pathname : undefined;
+}
+
+function alternatePath(html: string, language: string): string | undefined {
+  const tag = (html.match(/<link\b[^>]*>/g) ?? []).find(
+    (link) => link.includes('rel="alternate"') && link.includes(`hreflang="${language}"`),
+  );
+  const href = tag?.match(/\bhref="([^"]+)"/)?.[1];
+  return href ? new URL(href).pathname : undefined;
 }
