@@ -10,7 +10,6 @@ function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
 }
 
-
 function collectionHref(locale: string, id: string) {
   return `/${locale}/collections/${encodeURIComponent(id)}`;
 }
@@ -73,7 +72,10 @@ export function PublicCollectionDiscoveryPage({
             </p>
           )}
           {state.next ? (
-            <a href={publicCollectionDirectoryHref(locale, { cursor: state.next })} className={buttonVariants({ variant: 'outline' })}>
+            <a
+              href={publicCollectionDirectoryHref(locale, { cursor: state.next })}
+              className={buttonVariants({ variant: 'outline' })}
+            >
               {m.collection_discovery_more({}, options)}
             </a>
           ) : null}

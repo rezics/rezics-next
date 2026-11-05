@@ -27,15 +27,20 @@ test('unset kind stays distinct from explicit mixed and explicit presentation ty
   expect(parsePublicCollectionDirectoryAddress({ presentationKind: '' })).toEqual({ state: 'ready', address: {} });
   for (const presentationKind of ['mixed', 'creative/book']) {
     expect(parsePublicCollectionDirectoryAddress({ presentationKind })).toEqual({
-      state: 'ready', address: { presentationKind },
+      state: 'ready',
+      address: { presentationKind },
     });
   }
 });
 
 test('external addresses reject mutable curator names, nonidentities, unknown orders and broken cursors', () => {
   for (const [field, value] of [
-    ['curator', '@mutable-name'], ['subject', 'some title'], ['order', 'rating'],
-    ['cursor', ''], ['cursor', 'x'.repeat(4865)], ['curator', [selection.curator]],
+    ['curator', '@mutable-name'],
+    ['subject', 'some title'],
+    ['order', 'rating'],
+    ['cursor', ''],
+    ['cursor', 'x'.repeat(4865)],
+    ['curator', [selection.curator]],
     ['presentationKind', 'x'.repeat(257)],
   ] as const) {
     expect(parsePublicCollectionDirectoryAddress({ [field]: value })).toEqual({ state: 'invalid', field });
