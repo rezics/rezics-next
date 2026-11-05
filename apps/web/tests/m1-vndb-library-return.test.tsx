@@ -413,7 +413,7 @@ test('prepared native read carries the exact opaque cursor and original order, a
       headers: {
         cookie: `__Host-rezics_session=${'A'.repeat(43)}`,
         'x-reader': targetId,
-        'x-csrf-token': 'original',
+        'x-csrf-token': session.csrfToken,
         authorization: 'Bearer native-reader',
       },
     });
