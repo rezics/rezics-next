@@ -10514,5 +10514,16 @@
   "subject_synopsis_visit_invalid": "无法打开这次简介查看。请返回作品当前的阅读页面，重新选择简介。",
   "subject_synopsis_visit_changed": "无法按照原有的文档绑定重新打开所选简介。当前阅读可能已更改或不可用。",
   "subject_synopsis_current_field": "单独查看当前的 Global 字段",
-  "subject_synopsis_return_changed": "先前所选的简介已更改或不再提供。此处显示当前阅读。"
+  "subject_synopsis_return_changed": "先前所选的简介已更改或不再提供。此处显示当前阅读。",
+  "identifiers_origin_realm": "此页面来自所选 Realm 的公开阅读。",
+  "identifiers_origin_unsupported": "此页面来自所选 Context，但此公开路由无法重新读取该 Context。",
+  "identifiers_global_only_notice": "此处的标识符更正仅使用当前 Global 阅读。所选公开来源不会授予 Global 更正权限。",
+  "identifiers_global_choice": "打开当前 Global 更正",
+  "identifiers_return_origin": "返回所选的公开阅读",
+  "identifiers_open_global_subject": "打开 Global 条目",
+  "identifiers_origin_realm_named": "此页面来自所选的 Realm：{name}。",
+  "identifiers_origin_changed": "此条目的所选 Realm 已不再解析到相同的 Context。不会显示先前的值。",
+  "identifiers_origin_missing": "此条目的所选 Realm 阅读已无法使用。",
+  "identifiers_origin_refused": "无法访问所选 Realm 阅读，因此不会显示其值。",
+  "identifiers_origin_unavailable": "所选 Realm 阅读暂时无法使用，因此不会显示其值。"
 }

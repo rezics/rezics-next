@@ -10601,5 +10601,16 @@
   "subject_synopsis_visit_invalid": "無法開啟這次簡介檢視。請返回作品目前的閱讀頁面，重新選擇簡介。",
   "subject_synopsis_visit_changed": "無法依照原本的文件綁定重新開啟所選簡介。目前的閱讀可能已變更或無法使用。",
   "subject_synopsis_current_field": "另行檢視目前的 Global 欄位",
-  "subject_synopsis_return_changed": "先前所選的簡介已變更或不再提供。此處顯示目前的閱讀。"
+  "subject_synopsis_return_changed": "先前所選的簡介已變更或不再提供。此處顯示目前的閱讀。",
+  "identifiers_origin_realm": "此頁面來自所選 Realm 的公開閱讀。",
+  "identifiers_origin_unsupported": "此頁面來自所選 Context，但此公開路由無法重新讀取該 Context。",
+  "identifiers_global_only_notice": "此處的識別碼更正只使用目前的 Global 閱讀。所選公開來源不會授予 Global 更正權限。",
+  "identifiers_global_choice": "開啟目前的 Global 更正",
+  "identifiers_return_origin": "返回所選的公開閱讀",
+  "identifiers_open_global_subject": "開啟 Global 條目",
+  "identifiers_origin_realm_named": "此頁面來自所選的 Realm：{name}。",
+  "identifiers_origin_changed": "此條目的所選 Realm 已不再解析至相同的 Context。先前的值不會顯示。",
+  "identifiers_origin_missing": "此條目的所選 Realm 閱讀已無法使用。",
+  "identifiers_origin_refused": "無法存取所選 Realm 閱讀，因此不會顯示其值。",
+  "identifiers_origin_unavailable": "所選 Realm 閱讀暫時無法使用，因此不會顯示其值。"
 }

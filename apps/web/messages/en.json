@@ -10694,5 +10694,16 @@
   "subject_synopsis_visit_invalid": "This synopsis visit could not be opened. Return to the current work reading and choose the synopsis again.",
   "subject_synopsis_visit_changed": "The requested synopsis could not be reopened with its original document binding. The current reading may have changed or be unavailable.",
   "subject_synopsis_current_field": "Inspect the current Global field as a new visit",
-  "subject_synopsis_return_changed": "The previous synopsis selection has changed or is no longer available. This is the current reading."
+  "subject_synopsis_return_changed": "The previous synopsis selection has changed or is no longer available. This is the current reading.",
+  "identifiers_origin_realm": "This visit came from the selected Realm public reading.",
+  "identifiers_origin_unsupported": "This visit came from a selected Context that this public route cannot re-read.",
+  "identifiers_global_only_notice": "Identifier correction here uses the current Global reading only. The selected public origin cannot authorize a Global correction.",
+  "identifiers_global_choice": "Open the current Global correction",
+  "identifiers_return_origin": "Return to the selected public reading",
+  "identifiers_open_global_subject": "Open the Global subject",
+  "identifiers_origin_realm_named": "This visit came from the selected Realm: {name}.",
+  "identifiers_origin_changed": "The selected Realm no longer resolves to the same Context for this subject. Earlier values are not shown.",
+  "identifiers_origin_missing": "The selected Realm reading is no longer available for this subject.",
+  "identifiers_origin_refused": "The selected Realm reading could not be accessed. Its values are not shown.",
+  "identifiers_origin_unavailable": "The selected Realm reading is temporarily unavailable. Its values are not shown."
 }

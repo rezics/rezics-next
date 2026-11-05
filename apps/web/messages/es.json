@@ -10507,5 +10507,16 @@
   "subject_synopsis_visit_invalid": "No se ha podido abrir esta visita a la sinopsis. Vuelve a la lectura actual de la obra y selecciona de nuevo la sinopsis.",
   "subject_synopsis_visit_changed": "No se ha podido volver a abrir la sinopsis solicitada con su documento original. La lectura actual puede haber cambiado o no estar disponible.",
   "subject_synopsis_current_field": "Consultar el campo Global actual en una nueva visita",
-  "subject_synopsis_return_changed": "La sinopsis seleccionada anteriormente ha cambiado o ya no está disponible. Se muestra la lectura actual."
+  "subject_synopsis_return_changed": "La sinopsis seleccionada anteriormente ha cambiado o ya no está disponible. Se muestra la lectura actual.",
+  "identifiers_origin_realm": "Esta visita procede de la lectura pública del Realm seleccionado.",
+  "identifiers_origin_unsupported": "Esta visita procede de un Context seleccionado que esta ruta pública no puede volver a leer.",
+  "identifiers_global_only_notice": "La corrección de identificadores aquí usa solo la lectura Global actual. El origen público seleccionado no autoriza una corrección Global.",
+  "identifiers_global_choice": "Abrir la corrección Global actual",
+  "identifiers_return_origin": "Volver a la lectura pública seleccionada",
+  "identifiers_open_global_subject": "Abrir el sujeto Global",
+  "identifiers_origin_realm_named": "Esta visita procede del Realm público seleccionado: {name}.",
+  "identifiers_origin_changed": "El Realm seleccionado ya no resuelve al mismo Context para este sujeto. No se muestran los valores anteriores.",
+  "identifiers_origin_missing": "La lectura del Realm seleccionado ya no está disponible para este sujeto.",
+  "identifiers_origin_refused": "No se pudo acceder a la lectura del Realm seleccionado. No se muestran sus valores.",
+  "identifiers_origin_unavailable": "La lectura del Realm seleccionado no está disponible temporalmente. No se muestran sus valores."
 }

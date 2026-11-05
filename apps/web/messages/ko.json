@@ -10507,5 +10507,16 @@
   "subject_synopsis_visit_invalid": "이 줄거리 방문을 열 수 없습니다. 작품의 현재 읽기로 돌아가 줄거리를 다시 선택하세요.",
   "subject_synopsis_visit_changed": "원래 문서 연결로 요청한 줄거리를 다시 열 수 없습니다. 현재 읽기가 변경되었거나 사용할 수 없습니다.",
   "subject_synopsis_current_field": "새 방문으로 현재 Global 필드 확인",
-  "subject_synopsis_return_changed": "이전에 선택한 줄거리가 변경되었거나 더 이상 제공되지 않습니다. 현재 읽기를 표시합니다."
+  "subject_synopsis_return_changed": "이전에 선택한 줄거리가 변경되었거나 더 이상 제공되지 않습니다. 현재 읽기를 표시합니다.",
+  "identifiers_origin_realm": "이 방문은 선택한 Realm의 공개 읽기에서 시작되었습니다.",
+  "identifiers_origin_unsupported": "선택한 Context는 이 공개 경로에서 다시 읽을 수 없습니다.",
+  "identifiers_global_only_notice": "여기서 식별자를 수정할 때는 현재 Global 읽기만 사용합니다. 선택한 공개 출처는 Global 수정 권한을 부여하지 않습니다.",
+  "identifiers_global_choice": "현재 Global 수정 열기",
+  "identifiers_return_origin": "선택한 공개 읽기로 돌아가기",
+  "identifiers_open_global_subject": "Global 항목 열기",
+  "identifiers_origin_realm_named": "이 방문은 선택한 Realm 공개 읽기에서 시작되었습니다: {name}.",
+  "identifiers_origin_changed": "이 항목의 선택한 Realm이 더 이상 같은 Context로 확인되지 않습니다. 이전 값은 표시하지 않습니다.",
+  "identifiers_origin_missing": "이 항목의 선택한 Realm 읽기를 더 이상 사용할 수 없습니다.",
+  "identifiers_origin_refused": "선택한 Realm 읽기에 접근할 수 없어 값을 표시하지 않습니다.",
+  "identifiers_origin_unavailable": "선택한 Realm 읽기를 일시적으로 사용할 수 없어 값을 표시하지 않습니다."
 }

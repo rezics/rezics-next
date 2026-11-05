@@ -9,6 +9,10 @@ import type { EditorRead } from './statement-editor';
 import type { FactsTransport } from './subject-facts';
 import { SubjectFacts } from './subject-facts-view';
 import { identifierFields } from './identifiers-profile';
+import type { IdentifierVisitOrigin } from './identifier-current-visit';
+import { identifierOriginHref, identifierReviewHref } from './identifier-current-visit';
+import { candidateContext } from '../../subject/candidates';
+import { subjectHref } from '../../subject/subject-href';
 
 export type IdentifiersProfileProps = {
   id: string;
@@ -17,16 +21,38 @@ export type IdentifiersProfileProps = {
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
   initialReview?: { property: string; candidate: string } | undefined;
+  origin?: IdentifierVisitOrigin | undefined;
+  editorHref?: string | undefined;
+  originHref?: string | undefined;
+  globalHref?: string | undefined;
 };
 
 /** A scoped presentation of the ordinary fact workspace, with its native controls and commands. */
 export const IdentifiersProfile = catalogueEditor(IdentifiersProfileLive);
 
-function IdentifiersProfileLive({ id, locale, session, transport, review, initialReview }: IdentifiersProfileProps) {
+function IdentifiersProfileLive({
+  id,
+  locale,
+  session,
+  transport,
+  review,
+  initialReview,
+  origin,
+  editorHref,
+  originHref,
+  globalHref,
+}: IdentifiersProfileProps) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
-    queryKey: [...['catalogue-identifiers', id, locale], lifetime.generation],
+    queryKey: [
+      'catalogue-identifiers',
+      id,
+      locale,
+      origin?.context ?? null,
+      origin?.realm ?? null,
+      lifetime.generation,
+    ],
     queryFn: transport.read,
     enabled: session === 'signed-in',
     staleTime: 0,
@@ -36,7 +62,10 @@ function IdentifiersProfileLive({ id, locale, session, transport, review, initia
     refetchOnReconnect: false,
   });
   const [retained, setRetained] = useState<Extract<EditorRead, { ok: true }> | undefined>();
-  const current = query.data?.ok && query.data.public.subject.id === id ? query.data : undefined;
+  const current =
+    query.data?.ok && query.data.public.subject.id === id && query.data.public.subject.context === candidateContext
+      ? query.data
+      : undefined;
   if (current && retained !== current) setRetained(current);
   const readable = session === 'signed-in' && !query.isError && !query.isFetching && !!current;
   return (
@@ -50,7 +79,7 @@ function IdentifiersProfileLive({ id, locale, session, transport, review, initia
             <EditorFailure reason="unavailable" locale={locale} />
           ) : query.data && !query.data.ok ? (
             <EditorFailure reason={query.data.reason} locale={locale} />
-          ) : query.data?.ok && query.data.public.subject.id !== id ? (
+          ) : query.data?.ok && current === undefined ? (
             <EditorFailure reason="stale" locale={locale} />
           ) : (
             <p role="status">{m.candidate_loading({}, o)}</p>
@@ -76,7 +105,36 @@ function IdentifiersProfileLive({ id, locale, session, transport, review, initia
               intro: m.identifiers_intro({}, o),
               empty: m.identifiers_empty({}, o),
               path: 'identifiers',
+              editorHref: editorHref ?? `${subjectHref({ id, label }, locale).href}/identifiers`,
+              reviewHref: (property, candidate) =>
+                identifierReviewHref(
+                  editorHref ?? `${subjectHref({ id, label }, locale).href}/identifiers`,
+                  property,
+                  candidate,
+                ),
             }}
+            profileIntro={
+              origin?.kind === 'realm' ? (
+                <div className="space-y-2">
+                  <p>{m.identifiers_global_only_notice({}, o)}</p>
+                  {originHref && (
+                    <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={originHref}>
+                      {m.identifiers_return_origin({}, o)}
+                    </a>
+                  )}
+                </div>
+              ) : origin?.kind === 'unsupported' ? (
+                <div className="space-y-2">
+                  <p>{m.identifiers_global_only_notice({}, o)}</p>
+                  <a
+                    className="inline-flex min-h-11 items-center underline underline-offset-4"
+                    href={globalHref ?? identifierOriginHref({ id, label }, locale)}
+                  >
+                    {m.identifiers_open_global_subject({}, o)}
+                  </a>
+                </div>
+              ) : undefined
+            }
           />
         </div>
       )}

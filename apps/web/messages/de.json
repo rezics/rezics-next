@@ -10507,5 +10507,16 @@
   "subject_synopsis_visit_invalid": "Diese Zusammenfassung konnte nicht geöffnet werden. Kehren Sie zur aktuellen Lesart des Werks zurück und wählen Sie die Zusammenfassung erneut aus.",
   "subject_synopsis_visit_changed": "Die angeforderte Zusammenfassung konnte nicht mit ihrer ursprünglichen Dokumentzuordnung geöffnet werden. Die aktuelle Lesart hat sich möglicherweise geändert oder ist nicht verfügbar.",
   "subject_synopsis_current_field": "Das aktuelle Global-Feld in einem neuen Besuch prüfen",
-  "subject_synopsis_return_changed": "Die zuvor ausgewählte Zusammenfassung wurde geändert oder ist nicht mehr verfügbar. Die aktuelle Lesart wird angezeigt."
+  "subject_synopsis_return_changed": "Die zuvor ausgewählte Zusammenfassung wurde geändert oder ist nicht mehr verfügbar. Die aktuelle Lesart wird angezeigt.",
+  "identifiers_origin_realm": "Dieser Besuch stammt aus der ausgewählten öffentlichen Realm-Lesung.",
+  "identifiers_origin_unsupported": "Dieser Besuch stammt aus einem ausgewählten Context, den diese öffentliche Route nicht erneut lesen kann.",
+  "identifiers_global_only_notice": "Die Kennungskorrektur hier verwendet nur die aktuelle Global-Lesung. Der ausgewählte öffentliche Ursprung berechtigt nicht zu einer Global-Korrektur.",
+  "identifiers_global_choice": "Aktuelle Global-Korrektur öffnen",
+  "identifiers_return_origin": "Zur ausgewählten öffentlichen Lesung zurückkehren",
+  "identifiers_open_global_subject": "Global-Subjekt öffnen",
+  "identifiers_origin_realm_named": "Dieser Besuch stammt aus der ausgewählten öffentlichen Realm-Lesung: {name}.",
+  "identifiers_origin_changed": "Der ausgewählte Realm löst für dieses Subjekt nicht mehr zum selben Context auf. Frühere Werte werden nicht angezeigt.",
+  "identifiers_origin_missing": "Die ausgewählte Realm-Lesung ist für dieses Subjekt nicht mehr verfügbar.",
+  "identifiers_origin_refused": "Auf die ausgewählte Realm-Lesung konnte nicht zugegriffen werden. Ihre Werte werden nicht angezeigt.",
+  "identifiers_origin_unavailable": "Die ausgewählte Realm-Lesung ist vorübergehend nicht verfügbar. Ihre Werte werden nicht angezeigt."
 }

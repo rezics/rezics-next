@@ -82,6 +82,12 @@ export type FactsProfile = {
   intro: string;
   empty: string;
   path: string;
+  /** Optional installed profile address, including its validated local visit query. */
+  editorHref?: string | undefined;
+  /** Optional public Subject address for the current profile presentation. */
+  publicHref?: string | undefined;
+  /** Optional review address projection for profiles with a bounded visit origin. */
+  reviewHref?: ((property: string, candidate: string) => string) | undefined;
 };
 export { FactField };
 function ExactReview({
@@ -601,12 +607,10 @@ function FactField({
                     <p className="font-semibold">{m.correction_proposed({}, o)}</p>
                     {inspectionAvailability === 'allowed' ? (
                       <a
-                        href={`${href}/edit?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`}
-                        {...(editorHref
-                          ? {
-                              href: `${editorHref}?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`,
-                            }
-                          : {})}
+                        href={
+                          profile?.reviewHref?.(property, draft.result.candidate) ??
+                          `${editorHref ?? `${href}/edit`}?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`
+                        }
                         className={buttonVariants({
                           variant: 'outline',
                           className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2',
@@ -788,9 +792,9 @@ function SubjectFactsLive({
   const current = read.ok ? read : null;
   const subject = current?.public.subject;
   const label = pageText(subject?.labels, locale).text || m.subject_value_unlabelled({}, o);
-  const href = subject ? subjectHref({ id: subject.id, label }, locale).href : '';
+  const href = profile?.publicHref ?? (subject ? subjectHref({ id: subject.id, label }, locale).href : '');
   const groups = current ? factGroups(current) : { text: [], time: [], quantity: [] };
-  const editorHref = profile ? `${href}/${profile.path}` : undefined;
+  const editorHref = profile ? (profile.editorHref ?? `${href}/${profile.path}`) : undefined;
   if (profile && current) {
     const scope = new Set(profile.properties(current));
     for (const group of Object.keys(groups) as (keyof typeof groups)[])
