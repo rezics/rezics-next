@@ -69,11 +69,13 @@ export type DefaultPublicFilterRuntime = Readonly<{
   bindRequest(
     request: Readonly<{ plan: PublicFilterConsumerCaptureInput; snapshot: 'pit' | 'prepared' }>,
     context: PublicFilterConsumerContext,
+    acceptedRelease?: string,
   ): Promise<BoundPublicRequest>;
   /** Reopen a factory for retained producer state without recapturing or resetting its allowance. */
   resumeRequest(
     queried: PublicFilterQueriedObservation,
     context: PublicFilterConsumerContext,
+    acceptedRelease?: string,
   ): Promise<PublicFilterConsumerOperations>;
   bindSuggestion(
     request: PublicSuggestionCaptureInput,
@@ -98,6 +100,11 @@ function checkDeadline(context: PublicFilterConsumerContext): void {
 
 /** Trusted default composition. Neither Source nor Actor nor physical identity is injectable. */
 export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRuntimeConfig): DefaultPublicFilterRuntime {
+  async function requestMeaning(acceptedRelease?: string) {
+    if (acceptedRelease === undefined) return activeRelease(config.pool);
+    const release = await readRelease(config.pool, acceptedRelease);
+    return release ? { digest: acceptedRelease, release } : null;
+  }
   if (!(config.routeKey instanceof Uint8Array) || config.routeKey.byteLength !== 32)
     throw new TypeError('Public Search requires the canonical route key');
   const source = publicFilterSource(config);
@@ -340,10 +347,10 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         }
       });
     },
-    bindRequest(request, context) {
+    bindRequest(request, context, acceptedRelease) {
       return track(async () => {
         checkDeadline(context);
-        const release = await activeRelease(config.pool);
+        const release = await requestMeaning(acceptedRelease);
         if (!release) notReady();
         const state = await subjectGenerations(config.search, config.prefix);
         if (state.active === null) notReady();
@@ -357,10 +364,10 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         return { operations, capture };
       });
     },
-    resumeRequest(queried, context) {
+    resumeRequest(queried, context, acceptedRelease) {
       return track(async () => {
         checkDeadline(context);
-        const release = await activeRelease(config.pool);
+        const release = await requestMeaning(acceptedRelease);
         if (!release) notReady();
         const state = await subjectGenerations(config.search, config.prefix);
         if (state.active === null) notReady();
