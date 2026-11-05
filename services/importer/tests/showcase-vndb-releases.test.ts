@@ -591,6 +591,76 @@ test('default seed without binding files rereads catalogue state and exposes sel
   }
 }, 30_000);
 
+test('later selected-family reseeds carry the newly current release classification groups', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-release-reseed-'));
+  const tables = family({ platforms: [{ id: 'r1', platform: 'win' }], media: [{ id: 'r1', medium: 'cd' }] });
+  const plan = await planCrossMediaSeed(tables);
+  const initialPlan = structuredClone(plan);
+  const commands: BatchCommand[] = [];
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const created = new Map<string, string>();
+  const reviewPort = captureShowcaseCommands(localReviewPort(commands, created), journal);
+  try {
+    const beforeVocabulary = await prepareShowcaseVndbReleaseClassifications({
+      plan: initialPlan,
+      port: reviewPort,
+      journal,
+      stage: 'schemes',
+    });
+    const first = await seedShowcaseVndbReleases({
+      tables,
+      plan: initialPlan,
+      path: join(directory, 'state.sqlite'),
+      port: reviewPort,
+      bindings: beforeVocabulary.bindings,
+      groups: beforeVocabulary.groups,
+      extras: extras(),
+    });
+    const classifications = await prepareShowcaseVndbReleaseClassifications({
+      plan: initialPlan,
+      port: reviewPort,
+      journal,
+      stage: 'concepts',
+    });
+    const reread = await prepareShowcaseVndbReleaseClassifications({
+      plan: initialPlan,
+      port: reviewPort,
+      journal,
+      stage: 'concepts',
+    });
+    expect(JSON.stringify(reread.bindings)).toBe(JSON.stringify(classifications.bindings));
+    expect(classifications.bindings.concepts.some((item) => item.code === 'win')).toBe(true);
+
+    const nextCommands = commands.length;
+    const later = await seedShowcaseVndbReleases({
+      tables,
+      plan: structuredClone(plan),
+      path: join(directory, 'state.sqlite'),
+      port: reviewPort,
+      bindings: first.bindings,
+      extras: extras(),
+    });
+    const laterPlatformProposals = commands.slice(nextCommands).filter(
+      (command) =>
+        command.op === 'propose' &&
+        command.source.external_id === 'r1' &&
+        command.statement.property.id === 'schema:gamePlatform',
+    );
+    expect(later.identities.find((identity) => identity.key === 'r1')?.subjectId).toBe(
+      first.identities.find((identity) => identity.key === 'r1')?.subjectId,
+    );
+    expect(laterPlatformProposals).toHaveLength(1);
+    expect(
+      laterPlatformProposals.some(
+        (command) => command.op === 'propose' && command.statement.value.type === 'value' && command.statement.value.content === platformWinId,
+      ),
+    ).toBe(true);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('malformed and retracted source states withhold only affected claims', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-releases-edges-'));
   const created = new Map<string, string>();
