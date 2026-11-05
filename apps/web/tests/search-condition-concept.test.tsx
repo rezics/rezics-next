@@ -186,7 +186,11 @@ async function changeSelect(host: HTMLElement, select: HTMLSelectElement, value:
 }
 
 async function clickButton(host: HTMLElement, label: string) {
-  await act(async () => controlButton(host, label).click());
+  await act(async () => {
+    const button = controlButton(host, label);
+    button.focus();
+    button.click();
+  });
 }
 
 async function settle(host: HTMLElement) {
@@ -465,7 +469,10 @@ describe('Search Concept conditions', () => {
       expect(pending).toHaveLength(2);
       expect(controlButton(host, 'Retry Concept read').getAttribute('aria-disabled')).toBe('true');
       expect(controlButton(host, 'Apply Concept filter').disabled).toBe(true);
-      await act(async () => candidate.click());
+      await act(async () => {
+        candidate.focus();
+        candidate.click();
+      });
       await settle(host);
       expect(pending).toHaveLength(3);
       expect(host.querySelector('button[aria-pressed="true"]')?.textContent).toContain(conceptId);
