@@ -167,25 +167,21 @@ export function zoneRoutes(
       '/v1/zones/:id/collections',
       {
         params,
-        query: zoneSchema(
-          t.Object(
-            {
-              limit: t.Optional(t.String({ pattern: '^(?:[1-9]|[1-9][0-9]|100)$' })),
-              cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
-            },
-            closed,
-          ),
+        query: t.Object(
+          {
+            limit: t.Optional(t.String({ pattern: '^(?:[1-9]|[1-9][0-9]|100)$' })),
+            cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+          },
+          closed,
         ),
         response: {
           ...failures,
-          200: zoneSchema(
-            t.Object(
-              {
-                collections: t.Array(collectionResourceSchema, { maxItems: 100 }),
-                next: t.Union([t.String(), t.Null()]),
-              },
-              closed,
-            ),
+          200: t.Object(
+            {
+              collections: t.Array(collectionResourceSchema, { maxItems: 100 }),
+              next: t.Union([t.String(), t.Null()]),
+            },
+            closed,
           ),
           403: t.Union([failures[403], problemSchema('platform_closed')]),
           503: withHeaders(failures[503], { 'retry-after': t.String() }),
