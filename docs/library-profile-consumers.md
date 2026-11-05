@@ -216,7 +216,7 @@ the command's authorization/acceptance observation `T`. Validate the operation a
   maps `in_progress` to a new ID.
 - Decision: Subject state choices remain unsent until a compact inline review; only explicit Save delegates a changed state to the existing writer, and keeping the received state emits no command.
 - Progress must use one of `scalar_amount`, `cursor_position`, or `completed_units`, and an allowed exact mode/unit
-  pair. Pair metadata is read as data. The algorithms remain those three kernel algorithms.
+  pair.
 - Numeric minimum/maximum comparison is exact decimal-text comparison. Optional precision is 0–6. If precision is
   absent, preserve the existing parser's 12 integer digit and 6 fractional digit behavior. Dimension is inert and
   causes no conversion. LEGACY scalar-percent amount/total preserves 0..100; legacy cursor percent is not capped.
@@ -232,10 +232,11 @@ the command's authorization/acceptance observation `T`. Validate the operation a
 Absence of `TypeDefinition.library`, or a new state, mode/unit pair, copy kind, or status absent from the selected
 profile, denies NEW profiled state/progress/holding values with HTTP `422`, code `unsupported_library_profile`, and `effect_status: not_applied`.
 Malformed request shapes, including caller-supplied pin metadata or a missing fresh-copy kind, return HTTP `400` with
-`invalid_request`. Unsupported IDs are profile data membership failures, not rejections by a copied closed kernel enum.
-Absence does not select `legacy-fixed-v1`, default a profile, infer a profile from ancestry at runtime, or grant
-capabilities to People/Concepts. The bundled book and anime type declarations remain ordinary catalogue data and are
-exercised alongside data-only fixture verticals; generated files do not activate themselves.
+`invalid_request`. Unsupported IDs are profile membership failures, not copied kernel-enum rejections.
+Absence does not select `legacy-fixed-v1`, default a profile, infer a profile from ancestry, or grant
+capabilities to People/Concepts. Bundled book, anime and visual-novel declarations stay catalogue data. Subject Library visits admit the current
+released profile by accepting type, not manga names; progress recording does not require copy-list admission.
+Generated files do not activate themselves.
 
 **DECIDED:** readable unprofiled subjects accept generic label assignment/unassignment and curated occurrence add/remove.
 Missing or retired profiles never prevent reading historic own facts or clearing/deleting them; no default/legacy

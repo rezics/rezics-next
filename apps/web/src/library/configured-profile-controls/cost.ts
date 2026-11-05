@@ -1,7 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import { LIBRARY_PAGE_LIMIT } from '../reads';
 
-/** Native reads that constitute one exact series/volume visit. Profile resolution is local. */
+/** Native reads that constitute one exact profiled Subject visit. Profile resolution is local. */
 export const CONFIGURED_VISIT_COMPONENTS = {
   profile: 1,
   entry: 1,

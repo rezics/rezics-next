@@ -52,6 +52,7 @@ export function readConfiguredProfileCapabilities(
   type: string,
   locale: string,
 ): ConfiguredProfileCapabilities {
+  // Manga series/volume names are presentation only; the released profile selects the actions.
   const identity = mangaLibraryIdentity(type);
   const descriptor = libraryDescriptor(release, type);
   if (descriptor.state === 'unavailable' || !release) return { state: 'unavailable' };

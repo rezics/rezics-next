@@ -323,6 +323,7 @@ test('series and volume resolve distinct profiles, units and copy targets', asyn
   expect(html).toContain(m.library_configured_series());
   expect(html).toContain('series reading');
   expect(html).not.toContain('volume reading');
+  expect(html).toContain(`/en/library/progress/${id(1100)}`);
 });
 
 test('unavailable release, unsupported manga type, refused owner read and historical state stay distinct', async () => {

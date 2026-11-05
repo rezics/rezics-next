@@ -8,7 +8,7 @@ import type { SubjectLibrarySlotData } from '../../library/subject-slot';
 import { SubjectLibrarySlot } from '../../library/subject-slot-view';
 import { RichPrivateEntry } from '../../library/rich-private-entry/view';
 import { useSubjectLibraryObservation } from '../../library/subject-library-current-origin';
-import { ConfiguredProfileControls, isMangaLibrarySubject } from '../../library/configured-profile-controls';
+import { ConfiguredProfileControls } from '../../library/configured-profile-controls';
 import type { useSession } from '../../session/query';
 import type { SubjectFrameData } from './subject-frame';
 import { subjectLibraryQuery } from './subject-queries';
@@ -225,14 +225,12 @@ export function SubjectLibraryLeaf({
           },
         }}
       />
-      {isMangaLibrarySubject(frame.type) ? (
-        <ConfiguredProfileControls
-          subject={{ id: frame.id, type: frame.type, label: frame.title.text }}
-          locale={locale}
-          session={session}
-          returnTo={returnTo}
-        />
-      ) : null}
+      <ConfiguredProfileControls
+        subject={{ id: frame.id, type: frame.type, label: frame.title.text }}
+        locale={locale}
+        session={session}
+        returnTo={returnTo}
+      />
       {query.enabled &&
       (isError ||
         (data &&

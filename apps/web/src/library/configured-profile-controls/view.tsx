@@ -8,7 +8,6 @@ import { csrfHeaders } from '../../threads/composer';
 import type { useSession } from '../../session/query';
 import type { Release } from '../../subject/definitions';
 import type { CopyItem, CopyRemoved } from '../copies-read';
-import { isMangaLibrarySubject } from './capabilities';
 import { readConfiguredLibraryVisit } from './actions';
 import { ConfiguredCopyPanel, configuredCopyOrigin } from './copy-panel';
 import { ConfiguredProgressPanel } from './progress-panel';
@@ -62,10 +61,9 @@ export function configuredLibraryVisitQuery(
   });
 }
 
-function identityLabel(identity: 'series' | 'volume' | null): string {
+function identityLabel(identity: 'series' | 'volume'): string {
   if (identity === 'series') return m.library_configured_series();
-  if (identity === 'volume') return m.library_configured_volume();
-  return m.library_configured_heading();
+  return m.library_configured_volume();
 }
 
 function VisitBody({
@@ -156,7 +154,7 @@ function VisitBody({
     <div className="mt-4 min-w-0 space-y-6 border-t border-border pt-4">
       <div className="space-y-2">
         <h2 className="text-lg font-medium">{m.library_configured_heading()}</h2>
-        <p className="text-sm text-muted-foreground">{identityLabel(visit.identity)}</p>
+        {visit.identity ? <p className="text-sm text-muted-foreground">{identityLabel(visit.identity)}</p> : null}
         {visit.entry.meaning === 'absent' ? (
           <p className="text-sm text-muted-foreground">{m.library_configured_absent_state()}</p>
         ) : visit.entry.meaning === 'historical' ? (
@@ -210,7 +208,7 @@ function VisitBody({
   );
 }
 
-/** Mounted owner-private manga Library visit: profile, copies, one manual measure, result and return. */
+/** Mounted owner-private Library visit: current released profile, copies, one admitted measure, result and return. */
 export function ConfiguredProfileControls({
   subject,
   locale,
@@ -241,14 +239,12 @@ export function ConfiguredProfileControls({
     session.state === 'signed-in' &&
     !!session.subject &&
     !!session.csrfToken &&
-    copyListAdmitted &&
-    progressListAdmitted &&
-    isMangaLibrarySubject(subject.type);
+    (progressListAdmitted || copyListAdmitted);
   const isCurrent = (operation?: GatedOperation) => {
     if (!lifetime.current.active || session.state !== 'signed-in' || !session.subject) return false;
-    const gate = operation ?? 'copy.list';
-    if (!(operations as readonly string[]).includes(gate)) return false;
-    return admission.allowed(gate as (typeof operations)[number]);
+    if (!operation) return true;
+    if (!(operations as readonly string[]).includes(operation)) return false;
+    return admission.allowed(operation as (typeof operations)[number]);
   };
   const query = configuredLibraryVisitQuery(
     subject.id,
@@ -260,7 +256,7 @@ export function ConfiguredProfileControls({
   );
   const loaded = useQuery(query);
   const visit = supplied ?? loaded.data;
-  if (!isMangaLibrarySubject(subject.type) || session.state === 'signed-out') return null;
+  if (session.state === 'signed-out') return null;
   if (!visit) {
     if (!ready || supplied) return null;
     return loaded.isError ? (

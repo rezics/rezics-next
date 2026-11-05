@@ -235,7 +235,7 @@ function copiesFromPage(page: CopiesPageData, profile: CopyProfile): VisitCopies
 }
 
 /**
- * One exact series/volume visit: current profile, addressed entry, one sessions page and one copies page.
+ * One exact Subject visit: current released profile, addressed entry, one sessions page and one copies page.
  * Unrelated owner rows are never listed; work is the recorded native calls and the projected page.
  */
 export async function loadConfiguredLibraryVisit(

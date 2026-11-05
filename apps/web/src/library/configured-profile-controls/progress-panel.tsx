@@ -28,11 +28,13 @@ import type {
 } from '../progress-reads';
 import { progressFailureMessage, progressView } from '../progress-label';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
+import { checklistSessionHref } from '../episode-checklist/navigation';
 
 const target =
   'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const button = `${target} inline-flex items-center justify-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`;
 const quiet = `${target} inline-flex items-center justify-center rounded-lg border border-border px-4 hover:bg-muted disabled:opacity-60`;
+const linkClass = 'text-sm text-primary underline-offset-4 hover:underline';
 type StartResult = ProgressStarted | ProgressFailure;
 type RecordResult = ProgressRecorded | ProgressFailure;
 const startSender = startProgressSession as GuardedSender<ProgressStartInput, StartResult>;
@@ -290,6 +292,15 @@ export function ConfiguredProgressPanel({
               {m.library_configured_clear_progress()}
             </button>
           </Exposure>
+        ) : null}
+        {'session' in progress ? (
+          <a
+            data-configured-progress-session
+            className={linkClass}
+            href={checklistSessionHref(progress.session.id, locale)}
+          >
+            {m.library_progress_open()}
+          </a>
         ) : null}
       </div>
       {outcome?.state === 'conflict' ? <p role="alert">{m.library_configured_conflict()}</p> : null}
