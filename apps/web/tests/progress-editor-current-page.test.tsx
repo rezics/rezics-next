@@ -9,7 +9,6 @@ import type {
   ProgressSessionPage as Page,
 } from '../src/library/progress-reads';
 
-// UNRUN: focused mounted-page regressions for controller execution, not native/transport evidence.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -92,6 +91,7 @@ mock.module('../src/library/progress-server', () => ({
   },
 }));
 const { createRoot } = await import('react-dom/client');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { renderToString } = await import('react-dom/server');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
@@ -164,6 +164,8 @@ async function mount(initial: LoadedPage, phone = false) {
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
   const rootRoute = createRootRoute();
   const destinationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/destination' });
   const router = createRouter({
@@ -182,9 +184,11 @@ async function mount(initial: LoadedPage, phone = false) {
   await router.load();
   const tree = (p: Page | null) => (
     <StrictMode>
+      <QueryClientProvider client={client}>
       <RouterContextProvider router={router}>
         {p && <ProgressSessionPage page={p} logsCursor="logs:independent/==" />}
       </RouterContextProvider>
+      </QueryClientProvider>
     </StrictMode>
   );
   const show = async (p: Page | null) => settle(() => root.render(tree(p)));
@@ -277,6 +281,7 @@ async function mount(initial: LoadedPage, phone = false) {
     close: async () => {
       await settle(() => root.unmount());
       host.remove();
+      client.clear();
       if (phone) window.matchMedia = originalMatchMedia;
     },
   };
