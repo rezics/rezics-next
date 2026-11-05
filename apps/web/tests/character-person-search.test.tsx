@@ -58,8 +58,8 @@ test('the character and person journey preserves applied URL state and builds sa
   expect(request.spoilerThreshold).toBe(1);
   const url = new URL(characterPersonHref('ja', parsed.search, 'opaque-final'), 'https://rezics.test');
   expect(url.pathname).toBe('/ja/search/characters');
-  expect(url.searchParams.getAll('work')).toEqual([work, secondWork]);
-  expect(url.searchParams.getAll('language')).toEqual(['ja', 'en']);
+  expect(JSON.parse(url.searchParams.get('work')!)).toEqual([work, secondWork]);
+  expect(JSON.parse(url.searchParams.get('language')!)).toEqual(['ja', 'en']);
   expect(url.searchParams.get('cursor')).toBe('opaque-final');
   expect(url.searchParams.get('threshold')).toBe('1');
 });

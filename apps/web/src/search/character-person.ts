@@ -170,9 +170,11 @@ export function characterPersonHref(locale: string, search: CharacterPersonSearc
   const params = new URLSearchParams();
   params.set('mode', search.mode);
   if (search.name) params.set('name', search.name);
-  for (const work of search.works) params.append('work', work);
+  if (search.works.length === 1) params.set('work', search.works[0]!);
+  else if (search.works.length > 1) params.set('work', JSON.stringify(search.works));
   if (search.role) params.set('role', search.role);
-  for (const tag of search.languages) params.append('language', tag);
+  if (search.languages.length === 1) params.set('language', search.languages[0]!);
+  else if (search.languages.length > 1) params.set('language', JSON.stringify(search.languages));
   params.set('threshold', String(search.threshold));
   params.set('sort', search.sort);
   if (cursor) params.set('cursor', cursor);
