@@ -10,14 +10,27 @@ import { createPublicBulkClient } from '../../services/importer/src/public-bulk-
 const root = resolve(import.meta.dir, '../..');
 const evidence = resolve(root, '.temp/imports-native-evidence');
 const privateLogs = resolve(root, '.temp/local-stack/journey');
-const web = 'http://127.0.0.1:3000';
-const api = 'http://127.0.0.1:4100';
+function availablePort(): number {
+  const listener = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response() });
+  const port = listener.port!;
+  listener.stop(true);
+  return port;
+}
+const web = `http://127.0.0.1:${availablePort()}`;
+const api = `http://127.0.0.1:${availablePort()}`;
+const issuer = `http://127.0.0.1:${availablePort()}`;
 const env = {
   ...process.env,
   KERNEL_DATABASE_CONTAINER: `rezics-imports-${process.pid}-db`,
   KERNEL_DATABASE_VOLUME: `rezics-imports-${process.pid}-db`,
   KERNEL_SEARCH_CONTAINER: `rezics-imports-${process.pid}-search`,
   KERNEL_SEARCH_VOLUME: `rezics-imports-${process.pid}-search`,
+  KERNEL_DATABASE_PORT: String(availablePort()),
+  KERNEL_SEARCH_PORT: String(availablePort()),
+  REZICS_LOCAL_STACK_WEB_ORIGIN: web,
+  REZICS_LOCAL_STACK_KERNEL_ORIGIN: api,
+  REZICS_LOCAL_STACK_ISSUER_ORIGIN: issuer,
+  REZICS_LOCAL_STACK_NATIVE_ORIGIN: `http://127.0.0.1:${availablePort()}`,
 };
 
 function redactLog(value: string): string {
@@ -117,20 +130,23 @@ async function observe(result: SeedReport) {
 
 await mkdir(evidence, { recursive: true, mode: 0o700 });
 await mkdir(privateLogs, { recursive: true, mode: 0o700 });
-assert.equal(await command('infra', ['go-task', 'dev:infra']), 0);
-assert.equal(await command('persona', ['go-task', 'dev:persona']), 0);
+assert.equal(await command('database', ['bun', 'run', '--cwd', 'services/kernel', 'db', 'up']), 0);
+assert.equal(await command('search', ['bun', 'run', '--cwd', 'services/kernel', 'search', 'up']), 0);
+assert.equal(await command('setup', ['bun', 'services/auth/scripts/dev-stack.ts', 'setup']), 0);
+assert.equal(await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']), 0);
 const stackLog = Bun.file(resolve(privateLogs, 'stack.log'));
 const stack = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
   cwd: root, env, stdout: stackLog, stderr: stackLog,
 });
 try {
-  await ready('http://127.0.0.1:4200/.well-known/openid-configuration', stack);
+  await ready(`${issuer}/.well-known/openid-configuration`, stack);
   await ready(web, stack);
-  const firstCode = await command('seed', ['go-task', 'seed:dev']);
+  const seedCommand = ['bun', '--env-file=.temp/local-stack/seed.env', 'scripts/datasets/cross-media-seed.ts', '--dev'];
+  const firstCode = await command('seed', seedCommand);
   const first = await report();
   await writeFile(resolve(evidence, 'first.json'), JSON.stringify(first, null, 2));
   await observe(first);
-  const reopenCode = await command('reopen', ['go-task', 'seed:dev']);
+  const reopenCode = await command('reopen', seedCommand);
   const reopened = await report();
   await writeFile(resolve(evidence, 'reopened.json'), JSON.stringify(reopened, null, 2));
   assert.deepEqual(reopened.readings.map(({ source, externalId, subject }) => [source, externalId, subject.subject.id]),
