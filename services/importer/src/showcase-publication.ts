@@ -739,6 +739,12 @@ function errorCode(error: unknown): string {
   return 'review-unavailable';
 }
 
+function permanentReviewRefusal(code: string | null | undefined): boolean {
+  return ['review-http-401', 'review-http-403', 'review-http-409', 'review-http-412', 'review-http-423'].includes(
+    code ?? '',
+  );
+}
+
 function recordSource(record: ShowcaseRecord, assertion: ShowcaseAssertion): boolean {
   const externalId =
     record.kind === 'source-vocabulary' ? showcaseVocabularyExternalId(record.sourceKey) : record.sourceKey;
@@ -1927,6 +1933,11 @@ export async function publishShowcase(input: {
     const idempotencyKey = actionIdempotencyKey(body);
     const prior = input.journal.action(key);
     if (prior?.state === 'acknowledged') continue;
+    if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
+      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: prior.error_code! });
+      if (assertion.property !== 'schema:image') stoppedSubjects.add(id);
+      continue;
+    }
     const sealedBody = input.journal.prepareAction(key, body, idempotencyKey) as typeof body;
     const sealedKey = input.journal.action(key)!.idempotency_key;
     try {
@@ -2170,6 +2181,11 @@ export async function publishShowcase(input: {
       const key = actionKey('accept', edge.assertion.candidateId, edge.assertion.candidateDigest);
       const idempotencyKey = actionIdempotencyKey(body);
       const prior = input.journal.action(key);
+      if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
+        omissions.push({ provider: 'vndb', sourceKey: binding.path, code: prior.error_code! });
+        setParentOutcome(binding, 'withheld', edge.assertion.candidateId, prior.error_code!);
+        continue;
+      }
       if (prior?.state !== 'acknowledged') {
         const sealedBody = input.journal.prepareAction(key, body, idempotencyKey) as typeof body;
         const sealedKey = input.journal.action(key)!.idempotency_key;
@@ -2291,11 +2307,14 @@ export async function publishShowcase(input: {
     const action = actionKey('adopt', `${childId}:skos:broader`, showcaseDigest({ intent: manifest.digest, body }));
     const idempotencyKey = actionIdempotencyKey(body);
     const priorAction = input.journal.action(action);
-    if (
-      priorAction?.state !== 'acknowledged' ||
-      !currentAdoption ||
-      !sameAdoptionSelection(currentAdoption.selection, body.selection)
-    ) {
+    if (priorAction?.state === 'refused' && permanentReviewRefusal(priorAction.error_code)) {
+      omissions.push({ provider: 'vndb', sourceKey: group.record.sourceKey, code: priorAction.error_code! });
+      for (const { binding, assertion } of group.edges)
+        setParentOutcome(binding, 'withheld', assertion.candidateId, priorAction.error_code!);
+      withheldParentTags.add(refresh?.tagId ?? group.edges[0]?.binding.child ?? '');
+      continue;
+    }
+    if (!currentAdoption || !sameAdoptionSelection(currentAdoption.selection, body.selection)) {
       const sealedBody = input.journal.prepareAction(action, body, idempotencyKey) as typeof body;
       const sealedKey = input.journal.action(action)!.idempotency_key;
       try {
@@ -2313,6 +2332,8 @@ export async function publishShowcase(input: {
         withheldParentTags.add(refresh?.tagId ?? group.edges[0]?.binding.child ?? '');
         continue;
       }
+    } else if (priorAction && priorAction.state !== 'acknowledged') {
+      input.journal.acknowledgeAction(action);
     }
     pageCache.delete(groupKey(childId, 'skos:broader'));
     publicSubjects.delete(childId);
@@ -2417,6 +2438,11 @@ export async function publishShowcase(input: {
     const idempotencyKey = actionIdempotencyKey(body);
     const prior = input.journal.action(key);
     if (prior?.state === 'acknowledged') continue;
+    if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code)) {
+      blockedTagSubjects.add(id);
+      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: prior.error_code! });
+      continue;
+    }
     const sealedBody = input.journal.prepareAction(key, body, idempotencyKey) as typeof body;
     const sealedKey = input.journal.action(key)!.idempotency_key;
     try {
@@ -2631,12 +2657,15 @@ export async function publishShowcase(input: {
     const action = actionKey('adopt', `${id}:${group.property}`, showcaseDigest({ intent: manifest.digest, body }));
     const idempotencyKey = actionIdempotencyKey(body);
     const priorAction = input.journal.action(action);
-    if (
-      priorAction?.state === 'acknowledged' &&
-      currentAdoption &&
-      sameAdoptionSelection(currentAdoption.selection, body.selection)
-    )
+    if (priorAction?.state === 'refused' && permanentReviewRefusal(priorAction.error_code)) {
+      omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: priorAction.error_code! });
+      if (group.property !== 'schema:image') stoppedSubjects.add(id);
       continue;
+    }
+    if (currentAdoption && sameAdoptionSelection(currentAdoption.selection, body.selection)) {
+      if (priorAction && priorAction.state !== 'acknowledged') input.journal.acknowledgeAction(action);
+      continue;
+    }
     const sealedBody = input.journal.prepareAction(action, body, idempotencyKey) as typeof body;
     const sealedKey = input.journal.action(action)!.idempotency_key;
     try {
