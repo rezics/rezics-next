@@ -288,7 +288,9 @@ function PublicationIntentView({
     void response.then((outcome) => {
       if (timedOut) settle(outcome);
     });
-    const outcome = await publicationReadWithin(
+    const outcome = await publicationReadWithin<
+      { state: 'response'; value: PublicationResult } | { state: 'timeout' }
+    >(
       response.then((value) => ({ state: 'response' as const, value })),
       responseTimeoutMs,
       { state: 'timeout' as const },
