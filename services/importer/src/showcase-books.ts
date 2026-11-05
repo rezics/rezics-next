@@ -474,6 +474,7 @@ export async function importShowcaseBooks(input: {
       })),
       runs: {},
       readings: [],
+      personIdentities: [],
       mediaOutcomes: [],
       workLinks: [],
       family: planned.family,

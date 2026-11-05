@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bangumiVoiceDraft, deliverBangumiCreatorCredits } from '../src/bangumi-creator-credits.ts';
 import { CrossMediaGraph, type GraphEdgeDraft } from '../src/cross-media-bindings.ts';
 import { bundledDigest } from '@rezics/definitions/bundled';
@@ -100,14 +101,14 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
       statements: { 'wdt:P6296': [{ value: { type: 'value', content: '3' } }] },
     } }],
   ]);
-  const commands: Array<{ op: string; subject?: string; statement?: { value?: { content?: unknown } } }> = [];
+  const commands: Extract<BatchCommand, { op: 'propose' }>[] = [];
   const result = await deliverBangumiCreatorCredits({
     alias: 'bangumi_cross_media',
     drafts: [bangumiVoiceDraft({ subject_id: 1, person_id: 8, character_id: 3 }, 2)],
     bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
     claim: ({ external_id }) => ({ state: 'bound', subject: bound[external_id as keyof typeof bound]! }),
     async batch(request) {
-      commands.push(...request.commands);
+      for (const command of request.commands) if (command.op === 'propose') commands.push(command);
       return { results: request.commands.map((command) => ({ key: command.key, status: 201 as const, value: { candidate: currentPersonId, revision: 1 } })) };
     },
     async fence() { return { fenced: false }; },
@@ -121,7 +122,7 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
   expect(result.gaps).toEqual([]);
   expect(result.identities['person:8']).toMatchObject({ id: bound['person:8'], type: 'schema:Person' });
   expect(commands).toHaveLength(1);
-  expect(commands[0]!.statement?.value?.content).toBe(bound['person:8']);
+  expect(commands[0]!.statement.value).toMatchObject({ type: 'value', content: bound['person:8'] });
 });
 
 test('VNDB Person credits stay unresolved when the current exact provider identity is withdrawn', async () => {
