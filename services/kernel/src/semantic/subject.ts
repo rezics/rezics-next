@@ -855,12 +855,23 @@ export async function readSubject(
       const fact = selectedSynopsisFact(subject, input);
       if (fact && await admit()) {
         // Content has released every home before this final authoritative Semantic pass.
-        const final = await readSnapshot(id);
-        const current = final && await disclosedTargets(pool, final.release, final.supported, summaries.authorize);
-        if (final && current && final.rows[0]!.revision === rows[0]!.revision &&
-            final.rows[0]!.security_revision === rows[0]!.security_revision &&
-            JSON.stringify(current) === JSON.stringify(supported)) {
-          selectedSynopsis = { kind: 'matched', fact: redactSynopsisFact(fact), context, release: subject.release };
+        await refreshStatementReaderAuthorization();
+        const check = summaries.prepareAuthorize ? await summaries.prepareAuthorize(id) : authorize;
+        const final = await withReadTransaction(pool, async (client) => {
+          const identity = await readSubjectIdentity.run(client, { route, subject_id: id, partition_no: partitionOf(route) });
+          if (!identity || identity.visibility !== 'visible' || identity.redirect || !(await check(client)) ||
+              identity.revision !== rows[0]!.revision || BigInt(identity.securityRevision) !== BigInt(rows[0]!.security_revision)) return null;
+          const slot = await slotView(client, id, 'schema:abstract', context, defaults);
+          return supportedFacts(client, routeKey, id, slot.facts);
+        }, deadline);
+        if (final) {
+          const current = await disclosedTargets(pool, release, final, summaries.authorize);
+          const admitted = resolveItem(id, current.map((entry) => entry.fact), subject.type, factDataTypes(release, current.map((entry) => entry.fact)), {
+            revision: subject.revision, release: subject.release, context, resolution: {}, relationCounts: {},
+          });
+          const currentFact = selectedSynopsisFact(admitted, input);
+          if (currentFact && JSON.stringify(currentFact) === JSON.stringify(fact))
+            selectedSynopsis = { kind: 'matched', fact: redactSynopsisFact(currentFact), context, release: subject.release };
         }
       } else if (fact) selectedSynopsis = { kind: 'missing' };
     }
