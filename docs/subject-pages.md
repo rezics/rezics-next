@@ -2652,6 +2652,7 @@ The people view imports the work-name grouping/admission producer, with work-onl
 It admits the entire labels/aliases response within the same 262,144-byte UTF-8 presentation budget; oversized,
 malformed, empty, retired and empty-filter results have separate states. The limit does not establish a native
 producer bound. Filtering searches only admitted spellings, without normalizing punctuation, scripts or diacritics.
+The names filter control is at least 44px in both dimensions.
 No catalogue-wide or provider completeness is implied. At most eight groups and 24 rows per group are mounted, with
 explicit local continuation. All admitted groups and names remain reachable. Copy results are announced beside the
 originating control; late callbacks cannot update a replacement visit.
