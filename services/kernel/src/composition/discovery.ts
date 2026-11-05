@@ -3,7 +3,7 @@ import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../cont
 import { publicCollectionDiscoverySource } from '../library/collection-discovery-source.ts';
 import { readSpaceDiscoverySummaries, spaceDiscoverySource } from '../community/index.ts';
 import type { DiscoveryProducerEntry } from '../search/index.ts';
-import { createDiscoveryOwnerAdapters } from '../search/composition.ts';
+import { createDiscoveryOwnerAdapters } from './discovery-adapters.ts';
 import { createRatedSubjectSource } from '../search/rated-source.ts';
 import { createSpaceDiscoveryAdapter } from '../search/space-discovery.ts';
 import type { SubjectSource } from '../search/index.ts';

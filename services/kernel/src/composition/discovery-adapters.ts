@@ -3,16 +3,19 @@ import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { CollectionDiscoveryReadinessError, createNativeCollectionDiscoveryAdapter } from './collection-discovery.ts';
-import { createReviewDiscoveryAdapter } from './review-discovery.ts';
-import type { SpaceDiscoveryAdapter } from './space-discovery.ts';
+import { CollectionDiscoveryReadinessError, createNativeCollectionDiscoveryAdapter } from '../search/collection-discovery.ts';
+import { createReviewDiscoveryAdapter } from '../search/review-discovery.ts';
+import type { SpaceDiscoveryAdapter } from '../search/space-discovery.ts';
 import type { IndexedSpace, SpaceDiscoverySummary } from '../community/index.ts';
 import {
   REVIEW_DISCOVERY_PAGE_LIMIT,
   type IndexedReview,
   type ReviewDiscoverySource,
-} from '../content/index.ts';
-import type { CollectionDiscoveryItem, CollectionDiscoverySource } from '../library/index.ts';
+} from '../content/review-discovery.ts';
+import type {
+  CollectionDiscoveryItem,
+  CollectionDiscoverySource,
+} from '../library/collection-discovery-source.ts';
 import type {
   DiscoveryOwnerAdapterSlots,
   DiscoveryOwnerMetadataSummary,
@@ -20,16 +23,9 @@ import type {
   DiscoveryMetadataKind,
   DiscoveryMetadataProducer,
   DiscoveryMetadataProducers,
-  DiscoveryOmittedKind,
-  DiscoveryProducerEntry,
-} from './index.ts';
-import type { DiscoveryCapabilityWitnesses } from './generations.ts';
-import {
-  DiscoveryPopulationCutChangedError,
-  DiscoveryProducerCoverageError,
-  classifyDiscoveryMetadataProducers,
-} from './generations.ts';
-import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from './discovery-documents.ts';
+} from '../search/index.ts';
+import { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from '../search/discovery-errors.ts';
+import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from '../search/discovery-documents.ts';
 
 export type DiscoveryOwnerAdapters = DiscoveryOwnerAdapterSlots & Readonly<{
   metadataProducers: DiscoveryMetadataProducers;
@@ -79,55 +75,6 @@ const DISCOVERY_OWNER_METADATA = {
     icon: 'users',
   },
 } as const;
-
-export type ResolvedDiscoveryOwnerAdapters = Readonly<{
-  ownerAdapters: DiscoveryOwnerAdapterSlots;
-  metadataProducers: DiscoveryMetadataProducers;
-  omittedKinds: readonly DiscoveryOmittedKind[];
-  capabilityWitnesses: DiscoveryCapabilityWitnesses;
-}>;
-
-/** Resolve readiness for the current registry and bind candidates to the published kind set. */
-export async function resolveDiscoveryOwnerAdapters(
-  producers: Pick<DiscoveryProducerEntry, 'ownerAdapters' | 'metadataProducers'>,
-  publishedKinds?: readonly string[],
-): Promise<ResolvedDiscoveryOwnerAdapters> {
-  const classification = await classifyDiscoveryMetadataProducers(producers.metadataProducers);
-  const published = publishedKinds === undefined ? undefined : new Set(publishedKinds);
-  const available = new Set(
-    classification.availableKinds.filter((kind) => published === undefined || published.has(kind)),
-  );
-  const omittedKinds: DiscoveryOmittedKind[] = [
-    ...classification.omittedKinds.map(({ kind, state }) => ({
-      id: kind,
-      labels: DISCOVERY_OWNER_METADATA[kind].labels,
-      state,
-    })),
-    ...classification.availableKinds
-      .filter((kind) => published !== undefined && !published.has(kind))
-      .map((kind) => ({ id: kind, labels: DISCOVERY_OWNER_METADATA[kind].labels, state: 'preparing' as const })),
-  ];
-  const metadataProducers = Object.freeze(
-    Object.fromEntries([...available].map((kind) => [kind, producers.metadataProducers[kind]!])) as Partial<
-      Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>
-    >,
-  );
-  const capabilityWitnesses = Object.freeze(
-    Object.fromEntries(
-      Object.entries(classification.witnesses).filter(([kind]) => available.has(kind as DiscoveryMetadataKind)),
-    ),
-  ) as DiscoveryCapabilityWitnesses;
-  return Object.freeze({
-    ownerAdapters: Object.freeze({
-      collection: available.has('collection') ? producers.ownerAdapters.collection : { readiness: 'unavailable' },
-      review: available.has('review') ? producers.ownerAdapters.review : { readiness: 'unavailable' },
-      space: available.has('space') ? producers.ownerAdapters.space : { readiness: 'unavailable' },
-    }),
-    metadataProducers,
-    omittedKinds: Object.freeze(omittedKinds),
-    capabilityWitnesses,
-  });
-}
 
 function metadataKey(owner: 'commerce' | 'content', kind: 'collection' | 'review' | 'space', id: string) {
   const route = routeOf(id);
@@ -349,7 +296,7 @@ export function createDiscoveryOwnerAdapters(config: DiscoveryOwnerCompositionIn
   const clock = config.clock ? { clock: config.clock } : {};
   const collection = createNativeCollectionDiscoveryAdapter(
     { pool: config.pool, access: config.access, routeKey: config.routeKey, source: config.collectionSource, ...clock },
-    metadata.collection,
+    DISCOVERY_OWNER_METADATA.collection,
   );
   const review = createReviewDiscoveryAdapter(config.reviewSource);
   const space = config.space;
@@ -360,7 +307,7 @@ export function createDiscoveryOwnerAdapters(config: DiscoveryOwnerCompositionIn
         adapter: {
           owner: 'content' as const,
           kind: 'review' as const,
-          metadata: metadata.review,
+          metadata: DISCOVERY_OWNER_METADATA.review,
           readCurrent: review.readCurrent,
         },
       }
@@ -370,7 +317,7 @@ export function createDiscoveryOwnerAdapters(config: DiscoveryOwnerCompositionIn
     adapter: {
       owner: 'content' as const,
       kind: 'space' as const,
-      metadata: metadata.space,
+      metadata: DISCOVERY_OWNER_METADATA.space,
       async readCurrent(
         ids: readonly string[],
         context: DiscoveryReadContext,

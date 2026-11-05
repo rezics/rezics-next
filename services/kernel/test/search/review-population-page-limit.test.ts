@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
-import { REVIEW_DISCOVERY_PAGE_LIMIT } from '../../src/content/index.ts';
+import { REVIEW_DISCOVERY_PAGE_LIMIT } from '../../src/content/review-discovery.ts';
 
 test('mixed population respects the Review owner page bound and keeps its signed continuation', async () => {
   const after = { route: 0, id: '00000000-0000-8000-8000-000000000001' };

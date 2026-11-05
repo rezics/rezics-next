@@ -16,7 +16,7 @@ import type { DiscoveryMetadataProducer } from '../../src/search/discovery-api.t
 import type { DiscoveryRegistry } from '../../src/search/discovery.ts';
 import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
-import { resolveDiscoveryOwnerAdapters } from '../../src/search/composition.ts';
+import { resolveDiscoveryOwnerAdapters } from '../../src/search/discovery-registry.ts';
 import { createDiscoverySearch } from '../../src/search/discovery-service.ts';
 import { CollectionDiscoveryReadinessError } from '../../src/search/collection-discovery.ts';
 import type { OpenSearch } from '../../src/search/opensearch.ts';

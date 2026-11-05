@@ -37,12 +37,18 @@ import {
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { validateObservation } from './indexer.ts';
 import type { Pool } from 'pg';
-import type { SpaceDiscoveryDependencyReadiness } from '../community/index.ts';
 import type {
   DiscoveryMetadataKind,
   DiscoveryMetadataProducer,
   DiscoveryMetadataProducers,
 } from './discovery-api.ts';
+import { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from './discovery-errors.ts';
+import {
+  classifyDiscoveryMetadataProducers,
+  discoveryCapabilityWitnesses,
+  SECOND_SCOPE_PUBLIC_METADATA_KINDS,
+} from './discovery-readiness.ts';
+import type { DiscoveryCapabilityWitnesses, DiscoveryProducerOmission } from './discovery-readiness.ts';
 import { discardConnection } from '../database/pool.ts';
 import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 import {
@@ -64,6 +70,14 @@ import { readFreshness } from './freshness.ts';
 import reconcile from './reconcile.sql';
 import lockRebuild from './rebuild-lock.sql';
 import unlockRebuild from './rebuild-unlock.sql';
+
+export { DiscoveryPopulationCutChangedError, DiscoveryProducerCoverageError } from './discovery-errors.ts';
+export {
+  classifyDiscoveryMetadataProducers,
+  discoveryCapabilityWitnesses,
+  SECOND_SCOPE_PUBLIC_METADATA_KINDS,
+} from './discovery-readiness.ts';
+export type { DiscoveryCapabilityWitnesses, DiscoveryProducerOmission } from './discovery-readiness.ts';
 
 export { observedWrite };
 import type { SubjectSource } from './source.ts';
@@ -408,65 +422,13 @@ export type DiscoveryCapabilityBinding = Readonly<{
   physicalTarget: string;
   uuid: string;
   incarnation: string;
-  witnesses: Readonly<Record<string, Extract<SpaceDiscoveryDependencyReadiness, { state: 'ready' }>>>;
-}>;
-export type DiscoveryCapabilityWitnesses = DiscoveryCapabilityBinding['witnesses'];
-export type DiscoveryProducerOmission = Readonly<{
-  kind: DiscoveryMetadataKind;
-  state: 'preparing' | 'unavailable';
+  witnesses: DiscoveryCapabilityWitnesses;
 }>;
 export type DiscoveryGeneration = DiscoveryTarget & {
   state: string;
   kinds: string[];
   capability: DiscoveryCapabilityBinding | null;
 };
-
-/** Required public metadata kinds for a complete second-scope discovery generation. */
-export const SECOND_SCOPE_PUBLIC_METADATA_KINDS = Object.freeze(['collection', 'review', 'space'] as const);
-
-/** Classify each native metadata producer without turning one absent source into global unavailability. */
-export async function classifyDiscoveryMetadataProducers(producers: DiscoveryMetadataProducers): Promise<{
-  availableKinds: DiscoveryMetadataKind[];
-  omittedKinds: DiscoveryProducerOmission[];
-  witnesses: DiscoveryCapabilityWitnesses;
-}> {
-  const witnesses: Record<string, Extract<SpaceDiscoveryDependencyReadiness, { state: 'ready' }>> = {};
-  const availableKinds: DiscoveryMetadataKind[] = [];
-  const omittedKinds: DiscoveryProducerOmission[] = [];
-  for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
-    const producer = producers[kind];
-    if (!producer) {
-      omittedKinds.push({ kind, state: 'unavailable' });
-      continue;
-    }
-    const readiness = await producer.readiness();
-    if (kind === 'space' && readiness === 'ready')
-      throw new DiscoveryProducerCoverageError({ missingKinds: [], unsupportedKinds: [kind], duplicateKinds: [] });
-    const state = typeof readiness === 'string' ? readiness : readiness.state;
-    if (state !== 'ready') {
-      omittedKinds.push({ kind, state });
-      continue;
-    }
-    if (typeof readiness !== 'string') {
-      if (readiness.state !== 'ready' || !readiness.generation || !readiness.cut)
-        throw new TypeError('Native discovery capability has no generation/cut witness');
-      witnesses[kind] = structuredClone(readiness);
-    }
-    availableKinds.push(kind);
-  }
-  return { availableKinds, omittedKinds, witnesses };
-}
-
-/** Preserve the native witness verbatim; neither a position nor adapter installation is an epoch. */
-export async function discoveryCapabilityWitnesses(producers: DiscoveryMetadataProducers) {
-  const classification = await classifyDiscoveryMetadataProducers(producers);
-  const unavailable = classification.omittedKinds
-    .filter(({ kind }) => producers[kind] !== undefined)
-    .map(({ kind }) => kind);
-  if (unavailable.length)
-    throw new DiscoveryProducerCoverageError({ missingKinds: [], unsupportedKinds: unavailable, duplicateKinds: [] });
-  return classification.witnesses;
-}
 
 export function discoveryCapabilityMatches(
   target: DiscoveryTarget,
@@ -519,38 +481,6 @@ function discoveryProducerRegistrations(registry: DiscoveryRegistry): DiscoveryP
     if (slot?.readiness === 'ready') registrations.push({ kind, owner: slot.adapter.owner });
   }
   return registrations;
-}
-
-/** A candidate cannot be populated or published from an incomplete native producer set. */
-export class DiscoveryProducerCoverageError extends Error {
-  readonly missingKinds: readonly string[];
-  readonly unsupportedKinds: readonly string[];
-  readonly duplicateKinds: readonly string[];
-
-  constructor(input: {
-    missingKinds: readonly string[];
-    unsupportedKinds: readonly string[];
-    duplicateKinds: readonly string[];
-  }) {
-    const details = [
-      ...(input.missingKinds.length ? [`missing kinds: ${input.missingKinds.join(', ')}`] : []),
-      ...(input.unsupportedKinds.length ? [`unsupported kinds: ${input.unsupportedKinds.join(', ')}`] : []),
-      ...(input.duplicateKinds.length ? [`duplicate kinds: ${input.duplicateKinds.join(', ')}`] : []),
-    ];
-    const message = 'Discovery generation is not ready: native producer coverage is incomplete';
-    super(details.length ? `${message} (${details.join('; ')})` : message);
-    this.name = 'DiscoveryProducerCoverageError';
-    this.missingKinds = input.missingKinds;
-    this.unsupportedKinds = input.unsupportedKinds;
-    this.duplicateKinds = input.duplicateKinds;
-  }
-}
-
-/** A signed owner continuation was invalidated; never retry its retired cut forever. */
-export class DiscoveryPopulationCutChangedError extends DiscoveryProducerCoverageError {
-  constructor(kind: DiscoveryMetadataKind) {
-    super({ missingKinds: [], unsupportedKinds: [kind], duplicateKinds: [] });
-  }
 }
 
 /** Validate readiness before allocation can create a physical target or population rows. */
