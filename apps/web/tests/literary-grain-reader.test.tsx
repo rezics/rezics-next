@@ -146,6 +146,17 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     );
     expect([...memberRows].map((row) => row.textContent)).toEqual([expect.stringContaining('上巻・02a')]);
     expect(host.querySelector('[data-stream-node="edition-forward"] [data-state="ready"]')).not.toBeNull();
+    const animeCounterpart = host.querySelector<HTMLAnchorElement>(
+      '[data-property="rezics:crossMediaCounterpart"] a',
+    )!;
+    expect(animeCounterpart.textContent).toBe('First viewpoint');
+    const animeUrl = new URL(animeCounterpart.href);
+    expect(animeUrl.pathname).toContain(literaryIds.anime);
+    const animeReturnUrl = new URL(animeUrl.searchParams.get('via')!, 'https://site.test');
+    expect(animeReturnUrl.pathname).toContain('/contents');
+    expect(animeReturnUrl.searchParams.get('focus')).toBe(
+      'direct:rezics:crossMediaCounterpart:literary-series-anime-counterpart',
+    );
 
     input = {
       ...base,
@@ -178,6 +189,21 @@ test('all admitted membership and Edition streams stay discoverable while one ex
       host.querySelector<HTMLAnchorElement>('[data-stream-node="edition-inverse"] > a')!.href,
     );
     expect(otherStream.searchParams.has('cursor')).toBe(false);
+    const selectedAnimeLink = host.querySelector<HTMLAnchorElement>(
+      '[data-property="rezics:crossMediaCounterpart"] a',
+    )!;
+    const selectedAnimeReturn = new URL(
+      new URL(selectedAnimeLink.href).searchParams.get('via')!,
+      'https://site.test',
+    );
+    expect(selectedAnimeReturn.searchParams.get('realm')).toBe(literaryIds.author);
+    expect(selectedAnimeReturn.searchParams.get('node')).toBe('members-second');
+    expect(selectedAnimeReturn.searchParams.get('streamProperty')).toBe('wdt:P179');
+    expect(selectedAnimeReturn.searchParams.get('streamDirection')).toBe('inverse');
+    expect(selectedAnimeReturn.searchParams.get('cursor')).toBe('current-member-cursor');
+    expect(selectedAnimeReturn.searchParams.get('focus')).toBe(
+      'direct:rezics:crossMediaCounterpart:literary-series-anime-counterpart',
+    );
 
     const next = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => {
       const url = new URL(link.href);
@@ -188,8 +214,8 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     expect(nextUrl.searchParams.get('streamProperty')).toBe('wdt:P179');
     expect(nextUrl.searchParams.get('streamDirection')).toBe('inverse');
     const destination = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) => {
-      const via = new URL(link.href).searchParams.get('via');
-      return via !== null;
+      const url = new URL(link.href);
+      return url.pathname.includes(literaryIds.member) && url.searchParams.has('via');
     })!;
     const returnAddress = new URL(destination.href).searchParams.get('via')!;
     expect(subjectVisitReturn(returnAddress, 'en')).toBe(returnAddress);

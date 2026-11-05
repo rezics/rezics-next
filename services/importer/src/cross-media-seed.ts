@@ -4107,6 +4107,7 @@ export async function runCrossMediaSeedCli(
         ? {
             books: {
               family: books.family,
+              families: books.families,
               selected: books.selected,
               conversions: books.conversions,
               identities: books.identities,

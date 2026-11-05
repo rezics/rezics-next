@@ -1024,6 +1024,21 @@ function publicVocabularySourceEvidence(read: ReviewedSubjectRead, record: Showc
 }
 
 function publicHasSourceIdentity(read: ReviewedSubjectRead, record: ShowcaseRecord): boolean {
+  if (
+    record.provider === 'bangumi' &&
+    record.kind === 'organization' &&
+    /^person:[1-9][0-9]*$/u.test(record.sourceKey) &&
+    record.sourceUri
+  ) {
+    return record.assertions.some(
+      (assertion) =>
+        assertion.property === 'schema:name' &&
+        assertion.source.digest === record.semanticDigest &&
+        assertion.statement.value.type === 'value' &&
+        assertion.citations.includes(record.sourceUri!) &&
+        publicStatements(read, 'schema:name').some((entry) => statementOnPublicRead(entry, assertion.statement)),
+    );
+  }
   const identity = sourceIdentity(record);
   if (!identity || !record.sourceUri) return false;
   return publicStatements(read, identity.property).some((entry) => {
@@ -1034,6 +1049,20 @@ function publicHasSourceIdentity(read: ReviewedSubjectRead, record: ShowcaseReco
 }
 
 function recordHasSourceIdentity(record: ShowcaseRecord): boolean {
+  if (
+    record.provider === 'bangumi' &&
+    record.kind === 'organization' &&
+    /^person:[1-9][0-9]*$/u.test(record.sourceKey) &&
+    record.sourceUri
+  ) {
+    return record.assertions.some(
+      (assertion) =>
+        assertion.property === 'schema:name' &&
+        assertion.source.digest === record.semanticDigest &&
+        assertion.statement.value.type === 'value' &&
+        assertion.citations.includes(record.sourceUri!),
+    );
+  }
   const identity = sourceIdentity(record);
   if (!record.sourceUri || !identity) return false;
   return record.assertions.some(

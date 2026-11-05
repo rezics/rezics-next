@@ -339,7 +339,11 @@ At most 96 selected works, 512 dictionary tags, 256 associations, 1,024 parent e
 
 ### Default Bangumi novel/book showcase seed
 
-At most 32 volumes and 16 authors, within existing relation, credit and journal limits.
+Decision: preserve Book Girl (series 499, seed volume 26) and add Kara no Kyoukai (series 2815, seed volume 5329); the pinned dump supports volumes 5329/10862, author 1466, illustrator 1467, publisher Organization 128 and the series relation to movie 233. The source archive is `dump-2026-10-20.210332Z.zip`, SHA-256 `9fe8de272398ff4bd12994b73e25aac37cca631372383f6aadc503528623aa93`; exact source rows are listed in `showcase-book-series.ts`. Bangumi relation.1 code 1 remains the released neutral cross-media counterpart relation.
+
+- Touches: one sequential pass each over `subject-relations`, `subject`, `subject-persons` and `person`, capped at 1,000,000/500,000/500,000/100,000 rows and 512/512/256/128 MiB respectively; selected identities and relation evidence flow into the existing `seedCrossMedia` journal and publication path. A publisher is admitted only by its actual supported Organization row and identity; title text and editions do not fill missing evidence.
+- Bound: at most 32 member candidates per family, 16 distinct creator identities and 64 selected credit rows. At most two duplicate source rows per membership direction and four rows for the selected anime relation are retained; excess source evidence becomes a gap. Selected records, relation rows and creator rows stay proportional to these caps; unrelated identities are never materialized.
+- Growth check: `tests/showcase-book-series.test.ts` covers both retained families, exact volume ordering, supported roles, selected anime endpoint, missing endpoints, unknown/ambiguous ordinals and absent publisher evidence. `tests/showcase-books.test.ts` covers proposal, acceptance, adoption, current reads and exact durable reopen. Native/browser seeded-stack acceptance is run by the integration verifier.
 
 ### Import authored VNDB producer parent and subsidiary rows
 
@@ -902,22 +906,27 @@ ballots are not written.
 
 The default real-dump seed also runs
 [`showcase-books.ts`](src/showcase-books.ts) after the selected-family import.
-That adapter keeps the documented Book Girl novel family (series 499, first
-volume 26) from the pinned dump relation check, walks only 1002/1003 novel
-members, and delivers authors through the existing creator-credit helper.
-The helper prepares type-1 author role 2001 and current `schema:author`
-references after rereading source URI, type and `skos:inScheme`.
-The ordinary broad CLI retains this separate Book Girl source family.
+It retains Book Girl and adds Kara no Kyoukai from the pinned archive stated
+above. It follows only bounded 1002/1003 novel membership and the selected
+series-to-movie code-1 relation. `subject-persons` role 2001 maps to
+`schema:author`, 2002/2003 to `schema:illustrator`, and 2004 to
+`schema:publisher` only when the actual endpoint is an Organization. The
+existing creator-credit helper keeps the exact role Concept qualification and
+rereads current source URI, type and `skos:inScheme`. Unknown or ambiguous
+volume order stays unqualified; absent creator, publisher or relation evidence
+remains a gap. The ordinary broad CLI retains the same two reviewed book
+families.
 `task seed:dev` elects its directly selected Bangumi Official Book root as part
 of the five-work showcase. Decision: type 1 Book/BookSeries dispatch uses the
 current `bangumi@14` converter, preserving Book names, TVAnime original-run
 and Game player-count while adding TVAnime work evidence. Decision: one Bangumi subject stays one
 identity, so ISBN on a volume does not create a `bf:Instance`. Decision:
-selected Book Girl records join the common showcase manifest; book review
+selected Book Girl and Kara no Kyoukai records join the common showcase manifest; book review
 gaps stay in the seed books section so they do not fail Steins;Gate
 publication. Author-credit gaps stay in that same books section. Decision:
-Book author selection admits only source person.type 1 individuals and author
-role 2001; company, band, translator and illustrator rows are explicit omissions.
+Book creator selection admits source type-1 people for author/illustrator
+roles and source type-2 Organizations for publisher role 2004. Unsupported
+roles remain explicit omissions.
 
 The real-dump seed acquires `tags`, `tags_parents` and `tags_vn` from the same
 checksum-verified current VNDB archive. The ordinary broad CLI runs
