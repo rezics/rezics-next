@@ -334,6 +334,16 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
         if (!create?.subjectId) return [];
         const read = subjects.get(create.subjectId);
         if (!read || read.subject.type !== requirement.nativeType) return [];
+        const publishedAssertion = (property: string, digest: string) => {
+          const candidateId = randomUUID();
+          return {
+            candidateId,
+            property,
+            digest,
+            adoption: { head: 1, candidateId, rank: 'normal' as const },
+            readback: null,
+          };
+        };
         return [
           {
             provider: 'vndb' as const,
@@ -343,10 +353,10 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
             readerRoute: `/subjects/${create.subjectId}/credit`,
             assertions:
               requirement.nativeType === 'skos:ConceptScheme'
-                ? [{ candidateId: randomUUID(), property: 'schema:url', digest: 'a'.repeat(64) }]
+                ? [publishedAssertion('schema:url', 'a'.repeat(64))]
                 : [
-                    { candidateId: randomUUID(), property: 'schema:url', digest: 'b'.repeat(64) },
-                    { candidateId: randomUUID(), property: 'skos:inScheme', digest: 'c'.repeat(64) },
+                    publishedAssertion('schema:url', 'b'.repeat(64)),
+                    publishedAssertion('skos:inScheme', 'c'.repeat(64)),
                   ],
           },
         ];
