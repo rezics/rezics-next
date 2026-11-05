@@ -2935,7 +2935,10 @@ export async function seedCrossMedia(
       readings,
       personIdentities,
       personReviewSources,
-      personReview: { ...showcasePersonReview, pair: selectPersonReviewPair(personReviewSources, showcasePersonReview.selection) },
+      personReview: {
+        ...showcasePersonReview,
+        pair: selectPersonReviewPair(personReviewSources, showcasePersonReview.selection),
+      },
       mediaOutcomes: [],
       workLinks: [],
       gaps: [
@@ -3153,6 +3156,8 @@ export async function seedCrossMedia(
       runs,
       readings,
       personIdentities,
+      personReviewSources,
+      personReview: baseResult.personReview!,
       mediaOutcomes,
       workLinks,
       gaps: [
