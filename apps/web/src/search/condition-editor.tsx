@@ -539,6 +539,15 @@ function NodeEditor({
   const property = 'statement' in value ? value.statement.property : undefined;
   const definition = property ? context.metadata.properties[property] : undefined;
   const range = 'statement' in value && 'range' in value.statement ? value.statement.range : undefined;
+  const unitMessages = {
+    missing: () => m.search_quantity_unit_missing({}, context.options),
+    unitless: () => m.search_quantity_unitless_count({}, context.options),
+    marker: (unit: string) => m.search_quantity_unit_marker({ unit }, context.options),
+    notAdmitted: (unit: string) => m.search_quantity_unit_not_admitted({ unit }, context.options),
+    unavailable: (unit: string) => m.search_quantity_unit_label_unavailable({ unit }, context.options),
+  };
+  const unitText = (unit: string | undefined, admitted: readonly string[] = definition?.units ?? []) =>
+    searchQuantityUnitText(unit, admitted, context.locale, unitMessages);
   const rangeMagnitudes = (['gte', 'lte'] as const).map(
     (bound) => draft.ranges[bound].current?.raw ?? range?.[bound]?.toString() ?? '',
   );
@@ -869,7 +878,7 @@ function NodeEditor({
                               title={range.unit}
                               data-unit-id={range.unit}
                             >
-                              {searchQuantityUnitText(range.unit, definition.units ?? [], context.locale)}
+                              {unitText(range.unit, definition.units ?? [])}
                             </span>
                           )}
                         </div>
@@ -907,16 +916,16 @@ function NodeEditor({
                       }}
                     >
                       <NativeSelectOption value="">
-                        {searchQuantityUnitText(undefined, definition?.units ?? [], context.locale)}
+                        {unitText(undefined, definition?.units ?? [])}
                       </NativeSelectOption>
                       {range.unit && !definition?.units?.includes(range.unit) && (
                         <NativeSelectOption value={range.unit} title={range.unit}>
-                          {searchQuantityUnitText(range.unit, definition?.units ?? [], context.locale)}
+                          {unitText(range.unit, definition?.units ?? [])}
                         </NativeSelectOption>
                       )}
                       {definition?.units?.map((unit) => (
                         <NativeSelectOption key={unit} value={unit} title={unit}>
-                          {searchQuantityUnitText(unit, definition.units ?? [], context.locale)}
+                          {unitText(unit, definition.units ?? [])}
                         </NativeSelectOption>
                       ))}
                     </NativeSelect>
@@ -1100,8 +1109,8 @@ function NodeEditor({
           <p id={`${unitChangeId}-description`} className="mt-2 text-sm text-muted-foreground">
             {m.search_quantity_unit_change_message(
               {
-                from: searchQuantityUnitText(pendingUnitChange.from, definition?.units ?? [], context.locale),
-                to: searchQuantityUnitText(pendingUnitChange.to, definition?.units ?? [], context.locale),
+                from: unitText(pendingUnitChange.from, definition?.units ?? []),
+                to: unitText(pendingUnitChange.to, definition?.units ?? []),
               },
               options,
             )}

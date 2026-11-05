@@ -678,6 +678,13 @@ export function SearchPage({
   });
   if (data?.discovery && personal.state) data = { ...data, discovery: personal.state };
   const options = messageOptions(locale);
+  const unitMessages = {
+    missing: () => m.search_quantity_unit_missing({}, options),
+    unitless: () => m.search_quantity_unitless_count({}, options),
+    marker: (unit: string) => m.search_quantity_unit_marker({ unit }, options),
+    notAdmitted: (unit: string) => m.search_quantity_unit_not_admitted({ unit }, options),
+    unavailable: (unit: string) => m.search_quantity_unit_label_unavailable({ unit }, options),
+  };
   const type = data?.type;
   const result = data?.result;
   const discovery = data?.discovery;
@@ -819,7 +826,12 @@ export function SearchPage({
         range.gte === undefined ? '…' : `≥ ${range.gte}`
       } – ${range.lte === undefined ? '…' : `≤ ${range.lte}`}${
         data?.conditionMetadata?.properties[property]?.datatype === 'quantity'
-          ? ` (${searchQuantityUnitText(range.unit, data.conditionMetadata.properties[property]?.units ?? [], locale)})`
+          ? ` (${searchQuantityUnitText(
+              range.unit,
+              data.conditionMetadata.properties[property]?.units ?? [],
+              locale,
+              unitMessages,
+            )})`
           : range.unit
             ? ` (${range.unit})`
             : ''

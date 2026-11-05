@@ -230,6 +230,13 @@ function RefinementInstance({
   };
   const label = (labels: Record<string, string>) => localizedLabel(labels, locale).text;
   const options = { locale: locale as never };
+  const unitMessages = {
+    missing: () => m.search_quantity_unit_missing({}, options),
+    unitless: () => m.search_quantity_unitless_count({}, options),
+    marker: (unit: string) => m.search_quantity_unit_marker({ unit }, options),
+    notAdmitted: (unit: string) => m.search_quantity_unit_not_admitted({ unit }, options),
+    unavailable: (unit: string) => m.search_quantity_unit_label_unavailable({ unit }, options),
+  };
   const selected = Object.entries(conditions.facetValues).flatMap(([property, values]) =>
     values.map((value) => ({ property, value })),
   );
@@ -499,7 +506,7 @@ function RefinementInstance({
                       {range.lte === undefined ? '…' : `≤ ${range.lte}`}{' '}
                       {definition?.datatype === 'quantity' && (
                         <span title={range.unit} data-unit-id={range.unit}>
-                          {searchQuantityUnitText(range.unit, definition.units ?? [], locale)}
+                          {searchQuantityUnitText(range.unit, definition.units ?? [], locale, unitMessages)}
                         </span>
                       )}
                       <XIcon aria-hidden="true" className="size-3" />
@@ -853,6 +860,13 @@ function RangeControl({
 }) {
   const id = useId();
   const options = { locale: locale as never };
+  const unitMessages = {
+    missing: () => m.search_quantity_unit_missing({}, options),
+    unitless: () => m.search_quantity_unitless_count({}, options),
+    marker: (value: string) => m.search_quantity_unit_marker({ unit: value }, options),
+    notAdmitted: (value: string) => m.search_quantity_unit_not_admitted({ unit: value }, options),
+    unavailable: (value: string) => m.search_quantity_unit_label_unavailable({ unit: value }, options),
+  };
   const range = conditions.ranges?.[definition.property];
   const applied = range !== undefined;
   const { lower, upper, unit, invalid } = draft;
@@ -876,7 +890,8 @@ function RangeControl({
     )
       setPendingUnitChange(undefined);
   }, [disabled, identity, lower, pendingUnitChange, unit, upper]);
-  const unitText = (value: string | undefined) => searchQuantityUnitText(value, definition.units, locale);
+  const unitText = (value: string | undefined) =>
+    searchQuantityUnitText(value, definition.units, locale, unitMessages);
   const resolvePendingUnitChange = (confirmed: boolean) => {
     if (!pendingUnitChange) return;
     if (

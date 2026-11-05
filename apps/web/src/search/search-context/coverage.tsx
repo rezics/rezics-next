@@ -35,12 +35,21 @@ export function SearchCoverage({
   onFocus?: ((button: HTMLButtonElement) => void) | undefined;
 }) {
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
+  const unitMessages = {
+    missing: () => m.search_quantity_unit_missing({}, options),
+    unitless: () => m.search_quantity_unitless_count({}, options),
+    marker: (unit: string) => m.search_quantity_unit_marker({ unit }, options),
+    notAdmitted: (unit: string) => m.search_quantity_unit_not_admitted({ unit }, options),
+    unavailable: (unit: string) => m.search_quantity_unit_label_unavailable({ unit }, options),
+  };
   const freshness = resultFreshness(observation.freshness, observation.as_of);
   const scope = state.resourceScope;
   const label = (id: string) => localizedLabel(data.conditionMetadata?.properties[id]?.labels ?? {}, locale).text || id;
   const unitText = (property: string, unit: string | undefined) => {
     const definition = data.conditionMetadata?.properties[property];
-    return definition?.datatype === 'quantity' ? searchQuantityUnitText(unit, definition.units ?? [], locale) : unit;
+    return definition?.datatype === 'quantity'
+      ? searchQuantityUnitText(unit, definition.units ?? [], locale, unitMessages)
+      : unit;
   };
   const presets = useMemo(
     () => (data.conditionMetadata ? conditionPresetCatalogue(data.conditionMetadata, locale) : undefined),
