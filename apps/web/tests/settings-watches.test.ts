@@ -101,7 +101,7 @@ test('sparse continuation uses the exact opaque cursor, fixed request size and o
 
 test('bounded Previous rereads exact kind/cursor addresses and failed recovery never keeps the prior body', async () => {
   const requests: { kind: string; cursor: string | null; limit: number }[] = [];
-  let failPrevious = true;
+  let failPrevious = false;
   let expireBoardNext = true;
   const { controller } = setup({
     read: async ({ kind, cursor, limit }) => {
@@ -131,6 +131,7 @@ test('bounded Previous rereads exact kind/cursor addresses and failed recovery n
 
   await controller.first();
   for (let pageNumber = 1; pageNumber <= 10; pageNumber++) await controller.next();
+  failPrevious = true;
   expect(controller.snapshot()).toMatchObject({
     kind: 'thread',
     cursor: 'thread-10',
