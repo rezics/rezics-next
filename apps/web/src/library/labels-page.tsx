@@ -21,8 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@rezics/u
 import { EllipsisIcon } from 'lucide-react';
 import { undoToast as UndoToast } from '@rezics/ui/undo-toast';
 import { toast } from '@rezics/ui/shadcn/toast';
-import { manageLabel } from './labels-actions';
-import { readLabelsPage } from './labels-read-route';
+import type { manageLabel } from './labels-actions';
 import type { LabelInput, LabelsPage, LabelFeedback, LabelResult } from './labels-read';
 import { shelfHref } from './shelf-params';
 import type { LibraryLabelSummary } from './subject-labels.ts';
@@ -124,7 +123,10 @@ type Attempt = {
 
 export function LabelsPageView({
   page: initial,
-  sendLabel = manageLabel,
+  sendLabel = async (input) => {
+    const { manageLabel } = await import('./labels-actions');
+    return manageLabel(input);
+  },
   isCurrent = alwaysCurrent,
   refresh,
   originating,
@@ -420,7 +422,11 @@ export function LabelsPageView({
       let current: LabelsPage | null;
       try {
         if (!admitted(input)) return;
-        current = refresh ? await refresh() : await readLabelsPage({ data: { query: page.query, cursor } });
+        current = refresh
+          ? await refresh()
+          : await import('./labels-read-route').then(({ readLabelsPage }) =>
+              readLabelsPage({ data: { query: page.query, cursor } }),
+            );
         if (!admitted(input) || !current) return;
       } catch {
         if (!admitted(input)) return;

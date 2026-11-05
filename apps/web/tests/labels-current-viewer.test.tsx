@@ -49,7 +49,6 @@ const request = () =>
     headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
   });
 let currentRequest = request();
-mock.module('@tanstack/react-start', () => start);
 function installRouteMocks() {
   mock.module('@tanstack/react-start', () => start);
   mock.module('@tanstack/react-start/server', () => ({
@@ -99,10 +98,6 @@ function response(subject: string, search: Search = {}, revision = 7): LabelsCur
 }
 
 test('The actual private Labels route retires replaced-viewer names, dialogs, pending work and Undo while preserving exact current management intents', async () => {
-  // Another focused file mocks the page-only read seam. Restore its module mock before loading
-  // the actual route, then reinstall this test's server environment.
-  mock.restore();
-  installRouteMocks();
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
