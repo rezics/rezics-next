@@ -1241,6 +1241,10 @@ with null object prototypes retain the same provenance; prototype identity is ne
 
 Decision: `task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
 
+The development wrapper also mounts the existing [private VNDB list preview](../../docs/development/local-stack.md#upload-the-development-personas-private-vndb-list)
+through the authenticated generated Kernel client and common showcase journal. Missing private input is unavailable;
+the report carries only the actual upload UUID and row count, never inferred personal activity or export contents.
+
 [Seed denial diagnostics](seed-diagnostics.md).
 
 ### Refresh selected VNDB Character vocabulary

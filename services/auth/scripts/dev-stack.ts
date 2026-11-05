@@ -9,6 +9,7 @@ import { migrate } from './database.ts';
 import { mountedWebsiteConfiguration } from './website-composition.ts';
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
+import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 const state = resolve(root, '.temp/local-stack');
@@ -103,7 +104,9 @@ export function localShowcaseClientRegistration() {
   return {
     clientId: showcaseClient,
     firstParty: true,
-    scopes: [...new Set([...DEVELOPMENT_SHOWCASE_SCOPES, ...developmentCollectionScopes])],
+    scopes: [
+      ...new Set([...DEVELOPMENT_SHOWCASE_SCOPES, ...developmentCollectionScopes, ...developmentPersonalListScopes]),
+    ],
   };
 }
 export type DevelopmentKeys = {

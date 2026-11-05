@@ -1,8 +1,16 @@
 import { runCrossMediaSeedCli } from '../../services/importer/src/cross-media-seed.ts';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { createKernelClient } from '@rezics/client';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../services/importer/src/credentials.ts';
 import { createImportTransport } from '../../services/importer/src/import-client.ts';
+import { createImportFetch } from '../../services/importer/src/import-fetch.ts';
+import {
+  developmentPersonalListScopes,
+  readShowcasePersonalListExport,
+  seedShowcasePersonalList,
+  type ShowcasePersonalListUpload,
+} from '../../services/importer/src/showcase-personal-list.ts';
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
 import { fetchCrossMediaDumps } from './fetch-dumps.ts';
@@ -44,7 +52,10 @@ import {
   type DevelopmentShowcaseResult,
 } from './development-showcase.ts';
 
-export type DevelopmentShowcaseReport = DevelopmentPublicationReport & { collections: DevelopmentShowcaseResult };
+export type DevelopmentShowcaseReport = DevelopmentPublicationReport & {
+  collections: DevelopmentShowcaseResult;
+  personalList: ShowcasePersonalListUpload;
+};
 
 /** Exact development roots: Steins;Gate/CLANNAD VNDB VNs; Steins;Gate anime/book and CLANNAD anime in Bangumi. */
 export const developmentShowcaseSelection = {
@@ -86,7 +97,8 @@ async function attachDevelopmentShowcase(path: string, report: DevelopmentShowca
       : undefined;
   if (!result || !Array.isArray(result.readings) || !Array.isArray(result.workLinks))
     throw new TypeError('Cross-media seed result is missing its native work identity handoff');
-  await writeFile(path, JSON.stringify({ ...result, developmentShowcase: report }, null, 2) + '\n');
+  await chmod(path, 0o600);
+  await writeFile(path, JSON.stringify({ ...result, developmentShowcase: report }, null, 2) + '\n', { mode: 0o600 });
 }
 
 export async function runDevelopmentSeed(
@@ -109,12 +121,15 @@ export async function runDevelopmentSeed(
   const api = env.KERNEL_ORIGIN || 'http://127.0.0.1:' + (env.KERNEL_PORT || '4100');
   const characterVocabulary = env.REZICS_DEV_VNDB_CHARACTER_VOCABULARY?.trim();
   const gameGenreBindings = env.REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS?.trim();
+  const exportPath = env.REZICS_DEV_VNDB_EXPORT?.trim();
+  const personalXml = exportPath ? await readShowcasePersonalListExport(exportPath) : undefined;
   const dumps = await (options.fetchDumps ?? fetchCrossMediaDumps)();
   const root = options.root ?? resolve(import.meta.dir, '../..');
   const state = join(root, '.temp', 'cross-media-seed', 'state.sqlite');
   const showcase = join(root, '.temp', 'cross-media-seed', 'showcase.sqlite');
   const result = join(root, '.temp', 'cross-media-seed', 'result.json');
-  await mkdir(dirname(state), { recursive: true });
+  await mkdir(dirname(state), { recursive: true, mode: 0o700 });
+  await chmod(dirname(state), 0o700);
   const tokenProvider = await (options.createTokenProvider ?? createAccountTokenProvider)({
     accountKeyPath: accountKey,
     account,
@@ -176,12 +191,29 @@ export async function runDevelopmentSeed(
     account,
     client: showcaseClient,
     authOrigin: auth,
-    scopes: DEVELOPMENT_SHOWCASE_SCOPES,
+    scopes: [...DEVELOPMENT_SHOWCASE_SCOPES, ...developmentPersonalListScopes],
   });
   const actor = { accountId: account, clientId: showcaseClient };
   const journal = new ShowcaseJournal(showcase);
   let report: DevelopmentPublicationReport;
+  let personalList: ShowcasePersonalListUpload;
   try {
+    personalList =
+      personalXml === undefined
+        ? { state: 'unavailable', code: 'export-not-configured' }
+        : await seedShowcasePersonalList({
+            client: createKernelClient(api, {
+              fetch: createImportFetch({
+                origin: api,
+                token: showcaseToken,
+                maxAttempts: 3,
+                deadlineMs: 30_000,
+              }),
+            }),
+            journal,
+            xml: personalXml,
+            identity: { origin: new URL(api).origin, actor, credential: { keyId: credential } },
+          });
     const native = createDevelopmentShowcaseClient({
       origin: api,
       actor,
@@ -218,7 +250,18 @@ export async function runDevelopmentSeed(
       },
     };
   }
-  const composedReport: DevelopmentShowcaseReport = { ...report, collections };
+  if (report.state === 'complete' && personalList.state !== 'uploaded') {
+    report = {
+      ...report,
+      state: 'incomplete',
+      failure: {
+        state: personalList.state === 'unknown-delivery' ? 'unknown_delivery' : personalList.state,
+        operation: 'personal-list.preview',
+        code: personalList.code,
+      },
+    };
+  }
+  const composedReport: DevelopmentShowcaseReport = { ...report, collections, personalList };
   await attachDevelopmentShowcase(result, composedReport);
   if (report.state === 'complete') {
     process.stdout.write(

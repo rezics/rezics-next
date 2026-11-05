@@ -1,4 +1,5 @@
 import { Database } from 'bun:sqlite';
+import { chmodSync } from 'node:fs';
 import { sameStatementProvenance } from './statement-provenance.ts';
 import { showcaseFranchiseFence } from './showcase-franchise.ts';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement } from '@rezics/definitions/bulk';
@@ -97,6 +98,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
 
   constructor(path: string) {
     this.#db = new Database(path, { create: true, strict: true });
+    if (path !== ':memory:') chmodSync(path, 0o600);
     this.#db.exec(`
       PRAGMA journal_mode=WAL;
       PRAGMA synchronous=FULL;

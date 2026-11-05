@@ -47,7 +47,7 @@ test('Auth page scope configuration carries trusted siteActions and records nati
 });
 
 test('persona creator capabilities are registered separately from ordinary importer scopes', () => {
-  const creator = ['collection:create', 'collection:read', 'collection:update'];
+  const creator = ['collection:create', 'collection:read', 'collection:update', 'library_entry:update'];
   expect(localShowcaseClientRegistration().scopes).toEqual(expect.arrayContaining(creator));
   expect(importerScopes.some((scope) => creator.includes(scope))).toBe(false);
 });

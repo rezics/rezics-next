@@ -49,8 +49,8 @@ task reuses the developer, account key and ordinary exposure command keys; the n
 restore a grant that an operator later revokes.
 The persona owns the development platform governance role, including `gate:any`, Access grant authority and the
 cross-media importer's subject, statement, source-statistic, source-fence and media-import permissions. The importer
-client requests only its import scopes. The separate `rezics-dev-showcase` first-party client requests only Board,
-thread, source-read, edition and Commerce scopes. The local stack installs that developer's direct `board:create`
+client requests only its import scopes. The separate `rezics-dev-showcase` first-party client requests Board,
+thread, source-read, edition, Commerce, Collection and personal Library scopes. The local stack installs that developer's direct `board:create`
 grant on Global Context using a one-time native bootstrap receipt; Board creation itself uses the ordinary authenticated
 `POST /v1/boards` command and current Access checks. This grants no production authority and does not change the
 platform governance policy. The same person can sign into Web using the printed password. Local database setup supplies a finite
@@ -87,6 +87,31 @@ A public exposure opening admits that group, while ordinary route and resource p
 both app servers bind loopback. Do not expose this development database or host to a network.
 If an opening fails, setup reports the group and native error, exits unsuccessfully and tells you which task to rerun
 after resolving it. Seed does not continue after a failed persona step.
+
+### Upload the development persona's private VNDB list
+
+Decision: `REZICS_DEV_VNDB_EXPORT` names the persona's actual private VNDB version 1.0 export; missing input stays
+unavailable and prevents a complete showcase report. The seed does not synthesize personal activity from catalogue
+records. Supply an owner-only regular UTF-8 file under `.temp/` before running `task seed:dev`; the native preview
+owns XML/version admission. The separate showcase client requests `library_entry:update` through the existing
+personal Library gate and own-account authority, without adding platform grants.
+
+The mounted wrapper uses the generated authenticated Kernel client and the common `showcase.sqlite` upload journal.
+It seals the original persona, client, credential identity, destination, XML and idempotency key before sending.
+Unknown delivery reuses that exact intent after reopen. A changed identity cannot resend the private export;
+permanent refusals stay terminal. Successful replay still visits native authorization and must return the original
+upload UUID and row count. The response is journalled before disclosure. Only those actual response fields enter
+`developmentShowcase.personalList`; no export bytes or local export path enter the result or diagnostics. The seed
+directory is mode 0700 and the showcase journal and combined result are mode 0600.
+
+- Touches: one private export and one preview action plus its response in the existing journal; no review/apply,
+  status, Progress, vote or Library activity is inferred from an upload acknowledgement.
+- Bound: 2 MiB source input, the existing 2 MiB serialized request ceiling, one application preview call per run,
+  at most three HTTP attempts within 30 seconds, and the existing 1 MiB response cap; at most 5,000 reported rows.
+- Growth check: `services/importer/tests/showcase-personal-list.test.ts` covers exact process reopen, changed
+  custody, response identity, terminal refusal and private file admission; `services/importer/test/cross-media-local-seed.test.ts`
+  verifies the mounted authenticated request, actual response handoff, permissions and absence of private export
+  data from the combined result. Native private-list lifecycle and browser acceptance remain integration-owned.
 
 ### Compose the development persona Collections
 
