@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import * as v from 'valibot';
 import { kernelClient } from '../kernel/client';
-import { characterPersonRequest } from './character-person';
+import { characterPersonRequest, type CharacterPersonSearch } from './character-person';
 import { readDiscovery } from './discovery';
 
 const searchSchema = v.object({
@@ -22,7 +22,7 @@ export const readCharacterPerson = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     setResponseHeader('Cache-Control', 'private, no-store');
     const signal = getRequest().signal;
-    return readDiscovery(characterPersonRequest(data.search), (body) =>
+    return readDiscovery(characterPersonRequest(data.search as CharacterPersonSearch), (body) =>
       kernelClient(data.locale).subjects.$search.post(body, { fetch: { signal, cache: 'no-store' } }),
     );
   });

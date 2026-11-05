@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { characterPersonQueryKey, type CharacterPersonSearch } from './character-person';
 import { readCharacterPerson } from './character-person-window-server';
+import type { DiscoveryState } from './discovery';
 
 /** The public reader lease owns both dispatch and completion, including transports that ignore cancellation. */
 export function characterPersonQueryOptions(
@@ -11,7 +12,7 @@ export function characterPersonQueryOptions(
 ) {
   return queryOptions({
     queryKey: characterPersonQueryKey(locale, reader, search),
-    queryFn: async ({ signal }) => {
+    queryFn: async ({ signal }): Promise<{ discovery: DiscoveryState; restarted: boolean }> => {
       if (current && !current()) throw new DOMException('Reader retired', 'AbortError');
       const result = await readCharacterPerson({ data: { locale, search }, signal });
       signal.throwIfAborted();
