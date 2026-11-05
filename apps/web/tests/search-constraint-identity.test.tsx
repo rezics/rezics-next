@@ -112,7 +112,7 @@ test('selected Search identities retain exact operands, local keyboard actions a
     entrypoints: [entry],
     target: 'browser',
     format: 'esm',
-    jsxImportSource: join(app, 'node_modules/react'),
+    jsx: { runtime: 'automatic', importSource: join(app, 'node_modules/react') },
     plugins: [
       {
         name: 'request-environment',
