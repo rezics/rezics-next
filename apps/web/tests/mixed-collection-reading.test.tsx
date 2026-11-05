@@ -3,10 +3,8 @@ import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as start from '../.storybook/react-start';
-import * as transport from '../src/kernel/client';
-import * as definitions from '../src/subject/definitions';
+import type { Release } from '../src/subject/definitions';
 import { collectionFilterAddress } from '../src/library/collection-filter-params';
-import { CollectionMemberOccurrenceDetails } from '../src/library/collection-member-details';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => ({
@@ -16,10 +14,13 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseStatus() {},
 }));
 mock.module('cloudflare:workers', () => ({ env: { COLLECTION_FILTERS: true } }));
+const transport = await import('../src/kernel/client');
+const definitions = await import('../src/subject/definitions');
+const { CollectionMemberOccurrenceDetails } = await import('../src/library/collection-member-details');
 const { readCollectionPage } = await import('../src/library/collection-queries');
 const types = ['example:VN', 'example:Anime', 'schema:Book'];
 const properties = ['example:playTime', 'example:episodes', 'schema:wordCount'];
-const release: definitions.Release = {
+const release: Release = {
   digest: 'mixed-release',
   types: Object.fromEntries(types.map((type, index) => [type, { facets: [properties[index]!] }])),
   properties: Object.fromEntries(properties.map((property) => [property, { datatype: 'quantity', units: ['1'] }])),
