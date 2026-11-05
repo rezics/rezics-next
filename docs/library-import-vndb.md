@@ -99,7 +99,8 @@ consent and a separate clear choice. Native review reports profile or source ine
 
 The VNDB `vote` remains a private `fields.score` value with its exact `raw` spelling and source scale. A valid
 source score can be reviewed for the standard question `00000000-0000-7000-8000-000000000001`, revision 1,
-meaning and native units 0–20 step 1. The page shows the actual Content question and the owner's current vote or
+null meaning and native units 0–20 step 1. Null meaning is the released standard question and is captured as-is;
+it is not an unavailable current vote. The page shows the actual Content question and the owner's current vote or
 absence. A source value such as 7.3 is valid VNDB evidence but has no exact native value; the owner chooses native
 units deliberately. An exact candidate for 7.5 is shown only as a candidate, never applied automatically. Source zero
 is invalid and cannot be adopted as a vote. Clear uses a separate `{ kind: "clear" }` selection and is not source

@@ -857,7 +857,7 @@ export function createVndbImport(config: Config) {
       nativeQuestionView(reviewed.question),
       reviewed,
     );
-    if (!preview.question || preview.question.meaning === null || preview.currentVote.state === 'unavailable')
+    if (!preview.question || preview.currentVote.state === 'unavailable')
       return mutation(actor, 'review-score', key, { id, choice }, async () => ({
         status: 'unavailable' as const,
         reason: preview.question

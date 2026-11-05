@@ -450,6 +450,24 @@ async function sameHomeScoreCaller() {
   return { ...scorer, target, send, votes, service, scoreReview, stored, importUpload };
 }
 
+test('VNDB score review admits the released standard question when meaning is null', async () => {
+  const c = await sameHomeScoreCaller();
+  const prior = (await f.pool.query('SELECT meaning FROM rating.question WHERE id=$1', [STANDARD_QUESTION_ID])).rows[0]
+    .meaning;
+  await f.pool.query('UPDATE rating.question SET meaning=NULL WHERE id=$1', [STANDARD_QUESTION_ID]);
+  try {
+    const { uploadId } = await c.importUpload(xml(vn(`v${Date.now()}9`, '<vote>7.5</vote>')));
+    expect(await c.scoreReview(uploadId, 15)).toMatchObject({
+      status: 'reviewed',
+      units: 15,
+      question: { meaning: null },
+      nativeAdmission: 'conditional',
+    });
+  } finally {
+    await f.pool.query('UPDATE rating.question SET meaning=$2 WHERE id=$1', [STANDARD_QUESTION_ID, prior]);
+  }
+}, 120000);
+
 test('VNDB explicit unmatched score choice commits chosen units, zero and clear with counted current readback and independent Entry state', async () => {
   const c = await sameHomeScoreCaller();
   const source = xml(
