@@ -4,13 +4,12 @@
  * Kernel endpoint, and a read-only SQL count. Prints one line per section. Never prints
  * credentials.
  *
- * Decision: empty native lists with a seed SQL count of zero are SEED; surfaces that may
- * legitimately be empty omit SQL and classify EMPTY when the page shows empty, WEB when it
- * hides that empty reading. HTTP 400/5xx and an authenticated 403 are API (errors or
- * refuses). Unauthenticated 401/403 is UNAUTHORIZED. Native 200 that states preparing or
- * unavailable is UNAVAILABLE.
+ * Decision: use the routed default for native/page/seed judgments; pair every page section
+ * with that persona's native response, and classify SEED only for a declared expected SQL
+ * relation whose count is zero after the reader settles.
  */
 import { readFileSync, existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -32,13 +31,20 @@ const DEFAULT_AUTH_ORIGIN = 'http://127.0.0.1:4200';
 const DEFAULT_KERNEL_ENV = resolve(ROOT, 'services/kernel/.env');
 const LOCAL_KEYS = resolve(ROOT, '.temp/local-stack/keys.json');
 const MEMBER_EMAIL = 'developer@rezics.test';
-const PAGE_WAIT_MS = 15_000;
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+const PAGE_WAIT_MS = 5_000;
+const READER_WAIT_MS = 2_500;
+const REQUEST_WAIT_MS = 5_000;
 const SECRET_PATTERN =
   /(?:bearer\s+[a-z0-9._~+/-]+=*|eyj[a-z0-9_-]{20,}\.[a-z0-9_-]{10,}\.[a-z0-9_-]{10,}|password[=:][^\s&]+|authorization:\s*[^\r\n]+)/gi;
 
 type QueryClient = {
-  connect(): Promise<void>;
   query(text: string, values?: readonly unknown[]): Promise<{ rows: { n?: unknown }[] }>;
+  release(error?: Error | boolean): void;
+};
+
+type QueryPool = {
+  connect(): Promise<QueryClient>;
   end(): Promise<void>;
 };
 
@@ -48,11 +54,13 @@ export type NativeCall = {
   query?: Record<string, string>;
   body?: unknown;
   items: string;
+  admission?: string;
+  action?: { role: 'button'; name: string };
 };
 
 export type SeedSql = {
   text: string;
-  params: readonly ('subject' | 'property' | 'kind' | 'place' | 'question')[];
+  params: readonly ('subject' | 'property' | 'kind' | 'place' | 'question' | 'filter')[];
 };
 
 export type ManifestSection = {
@@ -87,6 +95,7 @@ export type NativeObservation = {
   status: number;
   body: unknown;
   authorized: boolean;
+  error?: string;
 };
 
 export type PageObservation = {
@@ -106,6 +115,14 @@ export type SectionResult = {
   section: string;
   name: string;
   class: SectionClass;
+  evidence: {
+    nativeStatus: number;
+    nativeItems: number;
+    pageItems: number;
+    reader: PageKind;
+    seedCount: number | null;
+    seedExpected: boolean;
+  };
 };
 
 export type RunOptions = {
@@ -120,6 +137,8 @@ export type RunOptions = {
   fetch?: typeof fetch;
   browser?: Browser;
   pageTimeoutMs?: number;
+  readerTimeoutMs?: number;
+  requestTimeoutMs?: number;
   stdout?: { write(chunk: string): void };
   stderr?: { write(chunk: string): void };
 };
@@ -167,6 +186,18 @@ export function hasItems(value: unknown): boolean {
   return Object.values(value).some((entry) => hasItems(entry));
 }
 
+function countItems(value: unknown): number {
+  if (Array.isArray(value)) return value.length;
+  if (typeof value === 'string') return value.length > 0 ? 1 : 0;
+  if (typeof value === 'number') return value > 0 ? value : 0;
+  if (isRecord(value)) {
+    const entries = Object.values(value);
+    const nestedItems = entries.reduce((total, entry) => total + (Array.isArray(entry) ? entry.length : 0), 0);
+    return nestedItems || (entries.length > 0 ? 1 : 0);
+  }
+  return 0;
+}
+
 function problemCode(body: unknown): string | undefined {
   if (!isRecord(body)) return undefined;
   if (typeof body.code === 'string') return body.code;
@@ -193,12 +224,20 @@ function nativeStatesUnavailable(body: unknown): boolean {
   return false;
 }
 
-export function nativeKind(observation: NativeObservation, items: string): NativeKind {
-  const { status, body, authorized } = observation;
-  if (status === 401 || (status === 403 && !authorized)) return 'unauthorized';
-  if (status >= 400) return 'error';
+export function nativeKind(observation: NativeObservation, items: string, admission?: string): NativeKind {
+  const { status, body, authorized, error } = observation;
+  if (error) return 'error';
+  if ((status === 401 || status === 403) && !authorized) return 'unauthorized';
+  if ((status === 401 || status === 403) && authorized) return 'error';
   if (nativeStatesUnavailable(body) || problemCode(body) === 'index_not_ready') return 'unavailable';
-  return hasItems(pointer(body, items)) ? 'data' : 'empty';
+  if (status >= 400 || status === 0) return 'error';
+  const selected = pointer(body, items);
+  if (admission !== undefined) {
+    if (!Array.isArray(selected)) return 'error';
+    return selected.includes(admission) ? 'data' : 'unavailable';
+  }
+  const hasData = hasItems(selected);
+  return hasData ? 'data' : 'empty';
 }
 
 const UNAUTHORIZED_TEXT = /\b(unauthorized|forbidden|sign in|not allowed)\b/i;
@@ -209,10 +248,10 @@ const EMPTY_TEXT = /\b(no visible entries|no supplied|no admitted|no results|emp
 
 export function pageKind(observation: PageObservation): PageKind {
   if (!observation.present) return 'missing';
-  if (observation.itemCount > 0) return 'data';
   if (UNAUTHORIZED_TEXT.test(observation.text) || observation.dataState === 'unauthorized') return 'unauthorized';
   if (UNAVAILABLE_TEXT.test(observation.text) || observation.dataState === 'unavailable') return 'unavailable';
   if (observation.busy || LOADING_TEXT.test(observation.text) || observation.dataState === 'loading') return 'loading';
+  if (observation.itemCount > 0) return 'data';
   if (EMPTY_TEXT.test(observation.text) || observation.dataState === 'empty' || observation.itemCount === 0)
     return 'empty';
   return 'missing';
@@ -223,18 +262,20 @@ export function classifySection(
   page: PageObservation,
   items: string,
   seedCount: number | null,
+  seedExpected = seedCount !== null,
+  admission?: string,
 ): SectionClass {
-  const nativeState = nativeKind(native, items);
+  const nativeState = nativeKind(native, items, admission);
   const pageState = pageKind(page);
   if (nativeState === 'error') return 'API';
-  if (nativeState === 'unauthorized')
-    return pageState === 'unauthorized' || pageState === 'missing' ? 'UNAUTHORIZED' : 'WEB';
-  if (nativeState === 'unavailable') return pageState === 'unavailable' ? 'UNAVAILABLE' : 'WEB';
-  if (nativeState === 'data') return pageState === 'data' ? 'DATA' : 'WEB';
-  if (seedCount === 0) return 'SEED';
-  if (seedCount !== null && seedCount > 0) return 'API';
-  if (pageState === 'empty') return 'EMPTY';
-  return 'WEB';
+  if (nativeState === 'unauthorized') return 'UNAUTHORIZED';
+  if (nativeState === 'unavailable') return 'UNAVAILABLE';
+  if (pageState === 'unauthorized') return 'UNAUTHORIZED';
+  if (pageState === 'loading' || pageState === 'unavailable' || pageState === 'missing') return 'UNAVAILABLE';
+  if (nativeState === 'data') return pageState === 'data' ? 'DATA' : pageState === 'empty' ? 'WEB' : 'UNAVAILABLE';
+  if (pageState === 'data') return 'API';
+  if (seedExpected) return seedCount === 0 ? 'SEED' : seedCount === null ? 'UNAVAILABLE' : 'EMPTY';
+  return pageState === 'empty' ? 'EMPTY' : 'UNAVAILABLE';
 }
 
 export function formatLine(result: SectionResult): string {
@@ -274,22 +315,42 @@ function bindSql(sql: SeedSql, vars: Record<string, string>): { text: string; va
   return { text: sql.text, values };
 }
 
-async function defaultQueryCount(databaseUrl: string, text: string, values: readonly string[]): Promise<number> {
-  const pg = (await import('pg')) as { default: { Client: new (config: { connectionString: string }) => QueryClient } };
-  const client = new pg.default.Client({ connectionString: databaseUrl });
-  await client.connect();
-  try {
-    await client.query('BEGIN READ ONLY');
-    const result = await client.query(text, values);
-    await client.query('COMMIT');
-    const row = result.rows[0] as { n?: unknown } | undefined;
-    const n = row?.n;
-    if (typeof n === 'number' && Number.isFinite(n)) return n;
-    if (typeof n === 'string' && n.trim() !== '' && Number.isFinite(Number(n))) return Number(n);
-    throw new Error('Seed count did not return n');
-  } finally {
-    await client.end();
-  }
+function createSeedCounter(databaseUrl: string): {
+  queryCount(text: string, values: readonly string[]): Promise<number>;
+  close(): Promise<void>;
+} {
+  const fromKernel = createRequire(resolve(ROOT, 'services/kernel/package.json'));
+  const pg = fromKernel('pg') as { Pool: new (config: Record<string, unknown>) => QueryPool };
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max: 1,
+    connectionTimeoutMillis: REQUEST_WAIT_MS,
+    query_timeout: REQUEST_WAIT_MS,
+    statement_timeout: REQUEST_WAIT_MS,
+    application_name: 'rezics-page-data-check',
+  });
+  return {
+    async queryCount(text, values) {
+      const client = await pool.connect();
+      let failure: Error | undefined;
+      try {
+        await client.query('BEGIN READ ONLY');
+        const result = await client.query(text, values);
+        await client.query('COMMIT');
+        const row = result.rows[0] as { n?: unknown } | undefined;
+        const n = row?.n;
+        if (typeof n === 'number' && Number.isFinite(n)) return n;
+        if (typeof n === 'string' && n.trim() !== '' && Number.isFinite(Number(n))) return Number(n);
+        throw new Error('Seed count did not return n');
+      } catch (error) {
+        failure = error instanceof Error ? error : new Error(String(error));
+        throw error;
+      } finally {
+        client.release(failure);
+      }
+    },
+    close: () => pool.end(),
+  };
 }
 
 function databaseUrlFromEnv(file: string): string | undefined {
@@ -298,7 +359,15 @@ function databaseUrlFromEnv(file: string): string | undefined {
     .split('\n')
     .find((entry) => entry.startsWith('DATABASE_URL='));
   if (!line) return undefined;
-  return line.slice('DATABASE_URL='.length);
+  return line.slice('DATABASE_URL='.length).replace(/^(['"])(.*)\1$/, '$2');
+}
+
+function isTimeout(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'TimeoutError' || /timed out|timeout/i.test(error.message));
+}
+
+function displayError(error: unknown): string {
+  return redact(error instanceof Error ? error.message : String(error));
 }
 
 async function nativeCall(
@@ -307,6 +376,7 @@ async function nativeCall(
   vars: Record<string, string>,
   token: string | undefined,
   send: typeof fetch,
+  timeoutMs: number,
 ): Promise<NativeObservation> {
   const url = new URL(expand(call.path, vars), kernel);
   if (call.query) {
@@ -315,23 +385,28 @@ async function nativeCall(
   const headers: Record<string, string> = { accept: 'application/json', 'accept-language': 'en' };
   if (token) headers.authorization = `Bearer ${token}`;
   if (call.method === 'POST') headers['content-type'] = 'application/json';
-  const response = await send(
-    new Request(url, {
-      method: call.method,
-      headers,
-      body: call.method === 'POST' ? JSON.stringify(call.body ?? {}) : undefined,
-    }),
-  );
-  const text = await response.text();
-  let body: unknown = text;
-  if (text.length > 0) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = { text };
+  try {
+    const response = await send(
+      new Request(url, {
+        method: call.method,
+        headers,
+        body: call.method === 'POST' ? JSON.stringify(call.body ?? {}) : undefined,
+        signal: AbortSignal.timeout(timeoutMs),
+      }),
+    );
+    const text = await response.text();
+    let body: unknown = null;
+    if (text.length > 0) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        return { status: response.status, body: null, authorized: Boolean(token), error: 'Native response was not valid JSON' };
+      }
     }
-  } else body = null;
-  return { status: response.status, body, authorized: Boolean(token) };
+    return { status: response.status, body, authorized: Boolean(token) };
+  } catch (error) {
+    return { status: 0, body: null, authorized: Boolean(token), error: `Native request failed: ${displayError(error)}` };
+  }
 }
 
 type SectionProbe = {
@@ -342,37 +417,108 @@ type SectionProbe = {
   busy: boolean;
 };
 
-async function observeSection(page: Page, section: ManifestSection): Promise<PageObservation> {
-  return page.evaluate(
-    ({ selector, heading, itemSelector }) => {
+async function observeSection(
+  page: Page,
+  section: ManifestSection,
+  timeoutMs: number,
+): Promise<{ observation: PageObservation; timedOut: boolean }> {
+  let timedOut = false;
+  try {
+    await page.waitForFunction(
+      ({ selector, heading }) => {
+        const loading = (element: HTMLElement): boolean => {
+          if (
+            element.getAttribute('aria-busy') === 'true' ||
+            element.getAttribute('data-state') === 'loading' ||
+            element.getAttribute('data-feed-result-state') === 'loading' ||
+            /\b(loading|preparing)\b/i.test(element.innerText ?? element.textContent ?? '')
+          )
+            return true;
+          return [...element.querySelectorAll<HTMLElement>('[aria-busy="true"],[data-state="loading"],[data-feed-result-state="loading"],[role="status"],[aria-live]')].some(
+            (child) =>
+              child.getAttribute('aria-busy') === 'true' ||
+              child.getAttribute('data-state') === 'loading' ||
+              child.getAttribute('data-feed-result-state') === 'loading' ||
+              /\b(loading|preparing)\b/i.test(child.innerText ?? child.textContent ?? ''),
+          );
+        };
+        const titleOf = (element: HTMLElement): string => {
+          const labelledBy = element
+            .getAttribute('aria-labelledby')
+            ?.split(/\s+/)
+            .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+            .filter(Boolean)
+            .join(' ')
+            .trim();
+          if (labelledBy) return labelledBy;
+          const label = element.getAttribute('aria-label')?.trim();
+          if (label) return label;
+          const headingNode = element.querySelector<HTMLElement>('h1,h2,h3,h4,h5,h6,[role="heading"]');
+          if (headingNode?.textContent?.trim()) return headingNode.textContent.trim();
+          return element.matches('a[href],button,[role="link"],[role="button"]') ? element.textContent?.trim() ?? '' : '';
+        };
+        const matches = [...document.querySelectorAll<HTMLElement>(selector)];
+        const wanted = heading?.trim().toLocaleLowerCase();
+        const node = wanted === undefined ? matches[0] : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
+        return Boolean(node) && !loading(node);
+      },
+      { selector: section.selector, heading: section.heading },
+      { timeout: timeoutMs },
+    );
+  } catch (error) {
+    if (!isTimeout(error)) throw error;
+    timedOut = true;
+  }
+  const observation = await page.evaluate(
+    ({ selector, heading, itemSelector, timedOut }) => {
+      const loading = (element: HTMLElement): boolean => {
+        if (
+          element.getAttribute('aria-busy') === 'true' ||
+          element.getAttribute('data-state') === 'loading' ||
+          element.getAttribute('data-feed-result-state') === 'loading' ||
+          /\b(loading|preparing)\b/i.test(element.innerText ?? element.textContent ?? '')
+        )
+          return true;
+        return [...element.querySelectorAll<HTMLElement>('[aria-busy="true"],[data-state="loading"],[data-feed-result-state="loading"],[role="status"],[aria-live]')].some(
+          (child) =>
+            child.getAttribute('aria-busy') === 'true' ||
+            child.getAttribute('data-state') === 'loading' ||
+            child.getAttribute('data-feed-result-state') === 'loading' ||
+            /\b(loading|preparing)\b/i.test(child.innerText ?? child.textContent ?? ''),
+        );
+      };
+      const titleOf = (element: HTMLElement): string => {
+        const labelledBy = element
+          .getAttribute('aria-labelledby')
+          ?.split(/\s+/)
+          .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+        if (labelledBy) return labelledBy;
+        const label = element.getAttribute('aria-label')?.trim();
+        if (label) return label;
+        const headingNode = element.querySelector<HTMLElement>('h1,h2,h3,h4,h5,h6,[role="heading"]');
+        if (headingNode?.textContent?.trim()) return headingNode.textContent.trim();
+        return element.matches('a[href],button,[role="link"],[role="button"]') ? element.textContent?.trim() ?? '' : '';
+      };
       const matches = [...document.querySelectorAll<HTMLElement>(selector)];
-      const node =
-        heading === undefined
-          ? matches[0]
-          : matches.find((element) => {
-              const label = element.getAttribute('aria-labelledby');
-              const title = label ? document.getElementById(label)?.textContent : '';
-              const headingNode = element.querySelector('h1,h2,h3');
-              return (title ?? headingNode?.textContent ?? element.textContent ?? '').includes(heading);
-            });
-      if (!node) return { present: false, itemCount: 0, text: '', dataState: null, busy: false };
-      const items = itemSelector ? node.querySelectorAll(itemSelector).length : 0;
+      const wanted = heading?.trim().toLocaleLowerCase();
+      const node = wanted === undefined ? matches[0] : matches.find((element) => titleOf(element).toLocaleLowerCase().includes(wanted));
+      if (!node) return { present: false, itemCount: 0, text: '', dataState: null, busy: true };
+      const items = itemSelector ? Number(node.matches(itemSelector)) + node.querySelectorAll(itemSelector).length : 0;
+      const unsettled = loading(node);
       return {
         present: true,
         itemCount: items,
         text: (node.innerText ?? node.textContent ?? '').slice(0, 4000),
         dataState: node.getAttribute('data-state') ?? node.getAttribute('data-feed-result-state'),
-        busy: node.getAttribute('aria-busy') === 'true',
+        busy: timedOut || unsettled,
       } satisfies SectionProbe;
     },
-    {
-      selector: section.selector,
-      heading: section.heading,
-      itemSelector:
-        section.itemSelector ??
-        '[data-slot="cover-card"], [data-feed-id], [data-slot="list-row"], [data-slot="rating-comparison"]',
-    },
+    { selector: section.selector, heading: section.heading, itemSelector: section.itemSelector, timedOut },
   );
+  return { observation, timedOut };
 }
 
 async function memberTokenFromAuth(
@@ -384,12 +530,8 @@ async function memberTokenFromAuth(
     new Request(new URL('/signin', origin), {
       method: 'POST',
       headers: { origin: origin.origin, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        email: signIn.email,
-        password: signIn.password,
-        client_id: 'rezics-website',
-        scope: ['openid', 'offline_access'],
-      }),
+      body: JSON.stringify(signInRequestBody(signIn.email, signIn.password)),
+      signal: AbortSignal.timeout(REQUEST_WAIT_MS),
     }),
   );
   if (!signin.ok) throw new Error(`Member sign-in failed: ${signin.status}`);
@@ -402,6 +544,7 @@ async function memberTokenFromAuth(
       method: 'POST',
       headers: { origin: origin.origin, 'content-type': 'application/json', cookie },
       body: '{}',
+      signal: AbortSignal.timeout(REQUEST_WAIT_MS),
     }),
   );
   if (!token.ok) throw new Error(`Member token failed: ${token.status}`);
@@ -415,14 +558,15 @@ async function signInBrowser(
   page: Page,
   base: URL,
   signIn: { origin: string; email: string; password: string },
+  timeoutMs: number,
 ): Promise<void> {
-  await page.goto(new URL('/auth/sign-in', base).href, { waitUntil: 'domcontentloaded' });
+  await page.goto(new URL('/auth/sign-in', base).href, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
   const email = page.getByLabel(/email/i);
-  await email.waitFor({ state: 'visible', timeout: PAGE_WAIT_MS });
+  await email.waitFor({ state: 'visible', timeout: timeoutMs });
   await email.fill(signIn.email);
   await page.locator('input[name="password"]').fill(signIn.password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await page.waitForURL((url) => url.origin === base.origin, { timeout: PAGE_WAIT_MS });
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click({ timeout: timeoutMs });
+  await page.waitForURL((url) => url.origin === base.origin, { timeout: timeoutMs });
 }
 
 function localSignIn(): { origin: string; email: string; password: string } | undefined {
@@ -436,25 +580,39 @@ function localSignIn(): { origin: string; email: string; password: string } | un
   };
 }
 
-export async function runPageDataCheck(options: RunOptions): Promise<{ results: SectionResult[]; defects: number }> {
+export async function runPageDataCheck(options: RunOptions): Promise<{
+  results: SectionResult[];
+  defects: number;
+  incomplete: boolean;
+  diagnostics: string[];
+}> {
   const base = publicOrigin(options.baseUrl, 'base URL');
   const kernel = publicOrigin(options.kernel, 'kernel URL');
   const send = options.fetch ?? fetch;
-  const timeout = options.pageTimeoutMs ?? PAGE_WAIT_MS;
+  const pageTimeout = options.pageTimeoutMs ?? PAGE_WAIT_MS;
+  const readerTimeout = options.readerTimeoutMs ?? READER_WAIT_MS;
+  const requestTimeout = options.requestTimeoutMs ?? REQUEST_WAIT_MS;
   const out = options.stdout ?? process.stdout;
+  const err = options.stderr ?? process.stderr;
+  const diagnostics: string[] = [];
+  let incomplete = false;
+  const report = (message: string) => {
+    const line = redact(message);
+    diagnostics.push(line);
+    err.write(`${line}\n`);
+  };
   let token = options.memberToken;
   const signIn = options.signIn;
   if (!token && signIn) token = await memberTokenFromAuth(signIn, send);
-  const queryCount =
-    options.queryCount ??
-    (options.databaseUrl
-      ? (text: string, values: readonly string[]) => defaultQueryCount(options.databaseUrl!, text, values)
-      : undefined);
 
   const ownedBrowser = options.browser === undefined;
   const browser = options.browser ?? (await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] }));
   const results: SectionResult[] = [];
+  let seedCounter: ReturnType<typeof createSeedCounter> | undefined;
   try {
+    seedCounter = !options.queryCount && options.databaseUrl ? createSeedCounter(options.databaseUrl) : undefined;
+    const queryCount = options.queryCount ?? seedCounter?.queryCount;
+    let sqlInfrastructureFailure: string | undefined;
     const contexts: Record<Persona, BrowserContext> = {
       anonymous: await browser.newContext({ locale: 'en-US' }),
       member: await browser.newContext({
@@ -466,7 +624,7 @@ export async function runPageDataCheck(options: RunOptions): Promise<{ results: 
       if (signIn && !options.memberStorageState) {
         const page = await contexts.member.newPage();
         try {
-          await signInBrowser(page, base, signIn);
+          await signInBrowser(page, base, signIn, pageTimeout);
         } finally {
           await page.close();
         }
@@ -478,40 +636,112 @@ export async function runPageDataCheck(options: RunOptions): Promise<{ results: 
             if (!personasOf(manifestPage).includes(persona)) continue;
             const sections = manifestPage.sections.filter((section) => personasOf(section).includes(persona));
             if (sections.length === 0) continue;
-            await page.goto(new URL(manifestPage.path, base).href, { waitUntil: 'load', timeout });
-            const vars: Record<string, string> = {
-              subject: manifestPage.subject ?? '',
-              GLOBAL: options.manifest.context,
-              QUESTION: options.manifest.question,
-              context: options.manifest.context,
-              question: options.manifest.question,
-              place: options.manifest.context,
-            };
-            for (const section of sections) {
-              if (section.property) vars.property = section.property;
-              if (section.kind) vars.kind = section.kind;
-              const native = await nativeCall(
-                kernel,
-                section.native,
-                vars,
-                persona === 'member' ? token : undefined,
-                send,
-              );
+            let navigationTimedOut = false;
+            try {
+              await page.goto(new URL(manifestPage.path, base).href, { waitUntil: 'load', timeout: pageTimeout });
+            } catch (error) {
+              if (!isTimeout(error)) throw error;
+              navigationTimedOut = true;
+              incomplete = true;
+              report(`Page navigation timed out for ${manifestPage.id} ${persona}; continuing bounded section coverage`);
+            }
+
+            const evaluateSection = async (section: ManifestSection): Promise<SectionResult> => {
+              const vars: Record<string, string> = {
+                subject: manifestPage.subject ?? '',
+                GLOBAL: options.manifest.context,
+                QUESTION: options.manifest.question,
+                context: options.manifest.context,
+                question: options.manifest.question,
+                place: options.manifest.context,
+                ...(section.property ? { property: section.property } : {}),
+                ...(section.kind ? { kind: section.kind } : {}),
+              };
+              vars.filter = section.native.query?.filter ? expand(section.native.query.filter, vars) : NIL_UUID;
+              let actionFailed = false;
+              if (section.native.action) {
+                try {
+                  await clickSectionAction(page, section, readerTimeout);
+                } catch (error) {
+                  if (!isTimeout(error)) throw error;
+                  incomplete = true;
+                  actionFailed = true;
+                  report(`Reader action timed out for ${manifestPage.id} ${persona} ${section.id}`);
+                }
+              }
+              const [native, read] = await Promise.all([
+                nativeCall(kernel, section.native, vars, persona === 'member' ? token : undefined, send, requestTimeout),
+                observeSection(page, section, readerTimeout),
+              ]);
               let seedCount: number | null = null;
               if (section.sql) {
-                if (!queryCount) throw new Error(`Section ${section.id} needs a database URL for its seed count`);
                 const bound = bindSql(section.sql, vars);
-                seedCount = await queryCount(bound.text, bound.values);
+                if (!queryCount) {
+                  incomplete = true;
+                  report(`SQL seed count unavailable for ${manifestPage.id} ${persona} ${section.id}: no database URL`);
+                } else if (sqlInfrastructureFailure) {
+                  incomplete = true;
+                  report(`SQL seed count not retried for ${manifestPage.id} ${persona} ${section.id}: ${sqlInfrastructureFailure}`);
+                } else {
+                  try {
+                    seedCount = await queryCount(bound.text, bound.values);
+                  } catch (error) {
+                    incomplete = true;
+                    sqlInfrastructureFailure = displayError(error);
+                    report(`SQL seed count failed for ${manifestPage.id} ${persona} ${section.id}: ${sqlInfrastructureFailure}`);
+                  }
+                }
               }
-              const observed = await observeSection(page, section);
-              const classified = classifySection(native, observed, section.native.items, seedCount);
+              if (native.error) report(`${manifestPage.id} ${persona} ${section.id}: ${native.error}`);
+              if (read.timedOut) {
+                incomplete = true;
+                report(`Reader readiness timed out for ${manifestPage.id} ${persona} ${section.id}`);
+              }
+              const observed = actionFailed || navigationTimedOut ? { ...read.observation, busy: true } : read.observation;
+              const classified = classifySection(
+                native,
+                observed,
+                section.native.items,
+                seedCount,
+                section.sql !== undefined,
+                section.native.admission,
+              );
               const result: SectionResult = {
                 page: manifestPage.id,
                 persona,
                 section: section.id,
                 name: section.name,
                 class: classified,
+                evidence: {
+                  nativeStatus: native.status,
+                  nativeItems:
+                    section.native.admission === undefined
+                      ? countItems(pointer(native.body, section.native.items))
+                      : nativeKind(native, section.native.items, section.native.admission) === 'data'
+                        ? 1
+                        : 0,
+                  pageItems: observed.itemCount,
+                  reader: pageKind(observed),
+                  seedCount,
+                  seedExpected: section.sql !== undefined,
+                },
               };
+              if (native.error) incomplete ||= native.status === 0;
+              if (DEFECTS.has(classified)) {
+                report(
+                  `Evidence ${manifestPage.id} ${persona} ${section.id}: native=${native.status} selected=${result.evidence.nativeItems}; reader=${pageKind(observed)} items=${observed.itemCount} state=${observed.dataState ?? 'none'} busy=${observed.busy}; ${section.sql ? `SQL=${seedCount ?? 'unavailable'}` : 'SQL=not-declared'}`,
+                );
+              }
+              return result;
+            };
+
+            const independent = sections.filter((section) => !section.native.action);
+            const activated = sections.filter((section) => section.native.action);
+            const evaluated = await Promise.all(independent.map(evaluateSection));
+            for (const section of activated) evaluated.push(await evaluateSection(section));
+            const byId = new Map(evaluated.map((result) => [result.section, result]));
+            for (const section of sections) {
+              const result = byId.get(section.id)!;
               results.push(result);
               out.write(`${formatLine(result)}\n`);
             }
@@ -524,9 +754,18 @@ export async function runPageDataCheck(options: RunOptions): Promise<{ results: 
       await Promise.all(Object.values(contexts).map((context) => context.close()));
     }
   } finally {
-    if (ownedBrowser) await browser.close();
+    try {
+      if (ownedBrowser) await browser.close();
+    } finally {
+      await seedCounter?.close();
+    }
   }
-  return { results, defects: results.filter((result) => DEFECTS.has(result.class)).length };
+  return {
+    results,
+    defects: results.filter((result) => DEFECTS.has(result.class)).length,
+    incomplete,
+    diagnostics,
+  };
 }
 
 export function parseArgs(argv: readonly string[]): {
@@ -567,9 +806,9 @@ async function main(argv: readonly string[]): Promise<number> {
     const manifestPath = isAbsolute(args.manifest) ? args.manifest : resolve(args.manifest);
     const databaseUrl = args.databaseUrl ?? process.env.DATABASE_URL ?? databaseUrlFromEnv(DEFAULT_KERNEL_ENV);
     const memberToken = args.memberToken ?? process.env.PAGE_DATA_CHECK_MEMBER_TOKEN;
-    const signIn = memberToken ? undefined : localSignIn();
+    const signIn = localSignIn();
     if (signIn && args.authOrigin) signIn.origin = args.authOrigin;
-    const { defects } = await runPageDataCheck({
+    const { defects, incomplete } = await runPageDataCheck({
       baseUrl: args.baseUrl,
       kernel: args.kernel,
       manifest: loadManifest(manifestPath),
@@ -578,7 +817,7 @@ async function main(argv: readonly string[]): Promise<number> {
       ...(args.memberStorageState ? { memberStorageState: args.memberStorageState } : {}),
       ...(signIn ? { signIn } : {}),
     });
-    return defects > 0 ? 1 : 0;
+    return defects > 0 ? 1 : incomplete ? 2 : 0;
   } catch (error) {
     process.stderr.write(`${redact(error instanceof Error ? error.message : String(error))}\n`);
     return 2;
