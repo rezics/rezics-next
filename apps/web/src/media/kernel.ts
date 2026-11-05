@@ -147,7 +147,9 @@ export async function readAvatarUploadAdvice(
   credential: string | null,
   viewerId: string,
 ): Promise<AvatarUploadAdvice> {
-  const result = await client.media['avatar-upload-advice'].get({ headers: viewerHeaders(credential) });
+  const result = (await Reflect.get(client.media, 'avatar-upload-advice').get({
+    headers: viewerHeaders(credential),
+  })) as { data?: unknown; error?: { value: unknown; status: number }; headers?: HeadersInit };
   if (result.error) throwClientError(result.error, result.headers);
   const advice = parseAvatarUploadAdvice(result.data, viewerId);
   if (!advice) throw dependencyUnavailable();
