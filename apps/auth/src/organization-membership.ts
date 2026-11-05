@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import * as contract from '@rezics/auth-contract';
-import { authPost } from './api';
+import { sendAccountOperation } from './account-operation-command';
+import { submitSignIn } from './sign-in-transport';
 import { readJsonBounded } from './private-auth-json';
 import { parseAccountSession } from './account-session';
 import { trustedSecurityResponseConfiguration } from './security-response-config';
@@ -437,7 +438,6 @@ function outcome(status: number, code: string): MembershipOutcome {
   if (status === 401 && code === 'step_up_required') return 'step-up';
   if (status === 409) return 'conflict';
   if (status === 401 || status === 403) return 'denied';
-  if (status === 202 || code === 'preparing') return 'preparing';
   return 'unavailable';
 }
 /** Persist before dispatch. A lost execute response keeps the same immutable
@@ -448,6 +448,7 @@ export async function submitMembership(
   isActive: () => boolean = () => true,
 ): Promise<MembershipOutcome> {
   if (!isActive() || !validCommand(command)) return 'denied';
+  const original = { ...command };
   const session = await loadAccountSession();
   if (!isActive()) return 'unavailable';
   if (!membershipSessionMatches(session, command.accountId)) return 'denied';
@@ -464,44 +465,52 @@ export async function submitMembership(
     if (!isActive()) return 'unavailable';
     if (current.kind !== 'ready') return current.kind === 'denied' ? 'denied' : 'unavailable';
     if ((current.membership?.reservationId ?? undefined) !== command.operation.reservationId) return 'conflict';
-    const approved = await authPost<unknown>('/account-operations/approve', {
+    const approved = await sendAccountOperation(
+      'approve',
+      { accountId: command.accountId, operationKey: command.operationKey, operation: command.operation },
+      contract.MEMBERSHIP_APPROVAL_MAX_RESPONSE_BYTES,
+      contract.parseMembershipApprovalResponse,
+      isActive,
+    );
+    if (!isActive()) return 'unavailable';
+    if (approved.kind === 'refused') return outcome(approved.status, approved.value.error);
+    if (approved.kind !== 'received' || Date.parse(approved.value.expiresAt) <= Date.now()) return 'unavailable';
+    command.reference = approved.value.reference;
+  }
+  // Preserve the original marker before dispatch, and never overwrite a replaced review.
+  const earlierUnknown = command.unresolved;
+  let dispatched = false;
+  if (!sameMembershipCommand(readMembershipCommand(), original)) return earlierUnknown ? 'unknown' : 'unavailable';
+  const executed = await sendAccountOperation(
+    'execute',
+    {
       accountId: command.accountId,
       operationKey: command.operationKey,
       operation: command.operation,
-    });
-    if (!isActive()) return 'unavailable';
-    if (!approved.ok) return outcome(approved.status, approved.code);
-    if (
-      !record(approved.body) ||
-      !closed(approved.body, ['reference', 'expiresAt']) ||
-      !text(approved.body.reference) ||
-      typeof approved.body.expiresAt !== 'string' ||
-      Date.parse(approved.body.expiresAt) <= Date.now() ||
-      !Number.isFinite(Date.parse(approved.body.expiresAt))
-    )
-      return 'unavailable';
-    command.reference = approved.body.reference;
+      reference: command.reference,
+    },
+    contract.MEMBERSHIP_EXECUTION_MAX_RESPONSE_BYTES,
+    contract.parseMembershipExecutionResponse,
+    () => {
+      if (!isActive()) return false;
+      command.unresolved = true;
+      if (!saveMembershipCommand(command)) return false;
+      dispatched = true;
+      return true;
+    },
+  );
+  if (!dispatched) return earlierUnknown ? 'unknown' : 'unavailable';
+  if (executed.kind === 'received')
+    return executed.value.accountId === command.operation.memberAccountId ? 'acknowledged' : 'unknown';
+  if (executed.kind === 'unavailable') return 'unknown';
+  // This refusal establishes only this dispatch's effect. Earlier lost execution
+  // stays unresolved, independently of the latest refusal shown by the mounted page.
+  if (!earlierUnknown) {
+    const pending = { ...command };
+    command.unresolved = false;
+    if (sameMembershipCommand(readMembershipCommand(), pending)) saveMembershipCommand(command);
   }
-  // Only undispatched browser stages end with the page. Once execute starts,
-  // retain its original command regardless of navigation or a lost response.
-  command.unresolved = true;
-  if (!saveMembershipCommand(command)) return 'unavailable';
-  const executed = await authPost<unknown>('/account-operations/execute', {
-    accountId: command.accountId,
-    operationKey: command.operationKey,
-    operation: command.operation,
-    reference: command.reference,
-  });
-  if (!executed.ok) {
-    // Even a later refusal cannot disprove an earlier lost execution.
-    if (executed.status >= 500) return 'unknown';
-    return outcome(executed.status, executed.code);
-  }
-  return record(executed.body) &&
-    closed(executed.body, ['accountId']) &&
-    executed.body.accountId === command.operation.memberAccountId
-    ? 'acknowledged'
-    : 'unknown';
+  return outcome(executed.status, executed.value.error);
 }
 
 /** Fresh native sign-in only establishes the exact initiating human/profile.
@@ -526,7 +535,7 @@ export async function reauthenticateMembershipSession(
 ): Promise<boolean> {
   const profile = membershipProfile();
   if (!isActive() || !profile) return false;
-  const response = await authPost('/signin', { email, password, ...profile });
+  const response = await submitSignIn('/signin', { email, password, ...profile }, profile);
   if (!isActive() || !response.ok) return false;
   const session = await loadAccountSession();
   return isActive() && membershipSessionMatches(session, accountId);

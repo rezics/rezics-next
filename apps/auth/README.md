@@ -1009,6 +1009,19 @@ or replaces an unresolved command.
 
 Membership departure, all page navigation and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss retires private details while keeping the generic unknown and its guard. Restore exact details only after the initiating account explicitly rereads current page advice and the selected reservation. One read-only recovery review is capped at four native requests (session, page session, page, selected member); exact retry rechecks session and selected member before one execute. Reauthentication remains in-page and secrets remain ephemeral.
 
+Decision: approval and execution use the shared bounded account-operation POST receiver, with separate
+closed membership parsers and one five-second headers/body allowance per existing POST. Approval's byte
+ceiling is `JSON.stringify({ reference: '', expiresAt: '' }).length + 6 × (4,096 + 27)`;
+execution's is `JSON.stringify({ accountId: '' }).length + 6 × 4,096`. These cover opaque native
+identifiers, supported locator spelling, canonical extended-year ISO dates and JSON escaping;
+stored command and roster bounds stay separate. Errors use the shared closed error/effect ceiling.
+Only exact selected-member acknowledgement proves this command's success. Closed native
+status/error/not-applied refusals describe only this dispatch; malformed, excess, timed-out or
+wrong-member execution output remains unknown. Earlier unknown remains independent of a refused exact
+retry or later acknowledgement. A replaced stored review cannot be overwritten during approval or
+cleared by the original result. Fresh authentication uses the sign-in owner's fixed-profile receiver,
+then the existing session observation, resets confirmation and never dispatches membership.
+
 Mounted membership return keeps the first generic unknown and the latest local interruption or native result,
 at most two classifications, independently of current membership. A native acknowledgement is recorded before
 readback and survives an unavailable or subsequently changed membership. Matching state, absence and later native

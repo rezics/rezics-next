@@ -3048,6 +3048,26 @@ nullable labels and cursor. Selected is the longest present membership with thre
 UUIDs and role `member`; null is shorter. Native viewer identity is not newly UUID-qualified;
 the browser retains its existing UUID selection restriction. Invalid or excess dependency
 output returns unavailable, without truncation, fabricated absence or new action advice.
+Membership command approval is a separate closed `{ reference, expiresAt }` response:
+`JSON.stringify({ reference: '', expiresAt: '' }).length + 6 × (4,096 + 27)` bytes.
+Native locator references retain their supported ASCII spelling (including sealed references),
+and canonical ISO dates permit extended years. Execution is closed `{ accountId }`:
+`JSON.stringify({ accountId: '' }).length + 6 × 4,096` bytes, preserving opaque native IDs.
+Six bytes per UTF-16 unit cover JSON escaping, including temporal strings; browser selected
+IDs retain their UUID restriction. Errors use the shared maximum of the two closed
+`{ error: account_operation_denied | step_up_required, effect_status: not_applied }` variants.
+Only the native transport's matching status/error/effect envelope proves a refusal. A generic
+409 says nothing about last-holder protection. After membership workflow dispatch, an exception
+returns unavailable without a not-applied claim because publication or inverse cleanup may have run.
+
+Decision: membership uses the shared account-operation POST lifetime and its own native projection,
+with one five-second allowance through headers/body and bounded bytes before parsing. Timeout,
+malformed output and wrong-member acknowledgement leave execution unknown; they never cancel native
+work or retry it. This adds zero requests: fresh submit is session, selected preparation, approval,
+execute (four), then selected observation, page session and page (three); exact retry omits approval
+(three plus three). Read-only recovery remains at most four; sign-in/session then explicit review
+keeps its existing cost. Native internal typed calls and authorization remain authoritative.
+
 Native roster and selected deadlines remain eight and three seconds; exact fresh human
 profile and current proof revalidation remain in their native owners. Browser receiving uses
 one five-second allowance through preflight and body, with no timer reset or automatic retry.
