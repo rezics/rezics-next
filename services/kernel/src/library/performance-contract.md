@@ -384,7 +384,7 @@ withheld and discarded rows remain charged. Only the actual distinct-release loo
 
 Native suites retain maximum filtered-page continuation, sparse/current-profile withholding, exact Undo, replacement
 and expiry assertions. Added causal checks cover source/profile change during preparation, the ordinary empty update
-and lost-delete-ack replay. These declarations are not native evidence; integration retains the named Copy, five
+and the mounted physical state/condition, filtered inventory, lost-delete-ack and exact Undo journey. These declarations are not native evidence; integration retains the named Copy, five
 Search and root acceptance with `acceptance.failing=true`. Entry lifecycle, imports, loans/archive and scheduled
 retention retain their existing owners; this composition introduces no scheduler or public edge.
 
