@@ -172,10 +172,12 @@ async function selectNameCandidates(
   const head = (page.body.adoption as { head: number } | null)?.head ?? null;
   for (const candidate of accept)
     expect(
-      (await editor.http(`/v1/subjects/${subjectId}/candidates/${candidate.id}:accept`, {
-        context: globalContext,
-        expected_head: null,
-      })).status,
+      (
+        await editor.http(`/v1/subjects/${subjectId}/candidates/${candidate.id}:accept`, {
+          context: globalContext,
+          expected_head: null,
+        })
+      ).status,
     ).toBe(200);
   expect(
     (
@@ -193,11 +195,12 @@ async function selectNameCandidates(
 async function publicNames(editor: Awaited<ReturnType<typeof openApiObserver>>, subjectId: string) {
   const current = await editor.http(`/v1/subjects/${subjectId}?context=${globalContext}`);
   expect(current.status).toBe(200);
-  const statements = (
-    current.body.subject as {
-      statements: Record<string, { value: { content: unknown }; references: unknown[] }[]>;
-    }
-  ).statements['schema:name'] ?? [];
+  const statements =
+    (
+      current.body.subject as {
+        statements: Record<string, { value: { content: unknown }; references: unknown[] }[]>;
+      }
+    ).statements['schema:name'] ?? [];
   return statements.map((statement) => statement.value.content);
 }
 
@@ -322,10 +325,12 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     const nameCandidates = await candidates(editor, personId, 'schema:name');
     expect(nameCandidates).toHaveLength(2);
     const originalName = nameCandidates.find(
-      (candidate) => JSON.stringify(candidate.statement.value.content) === JSON.stringify({ language: 'und', text: '星見' }),
+      (candidate) =>
+        JSON.stringify(candidate.statement.value.content) === JSON.stringify({ language: 'und', text: '星見' }),
     );
     const originalChineseName = nameCandidates.find(
-      (candidate) => JSON.stringify(candidate.statement.value.content) === JSON.stringify({ language: 'zh', text: '星見中文' }),
+      (candidate) =>
+        JSON.stringify(candidate.statement.value.content) === JSON.stringify({ language: 'zh', text: '星見中文' }),
     );
     expect(originalName?.source).toMatchObject({ source: alias, external_id: 'person:8101', field_group: 'facts' });
     expect(originalChineseName?.statement.references?.[0]?.parts).toContainEqual({
@@ -502,8 +507,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     const refreshedNames = await candidates(editor, personId, 'schema:name');
     const refreshedChineseName = refreshedNames.find(
       (candidate) =>
-        JSON.stringify(candidate.statement.value.content) ===
-        JSON.stringify({ language: 'zh', text: '星見中文 改' }),
+        JSON.stringify(candidate.statement.value.content) === JSON.stringify({ language: 'zh', text: '星見中文 改' }),
     );
     expect(refreshedChineseName).toBeDefined();
     const currentBeforeNameSelection = await publicNames(editor, personId);

@@ -50,8 +50,7 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
           return Response.json({ access_token: `PERSON_TOKEN_${sequence}`, token_type: 'Bearer', expires_in: 300 });
         return new Response('', { status: 404 });
       }
-      if (url.pathname === '/v1/sourceFences:check')
-        return Response.json({ fenced: false, securityRevision: null });
+      if (url.pathname === '/v1/sourceFences:check') return Response.json({ fenced: false, securityRevision: null });
       if (url.pathname === '/v1/source-records:setMetadata') {
         const body = (await request.json()) as { metadata: Record<string, unknown> };
         return Response.json({ record: body.metadata, metadata_revision: 1, effect: 'filled' }, { status: 201 });
@@ -80,8 +79,24 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
     }) as unknown as typeof globalThis.fetch;
     const result = await runImportCli(
       [
-        '--source', 'bangumi', '--source-alias', 'bangumi_cross_media', '--dump', '-', '--state', state,
-        '--api', origin, '--auth', auth, '--account-key', keyPath, '--account', randomUUID(), '--client', 'person-names',
+        '--source',
+        'bangumi',
+        '--source-alias',
+        'bangumi_cross_media',
+        '--dump',
+        '-',
+        '--state',
+        state,
+        '--api',
+        origin,
+        '--auth',
+        auth,
+        '--account-key',
+        keyPath,
+        '--account',
+        randomUUID(),
+        '--client',
+        'person-names',
       ],
       {
         stdin: (async function* () {
@@ -103,7 +118,9 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
       { language: 'zh', text: '岸本齐史' },
     ]);
     expect(names.every((command) => command.source.record_revision === 'unversioned')).toBe(true);
-    expect(names.every((command) => command.source.converter_revision === 'cross-media-entities@15+bangumi@15')).toBe(true);
+    expect(names.every((command) => command.source.converter_revision === 'cross-media-entities@15+bangumi@15')).toBe(
+      true,
+    );
     expect(sent.some((command) => command.op === 'retract')).toBe(false);
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -114,9 +131,16 @@ test('PersonDetail TSV binds the requested type-1 identity and never promotes ET
   const parse = async (record: Record<string, unknown>, key = 'person:641') => {
     const line = `/type/person\t${key}\tunversioned\t"cache-only"\t${JSON.stringify(record)}\n`;
     const rows = [];
-    for await (const row of readDump('bangumi', (async function* () { yield new TextEncoder().encode(line); })(), {
-      bangumiPersonDetailRows: true,
-    })) rows.push(row);
+    for await (const row of readDump(
+      'bangumi',
+      (async function* () {
+        yield new TextEncoder().encode(line);
+      })(),
+      {
+        bangumiPersonDetailRows: true,
+      },
+    ))
+      rows.push(row);
     return rows[0];
   };
   const actual = JSON.parse(evidence.operatorExample.responseBody) as Record<string, unknown>;

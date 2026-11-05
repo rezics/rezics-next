@@ -59,7 +59,10 @@ test('ordinary selected-family names are separately accepted and read on the ack
     expect(page.status).toBe(200);
     const candidates = page.body.candidates as {
       id: string;
-      statement: { value: { content: unknown }; references?: { parts: { property: { id: string }; value: { content: unknown } }[] }[] };
+      statement: {
+        value: { content: unknown };
+        references?: { parts: { property: { id: string }; value: { content: unknown } }[] }[];
+      };
     }[];
     expect(candidates.map(({ statement }) => statement.value.content)).toEqual([
       { language: 'und', text: '美甘義人' },

@@ -33,7 +33,8 @@ test('the default selected Person shares one bounded PersonDetail response for c
   expect(createHash('sha256').update(selection.responseBody).digest('hex')).toBe(selection.responseSha256);
   expect(
     selectedRows.some(
-      ({ id, type, name }) => id === selection.person.id && type === selection.person.type && name === selection.person.name,
+      ({ id, type, name }) =>
+        id === selection.person.id && type === selection.person.type && name === selection.person.name,
     ),
   ).toBe(true);
   expect(createHash('sha256').update(selection.person.responseBody).digest('hex')).toBe(selection.person.detailSha256);
@@ -99,10 +100,12 @@ test('the default selected Person shares one bounded PersonDetail response for c
         }) as unknown as typeof globalThis.fetch,
         sleep: async () => {},
       });
-      expect(replay.entities.bangumi.find(({ key }) => key === `person:${selection.person.id}`)?.payload).toMatchObject({
-        name_cn: '美甘义人',
-        career: ['producer'],
-      });
+      expect(replay.entities.bangumi.find(({ key }) => key === `person:${selection.person.id}`)?.payload).toMatchObject(
+        {
+          name_cn: '美甘义人',
+          career: ['producer'],
+        },
+      );
       expect(replay.personCareerSources).toEqual(acquired.personCareerSources);
       expect(requests).toHaveLength(1);
     } finally {
@@ -153,9 +156,7 @@ test('spoofed, absent and over-bound PersonDetail names preserve each independen
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
         command.op === 'propose' && command.statement.property.id === 'schema:name',
     );
-    expect(names.map(valueContent)).toEqual([
-      { language: 'und', text: `Original ${payload.id}` },
-    ]);
+    expect(names.map(valueContent)).toEqual([{ language: 'und', text: `Original ${payload.id}` }]);
   }
   expect(acquired.gaps).toContainEqual(
     expect.objectContaining({ externalId: 'person:644', property: 'schema:name', fields: ['person.name_cn'] }),

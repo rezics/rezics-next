@@ -19,14 +19,8 @@ import {
   parseBangumiCharacterInfoboxNames,
 } from './bangumi-character-names.ts';
 import { projectBangumiPersonName } from './bangumi-person-names.ts';
-export {
-  bangumiPersonNameLimits,
-  projectBangumiPersonName,
-} from './bangumi-person-names.ts';
-export type {
-  BangumiPersonNameDiagnostic,
-  BangumiPersonNameProjection,
-} from './bangumi-person-names.ts';
+export { bangumiPersonNameLimits, projectBangumiPersonName } from './bangumi-person-names.ts';
+export type { BangumiPersonNameDiagnostic, BangumiPersonNameProjection } from './bangumi-person-names.ts';
 import {
   canonicalLanguageTag,
   commandKey,
@@ -1774,10 +1768,7 @@ function convert(
     Object.entries(projected.labels).map(([language, value]) => ({ language, text: value }));
   const nameStatements = names.map((name) => {
     const statement = fact('schema:name', name);
-    if (
-      kind === 'bangumi-person' &&
-      checkStatementInput(statement, bundledRelease).violations.length > 0
-    )
+    if (kind === 'bangumi-person' && checkStatementInput(statement, bundledRelease).violations.length > 0)
       fail('/name', 'invalid_source_name_statement');
     return statement;
   });

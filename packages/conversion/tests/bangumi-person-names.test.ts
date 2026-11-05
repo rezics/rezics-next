@@ -61,7 +61,11 @@ test('PersonDetail infobox name reaches cited Person statements with the origina
   expect(proposals[0]?.source.digest).not.toBe(
     convert({ ...record, infobox: [{ key: '简体中文名', value: '岸本斉史' }] }).digest,
   );
-  expect(convert(record).proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:alternateName')).toBe(false);
+  expect(
+    convert(record).proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:alternateName',
+    ),
+  ).toBe(false);
   const organization = convertCrossMediaEntity(
     { external_id: 'person:641', record_revision: null, record: { ...record, type: 2 } },
     { source: 'bangumi_cross_media' },
@@ -88,12 +92,13 @@ test('ambiguous or invalid Chinese values are withheld without dropping an indep
   }
 
   for (const infobox of [
-    [{ key: '简体中文名', value: '甲' }, { key: '简体中文名', value: '乙' }],
+    [
+      { key: '简体中文名', value: '甲' },
+      { key: '简体中文名', value: '乙' },
+    ],
     Array.from({ length: 65 }, (_, index) => ({ key: index === 64 ? '简体中文名' : 'unknown', value: '越界' })),
   ])
-    expect(names(convert({ ...base, infobox })).map(valueContent)).toEqual([
-      { language: 'und', text: '原名' },
-    ]);
+    expect(names(convert({ ...base, infobox })).map(valueContent)).toEqual([{ language: 'und', text: '原名' }]);
 
   expect(
     names(convert({ ...base, name_cn: '甲', infobox: [{ key: '简体中文名', value: '乙' }] })).map(valueContent),
@@ -104,9 +109,7 @@ test('ambiguous or invalid Chinese values are withheld without dropping an indep
     { language: 'und', text: '原名' },
     { language: 'zh', text: '甲' },
   ]);
-  expect(names(convert({ ...base })).map(valueContent)).toEqual([
-    { language: 'und', text: '原名' },
-  ]);
+  expect(names(convert({ ...base })).map(valueContent)).toEqual([{ language: 'und', text: '原名' }]);
   const duplicate = projectBangumiPersonName(undefined, false, [
     { key: '简体中文名', value: '甲' },
     { key: '简体中文名', value: '甲' },

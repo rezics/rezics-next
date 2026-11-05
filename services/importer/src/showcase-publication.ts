@@ -457,7 +457,9 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       return prior;
     }
     this.#db
-      .query('INSERT INTO showcase_person_career_source(source_alias,external_id,archive_digest,response_digest,source_json) VALUES(?,?,?,?,?)')
+      .query(
+        'INSERT INTO showcase_person_career_source(source_alias,external_id,archive_digest,response_digest,source_json) VALUES(?,?,?,?,?)',
+      )
       .run(source.sourceAlias, source.externalId, source.archiveDigest, source.responseDigest!, body);
     return source;
   }

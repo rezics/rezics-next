@@ -316,11 +316,7 @@ export async function* readDump(
               return invalid();
             payload = object(json!);
             const requestedId = Number(id!.slice('person:'.length));
-            if (
-              !Number.isSafeInteger(requestedId) ||
-              payload.id !== requestedId ||
-              payload.type !== 1
-            )
+            if (!Number.isSafeInteger(requestedId) || payload.id !== requestedId || payload.type !== 1)
               return invalid();
             key = id!;
             revision = null;

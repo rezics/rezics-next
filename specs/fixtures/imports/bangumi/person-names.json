@@ -7,11 +7,7 @@
   },
   "defaultSelection": {
     "owner": "scripts/datasets/cross-media-seed.ts",
-    "selectedBangumiSubjects": [
-      10380,
-      84148,
-      51
-    ],
+    "selectedBangumiSubjects": [10380, 84148, 51],
     "rootSubject": 10380,
     "sourceUrl": "https://api.bgm.tv/v0/subjects/10380/persons",
     "responseSha256": "978ac452e7f194f9abadcfef1933c4d483dd96db6d9efe8dc375eace84853983",

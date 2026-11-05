@@ -57,9 +57,7 @@ export function projectBangumiPersonName(
   };
   if (
     recordBytes !== undefined &&
-    (!Number.isSafeInteger(recordBytes) ||
-      recordBytes < 0 ||
-      recordBytes > bangumiPersonNameLimits.maxRecordBytes)
+    (!Number.isSafeInteger(recordBytes) || recordBytes < 0 || recordBytes > bangumiPersonNameLimits.maxRecordBytes)
   ) {
     add('/infobox', 'person_detail_record_byte_limit');
     return { diagnostics };
@@ -70,11 +68,7 @@ export function projectBangumiPersonName(
   let infoboxName: string | undefined;
   let infoboxAmbiguous = false;
   if (infoboxPresent) {
-    if (
-      utilTypes.isProxy(infobox) ||
-      !Array.isArray(infobox) ||
-      Object.getPrototypeOf(infobox) !== Array.prototype
-    ) {
+    if (utilTypes.isProxy(infobox) || !Array.isArray(infobox) || Object.getPrototypeOf(infobox) !== Array.prototype) {
       add('/infobox', 'invalid_infobox_type');
     } else {
       const length = Object.getOwnPropertyDescriptor(infobox, 'length')?.value;

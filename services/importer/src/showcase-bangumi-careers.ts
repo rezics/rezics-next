@@ -71,9 +71,9 @@ function admittedCareers(value: unknown): string[] | undefined {
   return [...new Set(value as string[])];
 }
 
-function personImage(value: unknown):
-  | { personImageStatus: 'available'; personImageUrl: string }
-  | { personImageStatus: 'absent' | 'invalid' } {
+function personImage(
+  value: unknown,
+): { personImageStatus: 'available'; personImageUrl: string } | { personImageStatus: 'absent' | 'invalid' } {
   if (value === undefined || value === null) return { personImageStatus: 'absent' };
   const images = object(value);
   if (!images || ['large', 'medium', 'small', 'grid'].some((size) => typeof images[size] !== 'string'))
@@ -87,8 +87,7 @@ function personImage(value: unknown):
     if (error instanceof TypeError) return { personImageStatus: 'invalid' };
     throw error;
   }
-  if (/\/no_icon_(?:person|subject)\./iu.test(new URL(sourceUrl).pathname))
-    return { personImageStatus: 'absent' };
+  if (/\/no_icon_(?:person|subject)\./iu.test(new URL(sourceUrl).pathname)) return { personImageStatus: 'absent' };
   return { personImageStatus: 'available', personImageUrl: sourceUrl };
 }
 
@@ -117,7 +116,8 @@ function receipt(source: BangumiPersonCareerSource, row: SourceRecord): BangumiP
     (source.personImageStatus !== undefined &&
       (!['available', 'absent', 'invalid'].includes(source.personImageStatus) ||
         (source.personImageStatus === 'available' &&
-          (typeof source.personImageUrl !== 'string' || safeSourceUrl(source.personImageUrl, ['lain.bgm.tv']) !== source.personImageUrl)))) ||
+          (typeof source.personImageUrl !== 'string' ||
+            safeSourceUrl(source.personImageUrl, ['lain.bgm.tv']) !== source.personImageUrl)))) ||
     (source.personNameDiagnostics !== undefined &&
       (!Array.isArray(source.personNameDiagnostics) ||
         source.personNameDiagnostics.length > 16 ||
@@ -287,7 +287,8 @@ export async function acquireBangumiPersonCareerSources(
         undefined,
         false,
       ).chineseName;
-      payload.name_cn = archiveName !== undefined && archiveName !== source.personChineseName ? null : source.personChineseName;
+      payload.name_cn =
+        archiveName !== undefined && archiveName !== source.personChineseName ? null : source.personChineseName;
       if (archiveName !== undefined && archiveName !== source.personChineseName)
         gaps.push({
           source: 'bangumi',

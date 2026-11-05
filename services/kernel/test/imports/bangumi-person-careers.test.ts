@@ -162,7 +162,9 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
         const response = await runtime.importTransport.batch(request);
         if (
           loseNameReply &&
-          request.commands.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:name')
+          request.commands.some(
+            (command) => command.op === 'propose' && command.statement.property.id === 'schema:name',
+          )
         ) {
           loseNameReply = false;
           throw new Error('name proposal response lost after send');
@@ -219,8 +221,9 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       { language: 'und', text: '星見' },
       { language: 'zh', text: '星見中文' },
     ]);
-    expect(statements(await publicClient.readSubject(personId))['schema:name']?.map(({ value }) => value.content) ?? [])
-      .not.toContainEqual({ language: 'zh', text: '星見中文' });
+    expect(
+      statements(await publicClient.readSubject(personId))['schema:name']?.map(({ value }) => value.content) ?? [],
+    ).not.toContainEqual({ language: 'zh', text: '星見中文' });
 
     const schemes = await prepareShowcaseBangumiSelectedCharacterVocabulary({ plan, port, journal, stage: 'schemes' });
     expect(schemes.requirements.map(({ sourceUri }) => sourceUri)).toContain(
