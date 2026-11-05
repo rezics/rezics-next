@@ -166,7 +166,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
     ...options,
     enabled:
       mode !== 'initial-hydration' &&
-      (!selectedRealm || (reader.canRead && state !== 'unknown' && state !== 'unavailable')) &&
+      (!selectedRealm ? !loaderResult : reader.canRead && state !== 'unknown' && state !== 'unavailable') &&
       !retryController.shouldSuppressAutomaticRead(queryIdentity),
     ...(loaderResult ? { initialData: loaderResult, initialDataUpdatedAt: Date.now() } : {}),
   });

@@ -601,76 +601,74 @@ test('Default composed member recovery admits only its live reader and preserves
       expect(window.document.activeElement).toBe(freshTrigger);
     }
 
-    {
-      // A→B→A is a new reading incarnation. The first A failure cannot change the replacement A while it continues.
-      locale = 'en';
-      cacheReader = 'reader-one';
-      context = {
-        id: '00000000-0000-8000-8000-000000000011',
-        population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000012', title: 'Context A' },
-      };
-      await setReader('reader-one');
-      initial = { ...initial, next: 'aba-cursor' };
-      await render();
-      const retiredA = holdFailure();
-      await press();
-      context = {
-        id: '00000000-0000-8000-8000-000000000021',
-        population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000022', title: 'Context B' },
-      };
-      cacheReader = 'reader-two';
-      await setReader('reader-two');
-      await render();
-      context = {
-        id: '00000000-0000-8000-8000-000000000011',
-        population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000012', title: 'Context A' },
-      };
-      cacheReader = 'reader-one';
-      await setReader('reader-one');
-      await render();
-      const replacementTrigger = button();
-      replacementTrigger.focus();
-      const currentA = hold();
-      await press(replacementTrigger);
-      expect(
-        nativeCalls.slice(-2).map(({ input, authorization, context: currentContext }) => ({
-          node: input.continuation?.node,
-          cursor: input.continuation?.cursor,
-          authorization,
-          context: currentContext?.id,
-          populationId: currentContext?.population.kind === 'realm' ? currentContext.population.id : undefined,
-        })),
-      ).toEqual([
-        {
-          node: 'members',
-          cursor: 'aba-cursor',
-          authorization: 'Bearer native-reader-one',
-          context: '00000000-0000-8000-8000-000000000011',
-          populationId: '00000000-0000-8000-8000-000000000012',
-        },
-        {
-          node: 'members',
-          cursor: 'aba-cursor',
-          authorization: 'Bearer native-reader-one',
-          context: '00000000-0000-8000-8000-000000000011',
-          populationId: '00000000-0000-8000-8000-000000000012',
-        },
-      ]);
-      await act(async () => {
-        retiredA(new Error('Retired reader failed'));
-      });
-      await flush();
-      expect(status().textContent).toBe('Loading more…');
-      expect(list().textContent).not.toContain('The Little Prince');
-      expect(window.document.activeElement).toBe(replacementTrigger);
-      await act(async () => {
-        currentA(page([recording.members[0]!, recording.members[2]!], 'current-a-next'));
-      });
-      await flush();
-      expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
-      expect(list().textContent).toContain('The Little Prince');
-      expect(window.document.activeElement).toBe(replacementTrigger);
-    }
+    // A→B→A is a new reading incarnation. The first A failure cannot change the replacement A while it continues.
+    locale = 'en';
+    cacheReader = 'reader-one';
+    context = {
+      id: '00000000-0000-8000-8000-000000000011',
+      population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000012', title: 'Context A' },
+    };
+    await setReader('reader-one');
+    initial = { ...initial, next: 'aba-cursor' };
+    await render();
+    const retiredContinuationA = holdFailure();
+    await press();
+    context = {
+      id: '00000000-0000-8000-8000-000000000021',
+      population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000022', title: 'Context B' },
+    };
+    cacheReader = 'reader-two';
+    await setReader('reader-two');
+    await render();
+    context = {
+      id: '00000000-0000-8000-8000-000000000011',
+      population: { kind: 'realm', id: '00000000-0000-8000-8000-000000000012', title: 'Context A' },
+    };
+    cacheReader = 'reader-one';
+    await setReader('reader-one');
+    await render();
+    const replacementTrigger = button();
+    replacementTrigger.focus();
+    const currentContinuationA = hold();
+    await press(replacementTrigger);
+    expect(
+      nativeCalls.slice(-2).map(({ input, authorization, context: currentContext }) => ({
+        node: input.continuation?.node,
+        cursor: input.continuation?.cursor,
+        authorization,
+        context: currentContext?.id,
+        populationId: currentContext?.population.kind === 'realm' ? currentContext.population.id : undefined,
+      })),
+    ).toEqual([
+      {
+        node: 'members',
+        cursor: 'aba-cursor',
+        authorization: 'Bearer native-reader-one',
+        context: '00000000-0000-8000-8000-000000000011',
+        populationId: '00000000-0000-8000-8000-000000000012',
+      },
+      {
+        node: 'members',
+        cursor: 'aba-cursor',
+        authorization: 'Bearer native-reader-one',
+        context: '00000000-0000-8000-8000-000000000011',
+        populationId: '00000000-0000-8000-8000-000000000012',
+      },
+    ]);
+    await act(async () => {
+      retiredContinuationA(new Error('Retired reader failed'));
+    });
+    await flush();
+    expect(status().textContent).toBe('Loading more…');
+    expect(list().textContent).not.toContain('The Little Prince');
+    expect(window.document.activeElement).toBe(replacementTrigger);
+    await act(async () => {
+      currentContinuationA(page([recording.members[0]!, recording.members[2]!], 'current-a-next'));
+    });
+    await flush();
+    expect(status().textContent).toBe('New visible items in Books: 1. You can load more.');
+    expect(list().textContent).toContain('The Little Prince');
+    expect(window.document.activeElement).toBe(replacementTrigger);
     for (const boundary of ['reader', 'context', 'node']) {
       cacheReader = 'reader-one';
       context = {

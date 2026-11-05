@@ -87,7 +87,7 @@ export async function readMemberList(
       ...(input.cursor ? { continuation: { node: input.node, cursor: input.cursor } } : {}),
     },
     {
-      fetch: { redirect: 'manual', signal },
+      fetch: { redirect: 'manual', ...(signal ? { signal } : {}) },
       ...(authorization ? { headers: { authorization } } : {}),
     },
   );
