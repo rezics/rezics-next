@@ -1304,6 +1304,8 @@ export function MangaPublicVisitNotice({
   const origin = visit?.kind === 'origin' ? visit.origin : undefined;
   const returnHref = origin?.returnHref ?? (visit?.kind === 'global' ? visit.returnHref : undefined);
   const unsupported = !!origin && (origin.context !== candidateContext || !!origin.realm);
+  const link =
+    'inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
   return (
     <section className="space-y-3 p-4" aria-label={m.manga_edit({}, o)}>
       {(visit?.kind === 'invalid' || unsupported || changed) && (
@@ -1316,15 +1318,23 @@ export function MangaPublicVisitNotice({
         </p>
       )}
       <div className="flex flex-wrap gap-4">
-        {returnHref && <a href={returnHref}>{m.manga_origin_return({}, o)}</a>}
+        {returnHref && (
+          <a className={link} href={returnHref}>
+            {m.manga_origin_return({}, o)}
+          </a>
+        )}
         {origin && !returnHref && (
           <>
             <p>{m.manga_origin_no_exact_return({}, o)}</p>
-            <a href={subjectHref({ id, label: '' }, locale).href}>{m.manga_origin_general({}, o)}</a>
+            <a className={link} href={subjectHref({ id, label: '' }, locale).href}>
+              {m.manga_origin_general({}, o)}
+            </a>
           </>
         )}
         {(unsupported || changed || visit?.kind === 'invalid') && (
-          <a href={mangaGlobalVisitHref(id, locale, returnHref)}>{m.manga_origin_global({}, o)}</a>
+          <a className={link} href={mangaGlobalVisitHref(id, locale, returnHref)}>
+            {m.manga_origin_global({}, o)}
+          </a>
         )}
       </div>
     </section>
