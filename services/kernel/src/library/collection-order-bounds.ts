@@ -1,9 +1,30 @@
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
-import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import { MEMBERSHIP_LIMIT } from '../access/membership-inverse.ts';
+import { accessNativeDeclaration, type AccessWork } from '../access/work.ts';
+import accountRead from '../access/account-read.sql';
 import accountShare from '../access/account-share.sql';
+import permissionAssignment from '../access/permission-assignment.sql';
+import permissionCandidates from '../access/permission-candidates.sql';
+import permissionCheck from '../access/permission-check.sql';
+import permissionInverse from '../access/permission-inverse.sql';
+import permissionMembership from '../access/permission-membership.sql';
+import permissionTime from '../access/permission-time.sql';
 import eventFence from '../command/fence.sql';
 import noEffectFence from '../command/no-effect-fence.sql';
+import receiptRead from '../command/read-receipt.sql';
 import readTime from '../command/time.sql';
+import { COMMAND_HISTORY_KINDS } from '../history/record.ts';
+import partitionRead from '../partition/read.sql';
+import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import collectionAuthorization from './collection-store-collection-authorization.sql';
+import collectionRead from './collection-store-collection-read.sql';
+import memberInsert from './collection-store-collection-member-insert.sql';
+import memberMove from './collection-store-collection-member-move.sql';
+import memberNeighbors from './collection-store-collection-member-neighbors.sql';
+import memberRead from './collection-store-collection-member-read.sql';
+import membersRespace from './collection-store-collection-members-respace.sql';
+import collectionDefer from './collection-batch-defer.sql';
+import shelfAuthorizedCollection from './shelf-maintenance-authorized-collection.sql';
 import {
   GENERATED_ORDINAL_KEY_LENGTH,
   MAX_ORDINAL_KEY_LENGTH,
@@ -11,6 +32,7 @@ import {
   ORDER_WINDOW_SIZE,
 } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { sessionShelfWork } from './session-operation-bounds.ts';
 
 const zero = (): Bound =>
   declareBound({
@@ -74,8 +96,52 @@ export const COLLECTION_ORDER_SQL = Object.freeze({
        WHERE route=$1 AND collection_id=$2 AND state='active' AND member_count=$3
          AND revision=$4 AND source_generation=$5 AND order_epoch=$6 RETURNING collection_id`,
   removeExactRepair: 'DELETE FROM library.collection_order_repair WHERE route=$1 AND collection_id=$2 AND repair_id=$3',
+  editLeft: `SELECT member_id AS "memberId", ordinal_key AS "ordinalKey" FROM library.collection_member
+     WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND ordinal_key <= $3::text COLLATE "C"
+       AND NOT (member_id=ANY($4::uuid[]))
+     ORDER BY ordinal_key DESC, member_id DESC LIMIT $5`,
+  editRight: `SELECT member_id AS "memberId", ordinal_key AS "ordinalKey" FROM library.collection_member
+     WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND ordinal_key >= $3::text COLLATE "C"
+       AND NOT (member_id=ANY($4::uuid[]))
+     ORDER BY ordinal_key, member_id LIMIT $5`,
+  editFence: `SELECT collection.revision::text || ':' || collection.source_generation::text || ':' ||
+                collection.order_epoch::text || ':' || account.minimum_authn_epoch::text AS fence
+       FROM library.collection AS collection JOIN access.account AS account
+         ON account.route=collection.route AND account.account_id=collection.curator_account_id
+       WHERE collection.route=$1 AND collection.collection_id=$2`,
+  touchCollection: `UPDATE library.collection
+        SET updated_at = $1::timestamptz, transaction_id = $2::uuid,
+            revision = revision + $5::integer, source_generation = source_generation + $5::integer
+      WHERE route = $3 AND collection_id = $4 AND state = 'active'
+      RETURNING revision`,
+  moveMemberSetting: "SELECT set_config('library.collection_structure_move_member', $1, true)",
 });
 export const COLLECTION_ORDER_WORKFLOW = 'library.collectionOrderRepair';
+export const COLLECTION_ORDER_COMMAND_KINDS = Object.freeze({
+  add: 'library.collection.member.add',
+  move: 'library.collection.member.move',
+  begin: 'library.collection.order.repair.begin',
+});
+const NOTE_LIMIT = 1_000;
+const RECEIPT_KEY_CANDIDATES = 5;
+const ACTOR_MEMBERS = 2;
+const STRUCTURE_HISTORY_RETAINED = 1_000;
+const STRUCTURE_HISTORY_OPERATIONS = 32;
+const ACCESS_GRANT_ROLES = 1;
+/** Existing native resolveSubject ceiling; add pays it once, move does not. */
+const subjectDisclosure = dimensions({
+  candidateKeys: 1,
+  nativeRows: 8_192,
+  nativePoints: 128,
+  statements: 128,
+  bytes: 1024 * 1024,
+});
+
+function commandHistoryAbsence(kind: string): Bound {
+  if (Object.hasOwn(COMMAND_HISTORY_KINDS, kind))
+    throw new TypeError(`${kind} is registered for History and cannot use an absent write`);
+  return zero();
+}
 
 const sql = (query: string) => Buffer.byteLength(query, 'utf8');
 const query = (text: string, inputBytes: number, projectedBytes: number, counts: Partial<Bound>): Bound =>
@@ -388,6 +454,563 @@ const continuationRequest = dimensions({
     ),
 });
 
+const jsonSize = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
+const uuid = '0'.repeat(uuidBytes);
+const timestamp = '\0'.repeat(64);
+const actorAccount = { route: 65535, account_id: uuid };
+const collectionPoint = { route: 65535, collection_id: uuid };
+const memberPoint = { ...collectionPoint, member_id: uuid };
+const memberResult = {
+  collectionId: uuid,
+  id: uuid,
+  subjectId: uuid,
+  note: '\0'.repeat(NOTE_LIMIT),
+  ordinalKey: '\0'.repeat(ordinalBytes),
+  addedAt: timestamp,
+};
+const memberResultBytes = jsonSize(memberResult);
+const memberEventBytes = jsonSize({
+  type: 'com.rezics.library.collection.member.changed.v1',
+  subject: uuid,
+  data: { collectionId: uuid, memberId: uuid, subjectId: uuid },
+  id: uuid,
+});
+const httpAddBytes = jsonSize({
+  collectionId: uuid,
+  subjectId: uuid,
+  note: '\0'.repeat(NOTE_LIMIT),
+  after: uuid,
+  position: 'after',
+});
+const httpMoveBytes = jsonSize({ collectionId: uuid, memberId: uuid, after: uuid });
+const httpBeginBytes = jsonSize({
+  collectionId: uuid,
+  originalKind: COLLECTION_ORDER_COMMAND_KINDS.add,
+  originalKey: '\0'.repeat(64),
+  fence: `${'9'.repeat(integerBytes)}:${'9'.repeat(bigintBytes)}:${'9'.repeat(integerBytes)}:${'9'.repeat(bigintBytes)}`,
+});
+
+function fromAccess(work: AccessWork, statements: number, sqlText = ''): Bound {
+  return declareBound({
+    candidateKeys: work.keys,
+    nativeRows: work.rows,
+    identityMetadataRows: 0,
+    emptySeeks: work.emptySeeks,
+    nativePoints: work.points,
+    witnessKeys: work.witnesses,
+    statements,
+    bytes: work.bytes + sql(sqlText),
+    engineRequests: 0,
+  });
+}
+
+function accessLeaf(
+  operation: Parameters<typeof accessNativeDeclaration>[0],
+  sqlText: string,
+  input: unknown,
+  shape: Parameters<typeof accessNativeDeclaration>[2],
+  statements = 1,
+): Bound {
+  return fromAccess(accessNativeDeclaration(operation, input, shape).bound, statements, sqlText);
+}
+
+const accessMembers = ACTOR_MEMBERS;
+const accessGroups = accessMembers * MEMBERSHIP_LIMIT;
+const accessRoles = accessGroups * 2;
+const accessFormulaInput = {
+  route: 65535,
+  action: 'collection:update',
+  resource_ids: [uuid],
+  actor_id: uuid,
+  principal_id: uuid,
+  deadline: timestamp,
+};
+const accessPreparation = sumBounds(
+  accessLeaf('time', permissionTime.sql, { at: timestamp }, {}, 1),
+  accessLeaf('account-state', accountRead.sql, actorAccount, { targets: 1 }, 1),
+  accessLeaf(
+    'inverse',
+    permissionInverse.sql,
+    { ...actorAccount, members: Array.from({ length: accessMembers }, () => actorAccount) },
+    { members: accessMembers, groups: MEMBERSHIP_LIMIT },
+    accessMembers,
+  ),
+  accessLeaf(
+    'assignment',
+    permissionAssignment.sql,
+    { route: 65535, principal_id: uuid, request_id: uuid, actor_id: uuid, at: timestamp },
+    {},
+    1,
+  ),
+  accessLeaf(
+    'membership',
+    permissionMembership.sql,
+    {
+      route: 65535,
+      organization_id: uuid,
+      member_id: uuid,
+      at: timestamp,
+      pairs: Array.from({ length: MEMBERSHIP_LIMIT }, () => ({
+        route: 65535,
+        organization_id: uuid,
+        member_id: uuid,
+      })),
+    },
+    { groups: MEMBERSHIP_LIMIT },
+    1,
+  ),
+  accessLeaf(
+    'membership',
+    permissionMembership.sql,
+    {
+      pairs: Array.from({ length: MEMBERSHIP_LIMIT }, () => ({ realmId: uuid, accountId: uuid })),
+      at: timestamp,
+    },
+    { groups: MEMBERSHIP_LIMIT },
+    1,
+  ),
+  accessLeaf(
+    'candidates',
+    permissionCandidates.sql,
+    accessFormulaInput,
+    {
+      targets: 1,
+      members: accessMembers,
+      roles: accessRoles,
+      grantRoles: ACCESS_GRANT_ROLES,
+      explicit: true,
+      global: true,
+      assignment: true,
+    },
+    1,
+  ),
+  accessLeaf(
+    'formula',
+    permissionCheck.sql,
+    accessFormulaInput,
+    {
+      targets: 1,
+      members: accessMembers,
+      roles: accessRoles,
+      grantRoles: ACCESS_GRANT_ROLES,
+      explicit: true,
+      global: true,
+      assignment: true,
+    },
+    1,
+  ),
+  query(collectionAuthorization.sql, bindParent, uuidBytes + 7 + 7 + 7 + 16 + 5, {
+    candidateKeys: 1,
+    nativeRows: 1,
+    nativePoints: 1,
+    emptySeeks: 1,
+  }),
+  sumBounds(
+    ...[
+      'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+      'COMMIT',
+      'ROLLBACK',
+    ].map((text) => dimensions({ statements: 1, bytes: sql(text) })),
+    dimensions({ nativePoints: 2, emptySeeks: 2 }),
+  ),
+);
+
+const authorizationCollection = query(collectionAuthorization.sql, bindParent, uuidBytes + 7 + 7 + 7 + 16 + 5, {
+  candidateKeys: 1,
+  nativeRows: 1,
+  nativePoints: 1,
+  emptySeeks: 1,
+});
+const collectionRow = query(
+  collectionRead.sql,
+  bindParent,
+  jsonSize({
+    id: uuid,
+    curatorAccountId: uuid,
+    title: '\0'.repeat(200),
+    description: '\0'.repeat(2000),
+    visibility: 'unlisted',
+    presentationKind: '\0'.repeat(64),
+    coverMediaId: uuid,
+    state: 'deleted',
+    revision: 2_147_483_647,
+    memberCount: 2_147_483_647,
+    orderEpoch: 2_147_483_647,
+    membershipKind: 'dynamic',
+    builtinKind: '\0'.repeat(64),
+    hasSavedRule: true,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }),
+  { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
+);
+const shelfCurator = query(shelfAuthorizedCollection.sql, bindParent + uuidBytes, uuidBytes, {
+  candidateKeys: 1,
+  nativeRows: 1,
+  nativePoints: 1,
+  emptySeeks: 1,
+});
+const neighborSeek = query(
+  memberNeighbors.sql,
+  routeBytes + uuidBytes + 5 + uuidBytes + uuidBytes,
+  ordinalBytes * 2 + 5,
+  { candidateKeys: 3, nativeRows: 3, nativePoints: 3, emptySeeks: 3 },
+);
+const windowSide = ORDER_WINDOW_SIZE / 2;
+const windowSeek = (text: string): Bound =>
+  query(
+    text,
+    routeBytes + uuidBytes + ordinalBytes + uuidBytes + String(windowSide).length,
+    windowSide * (uuidBytes + ordinalBytes),
+    { candidateKeys: windowSide, nativeRows: windowSide, emptySeeks: windowSide === 0 ? 1 : 0 },
+  );
+const placementFence = query(COLLECTION_ORDER_SQL.editFence, bindParent, 4 * bigintBytes + 3, {
+  candidateKeys: 2,
+  nativeRows: 2,
+  nativePoints: 2,
+  emptySeeks: 2,
+});
+const memberReadCost = query(
+  memberRead.sql,
+  routeBytes + 2 * uuidBytes,
+  memberResultBytes,
+  { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
+);
+const deferredConstraint = query(collectionDefer.sql, 0, 0, {});
+const generatedWindowKeys = dimensions({ bytes: GENERATED_ORDINAL_KEY_LENGTH * (ORDER_WINDOW_SIZE + 1) });
+const structurePosition = sumBounds(
+  query(
+    'SELECT member_id FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND member_id <> $3 AND ordinal_key < $4 ORDER BY ordinal_key DESC, member_id DESC LIMIT 1',
+    bindParent + uuidBytes + ordinalBytes,
+    uuidBytes,
+    { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
+  ),
+  query(
+    'SELECT member_id FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND member_id <> $3 AND ordinal_key > $4 ORDER BY ordinal_key, member_id LIMIT 1',
+    bindParent + uuidBytes + ordinalBytes,
+    uuidBytes,
+    { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
+  ),
+);
+const structureAppend = sumBounds(
+  query(COLLECTION_ORDER_SQL.parent, bindParent, parentProjectionBytes, {
+    candidateKeys: 1,
+    nativeRows: 1,
+    nativePoints: 1,
+  }),
+  structurePosition,
+  query(
+    'INSERT INTO library.collection_structure_history_head (route, collection_id, next_change_no, unknown_before_tracking) VALUES ($1,$2,1,true) ON CONFLICT (route, collection_id) DO UPDATE SET next_change_no = library.collection_structure_history_head.next_change_no + 1 RETURNING next_change_no',
+    bindParent,
+    bigintBytes,
+    { nativeRows: 2, nativePoints: 1 },
+  ),
+  query(
+    'INSERT INTO library.collection_structure_history (route, collection_id, change_no, transaction_id, change_kind, member_id, subject_id, member_revision, before_state, after_state) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+    bindParent + uuidBytes + bigintBytes + uuidBytes + 16 + 2 * uuidBytes + bigintBytes + 2 * 32_768,
+    0,
+    { nativeRows: 1, nativePoints: 1 },
+  ),
+  query(
+    'DELETE FROM library.collection_structure_history WHERE route=$1 AND collection_id=$2 AND change_no <= $3',
+    bindParent + bigintBytes,
+    0,
+    { nativeRows: 1, nativePoints: 1 },
+  ),
+  query(
+    'SELECT transaction_id FROM library.collection_structure_history WHERE route=$1 AND member_id=$2 GROUP BY transaction_id ORDER BY max(recorded_at) DESC, transaction_id DESC LIMIT 16',
+    routeBytes + uuidBytes,
+    STRUCTURE_HISTORY_OPERATIONS * uuidBytes,
+    { candidateKeys: STRUCTURE_HISTORY_OPERATIONS, nativeRows: STRUCTURE_HISTORY_OPERATIONS },
+  ),
+  dimensions({ nativeRows: 1, nativePoints: 1, bytes: STRUCTURE_HISTORY_RETAINED }),
+);
+const structurePending = query(
+  'INSERT INTO library.collection_structure_pending_change (transaction_id, route, collection_id, member_id, before_state) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (transaction_id, route, collection_id, member_id) DO UPDATE SET before_state = EXCLUDED.before_state',
+  uuidBytes + bindParent + uuidBytes + 32_768,
+  0,
+  { nativeRows: 1, nativePoints: 1 },
+);
+const insertMemberCost = query(
+  memberInsert.sql,
+  routeBytes + 3 * uuidBytes + NOTE_LIMIT * 6 + ordinalBytes + 29 + uuidBytes,
+  memberResultBytes,
+  { nativeRows: 3, nativePoints: 2, witnessKeys: 1 },
+);
+const moveMemberCost = query(
+  memberMove.sql,
+  routeBytes + 2 * uuidBytes + ordinalBytes + uuidBytes,
+  memberResultBytes,
+  { nativeRows: 1, nativePoints: 1, witnessKeys: 1 },
+);
+const moveSetting = query(COLLECTION_ORDER_SQL.moveMemberSetting, uuidBytes, uuidBytes, { nativeRows: 0 });
+const touchStructural = query(
+  COLLECTION_ORDER_SQL.touchCollection,
+  29 + uuidBytes + bindParent + 1,
+  integerBytes,
+  { nativeRows: 1, nativePoints: 1 },
+);
+const respaceBody = (count: number): Bound =>
+  query(
+    membersRespace.sql,
+    routeBytes + uuidBytes + count * (uuidBytes + ordinalBytes + 40) + 29 + uuidBytes,
+    integerBytes * 2,
+    { candidateKeys: count, nativeRows: 1 + count * 2, nativePoints: 1 + count, witnessKeys: count },
+  );
+const respaceRewrites = (count: number): Bound =>
+  sumBounds(
+    respaceBody(count),
+    repeatBound(memberGuardTriggers, count),
+    repeatBound(
+      query(COLLECTION_ORDER_SQL.parent, bindParent, parentProjectionBytes, {
+        candidateKeys: 1,
+        nativeRows: 1,
+        nativePoints: 1,
+      }),
+      count,
+    ),
+  );
+
+const receiptLookup = (responseBytes: number): Bound =>
+  query(
+    receiptRead.sql,
+    partitionBytes + 7 + uuidBytes + 40 + RECEIPT_KEY_CANDIDATES * (4 + 64),
+    64 + integerBytes + bigintBytes + uuidBytes + responseBytes + 9,
+    {
+      candidateKeys: RECEIPT_KEY_CANDIDATES,
+      nativeRows: RECEIPT_KEY_CANDIDATES,
+      nativePoints: RECEIPT_KEY_CANDIDATES,
+      emptySeeks: RECEIPT_KEY_CANDIDATES,
+    },
+  );
+const actorReceiptFence = (eventCount: number, eventBytes: number, responseBytes: number): Bound =>
+  query(
+    eventFence.sql,
+    eventBytes +
+      eventCount +
+      1 +
+      uuidBytes +
+      partitionBytes +
+      jsonSize({
+        principal: { kind: 'account', id: uuid },
+        kind: COLLECTION_ORDER_COMMAND_KINDS.add,
+        key: `rk1.255.${'f'.repeat(64)}`,
+        digest: 'f'.repeat(44),
+        response: null,
+      }) +
+      responseBytes +
+      jsonSize({ principal: { kind: 'account', id: uuid }, clientId: uuid, requestedBy: uuid }),
+    integerBytes + bigintBytes,
+    {
+      candidateKeys: 1,
+      emptySeeks: 3,
+      nativeRows: 4 + 6 + 4 + 4,
+      nativePoints: 1 + 5 + 3 + 3,
+    },
+  );
+const actorNoEffectFence = query(
+  noEffectFence.sql,
+  partitionBytes +
+    uuidBytes +
+    jsonSize({
+      principal: { kind: 'account', id: uuid },
+      kind: COLLECTION_ORDER_COMMAND_KINDS.begin,
+      key: `rk1.255.${'f'.repeat(64)}`,
+      digest: 'f'.repeat(44),
+      response: { collectionId: uuid, repairId: uuid, step: 0 },
+    }),
+  integerBytes + bigintBytes,
+  { candidateKeys: 1, nativeRows: 1 + 4, nativePoints: 1 + 3, emptySeeks: 1 },
+);
+const actorTimeMint = sumBounds(
+  ...[
+    'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY',
+    "SET LOCAL statement_timeout = '200ms'",
+    'COMMIT',
+    'ROLLBACK',
+  ].map((text) => dimensions({ statements: 1, bytes: sql(text) })),
+  query(readTime.sql, 24, 29, { nativeRows: 1, nativePoints: 1 }),
+);
+const actorControls = sumBounds(
+  beginControl,
+  query(readTime.sql, 24, 29, { nativeRows: 1, nativePoints: 1 }),
+  dimensions({ statements: 1, bytes: sql(timeoutSql) }),
+);
+const partitionProbe = query(
+  partitionRead.sql,
+  partitionBytes,
+  jsonSize({
+    partitionNo: 4095,
+    node: uuid,
+    writeState: 'fenced',
+    movedTo: '9'.repeat(integerBytes),
+    epoch: 2_147_483_647,
+    position: '-9223372036854775808',
+  }),
+  { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
+);
+const actorRecovery = repeatBound(
+  sumBounds(actorTimeMint, partitionProbe),
+  1 + Math.ceil(WORK_STEP_DEADLINE_MS / 25),
+);
+const shelfWrite = sumBounds(
+  sessionShelfWork(65535, uuid, true),
+  shelfCurator,
+  accountShareCost,
+);
+const currentAuthorization = (includeBarrier: boolean): Bound =>
+  sumBounds(
+    authorizationCollection,
+    accountShareCost,
+    collectionRow,
+    shelfWrite,
+    ...(includeBarrier ? [barrierCeiling] : []),
+  );
+const actorEnvelope = (
+  kind: string,
+  requestBytes: number,
+  responseBytes: number,
+  eventBytes: number,
+  includeBarrier: boolean,
+): Bound =>
+  sumBounds(
+    commandHistoryAbsence(kind),
+    actorTimeMint,
+    accessPreparation,
+    actorControls,
+    currentAuthorization(includeBarrier),
+    receiptLookup(responseBytes),
+    actorReceiptFence(1, eventBytes, responseBytes),
+    commitControl,
+    rollbackControl,
+    actorRecovery,
+    dimensions({ bytes: requestBytes + 3 * responseBytes + eventBytes }),
+  );
+
+const addPlacementDirect = neighborSeek;
+const addPlacementWindow = sumBounds(neighborSeek, windowSeek(COLLECTION_ORDER_SQL.editLeft), windowSeek(COLLECTION_ORDER_SQL.editRight));
+const addPlacementFailed = sumBounds(addPlacementWindow, placementFence);
+const addInsert = sumBounds(insertMemberCost, memberGuardTriggers, structureAppend);
+const addRespace = (count: number) => sumBounds(deferredConstraint, respaceRewrites(count), generatedWindowKeys);
+const addSuccessDirect = sumBounds(
+  actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.add, httpAddBytes, memberResultBytes, memberEventBytes, true),
+  subjectDisclosure,
+  addPlacementDirect,
+  addInsert,
+);
+const addSuccessRespace = sumBounds(
+  actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.add, httpAddBytes, memberResultBytes, memberEventBytes, true),
+  subjectDisclosure,
+  addPlacementWindow,
+  addRespace(ORDER_WINDOW_SIZE - 2),
+  addInsert,
+);
+const addFailed = sumBounds(
+  actorTimeMint,
+  accessPreparation,
+  actorControls,
+  currentAuthorization(true),
+  receiptLookup(memberResultBytes),
+  subjectDisclosure,
+  addPlacementFailed,
+  rollbackControl,
+  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.add),
+  dimensions({ bytes: httpAddBytes }),
+);
+const addReplay = sumBounds(
+  actorTimeMint,
+  accessPreparation,
+  actorControls,
+  currentAuthorization(true),
+  receiptLookup(memberResultBytes),
+  commitControl,
+  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.add),
+  dimensions({ bytes: httpAddBytes + memberResultBytes }),
+);
+const movePlacementDirect = sumBounds(memberReadCost, neighborSeek);
+const movePlacementWindow = sumBounds(memberReadCost, addPlacementWindow);
+const movePlacementFailed = sumBounds(memberReadCost, addPlacementFailed);
+const moveWrite = sumBounds(moveSetting, moveMemberCost, moveSetting, memberGuardTriggers, structurePending, structureAppend, touchStructural);
+const moveSuccessDirect = sumBounds(
+  actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.move, httpMoveBytes, memberResultBytes, memberEventBytes, true),
+  movePlacementDirect,
+  moveWrite,
+);
+const moveSuccessRespace = sumBounds(
+  actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.move, httpMoveBytes, memberResultBytes, memberEventBytes, true),
+  movePlacementWindow,
+  addRespace(ORDER_WINDOW_SIZE - 2),
+  moveWrite,
+);
+const moveFailed = sumBounds(
+  actorTimeMint,
+  accessPreparation,
+  actorControls,
+  currentAuthorization(true),
+  receiptLookup(memberResultBytes),
+  movePlacementFailed,
+  rollbackControl,
+  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.move),
+  dimensions({ bytes: httpMoveBytes }),
+);
+const moveReplay = sumBounds(
+  actorTimeMint,
+  accessPreparation,
+  actorControls,
+  currentAuthorization(true),
+  receiptLookup(memberResultBytes),
+  commitControl,
+  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.move),
+  dimensions({ bytes: httpMoveBytes + memberResultBytes }),
+);
+const editCeiling = maxBound(
+  addSuccessDirect,
+  addSuccessRespace,
+  addFailed,
+  addReplay,
+  moveSuccessDirect,
+  moveSuccessRespace,
+  moveFailed,
+  moveReplay,
+);
+
+const beginEventBytes = eventRepairBytes;
+const beginEnvelope = actorEnvelope(
+  COLLECTION_ORDER_COMMAND_KINDS.begin,
+  httpBeginBytes,
+  beginResultBytes,
+  beginEventBytes,
+  false,
+);
+const beginSuccess = sumBounds(beginEnvelope, beginFresh);
+const beginReuseCommand = sumBounds(
+  actorTimeMint,
+  accessPreparation,
+  actorControls,
+  currentAuthorization(false),
+  receiptLookup(beginResultBytes),
+  beginReuse,
+  actorNoEffectFence,
+  commitControl,
+  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.begin),
+  dimensions({ bytes: httpBeginBytes + beginResultBytes }),
+);
+const beginEmptyCommand = sumBounds(
+  actorTimeMint,
+  accessPreparation,
+  actorControls,
+  currentAuthorization(false),
+  receiptLookup(beginResultBytes),
+  beginEmpty,
+  rollbackControl,
+  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.begin),
+  dimensions({ bytes: httpBeginBytes }),
+);
+const beginReplaceCommand = sumBounds(beginEnvelope, beginReplaceTerminal);
+const beginActorCeiling = maxBound(beginSuccess, beginReuseCommand, beginEmptyCommand, beginReplaceCommand);
+const failedAddAndBegin = sumBounds(addFailed, beginActorCeiling);
+const failedMoveAndBegin = sumBounds(moveFailed, beginActorCeiling);
+
 export const COLLECTION_ORDER_DECLARATION = Object.freeze({
   status: 'finite-owner-declarations' as const,
   axes: BOUND_AXES,
@@ -403,11 +1026,30 @@ export const COLLECTION_ORDER_DECLARATION = Object.freeze({
     pageCommandReceipts: 0,
     deferredUniqueConstraintStatements: 0,
     occurrenceHistoryEventsPerRewrite: 0,
+    commandHistoryWrites: 0,
+    receiptKeyCandidates: RECEIPT_KEY_CANDIDATES,
+    accessMemberships: MEMBERSHIP_LIMIT,
   }),
   terms: Object.freeze({
     barrier: barrierCeiling,
     beginSql: beginSqlCeiling,
     beginLocatorSerialization: dimensions({ bytes: beginResultBytes }),
+    accessPreparation,
+    addFailed,
+    addSuccessDirect,
+    addSuccessRespace,
+    addReplay,
+    moveFailed,
+    moveSuccessDirect,
+    moveSuccessRespace,
+    moveReplay,
+    beginSuccess,
+    beginReuse: beginReuseCommand,
+    beginEmpty: beginEmptyCommand,
+    failedAddAndBegin,
+    failedMoveAndBegin,
+    retryAdd: addSuccessRespace,
+    retryMove: moveSuccessRespace,
     pageCurrentness,
     pageRawWindow: rawPage(ORDER_WINDOW_SIZE),
     pageActiveWrites: rewriteRows(ORDER_WINDOW_SIZE, false),
@@ -422,9 +1064,11 @@ export const COLLECTION_ORDER_DECLARATION = Object.freeze({
   }),
   paths: Object.freeze({
     edit: Object.freeze({
-      status: 'execution-binding-only' as const,
+      status: 'complete-static-no-admission' as const,
+      cost: editCeiling,
+      ceiling: editCeiling,
       missing:
-        'The original actor command composition is not a complete nine-axis declaration. Its current Access preparation, authorization, receipt, result and transaction envelope remains to be derived.',
+        'runCommand has no owner Bound admission port; this declaration describes bounded actor add/move work without reserving or funding dispatch.',
     }),
     barrier: Object.freeze({
       status: 'library-sql-only' as const,
@@ -433,11 +1077,11 @@ export const COLLECTION_ORDER_DECLARATION = Object.freeze({
       missing: 'The enclosing actor command has no whole-operation Bound admission port.',
     }),
     begin: Object.freeze({
-      status: 'library-sql-only' as const,
-      cost: beginSqlCeiling,
-      ceiling: beginSqlCeiling,
+      status: 'complete-static-no-admission' as const,
+      cost: beginActorCeiling,
+      ceiling: beginActorCeiling,
       missing:
-        'The ordinary actor-authorized runCommand path has no public whole-command Bound admission for Access preparation and authorization, account lifecycle share, authoritative time, receipt and History work, result serialization, event/outbox work, controls, and rollback/commit.',
+        'runCommand has no owner Bound admission port; this declaration describes bounded actor begin work without reserving or funding dispatch.',
     }),
     page: Object.freeze({
       status: 'complete-static-no-admission' as const,
@@ -458,7 +1102,11 @@ export const COLLECTION_ORDER_DECLARATION = Object.freeze({
 if (
   !withinCeiling(barrierCeiling, barrierCeiling) ||
   !withinCeiling(beginSqlCeiling, beginSqlCeiling) ||
-  !withinCeiling(pageCeiling, pageCeiling)
+  !withinCeiling(beginActorCeiling, beginActorCeiling) ||
+  !withinCeiling(editCeiling, editCeiling) ||
+  !withinCeiling(pageCeiling, pageCeiling) ||
+  !withinCeiling(failedAddAndBegin, sumBounds(editCeiling, beginActorCeiling)) ||
+  !withinCeiling(failedMoveAndBegin, sumBounds(editCeiling, beginActorCeiling))
 )
   throw new TypeError('Collection order declaration is not a finite ceiling');
 

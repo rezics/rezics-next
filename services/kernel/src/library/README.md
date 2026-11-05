@@ -2018,31 +2018,34 @@ attribution; its execution remains with the controller's protected native growth
 
 ### Add member
 
-- Touches: Subject resolution, the exact Collection/member points, at most two indexed live neighbours, a local
-  window of at most 128 resting occurrences and the original partition/receipt/outbox fences. The insert changes
-  count/revision/source generation; local respacing additionally changes order epoch. A failed window commits only
-  a separately authorized repair-begin intent and returns `503` for the unapplied add.
-- Bound: O((selected + 128) log N) rows/index blocks with fixed data widths and bounded key memory, independent of
-  total membership; one selected occurrence for ordinary add/move and at most 100 for transfer. Refusal uses the
-  same finite points/window, never owner enumeration. Physical integer count/epoch/revision checks remain.
-- Growth check: Existing fitting-key growth, CAS/privacy/Undo and subject-anchor tests remain relevant. The maintained
-  `test/library/collection-order.test.ts` outcome adds a native HTTP attempt beyond 5,000, interrupted dense-gap repair,
-  default worker continuation, preserved order/identity/Undo evidence and a successful retry of the original edit.
-  This source and derivation do not establish native or growth proof; integration owns their execution.
+- Touches: Subject resolution, Access preparation, current authorization, receipts, the exact Collection/member
+  points, at most two indexed live neighbours, a local window of at most 128 resting occurrences, structure-journal
+  append and the original partition/outbox fences. The insert changes count/revision/source generation; local
+  respacing additionally changes order epoch. A failed window rolls back with no receipt, then a separately
+  authorized repair-begin command commits an intent and returns `503` for the unapplied add.
+- Bound: the `collection-order-bounds.ts` add/move actor-command ceiling, independent of membership and unrelated
+  History; History writes are absent because these kinds are unregistered. One selected occurrence for ordinary
+  add/move and at most 100 for transfer. Refusal uses the same finite points/window, never owner enumeration.
+- Growth check: Existing fitting-key, CAS/privacy/Undo and subject-anchor tests remain relevant. The maintained
+  `test/library/collection-order.test.ts` outcome adds a native HTTP attempt beyond 5,000, interrupted dense-gap
+  repair, default worker continuation, preserved identity/Undo evidence, a successful retry, and nine-axis
+  comparison at unrelated scales 64/512/4096. Native receiving remains with the controller.
 
 ### Move member
 
-- Touches: Exact live occurrence read, indexed neighbours and the same bounded local placement window as add.
-  The moved row is updated by its full point key after any resting-window rekey; it is never found by listing members.
-  The parent source generation/revision advance with the move, and local rekeying advances order epoch.
-- Bound: O((1 + 128) log N), bounded rows, statements and memory independent of Collection size. A captured repair
-  rejects structural writes by one exact owner barrier; the original move remains unapplied until retried.
-- Growth check: Retain the existing fitting-key move cost, privacy, CAS, duplicate occurrence and Undo tests. The new
-  Collection order outcome includes a move of an occurrence beyond the former admission boundary. Native proof is deferred.
+- Touches: Exact live occurrence read, indexed neighbours and the same Access/receipt/window terms as add, without
+  a Subject disclosure. The moved row is updated by its full point key after any resting-window rekey; it is never
+  found by listing members. Parent source generation/revision advance with the move; local rekeying advances order
+  epoch.
+- Bound: the shared add/move actor-command ceiling, independent of Collection size. A captured repair rejects
+  structural writes by one exact owner barrier; the original move remains unapplied until retried.
+- Growth check: Retain the existing fitting-key move, privacy, CAS, duplicate occurrence and Undo tests. The Collection
+  order outcome includes a move beyond the former admission boundary and the same nine-axis comparison. Native proof
+  is deferred.
 
 ### Durable Collection order repair and cleanup
 
-Decision: the Library owns fixed nine-axis declarations at its existing repair-begin, barrier, page and outbox call sites; the declarations describe bounded work and do not create dispatch or reservation authority.
+Decision: the Library owns complete nine-axis actor-command declarations for add/move and repair begin, and fixed page/outbox declarations, at their existing call sites; the declarations describe bounded work and do not create dispatch or reservation authority.
 
 - Touches: One immutable repair capture/progress row, one exact parent/account fence and at most 128 examined original
   raw occurrences per transaction. Output updates are point CAS operations. Parent order/source fences, invalidation
@@ -2066,15 +2069,12 @@ Decision: the Library owns fixed nine-axis declarations at its existing repair-b
   continuation request is accounted once outside page SQL and event-fence work.
 - Binding: local wrappers surround add/move, begin, page and enqueue at their existing execution owners. They preserve
   authorization, absolute deadlines, attempts, transaction and client identity; they do not create admission or
-  funding. Page and continuation declarations are finite.
-- Admission boundary: the ordinary actor-authorized `runCommand` path has no public whole-command nine-axis admission
-  for begin, including Access preparation, current authorization, account lifecycle, receipt/History, serialization,
-  controls, event/outbox work and rollback/commit. Finite page declarations cannot be received by `runCommand`
-  against a live native admission, and the DBOS client has no matching nine-axis enqueue admission. These descriptors
-  do not reserve Source work or fund a dispatch. Whole-command native admission remains deferred.
-- Growth check: Existing work/Source staleness and privacy assertions remain required for controller proof, including
-  interruption, account terminal fencing, changed fences, terminal cleanup and held sources. Native receiving and
-  broader acceptance remain deferred to the controller.
+  funding. Failed edit plus begin is one composed HTTP journey; the later retry is a separate add/move.
+- Admission boundary: `runCommand` still has no public whole-command Bound admission port. These descriptors do not
+  reserve Source work or fund a dispatch. Whole-command native admission remains deferred.
+- Growth check: Existing work/Source staleness and privacy assertions remain required for controller proof. The
+  Collection order suite compares all nine add/move/begin axes at unrelated scales 64/512/4096. Native receiving
+  remains deferred to the controller.
 
 ### Note member
 

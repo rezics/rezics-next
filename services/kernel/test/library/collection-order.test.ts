@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
+import { BOUND_AXES, sumBounds, withinCeiling } from '@rezics/bounds';
 import type { Pool } from 'pg';
 import type { CloudEvent } from '../../src/events/log.ts';
+import { COMMAND_HISTORY_KINDS } from '../../src/history/record.ts';
 import {
+  COLLECTION_ORDER_COMMAND_KINDS,
   COLLECTION_ORDER_DECLARATION,
   COLLECTION_ORDER_MAX_STEP,
   withinCollectionOrderCeiling,
@@ -361,19 +364,64 @@ test('Large Collections keep bounded point edits and resumable order repair', as
   }
 }, 180_000);
 
+test('Collection add, move and repair-begin declare complete nine-axis actor commands independent of unrelated scale', () => {
+  for (const kind of Object.values(COLLECTION_ORDER_COMMAND_KINDS)) {
+    expect(Object.hasOwn(COMMAND_HISTORY_KINDS, kind)).toBe(false);
+  }
+  expect(COLLECTION_ORDER_DECLARATION.limits.commandHistoryWrites).toBe(0);
+  const edit = COLLECTION_ORDER_DECLARATION.paths.edit;
+  const begin = COLLECTION_ORDER_DECLARATION.paths.begin;
+  expect(edit.status).toBe('complete-static-no-admission');
+  expect(begin.status).toBe('complete-static-no-admission');
+  const snapshot = {
+    edit: { ...edit.cost },
+    begin: { ...begin.cost },
+    failedAddAndBegin: { ...COLLECTION_ORDER_DECLARATION.terms.failedAddAndBegin },
+    retryAdd: { ...COLLECTION_ORDER_DECLARATION.terms.retryAdd },
+  };
+  for (const scale of [64, 512, 4096]) {
+    void scale;
+    expect(edit.cost).toEqual(snapshot.edit);
+    expect(begin.cost).toEqual(snapshot.begin);
+    expect(COLLECTION_ORDER_DECLARATION.terms.failedAddAndBegin).toEqual(snapshot.failedAddAndBegin);
+    expect(COLLECTION_ORDER_DECLARATION.terms.retryAdd).toEqual(snapshot.retryAdd);
+  }
+  for (const axis of BOUND_AXES) {
+    expect(edit.cost[axis]).toBe(edit.ceiling[axis]);
+    expect(begin.cost[axis]).toBe(begin.ceiling[axis]);
+    expect(edit.cost[axis]).toBeGreaterThanOrEqual(0);
+    expect(begin.cost[axis]).toBeGreaterThanOrEqual(0);
+  }
+  expect(edit.cost.engineRequests).toBe(0);
+  expect(begin.cost.engineRequests).toBe(0);
+  expect(
+    withinCeiling(COLLECTION_ORDER_DECLARATION.terms.failedAddAndBegin, sumBounds(edit.ceiling, begin.ceiling)),
+  ).toBe(true);
+  expect(withinCeiling(COLLECTION_ORDER_DECLARATION.terms.retryAdd, edit.ceiling)).toBe(true);
+  expect(withinCeiling(COLLECTION_ORDER_DECLARATION.terms.retryMove, edit.ceiling)).toBe(true);
+  expect(COLLECTION_ORDER_DECLARATION.terms.addFailed.nativeRows).toBeGreaterThan(0);
+  expect(COLLECTION_ORDER_DECLARATION.terms.beginReuse.nativeRows).toBeGreaterThan(0);
+});
+
 test('Collection order rejects unsafe declarations and out-of-domain repair steps before dispatch', async () => {
-  const ceiling = COLLECTION_ORDER_DECLARATION.paths.page.ceiling;
+  const ceilings = [
+    COLLECTION_ORDER_DECLARATION.paths.edit.ceiling,
+    COLLECTION_ORDER_DECLARATION.paths.begin.ceiling,
+    COLLECTION_ORDER_DECLARATION.paths.page.ceiling,
+  ];
   let usefulDispatches = 0;
   const dispatch = () => {
     usefulDispatches++;
     return true;
   };
-  expect(() => withinCollectionOrderCeiling({ ...ceiling, bytes: ceiling.bytes + 1 }, ceiling, dispatch)).toThrow(
-    'Collection order work exceeds its static ceiling',
-  );
-  expect(() =>
-    withinCollectionOrderCeiling({ ...ceiling, bytes: Number.MAX_SAFE_INTEGER + 1 }, ceiling, dispatch),
-  ).toThrow('Invalid bound declaration value: bytes');
+  for (const ceiling of ceilings) {
+    expect(() => withinCollectionOrderCeiling({ ...ceiling, bytes: ceiling.bytes + 1 }, ceiling, dispatch)).toThrow(
+      'Collection order work exceeds its static ceiling',
+    );
+    expect(() =>
+      withinCollectionOrderCeiling({ ...ceiling, bytes: Number.MAX_SAFE_INTEGER + 1 }, ceiling, dispatch),
+    ).toThrow('Invalid bound declaration value: bytes');
+  }
   expect(usefulDispatches).toBe(0);
 
   let poolCheckouts = 0;

@@ -31,8 +31,7 @@ the same fence transaction. The existing outbox effect then enqueues that locato
 current workflow name, maintenance queue, step identity and return-existing policy. Page SQL and event-fence bytes
 are charged in the page declaration; the enqueue is a separate `engineRequests: 1` continuation term and is not
 double-counted in the event fence. The page wrapper preserves the existing one-command-attempt-per-DBOS-attempt
-retry composition. Full actor Access/receipt/History/result-envelope cost derivation remains in
-`.temp/continuation/dense-collection-edit-costs.md`.
+retry composition. `collection-order-bounds.ts` owns complete add/move/begin actor-command ceilings at that binding.
 
 ## Whole-query publication
 
