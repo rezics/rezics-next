@@ -9,8 +9,8 @@ import {
   publicationInput,
   publicationResponse,
   publicationSource,
-  publishSelectedRecord,
-  selectedPublicationAdapter,
+  publishSelectedNative,
+  publicationReadWithin,
   collectionPublicationQuery,
   loadCollectionPublication,
   type PublicationInput,
@@ -138,16 +138,18 @@ test('the current dynamic reader preserves header revision and original IDs; sel
   expect(JSON.stringify(ordinary)).not.toContain('alias-a');
 });
 
-test('one guarded POST uses the exact selected native route and payload; unknown retries preserve the request and key', async () => {
+test('the installed generated operation sends the exact selected request; unknown retries preserve the request and key', async () => {
   const calls: Request[] = [];
-  const adapter = selectedPublicationAdapter('https://kernel.test', async (url, init) => {
-    calls.push(new Request(url, init));
-    if (calls.length === 1) throw new Error('Connection lost after dispatch');
-    return Response.json({ code: 'source_unavailable' }, { status: 503 });
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (url, init) => {
+      calls.push(new Request(url, init));
+      if (calls.length === 1) throw new Error('Connection lost after dispatch');
+      return Response.json({ code: 'source_unavailable' }, { status: 503 });
+    },
   });
   const selected = { ...input, subjectIds: ['canonical-a'] };
-  expect(await publishSelectedRecord(adapter, write(), {}, selected)).toEqual({ ok: false, reason: 'unknown' });
-  expect(await publishSelectedRecord(adapter, write(), {}, selected)).toEqual({ ok: false, reason: 'unavailable' });
+  expect(await publishSelectedNative(client, write(), {}, selected)).toEqual({ ok: false, reason: 'unknown' });
+  expect(await publishSelectedNative(client, write(), {}, selected)).toEqual({ ok: false, reason: 'unavailable' });
   expect(calls).toHaveLength(2);
   for (const call of calls) {
     expect(call.method).toBe('POST');
@@ -157,13 +159,13 @@ test('one guarded POST uses the exact selected native route and payload; unknown
     expect(call.headers.get('idempotency-key')).toBe(key);
     expect(await call.json()).toEqual({ revision: 7, subjectIds: ['canonical-a'] });
   }
-  let dispatched = false;
-  const never = async () => {
-    dispatched = true;
-    return { status: 200, body: {} };
-  };
-  const refused = await publishSelectedRecord(
-    never,
+  const refusedClient = createKernelClient('https://kernel.test', {
+    fetch: async () => {
+      throw new Error('Must not dispatch');
+    },
+  });
+  const refused = await publishSelectedNative(
+    refusedClient,
     new Request('https://site.test', {
       method: 'POST',
       headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}`, origin: 'https://foreign.test' },
@@ -172,12 +174,19 @@ test('one guarded POST uses the exact selected native route and payload; unknown
     input,
   );
   expect(refused).toEqual({ ok: false, reason: 'denied' });
-  expect(dispatched).toBe(false);
-  expect(
-    await selectedPublicationAdapter(undefined, async () => {
-      throw new Error('Must not dispatch');
-    })(input, 'Bearer owner-token'),
-  ).toEqual({ status: 503, body: null });
+});
+
+test('a local response deadline terminates without cancelling its operation', async () => {
+  let finished = false;
+  const read = new Promise<string>((resolve) => {
+    setTimeout(() => {
+      finished = true;
+      resolve('late');
+    }, 15);
+  });
+  expect(await publicationReadWithin(read, 1, 'unavailable')).toBe('unavailable');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(finished).toBe(true);
 });
 
 test('only the exact native complete response establishes publication; pending, denied, stale, malformed and sparse outcomes do not', () => {

@@ -258,3 +258,29 @@ dispatch. Preserve occurrence row keys and original Subjects while the producer 
 Decision: keep private Progress return context in router history state, re-read the native index before restoring row focus, and offer first-page/current-work recovery when the original address no longer admits the selected session; an explicit new session keeps its filters and removes only the Progress cursor.
 
 Canonical session and Subject links remain ordinary shareable addresses. Same-tab Progress navigation carries the filtered index selectors and opaque cursor privately, then accepts focus only for the same admitted session ID, Subject ID and start time. A stale or changed source offers a safe restart instead of searching later pages. Subject return context is revalidated against the currently disclosed work before it is used.
+
+## Selected Collection publication
+
+The page reviews at most 100 disclosed canonical subjects from the current page, preserves the first canonical
+occurrence, and asks for explicit confirmation even for an empty set. Its native selected-set command uses the
+Kernel's finite nine-axis plan: fixed owner/Source/scope preparation and pre-receipt checks, one bounded positive
+membership plus complete original-reference closure per selected ID, or a complete negative membership refusal,
+then output rows sized to the selection and fixed activation, History, events, receipt, serialization and rollback
+terms. The native adapter explicitly supplies `engineRequests: 0` to the older eight-axis Work port. Selected IDs,
+including `[]`, never certify whole-query exhaustion.
+
+The generated `collections({ collectionId }).$publishSelected.post` operation is the only publication transport.
+Session setup, server imports and response decoding stay inside safe result boundaries; the response is consumed into
+the plain feature result. The current-page read has a 10-second response phase and a dispatched publication has a
+separate 25-second response phase. A timeout only ends the visible wait. It does not cancel native work or prove
+whether it committed. The retained intent keeps its original IDs, revision, credential, idempotency key and frozen
+review; a deliberate retry sends that same operation. A late result may settle only its same live owner attempt.
+
+Reload performs one bounded current-page read and never publishes. A receipt and its original review remain visible
+independently of current-read recovery. Current selected output is rendered from its native page projection and a
+previously observed complete output remains visible across read failure; a later current output with a higher
+Collection revision takes precedence over an older receipt. A page read is only an output observation and never
+acknowledges an uncertain command. No DTO proof means unavailable, while a completed output with zero members remains an explicit
+complete empty set. Owner/account/address retirement removes old controls and ignores late work. Browser/native
+receiving acceptance is deferred to the controller verifier; missing Source or original-reference evidence stays
+unavailable.

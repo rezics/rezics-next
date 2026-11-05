@@ -141,13 +141,24 @@ async function mount() {
     });
   let session = viewer();
   let currentAddress = address;
-  const ready = (revision = 7, members = exampleSource.page.members): PublicationPage => ({
+  const ready = (
+    revision = 7,
+    members = exampleSource.page.members,
+    publication?: { generation: string; state: 'complete'; itemCount: number },
+  ): PublicationPage => ({
     viewer: { subject: session.subject!, csrfToken: session.csrfToken! },
     address: currentAddress,
     source: {
       state: 'ready',
       revision,
-      page: { ...exampleSource.page, id: currentAddress.id, curatorAccountId: session.subject!, revision, members },
+      page: {
+        ...exampleSource.page,
+        id: currentAddress.id,
+        curatorAccountId: session.subject!,
+        revision,
+        members,
+        ...(publication ? { publication } : {}),
+      },
     },
   });
   const tree = (node: ReactNode) => (
@@ -204,12 +215,13 @@ async function mount() {
     ids: publicationCandidates(exampleSource.page).map((member) => member.subject!.id),
     members: exampleSource.page.members,
     hide: () => flush(() => root.render(tree(null))),
-    view: (page: PublicationPage) =>
+    view: (page: PublicationPage, responseTimeoutMs?: number) =>
       flush(() =>
         root.render(
           tree(
             <CollectionPublicationPageView
               page={page}
+              {...(responseTimeoutMs === undefined ? {} : { responseTimeoutMs })}
               submit={(input) => {
                 const call = { input, csrf: page.viewer?.csrfToken ?? null, work: deferred<PublicationResult>() };
                 writes.push(call);
@@ -345,6 +357,64 @@ test('Uncertain selected publication retains its exact native intent across curr
     expect(writes[3]!.input.idempotencyKey).not.toBe(original.idempotencyKey);
     await page.settle(writes[3]!.work, complete(writes[3]!.input));
     expect(reads).toHaveLength(5);
+  });
+});
+
+test('A timed-out original remains uncertain after a refused replay and accepts its late exact receipt', async () => {
+  await mounted(async (page) => {
+    await page.view(page.ready(), 1);
+    await page.choose();
+    await page.click(page.m.library_publication_publish(), true);
+    expect(writes).toHaveLength(1);
+    const original = structuredClone(writes[0]!.input);
+    expect(page.host.textContent).toContain(page.m.library_publication_unknown());
+
+    await page.click(page.m.library_publication_retry());
+    expect(writes).toHaveLength(2);
+    expect(writes[1]!.input).toEqual(original);
+    await page.settle(writes[1]!.work, { ok: false, reason: 'denied' });
+    expect(page.host.textContent).toContain(page.m.library_publication_unknown());
+
+    await page.settle(writes[0]!.work, complete(original));
+    expect(page.host.textContent).toContain(page.m.library_publication_complete_one({ count: '1' }));
+    expect(page.host.textContent).not.toContain(page.m.library_publication_unknown());
+    expect(writes).toHaveLength(2);
+    expect(reads).toHaveLength(0);
+  });
+});
+
+test('A confirmed receipt stays separate from newer current output and survives a failed Reload without replay', async () => {
+  await mounted(async (page) => {
+    await page.show();
+    await page.settle(reads[0]!.work, page.ready(7, page.members, { generation: 'current-output', state: 'complete', itemCount: 3 }));
+    await page.choose();
+    await page.click(page.m.library_publication_publish());
+    expect(writes).toHaveLength(1);
+    await page.settle(writes[0]!.work, complete(writes[0]!.input));
+    expect(page.host.textContent).toContain(
+      page.m.library_publication_published_generation({ generation: 'native-complete' }),
+    );
+    expect(page.host.textContent).toContain(page.m.library_publication_complete_one({ count: '1' }));
+
+    await page.click(page.m.library_collection_reload());
+    expect(reads).toHaveLength(2);
+    await page.settle(
+      reads[1]!.work,
+      page.ready(9, page.members, { generation: 'newer-current-output', state: 'complete', itemCount: 4 }),
+    );
+    expect(page.host.textContent).toContain(
+      page.m.library_publication_published_generation({ generation: 'newer-current-output' }),
+    );
+    expect(page.host.textContent).toContain(page.m.library_publication_complete_one({ count: '1' }));
+
+    await page.click(page.m.library_collection_reload());
+    expect(reads).toHaveLength(3);
+    await page.settle(reads[2]!.work, new Error('Current output read failed'));
+    expect(page.host.textContent).toContain(
+      page.m.library_publication_published_generation({ generation: 'newer-current-output' }),
+    );
+    expect(page.host.textContent).toContain(page.m.library_publication_complete_one({ count: '1' }));
+    expect(writes).toHaveLength(1);
   });
 });
 

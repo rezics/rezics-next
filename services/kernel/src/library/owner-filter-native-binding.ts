@@ -92,6 +92,12 @@ export type NativeOwnerFilterBinding = Readonly<{
   query?: OwnerFilterQueryRead;
   originals: Map<string, string>;
 }>;
+export type NativeOwnerFilterCeilings = Readonly<{
+  /** Whole finite operation reservation; not an additional allocation or proof. */
+  total: WorkDimensions;
+  /** Static prefix retained by this binding phase before its remainder is transferred. */
+  binding: WorkDimensions;
+}>;
 const bindings = new WeakMap<OwnerFilterReadBinding, NativeOwnerFilterBinding>();
 
 /** Only a direct ordinary read owns its minted read time. Commands/Search keep their caller's lifetime. */
@@ -472,6 +478,7 @@ export async function bindNativeOwnerFilterRead(
   admission: CollectionMemberAdmission,
   deadline: number,
   attempt?: CommandAttempt,
+  ceilings?: NativeOwnerFilterCeilings,
 ) {
   requireAccessDeadline(deadline);
   const route = routeOf(collectionId);
@@ -495,12 +502,15 @@ export async function bindNativeOwnerFilterRead(
       throw ownerFilterUnavailable();
   }
   // The direct reader owns one root; a nested Search reader lends its existing root instead.
-  const root = scopeAllowance(100, randomUUID());
+  const reservationId = randomUUID();
+  const root = scopeAllowance(100, reservationId, ceilings?.total);
   // One direct Source request reservation, never renewed by a candidate/refill/closure.
   // Search supplies its own existing ceilings unchanged.
-  const work =
-    inherited?.work ??
-    new NativeCollectionWork({ ...root, remaining: { ...root.remaining, bytes: 16 * 1024 * 1024 } }, deadline);
+  const work = inherited?.work ??
+    new NativeCollectionWork(
+      ceilings ? root : { ...root, remaining: { ...root.remaining, bytes: 16 * 1024 * 1024 } },
+      deadline,
+    );
   const ownTime = !attempt && !inherited;
   const at =
     attempt?.time ??
@@ -510,7 +520,7 @@ export async function bindNativeOwnerFilterRead(
     ));
   let retained = false;
   try {
-    return await withAdmittedOwnerWorkingSource(
+    const bind = () => withAdmittedOwnerWorkingSource(
       {
         pool: dependencies.pool,
         actor,
@@ -627,6 +637,22 @@ export async function bindNativeOwnerFilterRead(
         return { status: 'bound', binding: result } as const;
       },
     );
+    const bound = ceilings
+      ? await work.withinAllowance(
+          { reservationId: work.receipt().reservationId, remaining: ceilings.binding },
+          bind,
+        )
+      : await bind();
+    if (bound.status !== 'bound' || !ceilings) return bound;
+    const previous = bindings.get(bound.binding);
+    if (!previous) throw ownerFilterUnavailable();
+    const result: OwnerFilterReadBinding = {
+      ...bound.binding,
+      input: { ...bound.binding.input, allowance: ownerFilterAllowance(work) },
+    };
+    freeze(result);
+    bindings.set(result, previous);
+    return { status: 'bound', binding: result } as const;
   } finally {
     if (ownTime && !retained) releaseOperationalTime(at);
   }
