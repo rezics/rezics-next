@@ -629,7 +629,8 @@ read boundary parser; unrelated query parameters remain refused.
 Session/client/consent inventory retains catalogue-derived bounds; Security, passkey and registration projections
 retain their fixed budgets. Enrollment requires the pinned `rezics.com` / `REZICS` RP. Current-session review after
 a lost password replacement acknowledgement does not renew the original opening epoch or confirm that command;
-its exact retry remains unknown when native revalidation refuses it.
+its exact retry remains unknown when native revalidation refuses it. Successful human password-retirement fixtures
+enroll an actual native passkey; independent account keys alone do not qualify that fixture.
 
 Enrollment responses use `packages/auth-contract/src/passkey-enrollment-response-bounds.ts`.
 Decision: bound the pinned complete creation DTO and exact credential-effect acknowledgement; stop malformed

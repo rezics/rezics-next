@@ -1,4 +1,5 @@
 import { actionDeclarations } from './native-account-bindings-fixture.ts';
+import { authenticator } from '../../../auth/test/support/passkey-authenticator';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { AsyncResource } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
@@ -98,7 +99,9 @@ export type NativeSecurityDriver = {
 /** Only credentials and caller handles live in this harness. Approval provenance,
  * policy, narrowing, consumption, floor advancement and effects belong to product.
  */
-export async function createNativeCredentialEffectDriver(): Promise<
+export async function createNativeCredentialEffectDriver(
+  options: { retainHumanPasskey?: boolean } = {},
+): Promise<
   NativeCredentialEffectDriver & { advanceClock(milliseconds: number): void; security: NativeSecurityDriver }
 > {
   let clockOffset = 0;
@@ -134,6 +137,7 @@ export async function createNativeCredentialEffectDriver(): Promise<
   let clientId = 'credential-consented';
   const loginClient = 'credential-login';
   const callers = new Map<string, Caller>();
+  const fixtureEffects = new Set<string>();
   const organizationFixtures = new Map<string, { owner: string; memberReservationId: string }>();
   const routeKey = testRouteKey();
   const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
@@ -626,6 +630,29 @@ export async function createNativeCredentialEffectDriver(): Promise<
       const botManager = operatorId === null ? other.caller : human.caller;
       const bot = await automated(operatorId ?? other.accountId, botManager);
       const subjectId = operatorId === null ? human.accountId : bot.accountId;
+      if (operatorId === null && options.retainHumanPasskey !== false) {
+        // Successful human password retirement needs a real interactive fallback.
+        // Keep the four-purpose outcome assertions unchanged by qualifying this fixture natively.
+        const device = authenticator();
+        const enrollment = await successful<{ challenge: string; user: { id: string } }>(
+          await security.request(human.caller, '/passkeys/register/options', {}),
+          'fixture passkey preparation',
+        );
+        await successful(
+          await security.request(human.caller, '/passkeys/register', {
+            name: 'Fixture interactive fallback',
+            response: device.registration(enrollment, true, issuer),
+          }),
+          'fixture passkey enrollment',
+        );
+        for (const row of (
+          await auth().query<{ effect_reference: string }>(
+            "SELECT effect_reference FROM auth_effect_receipt WHERE account_id=$1 AND purpose='add-passkey'",
+            [human.accountId],
+          )
+        ).rows)
+          fixtureEffects.add(row.effect_reference);
+      }
       const existing = await publicKey();
       const otherExisting = await publicKey();
       const candidate = await publicKey();
@@ -744,7 +771,7 @@ export async function createNativeCredentialEffectDriver(): Promise<
           "SELECT * FROM auth_effect_receipt WHERE account_id=ANY($1::text[]) AND committed_at IS NOT NULL AND operation_key NOT LIKE 'fixture:%' ORDER BY receipt_id",
           [targets],
         )
-      ).rows;
+      ).rows.filter((row) => !fixtureEffects.has(row.effect_reference));
       const floors = (
         await kernel().query(
           'SELECT account_id,minimum_authn_epoch::text,authn_fenced AS fenced FROM access.account WHERE account_id=ANY($1::uuid[]) ORDER BY account_id',

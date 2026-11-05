@@ -11,7 +11,7 @@ import {
 setDefaultTimeout(300_000);
 let driver: Awaited<ReturnType<typeof createNativeCredentialEffectDriver>>;
 beforeAll(async () => {
-  driver = await createNativeCredentialEffectDriver();
+  driver = await createNativeCredentialEffectDriver({ retainHumanPasskey: false });
 });
 afterAll(async () => {
   await driver?.close();
