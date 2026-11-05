@@ -12,6 +12,7 @@ import { identifierFields } from './identifiers-profile';
 import type { IdentifierInspection, IdentifierVisitOrigin } from './identifier-current-visit';
 import { identifierOriginHref, identifierReviewHref } from './identifier-current-visit';
 import { candidateContext } from '../../subject/candidates';
+import { pageText } from '../pages/shared';
 import { subjectHref } from '../../subject/subject-href';
 
 export type IdentifiersProfileProps = {
@@ -70,6 +71,7 @@ function IdentifiersProfileLive({
       ? query.data
       : undefined;
   if (current && retained !== current) setRetained(current);
+  const label = retained ? pageText(retained.public.subject.labels, locale).text : '';
   const readable = session === 'signed-in' && !query.isError && !query.isFetching && !!current;
   return (
     <section className="flex flex-col gap-4" data-slot="identifiers-profile">

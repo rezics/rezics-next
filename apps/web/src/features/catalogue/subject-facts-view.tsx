@@ -345,6 +345,7 @@ function FactField({
   onDiscard,
   href,
   editorHref,
+  reviewHref,
   onReview,
   onReuse,
   focusReference,
@@ -361,6 +362,7 @@ function FactField({
   onDiscard?: ((draft: FactDraft) => void) | undefined;
   href: string;
   editorHref?: string | undefined;
+  reviewHref?: FactsProfile['reviewHref'];
   onReview: (address: ReviewAddress) => void;
   onReuse?: ((index: number, keyboard: boolean) => void) | undefined;
   focusReference?: { index: number; nonce: number } | undefined;
@@ -609,7 +611,7 @@ function FactField({
                     {inspectionAvailability === 'allowed' ? (
                       <a
                         href={
-                          profile?.reviewHref?.(property, draft.result.candidate) ??
+                          reviewHref?.(property, draft.result.candidate) ??
                           `${editorHref ?? `${href}/edit`}?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`
                         }
                         className={buttonVariants({
@@ -1054,6 +1056,7 @@ function SubjectFactsLive({
                         draft={drafts.find((draft) => draft.property === property)}
                         onChange={change}
                         onDiscard={discard}
+                        reviewHref={profile?.reviewHref}
                         onReview={(address) => {
                           if (lifetime.active()) {
                             profile?.onReviewIntent?.();

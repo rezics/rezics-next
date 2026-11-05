@@ -1,7 +1,7 @@
 import type { Release } from '@rezics/definitions';
 import type { SubjectPageData } from '../pages/subject';
 import { subjectBody } from '../pages/subject';
-import { bestRank, spoilerLevel } from '../pages/shared';
+import { bestRank, spoilerLevel, type Stmt } from '../pages/shared';
 import { defaultReader } from '../../subject/reader';
 import { candidateContext } from '../../subject/candidates';
 import type { Subject, Related } from '../../subject/types';
@@ -9,7 +9,7 @@ import { identifierProperties } from './identifiers-profile';
 import type { IdentifierInspection, IdentifierVisitOrigin } from './identifier-current-visit';
 
 export type IdentifierEvidence = {
-  subject: Subject;
+  subject: Omit<Subject, 'statements'> & { statements: Record<string, Stmt[]> };
   related: Related;
   definitions: Pick<Release, 'types' | 'properties'>;
   digest: string;
