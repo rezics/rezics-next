@@ -168,6 +168,7 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     await click(m.settings_watches_retry_original());
     expect(host.textContent).toContain(m.settings_watches_uncertain_text());
     expect(host.textContent).toContain(m.settings_watches_denied());
+    expect(host.querySelector('[data-response-code="forbidden"]')).toBeTruthy();
     expect(host.querySelector('a[href="/threads/current"]')).toBeNull();
     response = { kind: 'page', page: { ...envelope, actions: { remove: 'denied' }, watches: [], next: null } };
     await click(m.settings_retry());

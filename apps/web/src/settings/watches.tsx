@@ -121,7 +121,13 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
             <Alert variant="destructive">
               <AlertTitle>{m.settings_watches_uncertain_title()}</AlertTitle>
               <AlertDescription className="space-y-3">
-                <p>{m.settings_watches_uncertain_text()}</p>
+                <p
+                  data-response-status={state.writeProblem?.status ?? ''}
+                  data-response-code={state.writeProblem?.code ?? ''}
+                  data-retry-after={state.writeProblem?.retryAfter}
+                >
+                  {m.settings_watches_uncertain_text()}
+                </p>
                 {originalWaiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
                 <Button
                   className={controlClass}
