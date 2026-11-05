@@ -2,6 +2,7 @@ import { sourceClassificationRoutes } from './source-classification-routes.ts';
 import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -130,6 +131,8 @@ function detail(operationId: string, write = false) {
     operationId,
     'x-action': VOTE_SCOPE,
     'x-exposure': 'gate:personal_library',
+    'x-authority-anchor': 'own-account',
+    'x-authority-resource-types': Object.keys(bundledRelease.types),
     security: bearer,
     ...(write ? { 'x-rate-limit': writeRate } : {}),
   };
