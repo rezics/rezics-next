@@ -92,13 +92,22 @@ const click = (label: string) => flush(() => button(label).click());
 async function mount() {
   calls = [];
   reply = (path) =>
-    path === '/session'
-      ? session()
-      : path.endsWith('/member')
-        ? selected()
-        : path.endsWith('/approve')
-          ? approval()
-          : Response.json({ accountId: memberAccountId });
+    path === '/signin'
+      ? Response.json({
+          account_id: accountId,
+          client_id: profile.client_id,
+          scope: profile.scope,
+          authn_epoch: 0,
+          auth_time: Math.floor(Date.now() / 1000),
+          amr: ['pwd'],
+        })
+      : path === '/session'
+        ? session()
+        : path.endsWith('/member')
+          ? selected()
+          : path.endsWith('/approve')
+            ? approval()
+            : Response.json({ accountId: memberAccountId });
   globalThis.fetch = (async (input, init) => {
     const path = String(input);
     calls.push({ path, body: init?.body ? JSON.parse(String(init.body)) : null });
@@ -202,7 +211,7 @@ for (const stage of ['list', 'selection', 'signin', 'session', 'reservation', 'a
       if (stage === 'signin') {
         reply = (path) =>
           path.endsWith('/approve')
-            ? Response.json({ code: 'step_up_required' }, { status: 401 })
+            ? Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 })
             : path === '/session'
               ? session()
               : selected();
@@ -278,7 +287,9 @@ test('determinate refusals preserve review; reauthentication requires confirmati
   });
   const normal = reply;
   reply = (path) =>
-    path.endsWith('/approve') ? Response.json({ code: 'step_up_required' }, { status: 401 }) : normal(path);
+    path.endsWith('/approve')
+      ? Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 })
+      : normal(path);
   await confirm();
   await click(m.auth_members_submit());
   expect(host.querySelector('#membership-confirmation')).not.toBeNull();
@@ -343,7 +354,7 @@ test.each(['signed-out', 'actor', 'profile', 'roster', 'reservation'])(
     let selectedReads = 0;
     reply = (path) =>
       path.endsWith('/approve')
-        ? Response.json({ code: 'step_up_required' }, { status: 401 })
+        ? Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 })
         : boundary === 'reservation' && path.endsWith('/member') && ++selectedReads === 2
           ? Response.json({ organizationId, memberAccountId, membership: { role: 'member', reservationId: other } })
           : normal(path);

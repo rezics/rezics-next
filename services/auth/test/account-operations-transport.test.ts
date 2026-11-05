@@ -1,3 +1,9 @@
+import {
+  MEMBERSHIP_APPROVAL_MAX_RESPONSE_BYTES,
+  MEMBERSHIP_EXECUTION_MAX_RESPONSE_BYTES,
+  parseMembershipApprovalResponse,
+  parseMembershipExecutionResponse,
+} from '@rezics/auth-contract';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -345,6 +351,23 @@ test('a signed-in person approves and executes organization creation rename and 
       ])
     ).rows,
   ).toEqual([{ kind: 'organization', state: 'active', handle }]);
+
+  const membership = { kind: 'membership', organizationId, memberAccountId: ordinary.accountId, role: 'member' };
+  const memberApprovalResponse = await approve(creator, 'join-selected-member', membership);
+  const approvalText = await memberApprovalResponse.text();
+  expect(memberApprovalResponse.status).toBe(200);
+  expect(Buffer.byteLength(approvalText)).toBeLessThanOrEqual(MEMBERSHIP_APPROVAL_MAX_RESPONSE_BYTES);
+  const memberApproval = parseMembershipApprovalResponse(JSON.parse(approvalText))!;
+  expect(memberApproval).not.toBeNull();
+  const memberResponse = await execute(creator, {
+    operationKey: 'join-selected-member',
+    operation: membership,
+    reference: memberApproval.reference,
+  });
+  const memberText = await memberResponse.text();
+  expect(memberResponse.status).toBe(200);
+  expect(Buffer.byteLength(memberText)).toBeLessThanOrEqual(MEMBERSHIP_EXECUTION_MAX_RESPONSE_BYTES);
+  expect(parseMembershipExecutionResponse(JSON.parse(memberText))).toEqual({ accountId: ordinary.accountId });
 
   const renamed = `${creator.handle}_renamed`;
   const rename = { kind: 'rename', accountId: creator.accountId, handle: renamed, expectedHandle: creator.handle };

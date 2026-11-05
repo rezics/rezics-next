@@ -174,6 +174,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   const [recoveryStatus, setRecoveryStatus] = useState('review');
   const roster = useRef(new MembershipRosterNavigation());
   const lifetime = useRef(0);
+  const mounted = useRef(false);
   const pageRead = useRef(new AbortController());
   const pendingDeparture = useRef<{ promise: Promise<boolean>; resolve: (leave: boolean) => void } | null>(null);
   const work = useRef(false);
@@ -187,8 +188,10 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   // Invalidate before another page can handle input. Each continuation captures
   // this particular lifetime, including across Strict Mode effect replay.
   useLayoutEffect(() => {
+    mounted.current = true;
     renewActivity();
     return () => {
+      mounted.current = false;
       lifetime.current++;
       pageRead.current.abort();
       roster.current.clear();
@@ -681,18 +684,23 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         return;
       }
       const result: MembershipOutcome = await submitMembership(command, isActive);
+      if (!mounted.current) return;
+      // Classify this original attempt before observing current membership, even
+      // when private authority retired while its execution was in flight.
+      const classification: MembershipHistoryKind =
+        result === 'acknowledged'
+          ? 'acknowledged'
+          : result === 'unknown'
+            ? 'unresolved'
+            : result === 'denied' || result === 'conflict' || result === 'step-up'
+              ? 'refused'
+              : 'unsent';
+      phase.current = classification;
+      remember(classification);
       if (!isActive()) return;
-      // Record the actual native result before any current-state observation.
-      // A later acknowledgement cannot erase an earlier unknown send.
-      if (result === 'acknowledged') {
-        phase.current = 'acknowledged';
-        remember('acknowledged');
-      } else if (command.unresolved) {
-        phase.current = 'unresolved';
-        remember('unresolved');
-      } else if (result === 'denied' || result === 'conflict') {
-        phase.current = 'refused';
-        remember('refused');
+      if (!sameMembershipCommand(readMembershipCommand(), command)) {
+        retirePrivateAuthority('unavailable');
+        return;
       }
       if (result === 'denied') {
         installPage({ kind: 'denied' });

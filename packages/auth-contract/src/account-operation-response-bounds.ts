@@ -73,3 +73,29 @@ export const DELETION_EXECUTION_MAX_RESPONSE_BYTES = RENAME_EXECUTION_MAX_RESPON
 export const parseRenameApprovalResponse = parseAccountOperationApprovalResponse;
 export const parseDeletionExecutionResponse = parseRenameExecutionResponse;
 export const parseDeletionOperationRefusal = parseRenameOperationRefusal;
+
+/** Membership also supports native locator references, with at most one seal separator.
+ * Keep opaque IDs opaque: HTTP command operands admit up to 4096 UTF-16 units.
+ */
+export const MEMBERSHIP_APPROVAL_MAX_RESPONSE_BYTES =
+  JSON.stringify({ reference: '', expiresAt: '' }).length + 6 * (ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH + 27);
+export const MEMBERSHIP_EXECUTION_MAX_RESPONSE_BYTES = RENAME_EXECUTION_MAX_RESPONSE_BYTES;
+export function parseMembershipApprovalResponse(value: unknown): AccountOperationApprovalResponse | null {
+  if (
+    !object(value) ||
+    Object.keys(value).sort().join(',') !== 'expiresAt,reference' ||
+    typeof value.reference !== 'string' ||
+    value.reference.length > ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH ||
+    /^[A-Za-z0-9][A-Za-z0-9:_/-]*(?:\.[A-Za-z0-9_-]+)?$/.exec(value.reference)?.[0] !== value.reference ||
+    typeof value.expiresAt !== 'string' ||
+    value.expiresAt.length > 27 ||
+    !Number.isFinite(Date.parse(value.expiresAt)) ||
+    new Date(value.expiresAt).toISOString() !== value.expiresAt
+  )
+    return null;
+  return { reference: value.reference, expiresAt: value.expiresAt };
+}
+export const parseMembershipExecutionResponse = parseRenameExecutionResponse;
+export const parseAccountOperationRefusal = parseRenameOperationRefusal;
+
+export type AccountOperationRefusal = RenameOperationRefusal;

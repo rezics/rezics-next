@@ -15,7 +15,7 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader() {},
 }));
 mock.module('cloudflare:workers', () => ({ env: { AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue' } }));
-const { membershipProfile, newMembershipCommand, submitMembership } = await import('./apps/auth/src/organization-membership');
+const { membershipProfile, newMembershipCommand, submitMembership, saveMembershipCommand, readMembershipCommand } = await import('./apps/auth/src/organization-membership');
   const [accountId, organizationId, memberAccountId] = [1, 2, 3].map((n) => \`00000000-0000-4000-8000-00000000000\${n}\`);
   const command = newMembershipCommand(accountId!, {
     kind: 'membership',
@@ -54,6 +54,7 @@ const { membershipProfile, newMembershipCommand, submitMembership } = await impo
     return Response.json({}, { status: 503 });
   }) as typeof fetch;
   try {
+    expect(saveMembershipCommand(command)).toBe(true);
     expect(await submitMembership(command)).toBe('unknown');
     expect(calls.map((call) => call.path)).toEqual([
       '/session',
@@ -70,6 +71,61 @@ const { membershipProfile, newMembershipCommand, submitMembership } = await impo
       '/account-operations/execute',
     ]);
     expect(calls.at(-1)!.body).toEqual(submitted);
+    const ordinaryFetch = globalThis.fetch;
+    for (const [response, expected, unresolved] of [
+      [() => Response.json({ accountId: memberAccountId }), 'acknowledged', true],
+      [() => Response.json({ accountId }), 'unknown', true],
+      [() => new Response('{'), 'unknown', true],
+      [() => Response.json({ accountId: 'x'.repeat(25000) }), 'unknown', true],
+      [() => Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 409 }), 'conflict', false],
+      [() => Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }), 'step-up', false],
+      [() => Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 503 }), 'unavailable', false],
+      [() => Response.json({ error: 'account_operation_denied' }, { status: 409 }), 'unknown', true],
+    ] as const) {
+      const attempt = newMembershipCommand(accountId!, command.operation);
+      saveMembershipCommand(attempt);
+      globalThis.fetch = ((input, init) => String(input).endsWith('/execute') ? response() : ordinaryFetch(input, init)) as typeof fetch;
+      expect(await submitMembership(attempt)).toBe(expected);
+      expect(readMembershipCommand()).toMatchObject({ unresolved });
+    }
+    globalThis.fetch = ((input, init) => String(input).endsWith('/approve')
+      ? Response.json({ reference: 'x'.repeat(4097), expiresAt: new Date(Date.now() + 60000).toISOString() })
+      : ordinaryFetch(input, init)) as typeof fetch;
+    const excess = newMembershipCommand(accountId!, command.operation);
+    saveMembershipCommand(excess);
+    const before = calls.filter(c => c.path.endsWith('/execute')).length;
+    expect(await submitMembership(excess)).toBe('unavailable');
+    expect(calls.filter(c => c.path.endsWith('/execute'))).toHaveLength(before);
+
+    // Shared stream tests cover the byte matrix. Here pin the membership POST's
+    // lifetime through a stalled body and ignored-abort headers, without waiting five seconds.
+    const timer = globalThis.setTimeout;
+    let expire!: () => void;
+    globalThis.setTimeout = ((callback, delay) => {
+      if (delay === 5000) expire = callback as () => void;
+      return timer(() => {}, 60000);
+    }) as typeof setTimeout;
+    try {
+      for (const stalledBody of [true, false]) {
+        let release!: (r: Response) => void;
+        const late = new Promise<Response>(resolve => { release = resolve; });
+        globalThis.fetch = ((input, init) => String(input).endsWith('/execute')
+          ? stalledBody ? new Response(new ReadableStream({ start() {}, cancel() {} })) : late
+          : ordinaryFetch(input, init)) as typeof fetch;
+        const attempt = newMembershipCommand(accountId!, command.operation);
+        saveMembershipCommand(attempt);
+        const pending = submitMembership(attempt);
+        // Allow the existing session/selected/approval promises to reach execute.
+        for (let i = 0; i < 100; i++) await Promise.resolve();
+        expire();
+        expect(await pending).toBe('unknown');
+        const saved = readMembershipCommand();
+        release(Response.json({ accountId: memberAccountId }));
+        await Promise.resolve();
+        expect(readMembershipCommand()).toEqual(saved);
+      }
+    } finally { globalThis.setTimeout = timer; }
+
   } finally {
     globalThis.fetch = originalFetch;
     if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);

@@ -459,3 +459,46 @@ test('pagehide synchronously clears prepared authentication inputs and stale sig
   expect(list.mock.calls).toHaveLength(reads);
   expect(host.querySelector('#membership-confirmation')).toBeNull();
 });
+
+test('a refused exact retry keeps first unknown and records the latest native refusal', async () => {
+  await mount();
+  execute = async () => Response.json({}, { status: 503 });
+  await click(m.auth_members_change_role());
+  await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await click(m.auth_members_submit());
+  const saved = membership.readMembershipCommand();
+  execute = async () =>
+    Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 });
+  await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await click(m.auth_members_retry_exact());
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).toContain(m.auth_members_return_refused());
+  expect(host.textContent).not.toContain(member);
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  expect(writes().filter((p) => p.endsWith('/approve'))).toHaveLength(1);
+  expect(writes().filter((p) => p.endsWith('/execute'))).toHaveLength(2);
+});
+
+test('an original execution returning after private retirement keeps generic result and replacement storage', async () => {
+  await mount();
+  let release!: (r: Response) => void;
+  execute = () =>
+    new Promise((resolve) => {
+      release = resolve;
+    });
+  await click(m.auth_members_change_role());
+  await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await click(m.auth_members_submit());
+  const original = membership.readMembershipCommand() as membership.MembershipCommand;
+  const replacement = membership.newMembershipCommand(account, { ...original.operation, role: 'member' });
+  membership.saveMembershipCommand(replacement);
+  await flush(() => transition('pagehide'));
+  const reads = requests.length;
+  await flush(() => release(Response.json({ accountId: member })));
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).toContain(m.auth_members_acknowledged());
+  expect(host.textContent).not.toContain(member);
+  expect(host.querySelector('#membership-confirmation')).toBeNull();
+  expect(membership.readMembershipCommand()).toEqual(replacement);
+  expect(requests).toHaveLength(reads);
+});

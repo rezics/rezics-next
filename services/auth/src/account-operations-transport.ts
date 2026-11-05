@@ -2,6 +2,7 @@ import {
   parseAccountOperationApprovalResponse,
   parseRenameExecutionResponse,
   parseDeletionExecutionResponse,
+  parseMembershipApprovalResponse,
 } from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import type { AccountOperation, createAccountWorkflows } from './workflows.ts';
@@ -142,7 +143,7 @@ export function accountOperationTransport(
       request.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json'
     )
       return denied(400);
-    let deletionDispatched = false;
+    let effectDispatched = false;
     try {
       const body = await readJsonObject(request);
       const names =
@@ -188,6 +189,8 @@ export function accountOperationTransport(
         if (!approval) return response({ error: 'platform_closed', effect_status: 'not_applied' }, 403);
         const projected = { reference: approval.reference, expiresAt: approval.expiresAt };
         if (['rename', 'delete'].includes(operation.kind) && !parseAccountOperationApprovalResponse(projected))
+          return response({ error: 'unavailable' }, 503);
+        if (operation.kind === 'membership' && !parseMembershipApprovalResponse(projected))
           return response({ error: 'unavailable' }, 503);
         return response(projected);
       }
@@ -242,7 +245,7 @@ export function accountOperationTransport(
             : response({ error: 'unavailable' }, 503);
         }
         case 'delete': {
-          deletionDispatched = true;
+          effectDispatched = true;
           const result = parseDeletionExecutionResponse(
             await workflows.deleteAccount({
               ...input,
@@ -265,6 +268,7 @@ export function accountOperationTransport(
             }),
           );
         case 'membership':
+          effectDispatched = true;
           return response(
             await workflows.setMembership({
               ...input,
@@ -278,8 +282,8 @@ export function accountOperationTransport(
           return response(await workflows.fenceOperator({ ...input, accountId: operation.accountId as string }));
       }
     } catch (error) {
-      // After invoking deletion, an exception can follow a committed tombstone.
-      if (deletionDispatched) return response({ error: 'unavailable' }, 503);
+      // After invoking deletion or membership, an exception can follow a committed effect.
+      if (effectDispatched) return response({ error: 'unavailable' }, 503);
       if (error && typeof error === 'object' && 'code' in error && error.code === 'step_up_required')
         return response({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
