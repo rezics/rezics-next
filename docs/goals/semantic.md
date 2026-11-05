@@ -31,6 +31,9 @@ extend existing bounded page composition and consumers under current grants; mus
 Commerce-owned. The [audit gap journey plan](../research/semantic-gap-journeys-plan.md) maps the three source audits to
 retained work and remaining native catalogue admission journeys; it does not reopen delivered UI.
 
+Decision: Kernel typecheck repairs update fixtures and call forms to current contracts while preserving assertions;
+production changes are limited to code that violates those contracts.
+
 ## Ownership
 
 Owns `packages/definitions/**`, `packages/filter/**`, `services/kernel/{src,db,test}/semantic/**` and
