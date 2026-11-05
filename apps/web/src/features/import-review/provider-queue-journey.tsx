@@ -1,3 +1,6 @@
+import { ProviderPersonReview } from './person-identity-view';
+import type { PersonReviewTransport } from './person-identity';
+import { getLocale } from '../../paraglide/runtime.js';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSession } from '../../session/query';
@@ -8,6 +11,8 @@ import {
   readProviderScopeSubjectsAction,
   searchProviderContextsAction,
   resolveProviderContextAction,
+  compareProviderPersonsAction,
+  mergeProviderPersonsAction,
 } from './provider-queue-actions';
 import { ProviderQueue } from './provider-queue-view';
 import {
@@ -32,7 +37,11 @@ import { m } from '../../paraglide/messages.js';
 export function ProviderQueueJourney({
   adapters,
 }: {
-  adapters?: (reader: ProviderAdmission) => { transport: QueueTransport; contexts: ProviderContextSource };
+  adapters?: (reader: ProviderAdmission) => {
+    transport: QueueTransport;
+    contexts: ProviderContextSource;
+    persons?: PersonReviewTransport;
+  };
 } = {}) {
   const client = useQueryClient();
   const session = useSession();
@@ -122,7 +131,11 @@ export function ProviderQueueJourney({
           search: (data) => admitted(() => searchProviderContextsAction({ data, headers })),
           resolve: (id) => admitted(() => resolveProviderContextAction({ data: { id }, headers })),
         };
-    return { transport, contexts };
+    const persons: PersonReviewTransport = installed?.persons ?? {
+      compare: (data) => admitted(() => compareProviderPersonsAction({ data, headers })),
+      merge: (data) => admitted(() => mergeProviderPersonsAction({ data, headers })),
+    };
+    return { transport, contexts, persons };
   }, [admission, visit, adapters]);
   if (refused)
     return (
@@ -155,15 +168,25 @@ export function ProviderQueueJourney({
       </p>
     );
   return (
-    <ProviderQueue
-      key={`${admission.id}:${visit.id}`}
-      {...bound}
-      current={visit.live}
-      canWrite={!!admission.csrfToken}
-      initialReturn={restored?.admission === admission.id ? restored.visit : undefined}
-      onReviewCandidate={(state) => {
-        return visit.live() ? !!saveProviderQueueReturn(source, admission, state) : false;
-      }}
-    />
+    <>
+      <ProviderPersonReview
+        key={`persons:${admission.id}:${visit.id}`}
+        transport={bound.persons}
+        current={visit.live}
+        canWrite={!!admission.csrfToken}
+        locale={getLocale()}
+      />
+      <ProviderQueue
+        key={`${admission.id}:${visit.id}`}
+        transport={bound.transport}
+        contexts={bound.contexts}
+        current={visit.live}
+        canWrite={!!admission.csrfToken}
+        initialReturn={restored?.admission === admission.id ? restored.visit : undefined}
+        onReviewCandidate={(state) => {
+          return visit.live() ? !!saveProviderQueueReturn(source, admission, state) : false;
+        }}
+      />
+    </>
   );
 }

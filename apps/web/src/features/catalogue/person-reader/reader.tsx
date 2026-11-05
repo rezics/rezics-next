@@ -12,6 +12,7 @@ import { catalogueEntries } from '../catalogue-entry';
 import { loadPersonDefinitions } from './actions';
 import {
   personEvidenceFits,
+  personCrossSourceIdentity,
   personGroups,
   personScalarFields,
   profileFields,
@@ -196,6 +197,13 @@ function PersonFacts(reading: Reading) {
   return (
     <div className="min-w-0 space-y-6 [overflow-wrap:anywhere]" data-slot="person-reader-facts">
       <SuppliedNames reading={reading} />
+      {personCrossSourceIdentity(read) !== 'current' && (
+        <p role="status">
+          {personCrossSourceIdentity(read) === 'conflicting'
+            ? m.person_identity_conflicting({}, o)
+            : m.person_identity_unconfirmed({}, o)}
+        </p>
+      )}
       <ProfileFields
         reading={reading}
         fields={profileFields(release, read, personScalarFields(release, read), locale).filter(

@@ -490,3 +490,17 @@ type ClassificationBallotOwnPageRoute = Routes['me']['classification-assessments
 export type ClassificationBallotOwnPageQuery = ClassificationBallotOwnPageRoute['query'];
 export type ClassificationBallotOwnPage = ClassificationBallotOwnPageRoute['response'][200];
 export type ClassificationBallotOwnPageItem = ClassificationBallotOwnPage['items'][number];
+
+export {
+  reviewedPersonRequests,
+  reviewedPersonMergeInput,
+  isReviewedPersonSource,
+  isReviewedPersonEndpoint,
+} from './reviewed-person-identity.ts';
+export type {
+  ReviewedPersonEndpoint,
+  ReviewedPersonSource,
+  ReviewedPersonRead,
+  ReviewedPersonMerge,
+  ReviewedPersonAdmission,
+} from './reviewed-person-identity.ts';

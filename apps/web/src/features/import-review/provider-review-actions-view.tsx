@@ -58,13 +58,13 @@ export function providerOutcomeText(result: ProviderDecisionResult, locale: stri
 }
 
 /** The queue and its sealed confirmation share the exact statement and provenance presentation. */
-function ProviderStatement({
+export function ProviderStatement({
   statement,
   row,
   locale,
 }: {
   statement: SubjectRead['subject']['statements'][string][number];
-  row: ProviderDecisionRow;
+  row: Pick<ProviderDecisionRow, 'subject' | 'related'>;
   locale: string;
 }) {
   const o = { locale: locale as never };
