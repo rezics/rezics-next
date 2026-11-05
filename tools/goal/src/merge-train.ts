@@ -2539,7 +2539,7 @@ export class MergeTrain {
         for (const member of prepared) {
           member.result.passed = true;
           member.result.stage = 'merge';
-          member.result.mergedCommit = member.candidate;
+          member.result.mergedCommit = head;
           member.result.hostMs = Date.now() - member.started;
           this.notifyOwnersOfOutsideChanges(
             member.entry.request,
@@ -2554,7 +2554,7 @@ export class MergeTrain {
               ),
               member.entry.request.declaredPaths,
             ),
-            member.candidate,
+            head,
             branch,
             member.result.logPath,
           );

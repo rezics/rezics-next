@@ -154,7 +154,7 @@ test('false integration recovery preserves provenance, reopens the same queue en
     h.queue.acknowledge(entry.id);
 
     const original = h.store.task(task.id);
-    const originalSession = h.store.attempt(ref).sessionId;
+    const originalSession = h.store.attempt(ref).session;
     const runtime = {
       queue: h.queue,
       db: h.store.db,
@@ -180,7 +180,7 @@ test('false integration recovery preserves provenance, reopens the same queue en
       branch: original.branch,
       worktree: original.worktree,
     });
-    expect(h.store.attempt(ref).sessionId).toBe(originalSession);
+    expect(h.store.attempt(ref).session).toBe(originalSession);
     expect(h.queue.entry(ref)).toMatchObject({ delivered: 0, outcome: null, candidate: null });
     expect(h.queue.entry(ref)?.request.devResolution).toBeUndefined();
     expect(h.store.events(task.id, 1).filter((event) => event.kind === 'false-integration-reconciled')).toHaveLength(1);
