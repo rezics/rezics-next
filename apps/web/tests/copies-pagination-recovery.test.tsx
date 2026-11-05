@@ -322,13 +322,25 @@ test('invalid addresses show correction without starting a browser copy read or 
   }
 });
 
-test('a native cursor restart is visible and its first-page link keeps the subject', async () => {
-  const h = await mount({ subjectId: edition, cursor: 'stale' }, { cursorRestarted: true });
+test('a native cursor restart admits a fresh first-page path and keeps its native continuation', async () => {
+  const h = await mount({ subjectId: edition, cursor: 'stale' }, { cursorRestarted: true, next: 'after-restart' });
   try {
     expect(h.host.textContent).toContain(m.library_copies_address_cursor_restarted());
-    const target = new URL(h.link(m.library_collections_first_page())!.href);
-    expect(target.searchParams.get('subjectId')).toBe(edition);
-    expect(target.searchParams.has('cursor')).toBe(false);
+    expect(h.link(m.library_label_previous_page())).toBeUndefined();
+    expect(h.link(m.library_collections_first_page())).toBeUndefined();
+    expect(new URL(h.link(m.library_copy_more())!.href).searchParams.get('cursor')).toBe('after-restart');
+  } finally {
+    await h.close();
+  }
+});
+
+test('an empty direct cursor window with a continuation remains traversable without inferred Previous', async () => {
+  const h = await mount({ subjectId: edition, cursor: 'direct-window' }, { copies: [], next: 'next-window' });
+  try {
+    expect(h.host.textContent).toContain(m.library_copy_page_empty());
+    expect(h.link(m.library_label_previous_page())).toBeUndefined();
+    expect(new URL(h.link(m.library_copy_more())!.href).searchParams.get('cursor')).toBe('next-window');
+    expect(new URL(h.link(m.library_collections_first_page())!.href).searchParams.has('cursor')).toBe(false);
   } finally {
     await h.close();
   }

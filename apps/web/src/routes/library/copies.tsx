@@ -36,6 +36,8 @@ export const Route = createFileRoute('/library/copies')({
   },
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) => readCopiesCurrent({ data: deps }),
+  // Cursor and filter moves use the private current reader; route entry alone needs loader data.
+  shouldReload: ({ cause }) => cause === 'enter',
   staleTime: 0,
   head: ({ match }) =>
     pageHead({ title: m.library_copy_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
