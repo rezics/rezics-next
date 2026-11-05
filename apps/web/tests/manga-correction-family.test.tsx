@@ -142,6 +142,8 @@ function deferred<T>() {
 test('Complete Manga correction groups and deliberate submission family retains whole mounted evidence, actions, bounds and retirement', async () => {
   await mounted(async (ui) => {
     const { MangaCorrections } = await import('../src/features/catalogue/manga-profile-corrections');
+    const { catalogueEditor } = await import('../src/features/catalogue/editor-lifetime');
+    const CorrectionsInEditor = catalogueEditor(MangaCorrections);
     const { MangaProfileEditor } = await import('../src/features/catalogue/manga-profile-view');
     const { mangaFixture, mangaVolumeId, mangaCreatorId, mangaVolumeCitation } =
       await import('../src/kernel/fake/catalogue-manga-profile');
@@ -242,7 +244,7 @@ test('Complete Manga correction groups and deliberate submission family retains 
       <>
         {[0, 1].map((index) => (
           <div key={index} data-mount={index} dir={index ? 'rtl' : 'ltr'}>
-            <MangaCorrections
+            <CorrectionsInEditor
               read={read}
               locale="en"
               disabled={false}
@@ -398,7 +400,7 @@ test('Complete Manga correction groups and deliberate submission family retains 
       const baseline = structuredClone(current.public);
       const attempts: FactCommand[] = [];
       await ui.render(
-        <MangaCorrections
+        <CorrectionsInEditor
           read={current}
           locale="en"
           disabled={false}
@@ -466,7 +468,7 @@ test('Complete Manga correction groups and deliberate submission family retains 
     const pending = deferred<Awaited<ReturnType<typeof partial.propose>>>();
     const partialCommands: FactCommand[] = [];
     await ui.render(
-      <MangaCorrections
+      <CorrectionsInEditor
         read={partialRead}
         locale="en"
         disabled={false}
@@ -518,7 +520,7 @@ test('Complete Manga correction groups and deliberate submission family retains 
 
     // Truthful missing/disabled inputs: no supplied subject means no fallback fact or action panel.
     await ui.render(
-      <MangaCorrections
+      <CorrectionsInEditor
         read={undefined}
         locale="en"
         disabled={true}
@@ -533,7 +535,7 @@ test('Complete Manga correction groups and deliberate submission family retains 
     expect(ui.host.textContent).not.toContain('Native relation port');
     for (const disabled of [true, false]) {
       await ui.render(
-        <MangaCorrections
+        <CorrectionsInEditor
           read={read}
           locale="en"
           disabled={disabled}
@@ -554,7 +556,7 @@ test('Complete Manga correction groups and deliberate submission family retains 
 
     const empty = mangaFixture('empty');
     await ui.render(
-      <MangaCorrections
+      <CorrectionsInEditor
         read={{ ok: true, release: empty.release, public: empty.reads.get(mangaVolumeId)! }}
         locale="en"
         disabled={false}
@@ -583,7 +585,7 @@ test('Complete Manga correction groups and deliberate submission family retains 
       const snapshot = structuredClone(current.public);
       const calls = structuredClone(growth.calls);
       await ui.render(
-        <MangaCorrections read={current} locale="en" disabled={false} ports={ports} reload={async () => undefined} />,
+        <CorrectionsInEditor read={current} locale="en" disabled={false} ports={ports} reload={async () => undefined} />,
       );
       const membership = field(ui.host, 'part of the series');
       expect(membership.querySelectorAll('a')).toHaveLength(size);
@@ -917,6 +919,8 @@ test('initial Manga recovery is single-flight, focuses its matching result, and 
 test('Manga withdrawn correction recovery preserves siblings, captured discard and exact uncertain commands', async () => {
   await mounted(async (ui) => {
     const { MangaCorrections } = await import('../src/features/catalogue/manga-profile-corrections');
+    const { catalogueEditor } = await import('../src/features/catalogue/editor-lifetime');
+    const CorrectionsInEditor = catalogueEditor(MangaCorrections);
     const { mangaFixture, mangaVolumeId } = await import('../src/kernel/fake/catalogue-manga-profile');
     const { readMangaProfile } = await import('../src/features/catalogue/manga-profile');
     const { m } = await import('../src/paraglide/messages.js');
@@ -953,7 +957,7 @@ test('Manga withdrawn correction recovery preserves siblings, captured discard a
         authored: null,
       };
       const page = (current = read) => (
-        <MangaCorrections read={current} locale="en" disabled={false} ports={ports} reload={async () => {}} />
+        <CorrectionsInEditor read={current} locale="en" disabled={false} ports={ports} reload={async () => {}} />
       );
       await ui.render(page());
       await ui.click(button(field(ui.host, 'number of pages'), m.facts_edit_field()));
