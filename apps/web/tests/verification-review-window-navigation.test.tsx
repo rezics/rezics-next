@@ -2,6 +2,7 @@ import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { act } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { ReviewPage, ReadState } from '../src/account-verification/transport';
 
 type ReviewRead = {
@@ -25,7 +26,10 @@ mock.module('../src/account-verification/actions', () => ({
 }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({}) }));
 mock.module('../src/session/query', () => ({
-  useSession: () => currentSession,
+  useSession: () => {
+    const { data } = useQuery({ queryKey: ['session'], queryFn: async () => currentSession, enabled: false });
+    return data ?? { state: 'unknown', csrfToken: null };
+  },
   sessionQuery: { queryKey: ['session'] },
 }));
 afterAll(() => mock.restore());
