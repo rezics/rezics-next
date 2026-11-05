@@ -345,8 +345,12 @@ Both mounted operations (`realm.home` and `realm.board_shelf`) use `RealmHomeBoa
 recent projection, through the existing registrations and dependencies. Publication's sole receiver must deliver
 the official package-root-derived callable before Web extends its Home transport; the older handwritten envelope
 does not authorize another substitute ABI. Web's agreed `RealmCommunityBoards` seam retains its existing shelf,
-focus, continuation and navigation slots. Client publication, browser receiving/join retirement and rendered journey
-acceptance remain follow-on work; this native source alone does not complete the connected product outcome.
+focus, continuation and navigation slots. Its Board title is an independent accessible link; no row-wide overlay may
+intercept a supplied thread link. The original outer membership/publication hosts alone consume completion and
+selected-shelf focus. A receiver whose installed Home/boardShelf callable omits `recent` keeps its admitted Board
+links and current unavailable discussion behavior until the sole publisher installs the complete projection and
+visibility types. Client publication, browser receiving/join retirement and rendered journey acceptance remain
+follow-on work; this native source alone does not complete the connected product outcome.
 
 ### Cost
 

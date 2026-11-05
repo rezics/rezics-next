@@ -2,7 +2,6 @@ import type { PublicationPrepare } from './realm-publication-preparation';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
-import { ListRow } from '@rezics/ui/list-row';
 import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
 import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
 import { coverSrc } from '../media/cover-src';
@@ -11,9 +10,10 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
 import { RealmMembership } from './realm-membership';
+import { RealmCommunityBoards } from './realm-community/boards';
 import { RealmBansPanel } from './realm-bans-panel';
 import { RealmMembersEntry } from './members/entry';
-import type { PublishedSubject, RealmBoard, RealmHome, SpacePageData } from './space';
+import type { PublishedSubject, RealmHome, SpacePageData } from './space';
 import { SpaceSetupEntry, useSpaceSetupRead } from './space-setup-page';
 import { FollowTargetControl } from '../library/follow-target-control';
 import { useSession } from '../session/query';
@@ -72,88 +72,6 @@ function subjectTitle(subject: PublishedSubject, locale: string): string {
     subject.labels.en ??
     Object.values(subject.labels)[0] ??
     m.library_subject_unavailable()
-  );
-}
-
-function purposeLabel(purpose: RealmBoard['purpose']): string {
-  return purpose === 'reviews' ? m.realm_board_purpose_reviews() : m.realm_board_purpose_discussion();
-}
-
-function Boards({
-  boards,
-  unavailable,
-  continuation,
-  complete,
-  focus,
-  returnFor,
-  current,
-}: {
-  returnFor: (id: string) => string | undefined;
-  current: () => boolean;
-  boards: RealmBoard[];
-  unavailable: number;
-  continuation: React.ReactNode;
-  complete: boolean;
-  focus: ReturnType<typeof useShelfContinuationFocus>;
-}) {
-  return (
-    <section className="space-y-4" aria-labelledby="realm-boards-heading">
-      <h2 ref={focus.boundaryRef} tabIndex={-1} id="realm-boards-heading" className="text-xl font-semibold">
-        {m.realm_boards_heading()}
-      </h2>
-      {boards.length ? (
-        <ul className="space-y-1">
-          {boards.map((board) => (
-            <ListRow
-              key={board.id}
-              id={`realm-board-${board.id}`}
-              ref={board.id === focus.firstId ? focus.itemRef : null}
-              tabIndex={-1}
-              aria-label={board.id === focus.firstId ? focus.regionLabel : undefined}
-              className="flex items-start gap-4 rounded-xl px-4 py-3 focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <Link
-                to="/boards/$id"
-                params={{ id: board.id }}
-                search={returnFor(board.id) ? { returnTo: returnFor(board.id)! } : {}}
-                onClick={(event) => {
-                  if (!current()) event.preventDefault();
-                }}
-                onAuxClick={(event) => {
-                  if (!current()) event.preventDefault();
-                }}
-                onContextMenu={(event) => {
-                  if (!current()) event.preventDefault();
-                }}
-                className="absolute inset-1 z-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                data-slot="list-row-link"
-              >
-                <span className="sr-only">{board.title ?? m.threads_untitled()}</span>
-              </Link>
-              <div className="min-w-0 flex-1 space-y-1">
-                <h3 className="font-semibold">{board.title ?? m.threads_untitled()}</h3>
-                {board.description ? (
-                  <p className="text-sm leading-relaxed text-muted-foreground">{board.description}</p>
-                ) : null}
-                <p className="text-xs font-medium text-muted-foreground">{purposeLabel(board.purpose)}</p>
-              </div>
-              {board.visibility === 'draft' || board.visibility === 'protected' ? (
-                <p className="relative z-10 shrink-0 text-xs text-muted-foreground">
-                  {board.visibility === 'draft' ? m.realm_board_draft() : m.realm_board_protected()}
-                </p>
-              ) : null}
-            </ListRow>
-          ))}
-        </ul>
-      ) : unavailable === 0 && complete ? (
-        <p className="text-muted-foreground">{m.realm_boards_empty()}</p>
-      ) : null}
-      {unavailable > 0 ? <p className="text-muted-foreground">{m.realm_boards_unavailable()}</p> : null}
-      {continuation}
-      <p role="status" className="sr-only">
-        {focus.announcement}
-      </p>
-    </section>
   );
 }
 
@@ -514,7 +432,7 @@ export function RealmShelf({
   }, [completed, publications.continuation, publications.busy, publications.failure, onCompleted]);
   return (
     <>
-      <Boards
+      <RealmCommunityBoards
         returnFor={(id) => returnFor('boards', id)}
         current={current}
         focus={boardFocus}

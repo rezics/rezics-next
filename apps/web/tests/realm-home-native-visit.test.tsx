@@ -47,7 +47,7 @@ const { bindNativeRealmHomeOperations, readNativeRealmHome, nativeRealmHomeShelv
   await import('../src/community/realm-home-native');
 const { readRealmJoinAdvice: readInstalledRealmJoinAdvice } = await import('../src/community/native-operations');
 const { loadSpacePageWithOrigin } = await import('../src/community/space');
-const { SpacePage } = await import('../src/community/space-page');
+const { SpacePage, RealmShelf } = await import('../src/community/space-page');
 const { bindSpacePageResult, captureSpacePageAdmission, SpacePageLifetimeHost } =
   await import('../src/community/space-page-lifetime');
 const { createRoot } = await import('react-dom/client');
@@ -663,4 +663,61 @@ test('late initial native home cannot bind to a retired route observation', asyn
   const page = await pending;
   expect(bindSpacePageResult(page, original, { kind: 'signed-in', subject: session.subject })).toBeNull();
   expect(host.textContent).toBe('');
+});
+
+test('the mounted Board seam restores its supplying shelf and links to the exact Realm cursor', async () => {
+  const page = await readNativeRealmHome(operations, input);
+  const realm = page.realm!;
+  const restored: (string | undefined)[] = [];
+  const returnTo = '/en/spaces/realm?node=boards&cursor=selected-window';
+  await settle(() =>
+    root.render(
+      <Frame.Provider
+        value={
+          <RealmShelf
+            realm={realm}
+            returnTo={returnTo}
+            transport={{
+              boards: async ({ cursor }) => {
+                restored.push(cursor);
+                return {
+                  kind: 'page',
+                  items: [
+                    {
+                      id: id(80),
+                      title: 'Supplied Board',
+                      description: 'Independent description',
+                      purpose: 'discussion',
+                      visibility: 'published',
+                    },
+                  ],
+                  next: null,
+                  unavailable: 0,
+                };
+              },
+            }}
+          />
+        }
+      >
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </Frame.Provider>,
+    ),
+  );
+  await settle(() => {});
+  expect(restored).toEqual(['selected-window']);
+  const section = host.querySelector('[data-slot="realm-community-boards"]')!;
+  const link = section.querySelector<HTMLAnchorElement>('[data-slot="realm-board-link"]')!;
+  expect(link.textContent).toBe('Supplied Board');
+  expect(link.closest('h3')).not.toBeNull();
+  expect(link.textContent).not.toContain('Independent description');
+  expect(link.className).not.toContain('absolute');
+  expect(section.querySelectorAll('a')).toHaveLength(1);
+  const destination = new URL(link.href, 'https://site.test');
+  expect(destination.pathname).toBe(`/boards/${id(80)}`);
+  expect(destination.searchParams.get('returnTo')).toBe(
+    `/en/spaces/realm?node=boards&cursor=selected-window#realm-board-${id(80)}`,
+  );
+  expect(document.activeElement?.id).toBe('realm-boards-heading');
 });
