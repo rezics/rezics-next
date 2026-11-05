@@ -5868,7 +5868,7 @@
   "search_result_kinds_help": "Wähle die gewünschten Ergebnistypen, auch Konten. Ohne Auswahl werden alle Typen durchsucht. Weitere Optionen findest du gegebenenfalls auf der nächsten Seite.",
   "search_all_kinds": "Alle Ergebnistypen",
   "search_choose_kinds": "Bestimmte Ergebnistypen wählen",
-  "search_kind_choice": "Ergebnisse: {value}",
+  "search_kind_choice": "Ergebnisse für den Typ {value}",
   "search_subject_type": "Eintragstyp",
   "search_subject_type_help": "Untertypen sind eingeschlossen. Konten wählst du unter Ergebnistypen.",
   "search_all_subject_types": "Beliebiger Eintragstyp",
@@ -10815,5 +10815,6 @@
   "library_archive_entry_update": "Geprüften lokalen Eintrag ausdrücklich ändern",
   "library_archive_entry_assign": "Geprüfte Zuordnung hinzufügen",
   "library_archive_entry_state_id": "Aktuelle unterstützte Status-ID",
-  "library_archive_entry_select": "Datensatz {ordinal} auswählen"
+  "library_archive_entry_select": "Datensatz {ordinal} auswählen",
+  "music_context_relations_unavailable": "Die Beziehungsseite konnte nicht gelesen werden. Profildaten bleiben verfügbar; rufe genau diese Seite erneut ab."
 }

@@ -160,6 +160,10 @@ export function TypeDirectoryPicker({
                 >
                   <span lang={type.labelLanguage ?? locale}>{type.label || type.id}</span>
                 </Button>
+                <code className="mt-1 block break-all text-xs text-muted-foreground">{type.id}</code>
+                {type.description && (
+                  <DefinitionMeaning text={type.description} language={type.descriptionLanguage} locale={locale} />
+                )}
               </li>
             ))}
           </ul>

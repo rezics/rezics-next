@@ -11,7 +11,7 @@ export const musicContextRequested = {
   place: ['schema:Place', 'schema:MusicVenue'] as const,
   event: ['schema:Event', 'schema:MusicEvent'] as const,
   area: ['schema:AdministrativeArea'] as const,
-  instrument: ['schema:MusicInstrument', 'wd:Q34379'] as const,
+  instrument: ['wd:Q34379'] as const,
 } as const;
 
 export type MusicContextKind = 'place' | 'event' | 'area' | 'instrument' | 'unsupported';
@@ -36,6 +36,7 @@ export type MusicContextLink = {
         property: string;
         label: string;
         text?: string | undefined;
+        target?: { id: string; label: string; targetKind?: Exclude<MusicContextKind, 'unsupported'> | undefined } | undefined;
         unknown?: 'somevalue' | 'novalue' | 'value' | undefined;
       }
     | undefined;
@@ -54,6 +55,7 @@ export type MusicContextRead =
       next: string | null;
       stream?: string | undefined;
       streamUnavailable?: boolean | undefined;
+      relationsUnavailable?: boolean | undefined;
       session?: string | undefined;
     };
 
@@ -171,73 +173,109 @@ export async function readMusicContext(
   const streamUnavailable = input.stream !== undefined && !stream;
   let links: MusicContextLink[] = [];
   let next: string | null = null;
+  let relationsUnavailable = false;
   let session = tokenOf(current) ?? input.session;
   if (stream) {
-    const page = await client.subjects({ id }).relations.get({
-      query: {
-        property: stream.id,
-        language: locale,
-        limit: MUSIC_CONTEXT_PAGE_CAP,
-        context,
-        ...(input.cursor ? { cursor: input.cursor } : {}),
-      },
-      headers: headersOf(authorization, session),
-      fetch: { cache: 'no-store', redirect: 'manual' },
-    });
-    if (page.status !== 200 || !page.data || !('relations' in page.data)) return readFailure(page.status);
-    session = tokenOf(page) ?? session;
-    next = isMusicContextCursor(page.data.next) ? page.data.next : null;
-    const dateField = stream.qualifiers.find((qualifier) => qualifier.datatype === 'time');
-    const roleField = stream.slotKey
-      ? stream.qualifiers.find((qualifier) => qualifier.id === stream.slotKey)
-      : undefined;
-    links = page.data.relations
-      .filter((row) => row.statement.property.id === stream.id)
-      .slice(0, MUSIC_CONTEXT_PAGE_CAP)
-      .map((row, index) => {
-        const summary = row.summary;
-        if (!summary?.id) {
-          return {
-            id: '',
-            label: '',
+    const page = await (async () => {
+      try {
+        return await client.subjects({ id }).relations.get({
+          query: {
             property: stream.id,
-            position: index + 1,
-            ...(typeof row.statement.id === 'string' ? { occurrence: row.statement.id } : {}),
-            unreadable: true,
-          };
-        }
-        const date = dateField && row.statement.qualifiers.find((part) => part.property.id === dateField.id);
-        const role = roleField && row.statement.qualifiers.find((part) => part.property.id === roleField.id);
-        const targetKind = summary?.type ? musicContextKind(release, summary.type) : 'unsupported';
-        return {
-          id: summary?.id ?? '',
-          label: summary?.label?.value ?? '',
-          ...(targetKind === 'unsupported' ? {} : { targetKind }),
-          property: stream.id,
-          position: index + 1,
-          ...(typeof row.statement.id === 'string' ? { occurrence: row.statement.id } : {}),
-          ...(date && dateField
-            ? { date: { property: dateField.id, label: dateField.label, time: timePresentation(date.value, locale) } }
-            : {}),
-          ...(role && roleField
-            ? {
-                role: {
-                  property: roleField.id,
-                  label: roleField.label,
-                  ...(role.value.type === 'value'
-                    ? {
-                        text:
-                          typeof role.value.content === 'string'
-                            ? role.value.content
-                            : (JSON.stringify(role.value.content) ?? ''),
-                      }
-                    : { unknown: role.value.type }),
-                },
-              }
-            : {}),
-          unreadable: false,
-        };
-      });
+            language: locale,
+            limit: MUSIC_CONTEXT_PAGE_CAP,
+            context,
+            ...(input.cursor ? { cursor: input.cursor } : {}),
+          },
+          headers: headersOf(authorization, session),
+          fetch: { cache: 'no-store', redirect: 'manual' },
+        });
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+        relationsUnavailable = true;
+        return undefined;
+      }
+    })();
+    if (page) {
+      session = tokenOf(page) ?? session;
+      const validPage =
+        page.status === 200 &&
+        !!page.data &&
+        'relations' in page.data &&
+        Array.isArray(page.data.relations) &&
+        (page.data.next === null || isMusicContextCursor(page.data.next));
+      if (!validPage) relationsUnavailable = true;
+      if (validPage) {
+        next = page.data.next;
+        const dateField = stream.qualifiers.find((qualifier) => qualifier.datatype === 'time');
+        const roleField = stream.slotKey
+          ? stream.qualifiers.find((qualifier) => qualifier.id === stream.slotKey)
+          : undefined;
+        links = page.data.relations
+          .filter((row) => row.statement.property.id === stream.id)
+          .slice(0, MUSIC_CONTEXT_PAGE_CAP)
+          .map((row, index) => {
+            const summary = row.summary;
+            if (!summary?.id) {
+              return {
+                id: '',
+                label: '',
+                property: stream.id,
+                position: index + 1,
+                ...(typeof row.statement.id === 'string' ? { occurrence: row.statement.id } : {}),
+                unreadable: true,
+              };
+            }
+            const date = dateField && row.statement.qualifiers.find((part) => part.property.id === dateField.id);
+            const role = roleField && row.statement.qualifiers.find((part) => part.property.id === roleField.id);
+            const roleTarget =
+              role?.value.type === 'value' && typeof role.value.content === 'string'
+                ? row.related?.[role.value.content]
+                : undefined;
+            const roleVisible =
+              !!role &&
+              (role.value.type !== 'value' || roleField?.datatype !== 'wikibase-item' || !!roleTarget);
+            const targetKind = summary.type ? musicContextKind(release, summary.type) : 'unsupported';
+            return {
+              id: summary.id,
+              label: summary.label?.value ?? '',
+              ...(targetKind === 'unsupported' ? {} : { targetKind }),
+              property: stream.id,
+              position: index + 1,
+              ...(typeof row.statement.id === 'string' ? { occurrence: row.statement.id } : {}),
+              ...(date && dateField
+                ? { date: { property: dateField.id, label: dateField.label, time: timePresentation(date.value, locale) } }
+                : {}),
+              ...(roleVisible && role && roleField
+                ? {
+                    role: {
+                      property: roleField.id,
+                      label: roleField.label,
+                      ...(roleTarget
+                        ? {
+                            target: {
+                              id: roleTarget.id,
+                              label: roleTarget.label?.value ?? '',
+                              ...(musicContextKind(release, roleTarget.type) !== 'unsupported'
+                                ? { targetKind: musicContextKind(release, roleTarget.type) }
+                                : {}),
+                            },
+                          }
+                        : {}),
+                      ...(role.value.type === 'value' && roleField.datatype !== 'wikibase-item'
+                        ? {
+                            text:
+                              typeof role.value.content === 'string'
+                                ? role.value.content
+                                : (JSON.stringify(role.value.content) ?? ''),
+                          }
+                        : { unknown: role.value.type }),
+                    },
+                  }
+                : {}),
+              unreadable: false,
+            };
+          });
+      }
   }
   return {
     ok: true,
@@ -249,6 +287,7 @@ export async function readMusicContext(
     next,
     ...(stream ? { stream: stream.id } : {}),
     ...(streamUnavailable ? { streamUnavailable: true } : {}),
+    ...(relationsUnavailable ? { relationsUnavailable: true } : {}),
     ...(session ? { session } : {}),
   };
 }

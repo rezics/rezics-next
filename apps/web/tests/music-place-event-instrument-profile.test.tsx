@@ -1,226 +1,59 @@
-import { expect, mock, test } from 'bun:test';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { expect, test } from 'bun:test';
 import type { KernelClient, SubjectRead } from '@rezics/client';
-import type { Release } from '@rezics/definitions';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { candidateContext } from '../src/subject/candidates';
 import { musicContextKind, readMusicContext } from '../src/features/catalogue/music-context-profile';
 import { MUSIC_CONTEXT_PAGE_CAP } from '../src/features/pages/graph-browser';
-import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
-import { MusicContextProfile } from '../src/features/pages/music-context-profile';
 
-mock.module('cloudflare:workers', () => ({ env: {} }));
+const event = '00000000-0000-4000-8000-00000000d201';
+const performer = '00000000-0000-4000-8000-00000000d202';
+const guitar = '00000000-0000-4000-8000-00000000d203';
+const bass = '00000000-0000-4000-8000-00000000d204';
+const locale = 'en';
+const value = (content: unknown) => ({ type: 'value', content });
 
-const place = '00000000-0000-4000-8000-00000000d001';
-const eventA = '00000000-0000-4000-8000-00000000d002';
-const eventB = '00000000-0000-4000-8000-00000000d003';
-const recording = '00000000-0000-4000-8000-00000000d004';
-
-function admit(release: Release) {
-  const type = (id: string, label: string, properties: string[]) => {
-    release.types[id] = {
-      iri: `http://schema.org/${label}`,
-      labels: { en: label },
-      mappings: [],
-      bases: ['schema:Thing'],
-      properties,
-      facets: [],
-      coverRatio: '5:7',
-      listPresentation: { imageAspect: 'portrait', keyFacts: [] },
-    };
-  };
-  type('schema:Place', 'place', [
-    'schema:startDate',
-    'schema:location',
-    'wdt:P8000',
-    'wdt:P1619',
-    'wdt:P9000',
-    'wdt:P9001',
-    'wdt:P9002',
-    'wdt:P9003',
-  ]);
-  type('schema:Event', 'event', ['schema:startDate', 'schema:location']);
-  type('schema:MusicInstrument', 'instrument', ['schema:name']);
-  type('schema:AdministrativeArea', 'area', []);
-  release.types['schema:AdministrativeArea']!.bases = ['schema:Event', 'schema:Place'];
-  const time = {
-    iri: 'http://schema.org/startDate',
-    labels: { en: 'start' },
-    descriptions: { en: 'start' },
-    datatype: 'time' as const,
-    mappings: [],
-    qualifiers: [],
-    multivalued: false,
-    value: { type: 'object' as const },
-  };
-  release.properties['schema:startDate'] = time;
-  release.properties['schema:location'] = {
-    iri: 'http://schema.org/location',
-    labels: { en: 'location' },
-    descriptions: { en: 'location' },
-    datatype: 'wikibase-item',
-    targets: ['schema:Place'],
-    mappings: [],
-    qualifiers: ['schema:startDate'],
-    multivalued: true,
-    value: { type: 'string', pattern: '^[0-9a-f-]+$' },
-    relation: { group: 'credit', order: 'time', inverse: 'none' },
-  };
-  release.properties['wdt:P8000'] = {
-    iri: 'http://www.wikidata.org/prop/direct/P8000',
-    labels: { en: 'z other relation' },
-    descriptions: { en: 'another admitted relation' },
-    datatype: 'wikibase-item',
-    targets: ['schema:Event'],
-    mappings: [],
-    qualifiers: ['schema:startDate'],
-    multivalued: true,
-    value: { type: 'string', pattern: '^[0-9a-f-]+$' },
-    relation: { group: 'context', order: 'name', inverse: 'none' },
-  };
-  release.properties['wdt:P1619'] = {
-    ...time,
-    iri: 'http://www.wikidata.org/prop/direct/P1619',
-    labels: { en: 'date of official opening' },
-  };
-  for (const [id, label] of [
-    ['wdt:P9000', 'unsupported precision'],
-    ['wdt:P9001', 'unsupported calendar'],
-    ['wdt:P9002', 'unsupported uncertainty'],
-  ])
-    release.properties[id] = {
-      ...time,
-      iri: `http://www.wikidata.org/prop/direct/${id.slice(4)}`,
-      labels: { en: label },
-    };
-  release.properties['wdt:P9003'] = {
-    iri: 'http://www.wikidata.org/prop/direct/P9003',
-    labels: { en: 'geographic coordinates' },
-    descriptions: { en: 'geographic coordinates' },
-    datatype: 'string',
-    mappings: [],
-    qualifiers: [],
-    multivalued: true,
-    value: { type: 'string' },
-  };
-  return release;
-}
-
-function placeRead(): SubjectRead {
+function subject(): SubjectRead {
   return {
     subject: {
-      id: place,
-      type: 'schema:Place',
-      revision: 1,
-      release: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      context: '00000000-0000-4000-8000-000000000001',
-      labels: { en: 'Hall' },
+      id: event,
+      type: 'schema:MusicEvent',
+      revision: 3,
+      release: bundledDigest,
+      context: candidateContext,
+      labels: { en: 'Harbor music festival' },
       descriptions: {},
       aliases: {},
       statements: {
         'schema:startDate': [
           {
-            id: '00000000-0000-4000-8000-00000000e031',
+            id: '00000000-0000-4000-8000-00000000e201',
             rank: 'normal',
             property: { id: 'schema:startDate', data_type: 'time' },
             value: {
               type: 'value',
               content: {
-                time: '+1999-00-00T00:00:00Z',
-                precision: 9,
+                time: '+2025-06-00T00:00:00Z',
+                precision: 10,
                 calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
-                timezone: -300,
-                before: 2,
-                after: 1,
               },
             },
             qualifiers: [],
-            references: [],
+            references: [
+              {
+                parts: [
+                  { property: { id: 'schema:url', data_type: 'url' }, value: value('https://festival.example.test/program') },
+                ],
+                hash: 'start-date-source',
+              },
+            ],
           },
         ],
-        'schema:location': [
+        'schema:endDate': [
           {
-            id: '00000000-0000-4000-8000-00000000e032',
+            id: '00000000-0000-4000-8000-00000000e202',
             rank: 'normal',
-            property: { id: 'schema:location', data_type: 'string' },
-            value: { type: 'somevalue' },
-            qualifiers: [],
-            references: [],
-          },
-        ],
-        'wdt:P1619': [
-          {
-            id: '00000000-0000-4000-8000-00000000e033',
-            rank: 'normal',
-            property: { id: 'wdt:P1619', data_type: 'time' },
+            property: { id: 'schema:endDate', data_type: 'time' },
             value: { type: 'novalue' },
-            qualifiers: [],
-            references: [],
-          },
-        ],
-        'wdt:P9000': [
-          {
-            id: '00000000-0000-4000-8000-00000000e034',
-            rank: 'normal',
-            property: { id: 'wdt:P9000', data_type: 'time' },
-            value: {
-              type: 'value',
-              content: {
-                time: '+2001-05-00T00:00:00Z',
-                precision: 12,
-                calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
-              },
-            },
-            qualifiers: [],
-            references: [],
-          },
-        ],
-        'wdt:P9001': [
-          {
-            id: '00000000-0000-4000-8000-00000000e035',
-            rank: 'normal',
-            property: { id: 'wdt:P9001', data_type: 'time' },
-            value: {
-              type: 'value',
-              content: { time: '+2001-05-01T00:00:00Z', precision: 11, calendarmodel: 'https://example.org/calendar' },
-            },
-            qualifiers: [],
-            references: [],
-          },
-        ],
-        'wdt:P9002': [
-          {
-            id: '00000000-0000-4000-8000-00000000e036',
-            rank: 'normal',
-            property: { id: 'wdt:P9002', data_type: 'time' },
-            value: {
-              type: 'value',
-              content: {
-                time: '+2001-05-01T00:00:00Z',
-                precision: 11,
-                calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
-                before: -1,
-              },
-            },
-            qualifiers: [],
-            references: [],
-          },
-        ],
-        'wdt:P9003': [
-          {
-            id: '00000000-0000-4000-8000-00000000e037',
-            rank: 'normal',
-            property: { id: 'wdt:P9003', data_type: 'string' },
-            value: { type: 'somevalue' },
-            qualifiers: [],
-            references: [],
-          },
-          {
-            id: '00000000-0000-4000-8000-00000000e038',
-            rank: 'normal',
-            property: { id: 'wdt:P9003', data_type: 'string' },
-            value: { type: 'value', content: '35.1, 139.2' },
             qualifiers: [],
             references: [],
           },
@@ -236,216 +69,153 @@ function placeRead(): SubjectRead {
   };
 }
 
-function client(
-  mode: 'ok' | 'unreadable' | 'denied',
-  relationReads: Array<{ property: string; limit: number; cursor?: string }> = [],
-  networkReads: Array<{ resource: 'subject' | 'relations'; cache?: string; redirect?: string }> = [],
-) {
+function credit(instrument: string, statementId: string, disclosed = true) {
   return {
+    statement: {
+      id: statementId,
+      rank: 'normal',
+      property: { id: 'schema:performer', data_type: 'wikibase-item' },
+      value: value(performer),
+      qualifiers: [
+        { property: { id: 'wdt:P1303', data_type: 'wikibase-item' }, value: value(instrument) },
+        { property: { id: 'wdt:P1932', data_type: 'string' }, value: value('Harbor Quartet') },
+      ],
+      references: [],
+      rezics: { release: bundledDigest, revision: 3 },
+    },
+    summary: { id: performer, type: 'schema:Person', types: ['schema:Person'], label: { value: 'Harbor Quartet', language: 'en' } },
+    related: disclosed
+      ? {
+          [instrument]: {
+            id: instrument,
+            type: 'wd:Q34379',
+            types: ['wd:Q34379'],
+            label: { value: instrument === guitar ? 'Guitar' : 'Bass guitar', language: 'en' },
+          },
+        }
+      : {},
+  };
+}
+
+function client(options: {
+  status?: number;
+  throw?: boolean;
+  rows?: unknown[];
+} = {}) {
+  const relationReads: unknown[] = [];
+  const native = {
     subjects: ({ id }: { id: string }) => ({
-      get: async (options?: { fetch?: { cache?: string; redirect?: string } }) => {
-        networkReads.push({ resource: 'subject', ...options?.fetch });
-        if (mode === 'denied') return { status: 401 };
-        return { status: 200, data: placeRead() };
+      get: async ({ query, fetch }: { query: { context: string; language: string }; fetch: { cache: string; redirect: string } }) => {
+        expect(id).toBe(event);
+        expect(query).toEqual({ context: candidateContext, language: locale });
+        expect(fetch).toEqual({ cache: 'no-store', redirect: 'manual' });
+        return { status: 200, data: subject() };
       },
       relations: {
-        get: async ({
-          query,
-          fetch,
-        }: {
-          query: { property: string; limit: number; cursor?: string };
-          fetch?: { cache?: string; redirect?: string };
-        }) => {
-          relationReads.push({ property: query.property, limit: query.limit, cursor: query.cursor });
-          networkReads.push({ resource: 'relations', ...fetch });
-          const locationRows = [
-            {
-              statement: {
-                id: '00000000-0000-4000-8000-00000000e041',
-                property: { id: 'schema:location', data_type: 'wikibase-item' },
-                value: { type: 'value', content: eventA },
-                rank: 'normal',
-                qualifiers: [
-                  {
-                    property: { id: 'schema:startDate', data_type: 'time' },
-                    value: {
-                      type: 'value',
-                      content: {
-                        time: '+2001-05-00T00:00:00Z',
-                        precision: 10,
-                        calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
-                      },
-                    },
-                  },
-                ],
-                references: [],
-              },
-              summary: { id: eventA, type: 'schema:Event', label: { value: 'Spring concert', language: 'en' } },
-              related: {},
-            },
-            {
-              statement: {
-                id: '00000000-0000-4000-8000-00000000e044',
-                property: { id: 'schema:location', data_type: 'wikibase-item' },
-                value: { type: 'value', content: eventA },
-                rank: 'normal',
-                qualifiers: [
-                  {
-                    property: { id: 'schema:startDate', data_type: 'time' },
-                    value: {
-                      type: 'value',
-                      content: {
-                        time: '+2001-05-00T00:00:00Z',
-                        precision: 10,
-                        calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
-                      },
-                    },
-                  },
-                ],
-                references: [],
-              },
-              summary: { id: eventA, type: 'schema:Event', label: { value: 'Spring concert', language: 'en' } },
-              related: {},
-            },
-            {
-              statement: {
-                id: '00000000-0000-4000-8000-00000000e042',
-                property: { id: 'schema:location', data_type: 'wikibase-item' },
-                value: { type: 'value', content: eventB },
-                rank: 'normal',
-                qualifiers: [
-                  {
-                    property: { id: 'schema:startDate', data_type: 'time' },
-                    value: {
-                      type: 'value',
-                      content: {
-                        time: '+2002-01-01T00:00:00Z',
-                        precision: 11,
-                        calendarmodel: 'https://example.org/calendar',
-                      },
-                    },
-                  },
-                ],
-                references: [],
-              },
-              summary: { id: eventB, type: 'schema:Event', label: { value: 'Autumn concert', language: 'en' } },
-              related: {},
-            },
-            {
-              statement: {
-                id: '00000000-0000-4000-8000-00000000e043',
-                property: { id: 'schema:location', data_type: 'wikibase-item' },
-                value: { type: 'value', content: recording },
-                rank: 'normal',
-                qualifiers: [{ property: { id: 'schema:startDate', data_type: 'time' }, value: { type: 'novalue' } }],
-                references: [],
-              },
-              summary:
-                mode === 'unreadable'
-                  ? null
-                  : { id: recording, type: 'schema:MusicAlbum', label: { value: 'Live', language: 'en' } },
-              related: {},
-            },
-          ];
+        get: async ({ query, fetch }: { query: Record<string, unknown>; fetch: { cache: string; redirect: string } }) => {
+          relationReads.push({ query, fetch });
+          if (options.throw) throw new TypeError('network unavailable');
+          if (options.status !== undefined) return { status: options.status };
           return {
             status: 200,
             data: {
-              relations: query.property === 'schema:location' ? locationRows : [],
-              next: query.cursor ? null : 'next-cursor',
+              relations: options.rows ?? [credit(guitar, '00000000-0000-4000-8000-00000000e211'), credit(bass, '00000000-0000-4000-8000-00000000e212')],
+              next: null,
               freshness: { caught_up: true },
             },
           };
         },
       },
     }),
-  } as unknown as KernelClient;
+  };
+  return { client: native as unknown as KernelClient, relationReads };
 }
 
-test('music context keeps two events at a place, dated recordings, partial dates and unreadable artists', async () => {
-  expect(musicContextKind(bundledRelease, 'schema:MusicAlbum')).toBe('unsupported');
-  const definitions = admit(structuredClone(bundledRelease) as Release);
-  expect(musicContextKind(definitions, 'schema:Place')).toBe('place');
-  expect(musicContextKind(definitions, 'schema:MusicInstrument')).toBe('instrument');
-  expect(musicContextKind(definitions, 'schema:AdministrativeArea')).toBe('area');
-  const relationReads: Array<{ property: string; limit: number; cursor?: string }> = [];
-  const networkReads: Array<{ resource: 'subject' | 'relations'; cache?: string; redirect?: string }> = [];
-  const read = await readMusicContext(
-    client('unreadable', relationReads, networkReads),
-    'Bearer reader',
-    definitions,
-    place,
-    'en',
-    { stream: 'schema:location', cursor: 'cursor-one' },
+test('released music context reads source-bearing partial event time and the exact instrument credit', async () => {
+  expect(musicContextKind(bundledRelease, 'schema:Place')).toBe('place');
+  expect(musicContextKind(bundledRelease, 'schema:MusicVenue')).toBe('place');
+  expect(musicContextKind(bundledRelease, 'schema:Event')).toBe('event');
+  expect(musicContextKind(bundledRelease, 'schema:MusicEvent')).toBe('event');
+  expect(musicContextKind(bundledRelease, 'schema:AdministrativeArea')).toBe('area');
+  expect(musicContextKind(bundledRelease, 'wd:Q34379')).toBe('instrument');
+  expect(musicContextKind(bundledRelease, 'schema:MusicInstrument')).toBe('unsupported');
+
+  const fixture = client();
+  const read = await readMusicContext(fixture.client, 'Bearer reader', bundledRelease, event, locale, {
+    context: candidateContext,
+    stream: 'schema:performer',
+  });
+  if (!read.ok) throw new Error('expected the admitted music event');
+  expect(read.public.subject).toMatchObject({ id: event, type: 'schema:MusicEvent', release: bundledDigest, context: candidateContext });
+  expect(read.facts.find((fact) => fact.property === 'schema:startDate')?.time).toMatchObject({
+    state: 'supported',
+    date: '+2025-06',
+    precision: 10,
+    calendar: 'gregorian',
+  });
+  expect(read.facts.find((fact) => fact.property === 'schema:endDate')?.time?.state).toBe('novalue');
+  expect(read.public.subject.statements['schema:startDate']?.[0]?.references[0]?.parts[0]?.value.content).toBe(
+    'https://festival.example.test/program',
   );
-  if (!read.ok) throw new Error('expected place');
-  expect(read.kind).toBe('place');
-  expect(read.public.subject).toMatchObject({
-    id: place,
-    type: 'schema:Place',
-    release: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-  });
-  expect(read.streams).toEqual([
-    { id: 'schema:location', label: 'location' },
-    { id: 'wdt:P8000', label: 'z other relation' },
+  expect(fixture.relationReads).toEqual([
+    {
+      query: {
+        property: 'schema:performer',
+        language: locale,
+        limit: MUSIC_CONTEXT_PAGE_CAP,
+        context: candidateContext,
+      },
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    },
   ]);
-  expect(relationReads).toEqual([{ property: 'schema:location', limit: MUSIC_CONTEXT_PAGE_CAP, cursor: 'cursor-one' }]);
-  expect(networkReads).toEqual([
-    { resource: 'subject', cache: 'no-store', redirect: 'manual' },
-    { resource: 'relations', cache: 'no-store', redirect: 'manual' },
+  expect(read.links.map((link) => link.occurrence)).toEqual([
+    '00000000-0000-4000-8000-00000000e211',
+    '00000000-0000-4000-8000-00000000e212',
   ]);
-  const timeFact = (property: string) => read.facts.find((fact) => fact.property === property)?.time;
-  expect(timeFact('schema:startDate')).toMatchObject({ state: 'supported', date: '+1999', precision: 9 });
-  expect(timeFact('wdt:P9000')).toMatchObject({ state: 'unsupported', reason: 'precision' });
-  expect(timeFact('wdt:P9001')).toMatchObject({ state: 'unsupported', reason: 'calendar' });
-  expect(timeFact('wdt:P9002')).toMatchObject({ state: 'unsupported', reason: 'uncertainty' });
-  expect(timeFact('wdt:P1619')).toMatchObject({ state: 'novalue' });
-  expect(read.facts.filter((fact) => fact.property === 'wdt:P9003').map((fact) => fact.unknown)).toEqual([
-    'somevalue',
-    'coordinates-unsupported',
+  expect(read.links.map((link) => link.role?.target)).toEqual([
+    { id: guitar, label: 'Guitar', targetKind: 'instrument' },
+    { id: bass, label: 'Bass guitar', targetKind: 'instrument' },
   ]);
-  expect(read.links.map((link) => link.label)).toEqual(['Spring concert', 'Spring concert', 'Autumn concert', '']);
-  expect(read.links.map((link) => link.id)).toEqual([eventA, eventA, eventB, '']);
-  expect(read.links.map((link) => link.position)).toEqual([1, 2, 3, 4]);
-  expect(read.links[0]?.occurrence).not.toBe(read.links[1]?.occurrence);
-  expect(read.links[0]?.date?.time).toMatchObject({ state: 'supported', date: '+2001-05', calendar: 'julian' });
-  expect(read.links[2]?.date?.time).toMatchObject({ state: 'unsupported', reason: 'calendar' });
-  expect(read.links[3]).toMatchObject({ id: '', unreadable: true });
-  const otherReads: Array<{ property: string; limit: number; cursor?: string }> = [];
-  const other = await readMusicContext(client('ok', otherReads), 'Bearer reader', definitions, place, 'en', {
-    stream: 'wdt:P8000',
-  });
-  expect(other.ok && other.stream).toBe('wdt:P8000');
-  expect(otherReads).toEqual([{ property: 'wdt:P8000', limit: MUSIC_CONTEXT_PAGE_CAP, cursor: undefined }]);
-  const queryClient = new QueryClient();
-  const html = renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(MusicContextProfile, {
-        id: place,
-        locale: 'en',
-        initial: read,
-        transport: { read: async () => read },
-      }),
-    ),
-  );
-  queryClient.clear();
-  expect(html).toContain('+1999');
-  expect(html).toContain('Unsupported precision: 12');
-  expect(html).toContain('Unsupported calendar: https://example.org/calendar');
-  expect(html).toContain('Unsupported time uncertainty');
-  expect(html).not.toContain('Unknown date');
-  expect(await readMusicContext(client('denied'), 'Bearer reader', definitions, place, 'en', {})).toEqual({
-    ok: false,
-    reason: 'denied',
-  });
-  const closed = await readMusicContext(client('ok'), 'Bearer reader', bundledRelease, place, 'en', {});
-  expect(closed.ok && closed.kind).toBe('unsupported');
-  const missingCalls: Array<{ property: string; limit: number; cursor?: string }> = [];
-  const missing = await readMusicContext(client('ok', missingCalls), 'Bearer reader', definitions, place, 'en', {
-    stream: 'schema:removed',
+  expect(read.next).toBeNull();
+  expect(read.relationsUnavailable).toBeUndefined();
+});
+
+test('an unavailable relation component preserves facts and distinguishes missing, empty and unavailable', async () => {
+  for (const failure of [{ status: 503 }, { throw: true }]) {
+    const read = await readMusicContext(client(failure).client, undefined, bundledRelease, event, locale, {
+      context: candidateContext,
+      stream: 'schema:performer',
+      cursor: 'native-current-cursor',
+    });
+    if (!read.ok) throw new Error('public event facts remain readable');
+    expect(read.relationsUnavailable).toBe(true);
+    expect(read.facts.map((fact) => fact.property)).toEqual(['schema:startDate', 'schema:endDate']);
+    expect(read.links).toEqual([]);
+    expect(read.next).toBeNull();
+  }
+  const missing = await readMusicContext(client().client, undefined, bundledRelease, event, locale, {
+    context: candidateContext,
+    stream: 'schema:containedInPlace',
   });
   expect(missing.ok && missing.streamUnavailable).toBe(true);
-  expect(missingCalls).toEqual([]);
-  expect(catalogueEntries.musicContext({ id: place, label: 'Hall', locale: 'en' }).href).toContain('/music-context');
+  const empty = await readMusicContext(client({ rows: [] }).client, undefined, bundledRelease, event, locale, {
+    context: candidateContext,
+    stream: 'schema:performer',
+  });
+  expect(empty.ok && empty.relationsUnavailable).toBeUndefined();
+  expect(empty.ok && empty.links).toEqual([]);
+});
+
+test('concealed instrument qualifiers never fall back to their raw identifiers', async () => {
+  const read = await readMusicContext(
+    client({ rows: [credit(guitar, '00000000-0000-4000-8000-00000000e213', false)] }).client,
+    undefined,
+    bundledRelease,
+    event,
+    locale,
+    { context: candidateContext, stream: 'schema:performer' },
+  );
+  if (!read.ok) throw new Error('expected the public event');
+  expect(read.links[0]?.role).toBeUndefined();
+  expect(JSON.stringify(read.links)).not.toContain(guitar);
 });

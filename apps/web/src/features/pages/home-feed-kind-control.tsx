@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Label } from '@rezics/ui/shadcn/label';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { DefinitionMeaning } from '../catalogue/definition-meaning';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { homeKindChoice, type createHomeKindChoices, type HomeKindChoice } from './home-feed-kinds';
@@ -46,6 +47,7 @@ export function HomeFeedKindControl({
         <NativeSelect
           id={id}
           className="max-w-full [&_select]:min-h-11 [&_select]:max-w-full"
+          aria-describedby={selected?.description ? `${id}-meaning` : undefined}
           value={selected?.id ?? ''}
           onChange={(event) => {
             if (event.target.value === '') onSelect(undefined);
@@ -75,6 +77,11 @@ export function HomeFeedKindControl({
               : m.home_kinds_load({}, options)}
         </Button>
       </div>
+      {selected?.description && (
+        <p id={`${id}-meaning`} className="max-w-prose text-sm text-muted-foreground">
+          <DefinitionMeaning text={selected.description} language={selected.descriptionLang} locale={locale} />
+        </p>
+      )}
       {snapshot.status !== 'idle' && snapshot.status !== 'ready' ? (
         <p role={failure ? 'alert' : 'status'} className="text-sm text-muted-foreground">
           {messages[snapshot.status]({}, options)}

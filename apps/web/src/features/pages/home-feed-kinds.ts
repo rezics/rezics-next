@@ -1,5 +1,6 @@
 import { parseDiscoveryFilter } from '@rezics/filter';
 import { pickText } from '@rezics/composition';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import type { DiscoveryKinds, DiscoveryKindsState } from '../../search/discovery';
 
 /** The same native literal admission used by Content; identity is never normalized. */
@@ -10,11 +11,18 @@ export function homeFeedKind(value: unknown): string | undefined {
   return value;
 }
 
-export type HomeKindChoice = { id: string; text: string; lang?: string };
+export type HomeKindChoice = { id: string; text: string; lang?: string; description?: string; descriptionLang?: string };
 export function homeKindChoice(kind: DiscoveryKinds['values'][number], locale: string): HomeKindChoice {
   homeFeedKind(kind.id);
   const label = pickText(kind.labels, locale);
-  return { id: kind.id, text: label.text, ...(label.lang ? { lang: label.lang } : {}) };
+  const description = pickText(bundledRelease.types[kind.id]?.descriptions ?? {}, locale);
+  return {
+    id: kind.id,
+    text: label.text,
+    ...(label.lang ? { lang: label.lang } : {}),
+    ...(description.text ? { description: description.text } : {}),
+    ...(description.lang ? { descriptionLang: description.lang } : {}),
+  };
 }
 export type HomeKindsReader = (cursor: string | undefined, signal: AbortSignal) => Promise<DiscoveryKindsState>;
 type Snapshot = {

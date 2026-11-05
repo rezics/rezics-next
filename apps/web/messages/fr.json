@@ -5868,7 +5868,7 @@
   "search_result_kinds_help": "Choisissez les types de résultats souhaités, y compris les comptes. Sans sélection, tous les types sont inclus. D’autres choix peuvent figurer sur la page suivante.",
   "search_all_kinds": "Tous les types de résultats",
   "search_choose_kinds": "Choisir des types de résultats précis",
-  "search_kind_choice": "Résultats : {value}",
+  "search_kind_choice": "Résultats pour le type {value}",
   "search_subject_type": "Type de fiche",
   "search_subject_type_help": "Les sous-types sont inclus. Les comptes se choisissent dans « Types de résultats ».",
   "search_all_subject_types": "Tous les types de fiches",
@@ -10815,5 +10815,6 @@
   "library_archive_entry_update": "Modifier explicitement l’entrée locale révisée",
   "library_archive_entry_assign": "Ajouter cette affectation révisée",
   "library_archive_entry_state_id": "Identifiant d’état actuellement pris en charge",
-  "library_archive_entry_select": "Sélectionner l’enregistrement {ordinal}"
+  "library_archive_entry_select": "Sélectionner l’enregistrement {ordinal}",
+  "music_context_relations_unavailable": "La page des relations est indisponible. Les faits du profil restent visibles ; réessayez cette page précise."
 }

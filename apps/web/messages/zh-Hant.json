@@ -5876,7 +5876,7 @@
   "search_result_kinds_help": "可依類型篩選結果，也可選擇帳號。未選擇時包含所有類型，下一頁可能還有更多選項。",
   "search_all_kinds": "所有結果類型",
   "search_choose_kinds": "選擇特定的結果類型",
-  "search_kind_choice": "{value}類結果",
+  "search_kind_choice": "類型為 {value} 的結果",
   "search_subject_type": "條目類型",
   "search_subject_type_help": "包含子類型。帳號請在「結果類型」中選擇。",
   "search_all_subject_types": "不限條目類型",
@@ -10914,5 +10914,6 @@
   "library_archive_entry_update": "明確更新已審核的本機條目",
   "library_archive_entry_assign": "新增已審核的指派",
   "library_archive_entry_state_id": "目前支援的狀態 ID",
-  "library_archive_entry_select": "選取記錄 {ordinal}"
+  "library_archive_entry_select": "選取記錄 {ordinal}",
+  "music_context_relations_unavailable": "關係頁面暫時無法讀取。個人資料事實仍可檢視；請重試此頁面。"
 }

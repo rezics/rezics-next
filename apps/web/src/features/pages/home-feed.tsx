@@ -483,6 +483,7 @@ export function HomeFeedConsumer({
       label: m.home_kind_label({}, options),
       value: selectedKind?.text || m.home_kind_unnamed({}, options),
       lang: selectedKind?.lang,
+      description: selectedKind?.description,
       onRemove: removeKind,
     });
   }

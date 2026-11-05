@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect as useBrowserLayoutEffect, useRef, useState } from 'react';
+import { pickText } from '@rezics/composition';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { NativeCheckbox } from '@rezics/ui/native-checkbox';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Label } from '@rezics/ui/shadcn/label';
@@ -11,6 +13,7 @@ import { KindContinuationLedger } from './kind-continuation';
 import type { SearchRecoveryState } from './search-recovery';
 import { searchRecoveryMessage } from './search-recovery-view';
 import { useSearchRetryWait } from './search-recovery-retry';
+import { DefinitionMeaning } from '../features/catalogue/definition-meaning';
 
 const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useBrowserLayoutEffect;
 
@@ -273,6 +276,7 @@ export function DiscoveryKinds({
         <ul className="space-y-2 pt-3">
           {values.map((kind) => {
             const label = localizedLabel(kind.labels, locale);
+            const description = pickText(bundledRelease.types[kind.id]?.descriptions ?? {}, locale);
             const count = initial.values.find((value) => value.id === kind.id)?.count;
             const evidence =
               count && 'value' in count
@@ -301,6 +305,12 @@ export function DiscoveryKinds({
                   <span lang={label.lang}>{label.text || kind.id}</span>
                   <span className="text-muted-foreground">{evidence}</span>
                 </Label>
+                <code className="ms-6 block break-all text-xs text-muted-foreground">{kind.id}</code>
+                {description.text && (
+                  <p className="ms-6 max-w-prose text-xs text-muted-foreground">
+                    <DefinitionMeaning text={description.text} language={description.lang} locale={locale} />
+                  </p>
+                )}
               </li>
             );
           })}

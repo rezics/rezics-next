@@ -146,8 +146,13 @@ function MusicContextReadingBound({
     seed ? { stream: seed.stream ?? initialStream, cursor: initialCursor } : undefined,
   );
   const [failure, setFailure] = useState<MusicContextFailure | undefined>(initial && !initial.ok ? initial : undefined);
+  const [relationshipFailure, setRelationshipFailure] = useState(!!seed?.relationsUnavailable);
   const [failedAddress, setFailedAddress] = useState<MusicContextAddress | undefined>(
-    initial && !initial.ok ? { stream: initialStream, cursor: initialCursor } : undefined,
+    initial && !initial.ok
+      ? { stream: initialStream, cursor: initialCursor }
+      : seed?.relationsUnavailable
+        ? { stream: initialStream ?? seed.stream, cursor: initialCursor }
+        : undefined,
   );
   const [failedCommit, setFailedCommit] = useState<HistoryCommit>({ kind: 'initial' });
   const [busy, setBusy] = useState(false);
@@ -258,6 +263,7 @@ function MusicContextReadingBound({
       setBusy(true);
       setFailure(undefined);
       setFailedAddress(undefined);
+      setRelationshipFailure(false);
       try {
         const result = await transport.read({
           context: selectedContext,
@@ -298,6 +304,7 @@ function MusicContextReadingBound({
           setDisplayAddress(undefined);
           writeProfile(undefined);
           writeDisplayed(undefined);
+          setRelationshipFailure(false);
           setSelectionEpoch((current) => current + 1);
           setReleaseEpoch((current) => current + 1);
           return;
@@ -306,6 +313,29 @@ function MusicContextReadingBound({
         setFreshReadRequired(false);
         sessionRef.current = result.session;
         writeProfile(result);
+        if (result.relationsUnavailable) {
+          const retained = displayedRef.current;
+          const selectedStream = address.stream ?? result.stream;
+          const retainWindow =
+            !!retained &&
+            retained.public.subject.id === result.public.subject.id &&
+            retained.public.subject.context === result.public.subject.context &&
+            retained.public.subject.type === result.public.subject.type &&
+            retained.public.subject.revision === result.public.subject.revision &&
+            retained.public.subject.release === result.public.subject.release &&
+            retained.stream === selectedStream;
+          if (!retainWindow) {
+            writeDisplayed(result);
+            setDisplayAddress({ stream: selectedStream, cursor: address.cursor });
+            setCursorIntent(address.cursor);
+          }
+          setRelationshipFailure(true);
+          setFailedAddress({ ...address, ...(selectedStream ? { stream: selectedStream } : {}) });
+          setFailedCommit(commit);
+          setFailure(undefined);
+          return;
+        }
+        setRelationshipFailure(false);
         writeDisplayed(result);
         setDisplayAddress({ stream: address.stream ?? result.stream, cursor: address.cursor });
         setCursorIntent(address.cursor);
@@ -319,8 +349,9 @@ function MusicContextReadingBound({
             ...(address.cursor ? { cursor: address.cursor } : {}),
           });
         if (!result.streamUnavailable) finishHistory();
-      } catch {
+      } catch (error) {
         if (!isCurrent()) return;
+        if (!(error instanceof TypeError)) throw error;
         setFailure({ ok: false, reason: 'unavailable' });
         setFailedAddress(address);
         setFailedCommit(commit);
@@ -371,6 +402,7 @@ function MusicContextReadingBound({
     setPageAddresses([initialCursor]);
     setPageIndex(0);
     setFailure(undefined);
+    setRelationshipFailure(false);
     setFailedAddress(undefined);
     setDisplayAddress(undefined);
     writeDisplayed(undefined);
@@ -432,7 +464,12 @@ function MusicContextReadingBound({
       : undefined;
   const selectedStream = streamIntent ?? page?.stream ?? profile?.stream;
   const streamAdmitted = profile?.streams.some((stream) => stream.id === selectedStream) ?? false;
-  const pageHasRetainedData = !!page && !!(busy || failure);
+  const relationshipCursorMismatch =
+    !!relationshipFailure &&
+    !!page &&
+    !!failedAddress &&
+    (failedAddress.stream !== page.stream || failedAddress.cursor !== displayAddress?.cursor);
+  const pageHasRetainedData = !!page && !!(busy || failure || relationshipCursorMismatch);
   const title = profile ? pickText(profile.public.subject.labels, locale).text : '';
   const safeVia = via
     ? musicContextRouteSearch({ context: selectedContext, via }, locale, { subjectId: id })?.via
@@ -460,7 +497,7 @@ function MusicContextReadingBound({
     ? `${correction}?${new URLSearchParams({ returnTo: visibleAddress })}`
     : correction;
   const correctionHref = fitsRetainedAddress(correctionCandidate) ? correctionCandidate : undefined;
-  const nextCursor = page?.streamUnavailable ? null : page?.next;
+  const nextCursor = page?.streamUnavailable || relationshipFailure ? null : page?.next;
 
   return (
     <article
@@ -551,7 +588,23 @@ function MusicContextReadingBound({
           {!page?.streamUnavailable && profile.streams.length === 0 && (
             <p role="status">{m.music_context_no_streams({}, o)}</p>
           )}
-          {!page?.streamUnavailable && page?.stream && page.links.length === 0 && (
+          {relationshipFailure && (
+            <div role="alert" className="space-y-2">
+              <p>{m.music_context_relations_unavailable({}, o)}</p>
+              {failedAddress && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={actionClass}
+                  disabled={busy}
+                  onClick={() => void dispatch(failedAddress, failedCommit)}
+                >
+                  {m.music_context_retry_page({}, o)}
+                </Button>
+              )}
+            </div>
+          )}
+          {!relationshipFailure && !page?.streamUnavailable && page?.stream && page.links.length === 0 && (
             <p role="status">{m.music_context_empty_page({}, o)}</p>
           )}
           {!!page?.links.length && (
@@ -634,14 +687,66 @@ function MusicContextReadingBound({
                   )}
                   {!link.unreadable && link.role && (
                     <span className="ms-2">
-                      {link.role.label}:{' '}
-                      {link.role.unknown === 'novalue'
-                        ? m.subject_value_none({}, o)
-                        : link.role.unknown === 'somevalue'
-                          ? m.subject_value_unknown({}, o)
-                          : link.role.unknown
-                            ? m.music_context_unknown_value({}, o)
-                            : link.role.text}
+                      {link.role.label}: {link.role.target ? (
+                        (() => {
+                          const target = link.role!.target!;
+                          const targetBase = target.targetKind && !realm
+                            ? catalogueEntries.musicContext({
+                                id: target.id,
+                                label: target.label,
+                                locale,
+                                context: selectedContext,
+                              }).href
+                            : subjectHref({ id: target.id, label: target.label }, locale).href;
+                          const exact = !!target.targetKind && !realm;
+                          const exactWithReturn =
+                            exact && target.id !== id && visibleAddress
+                              ? musicContextTargetHref(targetBase, visibleAddress, locale, target.id)
+                              : undefined;
+                          const generalWithReturn =
+                            !exact && !realm && visibleAddress
+                              ? withSubjectVisitReturn(targetBase, visibleAddress)
+                              : targetBase;
+                          const generalFits = fitsRetainedAddress(generalWithReturn);
+                          const href = exact
+                            ? target.id === id || !visibleAddress
+                              ? targetBase
+                              : (exactWithReturn ?? targetBase)
+                            : generalFits
+                              ? generalWithReturn
+                              : targetBase;
+                          const returnUnavailable =
+                            !!visibleAddress &&
+                            ((exact && target.id !== id && !exactWithReturn) || (!exact && !realm && !generalFits));
+                          return (
+                            <>
+                              <a className={linkClass} href={href}>
+                                {exact || (selectedContext === candidateContext && !realm)
+                                  ? target.label || m.subject_value_unlabelled({}, o)
+                                  : m.music_context_open_general_target({}, o)}
+                              </a>
+                              {(realm || (selectedContext !== candidateContext && !target.targetKind)) && (
+                                <span className="ms-2 text-muted-foreground">
+                                  {m.music_context_exact_target_unsupported({}, o)}
+                                </span>
+                              )}
+                              {returnUnavailable && (
+                                <span className="ms-2 text-muted-foreground">
+                                  {m.music_context_visit_return_unavailable({}, o)}
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()
+                      ) : link.role.unknown === 'novalue' ? (
+                        m.subject_value_none({}, o)
+                      ) : link.role.unknown === 'somevalue' ? (
+                        m.subject_value_unknown({}, o)
+                      ) : link.role.unknown ? (
+                        m.music_context_unknown_value({}, o)
+                      ) : (
+                        link.role.text
+                      )}
                     </span>
                   )}
                 </li>

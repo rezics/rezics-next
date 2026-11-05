@@ -6084,7 +6084,7 @@
   "search_result_kinds_help": "Choose exact types, including accounts. All types are included until you choose one. More choices may be on another page.",
   "search_all_kinds": "All result types",
   "search_choose_kinds": "Choose specific result types",
-  "search_kind_choice": "{value} results",
+  "search_kind_choice": "Results for Type {value}",
   "search_subject_type": "Subject type",
   "search_subject_type_help": "Includes subtypes. Accounts are chosen under Result types.",
   "search_all_subject_types": "Any subject type",
@@ -11036,5 +11036,6 @@
   "library_archive_entry_update": "Explicitly update reviewed local Entry",
   "library_archive_entry_assign": "Add this reviewed assignment",
   "library_archive_entry_state_id": "Current supported state ID",
-  "library_archive_entry_select": "Select record {ordinal}"
+  "library_archive_entry_select": "Select record {ordinal}",
+  "music_context_relations_unavailable": "The relation page could not be read. Profile facts remain available; retry this exact page."
 }

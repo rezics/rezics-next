@@ -5868,7 +5868,7 @@
   "search_result_kinds_help": "Elige los tipos de resultados que quieres ver, incluidas las cuentas. Si no eliges ninguno, se incluyen todos los tipos. Puede haber más opciones en la página siguiente.",
   "search_all_kinds": "Todos los tipos de resultados",
   "search_choose_kinds": "Elegir tipos de resultados concretos",
-  "search_kind_choice": "Resultados: {value}",
+  "search_kind_choice": "Resultados del tipo {value}",
   "search_subject_type": "Tipo de ficha",
   "search_subject_type_help": "Incluye los subtipos. Las cuentas se eligen en «Tipos de resultados».",
   "search_all_subject_types": "Cualquier tipo de ficha",
@@ -10815,5 +10815,6 @@
   "library_archive_entry_update": "Actualizar explícitamente la entrada local revisada",
   "library_archive_entry_assign": "Añadir esta asignación revisada",
   "library_archive_entry_state_id": "ID de estado actual compatible",
-  "library_archive_entry_select": "Seleccionar registro {ordinal}"
+  "library_archive_entry_select": "Seleccionar registro {ordinal}",
+  "music_context_relations_unavailable": "No se pudo leer la página de relaciones. Los datos del perfil siguen disponibles; vuelve a intentar esta misma página."
 }

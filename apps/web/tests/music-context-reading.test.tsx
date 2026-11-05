@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { MusicContextRead } from '../src/features/catalogue/music-context-profile';
+import { bundledDigest } from '@rezics/definitions/bundled';
 import type { MusicContextAddress } from '../src/features/catalogue/music-context-profile/navigation';
 import { musicContextRouteSearch } from '../src/features/catalogue/music-context-profile/navigation';
 import { MusicContextProfile } from '../src/features/pages/music-context-profile';
@@ -13,8 +14,8 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const anchor = '00000000-0000-4000-8000-00000000d101';
 const endpoint = '00000000-0000-4000-8000-00000000d102';
 const streams = [
-  { id: 'schema:location', label: 'Recorded at' },
-  { id: 'wdt:P8000', label: 'Related events' },
+  { id: 'schema:location', label: 'location' },
+  { id: 'schema:performer', label: 'performer' },
 ];
 
 function successful(stream: string, label: string, session: string, next: string | null = 'next-1') {
@@ -23,14 +24,42 @@ function successful(stream: string, label: string, session: string, next: string
     public: {
       subject: {
         id: anchor,
-        type: 'schema:Place',
+        type: 'schema:MusicEvent',
         revision: 4,
-        release: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        context: '00000000-0000-4000-8000-000000000001',
+        release: bundledDigest,
+        context: candidateContext,
         labels: { en: 'Harbor Stage' },
         descriptions: {},
         aliases: {},
-        statements: {},
+        statements: {
+          'schema:startDate': [
+            {
+              id: '00000000-0000-4000-8000-00000000d103',
+              rank: 'normal',
+              property: { id: 'schema:startDate', data_type: 'time' },
+              value: {
+                type: 'value',
+                content: {
+                  time: '+2001-05-00T00:00:00Z',
+                  precision: 10,
+                  calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+                },
+              },
+              qualifiers: [],
+              references: [
+                {
+                  parts: [
+                    {
+                      property: { id: 'schema:url', data_type: 'url' },
+                      value: { type: 'value', content: 'https://music.example.test/source' },
+                    },
+                  ],
+                  hash: 'source-reference',
+                },
+              ],
+            },
+          ],
+        },
         resolution: {},
         relationCounts: {},
         sourceRecords: [],
@@ -39,19 +68,19 @@ function successful(stream: string, label: string, session: string, next: string
       related: {},
       summary: null,
     },
-    kind: 'place',
+    kind: 'event',
     facts: [
       {
         property: 'schema:startDate',
         label: 'Opening date',
-        text: '2001 · year · Gregorian',
+        text: 'May 2001 · month · Gregorian',
         time: {
           state: 'supported',
-          text: '2001 · year · Gregorian',
-          date: '+2001',
-          precision: 9,
+          text: 'May 2001 · month · Gregorian',
+          date: '+2001-05',
+          precision: 10,
           calendar: 'gregorian',
-          structuredDate: '2001',
+          structuredDate: '2001-05',
         },
       },
     ],
@@ -63,18 +92,7 @@ function successful(stream: string, label: string, session: string, next: string
         property: stream,
         position: 1,
         occurrence: `${stream}:${label}`,
-        date: {
-          property: 'schema:startDate',
-          label: 'Start date',
-          time: {
-            state: 'supported',
-            text: '2001 · year · Gregorian',
-            date: '+2001',
-            precision: 9,
-            calendar: 'gregorian',
-            structuredDate: '2001',
-          },
-        },
+        ...(stream === 'schema:location' ? { targetKind: 'place' as const } : {}),
       },
     ],
     next,
@@ -137,7 +155,7 @@ test('the mounted music-context reader selects, pages, retries and returns throu
         initialAttempts += 1;
         return Promise.resolve(
           initialAttempts === 1
-            ? { ok: false, reason: 'unavailable' }
+            ? { ...successful('schema:location', 'Initial row', 'initial-token', null), links: [], next: null, relationsUnavailable: true }
             : successful('schema:location', 'Initial row', 'initial-token'),
         );
       }
@@ -145,7 +163,7 @@ test('the mounted music-context reader selects, pages, retries and returns throu
         pageAttempts += 1;
         return Promise.resolve(
           pageAttempts === 1
-            ? { ok: false, reason: 'unavailable' }
+            ? { ...successful('schema:location', 'Current venue', 'current-token', null), links: [], next: null, relationsUnavailable: true }
             : successful('schema:location', 'Second page endpoint', 'page-token', null),
         );
       }
@@ -182,7 +200,8 @@ test('the mounted music-context reader selects, pages, retries and returns throu
 
   try {
     await render();
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain('unavailable');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('relation page could not be read');
+    expect(host.textContent).toContain('May 2001 · month · Gregorian');
     expect([...host.querySelectorAll('button')].some((button) => button.textContent?.includes('Retry this page'))).toBe(
       true,
     );
@@ -191,7 +210,7 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     await settle(() => initialRetry.click());
     expect(host.textContent).toContain('Initial row');
 
-    await choose('wdt:P8000');
+    await choose('schema:performer');
     await choose('schema:location');
     await settle(() => pending[0]!.reject(new Error('retired relation failure')));
     expect(host.querySelector('[role="alert"]')).toBeNull();
@@ -199,7 +218,7 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     expect(host.textContent).toContain('Current after failure');
     expect(host.querySelector('select')?.value).toBe('schema:location');
 
-    await choose('wdt:P8000');
+    await choose('schema:performer');
     await choose('schema:location');
     await settle(() => pending[2]!.resolve(successful('wdt:P8000', 'Retired success', 'stale-token')));
     expect(host.textContent).not.toContain('Retired success');
