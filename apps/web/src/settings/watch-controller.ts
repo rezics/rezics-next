@@ -205,21 +205,23 @@ export class WatchController {
       credential,
     });
     this.update({ command, write: 'sending' });
-    await this.send(command);
+    await this.send(command, false);
   };
   retryOriginal = async () => {
     if (!this.canRetryOriginal()) return;
     const command = this.state.command!;
     this.update({ write: 'sending' });
-    await this.send(command);
+    await this.send(command, true);
   };
-  private async send(command: StopWatchIntent) {
+  private async send(command: StopWatchIntent, replay: boolean) {
     if (!command.credential || !this.current()) return;
     try {
       // Bound waiting without claiming cancellation reversed a dispatched command.
       const result = await withManagedReadDeadline(() => this.io.stop(command, command.credential));
       if (!this.current() || this.state.command !== command) return;
-      const writeRetryAt = result.kind === 'uncertain' ? preferenceRetryDeadline(result.problem.retryAfter) : 0;
+      const refusedReplay = replay && result.kind !== 'removed' && result.kind !== 'uncertain';
+      const writeRetryAt =
+        result.kind === 'uncertain' || refusedReplay ? preferenceRetryDeadline(result.problem.retryAfter) : 0;
       if (result.kind === 'removed') {
         const currentRevisionRemains = this.state.rows.some(
           (row) =>
@@ -243,13 +245,27 @@ export class WatchController {
         this.update({ write: 'uncertain', writeProblem: result.problem, writeRetryAt });
       } else if (result.kind === 'denied') {
         this.update({
-          command: null,
-          write: 'denied',
+          command: replay ? command : null,
+          write: replay ? 'uncertain' : 'denied',
           read: 'denied',
           rows: [],
           next: null,
           viewer: null,
           actions: null,
+          readProblem: result.problem,
+          writeProblem: result.problem,
+          writeRetryAt,
+        });
+      } else if (replay) {
+        this.update({
+          command,
+          write: 'uncertain',
+          read: 'failed',
+          rows: [],
+          next: null,
+          viewer: null,
+          actions: null,
+          readProblem: null,
           writeProblem: result.problem,
           writeRetryAt,
         });
