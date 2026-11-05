@@ -1,4 +1,5 @@
 import { QueryClientContext } from '@tanstack/react-query';
+import { useLocation } from '@tanstack/react-router';
 import { useContext, useEffect, useReducer, useState, useSyncExternalStore } from 'react';
 import { exposureQuery, sessionQuery } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
@@ -23,6 +24,8 @@ const uuid = '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}';
 
 export function ArchiveProgressRecoveryPage() {
   const client = useContext(QueryClientContext);
+  const location = useLocation();
+  const routeAddress = location.pathname + location.searchStr;
   const [, update] = useReducer((n) => n + 1, 0);
   const [journey, setJourney] = useState<Journey | null>(null);
   const identity = () =>
@@ -57,7 +60,7 @@ export function ArchiveProgressRecoveryPage() {
       active = false;
       mounted?.retire();
     };
-  }, [client, binding]);
+  }, [client, binding, routeAddress]);
   const snap = journey?.snapshot();
   if (!journey || !snap)
     return (
@@ -65,7 +68,7 @@ export function ArchiveProgressRecoveryPage() {
         <p role="status">{m.library_archive_progress_preparing()}</p>
       </main>
     );
-  return <RecoveryJourney key={binding} journey={journey} snap={snap} />;
+  return <RecoveryJourney key={binding + routeAddress} journey={journey} snap={snap} />;
 }
 
 function RecoveryJourney({ journey, snap }: { journey: Journey; snap: View }) {
