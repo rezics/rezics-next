@@ -101,8 +101,9 @@ function definitionValue(value: unknown): value is string {
 
 function validReturnAddress(address: string, origin: PeopleCurrentVisitOrigin): boolean {
   const accepted = subjectVisitReturn(address, origin.locale);
-  if (accepted !== address) return false;
+  if (!accepted) return false;
   const source = new URL(address, 'https://rezics.invalid');
+  if (source.hash || accepted !== `${source.pathname}${source.search}#connections`) return false;
   const segments = source.pathname.split('/');
   return (
     source.origin === 'https://rezics.invalid' &&

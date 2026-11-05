@@ -84,6 +84,7 @@ test('mounted Person entry carries its admitted origin and mounts the existing e
 test('the public Subject Person entry carries its actual origin and waits for Global choice before reading the profile', async () => {
   const { SubjectPage } = await import('../src/features/pages/subject');
   const { subjectPageMessages } = await import('../src/features/pages/route-support');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const fixture = peopleProfileFixture('ready', locale, 'person');
   fixture.person.subject.context = contextId;
@@ -116,8 +117,8 @@ test('the public Subject Person entry carries its actual origin and waits for Gl
   const source = new URLSearchParams({ context: contextId, realm: realmId });
   const sourceAddress = `${subjectHref({ id: peoplePersonId, label: 'Mira Sato' }, locale).href}?${source}`;
   const serverClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const pageMarkup = renderToStaticMarkup(
-    <QueryClientProvider client={serverClient}>
+  const rootRoute = createRootRoute({
+    component: () => (
       <SubjectPage
         page={page}
         locale={locale}
@@ -125,6 +126,15 @@ test('the public Subject Person entry carries its actual origin and waits for Gl
         currentHref={sourceAddress}
         renderJsonLd={false}
       />
+    ),
+  });
+  const router = createRouter({
+    routeTree: rootRoute,
+    history: createMemoryHistory({ initialEntries: [sourceAddress] }),
+  });
+  const pageMarkup = renderToStaticMarkup(
+    <QueryClientProvider client={serverClient}>
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   );
   const encodedEntry = /href="([^"]*\/people\?visit=[^"]*)"/u.exec(pageMarkup)?.[1];
