@@ -503,7 +503,7 @@ export async function readAvatarUploadAdvice(
     if (error instanceof AccessUnavailableError) throw new ProblemError('dependency_unavailable');
     throw error;
   }
-  const observation = {
+  const observation: Omit<AvatarUploadAdvice, 'allowedActions'> = {
     viewerState: 'signed_in' as const,
     viewer: { accountId: actor.accountId },
     target: { containerId: actor.accountId, purpose: 'avatar' as const },

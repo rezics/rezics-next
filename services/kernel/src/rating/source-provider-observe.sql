@@ -4,7 +4,7 @@ WITH input AS NOT MATERIALIZED (
          :source_record_id::text AS source_record_id, :as_of::date AS as_of,
          :payload::text::jsonb AS payload, :transaction_id::uuid AS transaction_id,
          :payload_version::smallint AS payload_version,
-         :local_order::bigint AS local_order, :last_order::bigint AS last_order
+         :local_order::nullable(bigint) AS local_order, :last_order::bigint AS last_order
 ), inserted AS (
   INSERT INTO rating.source_statistic_observation
     (route, subject_id, source, digest, source_alias, source_record_id, as_of, payload, transaction_id,

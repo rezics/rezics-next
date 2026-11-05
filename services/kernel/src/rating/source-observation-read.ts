@@ -17,7 +17,6 @@ import type { AccountActor } from '../request/access.ts';
 import { SourceFiguresSchema, SOURCE_OBSERVATION_MAX_BYTES, validSourceFigures } from './source-figures.ts';
 import {
   SOURCE_OBSERVATION_PAYLOAD_VERSION,
-  SOURCE_PROVIDER_IDS,
   sourceObservation,
   sourceProvider,
   type SourceObservation,
@@ -87,7 +86,7 @@ const observationSchema = t.Object(
 );
 export const SourceObservationReadResponseSchema = t.Object(
   {
-    source: t.Union(SOURCE_PROVIDER_IDS.map((provider) => t.Literal(provider))),
+    source: t.Union([t.Literal('vndb'), t.Literal('bangumi')]),
     head: t.Object(
       {
         digest: t.Union([digestSchema, t.Null()]),
@@ -640,14 +639,17 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
       : [];
     const payloadByDigest = new Map(storedPayloads.map((row) => [row.digest, row]));
     const needsLegacyPayload = hydrated.some((row) => row.digest === null && row.legacy);
-    let legacyRow: Record<string, unknown> | null = null;
+    let legacyRow: NonNullable<Awaited<ReturnType<typeof legacyPayloadQuery.run>>> | null = null;
     if (needsLegacyPayload) {
-      const rows = await query<Record<string, unknown>>(
-        legacyPayloadQuery,
-        { route, subject_id: input.subjectId, source },
-        input.deadline,
+      legacyRow = await within(input.deadline, () =>
+        withConnection(dependencies.pool, (connection) =>
+          legacyPayloadQuery.run(deadlineClient(connection, input.deadline), {
+            route,
+            subject_id: input.subjectId,
+            source,
+          }),
+        ),
       );
-      legacyRow = rows[0] ?? null;
       if (!legacyRow) throw new ProblemError('conflict');
     }
 

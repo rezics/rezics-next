@@ -33,7 +33,7 @@ import {
   SOURCE_STATISTICS_MAX_BODY_BYTES,
   type SourceFigures,
 } from './source-figures.ts';
-import { SOURCE_PROVIDER_IDS, sourceProvider, type SourceProvider } from './source-provider.ts';
+import { sourceProvider, type SourceProvider } from './source-provider.ts';
 import { admitSourceObservation, lockSourceObservation, saveSourceObservation } from './source-provider-observation.ts';
 import { createSourceObservationReadCommands, SourceObservationReadResponseSchema } from './source-observation-read.ts';
 import {
@@ -580,7 +580,7 @@ function publicReadDetail(operationId: string, action: string) {
 
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const id = t.String({ format: 'uuid' });
-const source = t.Union(SOURCE_PROVIDER_IDS.map((id) => t.Literal(id)));
+const source = t.Union([t.Literal('vndb'), t.Literal('bangumi')]);
 const closed = { additionalProperties: false } as const;
 const failures = {
   400: problemSchema('invalid_request'),

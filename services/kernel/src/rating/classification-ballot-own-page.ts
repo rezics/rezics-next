@@ -346,18 +346,17 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
               selectedShown: continuation.selectedShown,
               hasMore: false,
             };
-          const selectedRows =
+          const selectedSlot =
             selected && !continuation.selectedShown
-              ? ((await selectSelected.run(client, {
+              ? await selectSelected.run(client, {
                   route: actorRoute,
                   actor_id: owner.accountId,
                   subject_id: selected.subjectId,
                   association_id: selected.associationId,
                   generation: state.generation,
-                })) as Slot[])
-              : [];
-          const selectedSlot = selectedRows[0] ?? null;
-          const rawRows = (await selectRaw.run(client, {
+                })
+              : null;
+          const rawRows = await selectRaw.run(client, {
             route: actorRoute,
             actor_id: owner.accountId,
             generation: state.generation,
@@ -366,7 +365,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
             selected_subject: selected && (continuation.selectedShown || selectedSlot) ? selected.subjectId : null,
             selected_association:
               selected && (continuation.selectedShown || selectedSlot) ? selected.associationId : null,
-          })) as Slot[];
+          });
           const rawPage = rawRows.slice(0, CLASSIFICATION_BALLOT_OWN_PAGE_SIZE);
           return {
             raw: rawPage,
