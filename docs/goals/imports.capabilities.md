@@ -16,7 +16,7 @@ Completion includes the complete fresh seed; selected media and graph publicatio
 
 - The selected showcase uses the current registered seed roots and selected graph only. It retains exact source keys, citations, source and converter digests, current identity and property reads, independent candidate acceptance/adoption, public readback, and bounded cover acquisition/recovery.
 - Person and credit outcomes require current exact provider identifiers and reviewed role bindings. A name, similar credit or stale adoption never resolves identity.
-- Franchise and work-link results retain their typed source relations and independent provider identities. A Bangumi identifier comes only from an admitted source-site row with a parsed public Bangumi subject URL.
+- Franchise and work-link results retain their typed source relations and independent provider identities. VNDB `side`/`par` use released `wdt:P144` direction; reciprocal rows retain both citations on one directed assertion, with current identities and facts fences at both endpoints. A Bangumi identifier comes only from an admitted source-site row with a parsed public Bangumi subject URL; VNDB v2002 and Bangumi 3154 remain separate identities linked only by selected counterpart evidence.
 - Shared tags use the current reviewed Scheme and Concept bindings. Kana weights use a current response for the selected work and tag; COPY vote counts, user notes and private identifiers are excluded.
 - Personal VNDB Library import follows the [released-state and native-review contract](../../docs/library-import-vndb.md) under Commerce ownership. Private source retention is bounded; progress retention does not infer activity. Its native acceptance is not inferred from catalogue-import tests.
 

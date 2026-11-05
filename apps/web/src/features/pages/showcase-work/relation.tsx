@@ -67,6 +67,7 @@ export function WorkRelation({
   const holderLabel = relation.direction === 'in' ? relation.label : (value.subjectLabel ?? value.unlabelled);
   const holderHref = subjectHref({ id: relation.holder, label: holderLabel }, value.locale).href;
   const BaseLink = value.link;
+  const EndpointLink: PageLink = (props) => <BaseLink {...props} />;
   const evidenceReturn = returnToFor?.('evidence') ?? returnHref;
   const Link: PageLink = (props) => (
     <BaseLink
@@ -74,6 +75,7 @@ export function WorkRelation({
       href={evidenceReturn ? withSubjectVisitReturn(props.href, evidenceReturn, value.locale) : props.href}
     />
   );
+  const HolderLink = relation.direction === 'in' ? EndpointLink : Link;
   const metadata: unknown = Reflect.get(relation.statement, 'rezics');
   const related = {
     ...relation.related,
@@ -150,16 +152,16 @@ export function WorkRelation({
           {label}
         </h4>
         <p>
-          <Link href={holderHref} className={action}>
+          <HolderLink href={holderHref} className={action}>
             {holderLabel}
-          </Link>
+          </HolderLink>
         </p>
         <CandidateValue
           snak={relation.statement}
           related={related}
           locale={value.locale}
           subject={relation.holder}
-          link={Link}
+          link={relation.direction === 'out' ? EndpointLink : Link}
         />
         {isRecord(metadata) && typeof metadata.release === 'string' && typeof metadata.revision === 'number' && (
           <dl className="space-y-2 text-sm">
@@ -199,12 +201,12 @@ export function WorkRelation({
           </p>
         </details>
         <nav className="flex min-w-0 flex-wrap gap-3" aria-labelledby={heading}>
-          <Link href={`${holderHref}/details`} className={action}>
+          <HolderLink href={`${holderHref}/details`} className={action}>
             {m.subject_details({}, o)}
-          </Link>
-          <Link href={`${holderHref}/sources`} className={action}>
+          </HolderLink>
+          <HolderLink href={`${holderHref}/sources`} className={action}>
             {m.subject_sources({}, o)}
-          </Link>
+          </HolderLink>
           <ValueExplanationEntry
             link={Link}
             {...(evidenceReturn ? { returnTo: evidenceReturn } : {})}

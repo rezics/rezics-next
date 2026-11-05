@@ -285,7 +285,9 @@ function graphEdgeCitationsMatch(edge: CrossMediaPlan['edges'][number], actual: 
   const expected =
     edge.source === 'vndb' && edge.table === 'releases_supersedes' && edge.property === 'rezics:releaseSupersedes'
       ? [vndbRecordUrl(edge.holder), vndbRecordUrl(edge.target)].sort()
-      : [edge.url];
+      : edge.vndbRelation
+        ? [...new Set(edge.vndbRelation.evidence.map((row) => row.sourceUrl))].sort()
+        : [edge.url];
   return actual.length === expected.length && expected.every((uri, index) => uri === actual[index]);
 }
 
@@ -718,6 +720,7 @@ export function buildShowcaseManifest(input: {
       sourceKey: edge.target,
       subjectId: targetSubject.id,
       nativeType: targetSubject.type,
+      ...(edge.vndbRelation ? { factsFence: true as const } : {}),
     });
   }
 

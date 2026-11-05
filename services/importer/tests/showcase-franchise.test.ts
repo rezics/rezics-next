@@ -1,10 +1,15 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import { CrossMediaGraph, graphEdgeKey } from '../src/cross-media-bindings.ts';
+import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import {
+  CrossMediaGraph,
+  graphEdgeCommandKey,
+  graphEdgeKey,
+  graphEdgeSource,
+} from '../src/cross-media-bindings.ts';
 import {
   planCrossMediaSeed,
   crossMediaAliases,
@@ -76,22 +81,84 @@ test('finite observed members use existing mapper semantics and ignore unrelated
   expect(showcaseFranchiseSelection({ bangumi: [51], vndb: ['v4'] })).toEqual({ bangumi: [51], vndb: ['v4'] });
   expect(large.edges.map(graphEdgeKey)).toEqual(small.edges.map(graphEdgeKey));
   expect(small.edges.filter((edge) => edge.table === 'subject-relations')).toHaveLength(4);
-  expect(small.edges.map((edge) => edge.property).sort()).toEqual([
+  expect(small.edges.filter((edge) => edge.table === 'subject-relations').map((edge) => edge.property).sort()).toEqual([
     'rezics:crossMediaCounterpart',
     'rezics:crossMediaCounterpart',
     'rezics:sideStoryOf',
     'wdt:P155',
   ]);
-  // Keep these inventory strings unavailable until the selected typed-relation owner returns its exact result.
   expect(
     small.gaps.filter((row) => row.source === 'vndb' && ['side', 'par'].includes(String(row.record.relation))),
-  ).toHaveLength(2);
-  expect(small.edges.some((edge) => edge.source === 'vndb' && edge.table === 'vn_relations')).toBe(false);
-  expect(small.edges.some((edge) => edge.property === 'wdt:P144')).toBe(false);
+  ).toHaveLength(0);
+  expect(small.edges.filter((edge) => edge.source === 'vndb' && edge.table === 'vn_relations')).toMatchObject([
+    {
+      holder: 'v2002',
+      target: 'v17102',
+      property: 'wdt:P144',
+      vndbRelation: {
+        sourceSubject: 'v2002',
+        sourceEndpoint: 'v17102',
+        evidence: [
+          { sourceSubject: 'v17102', sourceEndpoint: 'v2002', code: 'par' },
+          { sourceSubject: 'v2002', sourceEndpoint: 'v17102', code: 'side' },
+        ],
+      },
+    },
+  ]);
+  const sideEdge = small.edges.find((edge) => edge.vndbRelation)!;
+  const sideHolder = id(800001);
+  const sideTarget = id(800002);
+  const sideCandidate = id(800003);
+  const sideCommand: BatchCommand = {
+    op: 'propose',
+    key: graphEdgeCommandKey(sideEdge),
+    source: graphEdgeSource(sideEdge),
+    subject: sideHolder,
+    statement: {
+      property: { id: sideEdge.property },
+      value: { type: 'value', content: sideTarget },
+      references: sideEdge.vndbRelation!.evidence.map((source) => ({
+        parts: [
+          {
+            property: { id: 'schema:url' },
+            value: { type: 'value', content: source.sourceUrl },
+          },
+        ],
+      })),
+    },
+  };
+  const sideReadings: CrossMediaReading[] = ([
+    ['v2002', sideHolder],
+    ['v17102', sideTarget],
+  ] as const).map(([externalId, subjectId]) => ({
+    source: 'vndb' as const,
+    externalId,
+    route: `/subjects/${subjectId}/work`,
+    selection: 'selected' as const,
+    subject: {
+      subject: { id: subjectId, type: 'wd:Q689445', statements: {} },
+    } as unknown as ReviewedSubjectRead,
+  }));
+  const sideManifest = buildShowcaseManifest({
+    plan: small,
+    readings: sideReadings,
+    acknowledgements: [{ command: sideCommand, candidateId: sideCandidate, commandDigest: showcaseDigest(sideCommand) }],
+    aliases: crossMediaAliases,
+  });
+  const sideAssertion = sideManifest.records
+    .find((record) => record.provider === 'vndb' && record.sourceKey === 'v2002')
+    ?.assertions.find((assertion) => assertion.candidateId === sideCandidate);
+  expect(sideAssertion).toMatchObject({
+    property: 'wdt:P144',
+    citations: ['https://vndb.org/v17102', 'https://vndb.org/v2002'],
+    graphTarget: { provider: 'vndb', sourceKey: 'v17102', subjectId: sideTarget, factsFence: true },
+  });
 });
 
 test('current graph results gate publication on exact reopen, changed source and endpoint identities', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'showcase-franchise-'));
+  const temporary = join(process.cwd(), '.temp');
+  await mkdir(temporary, { recursive: true });
+  const directory = await mkdtemp(join(temporary, 'showcase-franchise-'));
   const path = join(directory, 'graph.sqlite');
   let db = new Database(path);
   try {
