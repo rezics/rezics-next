@@ -150,7 +150,7 @@ function readManifest(cwd: string): PageManifest {
         typeof section.id !== 'string' ||
         typeof section.name !== 'string' ||
         typeof section.native?.path !== 'string' ||
-        (section.personas !== undefined && (!Array.isArray(section.personas) || section.personas.some((persona) => typeof persona !== 'string)))
+        (section.personas !== undefined && (!Array.isArray(section.personas) || section.personas.some((persona) => typeof persona !== 'string')))
       )
         throw new Error(`page-data manifest contains an invalid section on ${page.id}`);
   }
