@@ -464,6 +464,10 @@ revalidate before disclosure. Unsafe, changed, missing or pending acknowledgemen
 never stale exclusion/order/results. Ordinary checkpoints, `securityRevision`, complete ordinary generations,
 returned-ID checks and omitted counts cannot certify this seam.
 
+Decision: facet pages retain each exact native execution through value validation and cursor signing, then make one
+final query-level safety decision for all siblings. An unclean final observation withholds the complete facet
+response; engine exhaustion alone never upgrades source-backed sample totals to exact counts.
+
 Withholding a harem tag must protect positive harem results and **NOT harem**: returned-row checks miss the subject
 excluded by a stale tag. Paused-indexer negative/order/count cases must stay preparing until acknowledgement covers
 the local reduction and all affected foreign repair. This is a required abstract producer/consumer contract, not a

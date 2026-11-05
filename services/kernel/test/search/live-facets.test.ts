@@ -329,7 +329,7 @@ test('the helper probes labels only for the top two values per requested result 
   expect(readIds.filter((value) => !candidateIds.has(value)).length).toBeLessThanOrEqual(2);
 });
 
-test('incomplete samples and empty samples are lower bounds while a verified complete sample is exact', async () => {
+test('incomplete and empty samples remain lower bounds without a complete native query-level proof', async () => {
   const source = new ControlledSource();
   source.put(subject(1, [coded('en')]));
 
@@ -360,8 +360,8 @@ test('incomplete samples and empty samples are lower bounds while a verified com
 
   expect(incomplete.total).toEqual({ value: 1, relation: 'lower_bound' });
   expect(incomplete.facets[0]!.relation).toBe('lower_bound');
-  expect(exact.total).toEqual({ value: 1, relation: 'exact' });
-  expect(exact.facets[0]!.relation).toBe('exact');
+  expect(exact.total).toEqual({ value: 1, relation: 'lower_bound' });
+  expect(exact.facets[0]!.relation).toBe('lower_bound');
   expect(empty.total).toEqual({ value: 0, relation: 'lower_bound' });
   expect(empty.facets[0]!.relation).toBe('lower_bound');
 });
