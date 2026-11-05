@@ -7,7 +7,7 @@ import type { EditableCollectionPage } from '../src/library/collection-load';
 import recording from '../src/kernel/recorded/library-collection.json';
 import memberRecording from '../src/kernel/recorded/library-collection-members.json';
 import { subjectOf } from '../src/library/reads';
-import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, locales, overwriteGetLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 import { collectionStoryMembers } from '../src/kernel/fake/collection-stories';
 import definitions from '../src/kernel/recorded/definitions-release.json';
@@ -66,10 +66,10 @@ async function render(data = page, cursor?: string) {
 }
 
 test('the editor offers mixed separately from automatic cover selection and retains retired explicit Types', () => {
-  const previousLocale = getLocale();
+  const previousLocale = getLocale;
   try {
     for (const locale of locales) {
-      setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       for (const kind of [null, 'example:Retired']) {
         const html = renderToStaticMarkup(
           createElement(CollectionPresentationFields, {
@@ -92,17 +92,17 @@ test('the editor offers mixed separately from automatic cover selection and reta
       }
     }
   } finally {
-    setLocale(previousLocale, { reload: false });
+    overwriteGetLocale(previousLocale);
   }
 });
 
 test('The Collection identity keeps its own cover frame and shared placeholder when its own art is absent', async () => {
   // The SignedIn story measures the first real row and the single toolbar at phone390.
   // This render covers the same composition and disclosure in every launch locale.
-  const previousLocale = getLocale();
+  const previousLocale = getLocale;
   try {
     for (const locale of locales) {
-      setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       const html = await render();
       const hero = html.match(/<header\b[^>]*data-slot="collection-hero"[\s\S]*?<\/header>/)?.[0] ?? '';
       const toolbar = html.match(/<div\b[^>]*data-slot="collection-toolbar"[\s\S]*?<\/nav><\/div>/)?.[0] ?? '';
@@ -131,10 +131,9 @@ test('The Collection identity keeps its own cover frame and shared placeholder w
       }
       expect(html.indexOf('data-slot="collection-toolbar"')).toBeLessThan(html.indexOf('data-collection-members'));
       expect(html.match(/data-slot="member-list-row-title"/g)).toHaveLength(4);
-      expect(html.indexOf('data-collection-members')).toBeLessThan(
-        html.indexOf('aria-label="' + m.library_collection_export_label() + '"'),
-      );
-      expect(html).not.toContain('data-slot="member-list-row-facts"');
+      // The count is unknown here, so the complete-view export is not offered and its control is not rendered.
+      expect(html).not.toContain('aria-label="' + m.library_collection_export_label() + '"');
+      expect(html.match(/data-slot="member-list-row-facts"/g)).toHaveLength(4);
     }
     const title = '長い題名でも省略せずに読める本のコレクション — A long collection title without truncation';
     const html = await render({ ...page, title, memberCount: 4 });
@@ -143,7 +142,7 @@ test('The Collection identity keeps its own cover frame and shared placeholder w
     expect(heading).not.toMatch(/truncate|line-clamp/);
     expect(html).toContain(m.library_member_count({ count: 4 }));
   } finally {
-    setLocale(previousLocale, { reload: false });
+    overwriteGetLocale(previousLocale);
   }
 
   const ownCover = subjectOf(subjectRecording.summary)!.cover!;
@@ -200,10 +199,10 @@ test('compact presentation preserves genuine member preparation, unavailable fee
 });
 
 test('existing Collection pages render supplied Book author and publication year with type labels in every launch locale', async () => {
-  const previousLocale = getLocale();
+  const previousLocale = getLocale;
   try {
     for (const locale of locales) {
-      setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       const html = await render({
         ...page,
         listPresentations: {
@@ -218,9 +217,8 @@ test('existing Collection pages render supplied Book author and publication year
         })),
       });
       expect(html.match(/data-slot="member-list-row-title"/g)).toHaveLength(4);
-      const facts = [...html.matchAll(/<p\b[^>]*data-slot="member-list-row-facts"[^>]*>([\s\S]*?)<\/p>/g)].map(
-        (match) => match[1]!,
-      );
+      // Each facts row opens with its slot attribute; nested fact items make a regex end too early.
+      const facts = html.split('data-slot="member-list-row-facts"').slice(1);
       expect(facts).toHaveLength(4);
       for (const [index, author, year] of [
         [0, locale === 'ja' ? '川端康成' : 'Yasunari Kawabata', 1937],
@@ -236,6 +234,6 @@ test('existing Collection pages render supplied Book author and publication year
       expect(html).toContain('data-slot="collection-toolbar"');
     }
   } finally {
-    setLocale(previousLocale, { reload: false });
+    overwriteGetLocale(previousLocale);
   }
 });

@@ -175,7 +175,7 @@ test('current list/detail presentation stays bounded and public projection conce
   expect(mine.collections[0]?.presentationKindSource).toBe('mixed');
   expect(mine.collections[0]?.memberCount).toBe(4);
   expect(mine.collections[0]).not.toHaveProperty('coverMediaId');
-  expect(mine.collections[0]).not.toHaveProperty('preview');
+  expect(mine.collections[0]?.preview).toEqual({ state: 'unavailable' });
   expect(calls).toHaveLength(3);
   expect(calls.every((request) => request.method === 'GET')).toBe(true);
   expect(calls.slice(0, 2).every((request) => !request.headers.has('authorization'))).toBe(true);

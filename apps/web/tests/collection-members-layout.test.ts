@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { renderToString } from 'react-dom/server';
+import { m } from '../src/paraglide/messages.js';
 import type { EditableCollectionPage } from '../src/library/collection-load';
 import { collectionPageAddress } from '../src/library/collection-presentation';
 import { collectionComparisonReturnState } from '../src/library/collection-comparison/return';
@@ -15,11 +16,16 @@ import {
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
 mock.module('../src/library/collection-edit', () => {
+  // Bun mocks are process-wide: export every name an importer binds, or a co-run file fails to link.
   const unusedWrite = () => Promise.resolve({ ok: false, reason: 'conflict' });
   return {
+    addCollectionMember: unusedWrite,
+    createCollection: unusedWrite,
     deleteCollection: unusedWrite,
     moveCollectionMember: unusedWrite,
+    readNewCollection: unusedWrite,
     removeCollectionMember: unusedWrite,
+    restoreCollectionMember: unusedWrite,
     setCollectionFollow: unusedWrite,
     updateCollection: unusedWrite,
     updateMemberNote: unusedWrite,
@@ -306,13 +312,16 @@ test('mixed reading keeps occurrence positions and notes independent and returns
   expect(laterKey).not.toBe(listKey);
 });
 
-test('curator, member count and updated time share one metadata line', async () => {
+test('curator leads the owner row; member count and updated time share one metadata line', async () => {
   const html = await render();
-  const metadata = /<p\b(?=[^>]*data-slot="collection-metadata")[\s\S]*?<\/p>/.exec(html)?.[0] ?? '';
+  const owner = html.indexOf('data-collection-owner');
+  const count = html.indexOf(m.library_member_count({ count: 2 }));
+  const updated = html.indexOf(`dateTime="${stamp}"`);
 
-  expect(metadata).toContain('Ada Lovelace');
-  expect(metadata).toContain('@ada');
-  expect(metadata).toContain('2 members');
-  expect(metadata).toContain(`dateTime="${stamp}"`);
-  expect((metadata.match(/aria-hidden="true">·<\/span>/g) ?? []).length).toBe(2);
+  expect(owner).toBeGreaterThanOrEqual(0);
+  expect(html.slice(owner, count)).toContain('Ada Lovelace');
+  expect(html.slice(owner, count)).toContain('@ada');
+  expect(count).toBeGreaterThan(owner);
+  expect(updated).toBeGreaterThan(count);
+  expect(html.slice(count, updated)).toMatch(/aria-hidden="true">·<\/span>/);
 });
