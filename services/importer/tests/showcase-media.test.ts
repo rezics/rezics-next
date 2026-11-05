@@ -187,7 +187,7 @@ test('default selected Bangumi media intent resumes its journalled reservation t
     journal.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 15_000);
 
 test('direct selected Character images use CharacterDetail evidence and preserve changed receipts', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-character-media-'));

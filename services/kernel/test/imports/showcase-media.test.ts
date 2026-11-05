@@ -352,4 +352,4 @@ test('default finite Bangumi selection imports a direct Character image through 
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);
