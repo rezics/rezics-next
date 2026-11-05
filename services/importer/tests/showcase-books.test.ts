@@ -536,6 +536,9 @@ test('Kara no Kyoukai creator, publisher and anime identities survive exact jour
       publicClient: world.publicClient,
       ...(first.creditVocabularyRequirements ? { vocabularyRequirements: first.creditVocabularyRequirements } : {}),
     });
+    const publisherManifest = publication.manifest.records.find((record) => record.sourceKey === 'person:128');
+    expect(publisherManifest?.nativeType).toBe('schema:Organization');
+    expect(publisherManifest?.assertions.map((assertion) => assertion.property)).toContain('schema:name');
     const publisherRead = (await world.publicClient.readSubject(publisherId)).subject as {
       type: string;
       statements: Record<string, { value?: { content?: unknown } }[]>;
