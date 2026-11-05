@@ -2822,7 +2822,8 @@ the same journal and current-read rules.
   `services/importer/tests/showcase-vndb-traits.test.ts` covers reviewed trait
   selection; `services/kernel/test/imports/showcase-character-vocabulary.test.ts`
   covers the actual default selection, native current profile, source keys,
-  role/spoiler qualifiers and identity reuse.
+  role/spoiler qualifiers and identity reuse; `services/kernel/test/imports/vndb-character-traits.test.ts`
+  retains independent current-read and association qualifier coverage.
 
 ### Cost: selected showcase media acquisition and publication
 

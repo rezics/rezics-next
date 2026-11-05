@@ -175,46 +175,28 @@ test('selected character traits and appearances use current adopted vocabulary a
     const roleTaxonomyRequirements = {
       ...vocabulary.requirements,
       terms: vocabulary.requirements.terms.filter((term) => term.taxonomy === appearanceRoleTaxonomy),
-      parents: [],
-      associatedCodes: vocabulary.requirements.associatedCodes.filter((code) =>
-        vocabulary.requirements.terms.some((term) => term.taxonomy === appearanceRoleTaxonomy && term.code === code),
-      ),
     };
-    const sourceKeyId = (sourceKey: string) =>
-      journal
-        .acknowledgedCommands()
-        .find(
-          (acknowledgement) =>
-            acknowledgement.command.op === 'create' &&
-            acknowledgement.command.source.external_id === showcaseVocabularyExternalId(sourceKey),
-        )?.subjectId;
-    await prepareShowcaseCharacterVocabulary({
-      tables,
-      selectedPlan: selected,
-      port: vocabularyPort,
-      journal,
-      stage: 'schemes',
-      taxonomies: [appearanceRoleTaxonomy],
-    });
+    const prepareRoles = (stage: 'schemes' | 'concepts') =>
+      prepareShowcaseCharacterVocabulary({
+        tables,
+        selectedPlan: selected,
+        port: vocabularyPort,
+        journal,
+        stage,
+        taxonomies: [appearanceRoleTaxonomy],
+      });
+    const sourceKeyId = (key: string) =>
+      journal.acknowledgedCommands().find((ack) =>
+        ack.command.op === 'create' && ack.command.source.external_id === showcaseVocabularyExternalId(key),
+      )?.subjectId;
+    await prepareRoles('schemes');
     const roleSchemeId = sourceKeyId(appearanceRoleTaxonomy)!;
     await editor.adoptSubject(roleSchemeId, 'schema:url', appearanceRoleSchemeUri, GLOBAL_CONTEXT);
-    await prepareShowcaseCharacterVocabulary({
-      tables,
-      selectedPlan: selected,
-      port: vocabularyPort,
-      journal,
-      stage: 'concepts',
-      taxonomies: [appearanceRoleTaxonomy],
-    });
+    await prepareRoles('concepts');
     const roleMainId = sourceKeyId(`${appearanceRoleTaxonomy}:main`)!;
     await editor.adoptSubject(roleMainId, 'schema:url', appearanceRoleConceptUri('main'), GLOBAL_CONTEXT);
     await editor.adoptSubject(roleMainId, 'skos:inScheme', roleSchemeId, GLOBAL_CONTEXT);
-    const currentVocabulary = await readShowcaseCharacterVocabulary({
-      tables,
-      selectedPlan: selected,
-      port: vocabularyPort,
-      journal,
-    });
+    const currentVocabulary = await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port: vocabularyPort, journal });
     const profile = profileFromCharacterVocabularyBindings(currentVocabulary);
     expect(profile?.traits).toBeUndefined();
     expect(profile?.roles?.concepts).toEqual([{ code: 'main', id: roleMainId }]);
