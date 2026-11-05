@@ -13,3 +13,4 @@ export { readCatalogueFileProfile, type CatalogueFileRead } from './read';
 export { CatalogueFileProfileSession } from './session';
 export { CatalogueFileProfilePage, type CatalogueFileTransport } from './view';
 export { CatalogueFileProfileEntry } from './entry';
+export type { CatalogueFileCorrectionOrigin, CatalogueFileCorrectionSelection } from './origin';

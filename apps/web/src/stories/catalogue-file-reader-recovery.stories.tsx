@@ -6,6 +6,8 @@ import {
   type CatalogueFileReaderVisit,
 } from '../features/catalogue/catalogue-file-reader/model';
 import { CatalogueFileReader } from '../features/catalogue/catalogue-file-reader/reader';
+import { CatalogueFileProfileContextUnavailable } from '../features/catalogue/catalogue-file-profile/session';
+import { catalogueFileGlobalHref } from '../features/catalogue/catalogue-file-profile/origin';
 import { catalogueFileProfileFixture, catalogueFile } from '../kernel/fake/catalogue-file-profile';
 import { AppShell } from '../shell/shell';
 import { getLocale } from '../paraglide/runtime.js';
@@ -119,4 +121,25 @@ export const FrenchDesktopDark: Story = {
 };
 export const SpanishDesktopLight: Story = {
   globals: { locale: 'es', theme: 'light', viewport: { value: 'desktop1280' } },
+};
+
+function SelectedContextCorrectionUnsupported() {
+  const locale = getLocale();
+  const returnHref = `/${locale}/subjects/${catalogueFile}/episode-file#catalogue-file-reader`;
+  return (
+    <PatternStory path={`/subjects/${catalogueFile}/episode-file/file`} visitor="Signed In">
+      <AppShell>
+        <CatalogueFileProfileContextUnavailable
+          locale={locale}
+          returnHref={returnHref}
+          globalHref={catalogueFileGlobalHref(catalogueFile, locale, catalogueFile, returnHref)}
+        />
+      </AppShell>
+    </PatternStory>
+  );
+}
+
+export const SelectedContextNeedsFreshGlobalVisit: Story = {
+  render: () => <SelectedContextCorrectionUnsupported />,
+  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390' } },
 };

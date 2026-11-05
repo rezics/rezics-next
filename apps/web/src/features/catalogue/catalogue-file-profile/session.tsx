@@ -1,7 +1,7 @@
 import { candidateSession } from '../../../subject/candidate-lifetime';
 import { editorRequest } from '../editor-request';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useSession } from '../../../session/query';
 import { csrfHeaders } from '../../../threads/composer';
 import { m } from '../../../paraglide/messages.js';
@@ -13,6 +13,47 @@ import { submitFactCorrection } from '../subject-facts-actions';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../../pages/curate-actions';
 import { readSubjectCatalogueFile } from './actions';
 import { CatalogueFileProfilePage } from './view';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { catalogueFileSourceReturnHref } from '../catalogue-file-reader/navigation';
+import {
+  catalogueFileGlobalHref,
+  type CatalogueFileCorrectionOrigin,
+} from './origin';
+
+const actionClass =
+  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center whitespace-normal break-words py-2 underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+export function CatalogueFileProfileContextUnavailable({
+  locale,
+  returnHref,
+  globalHref,
+}: {
+  locale: string;
+  returnHref?: string | undefined;
+  globalHref: string;
+}) {
+  const o = { locale: locale as never };
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
+  return (
+    <section className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-4 sm:p-6" data-slot="catalogue-file-context-unsupported">
+      <h1 ref={heading} className="font-sans text-2xl font-semibold" tabIndex={-1}>
+        {m.catalogue_file_title({}, o)}
+      </h1>
+      <p role="status">{m.catalogue_file_context_unsupported({}, o)}</p>
+      <nav className="flex flex-wrap gap-2">
+        {returnHref ? (
+          <a className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} href={returnHref}>
+            {m.catalogue_file_reader_return({}, o)}
+          </a>
+        ) : null}
+        <a className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`} href={globalHref}>
+          {m.catalogue_file_global_correction_entry({}, o)}
+        </a>
+      </nav>
+    </section>
+  );
+}
 
 export const CatalogueFileProfileSession = candidateSession(CatalogueFileProfileSessionLive);
 
@@ -23,6 +64,10 @@ function CatalogueFileProfileSessionLive({
   realm,
   initialReview,
   returnSourceId,
+  origin,
+  originInvalid,
+  restartWithoutOrigin,
+  returnHref,
 }: {
   id: string;
   locale: string;
@@ -30,6 +75,10 @@ function CatalogueFileProfileSessionLive({
   realm?: string | undefined;
   initialReview?: { property: string; candidate: string } | undefined;
   returnSourceId?: string | undefined;
+  origin?: CatalogueFileCorrectionOrigin | undefined;
+  originInvalid?: boolean | undefined;
+  restartWithoutOrigin?: boolean | undefined;
+  returnHref?: string | undefined;
 }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
@@ -38,7 +87,13 @@ function CatalogueFileProfileSessionLive({
     [locale],
   );
   if (realm || (context && context !== candidateContext))
-    return <p role="status">{m.relation_context({}, { locale: locale as never })}</p>;
+    return (
+      <CatalogueFileProfileContextUnavailable
+        locale={locale}
+        returnHref={returnHref ?? (returnSourceId ? catalogueFileSourceReturnHref(returnSourceId, locale) : undefined)}
+        globalHref={catalogueFileGlobalHref(id, locale, returnSourceId, returnHref)}
+      />
+    );
   if (state !== 'signed-in')
     return (
       <p role="status">
@@ -54,6 +109,10 @@ function CatalogueFileProfileSessionLive({
       search={search}
       initialReview={initialReview}
       returnSourceId={returnSourceId}
+      returnHref={returnHref}
+      origin={origin}
+      originInvalid={originInvalid}
+      restartWithoutOrigin={restartWithoutOrigin}
       transport={{
         read: (stream, cursor, detail, session) =>
           readSubjectCatalogueFile({
