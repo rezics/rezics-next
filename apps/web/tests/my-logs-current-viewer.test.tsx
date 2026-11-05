@@ -509,12 +509,13 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     const previous = await navigateByKeyboard(m.library_my_logs_previous());
     expect(previous.cursor).toBeNull();
     retired();
+    await settle(previous, new Error('Transient Previous failure'));
     const previousRetry = await retry();
+    expect(previousRetry).not.toBe(previous);
     expect(previousRetry.cursor).toBeNull();
-    await settle(previous, new Error('Superseded Previous read'));
     await settle(previousRetry, history('B', null, 'B accepted predecessor'));
     expect(host.textContent).toContain('B accepted predecessor');
-    expect(window.document.activeElement).toBe(host.querySelector('h1'));
+    expect(window.document.activeElement).not.toBe(host.querySelector('h1'));
     expect(link(m.library_my_logs_previous())).toBeUndefined();
     const nextAgain = await navigateByKeyboard(m.library_my_logs_next());
     expect(nextAgain.cursor).toBe(next.cursor);
@@ -532,10 +533,16 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     await settle(directAfterRouteReturn, history('B', nextAgain.cursor, 'Fresh direct later page'));
     expect(host.textContent).toContain('Fresh direct later page');
     expect(link(m.library_my_logs_previous())).toBeUndefined();
+    const newestAfterReturn = await navigateByKeyboard(m.library_my_logs_newest());
+    expect(newestAfterReturn.cursor).toBeNull();
+    retired();
+    await settle(newestAfterReturn, history('B', null, 'Newest after direct route return'));
+    expect(host.textContent).toContain('Newest after direct route return');
+    expect(window.document.activeElement).toBe(host.querySelector('h1'));
     await settle(oldAddress, new Error('Late prior-address failure'));
-    expect(host.textContent).toContain('Fresh direct later page');
+    expect(host.textContent).toContain('Newest after direct route return');
     for (const state of ['denied', 'preparing', 'unavailable'] as const) {
-      await settle(await refetch(), { sessionSubject: null, cursor: next.cursor, locale: 'en', page: { state } });
+      await settle(await refetch(), { sessionSubject: null, cursor: null, locale: 'en', page: { state } });
       expect(host.textContent).toContain(
         state === 'denied'
           ? m.library_my_logs_denied()
@@ -547,13 +554,14 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
       retired();
     }
     await settle(await retry(), {
-      ...history('B', next.cursor),
+      ...history('B'),
       page: { state: 'loaded', logs: [], next: 'bounded-more', restarted: false },
     });
     expect(host.textContent).toContain(m.library_my_logs_no_visible());
-    const newest = await navigate(m.library_my_logs_newest());
-    expect(newest.cursor).toBeNull();
-    await settle(newest, { ...history('B'), page: { state: 'loaded', logs: [], next: null, restarted: false } });
+    await settle(await refetch(), {
+      ...history('B'),
+      page: { state: 'loaded', logs: [], next: null, restarted: false },
+    });
     expect(host.textContent).toContain(m.library_logs_empty());
     await settle(await refetch(), history('B'));
 
