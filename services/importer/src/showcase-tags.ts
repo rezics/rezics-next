@@ -484,6 +484,7 @@ export async function prepareShowcaseTags(input: {
   port: CrossMediaPort;
   known?: VndbPublicTagKnownBindings;
   fetch?: VndbTagRatingFetch;
+  journal?: ShowcaseJournal;
 }) {
   const known = input.known ?? { schemes: [], concepts: [] };
   const projected = await projectShowcaseTagTables(
@@ -498,6 +499,7 @@ export async function prepareShowcaseTags(input: {
     admitted: planned.admitted,
     bindings,
     identity: tagRatingIdentity,
+    ...(input.journal ? { journal: input.journal } : {}),
     ...(input.fetch ? { fetch: input.fetch } : {}),
   });
   return {
@@ -518,6 +520,7 @@ export async function importShowcaseTags(input: {
   known?: VndbPublicTagKnownBindings;
   destination?: { origin: string };
   fetch?: VndbTagRatingFetch;
+  journal?: ShowcaseJournal;
   manifest?: { recordVocabulary?(records: readonly ShowcaseTagVocabularyRecord[]): void };
 }): Promise<ShowcaseTagsResult> {
   const known = input.known ?? { schemes: [], concepts: [] };
@@ -529,6 +532,7 @@ export async function importShowcaseTags(input: {
     admitted: planned.admitted,
     bindings,
     identity: tagRatingIdentity,
+    ...(input.journal ? { journal: input.journal } : {}),
     ...(input.fetch ? { fetch: input.fetch } : {}),
   });
   input.manifest?.recordVocabulary?.(planned.vocabulary);

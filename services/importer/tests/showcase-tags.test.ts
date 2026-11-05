@@ -872,7 +872,6 @@ test('reviewed tag association bounds let one association from each selected wor
   expect(projected.truncated).toBe(false);
 });
 
-
 test('selected rating evidence survives response loss and reopen before terminal refresh', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-tag-rating-reopen-'));
   const journalPath = join(directory, 'showcase.sqlite');
@@ -903,35 +902,50 @@ test('selected rating evidence survives response loss and reopen before terminal
   };
   const fetchRatings: VndbTagRatingFetch = async () => {
     fetches++;
-    return new Response(`{"more":false,"results":[{"id":"v410","tags":[{"id":"g311","rating":${fetches === 1 ? '2.5000' : '1.2500'},"spoiler":1,"lie":false}]}]}`);
+    return new Response(
+      `{"more":false,"results":[{"id":"v410","tags":[{"id":"g311","rating":${fetches === 1 ? '2.5000' : '1.2500'},"spoiler":1,"lie":false}]}]}`,
+    );
   };
   const input = () => ({
-    tables: authoredTables(), selectedVids: ['v410'], path: join(directory, 'state.sqlite'), known,
-    fetch: fetchRatings, journal,
-    port: captureShowcaseCommands({
-      ...transport,
-      async batch(request) {
-        const result = await transport.batch(request);
-        if (loseResponse && request.commands.some(command => command.op === 'propose' && command.statement.qualifiers?.some(term => term.property.id === 'rezics:sourceTagWeight'))) {
-          loseResponse = false;
-          throw new Error('Lost committed rating response');
-        }
-        return result;
+    tables: authoredTables(),
+    selectedVids: ['v410'],
+    path: join(directory, 'state.sqlite'),
+    known,
+    fetch: fetchRatings,
+    journal,
+    port: captureShowcaseCommands(
+      {
+        ...transport,
+        async batch(request) {
+          const result = await transport.batch(request);
+          if (
+            loseResponse &&
+            request.commands.some(
+              (command) =>
+                command.op === 'propose' &&
+                command.statement.qualifiers?.some((term) => term.property.id === 'rezics:sourceTagWeight'),
+            )
+          ) {
+            loseResponse = false;
+            throw new Error('Lost committed rating response');
+          }
+          return result;
+        },
       },
-    }, journal),
+      journal,
+    ),
   });
   try {
     await expect(importShowcaseTags(input())).rejects.toThrow('Durable operations remain unresolved');
-    const sealed = journal.preparedCommands().filter(row => row.command.op === 'propose');
+    const sealed = journal.preparedCommands().filter((row) => row.command.op === 'propose');
     expect(sealed.length).toBeGreaterThan(0);
     journal.close();
     journal = new ShowcaseJournal(journalPath);
-    const reopening = importShowcaseTags(input());
-    await reopening.catch(() => {});
+    const reopened = await importShowcaseTags(input());
     expect(fetches).toBe(1);
-    const reopened = await reopening;
     expect(reopened.tagWeightObservations[0]?.responseDigest).toBe(sealed[0]!.command.source.digest);
-    for (const row of sealed) expect(commands.filter(command => command.key === row.command.key)).toEqual([row.command, row.command]);
+    for (const row of sealed)
+      expect(commands.filter((command) => command.key === row.command.key)).toEqual([row.command, row.command]);
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
