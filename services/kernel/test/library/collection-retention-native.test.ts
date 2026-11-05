@@ -27,6 +27,7 @@ beforeAll(async () => {
     'collection:read',
     'collection:update',
     'collection:delete',
+    'library_pin:update',
   ]);
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
 }, 120000);
@@ -105,7 +106,37 @@ test('exact Undo does not revive an independently deleted duplicate; D1 cannot r
   expect(d3.deletionId).not.toBe(d1.deletionId);
   expect((await purgeExpiredCollectionPage({ pool: f.pool, clock }, d1)).status).toBe('stale');
   expect((await f.send(owner.bearer, 'POST', `/v1/collections/${id}:restore`, first)).status).toBe(409);
+  const shelfBeforeReplay = (
+      await f.pool.query(
+        "SELECT generation_id,bucket,type_id,n::text FROM library.shelf_count WHERE route=$1 AND account_id=$2 ORDER BY generation_id,bucket,type_id",
+        [d3.route, owner.actor.accountId],
+      )
+    ).rows,
+    deletedEventsBeforeReplay = (
+      await f.pool.query(
+        "SELECT count(*)::text AS count FROM core.outbox WHERE subject=$1 AND type='com.rezics.library.collection.deleted.v1'",
+        [id],
+      )
+    ).rows[0]?.count;
+  expect(deletedEventsBeforeReplay).toBe('2');
+  expect(await remove(id, before.revision, receipt)).toEqual(first);
   expect(await snapshot(id)).toEqual(beforeStale);
+  expect(
+    (
+      await f.pool.query(
+        "SELECT generation_id,bucket,type_id,n::text FROM library.shelf_count WHERE route=$1 AND account_id=$2 ORDER BY generation_id,bucket,type_id",
+        [d3.route, owner.actor.accountId],
+      )
+    ).rows,
+  ).toEqual(shelfBeforeReplay);
+  expect(
+    (
+      await f.pool.query(
+        "SELECT count(*)::text AS count FROM core.outbox WHERE subject=$1 AND type='com.rezics.library.collection.deleted.v1'",
+        [id],
+      )
+    ).rows[0]?.count,
+  ).toBe(deletedEventsBeforeReplay);
 }, 120000);
 
 test('due cleanup uses the original deadline, erases children before the head, and resumes exact pages', async () => {
@@ -118,12 +149,15 @@ test('due cleanup uses the original deadline, erases children before the head, a
     });
     expect(r.status).toBe(201);
   }
+  const first = await remove(row.id, (await current(row.id)).revision),
+    d1 = await locator(row.id);
+  expect((await f.send(owner.bearer, 'POST', `/v1/collections/${row.id}:restore`, first)).status).toBe(200);
   await remove(row.id, (await current(row.id)).revision);
   const key = await locator(row.id),
     before = await snapshot(row.id);
   expect((await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).status).toBe('not_due');
   expect(await snapshot(row.id)).toEqual(before);
-  now += 720 * 3600 * 1000;
+  now = Date.parse(key.purgeAfter);
   const keys = await pageDueCollectionDeletions(f.pool, {
     partition: partitionOf(key.route),
     cutoff: clock().toISOString(),
@@ -132,6 +166,8 @@ test('due cleanup uses the original deadline, erases children before the head, a
   expect(keys).toContainEqual(key);
   expect(Buffer.byteLength(JSON.stringify(keys))).toBeLessThanOrEqual(4096);
   expect(await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).toEqual({ status: 'progress', removed: 64 });
+  expect(await snapshot(row.id)).toEqual(before);
+  expect((await purgeExpiredCollectionPage({ pool: f.pool, clock }, d1)).status).toBe('stale');
   expect(await snapshot(row.id)).toEqual(before);
   expect(
     (
@@ -153,6 +189,33 @@ test('due cleanup uses the original deadline, erases children before the head, a
     ).rows,
   ).toEqual([]);
   expect((await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).status).toBe('stale');
+}, 120000);
+
+test('private pin cleanup advances its retained preference revision once and preserves other pins', async () => {
+  const selected = await make(),
+    other = await make();
+  const first = await f.send(owner.bearer, 'PUT', `/v1/libraryPins/${selected.id}`, { revision: 0 });
+  expect(first.status).toBe(200);
+  const second = await f.send(owner.bearer, 'PUT', `/v1/libraryPins/${other.id}`, { revision: 1 });
+  expect(second.status).toBe(200);
+  const before = (
+    await f.pool.query<{ revision: string; ids: string[] }>(
+      'SELECT revision::text, collection_ids AS ids FROM library.collection_pins WHERE route=$1 AND account_id=$2',
+      [routeOf(selected.id), owner.actor.accountId],
+    )
+  ).rows[0]!;
+  expect(before.ids).toEqual([selected.id, other.id]);
+  await remove(selected.id, (await current(selected.id)).revision);
+  const key = await locator(selected.id);
+  now = Date.parse(key.purgeAfter);
+  expect(await purgeExpiredCollectionPage({ pool: f.pool, clock }, key)).toEqual({ status: 'progress', removed: 1 });
+  const after = (
+    await f.pool.query<{ revision: string; ids: string[] }>(
+      'SELECT revision::text, collection_ids AS ids FROM library.collection_pins WHERE route=$1 AND account_id=$2',
+      [routeOf(selected.id), owner.actor.accountId],
+    )
+  ).rows[0]!;
+  expect(after).toEqual({ revision: String(Number(before.revision) + 1), ids: [other.id] });
 }, 120000);
 
 test('public custody stays explicitly retained until actual Source and destination disposition are bound', async () => {

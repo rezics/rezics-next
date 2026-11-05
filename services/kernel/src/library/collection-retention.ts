@@ -12,7 +12,6 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { readPartition } from '../partition/partition.ts';
 import { PARTITIONS, partitionOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
@@ -28,7 +27,14 @@ import metadataHistory from './collection-metadata-history-cleanup.sql';
 import head from './collection-retention-head.sql';
 import retireFence from './native-source-custody-retire-fence.sql';
 import terminalScope from './erasure-scope.sql';
+import retentionPartition from './collection-retention-partition.sql';
 import { retireNativeCollectionCapturePage, type NativeSourceRetirement } from './native-source-custody.ts';
+import {
+  executeCollectionRetentionControl,
+  executeCollectionRetentionQuery,
+  withCollectionRetentionDeclaration,
+  withCollectionRetentionEngineRequest,
+} from './collection-retention-bounds.ts';
 
 export const COLLECTION_RETENTION_WORKFLOW = 'library.collectionRetention';
 export const COLLECTION_RETENTION_SCHEDULE = 'library.collectionRetention.every-10-minutes';
@@ -83,13 +89,13 @@ export async function pageDueCollectionDeletions(
     throw new RangeError('Invalid Collection retention partition');
   if (input.after && partitionOf(input.after.route) !== input.partition)
     throw new RangeError('Foreign Collection retention cursor');
-  const rows = await due.run(connection, {
+  const rows = await withCollectionRetentionDeclaration('duePage', () => executeCollectionRetentionQuery('due', due, connection, {
     partition_no: input.partition,
     cutoff: input.cutoff,
     after_time: input.after?.purgeAfter ?? null,
     after_route: input.after?.route ?? null,
     after_id: input.after?.collectionId ?? null,
-  });
+  }));
   const keys = rows.map((row) => {
     if (row.accountId === null || row.deletionId === null || row.purgeAfter === null)
       throw new Error('Due Collection lacks its exact owner/deletion episode');
@@ -123,17 +129,18 @@ async function removeLocalPage(
   const args = { route, collection_id: collectionId };
   // At most one nonempty child page per transaction; empty seeks are a fixed bound.
   for (const query of [members, facts]) {
-    const removed = (await query.run(tx, args)).length;
+    const id = query === members ? 'members' : 'facts';
+    const removed = (await executeCollectionRetentionQuery(id, query, tx, args)).length;
     if (removed > 0) return { status: 'progress', removed };
   }
-  if (await state.run(tx, args)) return { status: 'progress', removed: 1 };
-  const referenceCount = (await references.run(tx, args)).length;
+  if (await executeCollectionRetentionQuery('state', state, tx, args)) return { status: 'progress', removed: 1 };
+  const referenceCount = (await executeCollectionRetentionQuery('references', references, tx, args)).length;
   if (referenceCount > 0) return { status: 'progress', removed: referenceCount };
-  const removed = (await metadata.run(tx, { ...args, account_id: accountId })).length;
+  const removed = (await executeCollectionRetentionQuery('metadata', metadata, tx, { ...args, account_id: accountId })).length;
   if (removed > 0) return { status: 'progress', removed };
-  const historyRemoved = (await metadataHistory.run(tx, args)).length;
+  const historyRemoved = (await executeCollectionRetentionQuery('metadataHistory', metadataHistory, tx, args)).length;
   if (historyRemoved > 0) return { status: 'progress', removed: historyRemoved };
-  const [result] = await head.run(tx, {
+  const [result] = await executeCollectionRetentionQuery('head', head, tx, {
     ...args,
     account_id: accountId,
     revision: parent.revision,
@@ -142,7 +149,7 @@ async function removeLocalPage(
   if (!result) throw new Error('Locked Collection head still has undisposed local children');
   // The actual locked head above established private disposition. Its final writer hook ran first.
   // A fixed control point plus two empty-prefix probes; removed counts business graph rows, not writer controls.
-  await retireFence.run(tx, { ...args, account_id: accountId });
+  await executeCollectionRetentionQuery('retireFence', retireFence, tx, { ...args, account_id: accountId });
   return { status: 'purged', removed: 1 };
 }
 
@@ -156,7 +163,7 @@ export async function purgeExpiredCollectionPage(
   validateKey(key);
   let parent: LockedCollection | null = null;
   let accountLive = false;
-  const outcome = await runCommand<CollectionCleanupPage>(
+  const outcome = await withCollectionRetentionDeclaration('removeCommand', () => runCommand<CollectionCleanupPage>(
     pool,
     {
       partition: partitionOf(key.route),
@@ -176,13 +183,14 @@ export async function purgeExpiredCollectionPage(
           } catch (error) {
             if (!(error instanceof LifecycleDeniedError)) throw error;
           }
-          if (accountLive)
-            parent = await lock.run(tx, {
+          if (accountLive) {
+            parent = await executeCollectionRetentionQuery('lock', lock, tx, {
               route: key.route,
               collection_id: key.collectionId,
               purge_after: key.purgeAfter,
               time: authoritativeTimeValue(attempt.time),
             });
+          }
           return 'execute';
         },
       },
@@ -217,7 +225,7 @@ export async function purgeExpiredCollectionPage(
         ],
       };
     },
-  );
+  ));
   return bounded(outcome.value);
 }
 
@@ -231,29 +239,36 @@ export async function purgeTerminalCollectionPage(
   const time = authoritativeTimeValue(currentCommand(tx).time);
   const route = requireRoute(input.accountId);
   if (requireRoute(input.collectionId) !== route) throw new TypeError('Foreign terminal Collection');
-  if (!(await terminalScope.run(tx, { route, account_id: input.accountId })))
+  if (!(await executeCollectionRetentionQuery('terminalScope', terminalScope, tx, { route, account_id: input.accountId })))
     throw new Error('Collection cleanup requires the current native terminal obligation');
-  let parent = await lock.run(tx, { route, collection_id: input.collectionId, purge_after: null, time });
+  let parent = await executeCollectionRetentionQuery('lock', lock, tx, { route, collection_id: input.collectionId, purge_after: null, time });
   if (!parent) return { status: 'stale', removed: 0 };
   if (parent.accountId !== input.accountId) throw new Error('Foreign terminal Collection owner');
   const saved = await purgeSavedCollectionPage(tx, input);
   if (saved) return saved;
-  parent = await lock.run(tx, { route, collection_id: input.collectionId, purge_after: null, time });
+  parent = await executeCollectionRetentionQuery('lock', lock, tx, { route, collection_id: input.collectionId, purge_after: null, time });
   if (!parent) return { status: 'stale', removed: 0 };
-  return removeLocalPage(tx, route, input.collectionId, input.accountId, parent, { kind: 'terminal' });
+  return withCollectionRetentionDeclaration('terminalSharedCleanup', () =>
+    removeLocalPage(tx, route, input.collectionId, input.accountId, parent, { kind: 'terminal' }),
+  );
 }
 
 /** Installs on the one default Library runtime and existing bounded maintenance queue. */
 export async function registerCollectionRetention({ pool, client, clock }: WorkContext): Promise<void> {
-  const cutoff = DBOS.registerStep(async () => clock().toISOString(), { name: 'library.collectionRetention.cutoff' });
+  const cutoff = DBOS.registerStep(
+    async () => withCollectionRetentionDeclaration('cutoffStep', () => clock().toISOString()),
+    { name: 'library.collectionRetention.cutoff' },
+  );
   const discover = DBOS.registerStep(
     async (until: string, cursor: Cursor) => {
       bounded(cursor);
-      return withConnection(pool, async (connection) => {
-        await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      return withCollectionRetentionDeclaration('discoveryStep', () => withConnection(pool, async (connection) => {
+        await executeCollectionRetentionControl('discover.begin', (sql) => connection.query(sql));
         try {
-          await connection.query("SET LOCAL statement_timeout = '5000ms'");
-          const partition = await readPartition(connection, cursor.partition);
+          await executeCollectionRetentionControl('discover.timeout', (sql) => connection.query(sql));
+          const partition = await executeCollectionRetentionQuery('partition', retentionPartition, connection, {
+            partition_no: cursor.partition,
+          });
           const page =
             partition?.writeState === 'active'
               ? {
@@ -261,13 +276,13 @@ export async function registerCollectionRetention({ pool, client, clock }: WorkC
                   keys: await pageDueCollectionDeletions(connection, { ...cursor, cutoff: until }),
                 }
               : { kind: 'pending' as const };
-          await connection.query('COMMIT');
+          await executeCollectionRetentionControl('discover.commit', (sql) => connection.query(sql));
           return page;
         } catch (error) {
-          await connection.query('ROLLBACK');
+          await executeCollectionRetentionControl('discover.rollback', (sql) => connection.query(sql));
           throw error;
         }
-      });
+      }));
     },
     { name: 'library.collectionRetention.discover', ...COMMAND_STEP_RETRIES },
   );
@@ -278,26 +293,29 @@ export async function registerCollectionRetention({ pool, client, clock }: WorkC
   const continueSweep = DBOS.registerStep(
     async (next: Segment) => {
       bounded(next);
-      await client.enqueue(
-        {
-          workflowName: SEGMENT_WORKFLOW,
-          queueName: 'maintenance',
-          workflowID: `library.collectionRetention:${next.root}:${next.sequence}`,
-          workflowIDReusePolicy: 'return-existing',
-        },
-        next,
+      await withCollectionRetentionDeclaration('continuationEnqueue', () =>
+        withCollectionRetentionEngineRequest('continuationEnqueue', () => client.enqueue(
+          {
+            workflowName: SEGMENT_WORKFLOW,
+            queueName: 'maintenance',
+            workflowID: `library.collectionRetention:${next.root}:${next.sequence}`,
+            workflowIDReusePolicy: 'return-existing',
+          },
+          next,
+        )),
       );
     },
     { name: 'library.collectionRetention.continue', ...COMMAND_STEP_RETRIES },
   );
-  const segment = async (input: Segment) => {
+  const segment = async (input: Segment) => withCollectionRetentionDeclaration('segment', async () => {
     bounded(input);
     let { cursor, current } = input;
     // A segment has a fixed history bound, even for a very large retained graph.
     for (let n = 0; n < 32 && cursor.partition < PARTITIONS; n++) {
       if (current) {
-        const result = await remove(current);
+        const result = await withCollectionRetentionEngineRequest('removeStep', () => remove(current));
         if (result.status === 'progress') continue;
+        if (result.status === 'retained') break;
         cursor = {
           partition: cursor.partition,
           after: {
@@ -308,7 +326,7 @@ export async function registerCollectionRetention({ pool, client, clock }: WorkC
         };
         current = null;
       } else {
-        const page = await discover(input.cutoff, cursor);
+        const page = await withCollectionRetentionEngineRequest('discoveryStep', () => discover(input.cutoff, cursor));
         if (page.kind === 'pending') {
           // The next scheduled sweep retries this home; unavailable is never an empty source proof.
           cursor = { partition: cursor.partition + 1, after: null };
@@ -319,15 +337,18 @@ export async function registerCollectionRetention({ pool, client, clock }: WorkC
         if (!current) cursor = { partition: cursor.partition + 1, after: null };
       }
     }
-    if (cursor.partition < PARTITIONS) await continueSweep({ ...input, sequence: input.sequence + 1, cursor, current });
-  };
+    if (cursor.partition < PARTITIONS)
+      await withCollectionRetentionEngineRequest('continuationStep', () =>
+        continueSweep({ ...input, sequence: input.sequence + 1, cursor, current }),
+      );
+  });
   DBOS.registerWorkflow(segment, { name: SEGMENT_WORKFLOW });
   DBOS.registerWorkflow(
     async () =>
       segment({
         root: DBOS.workflowID!,
         sequence: 0,
-        cutoff: await cutoff(),
+        cutoff: await withCollectionRetentionEngineRequest('cutoffStep', () => cutoff()),
         cursor: { partition: 0, after: null },
         current: null,
       }),

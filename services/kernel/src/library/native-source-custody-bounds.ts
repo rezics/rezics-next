@@ -67,13 +67,28 @@ type StatementId =
   | 'rawOutput'
   | 'rawSession'
   | 'rawUnit'
+  | 'retireActive'
+  | 'retireCaptureRow'
+  | 'retireChildren'
+  | 'retireHolds'
+  | 'retireProofRow'
+  | 'retireReceipt'
+  | 'retireSource'
+  | 'identityRetention'
+  | 'nextCapture'
   | 'read'
   | 'release'
   | 'retained'
   | 'source'
   | 'start'
   | 'terminalScope';
-type CustodyOperation = 'capturePage' | 'finishCapture' | 'readAndHold' | 'revalidateHold' | 'releaseHold';
+type CustodyOperation =
+  | 'capturePage'
+  | 'finishCapture'
+  | 'readAndHold'
+  | 'revalidateHold'
+  | 'releaseHold'
+  | 'retireCapture';
 type CostDetail = Readonly<{
   bound: Bound;
   requestBytes: number;
@@ -152,6 +167,29 @@ const receiptProjectionBytes = Buffer.byteLength(JSON.stringify({ transactionId:
 const holdProjectionBytes = Buffer.byteLength(JSON.stringify({ transactionId: maxUuid, released: false }));
 const retainedProjectionBytes = Buffer.byteLength(JSON.stringify({ transactionId: maxUuid }));
 const terminalProjectionBytes = Buffer.byteLength(JSON.stringify({ version: maxInt, outcome: maxEscapedText(32) }));
+const retireSourceProjectionBytes = Buffer.byteLength(
+  JSON.stringify([
+    {
+      accountId: maxUuid,
+      incarnation: `${maxUuid}:9223372036854.775807`,
+      generation: maxBigint,
+      state: 'deleted',
+      kind: 'curated',
+      builtin: 'everything',
+      visibility: 'unlisted',
+      deletionId: maxUuid,
+      revision: maxInt,
+      deadlineMatches: false,
+      due: false,
+      publicCustody: false,
+    },
+  ]),
+);
+const retirementHoldProjectionBytes = Buffer.byteLength(
+  JSON.stringify([{ id: maxUuid, transactionId: maxUuid, released: false, committed: false }]),
+);
+const retirementUuidProjectionBytes = Buffer.byteLength(JSON.stringify([{ capture_id: maxUuid }]));
+const retirementPlanKeyProjectionBytes = Buffer.byteLength(JSON.stringify([{ plan_key: '0'.repeat(64) }]));
 
 const rawQueries = Object.freeze({
   member: rawMember,
@@ -244,6 +282,68 @@ const statementSpecs: readonly StatementSpec[] = Object.freeze([
   spec('retained', retainedQuery, 16, 1, 0, 0, retainedProjectionBytes),
   spec('release', releaseQuery, 32, 1, 0, 0, 0),
   spec('terminalScope', terminalScope, 48, 3, 0, 0, terminalProjectionBytes),
+  spec('retireSource', retireSource, 3, 3, 0, 3, retireSourceProjectionBytes),
+  spec('retireReceipt', retireReceipt, 1, 1, 0, 1, receiptProjectionBytes),
+  spec('retireActive', retireActive, 1, 1, 0, 1, Buffer.byteLength(JSON.stringify([{ id: maxUuid }]))),
+  spec('retireHolds', retireHolds, 80, 1, 0, 80, retirementHoldProjectionBytes * 80),
+  spec(
+    'retireChildren',
+    retireChildren,
+    (values) => {
+      const ids = values[retireChildren.params.indexOf('hold_ids')];
+      return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80 ? ids.length : undefined;
+    },
+    80,
+    0,
+    (values) => {
+      const ids = values[retireChildren.params.indexOf('hold_ids')];
+      return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80 ? ids.length : undefined;
+    },
+    (values) => {
+      const ids = values[retireChildren.params.indexOf('hold_ids')];
+      return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80
+        ? Buffer.byteLength(JSON.stringify(ids))
+        : undefined;
+    },
+    {
+      maxOverrides: { hold_ids: Array.from({ length: 80 }, () => maxUuid) },
+      valid: (values) => {
+        const ids = values.hold_ids;
+        return Array.isArray(ids) && ids.length >= 1 && ids.length <= 80 && ids.every((id) => typeof id === 'string' && uuid.test(id));
+      },
+    },
+  ),
+  spec('retireProofRow', retireProof, 1, 2, 0, 1, retirementUuidProjectionBytes),
+  spec('retireCaptureRow', retireCapture, 1, 2, 0, 1, retirementUuidProjectionBytes),
+  spec('identityRetention', identityRetention, 1, 1, 1, 1, retirementPlanKeyProjectionBytes),
+  spec(
+    'nextCapture',
+    nextCapture,
+    1,
+    2,
+    1,
+    1,
+    Buffer.byteLength(
+      JSON.stringify([
+        {
+          route: 65535,
+          captureId: maxUuid,
+          collectionId: maxUuid,
+          accountId: maxUuid,
+          incarnation: `${maxUuid}:9223372036854.775807`,
+          generation: maxBigint,
+          scope: maxScope,
+          ownerEpoch: maxInt,
+          receivingEpoch: maxBigint,
+          effectKey: maxEscapedText(256),
+          outputGeneration: maxUuid,
+          publicationTransactionId: maxUuid,
+          publicationPosition: maxBigint,
+          sourceGeneration: maxBigint,
+        },
+      ]),
+    ),
+  ),
   ...Object.entries(rawQueries).map(([driver, query]) => {
     const id = rawIdByQuery.get(query)!;
     return spec(
@@ -378,6 +478,29 @@ const operationDefinitions: Readonly<Record<CustodyOperation, OperationDefinitio
     controls: Object.freeze({}),
     checkout: 0,
   }),
+  retireCapture: Object.freeze({
+    fixed: Object.freeze({
+      identityPartition: 1,
+      account: 1,
+      retireSource: 1,
+      fences: 1,
+      read: 1,
+      retireReceipt: 1,
+      identityRetention: 1,
+      retireActive: 1,
+      retireHolds: 1,
+    }),
+    optional: Object.freeze({
+      terminalScope: 1,
+      proof: 1,
+      retireChildren: 1,
+      retireProofRow: 1,
+      retireCaptureRow: 1,
+    }),
+    choices: Object.freeze({}),
+    controls: Object.freeze({}),
+    checkout: 0,
+  }),
 });
 
 const zeroBound = () =>
@@ -474,6 +597,9 @@ function maxValue(name: string, overrides?: Readonly<Record<string, unknown>>): 
     limit: 100,
     transaction_id: maxUuid,
     hold_id: maxUuid,
+    hold_ids: Array.from({ length: 80 }, () => maxUuid),
+    purge_after: '9999-12-31T23:59:59.999999Z',
+    time: '9999-12-31T23:59:59.999999Z',
   };
   return Object.hasOwn(values, name) ? values[name] : undefined;
 }
@@ -530,10 +656,19 @@ function validParameter(name: string, value: unknown): boolean {
       return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= 100;
     case 'collection_id':
     case 'account_id':
-    case 'capture_id':
     case 'transaction_id':
     case 'hold_id':
       return isUuid(value);
+    case 'capture_id':
+      return isNullableUuid(value);
+    case 'purge_after':
+    case 'time':
+      return (
+        (name === 'purge_after' && value === null) ||
+        (typeof value === 'string' && value.length <= 35 && Number.isFinite(Date.parse(value)))
+      );
+    case 'hold_ids':
+      return Array.isArray(value) && value.length <= 80 && value.every(isUuid);
     case 'output_generation':
     case 'publication_transaction_id':
     case 'session_id':
@@ -647,52 +782,6 @@ function controlCost(sql: string, values: readonly unknown[]): CostDetail | unde
       witnessKeys: 0,
     }),
   });
-}
-
-function legacyFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {
-  const text = sql
-    .replace(/--[^\n]*/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/;$/, '');
-  for (const [query, rows, points, metadata, keys = 0] of [
-    [retireSource, 16, 1, 0],
-    [retireReceipt, 16, 1, 0],
-    [identityRetention, 2, 1, 0, 1],
-    [retireActive, 16, 1, 0, 1],
-    [retireHolds, 16 * 80 + 32, 1, 0, 80],
-    [retireChildren, 16 * 80, 80, 0],
-    [retireProof, 32, 2, 0],
-    [retireCapture, 32, 2, 0],
-    [nextCapture, 32, 2, 0, 1],
-  ] as const) {
-    if (
-      query.sql
-        .replace(/--[^\n]*/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .replace(/;$/, '') !== text
-    )
-      continue;
-    if (query.params.length !== values.length) return undefined;
-    if (query === retireChildren) {
-      const ids = values[query.params.indexOf('hold_ids')];
-      if (!Array.isArray(ids) || ids.length > 80 || ids.some((id) => typeof id !== 'string' || !uuid.test(id)))
-        return undefined;
-    }
-    const requestBytes = requestBytesFor(sql, values);
-    const projectionBytes = (rows || points ? 4096 : 0) + keys * 1024;
-    const bound = splitBound(requestBytes, projectionBytes, {
-      candidateKeys: keys,
-      nativeRows: rows,
-      identityMetadataRows: metadata,
-      emptySeeks: keys ? 1 : points,
-      nativePoints: points,
-      witnessKeys: 0,
-    });
-    return nativeSourceCustodyWorkDimensions(bound);
-  }
-  return undefined;
 }
 
 function maximumCostFor(specification: StatementSpec): CostDetail {
@@ -852,6 +941,7 @@ const operationBounds = Object.freeze(
     Object.entries(operationCompositions).map(([operation, cost]) => [operation, cost.bound]),
   ) as Record<CustodyOperation, Bound>,
 );
+const retirementPageBound = sumBounds(maximumStatement('nextCapture'), operationBounds.retireCapture);
 for (const operation of Object.keys(operationCompositions) as CustodyOperation[]) {
   const cost = operationCompositions[operation];
   if (cost.requestBytes + cost.projectionBytes !== cost.bound.bytes)
@@ -896,8 +986,14 @@ export const NATIVE_SOURCE_CUSTODY_OPERATION_PLAN = deepFreezeOperation({
       ceiling: operationBounds.releaseHold,
       cost: operationCosts.releaseHold,
     },
+    retireCapture: {
+      declaration: operationDeclarations.retireCapture,
+      ceiling: operationBounds.retireCapture,
+      cost: operationCosts.retireCapture,
+    },
   },
   captureStepCeiling: maximumBound(operationBounds.capturePage, operationBounds.finishCapture),
+  retirementPageCeiling: retirementPageBound,
   statementAxes: BOUND_AXES,
   compatibilityReceiptAxes: Object.freeze([
     'candidateKeys',
@@ -916,6 +1012,9 @@ export const NATIVE_SOURCE_CUSTODY_OPERATION_PLAN = deepFreezeOperation({
     holdBytes: holdProjectionBytes,
     retainedHoldBytes: retainedProjectionBytes,
     terminalOwnerBytes: terminalProjectionBytes,
+    retirementSourceBytes: retireSourceProjectionBytes,
+    retirementHoldBytes: retirementHoldProjectionBytes,
+    retirementPlanKeyBytes: retirementPlanKeyProjectionBytes,
   },
   nonSql: Object.freeze({
     authorization: 'Existing native command and Source/Accounts admission remain authoritative.',
@@ -926,6 +1025,7 @@ export const NATIVE_SOURCE_CUSTODY_OPERATION_PLAN = deepFreezeOperation({
 });
 
 export type NativeSourceCustodyOperation = CustodyOperation;
+export const NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND = retirementPageBound;
 
 const operationBindings = new Map<Query, StatementId | 'identityPartition' | 'control'>([
   [nativeIdentityPartitionQuery, 'identityPartition'],
@@ -944,6 +1044,15 @@ const operationBindings = new Map<Query, StatementId | 'identityPartition' | 'co
   [heldQuery, 'held'],
   [retainedQuery, 'retained'],
   [releaseQuery, 'release'],
+  [retireSource, 'retireSource'],
+  [retireReceipt, 'retireReceipt'],
+  [retireActive, 'retireActive'],
+  [retireHolds, 'retireHolds'],
+  [retireChildren, 'retireChildren'],
+  [retireProof, 'retireProofRow'],
+  [retireCapture, 'retireCaptureRow'],
+  [identityRetention, 'identityRetention'],
+  [nextCapture, 'nextCapture'],
   [terminalScope, 'terminalScope'],
   [rawAssignment, 'rawAssignment'],
   [rawChange, 'rawChange'],
@@ -1035,13 +1144,11 @@ function convertedCost(query: Query, values: readonly unknown[]): CostDetail | u
   return cost && ceiling && withinCeiling(cost.bound, ceiling) ? cost : undefined;
 }
 
-/** Exact runtime query-object pricing. Unconverted retirement statements use their existing compatibility declaration. */
+/** Exact runtime query-object pricing. Unknown SQL has no compatibility estimate. */
 export function nativeSourceCustodyExecutionBound(query: Query, values: readonly unknown[]): Bound | undefined {
   if (basisQuerySet.has(query) || specByQuery.has(query)) return convertedCost(query, values)?.bound;
   const control = controlCost(query.sql, values);
-  if (control) return control.bound;
-  const compatibility = legacyFootprint(query.sql, values);
-  return compatibility ? boundFromWork(compatibility) : undefined;
+  return control?.bound;
 }
 
 /** Nine-axis declaration for original-work composition and SQL-backed dispatch. */
@@ -1049,16 +1156,7 @@ export function nativeSourceCustodyStatementBound(sql: string, values: readonly 
   const control = controlCost(sql, values);
   if (control) return control.bound;
   const query = queryBySql.get(sql);
-  if (query) {
-    if (query === partitionQuery) {
-      const compatibility = legacyFootprint(sql, values);
-      return compatibility ? boundFromWork(compatibility) : undefined;
-    }
-    const cost = convertedCost(query, values);
-    return cost?.bound;
-  }
-  const compatibility = legacyFootprint(sql, values);
-  return compatibility ? boundFromWork(compatibility) : undefined;
+  return query ? convertedCost(query, values)?.bound : undefined;
 }
 
 /** Lookup-only eight-axis receipt adapter for callers not yet using operation objects. */

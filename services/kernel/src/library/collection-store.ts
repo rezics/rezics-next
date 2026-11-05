@@ -30,6 +30,7 @@ import memberRestore from './collection-store-collection-member-restore.sql';
 import memberRetentionRead from './collection-store-collection-member-retention-read.sql';
 import membersList from './collection-store-collection-members-list.sql';
 import membersRespace from './collection-store-collection-members-respace.sql';
+import { executeCollectionRetentionQuery } from './collection-retention-bounds.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 type WriteContext = { transactionId: string; time: string };
@@ -130,7 +131,7 @@ export async function insertCollection(
 }
 
 export async function readCollection(client: Client, route: number, id: string): Promise<Collection | null> {
-  const row = await collectionRead.run(queryClient(client), { route, id });
+  const row = await executeCollectionRetentionQuery('collectionRead', collectionRead, queryClient(client), { route, id });
   return row ? asCollection(row) : null;
 }
 
@@ -164,7 +165,7 @@ export async function tombstoneCollection(
   id: string,
   context: WriteContext,
 ): Promise<Collection | null> {
-  const [row] = await collectionTombstone.run(queryClient(client), { route, id, ...write(context) });
+  const [row] = await executeCollectionRetentionQuery('tombstone', collectionTombstone, queryClient(client), { route, id, ...write(context) });
   return row ? asCollection(row) : null;
 }
 
@@ -198,7 +199,7 @@ export async function restoreCollection(
   deletionId: string,
   context: WriteContext,
 ): Promise<Collection | null> {
-  const [row] = await collectionRestore.run(queryClient(client), {
+  const [row] = await executeCollectionRetentionQuery('restore', collectionRestore, queryClient(client), {
     route,
     id,
     revision: expectedRevision,

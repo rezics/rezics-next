@@ -37,6 +37,7 @@ import { listSitemapCollections } from './sitemap.ts';
 
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
 import { assertMemberPageCurrent } from './member-viewer-currentness.ts';
+import { withCollectionRetentionDeclaration } from './collection-retention-bounds.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -1112,10 +1113,12 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           epoch: result.epoch,
           position: result.position,
         });
-        set.headers['cache-control'] = 'private, no-store';
-        set.headers['Library-Collection-Deletion-Id'] = result.value.deletionId;
-        set.headers['Library-Collection-Deletion-Revision'] = String(result.value.revision);
-        set.status = 204;
+        withCollectionRetentionDeclaration('deleteResponse', () => {
+          set.headers['cache-control'] = 'private, no-store';
+          set.headers['Library-Collection-Deletion-Id'] = result.value.deletionId;
+          set.headers['Library-Collection-Deletion-Revision'] = String(result.value.revision);
+          set.status = 204;
+        });
       },
     )
     .post(
@@ -1148,7 +1151,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           epoch: result.epoch,
           position: result.position,
         });
-        return { collection: await written(result.value, actor) };
+        return withCollectionRetentionDeclaration('restoreResponse', async () => ({ collection: await written(result.value, actor) }));
       },
     )
     .get(

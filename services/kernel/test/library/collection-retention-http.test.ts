@@ -38,7 +38,16 @@ test('Collection exact Undo preserves identity visibility ordered duplicate occu
   expect(live.status).toBe(200);
   const before = (await live.json()).collection;
   const key = entryKey(),
-    deleted = await f.send(owner.bearer, 'DELETE', `${path}?revision=${before.revision}`, undefined, key);
+    deletePath = `${path}?revision=${before.revision}`;
+  // The command commits, but its response is discarded as if the acknowledgement were lost.
+  await f.send(owner.bearer, 'DELETE', deletePath, undefined, key);
+  const committedDeleteCount = await f.pool.query<{ count: string }>(
+    "SELECT count(*)::text AS count FROM core.outbox WHERE subject=$1 AND type='com.rezics.library.collection.deleted.v1'",
+    [original.id],
+  );
+  expect(committedDeleteCount.rows[0]?.count).toBe('1');
+  // Simulate a caller retrying the exact command after losing the successful response.
+  const deleted = await f.send(owner.bearer, 'DELETE', deletePath, undefined, key);
   expect(deleted.status).toBe(204);
   const deletionId = deleted.headers.get('Library-Collection-Deletion-Id'),
     revision = Number(deleted.headers.get('Library-Collection-Deletion-Revision'));
