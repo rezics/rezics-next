@@ -5,7 +5,7 @@ import { kernelClient } from '../../../kernel/client';
 import { prepareSession, viewerCredential } from '../../../session/request';
 import type { SessionEnv } from '../../../session/client';
 import { contributionActionsInput } from './receiver';
-import { validateContributionActionsResponse } from './response';
+import { readInstalledContributionActions } from './request';
 
 /** Private selected read only; native command owners retain every write. */
 export const readContributionActions = createServerFn({ method: 'POST' })
@@ -22,15 +22,10 @@ export const readContributionActions = createServerFn({ method: 'POST' })
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
-    const { accountId, references, ...body } = data;
-    const result = await kernelClient().accounts({ id: accountId })['contribution-actions'].post(
-      { ...body, references: [...references] },
-      { ...(authorization ? { headers: { authorization } } : {}), fetch: { cache: 'no-store', signal: request.signal } },
-    );
-    if (result.status !== 200 || result.error || !result.data) throw new Error('Author contribution actions read failed');
+    const response = await readInstalledContributionActions(kernelClient(), data, authorization, request.signal);
     const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
     return {
-      response: validateContributionActionsResponse(data, result.data),
+      response,
       verification: {
         sitekey: config.TURNSTILE_SITE_KEY ?? '',
         scriptUrl: (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) || 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
