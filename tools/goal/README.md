@@ -2560,6 +2560,10 @@ three-check concurrency cap.
 Decision: the landing train and dev verifier share pure changed-path selection. Each caller retains its configured order,
 closures, exclusions, workspace placement and execution authority.
 
+Decision: each verification builds one source-interval landing history (one Git log of `base..target`, plus one optional
+batched extra-commit read). That projection is not reused across source intervals, and a landing is not treated as
+verified unless its acceptance passed on that exact head.
+
 Each fresh verifier tree installs its own dependencies, even after an earlier tree's setup passed. Installation uses
 an available matching repository Bun or bootstraps with the verifier process's Bun, and logs the executable used.
 Checks still require the installed pinned Bun; an actual installation failure remains infrastructure.

@@ -21,6 +21,8 @@ import {
   classifyRun,
   devVerificationState,
   placeInWorkspace,
+  projectSourceInterval,
+  projectVerifierLandings,
   VERIFY_CONCURRENCY,
   verifyDev,
   withTreeBun,
@@ -317,6 +319,81 @@ test('worker-owned briefs keep affected verification without inventing an accept
   expect(commands).not.toContain('');
   expect(commands.some((command) => command.startsWith('acceptance'))).toBe(false);
   expect(devVerificationState(root).behind).toBe(0);
+});
+
+test('projects landing history once per source interval with bounded Git reads', () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev-verified');
+  const rootCommit = git(root, 'rev-list', '--max-parents=0', 'HEAD');
+  const tasks: Task[] = [];
+  let head = base;
+  const naive = new Map<string, string[]>();
+  for (let index = 0; index < 8; index++) {
+    head = commit(root, `services/kernel/n-${index}.ts`, `export const n = ${index};\n`, `n ${index}`);
+    naive.set(
+      head,
+      git(root, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', head).split('\n').filter(Boolean),
+    );
+    const task = landedTask(base, head, `n-${index}`);
+    if (index === 2) delete task.integratedCommits;
+    if (index === 3) task.brief.kind = 'research';
+    if (index === 4) task.brief.kind = 'specification';
+    if (index === 5) task.brief.kind = 'verification';
+    tasks.push(task);
+  }
+  tasks[0]!.integratedCommits = [rootCommit, tasks[0]!.integratedCommit!];
+  const sideTree = join(root, '.side');
+  git(root, 'worktree', 'add', '-b', 'side', sideTree, base);
+  git(root, 'merge', '--no-ff', commit(sideTree, 'docs/side.md', 'side\n', 'side'), '-m', 'merge side');
+  const merge = git(root, 'rev-parse', 'HEAD');
+  naive.set(
+    merge,
+    git(root, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', merge).split('\n').filter(Boolean),
+  );
+  tasks.push(landedTask(base, merge, 'merge-task'));
+  const mid = tasks[1]!.integratedCommit!;
+  const first = projectSourceInterval(root, base, mid);
+  const second = projectSourceInterval(root, mid, head);
+  expect(first.gitReads).toBe(1);
+  expect(second.gitReads).toBe(1);
+  expect(first.commits.some((commit) => second.commits.includes(commit))).toBe(false);
+  const history = projectVerifierLandings(root, { tasks: () => tasks }, base, merge);
+  expect(history.interval.gitReads).toBe(2);
+  expect(history.interval.commits).toContain(merge);
+  expect(history.interval.filesByCommit.get(merge)).toEqual(naive.get(merge));
+  expect(history.interval.filesByCommit.get(rootCommit)).toContain('services/kernel/base.ts');
+  for (const commit of history.interval.commits)
+    expect(history.interval.filesByCommit.get(commit)).toEqual(
+      naive.get(commit) ??
+        git(root, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', commit).split('\n').filter(Boolean),
+    );
+  expect(history.tasks.map((task) => task.id).sort()).toEqual(['merge-task', 'n-0', 'n-1', 'n-2', 'n-6', 'n-7']);
+});
+
+test('fallback landings keep acceptance while skipped kinds do not', async () => {
+  const root = repo(),
+    base = git(root, 'rev-parse', 'dev-verified');
+  const fallback = commit(root, 'services/kernel/fallback.ts', 'export const fallback = true;\n', 'fallback');
+  const skipped = commit(root, 'docs/research.md', 'notes\n', 'research');
+  git(root, 'branch', '-f', 'dev', skipped);
+  const fallbackTask = landedTask(base, fallback, 'fallback');
+  delete fallbackTask.integratedCommits;
+  const skippedTask = {
+    ...landedTask(base, skipped, 'skipped'),
+    brief: { ...landedTask(base, skipped, 'skipped').brief, kind: 'research', paths: ['docs/**'] },
+  } as Task;
+  const ctx = setup(root, [fallbackTask, skippedTask]);
+  const commands: string[] = [];
+  await verifyDev({
+    ...ctx,
+    runGate: async (command) => {
+      commands.push(command.join(' '));
+      return { passed: true, output: '', timedOut: false };
+    },
+  });
+  expect(commands).toContain('acceptance fallback');
+  expect(commands.some((command) => command.includes('skipped'))).toBe(false);
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(skipped);
 });
 
 test('passes all work since dev-verified once and advances the ref to the captured dev head', async () => {

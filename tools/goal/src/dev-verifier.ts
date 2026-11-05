@@ -9,7 +9,7 @@ import { runBoundedInstallProcess } from './install-process.ts';
 import type { WorkerStore } from './store.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
 import { matchesPath } from './briefs.ts';
-import { gateRunner, git, type GateRunner } from './merge.ts';
+import { gateRunner, git, gitOutputError, type GateRunner } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { recordFlow } from './flow.ts';
 import type { Database } from 'bun:sqlite';
@@ -94,54 +94,164 @@ export function placeInWorkspace(check: DevVerifierCheck, tracked: ReadonlySet<s
 function siblingTestFilesAtCommit(changedPaths: readonly string[], tracked: ReadonlySet<string>): string[] {
   return siblingTestFiles(changedPaths, tracked);
 }
-function commits(cwd: string, base: string, target: string): string[] {
-  return git(cwd, 'rev-list', '--reverse', `${base}..${target}`).split('\n').filter(Boolean);
+const COMMIT_LINE = /^([0-9a-f]{40,})(?: ([0-9a-f]{40,}(?: [0-9a-f]{40,})*))?$/;
+export type SourceInterval = {
+  base: string;
+  target: string;
+  commits: string[];
+  landed: Set<string>;
+  position: Map<string, number>;
+  filesByCommit: Map<string, string[]>;
+  parents: Map<string, string[]>;
+  gitReads: number;
+};
+export type VerifierLandings = { interval: SourceInterval; tasks: Task[] };
+function gitText(cwd: string, args: string[], input?: string): string {
+  const policy = defaultPolicy.merge;
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: policy.gitBufferBytes,
+    timeout: policy.commandTimeoutMs,
+    ...(input === undefined ? {} : { input }),
+  });
+  const overflow = gitOutputError(result, policy.gitBufferBytes, `git ${args[0]}`);
+  if (overflow) throw overflow;
+  if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || `git ${args[0]} failed`);
+  return result.stdout.trim();
+}
+function parseNameOnlyLog(output: string): { commit: string; parents: string[]; files: string[] }[] {
+  if (!output) return [];
+  return output.split('\n\n').flatMap((chunk) => {
+    const lines = chunk.split('\n');
+    const match = COMMIT_LINE.exec(lines[0]!.trimEnd());
+    if (!match) return [];
+    return [
+      {
+        commit: match[1]!,
+        parents: match[2] ? match[2].split(' ') : [],
+        files: lines.slice(1).filter(Boolean),
+      },
+    ];
+  });
+}
+function recordLog(
+  interval: SourceInterval,
+  records: readonly { commit: string; parents: string[]; files: string[] }[],
+  ontoInterval: boolean,
+): void {
+  for (const record of records) {
+    interval.filesByCommit.set(record.commit, record.files);
+    interval.parents.set(record.commit, record.parents);
+    if (!ontoInterval || interval.landed.has(record.commit)) continue;
+    interval.position.set(record.commit, interval.commits.length);
+    interval.commits.push(record.commit);
+    interval.landed.add(record.commit);
+  }
+}
+/** One bounded Git projection of `base..target`; extra commits are a second batched read, never a per-commit scan. */
+export function projectSourceInterval(
+  cwd: string,
+  base: string,
+  target: string,
+  extraCommits: readonly string[] = [],
+): SourceInterval {
+  const interval: SourceInterval = {
+    base,
+    target,
+    commits: [],
+    landed: new Set(),
+    position: new Map(),
+    filesByCommit: new Map(),
+    parents: new Map(),
+    gitReads: 1,
+  };
+  recordLog(
+    interval,
+    parseNameOnlyLog(gitText(cwd, ['log', '--reverse', '--name-only', '--pretty=format:%H %P', `${base}..${target}`])),
+    true,
+  );
+  const extras = [...new Set(extraCommits.filter((commit) => !interval.landed.has(commit)))];
+  if (!extras.length) return interval;
+  interval.gitReads++;
+  recordLog(
+    interval,
+    parseNameOnlyLog(
+      gitText(cwd, ['log', '--no-walk', '--stdin', '--name-only', '--pretty=format:%H %P'], `${extras.join('\n')}\n`),
+    ),
+    false,
+  );
+  return interval;
+}
+function landingTasks(store: Pick<WorkerStore, 'tasks'>, interval: Pick<SourceInterval, 'landed'>): Task[] {
+  return store.tasks().filter(
+    (task) =>
+      ['integrated', 'merged'].includes(task.state) &&
+      (task.integratedCommit ?? task.mergedCommit) &&
+      [...(task.integratedCommits ?? []), task.integratedCommit ?? task.mergedCommit!].some((commit) =>
+        interval.landed.has(commit),
+      ) &&
+      task.brief.kind !== undefined &&
+      !skippedKinds.has(task.brief.kind),
+  );
+}
+export function projectVerifierLandings(
+  cwd: string,
+  store: Pick<WorkerStore, 'tasks'>,
+  base: string,
+  target: string,
+): VerifierLandings {
+  const interval = projectSourceInterval(cwd, base, target);
+  const tasks = landingTasks(store, interval);
+  const extras = [...new Set(tasks.flatMap((task) => task.integratedCommits ?? []))].filter(
+    (commit) => !interval.landed.has(commit),
+  );
+  if (extras.length) {
+    interval.gitReads++;
+    recordLog(
+      interval,
+      parseNameOnlyLog(
+        gitText(cwd, ['log', '--no-walk', '--stdin', '--name-only', '--pretty=format:%H %P'], `${extras.join('\n')}\n`),
+      ),
+      false,
+    );
+  }
+  return { interval, tasks };
 }
 function matches(file: string, paths: readonly string[], policy = defaultPolicy.brief): boolean {
   return paths.some((path) => matchesPath(file, [path], policy));
 }
-function taskCommits(task: Task, cwd: string): string[] {
+function taskCommits(task: Task, interval: SourceInterval): string[] {
   if (task.integratedCommits?.length) return task.integratedCommits;
   const commit = task.integratedCommit ?? task.mergedCommit;
   if (!commit) return [];
-  return git(cwd, 'rev-list', '--reverse', `${task.integratedBase ?? task.base}..${commit}`)
-    .split('\n')
-    .filter(Boolean);
+  const stop = task.integratedBase ?? task.base;
+  const seen = new Set<string>();
+  const walked: string[] = [];
+  const stack = [commit];
+  while (stack.length) {
+    const current = stack.pop()!;
+    if (seen.has(current) || current === stop) continue;
+    seen.add(current);
+    if (interval.landed.has(current)) walked.push(current);
+    for (const parent of interval.parents.get(current) ?? []) stack.push(parent);
+  }
+  return walked.sort((left, right) => (interval.position.get(left) ?? -1) - (interval.position.get(right) ?? -1));
 }
-function filesInCommits(cwd: string, commitList: readonly string[]): string[] {
+function filesInCommits(interval: SourceInterval, commitList: readonly string[]): string[] {
   const files = new Set<string>();
   for (const commit of commitList)
-    for (const file of git(cwd, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', commit)
-      .split('\n')
-      .filter(Boolean))
-      files.add(file);
+    for (const file of interval.filesByCommit.get(commit) ?? []) files.add(file);
   return [...files];
 }
-function taskLandings(settings: Settings, store: Pick<WorkerStore, 'tasks'>, base: string, target: string): Task[] {
-  const landed = new Set(commits(settings.mainCheckout, base, target));
-  return store
-    .tasks()
-    .filter(
-      (task) =>
-        ['integrated', 'merged'].includes(task.state) &&
-        (task.integratedCommit ?? task.mergedCommit) &&
-        [...(task.integratedCommits ?? []), task.integratedCommit ?? task.mergedCommit!].some((commit) =>
-          landed.has(commit),
-        ) &&
-        task.brief.kind !== undefined &&
-        !skippedKinds.has(task.brief.kind),
-    );
-}
 function recordVerified(
-  settings: Settings,
   store: Pick<WorkerStore, 'tasks'> & { db?: Database },
-  base: string,
-  target: string,
+  history: VerifierLandings,
   passedTaskIds: ReadonlySet<string>,
 ): void {
   if (!store.db) return;
   const at = new Date().toISOString();
-  for (const task of taskLandings(settings, store, base, target)) {
+  for (const task of history.tasks) {
     // A verification receipt means this task's own acceptance passed on the exact head. A baseline failure on that
     // command is never converted into a receipt for the task.
     if (!passedTaskIds.has(task.id)) continue;
@@ -156,13 +266,11 @@ function recordVerified(
 }
 function createChecks(
   settings: Settings,
-  store: Pick<WorkerStore, 'tasks'>,
-  base: string,
-  target: string,
-  candidate = target,
+  history: VerifierLandings,
+  candidate = history.interval.target,
 ): Check[] {
   const checkout = settings.mainCheckout;
-  const files = changedFiles(checkout, base, target);
+  const files = changedFiles(checkout, history.interval.base, history.interval.target);
   if (!files.length) return [];
   const typecheck = ['bun', 'scripts/typecheck.ts'];
   const checks: Check[] = [
@@ -187,7 +295,7 @@ function createChecks(
       if (siblingCommand) checks.push({ command: siblingCommand, closure: siblingFiles });
     }
   }
-  for (const task of taskLandings(settings, store, base, target)) {
+  for (const task of history.tasks) {
     // Worker-owned briefs have no declared command to execute or credit as passed.
     if (task.brief.acceptance.workerOwned && !task.brief.acceptance.command.length) continue;
     checks.push({ command: [...task.brief.acceptance.command], closure: [...task.brief.paths], taskId: task.id });
@@ -794,9 +902,10 @@ function commandPresentAt(settings: Settings, commit: string, check: Check): boo
   return sourcePresentAt(settings.mainCheckout, commit, check);
 }
 
-async function compareRange(options: DevVerifierOptions, base: string, target: string): Promise<Comparison> {
+async function compareRange(options: DevVerifierOptions, history: VerifierLandings): Promise<Comparison> {
   const { settings, store } = options;
-  const checks: IndexedCheck[] = createChecks(settings, store, base, target, target).map((check, index) => ({
+  const { base, target } = history.interval;
+  const checks: IndexedCheck[] = createChecks(settings, history, target).map((check, index) => ({
     ...check,
     index,
     signature: checkSignature(check, index),
@@ -999,28 +1108,19 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
   }
 }
 
-function suspectsFor(
-  settings: Settings,
-  store: Pick<WorkerStore, 'tasks'>,
-  base: string,
-  target: string,
-  check: IndexedCheck,
-): Suspect[] {
-  const landed = commits(settings.mainCheckout, base, target);
-  const position = new Map(landed.map((commit, index) => [commit, index]));
-  const tasks = taskLandings(settings, store, base, target)
+function suspectsFor(settings: Settings, history: VerifierLandings, check: IndexedCheck): Suspect[] {
+  const { interval } = history;
+  const tasks = history.tasks
     .map((task) => {
-      const taskCommitList = taskCommits(task, settings.mainCheckout);
-      if (!taskCommitList.some((commit) => position.has(commit))) return undefined;
+      const taskCommitList = taskCommits(task, interval);
+      if (!taskCommitList.some((commit) => interval.position.has(commit))) return undefined;
       if (
         !check.closure.includes('**') &&
-        !filesInCommits(settings.mainCheckout, taskCommitList).some((file) =>
-          matches(file, check.closure, settings.policy?.brief),
-        )
+        !filesInCommits(interval, taskCommitList).some((file) => matches(file, check.closure, settings.policy?.brief))
       )
         return undefined;
       const commit = (task.integratedCommit ?? task.mergedCommit)!;
-      return position.has(commit) ? { task, commit, position: position.get(commit)! } : undefined;
+      return interval.position.has(commit) ? { task, commit, position: interval.position.get(commit)! } : undefined;
     })
     .filter((item): item is { task: Task; commit: string; position: number } => item !== undefined)
     .sort((a, b) => a.position - b.position);
@@ -1186,13 +1286,13 @@ function advanceVerified(
   store: DevVerifierOptions['store'],
   expectedBase: string,
   expectedDev: string,
-  target: string,
+  history: VerifierLandings,
   passedTaskIds: ReadonlySet<string>,
 ): boolean {
   try {
     if (head(settings.mainCheckout, settings.integrationBranch) !== expectedDev) return false;
-    git(settings.mainCheckout, 'update-ref', ref(verifiedBranch), target, expectedBase);
-    recordVerified(settings, store, expectedBase, target, passedTaskIds);
+    git(settings.mainCheckout, 'update-ref', ref(verifiedBranch), history.interval.target, expectedBase);
+    recordVerified(store, history, passedTaskIds);
     return true;
   } catch {
     // Concurrent ref movement wins; the next verifier starts from the new exact pair.
@@ -1215,23 +1315,23 @@ function updateFindingOwner(
 
 async function revertCulprits(
   options: DevVerifierOptions,
-  base: string,
-  target: string,
+  history: VerifierLandings,
   culprits: readonly { task: Task; findings: DevVerifierFinding[] }[],
 ): Promise<string | undefined> {
   if (!culprits.length) return undefined;
   const { settings, store } = options;
   const checkout = settings.mainCheckout;
+  const { interval } = history;
+  const target = interval.target;
   const tree = join(settings.worktreeRoot, `dev-verify-revert-${randomUUID()}`);
   mkdirSync(settings.worktreeRoot, { recursive: true });
   git(checkout, 'worktree', 'add', '--detach', tree, target);
   try {
     git(tree, 'reset', '--hard', target);
     git(tree, 'clean', '-fdx');
-    const landedOrder = new Map(commits(checkout, base, target).map((commit, index) => [commit, index]));
-    const selectedCommits = [...new Set(culprits.flatMap(({ task }) => taskCommits(task, checkout)))].sort(
-      (a, b) => (landedOrder.get(b) ?? -1) - (landedOrder.get(a) ?? -1),
-    );
+    const selectedCommits = [...new Set(culprits.flatMap(({ task }) => taskCommits(task, interval)))]
+      .filter((commit) => interval.position.has(commit))
+      .sort((a, b) => interval.position.get(b)! - interval.position.get(a)!);
     if (!selectedCommits.length) return undefined;
     const reverted = spawnSync('git', ['revert', '--no-commit', ...selectedCommits], {
       cwd: tree,
@@ -1276,10 +1376,9 @@ async function revertCulprits(
 
 async function reconcile(
   options: DevVerifierOptions,
-  base: string,
-  target: string,
+  history: VerifierLandings,
 ): Promise<{ comparison: Comparison; unknown: boolean; groups: FindingGroup[] }> {
-  const comparison = await compareRange(options, base, target);
+  const comparison = await compareRange(options, history);
   const selection = selectionIdentity(comparison.checks);
   const groups = groupNewFindings(comparison.findings, comparison.checks);
   const unknownChecks = comparison.results.filter(
@@ -1304,7 +1403,7 @@ async function reconcile(
       proof.push({ finding, status: 'unknown' });
       continue;
     }
-    const suspects = suspectsFor(options.settings, options.store, base, target, check);
+    const suspects = suspectsFor(options.settings, history, check);
     const result = await proveExistingOrReintroduced(options, check, finding.assertion, suspects, selection);
     proof.push({
       finding,
@@ -1350,7 +1449,11 @@ async function dispatchBootOwner(
   const selection = selectionIdentity([check]);
   const baseline = await probeAt(options, check, verified, selection, true);
   if (containsAssertion(baseline, assertion, options.settings.policy?.verifier) === true) return;
-  const suspects = suspectsFor(options.settings, options.store, verified, target, check);
+  const suspects = suspectsFor(
+    options.settings,
+    projectVerifierLandings(options.settings.mainCheckout, options.store, verified, target),
+    check,
+  );
   const owner = await locateNewFailure(options, check, assertion, suspects, selection, undefined, true);
   if (!owner) return;
   const existing = openBootRepair(options.store, test);
@@ -1481,14 +1584,16 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
     )
       return;
 
-    const initial = await reconcile(options, verified, dev);
+    const history = projectVerifierLandings(checkout, store, verified, dev);
+    const initial = await reconcile(options, history);
     const initialUnknown = initial.unknown;
     let finalHead = dev;
+    let finalHistory = history;
     let finalPassedTasks = new Set(initial.comparison.passTaskIds);
     if (initial.groups.length) {
       const owned: { group: FindingGroup; owners: Task[]; unknownOwner: boolean }[] = [];
       for (const group of initial.groups) {
-        const suspects = suspectsFor(settings, store, verified, dev, group.check);
+        const suspects = suspectsFor(settings, history, group.check);
         const owners: Task[] = [];
         let unknownOwner = false;
         for (const assertion of group.targets) {
@@ -1569,17 +1674,25 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
         entry.findings = [...new Map(entry.findings.map((finding) => [finding.identity, finding])).values()];
       }
       if (!byTask.size) return;
-      const postRevert = await revertCulprits(options, verified, dev, [...byTask.values()]);
+      const postRevert = await revertCulprits(options, history, [...byTask.values()]);
       if (!postRevert) return;
       finalHead = postRevert;
-      const afterRevert = await reconcile(options, verified, postRevert);
+      finalHistory = projectVerifierLandings(checkout, store, verified, postRevert);
+      const afterRevert = await reconcile(options, finalHistory);
       if (afterRevert.unknown || afterRevert.groups.length) return;
       finalPassedTasks = new Set(afterRevert.comparison.passTaskIds);
     } else if (initialUnknown) {
       return;
     }
     if (bootFailed) return;
-    advanceVerified(settings, store, verified, finalHead === dev ? dev : finalHead, finalHead, finalPassedTasks);
+    advanceVerified(
+      settings,
+      store,
+      verified,
+      finalHead === dev ? dev : finalHead,
+      finalHistory,
+      finalPassedTasks,
+    );
   } catch (error) {
     if (error instanceof LeaseHeldError) return;
     throw error;
@@ -1629,7 +1742,7 @@ export function devVerificationState(
   try {
     const verified = head(cwd, verifiedBranch),
       dev = head(cwd, integrationBranch);
-    const landed = new Set(commits(cwd, verified, dev));
+    const landed = new Set(git(cwd, 'rev-list', '--reverse', `${verified}..${dev}`).split('\n').filter(Boolean));
     const behind = tasks
       ? tasks.filter(
           (task) =>
