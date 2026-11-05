@@ -35,6 +35,32 @@ mock.module('cloudflare:workers', () => ({
     },
   },
 }));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({ url: 'https://site.test/en/inbox' });
+const globals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  location: window.location,
+  HTMLElement: window.HTMLElement,
+  HTMLButtonElement: window.HTMLButtonElement,
+  Element: window.Element,
+  Node: window.Node,
+  NodeFilter: window.NodeFilter,
+  Document: window.Document,
+  DocumentFragment: window.DocumentFragment,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const inboxReads = await import('../src/inbox/inbox-read');
 const {
   decodeInboxPage,
@@ -63,8 +89,24 @@ const markItem = spyOn(inboxReads, 'markInboxItemSeen').mockImplementation(async
   seenCommands.push(data);
   return { signedIn: true } satisfies InboxSeenResult;
 });
+const { createRoot } = await import('react-dom/client');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+  await import('@tanstack/react-router');
 const { InboxPageView, InboxRows } = await import('../src/inbox/inbox-page');
 const { InboxNoticeDetailView } = await import('../src/inbox/inbox-notice-detail');
+const { sessionQuery } = await import('../src/session/query');
+const { setLocale } = await import('../src/paraglide/runtime.js');
+const { m } = await import('../src/paraglide/messages.js');
+setLocale('en', { reload: false });
+afterAll(async () => {
+  mock.restore();
+  await window.happyDOM.close();
+  for (const [key, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
 type Notice = NoticeInboxItem;
 
 function notice(id: string, kind: Notice['kind']): Notice {
@@ -343,48 +385,6 @@ test('unknown native rows fail closed instead of becoming replies', () => {
   ).toBeNull();
 });
 
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
-const window = new Window({ url: 'https://site.test/en/inbox' });
-const globals = {
-  window,
-  document: window.document,
-  navigator: window.navigator,
-  location: window.location,
-  HTMLElement: window.HTMLElement,
-  HTMLButtonElement: window.HTMLButtonElement,
-  Element: window.Element,
-  Node: window.Node,
-  NodeFilter: window.NodeFilter,
-  Document: window.Document,
-  DocumentFragment: window.DocumentFragment,
-  MutationObserver: window.MutationObserver,
-  ResizeObserver: window.ResizeObserver,
-  getComputedStyle: window.getComputedStyle.bind(window),
-  requestAnimationFrame: window.requestAnimationFrame.bind(window),
-  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-  IS_REACT_ACT_ENVIRONMENT: true,
-};
-const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-const { createRoot } = await import('react-dom/client');
-const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
-  await import('@tanstack/react-router');
-const { sessionQuery } = await import('../src/session/query');
-const { setLocale } = await import('../src/paraglide/runtime.js');
-const { m } = await import('../src/paraglide/messages.js');
-setLocale('en', { reload: false });
-afterAll(async () => {
-  mock.restore();
-  await window.happyDOM.close();
-  for (const [key, descriptor] of previous) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-});
 const row = (id: string) => ({
   id,
   unread: true,
@@ -429,12 +429,13 @@ async function mountTriage(loadPage: (query: InboxPageQuery) => Promise<InboxPag
     );
   });
   await tick();
+  await tick();
   return {
     host,
     click: (label: string) =>
       act(async () => {
         const node = [...host.querySelectorAll('button')].find((button) => button.textContent === label);
-        expect(node, label).toBeDefined();
+        expect(node, `${label} in ${host.textContent}`).toBeDefined();
         node!.click();
       }),
     unmount: () =>
