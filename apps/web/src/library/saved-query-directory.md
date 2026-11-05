@@ -31,6 +31,8 @@ reader and locale replacement retire the private editor state and pending respon
 
 Decision: row navigation carries a validated same-locale cursor/layout return address so confirmed deletion returns to the exact bounded Library page.
 
+Decision: manager UI callbacks are bound to their originating controller, preserving its draft, ports, command recovery and retirement.
+
 The Web binding uses the installed Collection detail, metadata update and delete routes, all private `no-store` reads
 and writes. Commerce retains native authorization, revision/CAS and deletion semantics. Its remaining Web-facing
 producer gaps are complete paged dynamic owner metadata, dynamic member preparation and their required native outcome
