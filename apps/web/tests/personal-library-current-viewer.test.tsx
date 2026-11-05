@@ -4,7 +4,7 @@ import { act, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { PersonalLibraryCurrentRead, PersonalContinueRead } from '../src/library/personal-library-server';
 import type { LibraryMutationResult, PersonalLibraryEntry } from '../src/library/entries-read';
-import type { ShelfSearch } from '../src/library/shelf-params';
+import type { ShelfDisplay, ShelfSearch } from '../src/library/shelf-params';
 
 // UNRUN: controller integration owns execution. These use the installed DOM, actual combined
 // server export and exported mounted composition with real shelf children; no native/visual proof.
@@ -316,7 +316,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
   let root: ReturnType<typeof createRoot> | undefined;
   let initial = response('A');
   let search: ShelfSearch = {};
-  let display = { layout: 'list' as const, size: 'm' as const };
+  let display: ShelfDisplay = { layout: 'list', size: 'm' };
   const hydrationErrors: unknown[] = [];
   const tree = () => (
     <StrictMode>
@@ -565,7 +565,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     const moveWindow = async (label: string, cursor?: string, fail = false) => {
       await act(async () => link(label)!.click());
       expect(windows.pending).toBeDefined();
-      search = { type: 'core:Book', state: 'planned', ...(cursor ? { cursor } : {}) };
+      search = { type: 'core:Book', state: 'planned', orderBy: 'createdAt', direction: 'desc', ...(cursor ? { cursor } : {}) };
       const index = pendingReads.length;
       await show(session('C', 'csrf-rotated-again'));
       if (fail) {
@@ -578,7 +578,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
       }
     };
     try {
-      search = { type: 'core:Book', state: 'planned' };
+      search = { type: 'core:Book', state: 'planned', orderBy: 'createdAt', direction: 'desc' };
       let index = pendingReads.length;
       await show(session('C', 'csrf-rotated-again'));
       await settle(index, response('C', search));
@@ -598,7 +598,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
       expect(link(m.library_next_page())).toBeUndefined();
       expect(link(m.library_window_first())).toBeDefined();
       expect(windows.previous).toBe('next-C');
-      display = { layout: 'grid' as 'list', size: 'm' };
+      display = { layout: 'grid', size: 'm' };
       await show(session('C', 'csrf-rotated-again'));
       expect(windows.previous).toBe('next-C');
       await moveWindow(m.library_window_previous(), 'next-C');
