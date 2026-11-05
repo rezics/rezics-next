@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import type { Access, Actor, AccessCheck, AccessClient } from '../request/access.ts';
 import { accessCheck } from '../request/access.ts';
 import { AccessUnavailableError } from '../request/unavailable.ts';
-import type { AccessWorkAccounting } from '../access/work.ts';
+import type { AccessWorkAccounting } from '../work/access-work.ts';
 import { requireAccessDeadline } from '../request/unavailable.ts';
 import { realmReadEligibility } from '../community/realm.ts';
 import { spaceReadEligibility } from '../community/space.ts';

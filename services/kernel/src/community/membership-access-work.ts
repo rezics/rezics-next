@@ -1,5 +1,5 @@
 import { MEMBERSHIP_LIMIT } from '../access/membership-inverse.ts';
-import { EMPTY_ACCESS_WORK, type AccessWork } from '../access/work.ts';
+import { EMPTY_ACCESS_WORK, type AccessWork } from '../work/access-work.ts';
 import type { AccessRealmRoleReader } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 

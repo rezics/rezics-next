@@ -13,7 +13,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import assignmentRead from './delegation-read.sql';
-import { deriveAccess } from './derived-access.ts';
+import { deriveAccess } from '../request/derived-access.ts';
 import { accessClock } from './access-clock.ts';
 import {
   ManagementSourceRefusedError,

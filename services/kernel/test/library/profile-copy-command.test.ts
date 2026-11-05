@@ -226,7 +226,7 @@ test('native holdings accept declared data kind status pairs pin fresh facts and
 });
 
 test('copy commands retain one deadline and compare source and profile before a fresh mutation', async () => {
-  const { deriveAccess } = await import('../../src/access/derived-access.ts');
+  const { deriveAccess } = await import('../../src/request/derived-access.ts');
   for (const operation of ['create', 'update'] as const) {
     for (const change of ['profile', 'source'] as const) {
       await native.activate(originalDigest);
@@ -757,7 +757,7 @@ test('missing exact immutable Copy release never borrows current labels and tran
   } finally {
     native.pool.query = query;
   }
-  const { deriveAccess } = await import('../../src/access/derived-access.ts');
+  const { deriveAccess } = await import('../../src/request/derived-access.ts');
   const { AccessUnavailableError } = await import('../../src/request/unavailable.ts');
   const access = deriveAccess(native.access, {
     async prepare(actor, action, resource, context) {

@@ -5,7 +5,7 @@ import { ProblemError } from '../../src/http/problem.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import type { Access, Actor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { ERASURE_PARTICIPANTS, readErasureStatus } from '../../src/access/erasure.ts';
 import { readManagedErasureStatus } from '../../src/access/erasure-status-read.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';

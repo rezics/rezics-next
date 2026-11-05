@@ -1,4 +1,4 @@
-import { createAuthConsentReader } from '../../../src/access/auth-consent.ts';
+import { createAuthConsentReader } from '../../../src/request/auth-consent.ts';
 import { systemClock } from '../../../src/clock.ts';
 import { R2Storage } from '../../../src/content/r2-storage.ts';
 import { createContentWorkAccess } from '../../../src/content/register.ts';

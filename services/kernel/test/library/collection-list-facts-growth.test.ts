@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { fullMembers } from '../../src/library/views.ts';
 import { testTokens } from '../support/test-kernel.ts';
 import { assertGrowthAccessPaths, checkGrowth, seed } from '../support/growth.ts';

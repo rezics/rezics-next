@@ -3,7 +3,7 @@ import canonicalize from 'canonicalize';
 import { resourceAuthorization } from '../access/index.ts';
 import { accessCommandAttempt } from '../access/command-admission.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { deriveAccess } from '../access/derived-access.ts';
+import { deriveAccess } from '../request/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   authoritativeTimeValue,

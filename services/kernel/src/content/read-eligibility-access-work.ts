@@ -1,4 +1,4 @@
-import { ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, AccessWorkUnavailableError, type AccessWork } from '../access/work.ts';
+import { ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, AccessWorkUnavailableError, type AccessWork } from '../work/access-work.ts';
 import type {
   ResourceEligibilityOptions,
   ResourceEligibilityPrepareContext,

@@ -1,6 +1,6 @@
 import { systemClock, type KernelClock } from '../clock.ts';
 import type { Access } from '../request/access.ts';
-import { accessRoot } from './derived-access.ts';
+import { accessRoot } from '../request/derived-access.ts';
 
 const clocks = new WeakMap<Access, KernelClock>();
 

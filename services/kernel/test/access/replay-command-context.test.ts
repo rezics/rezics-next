@@ -16,7 +16,7 @@ import {
   type Access,
   type ActionCatalogue,
 } from '../../src/request/access.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';

@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, mock, spyOn, test } from 'bun:test';
-import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
+import type { CurrentConsentReader } from '../../src/request/auth-consent.ts';
 import type { MediaImportFetchConfig } from '../../src/content/media-import.ts';
 import type { NativeAuthorErasureWorkflows } from '../../src/content/operation-contract.ts';
 import type { ContentBoardDependencies } from '../../src/content/boards.ts';

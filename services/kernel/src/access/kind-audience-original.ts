@@ -22,7 +22,7 @@ import { collectionKindPreparationNativeWork } from '../search/scope-work-contex
 import { deadlineClient } from './authenticate.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { requireAccessDeadline } from '../request/unavailable.ts';
-import { AccessWorkUnavailableError, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkAccounting } from './work.ts';
+import { AccessWorkUnavailableError, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkAccounting } from '../work/access-work.ts';
 import { routeOf } from '../route/route.ts';
 import originRead from './kind-audience-origin.sql';
 import insertOrigin from './kind-audience-origin-insert.sql';

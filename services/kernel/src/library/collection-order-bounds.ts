@@ -1,6 +1,6 @@
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { MEMBERSHIP_LIMIT } from '../access/membership-inverse.ts';
-import { accessNativeDeclaration, type AccessWork } from '../access/work.ts';
+import { accessNativeDeclaration, type AccessWork } from '../work/access-work.ts';
 import accountRead from '../access/account-read.sql';
 import accountShare from '../access/account-share.sql';
 import permissionAssignment from '../access/permission-assignment.sql';

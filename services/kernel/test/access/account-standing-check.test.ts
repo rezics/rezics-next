@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { accountStandingCheck, createResourcePublicEligibility } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import resourceRoles from '../../src/access/resource-roles.json';
 import { createRealmMembership } from '../../src/community/membership.ts';
 import { createPool } from '../../src/database/pool.ts';

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createDelegationCommands, DelegationDeniedError } from '../../src/access/delegation-commands.ts';
 import { authoritativeTimeValue, commandTime } from '../../src/command/command.ts';

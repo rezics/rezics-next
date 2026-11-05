@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { createInitiatorRestorer, DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
-import { createAuthConsentReader, readAuthConsentConfig } from '../access/auth-consent.ts';
+import { createAuthConsentReader, readAuthConsentConfig } from '../request/auth-consent.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
 import { AccessUnavailableError } from '../request/unavailable.ts';
 import type { AuthoritativeTime } from '../command/command.ts';

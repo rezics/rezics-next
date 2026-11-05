@@ -1,7 +1,7 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';
-import { accessRoot, deriveAccess } from '../../src/access/derived-access.ts';
+import { accessRoot, deriveAccess } from '../../src/request/derived-access.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import {

@@ -31,7 +31,7 @@ import type { LifecycleRequest } from '../access/lifecycle.ts';
 import type { MembershipBootstrapStep, MembershipReservation } from '../access/membership-inverse.ts';
 import type { RealmMembershipCommands } from '../access/membership-work.ts';
 import type { MembershipRoleProof, RealmRoleReader } from '../access/permission.ts';
-import type { AccessWork } from '../access/work.ts';
+import type { AccessWork } from '../work/access-work.ts';
 import {
   roleWorkBound,
   roleBatchWorkBound,

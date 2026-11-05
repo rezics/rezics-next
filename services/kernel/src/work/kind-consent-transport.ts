@@ -15,7 +15,7 @@ import type {
   KindConsentParticipant,
   KindConsentWorkDeclaration,
 } from '@rezics/auth-contract';
-import type { AuthConsentConfig } from '../access/auth-consent.ts';
+import type { AuthConsentConfig } from '../request/auth-consent.ts';
 
 type TransportOptions = Readonly<{ fetch?: (url: string, init: RequestInit) => Promise<Response> }>;
 type Invocation = Readonly<{

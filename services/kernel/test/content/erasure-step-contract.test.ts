@@ -1,5 +1,5 @@
 import { expect, expectTypeOf, test } from 'bun:test';
-import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
+import type { CurrentConsentReader } from '../../src/request/auth-consent.ts';
 import type { ErasureJob } from '../../src/content/erasure-job.ts';
 import type { CommandOutcome } from '../../src/command/command.ts';
 import { erasePostLogical } from '../../src/content/erase-post.ts';

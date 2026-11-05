@@ -8,7 +8,7 @@ import { grantCommand, type GrantCommandContext } from './grant-command.ts';
 import createStatement from './delegation-create.sql';
 import revokeStatement from './delegation-revoke.sql';
 import readStatement from './delegation-read.sql';
-import { accessNativeWork, type AccessWorkAccounting } from './work.ts';
+import { accessNativeWork, type AccessWorkAccounting } from '../work/access-work.ts';
 
 export class DelegationDeniedError extends Error {
   constructor() {

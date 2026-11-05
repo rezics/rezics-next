@@ -19,7 +19,7 @@ import type { DownloadDecision, DownloadVariant, MediaDependencies } from './med
 import read from './read-download-media.sql';
 import readWork from './read-download-media-work.sql';
 import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
-import { AccessWorkUnavailableError, type AccessWorkAccounting } from '../access/work.ts';
+import { AccessWorkUnavailableError, type AccessWorkAccounting } from '../work/access-work.ts';
 import { coverPreparedAccessWork } from './cover-prepared-access-work.ts';
 import { COVER_MEDIA_WORK_DEPENDENCY, mediaEligibilityCallbacks } from './media-eligibility-access-work.ts';
 

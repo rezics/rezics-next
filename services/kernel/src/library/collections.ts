@@ -12,7 +12,7 @@ import canonicalize from 'canonicalize';
 import pg, { type Pool, type PoolConfig } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
-import { deriveAccess } from '../access/derived-access.ts';
+import { deriveAccess } from '../request/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { parentCreationAuthorization } from '../access/parent-creation.ts';

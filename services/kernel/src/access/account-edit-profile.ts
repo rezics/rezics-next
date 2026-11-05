@@ -16,7 +16,7 @@ import {
   addAccessWork,
   EMPTY_ACCESS_WORK,
   type AccessWork,
-} from './work.ts';
+} from '../work/access-work.ts';
 import profileRead from './account-edit-profile-read.sql';
 
 export const PROFILE_TEXT_MAX_LENGTH = 4096;

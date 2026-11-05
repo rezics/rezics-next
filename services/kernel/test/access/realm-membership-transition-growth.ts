@@ -4,7 +4,7 @@
 import { strict as assert } from 'node:assert';
 import { createAccess } from '../../src/access/index.ts';
 import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
-import { createAuthConsentReader, readAuthConsentConfig } from '../../src/access/auth-consent.ts';
+import { createAuthConsentReader, readAuthConsentConfig } from '../../src/request/auth-consent.ts';
 import { createAccountsWorkModule } from '../../src/access/membership-work.ts';
 import { createRealmMembershipReconciler } from '../../src/access/realm-membership-transition-legacy.ts';
 import { createRealmMembership, readMembershipInitiator } from '../../src/community/membership.ts';

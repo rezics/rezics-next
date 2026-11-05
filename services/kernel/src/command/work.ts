@@ -3,7 +3,7 @@ import {
   AccessWorkUnavailableError,
   type AccessWork,
   type AccessWorkSink,
-} from '../access/work.ts';
+} from '../work/access-work.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import {

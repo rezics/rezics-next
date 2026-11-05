@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { readListPresentationFacts } from '../../src/semantic/list-presentation.ts';
 import type { CurrentWorkContext, WorkContextSection } from '../../src/search/work-context.ts';
 import { citedValue, createListPresentationFixture } from './support/list-presentation-fixture.ts';

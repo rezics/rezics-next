@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { CurrentConsentReader } from '../access/auth-consent.ts';
+import type { CurrentConsentReader } from '../request/auth-consent.ts';
 
 const mountedConsent = new WeakMap<Pool, CurrentConsentReader>();
 

@@ -52,7 +52,7 @@ import {
   type Population,
 } from '../support/growth.ts';
 import { transformImage } from '../../src/content/image-transform.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 
 const HASH = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');

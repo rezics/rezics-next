@@ -7,7 +7,7 @@ import {
   createAuthConsentReader,
   readAuthConsentConfig,
   type CurrentConsentReader,
-} from '../access/auth-consent.ts';
+} from '../request/auth-consent.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Pool } from 'pg';
 import type { AccessRealmRoleReader } from '../request/access.ts';

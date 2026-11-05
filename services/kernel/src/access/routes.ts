@@ -53,7 +53,7 @@ import {
   type PublicAccountProfile,
 } from './account-data.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
-import { RealmLastOwnerError } from './resource-access-errors.ts';
+import { RealmLastOwnerError } from '../request/resource-access-errors.ts';
 import { readResourceGrants, type GrantReadPage } from './grant-read.ts';
 import type { ViewerActionResources } from './viewer-actions.ts';
 import { createRateTierCommands, RateTierNotAppliedError } from './rate-tier.ts';

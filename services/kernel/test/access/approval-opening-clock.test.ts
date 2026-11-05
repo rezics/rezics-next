@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createPool } from '../../src/database/pool.ts';
 import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createOperatorCommands } from '../../src/access/operator.ts';
 import { createWorkflowApprovals, credentialWorkflowApprovals } from '../../src/access/workflow-approvals.ts';

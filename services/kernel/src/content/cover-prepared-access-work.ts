@@ -6,7 +6,7 @@ import {
   type AccessWork,
   type AccessWorkAccounting,
   type AccessWorkProducer,
-} from '../access/work.ts';
+} from '../work/access-work.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import type { AccessCheck, AccessClient, AccessContext } from '../request/access.ts';
 

@@ -2,7 +2,7 @@ import { expect, test as bunTest } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { attachCollectionListFacts } from '../../src/library/collection-list-facts.ts';
 import { fullMembers } from '../../src/library/views.ts';

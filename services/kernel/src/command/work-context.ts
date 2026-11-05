@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { AccessWorkAccounting } from '../access/work.ts';
+import type { AccessWorkAccounting } from '../work/access-work.ts';
 import type { WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
 
 /** Accounting-only request context, kept free of runtime SQL dependencies. */

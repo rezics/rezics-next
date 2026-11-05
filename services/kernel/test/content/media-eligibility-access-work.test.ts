@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { ResourceEligibilityVerifyContext } from '../../src/access/eligibility.ts';
-import { AccessWorkAccounting, EMPTY_ACCESS_WORK, accessOwnerWork, type AccessWork } from '../../src/access/work.ts';
+import { AccessWorkAccounting, EMPTY_ACCESS_WORK, accessOwnerWork, type AccessWork } from '../../src/work/access-work.ts';
 import {
   COVER_MEDIA_WORK_DEPENDENCY,
   MEDIA_DOWNLOAD_WORK_DEPENDENCY,

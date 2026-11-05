@@ -10,7 +10,7 @@ import {
   type InitiatorRestorerConfig,
   type InitiatorRestorer,
 } from '../../src/access/durable-initiator.ts';
-import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
+import type { CurrentConsentReader } from '../../src/request/auth-consent.ts';
 import type { AuthorizationAnchor } from '../../src/access/resource-authorization.ts';
 import type { AuthoritativeTime, CommandAuthorization } from '../../src/command/command.ts';
 import type { Access, AccessClient, AccessContext, AccountActor } from '../../src/request/access.ts';

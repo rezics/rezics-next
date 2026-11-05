@@ -8,7 +8,7 @@ import {
   createMembershipWorkPorts,
   enqueueMembership,
 } from '../../src/access/membership-work.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { createInitiatorRestorer, DurableInitiatorUnavailableError } from '../../src/access/durable-initiator.ts';
 import type { LifecycleRequest } from '../../src/access/lifecycle.ts';
 import {

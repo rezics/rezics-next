@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
 import { COMMAND_STEP_RETRIES } from '../../src/work/retries.ts';
-import type { AccessWorkAccounting } from '../../src/access/work.ts';
+import type { AccessWorkAccounting } from '../../src/work/access-work.ts';
 import type { WorkReceipt } from '../../src/library/collection-source.ts';
 import { registerCommandWorkAssociation, type CommandWorkAssociation } from '../../src/command/work-context.ts';
 import { withCommandWorkAssociation } from '../../src/command/work.ts';

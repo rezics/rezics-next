@@ -35,7 +35,7 @@ const { createKernel } = await import('../../../src/http/kernel.ts');
 const { defineRateLimit } = await import('../../../src/http/rate-limit.ts');
 const appModule = await import('../../../src/http/app.ts');
 const { createAccess } = await import('../../../src/access/index.ts');
-const { deriveAccess } = await import('../../../src/access/derived-access.ts');
+const { deriveAccess } = await import('../../../src/request/derived-access.ts');
 const { createGrantCommands } = await import('../../../src/access/grant-commands.ts');
 
 const databaseUrl = process.env.DATABASE_URL;

@@ -1,8 +1,8 @@
-import type { AccessWorkAccounting, AccessWorkProducer } from '../access/work.ts';
+import type { AccessWorkAccounting, AccessWorkProducer } from '../work/access-work.ts';
 import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
 import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
-import { accessRoot } from '../access/derived-access.ts';
-import { hasOriginalAuthenticator } from '../access/authentication-work.ts';
+import { accessRoot } from './derived-access.ts';
+import { hasOriginalAuthenticator } from './authentication-work.ts';
 import type { Pool, PoolClient } from 'pg';
 import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';

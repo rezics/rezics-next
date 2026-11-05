@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createPool, withConnection } from '../src/database/pool.ts';
 import { CommandUnavailableError } from '../src/command/command.ts';
-import { deriveAccess } from '../src/access/derived-access.ts';
+import { deriveAccess } from '../src/request/derived-access.ts';
 import { readAccount } from '../src/access/account-data.ts';
 import { createLifecycleCommands, LifecycleDeniedError, LIFECYCLE_ACTIONS } from '../src/access/lifecycle.ts';
 import { newId, partitionOf } from '../src/route/route.ts';

@@ -12,7 +12,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createRealAccess } from './real-access.ts';
 import type { Access } from '../../src/request/access.ts';
 import type { PublicationStore } from './subject-page-local-publication.test.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { parentCreationAuthorization } from '../../src/access/parent-creation.ts';
 import { explainUnresolvedResourceType, resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';

@@ -1,6 +1,6 @@
 import type { CoverPreparedAccessWork } from './cover-prepared-access-work.ts';
 import type { ResourceEligibilityOptions, ResourceEligibilityVerifyContext } from '../access/eligibility.ts';
-import { ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, AccessWorkUnavailableError, type AccessWork } from '../access/work.ts';
+import { ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, AccessWorkUnavailableError, type AccessWork } from '../work/access-work.ts';
 
 const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value) ?? 'null');
 const uuid = 'x'.repeat(36);

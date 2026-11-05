@@ -7,7 +7,7 @@ import {
   AccessWorkUnavailableError,
   type AccessWorkAccounting,
   type AccessWorkProducer,
-} from './work.ts';
+} from '../work/access-work.ts';
 import {
   copyContentEditionBenefit,
   contentEditionBenefitBinding,
@@ -499,7 +499,7 @@ function preparedCheckWork(
     PreparedAccessCheckInvocation,
     {
       value: boolean;
-      usage: import('./work.ts').AccessWork;
+      usage: import('../work/access-work.ts').AccessWork;
       client: AccessClient;
       time: AuthoritativeTime;
       work: AccessWorkAccounting;

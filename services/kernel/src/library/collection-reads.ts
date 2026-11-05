@@ -1,4 +1,4 @@
-import { EMPTY_ACCESS_WORK, type AccessWorkAccounting } from '../access/work.ts';
+import { EMPTY_ACCESS_WORK, type AccessWorkAccounting } from '../work/access-work.ts';
 import outputHeadForRetention from './collection-source-output-head.sql';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';

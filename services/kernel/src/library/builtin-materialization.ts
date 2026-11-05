@@ -2,7 +2,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
-import { deriveAccess } from '../access/derived-access.ts';
+import { deriveAccess } from '../request/derived-access.ts';
 import { parentCreationAuthorization } from '../access/parent-creation.ts';
 import { initializeResourceGrants } from '../access/resource-initialization.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';

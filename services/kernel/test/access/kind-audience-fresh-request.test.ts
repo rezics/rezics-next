@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createAccess } from '../../src/access/index.ts';
-import { AccessWorkAccounting } from '../../src/access/work.ts';
+import { AccessWorkAccounting } from '../../src/work/access-work.ts';
 import type { AuthoritativeTime } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import type { PrepareKindAudienceInput } from '../../src/request/access.ts';

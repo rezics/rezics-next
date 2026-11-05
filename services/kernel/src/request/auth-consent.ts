@@ -1,6 +1,6 @@
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
-import { ConfigError } from '../commerce/config.ts';
-import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../request/unavailable.ts';
+import { ConfigError } from '../config-error.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 export type AuthConsentConfig = Readonly<{
   url: string;
   serviceTokenId: string;

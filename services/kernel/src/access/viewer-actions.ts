@@ -1,5 +1,5 @@
 import { t } from 'elysia';
-import type { AccessWorkAccounting } from './work.ts';
+import type { AccessWorkAccounting } from '../work/access-work.ts';
 import type { Pool } from 'pg';
 import { Compile } from 'typebox/compile';
 import type { Static, TSchema } from 'typebox';

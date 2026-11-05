@@ -1,6 +1,6 @@
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { expect, test } from 'bun:test';
-import { createAuthConsentReader, readAuthConsentConfig } from '../../src/access/auth-consent.ts';
+import { createAuthConsentReader, readAuthConsentConfig } from '../../src/request/auth-consent.ts';
 import { ConfigError } from '../../src/commerce/config.ts';
 import { AccessUnavailableError } from '../../src/access/index.ts';
 

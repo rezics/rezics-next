@@ -6,7 +6,7 @@ import {
   installCommandAdmission,
   requireCommandAdmission,
 } from '../../src/access/command-admission.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { installDurableIdentityBridge, restoreOperationIdentity } from '../../src/access/durable-identity.ts';
 import {
   ApprovalIdentityDeniedError,

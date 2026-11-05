@@ -3,7 +3,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Type } from 'typebox';
 import { createInternalConsentHandler } from '../../../auth/src/internal-consent.ts';
 import { migrate } from '../../../auth/scripts/database.ts';
-import { createAuthConsentReader } from '../../src/access/auth-consent.ts';
+import { createAuthConsentReader } from '../../src/request/auth-consent.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { shareAccount } from '../../src/access/account-share.ts';
 import { createAccess } from '../../src/access/permission.ts';

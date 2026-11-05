@@ -10,8 +10,8 @@ import { validResource } from './grant-command.ts';
 import endStatement from './resource-denial-end.sql';
 import recordStatement from './resource-denial-record.sql';
 
-import { ResourceAccessWriteDeniedError } from './resource-access-errors.ts';
-export { ResourceAccessWriteDeniedError } from './resource-access-errors.ts';
+import { ResourceAccessWriteDeniedError } from '../request/resource-access-errors.ts';
+export { ResourceAccessWriteDeniedError } from '../request/resource-access-errors.ts';
 
 const denialReasons = new Set(['resource', 'suspension', 'realm_ban']);
 const denialAction = /^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$/;

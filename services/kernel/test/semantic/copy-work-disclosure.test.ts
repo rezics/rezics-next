@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { copyWorkDisclosureOverlay, copyWorkProperty } from '../../src/presentation/semantic-page.ts';
 import {
   COPY_WORK_DISCLOSURE_MAX_RAW,

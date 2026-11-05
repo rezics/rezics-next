@@ -3,7 +3,7 @@ import { createOperationCatalogue } from '@rezics/operations';
 import { FEED_OPERATION_DECLARATIONS } from '../content/feed-operation-declarations.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
 import { mountContentEditionConsent } from '../content/edition-sale.ts';
-import type { CurrentConsentReader } from '../access/auth-consent.ts';
+import type { CurrentConsentReader } from '../request/auth-consent.ts';
 import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
 import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { NATIVE_CONTAINER_ACTIONS } from '../community/actions.ts';
@@ -16,7 +16,7 @@ import { ProblemError } from './problem.ts';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { accessActionCatalogue, assertInternalActionDeclarations, createAccess } from '../access/index.ts';
-import { deriveAccess } from '../access/derived-access.ts';
+import { deriveAccess } from '../request/derived-access.ts';
 import { assertDeclaredResourceTypes } from '../access/resource-roles.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
 import {

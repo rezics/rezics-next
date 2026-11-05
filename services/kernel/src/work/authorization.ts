@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { createAuthConsentReader, readAuthConsentConfig, type CurrentConsentReader } from '../access/auth-consent.ts';
+import { createAuthConsentReader, readAuthConsentConfig, type CurrentConsentReader } from '../request/auth-consent.ts';
 import { createAccess } from '../access/index.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { AccessUnavailableError } from '../request/unavailable.ts';

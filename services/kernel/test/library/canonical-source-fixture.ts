@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { mintReadTime } from '../../src/command/command.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { createCollectionReads } from '../../src/library/collection-reads.ts';

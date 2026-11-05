@@ -2,7 +2,7 @@ export { createAccountPublicEligibility } from './account-authority.ts';
 export type { AccessCheck, PreparedAccessCheckInvocation, PreparedAccessCheckWork } from '../request/access.ts';
 export type * from './kind-audience.ts';
 import type { PermissionAccount } from './account-authority.ts';
-import { accessCheckout, accessTransaction, AccessWorkAccounting, AccessWorkUnavailableError } from './work.ts';
+import { accessCheckout, accessTransaction, AccessWorkAccounting, AccessWorkUnavailableError } from '../work/access-work.ts';
 export {
   AccessWorkAccounting,
   AccessWorkUnavailableError,
@@ -11,7 +11,7 @@ export {
   type AccessWorkSink,
   type AccessWorkProducer,
   type AccessWorkResult,
-} from './work.ts';
+} from '../work/access-work.ts';
 export { accountStandingCheck, type AccountStandingInput, type AccountStandingDecisions } from './account-standing.ts';
 import { accountStandingCheck, installAccountStandingCheck } from './account-standing.ts';
 export {
@@ -78,7 +78,7 @@ import type {
   ResolveKindAudienceInput,
   VerifyKindAudienceSourceInput,
 } from './kind-audience.ts';
-import { accessRoot } from './derived-access.ts';
+import { accessRoot } from '../request/derived-access.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from './resource-roles.ts';
 import { createAccess as permissionAccess, readDecisionTime, authorizePreparedReadGate } from './permission.ts';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
@@ -151,7 +151,7 @@ type Prepared = IdentityExpiry & {
   deadline: number;
   requestDeadline: number;
   durableTime?: import('../command/command.ts').AuthoritativeTime;
-  work?: import('./work.ts').AccessWorkAccounting;
+  work?: import('../work/access-work.ts').AccessWorkAccounting;
 };
 
 type PlatformGateCheck = (

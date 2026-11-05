@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { Pool } from 'pg';
 import { createAccess } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';

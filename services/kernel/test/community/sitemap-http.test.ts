@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import type { SitemapRealmItem, SitemapSpaceItem } from '../../src/community/sitemap.ts';
 import { createAccess } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue } from '../../src/http/request.ts';

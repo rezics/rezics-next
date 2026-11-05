@@ -7,7 +7,7 @@ import { createAuthService } from '@rezics/auth';
 import { createInternalConsentHandler } from '../../../auth/src/internal-consent.ts';
 import { migrate } from '../../../auth/scripts/database.ts';
 import { createAccess, captureDurableInitiator, durableInitiatorCommitment } from '../../src/access/index.ts';
-import { createAuthConsentReader } from '../../src/access/auth-consent.ts';
+import { createAuthConsentReader } from '../../src/request/auth-consent.ts';
 import { ApprovalIdentityDeniedError, verifiedBearerExpiry } from '../../src/access/approved-identity.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';

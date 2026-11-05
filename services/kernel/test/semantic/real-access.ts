@@ -2,7 +2,7 @@ import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { createAccess, type AccessConfig } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import type { Access, Resource } from '../../src/request/access.ts';

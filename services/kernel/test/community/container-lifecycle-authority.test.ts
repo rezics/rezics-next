@@ -4,7 +4,7 @@ import { Value } from 'typebox/value';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { routeOf } from '../../src/route/route.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { restoreContainer, type ContainerKind } from '../../src/community/container-lifecycle.ts';
 import {

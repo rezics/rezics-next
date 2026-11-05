@@ -7,7 +7,7 @@ import type { CollectionKindInputBinding } from '../library/collection-kind-inpu
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/collection-source.ts';
 import type { AccessContext, AccountActor, Actor } from '../request/access.ts';
 import type { CollectionKindPreparationWorkContext } from '../search/scope-work-context.ts';
-import type { AccessWork, AccessWorkAccounting } from './work.ts';
+import type { AccessWork, AccessWorkAccounting } from '../work/access-work.ts';
 
 /** SERVER ONLY. Every reference below is a native lookup key, never a principal,
  * cached decision, ordinary prepared Access evidence or proof of its own existence.

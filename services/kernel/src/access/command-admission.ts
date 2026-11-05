@@ -12,7 +12,7 @@ import {
 } from '../request/access.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
-import { accessRoot } from './derived-access.ts';
+import { accessRoot } from '../request/derived-access.ts';
 
 /** A marker is held only in this registry and always carries a live executor time.
  * Request JSON, copied contexts and booleans cannot mark a read as a command.

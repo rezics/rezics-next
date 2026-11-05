@@ -9,7 +9,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { createWorkerAuthorization, type WorkerAuthorization } from './authorization.ts';
 import type { KindConsentParticipant } from '@rezics/auth-contract';
 import { bindIdentityOriginalEffect, IDENTITY_FX_EFFECT } from '../history/identity-original-association.ts';
-import { readAuthConsentConfig } from '../access/auth-consent.ts';
+import { readAuthConsentConfig } from '../request/auth-consent.ts';
 import { createKindConsentParticipantTransport } from './kind-consent-transport.ts';
 
 import { composeSelectedRuntime, type SelectedRuntime } from './selected-runtime.ts';

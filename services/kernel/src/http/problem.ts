@@ -23,7 +23,7 @@ import { NotFound, ParseError, ValidationError, t } from 'elysia';
 import type { TSchema } from 'typebox';
 import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
 import { AuthenticationError } from '../request/access.ts';
-import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
+import { RealmLastOwnerError } from '../request/resource-access-errors.ts';
 
 function fieldErrorCodes(): readonly FieldErrorCode[] {
   return ['required', 'unknown_field', 'invalid_type', 'invalid_format', 'out_of_range', 'unsupported'];

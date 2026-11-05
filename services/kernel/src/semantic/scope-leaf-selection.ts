@@ -3,7 +3,7 @@ import type { IndexedStatement } from '../search/source.ts';
 import { readNativeCalendarDate, readNativeSpoilerLevel } from '@rezics/filter';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
-import { ACCESS_WORK_AXES, AccessWorkAccounting, EMPTY_ACCESS_WORK, type AccessWork } from '../access/work.ts';
+import { ACCESS_WORK_AXES, AccessWorkAccounting, EMPTY_ACCESS_WORK, type AccessWork } from '../work/access-work.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../request/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { classifyUnavailability } from '../../src/request/unavailable.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent, accountAgentId } from '../../src/semantic/index.ts';

@@ -1,4 +1,4 @@
-import type { Access } from '../request/access.ts';
+import type { Access } from './access.ts';
 import { inheritOriginalAuthenticator } from './authentication-work.ts';
 
 const bases = new WeakMap<Access, Access>();

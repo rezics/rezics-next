@@ -10,7 +10,7 @@ import {
   accessCheckout,
   type AccessWork,
   type AccessWorkSink,
-} from '../../src/access/work.ts';
+} from '../../src/work/access-work.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';
 import { readAccount } from '../../src/access/account-data.ts';

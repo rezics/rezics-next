@@ -30,8 +30,8 @@ import {
   type CurrentResourceRoleKey,
 } from './current-resource-roles.ts';
 import { requireResourceCommand, ResourceAccessWriteDeniedError } from './resource-denials.ts';
-import { RealmLastOwnerError } from './resource-access-errors.ts';
-export { RealmLastOwnerError } from './resource-access-errors.ts';
+import { RealmLastOwnerError } from '../request/resource-access-errors.ts';
+export { RealmLastOwnerError } from '../request/resource-access-errors.ts';
 import catalogue from './resource-roles.json';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import read from './realm-ownership-read.sql';

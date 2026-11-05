@@ -1,6 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
-import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
+import type { CurrentConsentReader } from '../../src/request/auth-consent.ts';
 import { once } from 'node:events';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFileSync, mkdirSync, writeSync } from 'node:fs';

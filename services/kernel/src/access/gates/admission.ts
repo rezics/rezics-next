@@ -1,6 +1,6 @@
 import { readNativeAccessTime } from '../authenticate.ts';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../../command/command.ts';
-import type { AccessWorkAccounting } from '../work.ts';
+import type { AccessWorkAccounting } from '../../work/access-work.ts';
 import type { Pool } from 'pg';
 import { decideExposure, exposureAuthorityActions } from '@rezics/access';
 import { authorizePlatformGate } from '../index.ts';

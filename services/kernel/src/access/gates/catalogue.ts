@@ -1,4 +1,4 @@
-import { accessNativeWork, accessCheckout, accessTransaction, type AccessWorkAccounting } from '../work.ts';
+import { accessNativeWork, accessCheckout, accessTransaction, type AccessWorkAccounting } from '../../work/access-work.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../../request/unavailable.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';

@@ -5,7 +5,7 @@ import type { CredentialEffectBinding } from '@rezics/auth-contract';
 import type { SuspensionValue } from '../../src/access/suspension.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess, accessClock } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { readApprovedIdentity, verifiedBearerExpiry } from '../../src/access/approved-identity.ts';
 import { createWorkflowApprovals, credentialWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';

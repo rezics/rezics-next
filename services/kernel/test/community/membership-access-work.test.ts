@@ -7,7 +7,7 @@ import {
   EMPTY_ACCESS_WORK,
   accessOwnerWork,
   type AccessWork,
-} from '../../src/access/work.ts';
+} from '../../src/work/access-work.ts';
 import * as membershipModule from '../../src/community/membership.ts';
 import readRoles from '../../src/community/membership-role.sql';
 import readRoleBatch from '../../src/community/membership-role-batch.sql';

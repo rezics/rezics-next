@@ -6,7 +6,7 @@ import { authoritativeTimeValue, CommandUnavailableError, noEffect, runCommand }
 import { shareAccount } from '../access/account-share.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
-import type { CurrentConsentReader } from '../access/auth-consent.ts';
+import type { CurrentConsentReader } from '../request/auth-consent.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Access } from '../request/access.ts';

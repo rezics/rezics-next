@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { approveRealmClaim } from '../../src/access/realm-claim.ts';
 import { requestRealmClaim } from '../../src/community/realm-continuity.ts';
 import { listRealmClaimRequests, type RealmClaimReviewPage } from '../../src/community/realm-claim-review.ts';

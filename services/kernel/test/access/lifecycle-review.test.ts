@@ -8,7 +8,7 @@ import { readLifecycleReview } from '../../src/access/lifecycle-review.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createReinstatementCommands } from '../../src/access/reinstatement.ts';
 import { createCommittedContinuations } from '../../src/access/committed-continuations.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { readPublicAccount } from '../../src/access/account-data.ts';
 import { admittedAccess, authenticateAccount, accountToken } from '../support/admitted-access.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';

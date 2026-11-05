@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { attachCopyListContext } from '../../src/library/copy-list-context.ts';
 import { createCopyListContextFixture } from './copy-list-context-fixture.ts';

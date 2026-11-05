@@ -1,6 +1,6 @@
 import type { QueryResultRow } from 'pg';
 import type { AccessClient } from '../request/access.ts';
-import type { AccessWorkAccounting, AccessWork } from '../access/work.ts';
+import type { AccessWorkAccounting, AccessWork } from '../work/access-work.ts';
 import type { ReadContext } from './model.ts';
 import type { Partition } from '../partition/partition.ts';
 import partitionRead from '../partition/read.sql';

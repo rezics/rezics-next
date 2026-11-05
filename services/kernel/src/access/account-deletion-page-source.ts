@@ -15,7 +15,7 @@ import { accessClock } from './access-clock.ts';
 import { readAccount } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
-import { deriveAccess } from './derived-access.ts';
+import { deriveAccess } from '../request/derived-access.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../request/unavailable.ts';
 import { managedAuthWorkflowDescriptor } from './workflow-approvals.ts';

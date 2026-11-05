@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { FilterRelease } from '@rezics/filter';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { createKernel, createKernelAccessResolver } from '../../src/http/kernel.ts';
 import type { Access } from '../../src/request/access.ts';
 import { bulkLines, documentActions } from '../../src/search/document.ts';

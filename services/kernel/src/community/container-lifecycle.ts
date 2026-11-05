@@ -4,7 +4,7 @@ import { Type } from 'typebox';
 import { resourceAuthorization } from '../access/index.ts';
 import { accessCommandAttempt } from '../access/command-admission.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { accessRoot, deriveAccess } from '../access/derived-access.ts';
+import { accessRoot, deriveAccess } from '../request/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { resourceRoleHeld } from '../access/resource-role-held.ts';
 import { permissionEvidenceDeadline } from '../access/permission.ts';

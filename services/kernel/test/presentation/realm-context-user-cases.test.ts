@@ -10,7 +10,7 @@ import {
 } from '@rezics/composition';
 import type { HttpResponse } from '../../../../specs/semantic-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import type { Actor } from '../../src/request/access.ts';
 import { routeOf } from '../../src/route/route.ts';

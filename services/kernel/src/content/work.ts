@@ -5,7 +5,7 @@ import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
 import { within, deadlineClient } from '../access/authenticate.ts';
-import type { CurrentConsentReader } from '../access/auth-consent.ts';
+import type { CurrentConsentReader } from '../request/auth-consent.ts';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';

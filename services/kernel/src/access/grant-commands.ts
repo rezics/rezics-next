@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, currentCommand, type CommandOutcome } from '../command/command.ts';
 import type { Access, Resource } from '../request/access.ts';
-import { accessRoot } from './derived-access.ts';
+import { accessRoot } from '../request/derived-access.ts';
 import { grantSubject, type PublicGrantSubject } from './grant-subject.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import roleStatement from './role-grant-mutate.sql';
@@ -18,8 +18,8 @@ import {
 import realmMutation from './realm-ownership-mutation.sql';
 import realmRecipient from './realm-ownership-recipient.sql';
 import { ResourceAccessWriteDeniedError } from './resource-denials.ts';
-import { GrantDeniedError } from './resource-access-errors.ts';
-export { GrantDeniedError } from './resource-access-errors.ts';
+import { GrantDeniedError } from '../request/resource-access-errors.ts';
+export { GrantDeniedError } from '../request/resource-access-errors.ts';
 
 export type GrantRecipient =
   | { subject: PublicGrantSubject; subjectId?: never; subjectRole?: never }

@@ -16,7 +16,7 @@ import publicRead from './account-public-read.sql';
 import agentPageRead from './agent-verification-page-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
 import { accountAgentId, accountAgentsForSubjects } from '../semantic/agents.ts';
-import { accessNativeWork, type AccessWorkAccounting } from './work.ts';
+import { accessNativeWork, type AccessWorkAccounting } from '../work/access-work.ts';
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;

@@ -1,5 +1,5 @@
 import type { Access, AccessContext, Resource, ResourcePage } from '../request/access.ts';
-import { accessRoot } from './derived-access.ts';
+import { accessRoot } from '../request/derived-access.ts';
 
 export type AccountStandingInput = Readonly<{
   accountId: string;

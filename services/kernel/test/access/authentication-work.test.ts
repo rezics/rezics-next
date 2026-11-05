@@ -2,8 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool, type QueryConfig } from 'pg';
 import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
-import { authenticationWorkBound } from '../../src/access/authentication-work.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
+import { authenticationWorkBound } from '../../src/request/authentication-work.ts';
 import { PROBLEMS } from '../../src/http/problem.ts';
 import {
   AccessWorkUnavailableError,
@@ -11,7 +11,7 @@ import {
   EMPTY_ACCESS_WORK,
   type AccessWork,
   type AccessWorkSink,
-} from '../../src/access/work.ts';
+} from '../../src/work/access-work.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { actorOf, type Access } from '../../src/request/access.ts';
 

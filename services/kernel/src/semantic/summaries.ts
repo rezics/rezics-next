@@ -1,4 +1,4 @@
-import type { AccessWorkAccounting } from '../access/work.ts';
+import type { AccessWorkAccounting } from '../work/access-work.ts';
 import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';

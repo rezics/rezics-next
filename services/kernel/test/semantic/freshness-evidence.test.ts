@@ -5,7 +5,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { DEFAULT_REQUEST_DEADLINE_MS, type CommandAuthorization } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { fullView } from '../../src/library/views.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { accessCheck, actorOf, type AccountActor } from '../../src/request/access.ts';

@@ -7,7 +7,7 @@ import {
   accessNativeWork,
   accessOwnerWork,
   type AccessWork,
-} from '../../src/access/work.ts';
+} from '../../src/work/access-work.ts';
 import { createAccess } from '../../src/access/index.ts';
 import {
   createResourcePublicEligibility,

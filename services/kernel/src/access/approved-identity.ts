@@ -8,7 +8,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { unseal, type KeyRing } from '../tokens/seal.ts';
 import receiptRead from '../command/read-receipt.sql';
 import approvalRead from './workflow-approvals-read.sql';
-import { accessRoot } from './derived-access.ts';
+import { accessRoot } from '../request/derived-access.ts';
 import { accessClock } from './access-clock.ts';
 
 export class ApprovalIdentityDeniedError extends Error {

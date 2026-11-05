@@ -3,7 +3,7 @@
  */
 import type { Actor, AccessContext, ActionCatalogue } from '../request/access.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
-import { accessNativeDeclaration, addAccessWork, EMPTY_ACCESS_WORK, type AccessWork } from './work.ts';
+import { accessNativeDeclaration, addAccessWork, EMPTY_ACCESS_WORK, type AccessWork } from '../work/access-work.ts';
 import { MEMBERSHIP_LIMIT } from './membership-inverse.ts';
 import { resolveResourceRoles, type ResourceRoleCatalogue } from './resource-roles.ts';
 import timeRead from './permission-time.sql';

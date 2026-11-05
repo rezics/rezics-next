@@ -1,5 +1,5 @@
 import type { Access, ActionCatalogue, ActionMetadata } from '../request/access.ts';
-import { accessRoot } from './derived-access.ts';
+import { accessRoot } from '../request/derived-access.ts';
 import defaults from './resource-roles.json';
 import governance from '../events/contracts/access-platform-governance.json';
 

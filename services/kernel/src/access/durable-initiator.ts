@@ -8,7 +8,7 @@ import { deadlineClient, within } from './authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf } from '../route/route.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
-import type { CurrentConsentReader } from './auth-consent.ts';
+import type { CurrentConsentReader } from '../request/auth-consent.ts';
 import type { AuthorizationAnchor } from './resource-authorization.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, AccessClient, AccessContext, AccountActor } from '../request/access.ts';

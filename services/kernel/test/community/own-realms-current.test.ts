@@ -8,7 +8,7 @@ import {
   createCommunityDriver,
   queryCommunityDatabase,
 } from './community-driver.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { createRealmViewerObservation } from '../../src/community/own-realms-viewer.ts';
 import { REALM_OWNER_ROLE } from '../../src/access/realm-ownership.ts';
 import type { Account, CommunityDriver, Fixture } from '../../../../specs/community-driver.ts';

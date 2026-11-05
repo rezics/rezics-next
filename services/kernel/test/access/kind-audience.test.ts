@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createAccess } from '../../src/access/index.ts';
 import { kindOriginalFormulaPlan } from '../../src/access/kind-audience-formula.ts';
-import { AccessWorkAccounting, accessNativeDeclaration } from '../../src/access/work.ts';
+import { AccessWorkAccounting, accessNativeDeclaration } from '../../src/work/access-work.ts';
 import { mintReadTime, releaseOperationalTime } from '../../src/command/command.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { createCollectionKindFixture, type CollectionKindFixture } from '../library/support/collection-kind-fixture.ts';

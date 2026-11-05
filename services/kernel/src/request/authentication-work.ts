@@ -1,4 +1,4 @@
-import type { Access } from '../request/access.ts';
+import type { Access } from './access.ts';
 import type { Pool } from 'pg';
 import {
   accessNativeDeclaration,
@@ -6,7 +6,7 @@ import {
   type AccessWork,
   type AccessWorkAccounting,
   type AccessWorkProducer,
-} from './work.ts';
+} from '../work/access-work.ts';
 
 /** The public Auth signer has at most three live ES256/P-256 keys. */
 export const AUTHENTICATION_JWKS_LIMITS = Object.freeze({

@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { prepareAnonymousEligibility, type ResourceEligibility } from '../../src/access/eligibility.ts';
-import { ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, AccessWorkAccounting, type AccessWork } from '../../src/access/work.ts';
+import { ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, AccessWorkAccounting, type AccessWork } from '../../src/work/access-work.ts';
 import { realmReadEligibility } from '../../src/community/realm.ts';
 import { spaceReadEligibility } from '../../src/community/space.ts';
 import { realmParticipationAnchor } from '../../src/community/participation.ts';

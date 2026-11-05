@@ -501,7 +501,12 @@
         "services/kernel/src/events/contracts/search-identity-epoch-participant.ts",
         "services/kernel/src/events/contracts/semantic.ts",
         "services/kernel/src/events/erasure-locator-effects.ts",
-        "services/kernel/src/command/definition-catalogue-mechanical.ts"
+        "services/kernel/src/command/definition-catalogue-mechanical.ts",
+        "services/kernel/src/work/access-work.ts",
+        "services/kernel/src/request/derived-access.ts",
+        "services/kernel/src/request/resource-access-errors.ts",
+        "services/kernel/src/request/authentication-work.ts",
+        "services/kernel/src/request/auth-consent.ts"
       ],
       "allowedDependencies": [
         "bounds",

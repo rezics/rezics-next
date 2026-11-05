@@ -1,9 +1,9 @@
 import { createResourcePublicEligibility } from './eligibility.ts';
-import { accessNativeDeclaration, EMPTY_ACCESS_WORK } from './work.ts';
+import { accessNativeDeclaration, EMPTY_ACCESS_WORK } from '../work/access-work.ts';
 import type { AccessClient } from '../request/access.ts';
 import type { Account } from './account-data.ts';
 import { readAccountActionStates } from './account-viewer-actions.ts';
-import { accessNativeWork, type AccessWorkAccounting } from './work.ts';
+import { accessNativeWork, type AccessWorkAccounting } from '../work/access-work.ts';
 import { routeOf } from '../route/route.ts';
 
 /** Only native permission facts; never manufacture a full private Account. */
@@ -53,7 +53,7 @@ export function createAccountPublicEligibility(target: import('../request/access
   const resource = Object.freeze({ route: target.route, id: target.id });
   if (routeOf(resource.id) !== resource.route) throw new RangeError('Invalid Account floor key');
   type VerifyInput = import('./eligibility.ts').ResourceEligibilityVerifyContext<true>;
-  const receipts = new WeakMap<VerifyInput, import('./work.ts').AccessWork>();
+  const receipts = new WeakMap<VerifyInput, import('../work/access-work.ts').AccessWork>();
   const declaration = () =>
     accessNativeDeclaration('account-state', { routes: [resource.route], ids: [resource.id] }, { targets: 1 });
   return createResourcePublicEligibility({

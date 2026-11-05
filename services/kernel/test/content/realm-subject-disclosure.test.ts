@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
-import { AccessWorkAccounting } from '../../src/access/work.ts';
+import { AccessWorkAccounting } from '../../src/work/access-work.ts';
 import {
   prepareRealmSubjectDisclosure,
   type RealmSubjectCandidate,

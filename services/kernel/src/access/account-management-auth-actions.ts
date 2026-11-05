@@ -7,7 +7,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { AccountManagementPage, ManagedAuthOperationId } from './account-management.ts';
 import { readAccount, readOrganizationRole, type Account } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
-import { deriveAccess } from './derived-access.ts';
+import { deriveAccess } from '../request/derived-access.ts';
 import assignmentRead from './delegation-read.sql';
 import { ManagementSourceRefusedError, readNativeOperatorTransferRelation } from './management-source.ts';
 import { permissionEvidenceDeadline } from './permission.ts';

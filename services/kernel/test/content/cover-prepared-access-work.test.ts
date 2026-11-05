@@ -8,7 +8,7 @@ import {
   AccessWorkUnavailableError,
   accessOwnerWork,
   type AccessWork,
-} from '../../src/access/work.ts';
+} from '../../src/work/access-work.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../../src/command/command.ts';
 import { coverPreparedAccessWork, type CoverVerifyContext } from '../../src/content/cover-prepared-access-work.ts';
 import { mediaEligibilityCallbacks } from '../../src/content/media-eligibility-access-work.ts';

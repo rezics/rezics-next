@@ -5,7 +5,7 @@ import { WEBSITE_CLIENT_ID, type PublicJwks } from '@rezics/auth';
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts';
 import { accessActionCatalogue, INTERNAL_ACTIONS, captureDurableInitiator } from '../../src/access/index.ts';
-import { createAuthConsentReader } from '../../src/access/auth-consent.ts';
+import { createAuthConsentReader } from '../../src/request/auth-consent.ts';
 import { DurableInitiatorUnavailableError } from '../../src/access/durable-initiator.ts';
 import { createWorkflowApprovals, WorkflowApprovalDeniedError } from '../../src/access/workflow-approvals.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';

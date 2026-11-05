@@ -3,7 +3,7 @@ import type {
   ResourceEligibilityPrepareContext,
   ResourceEligibilityVerifyContext,
 } from '../access/public-eligibility.ts';
-import { EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkProducer } from '../access/work.ts';
+import { EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkProducer } from '../work/access-work.ts';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import contextPublicExists from './context-public-exists.sql';

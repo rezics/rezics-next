@@ -2,7 +2,7 @@ import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
-import type { CurrentConsentReader } from '../access/auth-consent.ts';
+import type { CurrentConsentReader } from '../request/auth-consent.ts';
 import { createInitiatorRestorer, DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { CommandUnavailableError, runCommand } from '../command/command.ts';

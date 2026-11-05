@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
-import { deriveAccess } from '../access/derived-access.ts';
+import { deriveAccess } from '../request/derived-access.ts';
 import { createAccess } from '../access/index.ts';
 import { admitExposure, PlatformClosedError } from '../access/gates/admission.ts';
 import { withConnection } from '../database/pool.ts';

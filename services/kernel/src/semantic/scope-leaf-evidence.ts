@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Release } from '@rezics/definitions';
 import type { Source } from '@rezics/definitions/bulk';
-import { AccessWorkUnavailableError, EMPTY_ACCESS_WORK } from '../access/work.ts';
+import { AccessWorkUnavailableError, EMPTY_ACCESS_WORK } from '../work/access-work.ts';
 import { accessCheck } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { readFences } from '../content/source-fences.ts';

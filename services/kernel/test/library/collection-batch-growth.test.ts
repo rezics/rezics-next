@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { memberNeighbors } from '../../src/library/collection-store.ts';
 import { keyBetween } from '../../src/library/ordinal.ts';

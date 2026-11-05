@@ -5,7 +5,7 @@ import {
   EMPTY_ACCESS_WORK,
   type AccessWork,
   type AccessWorkAccounting,
-} from './work.ts';
+} from '../work/access-work.ts';
 import { readNativePermissionAccount } from './account-authority.ts';
 import { mintReadTime, authoritativeTimeValue } from '../command/command.ts';
 import timeRead from './permission-time.sql';
@@ -37,7 +37,7 @@ import {
   installOriginalAuthenticator,
   runOriginalAuthentication,
   type OriginalAuthenticationInvocation,
-} from './authentication-work.ts';
+} from '../request/authentication-work.ts';
 
 export type AuthenticationConfig = {
   issuer: string;

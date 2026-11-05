@@ -709,7 +709,7 @@ test('native opt-in missing immutable release and transient current source remai
   } finally {
     native.pool.query = query;
   }
-  const { deriveAccess } = await import('../../src/access/derived-access.ts');
+  const { deriveAccess } = await import('../../src/request/derived-access.ts');
   const { AccessUnavailableError } = await import('../../src/request/unavailable.ts');
   const { createSessionCommands } = await import('../../src/library/sessions.ts');
   const access = deriveAccess(native.access, {

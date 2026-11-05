@@ -1,6 +1,6 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { createAccess } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Buffer } from 'node:buffer';
 import { createHash, randomUUID } from 'node:crypto';

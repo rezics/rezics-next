@@ -4,7 +4,7 @@ import { commandAccessContext, requireCommandAdmission } from '../access/command
 import { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { deriveAccess } from '../access/derived-access.ts';
+import { deriveAccess } from '../request/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { AccessUnavailableError } from '../request/unavailable.ts';
 import {

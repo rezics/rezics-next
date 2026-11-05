@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts';
-import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
+import type { CurrentConsentReader } from '../../src/request/auth-consent.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import {
   beginCollectionSourceOutput,

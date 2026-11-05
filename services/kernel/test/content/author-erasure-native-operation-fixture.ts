@@ -3,7 +3,7 @@ import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { Pool } from 'pg';
-import { createAuthConsentReader } from '../../src/access/auth-consent.ts';
+import { createAuthConsentReader } from '../../src/request/auth-consent.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createImageJob } from '../../src/content/image-job.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';

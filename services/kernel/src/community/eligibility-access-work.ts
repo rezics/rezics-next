@@ -3,7 +3,7 @@ import type {
   ResourceEligibilityPrepareContext,
   ResourceEligibilityVerifyContext,
 } from '../access/eligibility.ts';
-import { ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, type AccessWork } from '../access/work.ts';
+import { ACCESS_WORK_AXES, EMPTY_ACCESS_WORK, type AccessWork } from '../work/access-work.ts';
 import type { Actor, Resource } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 

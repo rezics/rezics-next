@@ -16,7 +16,7 @@ import receiptRead from '../command/read-receipt.sql';
 import { deadlineClient, within } from './authenticate.ts';
 import { readAccount, type Account } from './account-data.ts';
 import type { DurableInitiatorRecord, InitiatorRestoreInput, InitiatorRestorerConfig } from './durable-initiator.ts';
-import { accessRoot } from './derived-access.ts';
+import { accessRoot } from '../request/derived-access.ts';
 
 // This bridge is deliberately separate from the expiring workflow approval
 // bridge. Neither serializable rows nor an exported captureActor port mint it.

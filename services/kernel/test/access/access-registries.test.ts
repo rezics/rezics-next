@@ -7,7 +7,7 @@ import {
   readApprovedIdentity,
 } from '../../src/access/approved-identity.ts';
 import { requireCommandAdmission, commandAccessContext } from '../../src/access/command-admission.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { restoreOperationIdentity } from '../../src/access/durable-identity.ts';
 import { authorizePlatformGate, createAccess } from '../../src/access/index.ts';
 import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';

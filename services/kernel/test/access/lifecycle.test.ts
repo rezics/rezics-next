@@ -5,7 +5,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readAccount, readPublicAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { AccessUnavailableError } from '../../src/access/index.ts';
-import { deriveAccess } from '../../src/access/derived-access.ts';
+import { deriveAccess } from '../../src/request/derived-access.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import {
