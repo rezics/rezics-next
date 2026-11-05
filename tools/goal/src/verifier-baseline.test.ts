@@ -202,12 +202,7 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
   const root = repository();
   const base = git(root, 'rev-parse', 'dev-verified');
   commit(root, 'tools/goal/src/fixture.ts', 'export const fixture = true;\n', 'add fixture source');
-  commit(
-    root,
-    'tools/goal/src/fixture.test.ts',
-    "console.log('fixture test');\n",
-    'add fixture sibling test',
-  );
+  commit(root, 'tools/goal/src/fixture.test.ts', "console.log('fixture test');\n", 'add fixture sibling test');
   commit(root, 'apps/widget/bunfig.toml', '[install]\n', 'add widget bunfig');
   commit(root, 'apps/widget/src/widget.ts', 'export const widget = true;\n', 'add widget source');
   commit(root, 'apps/widget/src/helper.ts', 'export const helper = true;\n', 'add widget helper');
@@ -215,12 +210,7 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
   commit(root, 'apps/widget/src/helper.test.ts', "console.log('helper');\n", 'add helper test');
   commit(root, 'services/worker/bunfig.toml', '[install]\n', 'add worker bunfig');
   commit(root, 'services/worker/src/worker.ts', 'export const worker = true;\n', 'add worker source');
-  const finalHead = commit(
-    root,
-    'services/worker/src/worker.test.ts',
-    "console.log('worker');\n",
-    'add worker test',
-  );
+  const finalHead = commit(root, 'services/worker/src/worker.test.ts', "console.log('worker');\n", 'add worker test');
   git(root, 'update-ref', 'refs/heads/dev', finalHead, base);
   const ctx = context(root);
   const verifierCommand = ['bun', 'run', 'scripts/typecheck.ts'];
@@ -246,11 +236,16 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
       executed.filter(({ command }) => command.at(-2) === 'test' && command.at(-1) === 'scripts/typecheck.ts'),
     ).toHaveLength(0);
     expect(
-      executed.filter(({ command }) => command.at(-2) === 'test' && command.at(-1) === 'tools/goal/src/fixture.test.ts'),
+      executed.filter(
+        ({ command }) => command.at(-2) === 'test' && command.at(-1) === 'tools/goal/src/fixture.test.ts',
+      ),
     ).toHaveLength(1);
     expect(
       executed
-        .filter(({ command }) => command.at(-3) === 'test' && command.slice(-2).join(' ') === 'src/helper.test.ts src/widget.test.ts')
+        .filter(
+          ({ command }) =>
+            command.at(-3) === 'test' && command.slice(-2).join(' ') === 'src/helper.test.ts src/widget.test.ts',
+        )
         .map(({ cwd }) => cwd.split('/').slice(-2).join('/')),
     ).toEqual(['apps/widget']);
     expect(

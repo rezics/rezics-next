@@ -30,7 +30,9 @@ export type RevisionSource = {
 export type VerifierLandings = { interval: SourceInterval; tasks: Task[] };
 
 function changedFiles(cwd: string, base: string, target: string): string[] {
-  return gitText(cwd, ['diff', '--name-only', '-z', `${base}..${target}`]).split('\0').filter(Boolean);
+  return gitText(cwd, ['diff', '--name-only', '-z', `${base}..${target}`])
+    .split('\0')
+    .filter(Boolean);
 }
 
 export function trackedFilesAt(cwd: string, commit: string): Set<string> {
