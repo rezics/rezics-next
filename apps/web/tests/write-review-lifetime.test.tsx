@@ -480,12 +480,12 @@ test('one connected review-entry preparation and chooser admits only same-prepar
   await act(async () => surface.client.setQueryData(sessionQuery.queryKey, signedIn(readerA, null)));
   await surface.clickWrite();
   await until(() => membershipCalls().length > pagesBeforeFetch, 'the fetch-control membership read');
+  const boardCallCountBeforeFetch = destinationCalls().length;
   await surface.clickRealm('Realm 1');
   const fetchObserver = new QueryObserver(surface.client, { ...sessionQuery, enabled: false });
   const stopObserver = fetchObserver.subscribe(() => undefined);
   await settle();
   stopObserver();
-  const boardCallCountBeforeFetch = destinationCalls().length;
   await until(() => destinationCalls().length > boardCallCountBeforeFetch, 'the board read before session fetch');
   const sessionGate = deferred<Session>();
   const sessionFetch = surface.client
