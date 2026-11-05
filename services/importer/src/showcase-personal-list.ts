@@ -2,8 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { KernelClient } from '@rezics/client';
 import type { ShowcaseJournal } from './showcase-publication.ts';
 
-type VndbRoute = ReturnType<KernelClient['libraryImports']['vndb']>;
-type Preview = NonNullable<Awaited<ReturnType<VndbRoute['$preview']['post']>>['data']>;
+type VndbSurface = KernelClient['libraryImports']['vndb'];
+type Preview = NonNullable<Awaited<ReturnType<VndbSurface['$preview']['post']>>['data']>;
 
 export type ShowcasePersonalListUpload =
   | { state: 'uploaded'; uploadId: string; rows: number }
@@ -33,10 +33,12 @@ export async function seedShowcasePersonalList(input: {
   const actionKey = `personal-list:vndb:upload:${digest}`;
   const sealed = input.journal.prepareAction(actionKey, { xml: input.xml }, randomUUID()) as { xml: string };
   const action = input.journal.action(actionKey)!;
+  const route = input.client.libraryImports.vndb;
+  if (typeof route !== 'function') throw new TypeError('Kernel client does not expose VNDB imports');
 
-  let response: Awaited<ReturnType<VndbRoute['$preview']['post']>>;
+  let response: Awaited<ReturnType<VndbSurface['$preview']['post']>>;
   try {
-    response = await input.client.libraryImports.vndb.$preview.post(
+    response = await route.$preview.post(
       { xml: sealed.xml },
       { headers: { 'idempotency-key': JSON.stringify(action.idempotency_key) } },
     );

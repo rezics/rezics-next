@@ -17,7 +17,7 @@ test('uploads through the generated VNDB route and resumes the exact private int
   const changedXml = xml.replace('Original', 'Changed');
   const client = createKernelClient('https://kernel.test', {
     headers: { authorization: 'Bearer ordinary-person' },
-    fetch: async (input, init) => {
+    fetch: (async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const body = await request.clone().text();
       calls.push({
@@ -28,7 +28,7 @@ test('uploads through the generated VNDB route and resumes the exact private int
       if (calls.length === 1) throw new TypeError('fetch failed');
       const source = JSON.parse(body) as { xml: string };
       return Response.json({ uploadId: source.xml === changedXml ? changedId : firstId, rows: 2, limits: {} });
-    },
+    }) as typeof globalThis.fetch,
   });
 
   try {
