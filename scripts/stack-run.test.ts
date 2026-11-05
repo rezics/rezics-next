@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { onCheckHost, runOnCheckHost } from './stack-run.ts';
+import { LOCAL_CONTAINER_REFUSAL, onCheckHost, runOnCheckHost, workerLocalContainerError } from './stack-run.ts';
 import {
   REMOTE_TRANSPORT_FAILURE,
   ROOT,
@@ -22,6 +22,7 @@ import {
 } from './remote-check.ts';
 import { runWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
+import { walkStackLimit, walkStackNames } from './walk-stack.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const stackRun = join(repository, 'scripts/stack-run.ts');
@@ -233,6 +234,31 @@ appendFileSync(process.env.FAKE_DIR + '/log.jsonl', JSON.stringify({ kind: 'dock
 process.exit(99);
 `;
 
+// A stateful docker: containers and volumes persist in one file, so a walk stack's teardown is observable without a daemon.
+const walkDocker = `#!/usr/bin/env bun
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+const dir = process.env.FAKE_DIR!;
+const args = process.argv.slice(2);
+appendFileSync(dir + '/docker.log', JSON.stringify(args) + '\\n');
+const stateFile = dir + '/docker-state.json';
+const state = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, 'utf8')) : { containers: [], volumes: [] };
+const save = () => writeFileSync(stateFile, JSON.stringify(state));
+const add = (list, name) => { if (!list.includes(name)) list.push(name); };
+const at = args.indexOf('--filter');
+const wanted = at < 0 ? undefined : args[at + 1].slice('name=^'.length, -1);
+const listed = (kind) => state[kind].filter((name) => wanted === undefined || name === wanted);
+const print = (names) => process.stdout.write(names.map((name) => name + '\\n').join(''));
+if (args[0] === 'ps') print(listed('containers'));
+else if (args[0] === 'volume' && args[1] === 'ls') print(listed('volumes'));
+else if (args[0] === 'volume' && args[1] === 'create') { add(state.volumes, args[2]); save(); }
+else if (args[0] === 'volume' && args[1] === 'rm') { state.volumes = state.volumes.filter((name) => name !== args[2]); save(); }
+else if (args[0] === 'run') {
+  add(state.containers, args[args.indexOf('--name') + 1]);
+  args.forEach((argument, index) => { if (args[index - 1] === '-v') add(state.volumes, argument.split(':')[0]); });
+  save();
+} else if (args[0] === 'rm') { state.containers = state.containers.filter((name) => name !== args.at(-1)); save(); }
+`;
+
 function nodeFixture(source: string): string {
   // Keep fake SSH and rsync startup cheap while these fixtures exercise remote placement.
   const javascript = new Bun.Transpiler({ loader: 'ts', target: 'node' })
@@ -285,6 +311,9 @@ beforeAll(() => {
     writeFileSync(file, nodeFixture(source));
     chmodSync(file, 0o755);
   }
+  mkdirSync(join(root, 'walk-bin'));
+  writeFileSync(join(root, 'walk-bin', 'docker'), nodeFixture(walkDocker));
+  chmodSync(join(root, 'walk-bin', 'docker'), 0o755);
 });
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -1082,4 +1111,164 @@ test('Kernel tree profile and mixed schema travel through real stack placement a
     expect(placements).toBe(1);
     expect(physical.events()).toEqual([]);
   }
+});
+
+type WalkFixture = { dir: string; lease: string; env: Record<string, string> };
+
+function walkFixture(extra: Record<string, string> = {}): WalkFixture {
+  const dir = join(root, `walk-${counter++}`);
+  mkdirSync(dir);
+  const env: Record<string, string> = { ...(process.env as Record<string, string>) };
+  for (const name of [
+    'GOAL_TASK_ID',
+    'GOAL_ACCEPTANCE_REQUIRES',
+    'GOAL_CHECK_WAIT_FILE',
+    'REZICS_WALK_STACKS',
+    'REZICS_WALK_STACK_SLOT',
+    'REZICS_STACK_LEASE',
+    'REZICS_STACK_SLOT',
+  ])
+    delete env[name];
+  const lease = join(dir, 'lease');
+  return {
+    dir,
+    lease,
+    env: { ...env, PATH: `${join(root, 'walk-bin')}:${process.env.PATH}`, FAKE_DIR: dir, REZICS_WALK_STACK_DIR: lease, ...extra },
+  };
+}
+
+/** A walk worker's dev-stack run; its stderr is a file, so a test can wait for a visible queue position. */
+function spawnWalk(fixture: WalkFixture, task: string, command: string[]) {
+  const stderr = join(fixture.dir, `${task}.stderr`);
+  const child = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'walk', '--', ...command], {
+    cwd: repository,
+    env: { ...fixture.env, GOAL_TASK_ID: task, GOAL_ACCEPTANCE_REQUIRES: 'native' },
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: Bun.file(stderr),
+  });
+  return { child, stderr: () => (existsSync(stderr) ? readFileSync(stderr, 'utf8') : '') };
+}
+
+async function until(condition: () => boolean, detail: () => string): Promise<void> {
+  const deadline = Date.now() + 20_000;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting: ${detail()}`);
+    await Bun.sleep(20);
+  }
+}
+
+function dockerCalls(fixture: WalkFixture): string[][] {
+  const file = join(fixture.dir, 'docker.log');
+  return existsSync(file)
+    ? readFileSync(file, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as string[])
+    : [];
+}
+
+const dockerRan = (fixture: WalkFixture, name: string) =>
+  dockerCalls(fixture).some((args) => args[0] === 'run' && args.includes(name));
+
+function dockerState(fixture: WalkFixture): { containers: string[]; volumes: string[] } {
+  const file = join(fixture.dir, 'docker-state.json');
+  return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { containers: string[]; volumes: string[] }) : { containers: [], volumes: [] };
+}
+
+/** Holds host walk slots exactly as the stack-lease queue does, until the returned release is called. */
+async function holdSlots(lease: string, indexes: number[]): Promise<() => Promise<void>> {
+  mkdirSync(lease, { recursive: true });
+  const holders: { stdin: { end(): unknown }; exited: Promise<number> }[] = [];
+  for (const index of indexes) {
+    const holder = Bun.spawn(
+      ['flock', '--no-fork', join(lease, `slot-${index}.lock`), 'sh', '-c', 'echo LOCKED; exec cat >/dev/null'],
+      { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' },
+    );
+    await holder.stdout.getReader().read();
+    holders.push(holder);
+  }
+  return async () => {
+    for (const holder of holders) {
+      holder.stdin.end();
+      await holder.exited;
+    }
+  };
+}
+
+test('a walk worker starts its task-scoped stack through dev-stack, and its containers and volumes are removed when the attempt ends', async () => {
+  const fixture = walkFixture();
+  const walker = spawnWalk(fixture, 'walk-one', ['sleep', '60']);
+  const database = 'rezics-walk-walk-one-database';
+  await until(() => dockerRan(fixture, database), () => walker.stderr());
+  expect(dockerCalls(fixture).find((args) => args[0] === 'run')).toEqual(
+    expect.arrayContaining(['--name', database, '-p', '127.0.0.1:20014:5432', '-v', `${database}:/var/lib/postgresql`]),
+  );
+  expect(dockerState(fixture)).toEqual({ containers: [database], volumes: [database] });
+  walker.child.kill('SIGTERM');
+  expect(await walker.child.exited).toBe(143);
+  expect(dockerState(fixture)).toEqual({ containers: [], volumes: [] });
+  expect(dockerCalls(fixture)).toEqual(expect.arrayContaining([['rm', '-f', '-v', database], ['volume', 'rm', database]]));
+  expect(walker.stderr()).toContain('stack-lease: walk walk-one slot 1/6');
+  expect(spawnSync('flock', ['-n', join(fixture.lease, 'slot-1.lock'), 'true']).status).toBe(0);
+}, 60_000);
+
+test('walk stacks past the host policy wait in arrival order, each with its position shown', async () => {
+  const fixture = walkFixture({ REZICS_WALK_STACKS: '1' });
+  const release = await holdSlots(fixture.lease, [1]);
+  const first = spawnWalk(fixture, 'walk-first', ['true']);
+  await until(() => first.stderr().includes('walk walk-first waiting (1/1 held, 0 ahead)'), () => first.stderr());
+  const second = spawnWalk(fixture, 'walk-second', ['true']);
+  await until(() => second.stderr().includes('walk walk-second waiting (1/1 held, 1 ahead)'), () => second.stderr());
+  await release();
+  await until(() => dockerRan(fixture, 'rezics-walk-walk-first-database'), () => first.stderr());
+  expect(dockerRan(fixture, 'rezics-walk-walk-second-database')).toBe(false);
+  first.child.kill('SIGTERM');
+  await first.child.exited;
+  await until(() => dockerRan(fixture, 'rezics-walk-walk-second-database'), () => second.stderr());
+  second.child.kill('SIGTERM');
+  await second.child.exited;
+  expect(dockerState(fixture)).toEqual({ containers: [], volumes: [] });
+}, 60_000);
+
+test('six walk stacks run by default, a seventh start waits behind them, and the policy is bounded', async () => {
+  const fixture = walkFixture();
+  const release = await holdSlots(fixture.lease, [1, 2, 3, 4, 5]);
+  const sixth = spawnWalk(fixture, 'walk-sixth', ['sleep', '60']);
+  await until(() => dockerRan(fixture, 'rezics-walk-walk-sixth-database'), () => sixth.stderr());
+  expect(dockerCalls(fixture).find((args) => args[0] === 'run')).toEqual(expect.arrayContaining(['-p', '127.0.0.1:20064:5432']));
+  const seventh = spawnWalk(fixture, 'walk-seventh', ['true']);
+  await until(() => seventh.stderr().includes('walk walk-seventh waiting (6/6 held, 0 ahead)'), () => seventh.stderr());
+  expect(dockerRan(fixture, 'rezics-walk-walk-seventh-database')).toBe(false);
+  sixth.child.kill('SIGTERM');
+  await sixth.child.exited;
+  await until(() => dockerRan(fixture, 'rezics-walk-walk-seventh-database'), () => seventh.stderr());
+  seventh.child.kill('SIGTERM');
+  await seventh.child.exited;
+  await release();
+  expect(walkStackLimit({})).toBe(6);
+  expect(() => walkStackLimit({ REZICS_WALK_STACKS: '1001' })).toThrow('REZICS_WALK_STACKS must be an integer from 1 to 1000');
+}, 90_000);
+
+test('a local stack container needs a worker whose brief lists native or browser and a slot lock its launch holds', async () => {
+  const dir = join(root, `walk-gate-${counter++}`);
+  mkdirSync(dir);
+  const worker = { GOAL_TASK_ID: 'walk-gate', REZICS_WALK_STACK_DIR: dir };
+  const allowed = (environment: Record<string, string>) => workerLocalContainerError(environment, repository);
+  expect(await allowed(worker)).toBe(LOCAL_CONTAINER_REFUSAL);
+  expect(await allowed({ ...worker, GOAL_ACCEPTANCE_REQUIRES: 'root', REZICS_WALK_STACK_SLOT: '1' })).toBe(
+    LOCAL_CONTAINER_REFUSAL,
+  );
+  // A named slot that no launch holds proves nothing.
+  expect(await allowed({ ...worker, GOAL_ACCEPTANCE_REQUIRES: 'native', REZICS_WALK_STACK_SLOT: '1' })).toBe(
+    LOCAL_CONTAINER_REFUSAL,
+  );
+  const release = await holdSlots(dir, [1]);
+  expect(await allowed({ ...worker, GOAL_ACCEPTANCE_REQUIRES: 'browser', REZICS_WALK_STACK_SLOT: '1' })).toBeNull();
+  expect(await allowed({ ...worker, GOAL_ACCEPTANCE_REQUIRES: 'browser', REZICS_WALK_STACK_SLOT: '2' })).toBe(
+    LOCAL_CONTAINER_REFUSAL,
+  );
+  await release();
+  expect(await workerLocalContainerError({ REZICS_WALK_STACK_DIR: dir }, repository)).toBeNull();
+  expect(() => walkStackNames('not a name')).toThrow('GOAL_TASK_ID cannot name a walk stack');
 });
