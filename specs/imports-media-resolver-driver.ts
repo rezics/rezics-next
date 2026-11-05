@@ -1,7 +1,8 @@
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Owner, RecordBindings } from '../services/importer/src/record-bindings.ts';
 
-export const INVALID_MEDIA_RESOLVER_DRIVER = 'IMPORT_MEDIA_RESOLVER_DRIVER must name a module exporting createMediaResolver';
+export const INVALID_MEDIA_RESOLVER_DRIVER =
+  'IMPORT_MEDIA_RESOLVER_DRIVER must name a module exporting createMediaResolver';
 
 /** Ordinary public JSON operations, with HTTP status preserved for validation. */
 export interface MediaFencePort {
@@ -75,9 +76,10 @@ export type CreateMediaResolver = (options: MediaResolverOptions) => MediaResolv
  */
 export async function loadMediaResolver(suppliedPath?: string): Promise<CreateMediaResolver> {
   const configuredPath = suppliedPath ?? process.env.IMPORT_MEDIA_RESOLVER_DRIVER;
-  const path = configuredPath === undefined
-    ? new URL('../services/importer/tests/media-resolver-driver.ts', import.meta.url).href
-    : configuredPath;
+  const path =
+    configuredPath === undefined
+      ? new URL('../services/importer/tests/media-resolver-driver.ts', import.meta.url).href
+      : configuredPath;
   if (!path) throw new Error(INVALID_MEDIA_RESOLVER_DRIVER);
   const binding: unknown = await import(path);
   if (
