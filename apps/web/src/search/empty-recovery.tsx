@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { localizedLabel } from './results.tsx';
 import { discoverySearchHref, type SearchLoaderDeps } from './search-params';
+import { QueryTextRecovery } from './query-text-recovery';
 import type { EmptyRecovery } from './discovery';
 
 type Labels = Pick<SearchPageDataLike, 'typeLabels' | 'typeChoices' | 'selectedFacetLabels' | 'groups'>;
@@ -16,6 +17,12 @@ type SearchPageDataLike = {
 };
 type Action = EmptyRecovery['actions'][number];
 type ActionLink = { key: string; label: string; href: string };
+type RecoveryOwner = { key: string; observation: object; recovery: EmptyRecovery };
+type RecoveryVisit = { owner: RecoveryOwner; revision: number; retrying: boolean };
+
+function sameOwner(left: RecoveryOwner, right: RecoveryOwner): boolean {
+  return left.key === right.key && left.observation === right.observation && left.recovery === right.recovery;
+}
 
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -31,6 +38,7 @@ export function emptyRecoveryActionLinks(
   state: SearchLoaderDeps,
   actions: readonly Action[],
   labels: Labels,
+  queryTarget = 'empty-recovery-query',
 ): ActionLink[] {
   const options = messageOptions(locale);
   const firstPage = { ...state, cursor: undefined };
@@ -43,7 +51,7 @@ export function emptyRecoveryActionLinks(
       result.push({
         key: action.kind,
         label: m.search_empty_edit_phrase({}, options),
-        href: focused(discoverySearchHref(locale, firstPage), 'empty-recovery-query'),
+        href: focused(discoverySearchHref(locale, firstPage), queryTarget),
       });
       continue;
     }
@@ -106,51 +114,89 @@ export function EmptySearchRecovery({
   state,
   locale,
   labels,
+  ownerKey,
+  observation,
+  onNavigate,
   onRetry,
+  retryRef,
+  onRetryFocus,
 }: {
   recovery: EmptyRecovery;
   state: SearchLoaderDeps;
   locale: string;
   labels: Labels;
-  onRetry?: (() => void) | undefined;
+  ownerKey?: string | undefined;
+  observation?: object | undefined;
+  onNavigate?: ((href: string) => void) | undefined;
+  onRetry?: (() => PromiseLike<unknown> | void) | undefined;
+  retryRef?: { current: HTMLButtonElement | null } | undefined;
+  onRetryFocus?: ((source: HTMLButtonElement) => void) | undefined;
 }) {
   const options = messageOptions(locale);
-  const [query, setQuery] = useState(state.query);
-  const actions = emptyRecoveryActionLinks(locale, state, recovery.actions, labels);
+  const ids = useId().replaceAll(':', '');
+  const queryId = `empty-recovery-query-${ids}`;
+  const headingId = `search-empty-recovery-title-${ids}`;
+  const currentOwner: RecoveryOwner = {
+    key: ownerKey ?? JSON.stringify([locale, state]),
+    observation: observation ?? recovery,
+    recovery,
+  };
+  const [visit, setVisit] = useState<RecoveryVisit>(() => ({ owner: currentOwner, revision: 0, retrying: false }));
+  const retryLock = useRef<{ owner: RecoveryOwner; active: boolean }>({ owner: currentOwner, active: false });
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  if (!sameOwner(visit.owner, currentOwner)) {
+    retryLock.current = { owner: currentOwner, active: false };
+    setVisit({ owner: currentOwner, revision: visit.revision + 1, retrying: false });
+  }
+  const currentVisit = sameOwner(visit.owner, currentOwner)
+    ? visit
+    : { owner: currentOwner, revision: visit.revision + 1, retrying: false };
+  const actions = emptyRecoveryActionLinks(locale, state, recovery.actions, labels, queryId);
   const suggestions = recovery.alternatives.map((alternative) => ({
     ...alternative,
     href: emptyRecoveryAlternativeHref(locale, state, alternative.query),
   }));
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    window.location.assign(discoverySearchHref(locale, { ...state, query, cursor: undefined }));
+  function retry() {
+    const owner = retryLock.current.owner;
+    if (!onRetry || retryLock.current.active) return;
+    retryLock.current.active = true;
+    setVisit((previous) => (sameOwner(previous.owner, owner) ? { ...previous, retrying: true } : previous));
+    const completion = onRetry();
+    if (completion !== undefined)
+      void Promise.resolve(completion).finally(() => {
+        if (!mounted.current || !sameOwner(retryLock.current.owner, owner) || !retryLock.current.active) return;
+        retryLock.current.active = false;
+        setVisit((previous) => (sameOwner(previous.owner, owner) ? { ...previous, retrying: false } : previous));
+      });
   }
 
   return (
-    <section aria-labelledby="search-empty-recovery-title" className="mt-4">
+    <section aria-labelledby={headingId} className="mt-4">
       <Empty className="border" role="status">
         <EmptyHeader>
-          <EmptyTitle id="search-empty-recovery-title" className="text-base font-medium">
+          <EmptyTitle id={headingId} className="text-base font-medium">
             {m.search_empty_recovery_heading({}, options)}
           </EmptyTitle>
           <EmptyDescription>{m.search_empty_recovery_help({}, options)}</EmptyDescription>
         </EmptyHeader>
         {actions.some((action) => action.key === 'edit-query') ? (
-          <form className="flex w-full flex-wrap gap-2" onSubmit={submit}>
-            <label className="sr-only" htmlFor="empty-recovery-query">
-              {m.search_empty_edit_phrase({}, options)}
-            </label>
-            <input
-              id="empty-recovery-query"
-              className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-            />
-            <Button type="submit" size="sm">
-              {m.search_empty_search({}, options)}
-            </Button>
-          </form>
+          <QueryTextRecovery
+            key={currentVisit.revision}
+            value={state.query}
+            locale={locale}
+            control="search"
+            controlId={queryId}
+            compact
+            label={m.search_empty_edit_phrase({}, options)}
+            applyLabel={m.search_empty_search({}, options)}
+            onApply={(query) => onNavigate?.(emptyRecoveryAlternativeHref(locale, state, query))}
+          />
         ) : null}
         {actions.some((action) => action.key !== 'edit-query') ? (
           <ul aria-label={m.search_empty_remove_actions({}, options)} className="flex w-full flex-wrap gap-2">
@@ -188,7 +234,17 @@ export function EmptySearchRecovery({
           <p className="w-full text-sm text-muted-foreground">{m.search_empty_no_alternatives({}, options)}</p>
         )}
         {recovery.status !== 'ready' && onRetry ? (
-          <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+          <Button
+            ref={retryRef}
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={currentVisit.retrying}
+            onClick={(event) => {
+              onRetryFocus?.(event.currentTarget);
+              retry();
+            }}
+          >
             {m.search_facet_retry({}, options)}
           </Button>
         ) : null}

@@ -34,19 +34,31 @@ export function QueryTextRecovery({
   diagnostic,
   locale = 'en',
   retryAt,
+  control = 'textarea',
+  controlId,
+  compact = false,
+  label,
+  applyLabel,
   onApply,
 }: {
   value: string;
   diagnostic?: TextDiagnostic | undefined;
   locale?: string | undefined;
   retryAt?: number | undefined;
+  control?: 'search' | 'textarea';
+  controlId?: string | undefined;
+  compact?: boolean;
+  label?: string | undefined;
+  applyLabel?: string | undefined;
   onApply: (value: string) => void;
 }) {
   const options: Options = { locale: locales.find((tag) => tag === locale) ?? 'en' };
   const id = useId();
+  const inputId = controlId ?? `${id}-input`;
   const [draft, setDraft] = useState(value);
   const [failure, setFailure] = useState(diagnostic ? { query: value, diagnostic } : undefined);
-  const input = useRef<HTMLTextAreaElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
   const currentDraft = useRef(draft);
   currentDraft.current = draft;
   const frame = useRef<number | undefined>(undefined);
@@ -59,12 +71,16 @@ export function QueryTextRecovery({
   );
   const issue = failure?.query === draft ? failure.diagnostic : undefined;
   return (
-    <section className="space-y-4 rounded-xl border p-4" aria-labelledby={`${id}-title`} data-query-text-recovery>
-      <h2 id={`${id}-title`} className="font-medium">
+    <section
+      className={compact ? 'w-full space-y-2' : 'space-y-4 rounded-xl border p-4'}
+      aria-labelledby={`${id}-title`}
+      data-query-text-recovery
+    >
+      <h2 id={`${id}-title`} className={compact ? 'sr-only' : 'font-medium'}>
         {m.search_input_recovery_title({}, options)}
       </h2>
       <form
-        className="space-y-3"
+        className={compact ? 'flex w-full flex-wrap items-start gap-2' : 'space-y-3'}
         onSubmit={(event) => {
           event.preventDefault();
           if (waiting) return;
@@ -84,38 +100,59 @@ export function QueryTextRecovery({
             frame.current = undefined;
             if (currentDraft.current !== submitted || !form.isConnected || form.ownerDocument.activeElement !== source)
               return;
-            input.current?.focus();
-            input.current?.setSelectionRange(next.start, next.end);
+            const control = input.current ?? textarea.current;
+            control?.focus();
+            control?.setSelectionRange(next.start, next.end);
           });
         }}
       >
-        <label htmlFor={`${id}-input`} className="block text-sm font-medium">
-          {m.search_text_label({}, options)}
+        <label htmlFor={inputId} className={compact ? 'sr-only' : 'block text-sm font-medium'}>
+          {label ?? m.search_text_label({}, options)}
         </label>
-        <textarea
-          ref={input}
-          id={`${id}-input`}
-          value={draft}
-          autoCapitalize="off"
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-          aria-invalid={issue ? true : undefined}
-          aria-describedby={`${id}-help${issue ? ` ${id}-error` : ''}`}
-          className="min-h-32 w-full rounded-md border bg-background p-3 text-foreground"
-          onChange={(event) => {
-            if (frame.current !== undefined) cancelAnimationFrame(frame.current);
-            frame.current = undefined;
-            setDraft(event.currentTarget.value);
-          }}
-        />
+        {control === 'search' ? (
+          <input
+            ref={input}
+            id={inputId}
+            className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            type="search"
+            value={draft}
+            autoCapitalize="off"
+            autoComplete="off"
+            autoCorrect="off"
+            aria-invalid={issue ? true : undefined}
+            aria-describedby={`${id}-help${issue ? ` ${id}-error` : ''}`}
+            onChange={(event) => {
+              if (frame.current !== undefined) cancelAnimationFrame(frame.current);
+              frame.current = undefined;
+              setDraft(event.currentTarget.value);
+            }}
+          />
+        ) : (
+          <textarea
+            ref={textarea}
+            id={inputId}
+            value={draft}
+            autoCapitalize="off"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={issue ? true : undefined}
+            aria-describedby={`${id}-help${issue ? ` ${id}-error` : ''}`}
+            className="min-h-32 w-full rounded-md border bg-background p-3 text-foreground"
+            onChange={(event) => {
+              if (frame.current !== undefined) cancelAnimationFrame(frame.current);
+              frame.current = undefined;
+              setDraft(event.currentTarget.value);
+            }}
+          />
+        )}
         {issue && (
           <p id={`${id}-error`} role="alert" className="text-sm">
             {queryTextDiagnosis(issue, options)}{' '}
             {m.search_text_position({ position: issue.codePointStart + 1 }, options)}
           </p>
         )}
-        <p id={`${id}-help`} className="text-sm text-muted-foreground">
+        <p id={`${id}-help`} className={compact ? 'w-full text-sm text-muted-foreground' : 'text-sm text-muted-foreground'}>
           {m.search_text_grammar({}, options)}
         </p>
         <button
@@ -123,7 +160,7 @@ export function QueryTextRecovery({
           disabled={waiting}
           className="rounded-md bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
         >
-          {m.search_input_recovery_apply({}, options)}
+          {applyLabel ?? m.search_input_recovery_apply({}, options)}
         </button>
         {waiting && (
           <p role="status" className="text-sm">

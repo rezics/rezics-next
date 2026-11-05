@@ -25,6 +25,8 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 ## Scope
 
+Decision: Empty Search recovery drafts bind to the executed request, reader, locale, checkpoint and native page response; valid text uses shared query admission, and explicit retry focuses only the still-current result owner after settlement.
+
 Second-scope Space discovery uses the Content producer's complete native keyset pages and anonymous current summaries; the Space UUID is the sole hit identity, a public attached Realm only enriches it, and absent or invalid coverage remains readiness.
 
 Includes the public index tier, admitted catalogue plans and preparation, presentation profiles, compositions and
