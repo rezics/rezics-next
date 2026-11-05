@@ -75,6 +75,7 @@ let stack: Bun.Subprocess | undefined;
 let stackDescriptor: number | undefined;
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 try {
+  await command('reviewed-catalogue-test', ['bun', 'test', 'services/importer/tests/reviewed-catalogue-preflight.test.ts']);
   await command('database', ['bun', 'run', '--cwd', 'services/kernel', 'db', 'up']);
   await command('search', ['bun', 'run', '--cwd', 'services/kernel', 'search', 'up']);
   const kernelEnvFile = resolve(root, 'services/kernel/.env');
