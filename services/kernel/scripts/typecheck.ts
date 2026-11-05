@@ -143,9 +143,8 @@ function reyloAnalysisIdentity(repository: string, workspace: string): string {
     ['typescript/package.json', join(repository, 'node_modules/typescript/package.json')],
     ['reylo/package.json', join(workspace, 'node_modules/reylo/package.json')],
     ['reylo/src/cli.js', join(workspace, 'node_modules/reylo/src/cli.js')],
-    ['postgres-engine/package.json', join(workspace, 'node_modules/@reylosql/postgres/package.json')],
-    ['postgres-engine/tooling.js', join(workspace, 'node_modules/@reylosql/postgres/tooling.js')],
-    ['postgres-engine/engine.wasm', join(workspace, 'node_modules/@reylosql/postgres/engine.wasm')],
+    ['reylo/src/engine.js', join(workspace, 'node_modules/reylo/src/engine.js')],
+    ['reylo/src/native.js', join(workspace, 'node_modules/reylo/src/native.js')],
   ];
   for (const [name, path] of inputs) {
     hash.update(name).update('\0').update(readFileSync(path)).update('\0');

@@ -152,7 +152,7 @@
         "jose": "6.2.14",
         "openapi-types": "12.1.3",
         "pg": "8.23.1",
-        "reylo": "0.6.0",
+        "reylo": "0.7.0",
         "typebox": "1.4.3",
       },
       "devDependencies": {
@@ -318,7 +318,7 @@
       "devDependencies": {
         "@types/pg": "8.23.1",
         "dbmate": "2.37.0",
-        "reylo": "0.6.0",
+        "reylo": "0.7.0",
       },
     },
     "services/importer": {
@@ -339,7 +339,6 @@
       "dependencies": {
         "@dbos-inc/dbos-sdk": "5.5.3-preview",
         "@elysia/openapi": "2.0.0-rc.0",
-        "@reylosql/postgres": "0.6.0",
         "@rezics/access": "workspace:*",
         "@rezics/auth": "workspace:*",
         "@rezics/auth-contract": "workspace:*",
@@ -361,7 +360,7 @@
         "jose": "6.2.14",
         "openapi-types": "12.1.3",
         "pg": "8.23.1",
-        "reylo": "0.6.0",
+        "reylo": "0.7.0",
         "sharp": "0.35.5",
         "spdx-license-ids": "3.0.24",
         "stripe": "23.1.0",
@@ -1064,7 +1063,21 @@
 
     "@resvg/resvg-wasm": ["@resvg/resvg-wasm@2.6.2", "", {}, "sha512-FqALmHI8D4o6lk/LRWDnhw95z5eO+eAa6ORjVg09YRR7BkcM6oPHU9uyC0gtQG5vpFLvgpeU4+zEAz2H8APHNw=="],
 
-    "@reylosql/postgres": ["@reylosql/postgres@0.6.0", "", {}, "sha512-Y4BV7iloJapUvsUs6kCEmU4TVB7qPBuAECzW7yLjMByhDHmsH9lS/oyNZ0UfZp36AghXQfzdv7C71S0BKM5D0Q=="],
+    "@reylosql/engine-darwin-arm64": ["@reylosql/engine-darwin-arm64@0.7.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Mjnzrd88NwpUCgPhinx2Dl3NcpDQ/O7n/5Vzpc+Z3SXQ+6UDuyu2pX5/Iy3EyIs7GcvbGH71EGRn05drY9iqGg=="],
+
+    "@reylosql/engine-darwin-x64": ["@reylosql/engine-darwin-x64@0.7.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-KViE7mnDL/a9n/0OuwKoktk0Nfs9sr/8kXQBHrq9cNdoBSeeuJ/dMTcokqo4+epXvMd4Q/5ywfn0IAs9YB4rAA=="],
+
+    "@reylosql/engine-linux-arm64": ["@reylosql/engine-linux-arm64@0.7.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-fy37HBeaGeKffODQRo9ZGE6ZHW4xfSm3XIskYbbuuFVHYrr7loGiLQts1NrVoZR39mnr7nMCl7NSP85pE0toEw=="],
+
+    "@reylosql/engine-linux-arm64-musl": ["@reylosql/engine-linux-arm64-musl@0.7.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-hgfGCZiK0sQJCj/ghjCqh1jYfNEv2PE7h5ajZkqnjZof0WrXE0uYhyz0HK9thL3jXC5Bc/B+wAUqqE93900rmA=="],
+
+    "@reylosql/engine-linux-x64": ["@reylosql/engine-linux-x64@0.7.0", "", { "os": "linux", "cpu": "x64" }, "sha512-blWEtAY/JAmHKNoDLlzjaLqfmBFQIv5jU7fe/YfzrFfmqZ0zq/Fp4Zzew6vrloxRcISrLTlHFbqBe/VrHr3+6A=="],
+
+    "@reylosql/engine-linux-x64-musl": ["@reylosql/engine-linux-x64-musl@0.7.0", "", { "os": "linux", "cpu": "x64" }, "sha512-rTi5jo69dvvKX7KYz6mScVrB0T3nDdeQOEBsvsFUxjWGk7pon21Ii5ZxcYZZwnp7BrNpHHANMrElrS+PFGhnVA=="],
+
+    "@reylosql/engine-win32-arm64": ["@reylosql/engine-win32-arm64@0.7.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-MQTBJ0XDip1yYrbMztdaw15wvak8LxMCewBulB9xNnAV6jt9m8Io9ftwwkRlCmMG+J+8EfAJEZpmAWVz5h4NDA=="],
+
+    "@reylosql/engine-win32-x64": ["@reylosql/engine-win32-x64@0.7.0", "", { "os": "win32", "cpu": "x64" }, "sha512-xwUlkMgHO/v0PrBLGb0RUrHXi0HroL4oge42nZxL1l6SMRJmlFNkqz6y6zHqjaWRug5A9mymhf9QtBlEZOjz1w=="],
 
     "@rezics/access": ["@rezics/access@workspace:packages/access"],
 
@@ -2210,7 +2223,7 @@
 
     "reusify": ["reusify@1.1.0", "", {}, "sha512-g6QUff04oZpHs0eG5p83rFLhHeV00ug/Yf9nZM6fLeUrPguBTkTQOdpAWWspMh55TZfVQDPaN3NQJfbVRAxdIw=="],
 
-    "reylo": ["reylo@0.6.0", "", { "peerDependencies": { "@reylosql/mysql": "0.6.0", "@reylosql/postgres": "0.6.0", "@reylosql/sqlite": "0.6.0", "slonik": ">=49.12.0" }, "optionalPeers": ["@reylosql/mysql", "@reylosql/postgres", "@reylosql/sqlite", "slonik"], "bin": { "reylo": "src/cli.js" } }, "sha512-Njt2l+11XWivq+wcfq0NMz5Y5tQoePmv3U5fD/wC95KjGPS1EY6UEx0/js5zhn+ayNiF4Q1Xelixx2iIbh5Ywg=="],
+    "reylo": ["reylo@0.7.0", "", { "optionalDependencies": { "@reylosql/engine-darwin-arm64": "0.7.0", "@reylosql/engine-darwin-x64": "0.7.0", "@reylosql/engine-linux-arm64": "0.7.0", "@reylosql/engine-linux-arm64-musl": "0.7.0", "@reylosql/engine-linux-x64": "0.7.0", "@reylosql/engine-linux-x64-musl": "0.7.0", "@reylosql/engine-win32-arm64": "0.7.0", "@reylosql/engine-win32-x64": "0.7.0" }, "peerDependencies": { "slonik": ">=49.12.0" }, "optionalPeers": ["slonik"], "bin": { "reylo": "src/cli.js" } }, "sha512-h2w3l24KVs+VnKdw2fPeq5GvJirTKrtz5Vy0Ngt+JvHGQ+gwG7fEF/0vr7l5Hmw9PSIK3tL+FyPo0Kma7n41bg=="],
 
     "rolldown": ["rolldown@1.2.15", "", { "dependencies": { "@oxc-project/types": "=0.155.0", "@rolldown/pluginutils": "^1.0.0" }, "optionalDependencies": { "@rolldown/binding-android-arm-eabi": "1.2.15", "@rolldown/binding-android-arm64": "1.2.15", "@rolldown/binding-darwin-arm64": "1.2.15", "@rolldown/binding-darwin-x64": "1.2.15", "@rolldown/binding-freebsd-x64": "1.2.15", "@rolldown/binding-linux-arm-gnueabihf": "1.2.15", "@rolldown/binding-linux-arm64-gnu": "1.2.15", "@rolldown/binding-linux-arm64-musl": "1.2.15", "@rolldown/binding-linux-ppc64-gnu": "1.2.15", "@rolldown/binding-linux-s390x-gnu": "1.2.15", "@rolldown/binding-linux-x64-gnu": "1.2.15", "@rolldown/binding-linux-x64-musl": "1.2.15", "@rolldown/binding-openharmony-arm64": "1.2.15", "@rolldown/binding-win32-arm64-msvc": "1.2.15", "@rolldown/binding-win32-x64-msvc": "1.2.15" }, "bin": { "rolldown": "./bin/cli.mjs" } }, "sha512-6odND+fel5zVw3I4Yc2e69gvguDnX0CAAGiNDZSq4ik5WUcaLrkD2GLuog0XcODbor31hZ5ayEMgVDno+KPV5g=="],
 
