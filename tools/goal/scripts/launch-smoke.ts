@@ -43,7 +43,12 @@ import {
   type SmokeReport,
 } from './launch-smoke-evidence.ts';
 
-export { observeSmokeAdapter, requireSmokeWaitingCheckId, smokeRunSuffix, type SmokeLaunchEvidence } from './launch-smoke-evidence.ts';
+export {
+  observeSmokeAdapter,
+  requireSmokeWaitingCheckId,
+  smokeRunSuffix,
+  type SmokeLaunchEvidence,
+} from './launch-smoke-evidence.ts';
 export { parseProviderObject, resolveSmokeReportPath, saveSmokeEvidence };
 
 export type SmokeOptions = {
@@ -56,8 +61,6 @@ export type SmokeOptions = {
   scriptsRoot?: string;
   policy?: ControlPolicy;
 };
-
-
 
 export const SMOKE_ACCEPTANCE_COMMAND = [
   process.execPath,
@@ -659,8 +662,7 @@ export async function main(runSmoke?: () => Promise<void>, policyOverride?: Cont
     if (process.argv.includes('--inner')) {
       const { runInnerSmoke } = await import('./launch-smoke-scenarios.ts');
       await runInnerSmoke(reportLine, launchSmokeBrief);
-    }
-    else if (runSmoke) await runSmoke();
+    } else if (runSmoke) await runSmoke();
     else await runLaunchSmoke(undefined, { ...parseSmokeArguments(process.argv.slice(2)), policy: startupPolicy });
     return 0;
   } catch (error) {

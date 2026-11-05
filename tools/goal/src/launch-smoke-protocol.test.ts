@@ -77,7 +77,6 @@ test('provider result extraction reads the strict JSON from a Codex agent_messag
   expect(parseWorkerResult(parseProviderObject(events.join('\n'), 'waiting'), 'waiting', checkId)).toEqual(waiting);
 });
 
-
 test('entry helpers stay inert and inner execution uses the candidate launch-smoke entry', async () => {
   mkdirSync(join(root, '.temp'), { recursive: true });
   const directory = mkdtempSync(join(root, '.temp/launch-smoke-entry-'));
@@ -102,9 +101,11 @@ test('entry helpers stay inert and inner execution uses the candidate launch-smo
     mkdirSync(dirname(candidateEntry), { recursive: true });
     writeFileSync(
       candidateEntry,
-      'import { writeFileSync } from \'node:fs\';\n' +
-        'writeFileSync(' + JSON.stringify(argvPath) + ', JSON.stringify(process.argv.slice(2)));\n' +
-        'console.log(\'inner entry passed\');\n',
+      "import { writeFileSync } from 'node:fs';\n" +
+        'writeFileSync(' +
+        JSON.stringify(argvPath) +
+        ', JSON.stringify(process.argv.slice(2)));\n' +
+        "console.log('inner entry passed');\n",
     );
     const lines: string[] = [];
     await runInnerProcess(directory, process.env, 5_000, (line) => lines.push(line), defaultPolicy.launchSmoke);

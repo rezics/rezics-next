@@ -854,7 +854,6 @@ export async function runInnerSmoke(
   }
 }
 
-
 function assertCodexArgv(
   launches: string[][],
   options: { model: string; effort: string; serviceTier: string; session: string; worktree: string; schema: string },
@@ -903,4 +902,3 @@ function assertCodexArgv(
       'actual Codex resume argv did not preserve exec option order, session, selected settings, and schema',
     );
 }
-

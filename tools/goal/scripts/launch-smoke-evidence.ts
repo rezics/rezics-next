@@ -29,7 +29,6 @@ export function requireSmokeWaitingCheckId(checks: unknown): string {
   return checks[0];
 }
 
-
 export type SmokeReport = {
   version: 1;
   status: 'running' | 'passed' | 'failed' | 'unverified';
@@ -380,4 +379,3 @@ export function persistFailureLog(reportPath: string, step: string, contents: st
   writeFileSync(path, `${contents}\n`, { mode: 0o600 });
   return path;
 }
-
