@@ -136,6 +136,7 @@ export type ShowcaseMediaRecord = Readonly<{
   etag?: string;
   sourceUrl?: string;
   status: CrossMediaMediaOutcome['status'];
+  mediaState?: CrossMediaMediaOutcome['mediaState'];
   containerId: string | null;
   mediaId?: string;
   credit?: CrossMediaMediaOutcome['credit'];
@@ -725,6 +726,7 @@ export function buildShowcaseManifest(input: {
       ...(outcome.etag ? { etag: outcome.etag } : {}),
       ...(outcome.sourceUrl ? { sourceUrl: outcome.sourceUrl } : {}),
       status: outcome.status,
+      ...(outcome.mediaState ? { mediaState: outcome.mediaState } : {}),
       containerId: outcome.containerId,
       ...(outcome.mediaId ? { mediaId: outcome.mediaId } : {}),
       ...(outcome.credit ? { credit: outcome.credit } : {}),

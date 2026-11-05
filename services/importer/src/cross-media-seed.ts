@@ -2475,6 +2475,7 @@ export async function seedCrossMedia(
           const observed: CrossMediaMediaOutcome = {
             ...source,
             status: asset.outcome,
+            mediaState: asset.mediaState,
             containerId: input.subject,
             mediaKey: asset.key,
             ...(mediaId ? { mediaId } : {}),
