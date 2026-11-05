@@ -84,12 +84,13 @@ test('Keep the original post-image reservation through uncertain upload processi
 
     const failure = await refusal(uploadReplyImage('original-thread', file, signal()));
     expect(failure.mediaId).toBe(mediaId);
-    expect(JSON.parse(JSON.stringify(failure))).toEqual({
+    expect(failure.retryAfter).toBe(mode === 'rate-limited' ? 7 : undefined);
+    expect(JSON.parse(JSON.stringify(failure))).toMatchObject({
       name: 'UploadRefusal',
       reason: mode === 'rate-limited' ? 'rate-limited' : 'unavailable',
-      ...(mode === 'rate-limited' ? { retryAfter: 7 } : {}),
       mediaId,
     });
+    expect(JSON.parse(JSON.stringify(failure))).not.toHaveProperty('privateMetadata');
     expect(failure.message).toBe(failure.reason);
     expect(failure.cause).toBeUndefined();
     expect(calls.map(({ path, init }) => [init.method, path])).toEqual([
@@ -436,4 +437,53 @@ test('disclosed future-thread 409 retains its admitted container command through
     new Headers(calls[1]!.init.headers).get('idempotency-key'),
   );
   expect(JSON.parse(String(calls[2]!.init.body))).toMatchObject({ containerId: 'disclosed-container' });
+});
+
+test('failing reservation and transfer keep Retry-After observed before body cleanup', async () => {
+  let now = 1_000;
+  spyOn(Date, 'now').mockImplementation(() => now);
+  const date = 'Sat, 31 Oct 2026 00:01:00 GMT';
+  let step: 'limit' | 'unavailable' | 'invalid' = 'limit';
+  intercept((_path, init) => {
+    const later = () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('private-body'));
+        },
+        cancel() {
+          now += 4_000;
+        },
+      });
+    if (step === 'invalid') return new Response(null, { status: 429, headers: { 'retry-after': 'later' } });
+    if (init.method === 'POST' && step === 'limit')
+      return new Response(later(), { status: 429, headers: { 'retry-after': '7200' } });
+    if (init.method === 'POST') return media('reserved');
+    return new Response(later(), { status: 503, headers: { 'retry-after': date } });
+  });
+
+  const limited = await refusal(uploadAvatar('original-account', file, signal()));
+  expect(limited).toMatchObject({
+    reason: 'rate-limited',
+    retryAfter: 3600,
+    retryAfterHeader: '7200',
+    responseTime: 1_000,
+    mediaId: undefined,
+  });
+
+  step = 'unavailable';
+  now = 6_000;
+  const paused = await refusal(uploadAvatar('original-account', file, signal()));
+  expect(paused).toMatchObject({
+    reason: 'unavailable',
+    retryAfterHeader: date,
+    responseTime: 6_000,
+    mediaId,
+  });
+  expect(paused.retryAfter).toBeUndefined();
+
+  step = 'invalid';
+  now = 10_000;
+  const ignored = await refusal(uploadAvatar('original-account', file, signal()));
+  expect(ignored).toMatchObject({ reason: 'rate-limited', retryAfterHeader: 'later', responseTime: 10_000 });
+  expect(ignored.retryAfter).toBeUndefined();
 });

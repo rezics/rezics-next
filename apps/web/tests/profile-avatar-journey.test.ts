@@ -3,6 +3,7 @@ import { spyOn } from 'bun:test';
 import {
   createMediaReservationIntent,
   readSiteAvatarUploadAdvice,
+  resumeReplyImageUpload,
   uploadAvatar,
   UploadRefusal,
   type MediaReservationIntent,
@@ -350,6 +351,10 @@ async function mountedRecovery(editor: ProfileEditor, resumeAvailable = true, re
 function refusal(reason: UploadRefusalReason, mediaId?: string, retryAfter?: number) {
   const failure = new UploadRefusal(reason, retryAfter);
   if (mediaId) failure.mediaId = mediaId;
+  if (retryAfter !== undefined) {
+    failure.retryAfterHeader = String(retryAfter);
+    failure.responseTime = Date.now();
+  }
   return failure;
 }
 function recoveryEditor(initial = profile()) {
@@ -755,4 +760,142 @@ test('lost site reservation acknowledgement retries the original key and body on
   } finally {
     fetchSpy.mockRestore();
   }
+});
+
+test('command waits keep the longest response-time Retry-After through delayed catch, 503 dates and replacement', async () => {
+  let now = 1_000;
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
+  const dateDeadline = 14_401_000;
+  const httpDate = new Date(dateDeadline).toUTCString();
+  const mediaId = '0192f3a0-6c1e-7b2a-9d4e-0000000000aa';
+  const calls: { method?: string; path: string }[] = [];
+  let wave = 0;
+  const originalBitmap = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap');
+  Object.defineProperty(globalThis, 'createImageBitmap', {
+    configurable: true,
+    value: async () => ({ width: 7, height: 5, close() {} }),
+  });
+  const delayed = (status: number, retryAfter?: string) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('private-body'));
+        },
+        cancel() {
+          now += 4_000;
+        },
+      }),
+      { status, headers: retryAfter ? { 'retry-after': retryAfter } : {} },
+    );
+  const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async (input, init = {}) => {
+    const path = String(input);
+    calls.push({ method: init.method, path });
+    if (init.method === 'POST') {
+      if (wave === 0) return new Response(null, { status: 503 });
+      if (wave === 1) return delayed(429, '7200');
+      return Response.json({
+        media: { id: mediaId, state: 'reserved', mediaType: 'image/png', byteCount: file().size },
+      });
+    }
+    if (init.method === 'PUT') {
+      if (wave === 2) return delayed(503, httpDate);
+      return new Response(null, { status: 204 });
+    }
+    return Response.json({
+      media: {
+        id: mediaId,
+        state: wave >= 3 ? 'available' : 'reserved',
+        mediaType: 'image/png',
+        byteCount: file().size,
+      },
+    });
+  });
+  const editor = recoveryEditor();
+  const created: string[] = [];
+  const revoked: string[] = [];
+  const controller = new ProfileAvatarUpload(
+    editor,
+    uploadAvatar,
+    {
+      createObjectURL: () => {
+        const url = `blob:wait-${created.length}`;
+        created.push(url);
+        return url;
+      },
+      revokeObjectURL: (url) => {
+        revoked.push(url);
+      },
+    },
+    resumeReplyImageUpload,
+    async () => adviceResult(advice(editor.snapshot().draft?.accountId ?? '')),
+  );
+  const disconnect = controller.connect();
+  try {
+    await settle();
+    await settle();
+    const selected = file();
+    await submit(controller, selected);
+    expect(controller.snapshot().retryAt ?? 0).toBe(0);
+    expect(calls).toEqual([{ method: 'POST', path: '/media' }]);
+
+    wave = 1;
+    controller.retry();
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      await settle();
+      if (controller.snapshot().retryAt === 7_201_000) break;
+    }
+    expect(controller.snapshot()).toMatchObject({
+      phase: 'error',
+      failure: { reason: 'rate-limited', retryAfter: 3600 },
+      retryAt: 7_201_000,
+    });
+    expect(calls).toHaveLength(2);
+
+    const replacement = file();
+    await submit(controller, replacement);
+    expect(calls).toHaveLength(2);
+    expect(controller.snapshot().retryAt).toBe(7_201_000);
+
+    now = 7_201_000;
+    await settle();
+    expect(calls).toHaveLength(2);
+
+    wave = 2;
+    controller.retry();
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      await settle();
+      if (controller.snapshot().retryAt === dateDeadline) break;
+    }
+    expect(calls.map(({ method }) => method)).toEqual(['POST', 'POST', 'POST', 'PUT']);
+    expect(controller.snapshot()).toMatchObject({
+      phase: 'error',
+      failure: { reason: 'unavailable' },
+      retryAt: dateDeadline,
+    });
+    now = dateDeadline - 1;
+    controller.retry();
+    expect(calls).toHaveLength(4);
+    now = dateDeadline;
+    await settle();
+    expect(calls).toHaveLength(4);
+
+    wave = 3;
+    controller.retry();
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      await settle();
+      if (controller.snapshot().phase === 'ready') break;
+    }
+    expect(calls.filter(({ method, path }) => method === 'GET' && path === `/media/${mediaId}`).length).toBeGreaterThan(
+      0,
+    );
+    expect(controller.snapshot().phase).toBe('ready');
+    expect(editor.snapshot().draft?.avatar).toEqual({ media: mediaId });
+  } finally {
+    disconnect();
+    fetchSpy.mockRestore();
+    clock.mockRestore();
+    if (originalBitmap) Object.defineProperty(globalThis, 'createImageBitmap', originalBitmap);
+    else Reflect.deleteProperty(globalThis, 'createImageBitmap');
+  }
+  expect(revoked).toEqual(created);
 });
