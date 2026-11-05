@@ -1,7 +1,7 @@
 import { readWorkerConfig, startWorker, type WorkerConfig } from '../../../src/worker.ts';
 import { KERNEL_WORK_MODULES } from '../../support/default-work-modules.ts';
 import type { WorkContext, WorkModule } from '../../../src/work/registry.ts';
-import { rebuildSubjects } from '../../../src/search/generations.ts';
+import { rebuildSubjects, RebuildError } from '../../../src/search/generations.ts';
 import { createOpenSearch } from '../../../src/search/opensearch.ts';
 import { readSearchConfig } from '../../../src/search/work.ts';
 import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
@@ -140,7 +140,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
 
   function control(method: string, params: unknown): unknown | Promise<unknown> {
     if (closing) throw new Error('Outcome worker is closing');
-    if (!['init', 'indexing', 'rebuild', 'stats', 'clock', 'close'].includes(method))
+    if (!['init', 'indexing', 'rebuild', 'requestRebuild', 'stats', 'clock', 'close'].includes(method))
       throw new Error(`Unknown control: ${method}`);
     if (method === 'init') {
       const env = initEnv(params);
@@ -172,15 +172,26 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
       const config = readSearchConfig(context.env);
       if (!config) throw new Error('Default search configuration is missing');
       const routeKey = readMembershipRouteKey(context.env);
-      const { generation, previous } = await rebuildSubjects({
+      const rebuilding = rebuildSubjects({
         publication: 'native',
+        ...(method === 'requestRebuild' ? { timeoutMs: 0 } : {}),
         pool: context.pool,
         search: createOpenSearch(config.url),
         prefix: config.prefix,
         source: createRatedSubjectSource(context.pool, routeKey).source,
         runner,
       });
-      return { generation, previous };
+      if (method === 'requestRebuild') {
+        try {
+          const result = await rebuilding;
+          return { generation: result.generation };
+        } catch (error) {
+          // The ordinary CLI timed out after allocation/refresh; maintenance retains its work.
+          if (error instanceof RebuildError && error.reason === 'timeout') return { generation: error.generation };
+          throw error;
+        }
+      }
+      return rebuilding;
     });
   }
 

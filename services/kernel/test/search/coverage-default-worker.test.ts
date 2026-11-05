@@ -1,24 +1,20 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { admitFilter, parseFilter } from '@rezics/filter';
+import { compileFilter } from '../../src/search/filter.ts';
 import pg from 'pg';
-import { createCoverageStore } from '../../src/search/coverage-store.ts';
-import { readSubjectCoverage, type IndexIncarnation } from '../../src/search/coverage.ts';
 import { readFreshness } from '../../src/search/freshness.ts';
 import { subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
 import { searchSubjects } from '../../src/search/query.ts';
-import { createCoverageFixture } from './coverage-fixture.ts';
 import { createDriverClient, type DriverClient } from './support/driver-client.ts';
 
-// Run the existing real command/source/engine baseline before requiring missing coverage composition.
-// This file never calls population/coordinator helpers or starts a second producer.
-let f: Awaited<ReturnType<typeof createCoverageFixture>>;
-beforeAll(async () => {
-  f = await createCoverageFixture();
-}, 180_000);
-afterAll(async () => {
-  await f?.close();
-}, 180_000);
+const search = createOpenSearch(process.env.OPENSEARCH_URL!);
+const compiled = compileFilter(admitFilter(parseFilter({ type: { in: ['schema:Book'] } }), bundledRelease), {
+  prefix: 'f',
+  relationOverflow: true,
+});
 
 async function eventually<T>(read: () => Promise<T>, accepts: (value: T) => boolean) {
   const deadline = Date.now() + 120_000;
@@ -40,48 +36,49 @@ async function checkpoints(pool: pg.Pool, consumer: string) {
   ).rows;
 }
 
-async function certified(pool: pg.Pool, search: OpenSearch, incarnation: IndexIncarnation) {
-  const store = createCoverageStore(pool);
-  const { prefix, generation, index, uuid, consumer } = incarnation;
-  expect(index).toBe(subjectIndexName(prefix, generation));
-  expect(consumer).toBe(subjectConsumer(prefix, generation));
-  expect(incarnation.protocol).toBe('subject-coverage-v1');
+type IndexIncarnation = { prefix: string; generation: number; index: string; uuid: string; consumer: string };
+async function physical(search: OpenSearch, prefix: string): Promise<IndexIncarnation | null> {
+  const generation = (await subjectGenerations(search, prefix)).active;
+  if (generation === null) return null;
+  const index = subjectIndexName(prefix, generation);
   const settings = await search.request<Record<string, { settings: { index: { uuid: string } } }>>(
     'GET',
     `/${index}/_settings`,
   );
-  expect(settings.body[index]!.settings.index.uuid).toBe(uuid);
-  expect((await subjectGenerations(search, prefix)).active).toBe(generation);
-  expect((await store.readPrefix(prefix))!.issuedGeneration).toBeGreaterThanOrEqual(generation);
-  const lineage = (await store.readLineage(incarnation))!;
-  expect(lineage).toMatchObject({ incarnation, state: 'live', complete: true, after: null });
-  expect(['created-empty', 'replay']).toContain(lineage.origin); // No imported/direct-bulk adoption or audit origin.
-  expect(lineage.partition).toBe(4096);
-  const progress = await checkpoints(pool, consumer);
-  // Observe every fixed home, including empty homes; cardinality is never the certificate.
-  for (let partition = 0; partition < 4096; partition++) {
-    const home = (await store.readHome(incarnation, partition))!;
-    expect(home).not.toBeNull();
-    expect(home.incarnation).toEqual(incarnation);
-    expect(home.current).not.toBeNull();
-    expect(home.verified).toEqual(home.current);
-    expect(home.fence).not.toBeNull();
-    expect(home.current!.partition).toBe(partition);
-    expect(home.current!.generation).toBe(home.fence!.generation);
-    expect(home.coveredThrough).not.toBeNull();
-    expect(home.coveredThrough!.epoch).toBe(home.fence!.epoch);
-    expect(home.coveredThrough!.position).toBeGreaterThanOrEqual(home.fence!.position);
-    if (home.attempt !== null) {
-      expect(home.attempt.outcome).toBe('completed');
-      expect(['advanced', 'lost', 'stopped']).toContain(home.attempt.checkpoint);
-    }
-    const checkpoint = progress.find((row) => row.partition_no === partition);
-    if (home.attempt !== null && home.attempt.checkpoint === 'advanced' && home.attempt.through.position > 0n) {
-      expect(checkpoint).toBeDefined();
-      expect(checkpoint!.epoch).toBe(home.attempt.through.epoch);
-      expect(BigInt(checkpoint!.position)).toBeGreaterThanOrEqual(home.attempt.through.position);
-    }
-  }
+  return {
+    prefix,
+    generation,
+    index,
+    uuid: settings.body[index]!.settings.index.uuid,
+    consumer: subjectConsumer(prefix, generation),
+  };
+}
+async function certified(pool: pg.Pool, search: OpenSearch, incarnation: IndexIncarnation, settled = true) {
+  const { index, uuid } = incarnation;
+  expect(await physical(search, incarnation.prefix)).toEqual(incarnation);
+  const native = (
+    await pool.query<{
+      job: string;
+      pass: string;
+      phase: string;
+      fenced_pass: boolean;
+      consumer: { incarnation: string };
+      native_incarnation: string;
+    }>(
+      `SELECT job,pass::text,phase,fenced_pass,consumer,native_incarnation
+      FROM search.generation_publication WHERE partition_no=0 AND physical_target=$1`,
+      [index],
+    )
+  ).rows;
+  expect(native).toHaveLength(1);
+  expect(settled ? ['active'] : ['intent', 'active']).toContain(native[0]!.phase);
+  expect(native[0]!.fenced_pass).toBe(true);
+  expect(native[0]!.consumer.incarnation).toBe(uuid);
+  const homes = await pool.query<{ partition_no: number }>(
+    `SELECT partition_no FROM search.generation_publication_home WHERE job=$1 AND pass=$2 ORDER BY partition_no`,
+    [native[0]!.job, native[0]!.pass],
+  );
+  expect(homes.rows.map((row) => row.partition_no)).toEqual(Array.from({ length: 4096 }, (_, home) => home));
 }
 
 async function reconciled(pool: pg.Pool, search: OpenSearch, incarnation: IndexIncarnation) {
@@ -122,7 +119,7 @@ async function gone(client: DriverClient) {
           [],
         );
       } else if (resource.kind === 'index_prefix') {
-        const result = await f.search.request<{ indices: { name: string }[] }>(
+        const result = await search.request<{ indices: { name: string }[] }>(
           'GET',
           `/_resolve/index/${resource.name}*`,
           undefined,
@@ -138,7 +135,7 @@ async function gone(client: DriverClient) {
   }
 }
 
-test('real default lifecycle certifies its own worker population before pause and ordinary lag', async () => {
+test('real default worker reconciles a native replacement across interruption and lost activation response', async () => {
   const client = createDriverClient();
   let pool: pg.Pool | undefined;
   try {
@@ -154,18 +151,19 @@ test('real default lifecycle certifies its own worker population before pause an
     url.pathname = `/${database.name}`;
     pool = new pg.Pool({ connectionString: url.href });
     const search = createOpenSearch(process.env.OPENSEARCH_URL!);
-    const config = { pool, search, prefix: target.name };
-    // init is a readiness boundary: the worker must already own a certified fresh physical target.
-    const initial = await readSubjectCoverage(config, { deadline: Date.now() + 30_000 });
-    expect(initial.state).toBe('ready');
-    if (initial.state !== 'ready') throw new Error('Default registration acknowledged before real certification');
+    const initial = await eventually(
+      () => physical(search, target.name),
+      (value) => value !== null,
+    );
+    const ready = { incarnation: initial! };
+    await certified(pool, search, ready.incarnation);
     const stats = observation.workerStats!;
     for (const name of ['semantic', 'search']) {
       expect(stats.defaultModules.filter((entry) => entry === name)).toHaveLength(1);
       expect(stats.registrationCounts[name]).toBe(1);
       expect(stats.startedServices[name]).toBeGreaterThan(0);
     }
-    expect(stats.startedServices.search).toBe(1);
+    expect(stats.startedServices.search).toBeGreaterThan(1);
     expect(stats.searchStarterInvocations).toBe(1);
     expect(stats.stopped).toBe(false);
     expect(client.ledger().resources.filter((resource) => resource.kind === 'worker_process')).toHaveLength(1);
@@ -183,24 +181,14 @@ test('real default lifecycle certifies its own worker population before pause an
     }
     ids.sort();
     const raw = async () =>
-      (await searchSubjects(search, target.name, { filter: f.compiled.query, sort: 'id', size: 100 })).hits.filter(
+      (await searchSubjects(search, target.name, { filter: compiled.query, sort: 'id', size: 100 })).hits.filter(
         (hit) => ids.includes(hit.id),
       );
-    const deadline = Date.now() + 120_000;
-    let ready;
-    for (;;) {
-      ready = await readSubjectCoverage(config, { deadline });
-      if (ready.state === 'ready' && (await raw()).length === 3) break;
-      if (Date.now() >= deadline) throw new Error('Default worker did not establish physical coverage');
-      await Bun.sleep(50); // Poll actual completion; elapsed time never proves it.
-    }
-    expect(ready.state).toBe('ready');
-    const before = await raw();
-    expect(before.map((hit) => hit.id)).toEqual(ids);
-    expect(before.map((hit) => hit.matched)).toEqual([['f0'], ['f0'], ['f0']]);
-    expect(before.map((hit) => hit.sort)).toEqual(ids.map((id) => [id]));
-    if (ready.state !== 'ready') throw new Error('Missing actual A/B/C certificate');
-    expect(ready.incarnation).toEqual(initial.incarnation);
+    await eventually(raw, (hits) => hits.length === 3);
+    await eventually(
+      () => readFreshness(pool!, ready.incarnation.consumer),
+      (value) => value.behind === 0,
+    );
     const api = (extra: Record<string, unknown> = {}) =>
       driver.request('anonymous', 'POST', '/v1/subjects:search', {
         filter: { type: { in: ['schema:Book'] } },
@@ -213,6 +201,66 @@ test('real default lifecycle certifies its own worker population before pause an
       return (response.body.subjects as { id: string }[]).map((subject) => subject.id).sort();
     };
     expect(disclosed(await api())).toEqual(ids);
+    const post = (persona: 'editor' | 'acceptor', path: string, body: unknown) =>
+      driver.request(persona, 'POST', path, body, { 'Idempotency-Key': `"${crypto.randomUUID()}"` });
+    const author = await post('editor', '/v1/subjects', { type: 'schema:Person', labels: { en: 'Recovery author' } });
+    expect(author.status).toBe(201);
+    const authorId = (author.body.subject as { id: string }).id;
+    const candidate = await post('editor', `/v1/subjects/${ids[0]}/candidates`, {
+      statement: {
+        property: { id: 'schema:author' },
+        value: { type: 'value', content: authorId },
+        qualifiers: [],
+        references: [
+          {
+            parts: [
+              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/recovery' } },
+            ],
+          },
+        ],
+      },
+    });
+    expect(candidate.status).toBe(201);
+    expect(
+      (
+        await post('acceptor', `/v1/subjects/${ids[0]}/candidates/${candidate.body.candidate}:accept`, {
+          context: driver.globalContext,
+          expected_head: null,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await post('acceptor', `/v1/subjects/${ids[0]}:adopt`, {
+          context: driver.globalContext,
+          property: 'schema:author',
+          target: authorId,
+          mode: 'replace',
+          selection: [{ candidate: candidate.body.candidate, rank: 'normal' }],
+          expected_head: null,
+        })
+      ).status,
+    ).toBe(200);
+    await eventually(
+      async () =>
+        disclosed(
+          await api({
+            filter: {
+              and: [{ type: { in: ['schema:Book'] } }, { statement: { property: 'schema:author', in: [authorId] } }],
+            },
+          }),
+        ),
+      (value) => value.length === 1 && value[0] === ids[0],
+    );
+    await eventually(
+      () => readFreshness(pool!, ready.incarnation.consumer),
+      (value) => value.behind === 0,
+    );
+    const before = await raw();
+    expect(before.map((hit) => hit.id)).toEqual(ids);
+    expect(before.map((hit) => hit.matched)).toEqual([['f0'], ['f0'], ['f0']]);
+    expect(before.map((hit) => hit.sort)).toEqual(ids.map((id) => [id]));
+    expect(await physical(search, target.name)).toEqual(initial);
     const token = (await api({ limit: 1 })).body.next;
     expect(token).toBeString();
     await driver.indexing('paused');
@@ -222,7 +270,7 @@ test('real default lifecycle certifies its own worker population before pause an
     expect(paused.workerStats!.startedServices.semantic).toBe(stats.startedServices.semantic);
     expect(paused.workerStats!.searchStarterInvocations).toBe(1);
     await driver.remove(ids[1]!, 'hidden');
-    expect(await readSubjectCoverage(config, { deadline: Date.now() + 30_000 })).toEqual(ready);
+    expect(await physical(search, target.name)).toEqual(initial);
     expect(await raw()).toEqual(before);
     expect(await checkpoints(pool, ready.incarnation.consumer)).toEqual(pausedCheckpoints);
     expect((await readFreshness(pool, ready.incarnation.consumer)).behind).toBeGreaterThan(0);
@@ -231,7 +279,7 @@ test('real default lifecycle certifies its own worker population before pause an
     expect(disclosed(withheld)).toEqual([ids[0]!, ids[2]!]);
     expect(disclosed(await api({ limit: 1, cursor: token }))).not.toContain(ids[1]!);
     expect(await raw()).toEqual(before);
-    expect(await readSubjectCoverage(config, { deadline: Date.now() + 30_000 })).toEqual(ready);
+    expect(await physical(search, target.name)).toEqual(initial);
     await driver.indexing('running');
     await driver.indexing('running');
     expect((await client.inspect()).workerStats!.searchStarterInvocations).toBe(2);
@@ -243,7 +291,7 @@ test('real default lifecycle certifies its own worker population before pause an
     const converged = await api();
     expect(converged.body).not.toHaveProperty('total');
     expect(disclosed(converged)).toEqual([ids[0]!, ids[2]!]);
-    expect(await readSubjectCoverage(config, { deadline: Date.now() + 30_000 })).toEqual(ready);
+    expect(await physical(search, target.name)).toEqual(initial);
 
     // Snapshot native source facts, never rewrite them to make replay/certification succeed.
     const facts = async () => ({
@@ -261,7 +309,27 @@ test('real default lifecycle certifies its own worker population before pause an
     const sourceBefore = await facts();
     const oldCheckpoint = await checkpoints(pool, ready.incarnation.consumer);
     // Observe actual alias publication while the production call owns replay/reconciliation.
-    // Every sampled alias must already name a complete live lineage; never adopt a raw target here.
+    // Every sampled alias must carry the completed native job and complete final pass.
+    const requested = await client.requestRebuild();
+    const replacementIndex = subjectIndexName(target.name, requested.generation);
+    const retainedJob = async () =>
+      (
+        await pool!.query<{ job: string; consumer: { incarnation: string }; phase: string }>(
+          `SELECT job,consumer,phase FROM search.generation_publication WHERE partition_no=0 AND physical_target=$1`,
+          [replacementIndex],
+        )
+      ).rows[0];
+    await client.loseActivationResponse();
+    await driver.indexing('running');
+    const originalJob = await eventually(retainedJob, (value) => value !== undefined);
+    expect((await subjectGenerations(search, target.name)).active).toBe(ready.incarnation.generation);
+    expect(disclosed(await api())).toEqual([ids[0]!, ids[2]!]);
+    const restarted = await client.restartWorker();
+    expect(restarted.workerStats!.registeredModules).toEqual(stats.defaultModules);
+    expect(restarted.workerStats!.searchStarterInvocations).toBe(1);
+    expect((await retainedJob())!.job).toBe(originalJob!.job);
+    expect((await retainedJob())!.consumer.incarnation).toBe(originalJob!.consumer.incarnation);
+    expect(client.ledger().resources.filter((resource) => resource.kind === 'worker_process')).toHaveLength(2);
     let rebuilding = true;
     const pending = driver.rebuild().finally(() => {
       rebuilding = false;
@@ -270,26 +338,9 @@ test('real default lifecycle certifies its own worker population before pause an
       do {
         const active = (await subjectGenerations(search, target.name)).active;
         expect(active).not.toBeNull();
-        const index = subjectIndexName(target.name, active!);
-        const settings = await search.request<Record<string, { settings: { index: { uuid: string } } }>>(
-          'GET',
-          `/${index}/_settings`,
-        );
-        const incarnation: IndexIncarnation = {
-          prefix: target.name,
-          generation: active!,
-          index,
-          uuid: settings.body[index]!.settings.index.uuid,
-          protocol: 'subject-coverage-v1',
-          consumer: subjectConsumer(target.name, active!),
-        };
-        expect(await createCoverageStore(pool!).readLineage(incarnation)).toMatchObject({
-          incarnation,
-          state: 'live',
-          complete: true,
-          partition: 4096,
-          after: null,
-        });
+        const incarnation = (await physical(search, target.name))!;
+        await certified(pool!, search, incarnation, false);
+        expect(disclosed(await api())).toEqual([ids[0]!, ids[2]!]);
         await Bun.sleep(50);
       } while (rebuilding);
     })();
@@ -298,10 +349,11 @@ test('real default lifecycle certifies its own worker population before pause an
     if (rebuildResult.status === 'rejected') throw rebuildResult.reason;
     if (observationResult.status === 'rejected') throw observationResult.reason;
     const rebuilt = rebuildResult.value; // The actual public result is {generation}.
+    expect(rebuilt.generation).toBe(requested.generation);
     expect(rebuilt.generation).toBeGreaterThan(ready.incarnation.generation);
-    const replacement = await readSubjectCoverage(config, { deadline: Date.now() + 30_000 });
-    expect(replacement.state).toBe('ready');
-    if (replacement.state !== 'ready') throw new Error('Production rebuild switched before certification');
+    expect((await client.inspect()).lostAliasResponses).toBe(1);
+    expect((await retainedJob())!.job).toBe(originalJob!.job);
+    const replacement = { incarnation: (await physical(search, target.name))! };
     expect(replacement.incarnation.generation).toBe(rebuilt.generation);
     expect(replacement.incarnation.uuid).not.toBe(ready.incarnation.uuid);
     expect(replacement.incarnation.index).not.toBe(ready.incarnation.index);
@@ -311,17 +363,22 @@ test('real default lifecycle certifies its own worker population before pause an
     await driver.indexing('paused'); // Drain the new runner before inspecting durable terminal evidence.
     await certified(pool, search, replacement.incarnation);
     await reconciled(pool, search, replacement.incarnation);
+    const nativeCoverage = await client.nativeCoverage();
+    expect(nativeCoverage.homes).toBe(4096);
+    expect(nativeCoverage.engineKeys).toBe(nativeCoverage.nativeKeys);
+    expect(nativeCoverage.nativeKeys).toBeGreaterThanOrEqual(2);
     expect(await facts()).toEqual(sourceBefore);
-    expect(await checkpoints(pool, ready.incarnation.consumer)).toEqual(oldCheckpoint);
-    expect(await createCoverageStore(pool).readLineage(ready.incarnation)).toMatchObject({
-      incarnation: ready.incarnation,
-      complete: true,
-    });
+    const drained = await checkpoints(pool, ready.incarnation.consumer);
+    for (const previous of oldCheckpoint) {
+      const current = drained.find((row) => row.partition_no === previous.partition_no)!;
+      expect(current.epoch).toBe(previous.epoch);
+      expect(BigInt(current.position)).toBeGreaterThanOrEqual(BigInt(previous.position));
+    }
     const stale = await api({ limit: 1, cursor: token });
     expect(stale.status).toBe(409);
     expect(stale.body.code).toBe('search_restart_required');
     expect(disclosed(await api())).toEqual([ids[0]!, ids[2]!]);
-    const physical = await search.request<{ hits: { hits: { _id: string }[] } }>(
+    const visible = await search.request<{ hits: { hits: { _id: string }[] } }>(
       'POST',
       `/${replacement.incarnation.index}/_search`,
       {
@@ -330,7 +387,7 @@ test('real default lifecycle certifies its own worker population before pause an
         sort: [{ id: 'asc' }],
       },
     );
-    expect(physical.body.hits.hits.map((hit) => hit._id)).toEqual([ids[0]!, ids[2]!]);
+    expect(visible.body.hits.hits.map((hit) => hit._id)).toEqual([ids[0]!, ids[2]!]);
     // Close while paused with an admitted native read: admission seals, accepted work drains, then pools disappear.
     const admitted = api();
     await pool.end();

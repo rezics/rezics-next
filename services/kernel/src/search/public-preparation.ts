@@ -1,9 +1,9 @@
 import type { Pool } from 'pg';
 import type { WorkClient } from '../work/client.ts';
 import { activeRelease } from '../semantic/definitions.ts';
-import { readPartition } from '../partition/partition.ts';
 import type { SubjectSourceKeyTraversal as SubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
 import type { PublicFilterConsumerContext, PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
+import type { GenerationPublicationJob } from './generation-publication.ts';
 import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { SearchUnavailableError } from './opensearch.ts';
@@ -14,12 +14,7 @@ import {
   subjectIndexName,
   subjectGenerations,
 } from './indices.ts';
-import { applySubjectKeys, createSubjectIndexer } from './indexer.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
-import { subjectPartition } from './source.ts';
-import { routeOf } from '../route/route.ts';
-import { subjectConsumer } from './runner.ts';
-import { createSearchWriterGuard } from './writer-guard.ts';
 import {
   createPublicPreparationStore,
   type PopulationFrontier,
@@ -75,130 +70,37 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     const release = await activeRelease(options.pool);
     if (!release || release.digest !== state.meaning || (await indexUuid(options.search, index)) !== state.uuid)
       return store.advance(record, state, 5000);
-    const publication = await options.runtime.preparePublication(state.generation, context);
-    if (publication.status !== 'preparing') return store.advance(record, state, 1000);
-    if (state.publication !== null && state.publication !== publication.job.job)
-      throw new SearchUnavailableError('Public publication identity changed during population');
-    if (state.publication === null) return store.advance(record, { ...state, publication: publication.job.job });
-    const writer = createSearchWriterGuard({
-      pool: options.pool,
-      search: options.search,
-      source: options.source,
-      listing: options.listing,
-      index,
-      consumer: subjectConsumer(options.prefix, state.generation),
-      ...(calendarFormat === null ? {} : { calendarFormat }),
-    });
-    if (state.partition === 4096) {
-      if (state.phase !== 'activate') {
-        const reconciliation = await options.runtime.publication.step(publication.job, context);
-        return store.advance(
-          record,
-          {
-            ...state,
-            phase: reconciliation.status === 'reconciled' ? 'activate' : 'native',
-          },
-          reconciliation.status === 'progress' || reconciliation.status === 'reconciled' ? 0 : 1000,
-        );
-      }
-      if (calendarFormat === 1) await markSubjectCalendarReady(options.search, options.prefix, state.generation);
-      const activated = await options.runtime.publication.activate(publication.job, context);
-      if (activated.status === 'activated') {
-        if (activated.consumer.physicalTarget !== index)
-          throw new SearchUnavailableError('Public publication activated the wrong generation');
-        return store.advance(record, null);
-      }
-      return store.advance(record, activated.status === 'preparing' ? { ...state, phase: 'native' } : state, 1000);
+    // Resume the original native job directly. Re-registering from today's Source definition
+    // can replace its consumer and strand a retained fence or ambiguous alias intent.
+    let job: GenerationPublicationJob;
+    if (state.publication === null) {
+      const prepared = await options.runtime.preparePublication(state.generation, context);
+      if (prepared.status !== 'preparing') return store.advance(record, state, 1000);
+      return store.advance(record, { ...state, publication: prepared.job.job, phase: 'native' });
     }
-    const home = await readPartition(options.pool, state.partition);
-    if (!home || home.writeState !== 'active') return store.advance(record, state, 1000);
-    if (state.epoch !== null && state.epoch !== home.epoch) return store.advance(record, state, 1000); // Retain the unresolved bridge; do not restart settled homes.
-    if (state.through === null) {
-      // Arm ordinary log retention before any key traversal. Epoch/head are native, never a public cut.
-      await options.pool.query(
-        `INSERT INTO core.consumer_checkpoint(partition_no, consumer)
-        VALUES ($1, $2) ON CONFLICT (partition_no, consumer) DO NOTHING`,
-        [state.partition, subjectConsumer(options.prefix, state.generation)],
-      );
-      return store.advance(record, { ...state, epoch: home.epoch, through: String(home.position) });
-    }
-    if (state.phase === 'replay') {
-      const relay = createSubjectIndexer({
-        ...options,
-        index,
-        consumer: subjectConsumer(options.prefix, state.generation),
-        envelopes: 1,
-        writer,
-        ...(calendarFormat === null ? {} : { calendarFormat }),
-      });
-      const replay = await relay.run(state.partition);
-      if (replay.status !== 'read') return store.advance(record, state, 1000);
-      if (replay.position < home.position) return store.advance(record, state);
-      return store.advance(record, {
-        ...state,
-        partition: state.partition + 1,
-        phase: 'scan',
-        epoch: null,
-        through: null,
-        after: null,
-        pending: null,
-      });
-    }
-    if (state.pending) {
-      // A crash can replay only this retained step, through the same ordinary serializer/version writer.
-      await applySubjectKeys(
-        { ...options, index, writer, ...(calendarFormat === null ? {} : { calendarFormat }) },
-        state.partition,
-        state.pending.keys,
-        BigInt(state.pending.position),
-      );
-      return store.advance(record, {
-        ...state,
-        after: state.pending.after,
-        pending: null,
-        phase: state.pending.complete ? 'replay' : 'scan',
-      });
-    }
-    // A small real owner batch leaves room for its complete dependency/Source-read budgets.
-    const page = await options.source.readSubjectKeyPage(
-      {
-        partition: state.partition,
-        epoch: state.epoch!,
-        after: state.after,
-        through: BigInt(state.through),
-        inputLimit: 64,
-      },
-      context,
+    const retained = await options.pool.query<{ consumer: GenerationPublicationJob['consumer'] }>(
+      `SELECT consumer FROM search.generation_publication
+       WHERE partition_no=0 AND job=$1 AND physical_target=$2`,
+      [state.publication, index],
     );
-    if (page.status !== 'progress' && page.status !== 'complete') return store.advance(record, state, 1000);
-    if (
-      page.partition !== state.partition ||
-      page.epoch !== state.epoch ||
-      page.through !== BigInt(state.through) ||
-      page.keys.length > 64 ||
-      new Set(page.keys).size !== page.keys.length ||
-      page.cost.inputKeys > 64 ||
-      page.keys.some((key) => subjectPartition(key) !== state.partition) ||
-      (page.status === 'progress' && JSON.stringify(page.after) === JSON.stringify(state.after))
-    )
-      throw new TypeError('Invalid native public population key page');
-    let previous = state.after;
-    for (const key of page.keys) {
-      const route = routeOf(key)!;
-      if (previous && (route < previous.route || (route === previous.route && key <= previous.id)))
-        throw new TypeError('Public population key page did not advance its native route frontier');
-      previous = { route, id: key };
+    job = { job: state.publication, consumer: retained.rows[0]!.consumer };
+    // Publication already enumerates complete native key pages, repairs through the ordinary
+    // writer and reconciles engine extras. The retired fixed-cut scan was a second population
+    // frontier whose Source adapter is unavailable; it must not gate this existing lifecycle.
+    if (state.phase !== 'activate') {
+      const reconciliation = await options.runtime.publication.step(job, context);
+      return store.advance(
+        record,
+        { ...state, phase: reconciliation.status === 'reconciled' ? 'activate' : 'native' },
+        reconciliation.status === 'progress' || reconciliation.status === 'reconciled' ? 0 : 1000,
+      );
     }
-    return store.advance(record, {
-      ...state,
-      pending: {
-        keys: [...page.keys],
-        after: page.after,
-        complete: page.status === 'complete',
-        position: String(page.position),
-      },
-    });
+    if (calendarFormat === 1) await markSubjectCalendarReady(options.search, options.prefix, state.generation);
+    const activated = await options.runtime.publication.activate(job, context);
+    if (activated.status === 'activated') return store.advance(record, null);
+    return store.advance(record, activated.status === 'preparing' ? { ...state, phase: 'native' } : state, 1000);
   }
+
   return {
     enqueueRepair,
     /** The actual ordinary writer checks the native publication gate inside its enrollment transaction. */
@@ -225,7 +127,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
           epoch: null,
           through: null,
           after: null,
-          phase: 'scan',
+          phase: 'native',
           pending: null,
         },
         Date.now() + 24 * 60 * 60 * 1000,

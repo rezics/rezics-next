@@ -24,6 +24,9 @@ import { workerTestEnv } from '../../support/worker-env.ts';
 import { createOutcomeRpc, type OutcomeRpc } from './outcome-rpc.ts';
 import type { WorkerStats } from './outcome-worker.ts';
 import { createReleasedBookImport } from './released-imports.ts';
+import { assertNativeGenerationCoverage } from './native-generation.ts';
+import { createSubjectSourceKeyPages } from '../../../src/semantic/subject-source-key-pages.ts';
+import { subjectGenerations, subjectIndexName } from '../../../src/search/indices.ts';
 import type { ReleasedTransportBarrier, ReleasedTransportBoundary } from './released-discovery-runtime.ts';
 
 export type OwnedResource =
@@ -48,6 +51,7 @@ export interface SupervisorObservation {
   authIssuer?: string;
   workerStats?: WorkerStats;
   workerOutput: string;
+  lostAliasResponses?: number;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -74,6 +78,8 @@ export async function searchProxy(endpoint: string) {
   };
   const gates = new Set<Gate>();
   let closed = false;
+  let lostAlias: string | undefined;
+  let lostAliasResponses = 0;
   async function boundary(phase: Gate['phase'], method: string | undefined, path: string | undefined) {
     const gate = [...gates].find(
       (gate) => !gate.claimed && gate.phase === phase && gate.method === method && gate.path === path,
@@ -84,6 +90,23 @@ export async function searchProxy(endpoint: string) {
     await gate.wait;
   }
   const server = createServer((incoming, outgoing) => {
+    const alias = incoming.method === 'POST' && incoming.url === '/_aliases' ? lostAlias : undefined;
+    const losesAlias =
+      alias === undefined
+        ? Promise.resolve(false)
+        : new Promise<boolean>((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            incoming.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            incoming.once('error', reject);
+            incoming.once('end', () => {
+              try {
+                const body = JSON.parse(Buffer.concat(chunks).toString()) as { actions: { add?: { alias: string } }[] };
+                resolve(body.actions.some((action) => action.add?.alias === alias));
+              } catch (error) {
+                reject(error);
+              }
+            });
+          });
     void (async () => {
       await boundary('request', incoming.method, incoming.url);
       if (incoming.destroyed || outgoing.destroyed) return;
@@ -99,7 +122,15 @@ export async function searchProxy(endpoint: string) {
         (response) => {
           // Retain the native stream under Node's backpressure while delivery is paused.
           void boundary('response', incoming.method, incoming.url)
-            .then(() => {
+            .then(async () => {
+              // The actual node has applied this request. Drop only its response to the fixture's read alias.
+              if ((await losesAlias) && lostAlias === alias) {
+                lostAlias = undefined;
+                lostAliasResponses++;
+                outgoing.destroy();
+                response.destroy();
+                return;
+              }
               if (outgoing.destroyed) return response.destroy();
               outgoing.writeHead(response.statusCode!, response.statusMessage, response.rawHeaders);
               response.pipe(outgoing);
@@ -138,6 +169,10 @@ export async function searchProxy(endpoint: string) {
   await up();
   return {
     url: `http://127.0.0.1:${port}`,
+    loseAliasResponse(alias: string) {
+      lostAlias = alias;
+    },
+    lostAliasResponses: () => lostAliasResponses,
     up,
     down,
     barrier(input: ReleasedTransportBoundary): ReleasedTransportBarrier {
@@ -190,9 +225,11 @@ function supervise(parent: OutcomeRpc) {
   };
   let semantic: SemanticOutcomeDriver | undefined;
   let publicFilters: DefaultPublicFilterRuntime | undefined;
+  let nativeCoverage: (() => ReturnType<typeof assertNativeGenerationCoverage>) | undefined;
   let preparationClient: Promise<WorkClient> | undefined;
   let releasedBook: ReturnType<typeof createReleasedBookImport> | undefined;
   let proxy: Awaited<ReturnType<typeof searchProxy>> | undefined;
+  let workerEnvironment: Record<string, string | undefined> | undefined;
   let worker: ChildProcess | undefined;
   let workerRpc: OutcomeRpc | undefined;
   let workerExit: Promise<{ code: number | null; signal: string | null }> | undefined;
@@ -249,6 +286,70 @@ function supervise(parent: OutcomeRpc) {
       }
       if (errors.length) throw new AggregateError(errors, 'Owned worker cleanup failed');
     })());
+  }
+  async function launchWorker(env: Record<string, string | undefined>) {
+    const child = fork(`${import.meta.dir}/outcome-worker.ts`, [], {
+      execPath: process.execPath,
+      env: {
+        ...Object.fromEntries(
+          Object.entries(process.env).filter(([key]) => /^(PATH|HOME|TMPDIR|TEMP|LANG|TZ|BUN_.+)$/.test(key)),
+        ),
+        // SQL modules load before the IPC init handler: use this same world's database at import time too.
+        ...env,
+      },
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+    });
+    worker = child;
+    exited = false;
+    const output = (chunk: unknown) => {
+      observation.workerOutput = (observation.workerOutput + String(chunk)).slice(-65_536);
+    };
+    child.stdout!.on('data', output);
+    child.stderr!.on('data', output);
+    workerExit = new Promise((resolve) =>
+      child.once('close', (code, signal) => {
+        exited = true;
+        resolve({ code, signal });
+      }),
+    );
+    workerRpc = createOutcomeRpc(
+      {
+        send: (packet) =>
+          new Promise<void>((resolve, reject) =>
+            child.send(packet as object, (error) => (error ? reject(error) : resolve())),
+          ),
+        subscribe(message, failure) {
+          const disconnect = () => failure(new Error(`Worker IPC disconnected: ${observation.workerOutput}`));
+          const exit = () => {
+            failure(new Error(`Worker exited: ${observation.workerOutput}`));
+            if (!stoppingWorker && ready)
+              void close().catch((error) => {
+                console.error(error);
+                process.exitCode = 1;
+              });
+          };
+          child.on('message', message);
+          child.on('error', failure);
+          child.on('disconnect', disconnect);
+          child.on('exit', exit);
+          return () => {
+            child.off('message', message);
+            child.off('error', failure);
+            child.off('disconnect', disconnect);
+            child.off('exit', exit);
+          };
+        },
+      },
+      {
+        onRequest() {
+          throw new Error('Worker cannot control supervisor');
+        },
+        timeoutMs: 90_000,
+      },
+    );
+    if (!child.pid) throw new Error('Worker has no process identity');
+    await own({ kind: 'worker_process', pid: child.pid });
+    observation.workerStats = await workerRpc.request<WorkerStats>('init', { env });
   }
   let beforeClosing: Promise<void> | undefined;
   function beforeClose() {
@@ -350,6 +451,17 @@ function supervise(parent: OutcomeRpc) {
             ...config,
             onAccessReady(access) {
               config.onAccessReady?.(access);
+              const keys = createSubjectSourceKeyPages(config.pool, config.routeKey, access);
+              nativeCoverage = async () => {
+                const generation = (await subjectGenerations(client, prefix)).active!;
+                return assertNativeGenerationCoverage({
+                  pool: config.pool,
+                  search: client,
+                  index: subjectIndexName(prefix, generation),
+                  source,
+                  keys,
+                });
+              };
               publicFilters = createDefaultPublicFilterRuntime({
                 pool: config.pool,
                 routeKey: config.routeKey,
@@ -400,66 +512,8 @@ function supervise(parent: OutcomeRpc) {
         OPENSEARCH_URL: proxy.url,
         KERNEL_SEARCH_PREFIX: prefix,
       });
-      worker = fork(`${import.meta.dir}/outcome-worker.ts`, [], {
-        execPath: process.execPath,
-        env: {
-          ...Object.fromEntries(
-            Object.entries(process.env).filter(([key]) => /^(PATH|HOME|TMPDIR|TEMP|LANG|TZ|BUN_.+)$/.test(key)),
-          ),
-          // SQL modules load before the IPC init handler: use this same world's database at import time too.
-          ...env,
-        },
-        stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-      });
-      const output = (chunk: unknown) => {
-        observation.workerOutput = (observation.workerOutput + String(chunk)).slice(-65_536);
-      };
-      worker.stdout!.on('data', output);
-      worker.stderr!.on('data', output);
-      workerExit = new Promise((resolve) =>
-        worker!.once('close', (code, signal) => {
-          exited = true;
-          resolve({ code, signal });
-        }),
-      );
-      workerRpc = createOutcomeRpc(
-        {
-          send: (packet) =>
-            new Promise<void>((resolve, reject) =>
-              worker!.send(packet as object, (error) => (error ? reject(error) : resolve())),
-            ),
-          subscribe(message, failure) {
-            const disconnect = () => failure(new Error(`Worker IPC disconnected: ${observation.workerOutput}`));
-            const exit = () => {
-              failure(new Error(`Worker exited: ${observation.workerOutput}`));
-              if (!stoppingWorker && ready)
-                void close().catch((error) => {
-                  console.error(error);
-                  process.exitCode = 1;
-                });
-            };
-            worker!.on('message', message);
-            worker!.on('error', failure);
-            worker!.on('disconnect', disconnect);
-            worker!.on('exit', exit);
-            return () => {
-              worker!.off('message', message);
-              worker!.off('error', failure);
-              worker!.off('disconnect', disconnect);
-              worker!.off('exit', exit);
-            };
-          },
-        },
-        {
-          onRequest() {
-            throw new Error('Worker cannot control supervisor');
-          },
-          timeoutMs: 90_000,
-        },
-      );
-      if (!worker.pid) throw new Error('Worker has no process identity');
-      await own({ kind: 'worker_process', pid: worker.pid });
-      observation.workerStats = await workerRpc.request<WorkerStats>('init', { env });
+      workerEnvironment = env;
+      await launchWorker(env);
       ready = true;
       return { globalContext: semantic.globalContext, indexPrefix: prefix, workerStats: observation.workerStats };
     } catch (error) {
@@ -607,7 +661,20 @@ function supervise(parent: OutcomeRpc) {
       return null;
     }
     empty(params);
-    if (method === 'rebuild') return workerRpc!.request('rebuild');
+    if (method === 'nativeCoverage') return nativeCoverage!();
+    if (method === 'requestRebuild') return workerRpc!.request('requestRebuild');
+    if (method === 'restartWorker') {
+      await stopWorker();
+      stoppingWorker = undefined;
+      await launchWorker(workerEnvironment!);
+      return snapshot();
+    }
+    if (method === 'loseActivationResponse') {
+      proxy!.loseAliasResponse(`${prefix}subjects`);
+      return null;
+    }
+    if (method === 'rebuild') return workerRpc!.request('rebuild', undefined, 300_000);
+    observation.lostAliasResponses = proxy!.lostAliasResponses();
     observation.workerStats = await workerRpc!.request<WorkerStats>('stats');
     return snapshot();
   }
@@ -641,6 +708,10 @@ function supervise(parent: OutcomeRpc) {
           'indexing',
           'searchNode',
           'rebuild',
+          'requestRebuild',
+          'restartWorker',
+          'loseActivationResponse',
+          'nativeCoverage',
           'inspect',
           'nativeVoter',
           'nativeVote',

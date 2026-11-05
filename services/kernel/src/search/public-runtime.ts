@@ -35,7 +35,7 @@ import type {
   PublicFilterQueriedObservation,
   PublicSuggestionCaptureInput,
 } from './public-filter-consumer-contract.ts';
-import { subjectGenerations, subjectIndexName } from './indices.ts';
+import { subjectGenerations, subjectIndexName, readSubjectCalendarMappingFormat } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import { createFacetNativeOperations } from './facet-discovery-operations.ts';
@@ -136,6 +136,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       consumer.physicalTarget !== subjectIndexName(config.prefix, generation)
     )
       notReady();
+    const calendarFormat = await readSubjectCalendarMappingFormat(config.search, config.prefix, generation);
     return createSearchGenerationPublication({
       pool: config.pool,
       search: config.search,
@@ -151,6 +152,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
         consumer: subjectConsumer(config.prefix, generation),
         source: nativeSource,
         listing,
+        ...(calendarFormat === null ? {} : { calendarFormat }),
       }),
     });
   }

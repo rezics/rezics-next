@@ -1831,13 +1831,25 @@ The default maintenance worker composes the sole [bounded publication port](#bou
 Its `preparePublication` adapter resolves the native full-population binding and registers native custody,
 then passes the returned consumer to `prepare`. It retains only the publication job ID between steps.
 Cold population and ordinary replay both use the delivered native writer's admission gate; no publication
-callback supplies authority. After finite population/replay, maintenance advances native reconciliation and
-publication through the same worker. CLI rebuild waits for that worker-owned alias publication. Retirement
+callback supplies authority. Maintenance resumes the stored job and its original consumer directly; it does
+not repeat the retired fixed-cut scan or register a replacement consumer on restart. Native complete key
+pages may retain their terminal cursor or advance past only filtered rows; the next home starts without
+that cursor. The publication's finite passes own population, repair, reconciliation and activation through
+the same worker. CLI rebuild waits for that worker-owned alias publication. Retirement
 still requires actual retained-copy and writer evidence. Live physical generations remain capped at three.
 
 The consumer, Source binding and Source key-page adapters remain provisional where owner runtime evidence
 is missing. They create no Source identity, permission, coverage, ACK, grant or ready output. Their absence
 returns typed unavailable while the independent native reconciliation/publication implementation remains installed.
+
+Decision: recovery consumes the existing native publication job and released analyzer/calendar metadata;
+native Source observations, original drain and completion remain Source-owned prerequisites, including
+retirement after readers drain. Activation preserves the entire released mapping metadata on write and
+exact readback after an ambiguous response. No readiness flag or equal-count comparison replaces the
+complete native identity/body/version and engine-extra reconciliation. The default-worker receiving suite
+uses the native job and final home pass instead of legacy coverage certificates. Integrated native recovery
+and declared-scale growth acceptance remain pending until those Source prerequisites are delivered and
+the receiving suites pass.
 
 The adopted runtime plan and end-to-end research distinguish immutable engine observations from current disclosure,
 retain request-owned PIT lifetime, and place summaries inside the last privacy boundary. Reference source reads
