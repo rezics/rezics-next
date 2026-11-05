@@ -71,12 +71,24 @@ export async function loadAccountRenameRegionResult(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
 ): Promise<AccountRenameReadResult> {
-  await prepareSession(request, sessionEnv);
+  await withManagedReadDeadline(() => prepareSession(request, sessionEnv), request.signal);
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   return authorization && accountId
     ? readAccountRenameContextResult(client, authorization, accountId, request.signal)
     : { context: null };
+}
+
+/** Mixed native faults stay conservative: unavailable before denied before failed. */
+export function accountRenamePresentedFailure(
+  failures: AccountRenameFailure[] | undefined,
+): AccountRenameFailure | undefined {
+  if (!failures?.length) return undefined;
+  return (
+    failures.find((entry) => entry.kind === 'unavailable') ??
+    failures.find((entry) => entry.kind === 'denied') ??
+    failures[0]
+  );
 }
 
 export async function readAccountRenameContext(

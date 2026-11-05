@@ -188,3 +188,13 @@ Directory identities, membership roles and responsibility holds supply no detail
 The Account card reads the current identity from the managed session and keeps rename advice in its separate native profile and viewer-actions read. Security, rename and deletion handoffs use only fixed Auth-owned paths from trusted issuer configuration; they do not grant a destructive command. An unavailable or denied read stays visible until deliberate reload, and native sign-out keeps ordinary POST/redirect behavior with explicit reload recovery and no automatic replay.
 
 **Decision:** A retired managed observation may leave its rendered card visible until React removes it, but every Account destination and recovery callback is synchronously fenced by that original observation; only a newly established session context restores actions.
+
+**Decision:** Account rename server setup, native result consumption and serialization faults return the same plain AccountRenameResult envelope. Framework redirects and not-found still throw. Private no-store is set whenever the response helper loaded.
+
+**Decision:** Session preparation for the rename read uses the existing ten-second managed deadline; timeout neither cancels the lookup nor enables rename. Profile and viewerActions remain the two exact current reads.
+
+**Decision:** Mixed native failures in one envelope present unavailable before denied before failed, keep the longest Retry-After, and never leave a previously available destination clickable.
+
+**Decision:** Sign-out recovery bounds the existing session query with that same deadline. Timeout keeps original uncertainty visible, unlocks only the deliberate Reload, and never submits sign-out or treats a late session as idle for an obsolete viewer.
+
+**Decision:** Account safety recovery is proven by the existing region, link and card checks plus setup-envelope, non-cooperative session recovery, old-viewer late completion and deliberate current destination assertions. No extra timer-test family or stories.

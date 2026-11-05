@@ -1,7 +1,8 @@
 import { createServerFn } from '@tanstack/react-start';
+import { isNotFound, isRedirect } from '@tanstack/react-router';
 import { authManagementPageHref } from '../session/auth-page-routes';
 import type { SessionEnv } from '../session/client';
-import type { AccountRenameContext, AccountRenameReadResult } from './account-rename-data';
+import type { AccountRenameContext, AccountRenameFailure, AccountRenameReadResult } from './account-rename-data';
 
 export type AccountRenameNavigation = AccountRenameContext & { href?: string | null };
 export type AccountRenameResult = AccountRenameReadResult<AccountRenameNavigation>;
@@ -18,18 +19,42 @@ export function accountRenameNavigation(
   };
 }
 
+/** Redirect and not-found remain Start/Router control flow, including after a failed private read. */
+export function accountRenameControlFlow(error: unknown): void {
+  if (isRedirect(error) || isNotFound(error)) throw error;
+}
+
+/** Module, request-helper and serialization faults stay in the same plain unavailable envelope. */
+export function accountRenameSetupFailure(error: unknown): AccountRenameResult {
+  accountRenameControlFlow(error);
+  return { context: null, failures: [{ kind: 'unavailable', status: null } satisfies AccountRenameFailure] };
+}
+
+/** Server-function transport drops custom properties; only JSON-safe metadata crosses the boundary. */
+export function serializeAccountRenameResult(result: AccountRenameResult): AccountRenameResult {
+  return JSON.parse(JSON.stringify(result)) as AccountRenameResult;
+}
+
 /** Browser-only region read; POST uses the ordinary Origin and session CSRF checks. */
 export const readAccountRename = createServerFn({ method: 'POST' }).handler(async (): Promise<AccountRenameResult> => {
-  const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
-  setResponseHeader('cache-control', 'private, no-store');
-  const { env } = await import('cloudflare:workers');
-  const { kernelClient } = await import('../kernel/client');
-  const { loadAccountRenameRegionResult, accountRenameException } = await import('./account-rename-data');
-  const sessionEnv = env as Partial<SessionEnv>;
   try {
-    const result = await loadAccountRenameRegionResult(kernelClient(), getRequest(), sessionEnv);
-    return { ...result, context: accountRenameNavigation(sessionEnv, result.context) };
+    const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
+    setResponseHeader('cache-control', 'private, no-store');
+    const { env } = await import('cloudflare:workers');
+    const { kernelClient } = await import('../kernel/client');
+    const { loadAccountRenameRegionResult, accountRenameException } = await import('./account-rename-data');
+    const sessionEnv = env as Partial<SessionEnv>;
+    try {
+      const result = await loadAccountRenameRegionResult(kernelClient(), getRequest(), sessionEnv);
+      return serializeAccountRenameResult({
+        ...result,
+        context: accountRenameNavigation(sessionEnv, result.context),
+      });
+    } catch (error) {
+      accountRenameControlFlow(error);
+      return serializeAccountRenameResult({ context: null, failures: [accountRenameException(error)] });
+    }
   } catch (error) {
-    return { context: null, failures: [accountRenameException(error)] };
+    return serializeAccountRenameResult(accountRenameSetupFailure(error));
   }
 });

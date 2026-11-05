@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
@@ -6,6 +6,9 @@ import { createRoot } from 'react-dom/client';
 import { sessionQuery } from '../src/session/query';
 import { AccountRenameRegion, AccountSafetyCard, AccountSafetySection } from '../src/settings/account-safety';
 import { m } from '../src/paraglide/messages.js';
+
+const accountId = '123e4567-e89b-42d3-a456-426614174000';
+const renameHref = 'https://auth.test/account/rename';
 
 test('rename recovery refreshes only its read and retires expired credentials before dispatch', async () => {
   let token = 'expired';
@@ -186,4 +189,202 @@ test('failed and uncertain native sign-out recover independently without replay 
       else Reflect.deleteProperty(globalThis, key);
     }
   }
+});
+
+async function withAccountSafetyDom(
+  run: (host: HTMLElement, window: { HTMLFormElement: { prototype: { submit: () => void } } }) => Promise<void>,
+) {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/settings#account' });
+  const globals = {
+    window,
+    document: window.document,
+    HTMLElement: window.HTMLElement,
+    HTMLFormElement: window.HTMLFormElement,
+    Element: window.Element,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = Object.entries(globals).map(([key, value]) => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+    return [key, descriptor] as const;
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  try {
+    await run(host, window);
+  } finally {
+    await window.happyDOM.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}
+
+test('a never-settling session recovery finishes visibly without another sign-out or native discovery', async () => {
+  await withAccountSafetyDom(async (host, window) => {
+    const root = createRoot(host);
+    let submitted = 0;
+    let renamed = 0;
+    window.HTMLFormElement.prototype.submit = function () {
+      submitted++;
+    };
+    const hang = Promise.withResolvers<void>();
+    const schedule = globalThis.setTimeout;
+    const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((callback, delay, ...args) =>
+      schedule(callback, delay === 10_000 ? 0 : delay, ...args)) as typeof setTimeout);
+    try {
+      await act(async () =>
+        root.render(
+          <AccountSafetyCard
+            state="signed-in"
+            csrfToken="fresh"
+            securityHref="https://auth.test/security"
+            onReload={() => hang.promise}
+            renameRead={{
+              loading: false,
+              reload: () => {
+                renamed++;
+              },
+            }}
+          />,
+        ),
+      );
+      await act(async () => host.querySelector<HTMLButtonElement>('button[type="submit"]')!.click());
+      expect(host.textContent).toContain(m.settings_account_sign_out_uncertain());
+      await act(async () =>
+        host.querySelector<HTMLButtonElement>(`button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`)!.click(),
+      );
+      await act(async () => new Promise((resolve) => schedule(resolve, 0)));
+      expect(host.textContent).toContain(m.settings_account_sign_out_uncertain());
+      expect(host.querySelector('button[type="submit"]')?.hasAttribute('disabled')).toBe(true);
+      expect(
+        host.querySelector<HTMLButtonElement>(`button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`)
+          ?.disabled,
+      ).toBe(false);
+      expect(submitted).toBe(1);
+      expect(renamed).toBe(0);
+    } finally {
+      hang.resolve();
+      timer.mockRestore();
+      await act(async () => root.unmount());
+    }
+  });
+});
+
+test('old-viewer late completion cannot restore a link or unlock an old form', async () => {
+  await withAccountSafetyDom(async (host, window) => {
+    const root = createRoot(host);
+    let submitted = 0;
+    let current = true;
+    const hang = Promise.withResolvers<void>();
+    window.HTMLFormElement.prototype.submit = function () {
+      submitted++;
+    };
+    const available = {
+      accountId,
+      handle: 'alice',
+      available: true as const,
+      href: renameHref,
+    };
+    await act(async () =>
+      root.render(
+        <AccountSafetyCard
+          state="signed-in"
+          csrfToken="fresh"
+          securityHref="https://auth.test/security"
+          isCurrent={() => current}
+          onReload={() => hang.promise}
+          renameAccount={available}
+          renameRead={{ loading: false, reload() {} }}
+        />,
+      ),
+    );
+    expect(host.querySelector(`a[href="${renameHref}"]`)).toBeTruthy();
+    await act(async () => host.querySelector<HTMLButtonElement>('button[type="submit"]')!.click());
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>(`button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`)!.click(),
+    );
+    current = false;
+    await act(async () =>
+      root.render(
+        <AccountSafetyCard
+          state="signed-in"
+          csrfToken="fresh"
+          securityHref="https://auth.test/security"
+          isCurrent={() => current}
+          onReload={() => hang.promise}
+          renameAccount={available}
+          renameRead={{ loading: false, reload() {} }}
+        />,
+      ),
+    );
+    expect(host.querySelector(`a[href="${renameHref}"]`)).toBeNull();
+    hang.resolve();
+    await act(async () => await Promise.resolve());
+    expect(host.querySelector(`a[href="${renameHref}"]`)).toBeNull();
+    expect(host.textContent).toContain(m.settings_account_sign_out_uncertain());
+    expect(host.querySelector('button[type="submit"]')?.hasAttribute('disabled')).toBe(true);
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>(`button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`)?.click(),
+    );
+    expect(submitted).toBe(1);
+    await act(async () => root.unmount());
+  });
+});
+
+test('deliberate current recovery renders the native available destination once or the honest unavailable outcome', async () => {
+  await withAccountSafetyDom(async (host) => {
+    const root = createRoot(host);
+    let outcome: 'failed' | 'available' | 'unavailable' = 'failed';
+    const render = () => (
+      <AccountSafetyCard
+        state="signed-in"
+        csrfToken="fresh"
+        securityHref="https://auth.test/security"
+        onReload={() => {}}
+        renameAccount={
+          outcome === 'available'
+            ? { accountId, handle: 'alice', available: true, href: renameHref }
+            : { accountId, handle: 'alice', available: true, href: null }
+        }
+        renameRead={{
+          loading: false,
+          reload() {
+            outcome = outcome === 'failed' ? 'available' : 'unavailable';
+          },
+          failures:
+            outcome === 'failed'
+              ? [{ kind: 'failed', status: 503 }]
+              : outcome === 'unavailable'
+                ? [{ kind: 'unavailable', status: 501 }]
+                : undefined,
+        }}
+      />
+    );
+    await act(async () => root.render(render()));
+    expect(host.querySelector(`a[href="${renameHref}"]`)).toBeNull();
+    expect(host.textContent).toContain(m.settings_account_rename_failed());
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>(
+        `button[aria-label="${m.settings_reload()}: ${m.settings_account_rename_heading()}"]`,
+      )!.click(),
+    );
+    await act(async () => root.render(render()));
+    expect(host.querySelectorAll(`a[href="${renameHref}"]`)).toHaveLength(1);
+    expect(host.textContent).not.toContain(m.settings_account_rename_failed());
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>(
+        `button[aria-label="${m.settings_reload()}: ${m.settings_account_rename_heading()}"]`,
+      )!.click(),
+    );
+    await act(async () => root.render(render()));
+    expect(host.querySelector(`a[href="${renameHref}"]`)).toBeNull();
+    expect(host.textContent).toContain(m.settings_account_rename_unavailable());
+    await act(async () => root.unmount());
+  });
 });

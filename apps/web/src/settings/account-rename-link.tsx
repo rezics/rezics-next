@@ -18,8 +18,14 @@ export function AccountRenameLink({
   const identity = !loading && !failure ? context : null;
   const href = identity?.available ? (identity.href ?? null) : null;
   return (
-    <div className="min-w-0 max-w-full space-y-3 [overflow-wrap:anywhere]">
-      <h3 className="font-medium">{m.settings_account_rename_heading()}</h3>
+    <div
+      className="min-w-0 max-w-full space-y-3 [overflow-wrap:anywhere]"
+      aria-busy={loading || undefined}
+      aria-labelledby={`${id}-heading`}
+    >
+      <h3 id={`${id}-heading`} className="font-medium">
+        {m.settings_account_rename_heading()}
+      </h3>
       {identity ? (
         <div className="w-full min-w-0 max-w-full space-y-2">
           <p

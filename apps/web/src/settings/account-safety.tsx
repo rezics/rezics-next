@@ -1,5 +1,14 @@
 import { withManagedReadDeadline } from './managed-read-deadline';
-import { useContext, useEffect, useId, useSyncExternalStore, useMemo, useRef, useState } from 'react';
+import {
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useSyncExternalStore,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -10,7 +19,7 @@ import { SignInPrompt } from '../threads/write-prompts';
 import { accountSafetyLinks } from './account-safety-links';
 import { AccountRenameLink } from './account-rename-link';
 import type { AccountRenameNavigation, AccountRenameResult } from './account-rename-actions';
-import type { AccountRenameFailure } from './account-rename-data';
+import { accountRenamePresentedFailure, type AccountRenameFailure } from './account-rename-data';
 import {
   managedNavigationGuard,
   useManagedReaderLifetime,
@@ -208,22 +217,38 @@ function AccountSignOut({
   const [phase, setPhase] = useState<'idle' | 'csrf' | 'failed' | 'uncertain'>('idle');
   const [recovering, setRecovering] = useState(false);
   const locked = useRef(false);
+  const attempt = useRef(0);
+  const reloadControl = useRef<HTMLButtonElement>(null);
+  const submitControl = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
   const isCurrent = props.isCurrent ?? alwaysCurrent;
   const unavailable = !props.csrfToken || phase === 'csrf';
   const recover = async () => {
     if (recovering || !isCurrent()) return;
+    const token = ++attempt.current;
     setRecovering(true);
     try {
-      await props.onReload();
-      if (!isCurrent()) return;
+      await withManagedReadDeadline(async () => {
+        await props.onReload();
+      });
+      if (!isCurrent() || token !== attempt.current) return;
       locked.current = false;
       setPhase('idle');
     } catch {
       // Keep the original failure/uncertainty visible until a session read succeeds.
     } finally {
-      if (isCurrent()) setRecovering(false);
+      if (isCurrent() && token === attempt.current) setRecovering(false);
     }
   };
+  useLayoutEffect(() => {
+    if (recovering || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    if (!isCurrent()) return;
+    const active = document.activeElement;
+    const target = phase === 'idle' ? submitControl.current : reloadControl.current;
+    if (active !== document.body && active !== reloadControl.current && active !== submitControl.current) return;
+    target?.focus();
+  }, [recovering, phase, isCurrent]);
   return (
     <div className="space-y-3">
       <p id={`${id}-sign-out`} className="text-sm text-muted-foreground">
@@ -253,6 +278,7 @@ function AccountSignOut({
       >
         <input type="hidden" name="csrf_token" value={props.csrfToken ?? ''} />
         <Button
+          ref={submitControl}
           type="submit"
           variant="outline"
           size="lg"
@@ -273,12 +299,14 @@ function AccountSignOut({
                 : m.settings_account_sign_out_uncertain()}
           </p>
           <Button
+            ref={reloadControl}
             type="button"
             variant="outline"
             className={actionClass}
             disabled={recovering}
             aria-label={`${m.settings_reload()}: ${m.account_sign_out()}`}
-            onClick={() => {
+            onClick={(event) => {
+              restoreFocus.current = event.detail === 0;
               if (isCurrent()) void recover();
             }}
           >
@@ -293,7 +321,7 @@ function AccountSignOut({
 export function AccountSafetyCard(props: AccountSafetyProps) {
   const id = useId();
   const read = props.state === 'signed-in' ? props.renameRead : undefined;
-  const failure = read?.failures?.find((entry) => entry.kind === 'denied') ?? read?.failures?.[0];
+  const failure = accountRenamePresentedFailure(read?.failures);
   const retryAt = useMemo(
     () =>
       read?.retryAt ?? Math.max(0, ...(read?.failures ?? []).map((entry) => preferenceRetryDeadline(entry.retryAfter))),
@@ -303,6 +331,16 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
   const links = props.state === 'signed-in' ? accountSafetyLinks(props.securityHref) : null;
   const isCurrent = props.state === 'signed-in' ? (props.isCurrent ?? alwaysCurrent) : alwaysCurrent;
   const navigationGuard = managedNavigationGuard(isCurrent);
+  const renameReload = useRef<HTMLButtonElement>(null);
+  const restoreRenameFocus = useRef(false);
+  useLayoutEffect(() => {
+    if (read?.loading || !restoreRenameFocus.current) return;
+    restoreRenameFocus.current = false;
+    if (!isCurrent()) return;
+    const active = document.activeElement;
+    if (active !== document.body && active !== renameReload.current) return;
+    renameReload.current?.focus();
+  }, [read?.loading, isCurrent]);
   const actionClass =
     'h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal py-2 text-center [overflow-wrap:anywhere]';
   return (
@@ -325,19 +363,21 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
         ) : (
           <>
             <AccountRenameLink
-              context={props.renameAccount ?? null}
-              loading={read?.loading ?? false}
-              failure={failure}
+              context={isCurrent() ? (props.renameAccount ?? null) : null}
+              loading={(read?.loading ?? false) || !isCurrent()}
+              failure={isCurrent() ? failure : undefined}
             />
             {props.renameRead ? (
-              <div aria-busy={props.renameRead.loading} className="space-y-2">
+              <div aria-busy={props.renameRead.loading || !isCurrent()} className="space-y-2">
                 <Button
+                  ref={renameReload}
                   type="button"
                   variant="outline"
                   className={actionClass}
-                  disabled={props.renameRead.loading || waiting}
+                  disabled={props.renameRead.loading || waiting || !isCurrent()}
                   aria-describedby={waiting ? `${id}-rename-wait` : undefined}
-                  onClick={() => {
+                  onClick={(event) => {
+                    restoreRenameFocus.current = event.detail === 0;
                     if (isCurrent() && (read?.isCurrent?.() ?? true)) props.renameRead?.reload();
                   }}
                   aria-label={`${m.settings_reload()}: ${m.settings_account_rename_heading()}`}

@@ -6,7 +6,7 @@ import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
 import { loadAccountRenameRegion } from '../src/settings/account-rename-data';
 import type { AccountRenameResult } from '../src/settings/account-rename-actions';
-import { AccountRenameRegion, AccountSafetySection } from '../src/settings/account-safety';
+import { AccountRenameRegion, AccountSafetySection, readCurrentAccountRename } from '../src/settings/account-safety';
 import { loadSettingsPage } from '../src/settings/preferences';
 
 const accountId = '123e4567-e89b-42d3-a456-426614174000';
@@ -206,4 +206,38 @@ test('account safety honors HTTP-date waits exactly and never invents a wait for
   } finally {
     clock.mockRestore();
   }
+});
+
+test('retired module loading never issues a later account request, and a late success cannot restore the destination', async () => {
+  const ready: AccountRenameResult = {
+    context: { accountId, handle: 'alice', available: true, href: 'https://auth.example.test/account/rename' },
+  };
+  let current = true;
+  let imports = 0;
+  let reads = 0;
+  let resolveLoad!: (value: typeof import('../src/settings/account-rename-actions')) => void;
+  const loaded = {
+    readAccountRename: async () => {
+      reads++;
+      return ready;
+    },
+  } as unknown as typeof import('../src/settings/account-rename-actions');
+  const pending = readCurrentAccountRename(csrfToken, () => current, () => {
+    imports++;
+    return new Promise((done) => {
+      resolveLoad = done;
+    });
+  });
+  current = false;
+  resolveLoad(loaded);
+  expect(await pending).toEqual({ context: null });
+  expect(imports).toBe(1);
+  expect(reads).toBe(0);
+  const region = new AccountRenameRegion(async () => ready, accountId, () => current);
+  const leave = region.mount();
+  await region.reload();
+  expect(region.snapshot().context).toBeNull();
+  current = true;
+  expect(region.snapshot().context).toBeNull();
+  leave();
 });
