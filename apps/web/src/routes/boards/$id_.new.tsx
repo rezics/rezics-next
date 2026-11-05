@@ -8,7 +8,8 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { startThread } from '../../threads/actions';
-import { threadHref, threadTitle } from '../../threads/thread-href';
+import { threadLocation } from '../../threads/thread-href';
+import { boardRequestHref } from '../../threads/board-navigation';
 import { draftFetch, PostComposer } from '../../threads/composer';
 import { ReviewFields } from '../../threads/review-fields';
 import type { VoteCitation } from '../../threads/post-writes';
@@ -328,7 +329,11 @@ function NewThreadEditor({
                 }}
                 onSuccess={(thread) => {
                   if (!lifetime.isCurrent(ticket)) return;
-                  window.location.assign(`/${getLocale()}${threadHref({ id: thread.id, title: threadTitle(thread) })}`);
+                  const locale = getLocale();
+                  const boardReturn = origin.returnTo
+                    ? boardRequestHref(locale, origin.boardId, { returnTo: origin.returnTo })
+                    : undefined;
+                  window.location.assign(threadLocation(locale, thread, undefined, undefined, undefined, boardReturn));
                 }}
               />
             </div>

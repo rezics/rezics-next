@@ -57,7 +57,12 @@ import { ClosedErrorPage } from '../../shell/closed';
 import { isThreadPageCursorError } from '../../threads/thread-page-errors';
 import { ThreadPageError } from '../../threads/thread-page-error';
 import { ThreadWatch } from '../../threads/thread-watch';
-import { admittedBoardReturn, boardReturnMatches, boardReturnRestart } from '../../threads/board-navigation';
+import {
+  admittedBoardReturn,
+  boardReturnMatches,
+  boardReturnRestart,
+  boardPreparedSearch,
+} from '../../threads/board-navigation';
 import { PageHeading } from '../../shell/page-heading';
 import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
 import {
@@ -170,10 +175,20 @@ export function ThreadReadingHeader({
 }) {
   const origin = admittedBoardReturn(boardReturn);
   const currentOrigin = origin && boardReturnCurrent && boardReturnMatches(origin, page.board?.id, getLocale());
+  const subjectReturn = currentOrigin ? boardPreparedSearch({ href: origin }, getLocale()).returnTo : undefined;
   const restart = origin ? boardReturnRestart(origin) : undefined;
   return (
     <header className="min-w-0 min-h-8 scroll-mt-24 space-y-3 px-1 [overflow-wrap:anywhere]">
       <BoardContext realm={page.realm} board={page.board} boardReturn={currentOrigin ? origin : undefined} prominent />
+      {subjectReturn ? (
+        <a
+          data-slot="thread-subject-return"
+          href={subjectReturn}
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+        >
+          {m.subject_connections_return()}
+        </a>
+      ) : null}
       {currentOrigin ? (
         <a
           href={origin}

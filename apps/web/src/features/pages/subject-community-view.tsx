@@ -73,6 +73,7 @@ export function SubjectCommunityRegion({
       kind,
       locale,
       href,
+      currentHref,
       paged,
       community?.contextId,
       region.state,

@@ -326,7 +326,13 @@ test('real new-thread composition preserves a selected review citation and retri
     } as Awaited<ReturnType<typeof startThread>>;
     await page.resolveWrite(1, created);
     await page.settle(() => page.navigation.length === 1);
-    expect(page.navigation).toEqual([`/en/threads/${id(9)}/a-review-title`]);
+    const acknowledged = new URL(page.navigation[0]!, 'https://site.test');
+    expect(acknowledged.pathname).toBe(`/en/threads/${id(9)}/a-review-title`);
+    const boardReturn = new URL(acknowledged.searchParams.get('boardReturn')!, 'https://site.test');
+    expect(boardReturn.pathname).toBe(`/en/boards/${id(1)}`);
+    expect(boardReturn.searchParams.get('returnTo')).toBe(
+      `/en/subjects/${id(2)}/work/reviews?realm=${id(18)}#subject-community-reviews`,
+    );
     expect(page.window.document.cookie).toContain(`rezics_draft_key=${id(9)}.${page.writes[1]!.data.idempotencyKey}`);
     expect(page.voteReads).toHaveLength(1);
 
