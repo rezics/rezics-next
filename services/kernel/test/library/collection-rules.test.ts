@@ -139,9 +139,9 @@ test('catalogue selected publication uses pinned Search membership and activates
 
     const privateBefore = await request('alice', 'GET', `/v1/collections/${collection.id}/members`);
     expect(privateBefore.status).toBe(200);
-    expect((privateBefore.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId)).toEqual(
-      [catalogueMatch.id],
-    );
+    expect(
+      (privateBefore.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId),
+    ).toEqual([catalogueMatch.id]);
 
     const originalInput = { revision: collection.revision, subjectIds: [catalogueMatch.id] };
     const originalKey = discoveryKey();
@@ -164,38 +164,24 @@ test('catalogue selected publication uses pinned Search membership and activates
     expect(exactReplay.status).toBe(200);
     expect(exactReplay.body).toEqual(first.body);
     expect(
-      (
-        await request(
-          'bob',
-          'POST',
-          `/v1/collections/${collection.id}:publishSelected`,
-          originalInput,
-          originalKey,
-        )
-      ).status,
+      (await request('bob', 'POST', `/v1/collections/${collection.id}:publishSelected`, originalInput, originalKey))
+        .status,
     ).toBe(404);
 
     const publicBeforeChange = await request('anonymous', 'GET', `/v1/collections/${collection.id}/members`);
     expect(publicBeforeChange.status).toBe(200);
-    expect((publicBeforeChange.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId)).toEqual(
-      [catalogueMatch.id],
-    );
+    expect(
+      (publicBeforeChange.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId),
+    ).toEqual([catalogueMatch.id]);
 
-    await base.adopt(
-      libraryOnlyBeforeMatch,
-      discoveryStatement('schema:wordCount', { amount: '+1200001', unit: '1' }),
-    );
+    await base.adopt(libraryOnlyBeforeMatch, discoveryStatement('schema:wordCount', { amount: '+1200001', unit: '1' }));
     await base.catchUp([libraryOnlyBeforeMatch]);
     const currentViewQuery = new URLSearchParams({ filter: JSON.stringify(filter), sort: 'id', limit: '100' });
-    const privateAfter = await request(
-      'alice',
-      'GET',
-      `/v1/collections/${collection.id}/members?${currentViewQuery}`,
-    );
+    const privateAfter = await request('alice', 'GET', `/v1/collections/${collection.id}/members?${currentViewQuery}`);
     expect(privateAfter.status).toBe(200);
-    expect((privateAfter.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId)).toEqual(
-      [catalogueMatch.id, libraryOnlyBeforeMatch.id].sort(),
-    );
+    expect(
+      (privateAfter.body as { members: { subjectId: string }[] }).members.map(({ subjectId }) => subjectId),
+    ).toEqual([catalogueMatch.id, libraryOnlyBeforeMatch.id].sort());
     const publicUntilActivation = await request('anonymous', 'GET', `/v1/collections/${collection.id}/members`);
     expect(publicUntilActivation.status).toBe(200);
     expect(
