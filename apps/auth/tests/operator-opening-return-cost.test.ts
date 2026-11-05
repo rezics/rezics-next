@@ -3,16 +3,18 @@ import type { OpeningInput } from '../src/operator-session-opening';
 import { readOpenedSession } from '../src/operator-session-opening';
 import { managementOperationProfile } from '../src/management-operations';
 
+const subject = '33333333-3333-4333-8333-333333333333';
+const input: OpeningInput = {
+  accountId: '11111111-1111-4111-8111-111111111111',
+  operationKey: 'readback-only',
+  operation: {
+    kind: 'opening',
+    operatorAccountId: '22222222-2222-4222-8222-222222222222',
+    subjectAccountId: subject,
+  },
+};
+
 test('one explicit session readback makes one native read and no approval or opening request', async () => {
-  const input: OpeningInput = {
-    accountId: '11111111-1111-4111-8111-111111111111',
-    operationKey: 'readback-only',
-    operation: {
-      kind: 'opening',
-      operatorAccountId: '22222222-2222-4222-8222-222222222222',
-      subjectAccountId: '33333333-3333-4333-8333-333333333333',
-    },
-  };
   const calls: string[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = ((path) => {

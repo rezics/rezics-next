@@ -91,12 +91,12 @@ test('cache return, departure and unmount retire read ownership before late meta
 
   await page.review();
   expect(page.pending).toHaveLength(2);
-  transition('pagehide');
+  await flush(() => transition('pagehide'));
   expect(page.pending[1]!.signal.aborted).toBe(true);
   await flush(() => page.pending[1]!.resolve(metadata));
   expect(page.host.querySelector('#opening-confirmation')).toBeNull();
 
-  transition('pageshow');
+  await flush(() => transition('pageshow'));
   await page.review();
   expect(page.pending).toHaveLength(3);
   await page.navigate('/security');
