@@ -67,7 +67,11 @@ const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/ker
 const { sessionQuery } = await import('../src/session/query');
 
 const reads = await import('../src/checkout/creator-sales');
-const { CreatorSalesCurrent, navigateCreatorSales } = await import('../src/checkout/creator-sales-current');
+const {
+  CreatorSalesCurrent,
+  creatorSalesLocationKey,
+  navigateCreatorSales,
+} = await import('../src/checkout/creator-sales-current');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
 const A = '019a2100-0000-7000-8000-000000000020';
@@ -313,7 +317,7 @@ test('three windows return through exact Previous and failed Restart retry witho
         <CreatorSalesCurrent
           initial={data.initial}
           loadId={data.loadId}
-          locationKey={routeRouter.state.location.key}
+          locationKey={creatorSalesLocationKey(routeRouter.state.location)}
           cursor={cursor}
           locale="en"
           navigate={(href, started) => {
@@ -372,7 +376,7 @@ test('three windows return through exact Previous and failed Restart retry witho
     await click('Older sales', true, true);
     const firstRouteLoad = router.state.matches.at(-1)!.loaderData as { loadId: string };
     expect(await admissions[0]!.promise).toEqual({
-      locationKey: router.state.location.key,
+      locationKey: creatorSalesLocationKey(router.state.location),
       loadId: firstRouteLoad.loadId,
     });
     expect(host.textContent).toContain('Previous sales');
@@ -522,7 +526,7 @@ test('a delayed move superseded at the same cursor retires its path before a fre
         <CreatorSalesCurrent
           initial={data.initial}
           loadId={data.loadId}
-          locationKey={router.state.location.key}
+          locationKey={creatorSalesLocationKey(router.state.location)}
           cursor={cursor}
           locale="en"
           navigate={(href, started) => {
@@ -575,7 +579,7 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     delayNextNavigation = true;
     await click('Older sales');
     const delayedAdmission = await admissions[0]!.promise;
-    expect(delayedAdmission?.locationKey).toBe(router.state.location.key);
+    expect(delayedAdmission?.locationKey).toBe(creatorSalesLocationKey(router.state.location));
     const initialTargetLoad = router.state.matches.at(-1)!.loaderData as { loadId: string };
     expect(delayedAdmission?.loadId).toBe(initialTargetLoad.loadId);
     expect(requested.at(-1)).toBe('second+/=');
@@ -600,7 +604,7 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     expect(host.textContent).toContain('Older sales');
     await click('Older sales', true);
     const freshAdmission = await admissions[1]!.promise;
-    expect(freshAdmission?.locationKey).toBe(router.state.location.key);
+    expect(freshAdmission?.locationKey).toBe(creatorSalesLocationKey(router.state.location));
     const freshTargetLoad = router.state.matches.at(-1)!.loaderData as { loadId: string };
     expect(freshAdmission?.loadId).toBe(freshTargetLoad.loadId);
     await tick();
