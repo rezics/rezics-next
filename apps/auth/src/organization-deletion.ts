@@ -200,11 +200,12 @@ export async function executeOrganizationDeletion(
       !organizationDeletePendingMatches(continuation.value, target.humanAccountId, target.organizationId, operationKey))
   )
     return { ok: false, reason: 'changed' };
+  const expectedContinuation = continuation.kind === 'pending' ? continuation.value : null;
   const continuationIsCurrent = () => {
     const latest = readOrganizationDeleteStepUp();
-    return continuation.kind === 'absent'
+    return expectedContinuation === null
       ? latest.kind === 'absent'
-      : latest.kind === 'pending' && sameOrganizationDeleteDescriptor(latest.value, continuation.value);
+      : latest.kind === 'pending' && sameOrganizationDeleteDescriptor(latest.value, expectedContinuation);
   };
   // Persist the fence at the execution boundary, after approval and immediately
   // before sending. A preflight or approval failure is not a submitted deletion.
