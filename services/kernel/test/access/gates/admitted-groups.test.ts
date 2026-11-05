@@ -10,9 +10,15 @@ const { parseExposure } = await import('../../../src/access/gates/declaration.ts
 const { newId, routeOf } = await import('../../../src/route/route.ts');
 const { createKernel } = await import('../../../src/http/kernel.ts');
 const { actionCatalogue } = await import('../../../src/http/request.ts');
+const { configureTestReceiptKeys, testReceiptKeys } = await import('../../support/receipt-keys.ts');
 const appModule = await import('../../../src/http/app.ts');
 
+const originalReceiptKeys = process.env.KERNEL_RECEIPT_KEYS;
+process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
+  .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+  .join(',');
 const pool = createPool(process.env.DATABASE_URL!);
+configureTestReceiptKeys(pool);
 const instant = new Date();
 let now = new Date(instant);
 const groups = {
@@ -165,6 +171,7 @@ beforeAll(async () => {
     kernel = createKernel({
       pool,
       routeKey: new Uint8Array(32).fill(107),
+      receiptKeys: testReceiptKeys(),
       clock: () => new Date(now),
       access: (config) => {
         access = createAccess({
@@ -202,6 +209,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.end();
+  if (originalReceiptKeys === undefined) delete process.env.KERNEL_RECEIPT_KEYS;
+  else process.env.KERNEL_RECEIPT_KEYS = originalReceiptKeys;
 });
 
 test('an anonymous caller sees the mounted groups open at T and public journey markers', async () => {

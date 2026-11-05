@@ -215,7 +215,10 @@ function writeEvidence(body: Record<string, unknown>) {
 }
 
 function layoutControl(page: Page, name: string) {
-  return page.getByRole('button', { name }).or(page.getByRole('radio', { name }));
+  return page
+    .getByRole('button', { name })
+    .or(page.getByRole('radio', { name }))
+    .or(page.getByRole('link', { name }));
 }
 
 test('touched Library labels exist in every launch locale', () => {

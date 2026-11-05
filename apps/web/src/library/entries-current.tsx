@@ -138,7 +138,7 @@ export function DisplayControls({
               key={layout}
               href={shelfHref(locale, choice({ layout, layoutExplicit: true }))}
               aria-current={display.layout === layout ? 'page' : undefined}
-              className={`${selected(display.layout === layout)}${layout === 'table' ? ' max-sm:hidden' : ''}`}
+              className={`${selected(display.layout === layout)} min-h-11 min-w-11${layout === 'table' ? ' max-sm:hidden' : ''}`}
             >
               {layoutLabel(layout)}
             </a>
@@ -151,7 +151,7 @@ export function DisplayControls({
                 key={size}
                 href={shelfHref(locale, choice({ size, sizeExplicit: true }))}
                 aria-current={display.size === size ? 'page' : undefined}
-                className={selected(display.size === size)}
+                className={`${selected(display.size === size)} min-h-11 min-w-11`}
               >
                 {sizeLabel(size)}
               </a>
