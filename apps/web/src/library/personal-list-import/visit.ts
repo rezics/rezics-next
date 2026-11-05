@@ -50,7 +50,7 @@ export function usePersonalImportVisit(): PersonalImportVisit | null {
       locale,
       controller,
       retire,
-      current(signal) {
+      current(signal?: AbortSignal) {
         const latest = observation?.getSnapshot();
         if (
           latest?.state !== 'signed-in' ||
