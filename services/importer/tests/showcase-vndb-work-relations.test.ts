@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { Database } from 'bun:sqlite';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import {
@@ -7,7 +8,7 @@ import {
   planCrossMediaSeed,
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
-import { graphEdgeSource, type GraphEdgeEvidence } from '../src/cross-media-bindings.ts';
+import { CrossMediaGraph, graphEdgeSource, type GraphEdgeEvidence } from '../src/cross-media-bindings.ts';
 
 const uuid = (tail: string) => `00000000-0000-4000-8000-${tail.padStart(12, '0')}`;
 
@@ -125,4 +126,43 @@ test('selected VNDB relation handoff keeps mapped direction, cited source and ex
       reason: 'missing_endpoint:v4',
     },
   ]);
+
+  const database = new Database(':memory:');
+  try {
+    const graph = new CrossMediaGraph(database);
+    graph.remember(edges);
+    const fencedTuples: string[] = [];
+    let sent = false;
+    const delivered = await graph.deliver({
+      claim: ({ external_id }) => ({ state: 'bound', subject: external_id === 'v7983' ? holderId : targetId }),
+      nativeType: () => 'wd:Q689445',
+      fence: async ({ externalId }) => {
+        fencedTuples.push(externalId);
+        return { fenced: externalId === 'v4', securityRevision: '1' };
+      },
+      batch: async ({ commands }) => {
+        sent = true;
+        return {
+          results: commands.map((command) => ({
+            key: command.key,
+            status: 201,
+            value: { candidate: candidateId, revision: 1 },
+          })),
+        };
+      },
+    });
+    expect(fencedTuples).toEqual(['v4']);
+    expect(sent).toBe(false);
+    expect(delivered.unresolved.map(({ reason }) => reason)).toEqual(['fenced_source_facts']);
+    expect(
+      buildVndbWorkRelationOutcomes({
+        plan,
+        evidence: graph.evidence(edges),
+        readings: [],
+        unresolved: delivered.unresolved,
+      }),
+    ).toMatchObject([{ delivery: 'unavailable', publication: 'pending', reason: 'fenced_source_facts' }]);
+  } finally {
+    database.close();
+  }
 });
