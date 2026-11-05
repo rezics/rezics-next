@@ -33,6 +33,7 @@ import { runOnCheckHost } from '../../../scripts/stack-run.ts';
 import { affectedTests } from './affected.ts';
 import { buildSearchImage, cgroupArgs, subjectAutoCreateIndexSetting, waitForSearch } from './search.ts';
 import { withCommandPhase } from './command-phases.ts';
+import { prepareReyloAnalysisCache } from './reylo-cache.ts';
 import {
   captureArtifactReturns,
   registerArtifactDeclarations,
@@ -44,6 +45,7 @@ const pid = String(process.pid);
 let container = '';
 let searchContainer = '';
 let reyloDirectory = '';
+let analysisDispose: (() => void) | undefined;
 let failedFileOutputs: string[] = [];
 const POSTGRES_MAX_CONNECTIONS = 500;
 const POSTGRES_CONNECTION_SAMPLE_MS = 250;
@@ -826,6 +828,7 @@ export function cleanup(
     }
   }
   if (reyloDirectory) rmSync(reyloDirectory, { recursive: true, force: true });
+  analysisDispose?.();
 }
 
 function fail(message: string): never {
@@ -927,16 +930,34 @@ async function main(): Promise<void> {
   await withCommandPhase('migrations', () => {
     migrate(url);
   });
+  let dumps: Record<string, string> = {};
   await withCommandPhase('sql-schema', async () => {
-    await assertSchemaConsistency(schemaDumps(url));
+    dumps = schemaDumps(url);
+    await assertSchemaConsistency(dumps);
   });
 
-  // The copies share the template's schema and object ids, so one analysis holds for all of them.
-  await psql(`CREATE DATABASE ${ANALYSIS_DATABASE} TEMPLATE rezics`);
-  const temporaryRoot = resolve(directory, '.temp');
-  mkdirSync(temporaryRoot, { recursive: true });
-  reyloDirectory = mkdtempSync(resolve(temporaryRoot, 'reylo-'));
-  const reyloConfig = writeReyloProject(reyloDirectory, url.replace(/\/rezics(?=\?)/, `/${ANALYSIS_DATABASE}`));
+  // The host's warm analysis, shared with typecheck: an unchanged SQL file is not analysed, and the compiler and the tests
+  // read every entry offline. A failed generation keeps this run's own analysis, so TypeScript reports the SQL errors.
+  const analysisStarted = performance.now();
+  const analysis = await withCommandPhase('sql-analysis', () =>
+    prepareReyloAnalysisCache(env, { schemaDumps: () => dumps }),
+  );
+  analysisDispose = analysis.dispose;
+  let reyloConfig: string;
+  if (analysis.available) {
+    reyloConfig = analysis.environment.REYLO_CONFIG!;
+    process.stdout.write(
+      `Kernel SQL analysis cache: analyzed ${analysis.analyzedFiles} of ${analysis.totalFiles} files, ${analysis.writtenEntries} statement entries written in ${seconds(analysisStarted)}s.\n`,
+    );
+  } else {
+    // The copies share the template's schema and object ids, so one analysis holds for all of them.
+    await psql(`CREATE DATABASE ${ANALYSIS_DATABASE} TEMPLATE rezics`);
+    const temporaryRoot = resolve(directory, '.temp');
+    mkdirSync(temporaryRoot, { recursive: true });
+    reyloDirectory = mkdtempSync(resolve(temporaryRoot, 'reylo-'));
+    reyloConfig = writeReyloProject(reyloDirectory, url.replace(/\/rezics(?=\?)/, `/${ANALYSIS_DATABASE}`));
+    process.stdout.write(`Kernel SQL analysis cache unavailable; analysing every statement in this run.\n`);
+  }
   const analysisEnvironment = { ...env, REYLO_CONFIG: reyloConfig };
   const compilerConfig = reyloConfig;
   const compilerEntriesBefore = reyloEntryCount(compilerConfig);
@@ -1110,8 +1131,7 @@ async function main(): Promise<void> {
     if (samplerConnected) await samplerClient.end().catch(() => undefined);
     process.stdout.write(`${formatConnectionRunSummary(sampler.peakTotal(), filePeaks)}\n`);
   }
-  const queries = resolve(reyloDirectory, '.reylo/queries');
-  process.stderr.write(`Reylo analyses written: ${existsSync(queries) ? readdirSync(queries).length : 0}\n`);
+  process.stderr.write(`Reylo analyses written: ${reyloEntryCount(reyloConfig)}\n`);
   if (failedFiles.length) fail(`Kernel tests failed for ${failedFiles.length} file(s):\n${failedFiles.join('\n')}`);
 }
 
