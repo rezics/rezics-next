@@ -74,6 +74,7 @@ function RecoveryReader({
   const readOwnerRef = useRef(readOwner);
   const live = useRef(true);
   const busy = useRef(false);
+  const readSequence = useRef(0);
   const firstReadStarted = useRef('');
   const windows = useRef(new BulkOutcomeWindows());
   const [readFailed, setReadFailed] = useState(false);
@@ -99,6 +100,8 @@ function RecoveryReader({
       admitted = next;
       windows.current = new BulkOutcomeWindows();
       busy.current = false;
+      readSequence.current++;
+      setReadBusy(false);
       readRef.current = { state: 'unavailable', operationId };
       readOwnerRef.current = '';
       firstReadStarted.current = '';
@@ -141,6 +144,7 @@ function RecoveryReader({
     const owner = ownerKey;
     const lease = origin.capture('personal_library');
     if (!addressCurrent(pathname, owner, lease) || id !== operationId || busy.current) return;
+    const sequence = ++readSequence.current;
     const path = windows.current;
     const previous = readRef.current;
     if (kind === 'next' && (previous.state !== 'available' || previous.next !== cursor)) return;
@@ -187,7 +191,7 @@ function RecoveryReader({
     } catch {
       if (addressCurrent(pathname, owner, lease) && windows.current === path) setReadFailed(true);
     } finally {
-      if (windows.current === path) {
+      if (readSequence.current === sequence) {
         busy.current = false;
         if (live.current) setReadBusy(false);
       }
@@ -259,8 +263,10 @@ function RecoveryReader({
         setCancelOwner(owner);
       }
     } finally {
-      busy.current = false;
-      if (live.current) setReadBusy(false);
+      if (addressCurrent(pathname, owner, lease)) {
+        busy.current = false;
+        setReadBusy(false);
+      }
     }
   }
 
@@ -312,8 +318,10 @@ function RecoveryReader({
         setCancelOwner(owner);
       }
     } finally {
-      busy.current = false;
-      if (live.current) setReadBusy(false);
+      if (addressCurrent(pathname, owner, lease)) {
+        busy.current = false;
+        setReadBusy(false);
+      }
     }
   }
 
@@ -342,6 +350,7 @@ function RecoveryReader({
 
   return (
     <LibraryBulkOperationRecoveryView
+      focusOwner={ownerKey}
       addressOperationId={operationId}
       authorized={authorized}
       read={visibleRead}

@@ -22,10 +22,10 @@ afterAll(async () => { mock.restore(); await window.happyDOM.close(); for (const
   if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key);
 } });
 function operation(id: string): LibraryBulkOperation {
-  return { id, route: 1, action: 'set_status', state: 'completed', collectionId: null, selectionKind: 'explicit',
+  return { id, route: 1, action: 'set_status', state: 'planned', collectionId: null, selectionKind: 'explicit',
     phase: 'applying', selectionComplete: true, occurrencesComplete: true, cancelRequested: false,
     counts: { scannedCandidates: 60, selectedSubjects: 60, scannedOccurrences: 0, capturedOccurrences: 0, targets: 60,
-      pending: 60, reconciling: 0, applied: 0, no_effect: 0, conflict: 0, denied: 0, failed: 0, cancelled: 0 },
+      pending: changed ? 0 : 60, reconciling: 0, applied: changed ? 60 : 0, no_effect: 0, conflict: 0, denied: 0, failed: 0, cancelled: 0 },
     summary: null, admittedAt: '2026-11-01T00:00:00Z', targetBoundAt: null, expiresAt: '2026-11-02T00:00:00Z',
     resultsExpireAt: '2026-11-03T00:00:00Z', finishedAt: null, reason: null };
 }
@@ -34,11 +34,11 @@ const commands: unknown[] = [];
 let fail = false, invalid = false, changed = false;
 let late: (() => Promise<void>) | undefined;
 function page(cursor?: string) {
-  const outcomes: LibraryBulkOutcome[] = cursor === 'c' ? [] : Array.from({ length: 20 }, (_, index) => ({
+  const outcomes: LibraryBulkOutcome[] = cursor === 'c' || cursor === 'd' ? [] : Array.from({ length: 20 }, (_, index) => ({
     ordinal: `${cursor ?? 'first'}-${index}`, subjectId: `subject-${cursor ?? 'first'}-${index}`, memberId: null,
     state: changed ? 'applied' : 'pending', reason: null, resultingMemberId: null,
   }));
-  return { outcomes, next: cursor === undefined ? 'b' : cursor === 'b' ? 'c' : null };
+  return { outcomes, next: cursor === undefined ? 'b' : cursor === 'b' ? 'c' : cursor === 'c' ? 'd' : null };
 }
 mock.module('../src/library/bulk-operation-recovery-server', () => ({
   readBulkOperationRecovery: async ({ data }: { data: { operationId: string; cursor?: string } }) => {
@@ -110,6 +110,11 @@ test('production route replaces three windows, retries exact reads independently
     await click(m.library_bulk_recovery_read_again());
     expect(reads.slice(-2).map(r => r.cursor)).toEqual(['c', 'c']);
     expect(host.querySelectorAll('ol li')).toHaveLength(0);
+    await click(m.library_bulk_recovery_read_more());
+    expect(reads.at(-1)?.cursor).toBe('d');
+    expect(host.querySelectorAll('ol li')).toHaveLength(0);
+    await click(m.library_window_previous());
+    expect(reads.at(-1)?.cursor).toBe('c');
     await click(m.library_window_previous());
     expect(reads.at(-1)?.cursor).toBe('b');
     changed = true; await click(m.library_vndb_browse_refresh());
