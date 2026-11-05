@@ -47,7 +47,8 @@ const schemeLabel = {
   [appearanceRoleTaxonomy]: 'VNDB appearance roles',
 } as const;
 type LabelLanguage = 'en' | 'ja' | 'zh-Hant';
-type CharacterTaxonomy = typeof characterTraitTaxonomy | typeof appearanceRoleTaxonomy;
+export type ShowcaseCharacterTaxonomy = typeof characterTraitTaxonomy | typeof appearanceRoleTaxonomy;
+type CharacterTaxonomy = ShowcaseCharacterTaxonomy;
 
 export type ShowcaseCharacterTerm = Readonly<{
   provider: 'vndb';
@@ -603,12 +604,29 @@ export async function prepareShowcaseCharacterVocabulary(input: {
   port: Pick<CrossMediaPort, 'batch' | 'readReviewedSubject'>;
   journal: ShowcaseJournal;
   stage: 'schemes' | 'concepts';
+  taxonomies?: readonly ShowcaseCharacterTaxonomy[];
 }): Promise<ShowcaseCharacterVocabularyPublication> {
   const vocabulary = await planShowcaseCharacterVocabulary(input.tables, input.selectedPlan);
-  const ownerKey = ownerKeyFor(input.selectedPlan, vocabulary.requirements.selectedWorkIds);
-  if (!ownerKey || !vocabulary.requirements.terms.length)
-    return { requirements: [], bindings: emptyBindings(), truncated: truncatedFrom(vocabulary.plan) };
-  const schemes = neededSchemes(vocabulary.requirements.terms);
+  const selectedTaxonomies = input.taxonomies ? new Set(input.taxonomies) : undefined;
+  const terms = selectedTaxonomies
+    ? vocabulary.requirements.terms.filter((term) => selectedTaxonomies.has(term.taxonomy))
+    : vocabulary.requirements.terms;
+  const requirements = selectedTaxonomies
+    ? {
+        ...vocabulary.requirements,
+        terms,
+        parents: selectedTaxonomies.has(characterTraitTaxonomy) ? vocabulary.requirements.parents : [],
+        associatedCodes: vocabulary.requirements.associatedCodes.filter((code) =>
+          terms.some((term) => term.code === code),
+        ),
+      }
+    : vocabulary.requirements;
+  const ownerKey = ownerKeyFor(input.selectedPlan, requirements.selectedWorkIds);
+  const truncated = selectedTaxonomies
+    ? terms.some((term) => term.taxonomy === characterTraitTaxonomy) && truncatedFrom(vocabulary.plan)
+    : truncatedFrom(vocabulary.plan);
+  if (!ownerKey || !terms.length) return { requirements: [], bindings: emptyBindings(), truncated };
+  const schemes = neededSchemes(terms);
   const schemeCommands = schemes.flatMap((taxonomy) =>
     vocabularyCommands({
       sourceKey: vocabularyKey(taxonomy),
@@ -644,23 +662,23 @@ export async function prepareShowcaseCharacterVocabulary(input: {
       'skos:ConceptScheme',
     ),
   );
-  const profile = identityProfile(vocabulary.requirements, input.journal);
+  const profile = identityProfile(requirements, input.journal);
   if (input.stage === 'schemes')
     return {
       requirements: schemeRequirements,
-      bindings: await composeVndbCharacterVocabularyBindings(input.port, profile, vocabulary.requirements),
-      truncated: truncatedFrom(vocabulary.plan),
+      bindings: await composeVndbCharacterVocabularyBindings(input.port, profile, requirements),
+      truncated,
     };
 
-  const current = await composeVndbCharacterVocabularyBindings(input.port, profile, vocabulary.requirements);
+  const current = await composeVndbCharacterVocabularyBindings(input.port, profile, requirements);
   const currentSchemes = new Map(current.schemes.map((entry) => [entry.taxonomy, entry.id]));
   const budget = Math.max(0, showcaseLimits.vocabulary - schemeRequirements.length);
-  const associatedCodes = new Set(vocabulary.requirements.associatedCodes);
-  const admitted = vocabulary.requirements.terms.filter((term) => currentSchemes.has(term.taxonomy));
+  const associatedCodes = new Set(requirements.associatedCodes);
+  const admitted = requirements.terms.filter((term) => currentSchemes.has(term.taxonomy));
   const associated = admitted.filter((term) => associatedCodes.has(term.code));
   const parentTerms = admitted.filter((term) => !associatedCodes.has(term.code));
   const conceptEntries = [...associated, ...parentTerms].slice(0, budget);
-  const truncated = truncatedFrom(vocabulary.plan) || admitted.length > conceptEntries.length;
+  const entriesTruncated = truncated || admitted.length > conceptEntries.length;
   const conceptCommands = conceptEntries.flatMap((term) =>
     vocabularyCommands({
       sourceKey: vocabularyKey(term.taxonomy, term.code),
@@ -674,7 +692,7 @@ export async function prepareShowcaseCharacterVocabulary(input: {
     await sendMissing({ port: input.port, journal: input.journal, commands: conceptCommands });
   const conceptCreates = ackedCreates(input.journal);
   const parentIds = new Map<string, string[]>();
-  for (const edge of vocabulary.requirements.parents) {
+  for (const edge of requirements.parents) {
     const parentId = conceptCreates.get(
       showcaseVocabularyExternalId(vocabularyKey(characterTraitTaxonomy, edge.parentCode)),
     );
@@ -714,8 +732,8 @@ export async function prepareShowcaseCharacterVocabulary(input: {
   const resolved = identityProfile(vocabulary.requirements, input.journal);
   return {
     requirements: [...schemeRequirements, ...conceptRequirements],
-    bindings: await composeVndbCharacterVocabularyBindings(input.port, resolved, vocabulary.requirements),
-    truncated,
+    bindings: await composeVndbCharacterVocabularyBindings(input.port, resolved, requirements),
+    truncated: entriesTruncated,
   };
 }
 

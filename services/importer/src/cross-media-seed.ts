@@ -3189,6 +3189,9 @@ export async function runCrossMediaSeedCli(
   let vndbCharacterProfileVocabularyRequirements: Awaited<
     ReturnType<typeof prepareShowcaseVndbCharacterProfileVocabulary>
   >['requirements'] = [];
+  let characterVocabularyRequirements: Awaited<
+    ReturnType<typeof prepareShowcaseCharacterVocabulary>
+  >['requirements'] = [];
   let vndbCreditVocabularyRequirements: Awaited<
     ReturnType<typeof prepareShowcaseVndbCreditVocabulary>
   >['requirements'] = [];
@@ -3235,6 +3238,9 @@ export async function runCrossMediaSeedCli(
       [];
     let vocabularyAdmissions: NonNullable<ImporterOptions['vocabularyAdmission']>[] = [careerAdmission];
     let vndbBindings: SourceVocabularyBindings | undefined;
+    let reviewedCharacterTraitBindings: SourceVocabularyBindings | undefined;
+    let reviewedCharacterTraitAdmission: NonNullable<ImporterOptions['vocabularyAdmission']> | undefined;
+    let characterRoleAdmission: NonNullable<ImporterOptions['vocabularyAdmission']> | undefined;
     if (options.selection && reviewedSubjects) {
       const plannedKeys = new Set([...plan.records.vndb, ...plan.entities.vndb].map((row) => row.key));
       for (const row of [...characterVocabulary.plan.records.vndb, ...characterVocabulary.plan.entities.vndb]) {
@@ -3289,10 +3295,11 @@ export async function runCrossMediaSeedCli(
       const roleBindings = await composeVndbCharacterVocabularyBindings(port, vndbVocabularyProfile, roleRequirements);
       const { prepareShowcaseVndbTraits } = await import('./showcase-vndb-traits.ts');
       const reviewedTraits = await prepareShowcaseVndbTraits(plan, characterVocabulary.plan, port, reviewedSubjects);
-      characterAdmissions.push(reviewedTraits.vocabularyAdmission);
-      characterAdmissions.push(
-        vndbCharacterVocabularyAdmission(roleBindings, { ...characterVocabulary.plan, traits: [] }),
-      );
+      reviewedCharacterTraitBindings = reviewedTraits.bindings;
+      reviewedCharacterTraitAdmission = reviewedTraits.vocabularyAdmission;
+      characterRoleAdmission = vndbCharacterVocabularyAdmission(roleBindings, { ...characterVocabulary.plan, traits: [] });
+      characterAdmissions.push(reviewedCharacterTraitAdmission);
+      characterAdmissions.push(characterRoleAdmission);
       vndbBindings = {
         releaseDigest: bundledDigest,
         schemes: [...reviewedTraits.bindings.schemes, ...roleBindings.schemes],
@@ -3618,6 +3625,90 @@ export async function runCrossMediaSeedCli(
         journal,
       });
     }
+    if (reviewedSelection && !vocabularyPath && journal && publicClient) {
+      const { vndbCharacterVocabularyAdmission, appearanceRoleTaxonomy } = await import('./vndb-character-traits.ts');
+      const roleRequirements = {
+        ...characterVocabulary.requirements,
+        terms: characterVocabulary.requirements.terms.filter((term) => term.taxonomy === appearanceRoleTaxonomy),
+        parents: [],
+        associatedCodes: characterVocabulary.requirements.associatedCodes.filter((code) =>
+          characterVocabulary.requirements.terms.some(
+            (term) => term.taxonomy === appearanceRoleTaxonomy && term.code === code,
+          ),
+        ),
+      };
+      const schemes = await prepareShowcaseCharacterVocabulary({
+        tables: input,
+        selectedPlan: publicationPlan,
+        port,
+        journal,
+        stage: 'schemes',
+        taxonomies: [appearanceRoleTaxonomy],
+      });
+      if (schemes.requirements.length)
+        await publishShowcase({
+          plan: publicationPlan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review: importPort,
+          publicClient,
+          vocabularyRequirements: [
+            ...(result.creditVocabularyRequirements ?? []),
+            ...releaseClassificationRequirements,
+            ...tagVocabularyRequirements,
+            ...vndbCreditVocabularyRequirements,
+            ...vndbCharacterProfileVocabularyRequirements,
+            ...schemes.requirements,
+          ],
+        });
+      const concepts = await prepareShowcaseCharacterVocabulary({
+        tables: input,
+        selectedPlan: publicationPlan,
+        port,
+        journal,
+        stage: 'concepts',
+        taxonomies: [appearanceRoleTaxonomy],
+      });
+      characterVocabularyRequirements = concepts.requirements;
+      if (concepts.requirements.length)
+        await publishShowcase({
+          plan: publicationPlan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review: importPort,
+          publicClient,
+          vocabularyRequirements: [
+            ...(result.creditVocabularyRequirements ?? []),
+            ...releaseClassificationRequirements,
+            ...tagVocabularyRequirements,
+            ...vndbCreditVocabularyRequirements,
+            ...vndbCharacterProfileVocabularyRequirements,
+            ...concepts.requirements,
+          ],
+        });
+      vndbVocabularyProfile = profileFromCharacterVocabularyBindings(
+        await readShowcaseCharacterVocabulary({ tables: input, selectedPlan: publicationPlan, port, journal }),
+      );
+      const roleBindings = await composeVndbCharacterVocabularyBindings(port, vndbVocabularyProfile, roleRequirements);
+      characterRoleAdmission = vndbCharacterVocabularyAdmission(roleBindings, {
+        ...characterVocabulary.plan,
+        traits: [],
+      });
+      const traitBindings = reviewedCharacterTraitBindings!;
+      vndbBindings = {
+        releaseDigest: bundledDigest,
+        schemes: [...traitBindings.schemes, ...roleBindings.schemes],
+        concepts: [...traitBindings.concepts, ...roleBindings.concepts],
+      };
+      vocabularyAdmissions = [
+        preparedPublicTags!.vocabularyAdmission,
+        reviewedCharacterTraitAdmission!,
+        characterRoleAdmission,
+        careerAdmission,
+      ];
+    }
     const currentVndbCreditReferences = autoVndbCreditReferences ?? vndbCreditReferences;
     let showcase: ShowcasePublicationResult | undefined;
     let bangumiVocabularyRequirements:
@@ -3721,7 +3812,9 @@ export async function runCrossMediaSeedCli(
       journal &&
       publicClient &&
       characterBindingsPath &&
-      (autoVndbCreditReferences || (!explicitProfileBindingsPath && characterProfileBindings.concepts.length > 0))
+      (autoVndbCreditReferences ||
+        (!explicitProfileBindingsPath && characterProfileBindings.concepts.length > 0) ||
+        (reviewedSelection && !vocabularyPath))
     ) {
       await reseedWithCurrentVocabulary(
         characterBindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
@@ -3757,9 +3850,6 @@ export async function runCrossMediaSeedCli(
       result.creditVocabularyRequirements = current.requirements;
       if (result.creditGaps.length) result.status = 'imported-with-gaps';
     }
-    let characterVocabularyRequirements: Awaited<
-      ReturnType<typeof prepareShowcaseCharacterVocabulary>
-    >['requirements'] = [];
     let characterResult: Awaited<ReturnType<typeof importVndbCharacterTraits>> | undefined;
     if (!reviewedSelection) {
       if (!vocabularyPath && journal && publicClient) {
@@ -3886,6 +3976,7 @@ export async function runCrossMediaSeedCli(
       vndbCreditVocabularyDelivery: vndbCreditVocabularyIssues,
       characterVocabulary: {
         requirements: characterVocabulary.requirements,
+        currentProfile: profileFromCharacterVocabularyBindings(vndbBindings),
         admittedConceptCodes: vndbBindings.concepts.map((concept) => concept.taxonomy + ':' + concept.code).sort(),
         withheldConceptCodes: characterVocabulary.requirements.terms
           .filter(

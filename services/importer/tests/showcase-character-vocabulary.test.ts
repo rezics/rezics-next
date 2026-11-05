@@ -167,33 +167,6 @@ function journaledPort(journal: ShowcaseJournal, commands: BatchCommand[]) {
   };
 }
 
-test('reviewed selection publishes only its source-supported appearance-role vocabulary', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'showcase-character-role-vocabulary-'));
-  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
-  const commands: BatchCommand[] = [];
-  const port = journaledPort(journal, commands);
-  try {
-    const tables = await selectedTables(directory);
-    const selected = await planCrossMediaSeed(tables, { deferVndbCharacterAppearances: true });
-    const prepared = await prepareShowcaseCharacterVocabulary({
-      tables,
-      selectedPlan: selected,
-      port,
-      journal,
-      stage: 'concepts',
-      taxonomies: [appearanceRoleTaxonomy],
-    });
-    expect(prepared.requirements.map((item) => item.sourceKey)).toEqual([
-      'vndb.char_role',
-      'vndb.char_role:main',
-    ]);
-    expect(JSON.stringify(commands)).not.toContain('character-trait');
-  } finally {
-    journal.close();
-    await rm(directory, { recursive: true, force: true });
-  }
-}, 30_000);
-
 test('default seed publishes selected trait and role vocabulary without a UUID file and admits spoiler-qualified facts', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-character-vocabulary-'));
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
@@ -203,6 +176,22 @@ test('default seed publishes selected trait and role vocabulary without a UUID f
     const tables = await selectedTables(directory);
     const selected = await planCrossMediaSeed(tables, { deferVndbCharacterAppearances: true });
     const vocabulary = await planShowcaseCharacterVocabulary(tables, selected);
+    const roleOnly = await prepareShowcaseCharacterVocabulary({
+      tables,
+      selectedPlan: selected,
+      port,
+      journal,
+      stage: 'concepts',
+      taxonomies: [appearanceRoleTaxonomy],
+    });
+    expect(roleOnly.requirements.map((item) => item.sourceKey)).toEqual([
+      'vndb.char_role',
+      'vndb.char_role:main',
+    ]);
+    expect(JSON.stringify(commands)).not.toContain('character-trait');
+    const roleProfile = profileFromCharacterVocabularyBindings(roleOnly.bindings);
+    expect(roleProfile?.roles?.concepts.map((item) => item.code)).toEqual(['main']);
+    expect(roleProfile?.traits).toBeUndefined();
     expect(selected.franchises['steins-gate'].vndb).toEqual(['v1']);
     expect(vocabulary.plan.records.vndb.map((record) => record.key)).toEqual(['c1', 'c2', 'c4']);
     expect(vocabulary.requirements.selectedWorkIds).toEqual(['v1', 'v2', 'v3']);

@@ -2724,28 +2724,15 @@ Association citations retain their table keys. False-positive, unsupported,
 missing-qualifier, and release-scoped rows remain review gaps. For
 `task seed:dev`, reviewed trait Concepts i23 and i30 are checked against current
 public reads and composed with selected works in the same reconciliation run.
-Its optional vocabulary profile supplies appearance-role bindings; other
-character traits remain withheld unless they have reviewed Concepts. The
-ordinary broad publisher emits the bounded needed trait dictionary, parent
-closure and admitted appearance-role terms through the current importer and
-common journal, rereads current native type/`schema:url`/`skos:inScheme`/
-`skos:broader`, and only then admits exact character and per-work associations.
-Optional
-`--vndb-character-vocabulary` / `REZICS_DEV_VNDB_CHARACTER_VOCABULARY` remains
-an explicit UUID override; adopted usable bindings are those the current public
-read actually discloses. Publication consumes the finite vocabulary records and
-exact source URIs from this adapter; it does not invent another vocabulary
-publisher. Trait labels use the exact `traits.name` (ja when kana is present,
-zh-Hant when Han is present without kana, otherwise en) and never a minted
-translation. Mapping revisions stay `character-trait@1` and `appearance-role@1`
-on those associations; vocabulary create/propose identity uses
-`vndb-character-vocabulary@1`.
+The reviewed selection admits only those two trait Concepts; other character
+traits remain withheld unless they have reviewed Concepts. Trait labels use the
+exact `traits.name` (ja when kana is present, zh-Hant when Han is present
+without kana, otherwise en), never a minted translation. Mapping revisions stay
+`character-trait@1` and `appearance-role@1` on those associations; vocabulary
+create/propose identity uses `vndb-character-vocabulary@1`.
 
-Decision: vocabulary profile UUIDs are lookup hints only; the broad publication
-worker emits them after acknowledgement, and the importer rereads each
-selected Scheme and Concept from current public state before use.
-
-Decision: bounded `traits_parents` edges publish as `skos:broader` on the child Concept; a later URI, type, inScheme or taxonomy-parent contradiction withholds only that term and leaves independently admitted character names and blood-type facts intact.
+Decision: bounded `traits_parents` edges map to `skos:broader` on the child
+Concept.
 
 ### Bangumi person biographies
 
@@ -2803,10 +2790,44 @@ Decision: selected graph preparation retains at most 8,192 edges and 8 MiB total
 
 The result carries provider and native type bindings, source keys, source and converter digests, selected candidate IDs, and ordinary reader routes. Each selected subject and vocabulary dependency is checked through current reads, and the final facts are checked with a tokenless Global-context reader. Source ConceptScheme and Concept records are eligible only when their source create commands are acknowledged and their current source URI and scheme association are present. No canonical equivalence is inferred. The default cross-media seed consumes only the exact Bangumi editor `meta_tags` literal `后宫` and adapts its trusted alias to the existing lookup. Unsupported or withdrawn genre bindings produce bounded addressable diagnostics while independent source facts remain usable; source-tag removal retracts only the importer-owned keyword candidate. The pinned `GET /v0/subjects/{id}` response is validated against the selected work and required image fields before `images.large` is admitted. Its SHA-256 and optional ETag are sealed beside the archive revision/digest in the showcase journal. A missing or invalid cover stays an addressable gap while independent metadata remains useful. Reserved/uploaded/rejected and unknown states stay journalled; retries reuse exact bytes and keys, and only available media is proposed. Covers retain `(c) rights holder`, `via Bangumi`, unknown image licence, cover-only use, private original retention and public re-encoded variants. Prose stays private without admitted rights. Public visibility makes no Search-index claim.
 
+### VNDB character vocabulary handoff
+
+Decision: the reviewed default selection publishes only source-supported
+appearance-role vocabulary through the common journal, rereads current native
+identities, and combines those role bindings with reviewed trait Concepts i23
+and i30. Other trait terms stay withheld.
+
+The optional `--vndb-character-vocabulary` /
+`REZICS_DEV_VNDB_CHARACTER_VOCABULARY` file supplies UUID lookup hints. Without
+that override, the reviewed path prepares the role Scheme, then only the role
+Concepts demanded by direct selected `chars_vns` rows. Create/proposal ACKs are
+recorded by `ShowcaseJournal`; separately authorized acceptance and adoption
+precede current public reads. The current role identities are composed into the
+existing selected Character/work admissions before the ordinary caller's next
+seed pass. Wrong-Scheme, withdrawn or undisclosed Concepts withhold only their
+association; current type, source URI, scheme membership and selected taxonomy
+parents must agree. Unreviewed trait dictionary entries are not published in
+this path. The broad operator path retains its bounded trait-parent closure and
+the same journal and current-read rules.
+
+- Touches: reviewed trait Concepts i23/i30, source-supported appearance roles
+  for selected VNDB work cast, the common publication journal and the existing
+  seed admissions.
+- Bound: roles come only from selected direct-work `chars_vns` rows with no
+  release key, a supported role, and spoiler level 0–2. The reviewed path
+  publishes no source trait dictionary terms; the existing vocabulary, command,
+  selected-record, and current-read bounds apply.
+- Growth check: `services/importer/tests/showcase-character-vocabulary.test.ts`
+  covers role-only publication and current profile identities;
+  `services/importer/tests/showcase-vndb-traits.test.ts` covers reviewed trait
+  selection; `services/kernel/test/imports/showcase-character-vocabulary.test.ts`
+  covers the actual default selection, native current profile, source keys,
+  role/spoiler qualifiers and identity reuse.
+
 ### Cost: selected showcase media acquisition and publication
 
 - Touches: preparation of at most 8,192 selected graph edges and 8 MiB of retained edge data (at most 1 MiB per edge), plus at most 768 selected source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 candidates per current page, 256 selected Bangumi works, 64 selected creators and 320 combined media outcomes or omissions.
-- Bound: work is limited to the exact five roots, their direct cast and episodes, at most 64 people or organizations per provider, reviewed VNDB trait/tag codes i23/i30 and g105/g249, exact local candidate IDs, and required current subject/property reads. Current native and public reads are deduplicated by subject ID and cover at most 768 selected source plus 512 vocabulary subjects; graph targets must belong to that selected set. Candidate pages are limited by the 8,192 assertion cap and 100-row page bound. Selected work and creator detail acquisition is sequential and capped at 320 requests, 1 MiB per response and 1 MiB combined sealed source evidence, using the existing deadline and pacing. Media send/status uses the ordinary authenticated transport, exact importer bindings and current `(source, external_id, cover)` fence; public readback uses the existing bounded publication pass. There is no catalogue-wide scan, unsupported-tag inference or generic accept-all mode.
+- Bound: work is limited to the exact five roots, their direct cast and episodes, at most 64 people or organizations per provider, reviewed VNDB trait/tag codes i23/i30 and g105/g249, source-supported direct appearance roles, exact local candidate IDs, and required current subject/property reads. Current native and public reads are deduplicated by subject ID and cover at most 768 selected source plus 512 vocabulary subjects; graph targets must belong to that selected set. Candidate pages are limited by the 8,192 assertion cap and 100-row page bound. Selected work and creator detail acquisition is sequential and capped at 320 requests, 1 MiB per response and 1 MiB combined sealed source evidence, using the existing deadline and pacing. Media send/status uses the ordinary authenticated transport, exact importer bindings and current `(source, external_id, cover)` fence; public readback uses the existing bounded publication pass. There is no catalogue-wide scan, unsupported-tag inference or generic accept-all mode.
 - Growth check: `services/importer/tests/showcase-media.test.ts` covers work recovery, creator/Organization conversion, absent/unavailable/invalid detail states, changed image evidence and unknown-send receipt reuse; `services/importer/tests/showcase-publication.test.ts` proves exact candidate and relation publication across refusal, current-read withholding and journal restart; `services/importer/tests/showcase-bangumi-genres.test.ts` covers trusted alias resolution. `services/kernel/test/imports/showcase-media.test.ts` authors the common Person/Organization media, review, public-read, served-variant and takedown path with synthetic detail derivatives; integration verifies it against the actual finite default selection. Native showcase media, genre and graph walkthroughs remain controller-owned; no native pass or database growth series is claimed here.
 
 ### Bangumi Person careers
