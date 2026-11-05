@@ -23,9 +23,9 @@ test('password phase bounds admit producer maxima before UTF-8 parsing', () => {
   const reference = `${'A'.repeat(credentialEffectResponseLimits.passwordApprovalReferenceUnits - 44)}.${'A'.repeat(43)}`;
   expect(isPasswordCredentialEffectApprovalReference(reference)).toBe(true);
   expect(isCredentialEffectApprovalReference(reference)).toBe(true);
-  expect(
-    JSON.stringify({ reference, expiresAt: '9999-12-31T23:59:59.999Z' }).length,
-  ).toBe(credentialEffectResponseByteBudgets.approve.success);
+  expect(JSON.stringify({ reference, expiresAt: '9999-12-31T23:59:59.999Z' }).length).toBe(
+    credentialEffectResponseByteBudgets.approve.success,
+  );
 
   expect(JSON.stringify({ receiptId: uuid, replayed: false }).length).toBe(
     credentialEffectResponseByteBudgets.apply.success,

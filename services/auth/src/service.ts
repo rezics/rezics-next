@@ -1616,7 +1616,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           [approval.expiresAt],
         );
         if (live.rowCount !== 1) throw new Denied();
-        return { reference: approval.reference, expiresAt: approval.expiresAt } satisfies CredentialEffectApprovalResponse;
+        return {
+          reference: approval.reference,
+          expiresAt: approval.expiresAt,
+        } satisfies CredentialEffectApprovalResponse;
       },
       async applyCredentialEffect(input) {
         // Direct internal callers also receive one boundary deadline here;

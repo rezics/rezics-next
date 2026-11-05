@@ -106,10 +106,7 @@ const genericOperatorOpeningReferenceMax = sealedTokenLength(
 export const credentialEffectResponseLimits = Object.freeze({
   textUnits: 1_024,
   approvalReferenceUnits: Math.max(genericWorkflowOpeningReferenceMax, genericOperatorOpeningReferenceMax),
-  passwordApprovalReferenceUnits: Math.max(
-    passwordWorkflowOpeningReferenceMax,
-    passwordOperatorOpeningReferenceMax,
-  ),
+  passwordApprovalReferenceUnits: Math.max(passwordWorkflowOpeningReferenceMax, passwordOperatorOpeningReferenceMax),
 });
 
 const stageSuccessBytes = JSON.stringify({
@@ -166,21 +163,14 @@ export function isCredentialEffectUuid(value: unknown): value is string {
 
 /** Access's approval is a sealed base64url payload plus a SHA-256 HMAC. */
 export function isCredentialEffectApprovalReference(value: unknown): value is string {
-  if (
-    typeof value !== 'string' ||
-    value.length > credentialEffectResponseLimits.approvalReferenceUnits
-  )
-    return false;
+  if (typeof value !== 'string' || value.length > credentialEffectResponseLimits.approvalReferenceUnits) return false;
   const parts = sealedAccessReference.exec(value);
   return Boolean(parts && canonicalBase64Url(parts[1]!) && canonicalBase64Url(parts[2]!));
 }
 
 /** The password phase accepts only its own producer-shaped reference maximum. */
 export function isPasswordCredentialEffectApprovalReference(value: unknown): value is string {
-  if (
-    typeof value !== 'string' ||
-    value.length > credentialEffectResponseLimits.passwordApprovalReferenceUnits
-  )
+  if (typeof value !== 'string' || value.length > credentialEffectResponseLimits.passwordApprovalReferenceUnits)
     return false;
   const parts = sealedAccessReference.exec(value);
   return Boolean(parts && canonicalBase64Url(parts[1]!) && canonicalBase64Url(parts[2]!));
@@ -188,8 +178,7 @@ export function isPasswordCredentialEffectApprovalReference(value: unknown): val
 
 /** Access publishes approval expiry with Date.prototype.toISOString(). */
 export function isCredentialEffectApprovalExpiry(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value))
-    return false;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
 }

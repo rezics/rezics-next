@@ -115,21 +115,17 @@ test('the maximum password approval and replay receipt fit their phase budgets',
   const approvalBody = JSON.stringify({ reference, expiresAt: new Date(Date.now() + 60_000).toISOString() });
   expect(new TextEncoder().encode(approvalBody).byteLength).toBe(credentialEffectResponseByteBudgets.approve.success);
   let applying: PasswordChangeAttempt | undefined;
-  await withFetch(
-    (async () => new Response(approvalBody, { status: 200 })) as typeof fetch,
-    async () => {
-      const result = await dispatchPasswordChangePhase(attemptAt('approve'));
-      expect(result.kind).toBe('next');
-      if (result.kind === 'next') applying = result.attempt;
-    },
-  );
+  await withFetch((async () => new Response(approvalBody, { status: 200 })) as typeof fetch, async () => {
+    const result = await dispatchPasswordChangePhase(attemptAt('approve'));
+    expect(result.kind).toBe('next');
+    if (result.kind === 'next') applying = result.attempt;
+  });
   if (!applying) throw new Error('expected admitted approval');
 
   const receiptBody = JSON.stringify({ receiptId: effectRef, replayed: false });
   expect(new TextEncoder().encode(receiptBody).byteLength).toBe(credentialEffectResponseByteBudgets.apply.success);
-  await withFetch(
-    (async () => new Response(receiptBody, { status: 200 })) as typeof fetch,
-    async () => expect((await dispatchPasswordChangePhase(applying!)).kind).toBe('complete'),
+  await withFetch((async () => new Response(receiptBody, { status: 200 })) as typeof fetch, async () =>
+    expect((await dispatchPasswordChangePhase(applying!)).kind).toBe('complete'),
   );
 });
 
@@ -144,15 +140,12 @@ test.each([
   const attempt = attemptAt(phase);
   const bytes = new Uint8Array(credentialEffectResponseByteBudgets[phase].success + 1).fill(0x20);
   const headers = length === undefined ? {} : { 'Content-Length': length };
-  await withFetch(
-    (async () => new Response(bytes, { status: 200, headers })) as typeof fetch,
-    async () => {
-      expect(await dispatchPasswordChangePhase(attempt)).toMatchObject({
-        kind: 'unknown',
-        attempt: { phase, uncertain: true },
-      });
-    },
-  );
+  await withFetch((async () => new Response(bytes, { status: 200, headers })) as typeof fetch, async () => {
+    expect(await dispatchPasswordChangePhase(attempt)).toMatchObject({
+      kind: 'unknown',
+      attempt: { phase, uncertain: true },
+    });
+  });
 });
 
 test('split UTF-8 and a lying short length still admit the exact stage binding', async () => {
@@ -182,35 +175,38 @@ test('split UTF-8 and a lying short length still admit the exact stage binding',
   );
 });
 
-test.each(['stage', 'approve', 'apply'] as const)('retirement settles an abort-ignoring %s body as unknown', async (phase) => {
-  const attempt = attemptAt(phase);
-  const caller = new AbortController();
-  let calls = 0;
-  await withFetch(
-    (async () => {
-      calls++;
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          pull() {
-            return new Promise<void>(() => {});
-          },
-          cancel() {
-            return new Promise<void>(() => {});
-          },
-        }),
-        { status: 200 },
-      );
-    }) as typeof fetch,
-    async () => {
-      const pending = dispatchPasswordChangePhase(attempt, caller.signal);
-      await Promise.resolve();
-      await Promise.resolve();
-      caller.abort();
-      expect(await pending).toMatchObject({ kind: 'unknown', attempt: { phase, uncertain: true } });
-      expect(calls).toBe(1);
-    },
-  );
-});
+test.each(['stage', 'approve', 'apply'] as const)(
+  'retirement settles an abort-ignoring %s body as unknown',
+  async (phase) => {
+    const attempt = attemptAt(phase);
+    const caller = new AbortController();
+    let calls = 0;
+    await withFetch(
+      (async () => {
+        calls++;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull() {
+              return new Promise<void>(() => {});
+            },
+            cancel() {
+              return new Promise<void>(() => {});
+            },
+          }),
+          { status: 200 },
+        );
+      }) as typeof fetch,
+      async () => {
+        const pending = dispatchPasswordChangePhase(attempt, caller.signal);
+        await Promise.resolve();
+        await Promise.resolve();
+        caller.abort();
+        expect(await pending).toMatchObject({ kind: 'unknown', attempt: { phase, uncertain: true } });
+        expect(calls).toBe(1);
+      },
+    );
+  },
+);
 
 test('each phase has one five-second lifetime through an abort-ignoring body', async () => {
   const attempt = attemptAt('approve');
@@ -257,14 +253,12 @@ test('only the exact admitted refusal DTO and status can settle a phase', async 
       (async () => Response.json({ ...refusal, extra: true }, { status: 409 })) as typeof fetch,
       async () => expect((await dispatchPasswordChangePhase(attempt)).kind).toBe('unknown'),
     );
-    await withFetch(
-      (async () => Response.json(refusal, { status: 500 })) as typeof fetch,
-      async () => expect((await dispatchPasswordChangePhase(attempt)).kind).toBe('unknown'),
+    await withFetch((async () => Response.json(refusal, { status: 500 })) as typeof fetch, async () =>
+      expect((await dispatchPasswordChangePhase(attempt)).kind).toBe('unknown'),
     );
     for (const status of credentialEffectNotAppliedStatuses)
-      await withFetch(
-        (async () => Response.json(refusal, { status })) as typeof fetch,
-        async () => expect((await dispatchPasswordChangePhase(attempt)).kind).toBe('refused'),
+      await withFetch((async () => Response.json(refusal, { status })) as typeof fetch, async () =>
+        expect((await dispatchPasswordChangePhase(attempt)).kind).toBe('refused'),
       );
     await withFetch(
       (async () =>
@@ -275,10 +269,9 @@ test('only the exact admitted refusal DTO and status can settle a phase', async 
   expect(credentialEffectNotAppliedStatuses).toEqual([400, 401, 403, 409, 413, 415, 503]);
   await withFetch(
     (async () =>
-      new Response(
-        '{"error":"credential_effect_denied","effect_status":"applied","effect_status":"not_applied"}',
-        { status: 409 },
-      )) as typeof fetch,
+      new Response('{"error":"credential_effect_denied","effect_status":"applied","effect_status":"not_applied"}', {
+        status: 409,
+      })) as typeof fetch,
     async () => expect((await dispatchPasswordChangePhase(attemptAt('stage'))).kind).toBe('unknown'),
   );
 });
@@ -297,13 +290,10 @@ test.each(['stage', 'approve', 'apply'] as const)('invalid %s success never adva
       : phase === 'approve'
         ? { reference: 'approval-ref', expiresAt: new Date(Date.now() + 60_000).toISOString() }
         : { receiptId: 'not-a-native-receipt', replayed: true };
-  await withFetch(
-    (async () => Response.json(body, { status: 200 })) as typeof fetch,
-    async () => {
-      expect(await dispatchPasswordChangePhase(attempt)).toMatchObject({
-        kind: 'unknown',
-        attempt: { phase, uncertain: true },
-      });
-    },
-  );
+  await withFetch((async () => Response.json(body, { status: 200 })) as typeof fetch, async () => {
+    expect(await dispatchPasswordChangePhase(attempt)).toMatchObject({
+      kind: 'unknown',
+      attempt: { phase, uncertain: true },
+    });
+  });
 });

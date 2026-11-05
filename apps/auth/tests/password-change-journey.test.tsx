@@ -154,7 +154,11 @@ test('ordinary password completion posts one admitted stage, approval and apply'
     ),
   );
   expect(calls.map((call) => call.path)).toEqual(['/credential-effects/stage', '/credential-effects/approve']);
-  await flush(() => calls[1]!.resolve(Response.json({ reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() })));
+  await flush(() =>
+    calls[1]!.resolve(
+      Response.json({ reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+    ),
+  );
   expect(calls.map((call) => call.path)).toEqual([
     '/credential-effects/stage',
     '/credential-effects/approve',
@@ -191,7 +195,11 @@ test('approval retry repeats only its exact uncertain phase', async () => {
     '/credential-effects/approve',
   ]);
   expect(calls[2]!.body).toEqual(exactApproval);
-  await flush(() => calls[2]!.resolve(Response.json({ reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() })));
+  await flush(() =>
+    calls[2]!.resolve(
+      Response.json({ reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+    ),
+  );
   await flush(() => calls[3]!.resolve(Response.json({ receiptId, replayed: false })));
   expect(host.textContent).toContain(m.auth_security_password_changed());
 });
@@ -212,7 +220,11 @@ test('apply retry repeats only its exact uncertain phase', async () => {
       }),
     ),
   );
-  await flush(() => calls[1]!.resolve(Response.json({ reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() })));
+  await flush(() =>
+    calls[1]!.resolve(
+      Response.json({ reference: approvalReference, expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+    ),
+  );
   const exactApply = calls[2]!.body;
   await flush(() => calls[2]!.resolve(Response.json({ receiptId: 'not-a-native-receipt', replayed: false })));
   expect(host.textContent).toContain(m.auth_security_password_apply_unknown());
