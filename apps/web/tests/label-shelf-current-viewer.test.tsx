@@ -358,9 +358,29 @@ test('The actual named-label Library renders private FULL assignments and remove
         address.searchParams.get('cursor'),
         address.searchParams.get('layout'),
       ]).toEqual(['/en/library', labelId, null, 'list']);
+      expect(Array.from(host.querySelectorAll('a')).some((link) => link.textContent === m.library_label_previous_page())).toBe(
+        false,
+      );
       expect(reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments')).toHaveLength(
         before + 1,
       );
+      const retry = Array.from(host.querySelectorAll<HTMLAnchorElement>('a')).find(
+        (link) => link.textContent === m.library_label_retry_page(),
+      )!;
+      expect(new URL(retry.href).searchParams.get('cursor')).toBe('source-one');
+      expect(new URL(retry.href).searchParams.get('undoKey')).toBe(undoKey);
+      expect(new URL(retry.href).searchParams.get('labelResult')).toBe('label-restore-stale');
+      const beforeRetry = reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments').length;
+      await act(async () => {
+        retry.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+      });
+      await settle();
+      expect(reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments')).toHaveLength(
+        beforeRetry + 1,
+      );
+      expect(
+        new URL(reads.at(-1)!.url).searchParams.get('cursor'),
+      ).toBe('source-one');
       const otherSource = {
         ...recovery,
         provenance: { ...recovery.provenance, source: { ...recovery.provenance.source, cursor: 'source-two' } },
@@ -663,6 +683,108 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(fields()).toEqual(cForms);
     expect(reads).toHaveLength(beforeLateRefresh); // The retired pending refresh cannot start another pair.
     expect(reads.every((req) => req.method === 'GET')).toBe(true);
+
+    // Three native windows use only their accepted cursors; display changes keep the pending visit, while Label replacement retires it.
+    receive = (page) => {
+      if (page.state !== 'loaded' || page.label.id !== labelId) return page;
+      if (page.provenance.source.cursor === 'source-one') return { ...page, next: 'window-two' };
+      if (page.provenance.source.cursor === 'window-two') return { ...page, next: 'window-three' };
+      if (page.provenance.source.cursor === 'window-three') return { ...page, entries: [], next: null };
+      return page;
+    };
+    const firstWindowQuery = currentQuery();
+    await act(async () => client.invalidateQueries({ queryKey: firstWindowQuery.queryKey, exact: true }));
+    await settle();
+    const admittedFirst = currentQuery().state.data as CurrentLabelShelfData;
+    expect(admittedFirst.state).toBe('loaded');
+    if (admittedFirst.state !== 'loaded') throw new Error('Missing first admitted cursor window');
+    expect(admittedFirst.next).toBe('window-two');
+    expect(admittedFirst).toMatchObject({ undo: input.undo, undoKey, labelResult: input.labelResult });
+    const firstPage = Array.from(host.querySelectorAll<HTMLAnchorElement>('a')).find(
+      (link) => link.textContent === m.library_label_first_page(),
+    )!;
+    expect(new URL(firstPage.href).searchParams.get('cursor')).toBeNull();
+    const originalWindowForms = fields();
+    expect(originalWindowForms.find((form) => form.intent === 'restore')).toMatchObject({
+      assignmentId: id(10),
+      revision: '9',
+      idempotencyKey: undoKey,
+    });
+
+    hold = C;
+    const more = Array.from(host.querySelectorAll<HTMLAnchorElement>('a')).find(
+      (link) => link.textContent === m.library_more(),
+    )!;
+    const secondAddress = new URL(more.href);
+    expect(secondAddress.searchParams.get('cursor')).toBe('window-two');
+    const secondSearch = secondAddress.searchParams;
+    await act(async () => {
+      more.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+    });
+    await settle();
+    expect(held.some((pending) => pending.cursor === 'window-two')).toBe(true);
+    absent();
+
+    secondSearch.set('layout', 'table');
+    const readsBeforeDisplayChange = reads.length;
+    let displayMove!: Promise<void>;
+    await act(async () => {
+      displayMove = navigate(secondSearch);
+    });
+    expect(host.textContent).not.toContain('42%');
+    expect(reads).toHaveLength(readsBeforeDisplayChange);
+    const secondReads = held.filter((pending) => pending.cursor === 'window-two');
+    expect(secondReads.length).toBeGreaterThan(0);
+    await act(async () => {
+      for (const pending of secondReads) {
+        held.splice(held.indexOf(pending), 1);
+        pending.resolve(pending.response);
+      }
+      await displayMove;
+    });
+    await settle();
+    expect(host.textContent).toContain(`${name(C)} entry`);
+    expect(
+      Array.from(host.querySelectorAll<HTMLAnchorElement>('a')).some(
+        (link) => link.textContent === m.library_label_previous_page() && new URL(link.href).searchParams.get('cursor') === 'source-one',
+      ),
+    ).toBe(true);
+    expect(fields().some((form) => form.intent === 'restore')).toBe(false);
+    expect(fields().every((form) => form.intent === 'unassign')).toBe(true);
+
+    const nextMore = Array.from(host.querySelectorAll<HTMLAnchorElement>('a')).find(
+      (link) => link.textContent === m.library_more(),
+    )!;
+    expect(new URL(nextMore.href).searchParams.get('cursor')).toBe('window-three');
+    await act(async () => {
+      nextMore.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+    });
+    await settle();
+    expect(held.some((pending) => pending.cursor === 'window-three')).toBe(true);
+    absent();
+
+    hold = null;
+    const replacementLabel = id(805);
+    const replacement = new URLSearchParams(secondSearch);
+    replacement.set('label', replacementLabel);
+    await act(async () => {
+      await navigate(replacement);
+    });
+    await settle();
+    const replacementPage = currentQuery().state.data as CurrentLabelShelfData;
+    expect(replacementPage.provenance.source).toMatchObject({ labelId: replacementLabel, cursor: 'window-three' });
+    expect(Array.from(host.querySelectorAll('a')).some((link) => link.textContent === m.library_label_previous_page())).toBe(
+      false,
+    );
+    expect(Array.from(host.querySelectorAll('a')).some((link) => link.textContent === m.library_label_first_page())).toBe(
+      true,
+    );
+    await act(async () => {
+      for (const pending of held.splice(0)) pending.resolve(pending.response);
+    });
+    await settle();
+    expect((currentQuery().state.data as CurrentLabelShelfData).provenance.source.labelId).toBe(replacementLabel);
+    expect(originalWindowForms.find((form) => form.intent === 'restore')?.idempotencyKey).toBe(undoKey);
   } finally {
     hold = null;
     for (const pending of held.splice(0)) pending.resolve(pending.response);
