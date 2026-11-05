@@ -1427,12 +1427,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
       async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, async () =>
-          fullView(
-            viewDependencies(),
-            actor,
-            query.view,
-            await read().listSubjectCollections(actor, params.id, query),
-          ),
+          fullView(viewDependencies(), actor, query.view, await read().listSubjectCollections(actor, params.id, query)),
         ),
     );
 }

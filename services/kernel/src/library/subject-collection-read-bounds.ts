@@ -15,18 +15,29 @@ export type SubjectCollectionPairPlan = Readonly<{
 // UUIDs are 36 characters, route/multiplicity are PostgreSQL int4, and the
 // timestamp projection allows PostgreSQL's full range, zone and BC suffix.
 // Escaped JSON also bounds the positional SQL response payload.
-const projectedPairBytes = Buffer.byteLength(JSON.stringify({
-  collectionId: 'f'.repeat(36),
-  collectionRoute: -2147483648,
-  multiplicity: -2147483648,
-  updatedAt: '\0'.repeat(64),
-  transactionId: 'f'.repeat(36),
-})) + 1;
+const projectedPairBytes =
+  Buffer.byteLength(
+    JSON.stringify({
+      collectionId: 'f'.repeat(36),
+      collectionRoute: -2147483648,
+      multiplicity: -2147483648,
+      updatedAt: '\0'.repeat(64),
+      transactionId: 'f'.repeat(36),
+    }),
+  ) + 1;
 
-const bytes = (value: number): Bound => declareBound({
-  candidateKeys: 0, nativeRows: 0, identityMetadataRows: 0, nativePoints: 0,
-  witnessKeys: 0, statements: 0, bytes: value, emptySeeks: 0, engineRequests: 0,
-});
+const bytes = (value: number): Bound =>
+  declareBound({
+    candidateKeys: 0,
+    nativeRows: 0,
+    identityMetadataRows: 0,
+    nativePoints: 0,
+    witnessKeys: 0,
+    statements: 0,
+    bytes: value,
+    emptySeeks: 0,
+    engineRequests: 0,
+  });
 
 /** Keep the caller's original seek and sentinel, independently of rows returned. */
 export function subjectCollectionPairPlan(input: PageInput): SubjectCollectionPairPlan {

@@ -965,16 +965,31 @@ test('Subject BASIC and FULL continuations preserve the public Collection popula
     let cursor: string | null = null;
     const ids: string[] = [];
     do {
-      const result: { collections: { id: string }[]; next: string | null; count: SubjectCollectionCount } =
-        await json(await request('GET', `${url}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, 'anonymous'));
+      const result: { collections: { id: string }[]; next: string | null; count: SubjectCollectionCount } = await json(
+        await request('GET', `${url}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, 'anonymous'),
+      );
       expect(result.count.exact).toBe(true);
       expect(result.count.value).toBeGreaterThanOrEqual(shelves.length);
       ids.push(...result.collections.map(({ id }) => id));
       if (cursor === null) {
         expect(result.next).toBeString();
         const foreignView = view === 'BASIC' ? 'FULL' : 'BASIC';
-        await problem(await request('GET', `/v1/subjects/${subjectId}/collections?limit=1&view=${foreignView}&cursor=${encodeURIComponent(result.next!)}`), 400, 'invalid_cursor');
-        await problem(await request('GET', `/v1/subjects/${subjectId}/collections?limit=2&view=${view}&cursor=${encodeURIComponent(result.next!)}`), 400, 'invalid_cursor');
+        await problem(
+          await request(
+            'GET',
+            `/v1/subjects/${subjectId}/collections?limit=1&view=${foreignView}&cursor=${encodeURIComponent(result.next!)}`,
+          ),
+          400,
+          'invalid_cursor',
+        );
+        await problem(
+          await request(
+            'GET',
+            `/v1/subjects/${subjectId}/collections?limit=2&view=${view}&cursor=${encodeURIComponent(result.next!)}`,
+          ),
+          400,
+          'invalid_cursor',
+        );
       }
       cursor = result.next;
     } while (cursor);

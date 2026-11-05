@@ -202,7 +202,10 @@ export async function subjectCollections(pool: Pool, subjectId: string, after: s
   const route = requireRoute(subjectId);
   if (after !== null) requireRoute(after);
   const plan = subjectCollectionPairPlan({
-    route, subject_id: subjectId, after: after ?? '00000000-0000-0000-0000-000000000000', limit,
+    route,
+    subject_id: subjectId,
+    after: after ?? '00000000-0000-0000-0000-000000000000',
+    limit,
   });
   return withConnection(pool, async (client) => {
     const rows = await executeSubjectCollectionPairs({ query: client.query.bind(client) }, plan);
