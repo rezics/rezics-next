@@ -567,6 +567,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       retired('F');
       await show(session('F'), ['personal_library', 'library_label.list'], true);
       retired('F');
+      await refetch();
       await settleRead(18, response('F', search));
       expect(host.textContent).toContain('Private F');
       expect(host.querySelector('input[name="operation"]')).toBeNull();
