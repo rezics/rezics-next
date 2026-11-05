@@ -2469,6 +2469,11 @@ bounded exploration address.
 Decision: Music-context relation and correction returns preserve only the selected public stream and its bounded
 native cursor; the reader keeps at most eight page addresses and returns without rows or session tokens.
 
+Decision: every initial, stream, continuation and retry MusicContext window first admits its selected Context through
+the native Context GET, including Global. A denied or unavailable Context produces no Subject or relation read.
+The Context observation's session token carries forward into the Subject and relation stages; request cancellation
+stops subsequent stages. This adds one bounded Context read per deliberate window and publishes no new identity grain.
+
 Decision: keep creatable `schema:Place` and `schema:Event` as distinct broad identities; `schema:MusicVenue` and
 `schema:MusicEvent` specialize them, `schema:AdministrativeArea` is a Place, and `wd:Q34379` is the exact instrument
 identity. `schema:Quotation` stays named unavailable until Semantic admits it; unknown source roles stay retained

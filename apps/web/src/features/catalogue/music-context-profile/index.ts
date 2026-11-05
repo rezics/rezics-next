@@ -107,6 +107,7 @@ export async function readMusicContext(
     stream?: string | undefined;
     cursor?: string | undefined;
     session?: string | undefined;
+    signal?: AbortSignal | undefined;
   },
 ): Promise<MusicContextRead> {
   if (
@@ -116,12 +117,23 @@ export async function readMusicContext(
   )
     return { ok: false, reason: 'invalid' };
   const context = input.context ?? candidateContext;
-  const headers = headersOf(authorization, input.session);
+  const signal = input.signal;
+  const fetchOptions = { cache: 'no-store', redirect: 'manual', ...(signal ? { signal } : {}) } as const;
+  signal?.throwIfAborted();
+  const scope = await client.contexts({ id: context }).get({
+    headers: headersOf(authorization, input.session),
+    fetch: fetchOptions,
+  });
+  signal?.throwIfAborted();
+  if (scope.status !== 200 || !scope.data) return readFailure(scope.status);
+  if (scope.data.context.id !== context) return readFailure(409);
+  const headers = headersOf(authorization, tokenOf(scope) ?? input.session);
   const current = await client.subjects({ id }).get({
     query: { context, language: locale },
     headers,
-    fetch: { cache: 'no-store', redirect: 'manual' },
+    fetch: fetchOptions,
   });
+  signal?.throwIfAborted();
   if (current.status !== 200 || !current.data) return readFailure(current.status);
   if (current.data.subject.id !== id || current.data.subject.context !== context) return readFailure(409);
   const kind = musicContextKind(release, current.data.subject.type);
@@ -176,7 +188,7 @@ export async function readMusicContext(
   let links: MusicContextLink[] = [];
   let next: string | null = null;
   let relationsUnavailable = false;
-  let session = tokenOf(current) ?? input.session;
+  let session = tokenOf(current) ?? tokenOf(scope) ?? input.session;
   if (stream) {
     const page = await (async () => {
       try {
@@ -189,14 +201,16 @@ export async function readMusicContext(
             ...(input.cursor ? { cursor: input.cursor } : {}),
           },
           headers: headersOf(authorization, session),
-          fetch: { cache: 'no-store', redirect: 'manual' },
+          fetch: fetchOptions,
         });
       } catch (error) {
+        signal?.throwIfAborted();
         if (!(error instanceof TypeError)) throw error;
         relationsUnavailable = true;
         return undefined;
       }
     })();
+    signal?.throwIfAborted();
     if (page) {
       session = tokenOf(page) ?? session;
       const validPage =

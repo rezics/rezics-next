@@ -1,5 +1,6 @@
 import { expectedCandidateReader } from '../../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
+import { getRequest } from '@tanstack/react-start/server';
 import { isExploreId } from '../../pages/graph-browser';
 import { exploreContext } from '../../pages/graph-browser/actions';
 import { isMusicContextCursor, isMusicContextStream } from './navigation';
@@ -30,15 +31,21 @@ export const readSubjectMusicContext = createServerFn({ method: 'POST', strict: 
     };
   })
   .handler(async ({ data }): Promise<MusicContextRead> => {
-    const prepared = await exploreContext(data.locale, data.expectedReader);
+    const signal = getRequest().signal;
+    const prepared = await exploreContext(data.locale, data.expectedReader, signal);
+    signal.throwIfAborted();
     if (!prepared) return { ok: false, reason: 'denied' };
     const { fetchGuideRelease } = await import('../definition-guide');
     const headers = prepared.authorization ? { authorization: prepared.authorization } : {};
     let release;
     try {
-      release = await fetchGuideRelease(prepared.client, undefined, headers);
+      release = await fetchGuideRelease(prepared.client, undefined, headers, signal);
     } catch {
+      signal.throwIfAborted();
       return { ok: false, reason: 'unavailable' };
     }
-    return readMusicContext(prepared.client, prepared.authorization, release, data.id, data.locale, data);
+    return readMusicContext(prepared.client, prepared.authorization, release, data.id, data.locale, {
+      ...data,
+      signal,
+    });
   });

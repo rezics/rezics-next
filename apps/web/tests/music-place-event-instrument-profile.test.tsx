@@ -110,18 +110,36 @@ function client(
     status?: number;
     throw?: boolean;
     rows?: unknown[];
+    contextStatus?: number;
+    contextId?: string;
   } = {},
 ) {
   const relationReads: unknown[] = [];
+  const contextReads: unknown[] = [];
+  const subjectReads: unknown[] = [];
   const native = {
+    contexts: ({ id }: { id: string }) => ({
+      get: async (input: unknown) => {
+        contextReads.push({ id, input });
+        return {
+          status: options.contextStatus ?? 200,
+          data: { context: { id: options.contextId ?? id } },
+          headers: { 'rezics-session-token': 'admitted-context-token' },
+        };
+      },
+    }),
     subjects: ({ id }: { id: string }) => ({
       get: async ({
         query,
         fetch,
+        headers,
       }: {
         query: { context: string; language: string };
         fetch: { cache: string; redirect: string };
+        headers: Record<string, string>;
       }) => {
+        subjectReads.push(query);
+        expect(headers['rezics-session-token']).toBe('admitted-context-token');
         expect(id).toBe(event);
         expect(query).toEqual({ context: candidateContext, language: locale });
         expect(fetch).toEqual({ cache: 'no-store', redirect: 'manual' });
@@ -153,8 +171,52 @@ function client(
       },
     }),
   };
-  return { client: native as unknown as KernelClient, relationReads };
+  return { client: native as unknown as KernelClient, relationReads, contextReads, subjectReads };
 }
+
+test('every music window admits its native Context before reading Subject or relation data', async () => {
+  const fixture = client();
+  for (const cursor of [undefined, 'next-window']) {
+    const result = await readMusicContext(fixture.client, 'Bearer reader', bundledRelease, event, locale, {
+      context: candidateContext,
+      stream: 'schema:performer',
+      cursor,
+      session: 'original-token',
+    });
+    expect(result.ok).toBe(true);
+  }
+  expect(fixture.contextReads).toEqual(
+    Array.from({ length: 2 }, () => ({
+      id: candidateContext,
+      input: {
+        headers: { authorization: 'Bearer reader', 'rezics-session-token': 'original-token' },
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      },
+    })),
+  );
+  expect(fixture.subjectReads).toHaveLength(2);
+  expect(fixture.relationReads).toHaveLength(2);
+  for (const contextStatus of [401, 403, 404, 503]) {
+    const denied = client({ contextStatus });
+    const result = await readMusicContext(denied.client, undefined, bundledRelease, event, locale, {});
+    expect(result).toEqual({ ok: false, reason: contextStatus < 404 ? 'denied' : 'unavailable' });
+    expect(denied.subjectReads).toHaveLength(0);
+    expect(denied.relationReads).toHaveLength(0);
+  }
+  const replaced = client({ contextId: performer });
+  expect(await readMusicContext(replaced.client, undefined, bundledRelease, event, locale, {})).toEqual({
+    ok: false,
+    reason: 'stale',
+  });
+  expect(replaced.subjectReads).toHaveLength(0);
+  const stopped = client();
+  const controller = new AbortController();
+  controller.abort(new Error('retired request'));
+  expect(
+    readMusicContext(stopped.client, undefined, bundledRelease, event, locale, { signal: controller.signal }),
+  ).rejects.toThrow('retired request');
+  expect(stopped.contextReads).toHaveLength(0);
+});
 
 test('released music context reads source-bearing partial event time and the exact instrument credit', async () => {
   expect(musicContextKind(bundledRelease, 'schema:Place')).toBe('place');
