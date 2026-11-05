@@ -7,6 +7,13 @@ import type { LabelsPage } from '../src/library/labels-read';
 const { loadCurrentLabelShelfPage, loadLabelShelfPage } = await import('../src/library/label-shelf-read');
 const { LabelShelfPage } = await import('../src/library/entries-page');
 const { LabelsPageView } = await import('../src/library/labels-page');
+const {
+  admitLabelShelfWindow,
+  emptyLabelShelfWindow,
+  hasPreviousLabelShelfWindow,
+  previousLabelShelfWindow,
+  stageLabelShelfWindow,
+} = await import('../src/library/label-shelf-window-navigation');
 const { shelfDisplay, shelfHref, validateShelfSearch } = await import('../src/library/shelf-params');
 const { subjectHref } = await import('../src/subject/subject-href');
 
@@ -207,6 +214,8 @@ test('rejected native Label cursors offer a deliberate same-Label first page wit
         createElement(LabelShelfPage, {
           page,
           locale: 'ja',
+          currentCursor: 'opaque-page-token',
+          retryHref: `/ja/library?label=${labelId}&cursor=opaque-page-token&layout=table&size=l&columns=title`,
           display: {
             layout: 'table',
             size: 'l',
@@ -219,7 +228,10 @@ test('rejected native Label cursors offer a deliberate same-Label first page wit
       );
       expect(html).toContain('This Label continuation could not be loaded.');
       expect(html).toContain(`/ja/library?label=${labelId}&amp;layout=table&amp;size=l&amp;columns=title`);
-      expect(html).not.toMatch(/opaque-page-token|Reading list|<form/);
+      expect(html).toContain('Retry this page');
+      expect(html).toContain(`href="/ja/library?label=${labelId}&amp;cursor=opaque-page-token&amp;layout=table&amp;size=l&amp;columns=title"`);
+      expect(html).not.toContain('Reading list');
+      expect(html).not.toContain('<form');
       expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toHaveLength(2);
     }
     for (const [status, code, cursorOnly, cursor, state] of [
@@ -243,6 +255,70 @@ test('rejected native Label cursors offer a deliberate same-Label first page wit
     }
   } finally {
     assignmentOverride = null;
+  }
+});
+
+test('Label window navigation admits three windows, keeps terminal recovery and retries the exact failed target', async () => {
+  let windows = emptyLabelShelfWindow();
+  windows = admitLabelShelfWindow(windows, null);
+  windows = stageLabelShelfWindow(windows, 'next', 'window-two');
+  windows = admitLabelShelfWindow(windows, 'window-two');
+  windows = stageLabelShelfWindow(windows, 'next', 'window-three');
+  windows = admitLabelShelfWindow(windows, 'window-three');
+  expect(windows).toEqual({ predecessors: [null, 'window-two'], current: 'window-three', pending: null });
+  expect(previousLabelShelfWindow(windows)).toBe('window-two');
+
+  const beforeFailedTarget = windows;
+  windows = stageLabelShelfWindow(windows, 'next', 'opaque-failed-target');
+  const retry = stageLabelShelfWindow(windows, 'retry', 'opaque-failed-target');
+  expect(retry).toBe(windows);
+  expect(retry.predecessors).toEqual(beforeFailedTarget.predecessors);
+  expect(retry.current).toBe(beforeFailedTarget.current);
+  expect(retry.pending).toEqual({ move: 'next', target: 'opaque-failed-target' });
+
+  windows = stageLabelShelfWindow(windows, 'previous', 'window-three');
+  expect(hasPreviousLabelShelfWindow(windows)).toBe(true);
+  windows = admitLabelShelfWindow(windows, 'window-three');
+  windows = stageLabelShelfWindow(windows, 'previous', 'window-two');
+  windows = admitLabelShelfWindow(windows, 'window-two');
+  windows = stageLabelShelfWindow(windows, 'first', null);
+  windows = admitLabelShelfWindow(windows, null);
+  expect(windows).toEqual(emptyLabelShelfWindow());
+
+  let capped = emptyLabelShelfWindow();
+  capped = admitLabelShelfWindow(capped, null);
+  for (let index = 1; index <= 10; index++) {
+    const target = `window-${index}`;
+    capped = stageLabelShelfWindow(capped, 'next', target);
+    capped = admitLabelShelfWindow(capped, target);
+  }
+  expect(capped.predecessors).toHaveLength(8);
+  expect(admitLabelShelfWindow(emptyLabelShelfWindow(), 'direct-later-window').predecessors).toEqual([]);
+
+  pageSize = 0;
+  try {
+    const page = await loadLabelShelfPage(client() as never, request(), env, { labelId, limit: 100 });
+    if (page.state !== 'loaded') throw new Error('Missing typed terminal Label page');
+    const html = renderToStaticMarkup(
+      createElement(LabelShelfPage, {
+        page,
+        locale: 'en',
+        display: { layout: 'grid', size: 'm' },
+        currentCursor: 'window-three',
+        windowLinks: {
+          previous: { href: `/en/library?label=${labelId}&cursor=window-two` },
+          first: { href: `/en/library?label=${labelId}` },
+        },
+      }),
+    );
+    expect(html).toContain('No works have this label yet.');
+    expect(html).toContain('Previous page');
+    expect(html).toContain('First page');
+    expect(html).not.toContain('More</a>');
+    expect(html).toContain(`href="/en/library?label=${labelId}&amp;cursor=window-two"`);
+    expect(html).toContain(`href="/en/library?label=${labelId}"`);
+  } finally {
+    pageSize = 10;
   }
 });
 

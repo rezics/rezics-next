@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type MouseEventHandler } from 'react';
 import { ShelfEmpty } from '@rezics/ui/shelf-empty';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
@@ -39,6 +39,58 @@ import {
 } from './shelf-summary-view';
 
 type Display = ShelfDisplay;
+
+export type LabelShelfWindowLink = { href: string; onClick?: MouseEventHandler<HTMLAnchorElement> };
+export type LabelShelfWindowLinks = {
+  previous?: LabelShelfWindowLink;
+  first?: LabelShelfWindowLink;
+  next?: LabelShelfWindowLink;
+  retry?: LabelShelfWindowLink;
+};
+
+function LabelShelfWindowActions({ links }: { links: LabelShelfWindowLinks }) {
+  if (!links.previous && !links.first && !links.next && !links.retry) return null;
+  return (
+    <nav aria-label={m.library_labels_heading()} className="flex flex-wrap gap-2">
+      {links.previous ? (
+        <a
+          href={links.previous.href}
+          onClick={links.previous.onClick}
+          className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11 min-w-11`}
+        >
+          {m.library_label_previous_page()}
+        </a>
+      ) : null}
+      {links.first ? (
+        <a
+          href={links.first.href}
+          onClick={links.first.onClick}
+          className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11 min-w-11`}
+        >
+          {m.library_label_first_page()}
+        </a>
+      ) : null}
+      {links.next ? (
+        <a
+          href={links.next.href}
+          onClick={links.next.onClick}
+          className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11 min-w-11`}
+        >
+          {m.library_more()}
+        </a>
+      ) : null}
+      {links.retry ? (
+        <a
+          href={links.retry.href}
+          onClick={links.retry.onClick}
+          className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11 min-w-11`}
+        >
+          {m.library_label_retry_page()}
+        </a>
+      ) : null}
+    </nav>
+  );
+}
 
 export function PersonalLibraryPage({
   page,
@@ -326,6 +378,9 @@ export function LabelShelfPage({
   locale,
   display,
   presentation,
+  currentCursor,
+  retryHref,
+  windowLinks,
   isCurrent,
   canUnassign,
 }: {
@@ -333,19 +388,40 @@ export function LabelShelfPage({
   locale: string;
   display: Display;
   presentation?: ShelfPresentationResolution;
+  currentCursor?: string | null;
+  retryHref?: string;
+  windowLinks?: LabelShelfWindowLinks;
   isCurrent?: () => boolean;
   canUnassign?: () => boolean;
 }) {
-  if (page.state === 'cursor-rejected') {
-    const firstPageView: ShelfPresentationIntent = presentation?.intent ?? {
-      label: page.labelId,
-      ...explicitShelfDisplay(display),
+  const view = (label: string): ShelfPresentationIntent =>
+    presentation?.intent ?? { label, ...explicitShelfDisplay(display) };
+  const firstHref = (label: string) => {
+    const { cursor: _cursor, ...first } = view(label);
+    return shelfHref(locale, first);
+  };
+  const linksFor = (label: string, next: string | null): LabelShelfWindowLinks =>
+    windowLinks ?? {
+      ...(currentCursor ? { first: { href: firstHref(label) } } : {}),
+      ...(next ? { next: { href: shelfHref(locale, { ...view(label), cursor: next }) } } : {}),
     };
+  if (page.state === 'cursor-rejected') {
     return (
       <div className="max-w-6xl space-y-6 text-foreground">
         <PageHeading>{m.library_labels_heading()}</PageHeading>
         <p role="alert">{m.library_label_cursor_rejected()}</p>
-        <EntriesFirstPage locale={locale} view={firstPageView} />
+        {windowLinks ? (
+          <LabelShelfWindowActions links={windowLinks} />
+        ) : retryHref || currentCursor ? (
+          <LabelShelfWindowActions
+            links={{
+              ...(currentCursor ? { first: { href: firstHref(page.labelId) } } : {}),
+              ...(retryHref ? { retry: { href: retryHref } } : {}),
+            }}
+          />
+        ) : (
+          <EntriesFirstPage locale={locale} view={view(page.labelId)} />
+        )}
       </div>
     );
   }
@@ -360,6 +436,7 @@ export function LabelShelfPage({
               ? m.library_labels_denied()
               : m.library_subject_label_unavailable()}
         </p>
+        {windowLinks ? <LabelShelfWindowActions links={windowLinks} /> : null}
         <a href={`/${encodeURIComponent(locale)}/library/labels`}>{m.library_labels_heading()}</a>
       </div>
     );
@@ -378,7 +455,9 @@ export function LabelShelfPage({
     );
   return (
     <div className="max-w-6xl space-y-6 text-foreground">
-      <PageHeading>{page.label.name}</PageHeading>
+      <PageHeading data-label-shelf-heading tabIndex={-1}>
+        {page.label.name}
+      </PageHeading>
       <SubjectLabelNotice {...(page.labelResult !== undefined ? { result: page.labelResult } : {})} />
       <DisplayControls
         locale={locale}
@@ -405,20 +484,7 @@ export function LabelShelfPage({
           </EmptyHeader>
         </Empty>
       )}
-      {page.next ? (
-        <a
-          onClick={(event) => {
-            if (isCurrent && !isCurrent()) event.preventDefault();
-          }}
-          href={shelfHref(locale, {
-            ...(presentation?.intent ?? { label: page.label.id, ...explicitShelfDisplay(display) }),
-            cursor: page.next,
-          })}
-          className={buttonVariants({ variant: 'outline', size: 'lg' })}
-        >
-          {m.library_more()}
-        </a>
-      ) : null}
+      <LabelShelfWindowActions links={linksFor(page.label.id, page.next)} />
       {page.undo ? (
         <Exposure operation="library_label.unassign">
           <form
