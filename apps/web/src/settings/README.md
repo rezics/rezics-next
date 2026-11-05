@@ -40,6 +40,8 @@ Settings Profile reads Content `GET /v1/media/avatar-upload-advice` for current 
 
 **Decision:** Avatar reservation, transfer and processing waits keep the longest Retry-After deadline captured at the failing response, including 503 and HTTP dates; expiry enables deliberate retry only, and local replacement cannot bypass it.
 
+**Decision:** Avatar crop reads at most 256 KiB of PNG/JPEG header. Advice, preparation, crop export and upload observation use the existing ten-second Profile deadline; timeout ends local busy presentation while retaining the exact upload identity and native waits, and late results cannot alter a successor.
+
 ## Notifications
 
 The signed-in Settings notifications section reads the Access preference `page`: current optional kinds, compulsory
