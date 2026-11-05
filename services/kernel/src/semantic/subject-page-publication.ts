@@ -4,7 +4,7 @@ import type { KernelClock } from '../clock.ts';
 import { noEffect, runCommand, type CommandEvent } from '../command/command.ts';
 import type { Access } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { SUBJECT_PAGE_REPAIR_QUEUED, SUBJECT_PAGE_WORK_COMMITTED } from './events.ts';
+import { SUBJECT_PAGE_REPAIR_QUEUED, SUBJECT_PAGE_WORK_COMMITTED } from '../events/contracts/semantic.ts';
 import { readSubjectPageNativeWindow, readSubjectPageNativeComponent } from './subject-page-publication-reader.ts';
 import candidateWindow from './subject-page-candidates.sql';
 import {

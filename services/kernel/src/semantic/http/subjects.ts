@@ -70,7 +70,7 @@ import {
   publicContextEligibility,
 } from '../context.ts';
 import { currentCommand, type CommandAuthorization, type CommandTransaction } from '../../command/command.ts';
-import { REACTION_KINDS } from '../../content/events.ts';
+import { REACTION_KINDS } from '../../events/contracts/content.ts';
 import { readReactionCounts, type ReactionKind } from '../../content/reaction-projection.ts';
 import readVisibility from '../read-visibility.sql';
 import { AccountAgentLabelEditError, AccountAgentWriteDeniedError } from '../agents.ts';

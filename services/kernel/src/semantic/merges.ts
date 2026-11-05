@@ -10,7 +10,7 @@ import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { EditorialConflictError, SubjectNotFoundError } from './candidates.ts';
-import { SUBJECT_MERGED } from './events.ts';
+import { SUBJECT_MERGED } from '../events/contracts/semantic.ts';
 import type { Release } from '@rezics/definitions';
 import readRedirect from './read-redirect.sql';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';

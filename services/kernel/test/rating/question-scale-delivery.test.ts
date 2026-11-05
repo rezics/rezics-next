@@ -5,12 +5,12 @@ import type { CloudEvent } from '../../src/events/log.ts';
 import { createRatingCounter } from '../../src/access/rating-counter.ts';
 import { readPublicFigureViews } from '../../src/rating/public-figure-http.ts';
 import { createRatingAggregateEffect, readAggregate } from '../../src/rating/aggregate-effect.ts';
-import { RATING_EVENTS } from '../../src/rating/events.ts';
+import { RATING_EVENTS } from '../../src/events/contracts/rating.ts';
 import {
   assertPopulationDeliveryDelta,
   ratingQuestionHistogramIndex,
   ratingQuestionHistogramSize,
-} from '../../src/rating/question-scale.ts';
+} from '../../src/events/contracts/rating-question-scale.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { body, createNativePublicationFixture, votePath } from './public-figure-native-publication-fixture.ts';

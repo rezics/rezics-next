@@ -10,7 +10,7 @@ import { createCommittedContinuations } from '../../src/access/committed-continu
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createReinstatementCommands } from '../../src/access/reinstatement.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
-import { ACCESS_EVENTS } from '../../src/access/events.ts';
+import { ACCESS_EVENTS } from '../../src/events/contracts/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);

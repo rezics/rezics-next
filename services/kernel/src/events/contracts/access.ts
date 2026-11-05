@@ -1,5 +1,5 @@
 import { Type } from 'typebox';
-import governance from './platform-governance.json';
+import governance from './access-platform-governance.json';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const identity = Type.String({ pattern: `^${uuid}$`, minLength: 36, maxLength: 36 });

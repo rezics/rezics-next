@@ -5,7 +5,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { MediaId } from './model.ts';
 import type { MediaStorage } from './media-storage.ts';
 import type { MediaVariant } from './media.ts';
-import type { MediaEventData } from './media-events.ts';
+import type { MediaEventData } from '../events/contracts/content-media.ts';
 import {
   ImageCropOutOfBoundsRejection,
   ImageDecodeRejection,

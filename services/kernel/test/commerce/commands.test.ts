@@ -14,7 +14,7 @@ import { accessCheck, type Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
-import { COMMERCE_EVENTS } from '../../src/commerce/events.ts';
+import { COMMERCE_EVENTS } from '../../src/events/contracts/commerce.ts';
 import {
   createCommerceCommands,
   OfferRevisionConflictError,

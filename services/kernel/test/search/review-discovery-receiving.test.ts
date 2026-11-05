@@ -11,7 +11,7 @@ import {
   createReviewDiscoveryEffect,
   processReviewDiscoveryPage,
 } from '../../src/content/review-discovery-lifecycle.ts';
-import { REVIEW_DISCOVERY_CHANGED } from '../../src/content/review-discovery-events.ts';
+import { REVIEW_DISCOVERY_CHANGED } from '../../src/events/contracts/content-review-discovery.ts';
 import { readReviewDiscoveryChanges } from '../../src/content/review-discovery-changes.ts';
 import type { CommandOutcome } from '../../src/command/command.ts';
 import type { CloudEvent } from '../../src/events/log.ts';

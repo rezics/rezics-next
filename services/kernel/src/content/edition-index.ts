@@ -11,7 +11,7 @@ import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { ContentEditionView } from './edition-model.ts';
 import { readCreatorContentEdition, prepareEditionIdentities } from './edition-reads.ts';
 import { editionRow, editionSnapshot } from './edition-store.ts';
-import { CONTENT_EVENTS } from './events.ts';
+import { CONTENT_EVENTS } from '../events/contracts/content.ts';
 import { lockErasureFence } from './erasure-fence.ts';
 import { ContentNotFoundError } from './reads.ts';
 import page from './edition-index-page.sql';

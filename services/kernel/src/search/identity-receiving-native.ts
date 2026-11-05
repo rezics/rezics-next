@@ -12,7 +12,7 @@ import { requireAccessDeadline } from '../request/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { readIdentitySourceProjection } from '../semantic/search-source.ts';
-import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
+import { searchIdentityWriterChanged } from '../events/contracts/search-identity-epoch-participant.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type {
   SearchIdentityReceivingContext,

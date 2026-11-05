@@ -7,7 +7,7 @@ import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-ad
 import { stepIdentityEpochMapping } from '../../src/semantic/identity-epoch-mapping.ts';
 import { identityEpochStore as store } from '../../src/semantic/identity-epoch-store.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
-import { searchIdentityWriterChanged } from '../../src/search/identity-epoch-participant-events.ts';
+import { searchIdentityWriterChanged } from '../../src/events/contracts/search-identity-epoch-participant.ts';
 import type { SearchNativeReceivingPreparation } from '../../src/search/identity-receiving-native-internal.ts';
 import { createSearchIdentityReceivingNativeStore } from '../../src/search/identity-receiving-native-store.ts';
 import {

@@ -15,7 +15,7 @@ import {
   readReviewDiscoveryChanges,
   refreshReviewDiscoveryChanges,
 } from '../../src/content/review-discovery-changes.ts';
-import { REVIEW_DISCOVERY_OPENED, type ReviewDiscoveryWork } from '../../src/content/review-discovery-events.ts';
+import { REVIEW_DISCOVERY_OPENED, type ReviewDiscoveryWork } from '../../src/events/contracts/content-review-discovery.ts';
 import { observeSql } from './support/sql-observer.ts';
 import { erasePost, takedown } from '../../src/content/moderation.ts';
 import { createReviewDiscoverySource } from '../../src/content/review-discovery.ts';

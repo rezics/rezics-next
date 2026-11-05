@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { currentCommand, noEffect, runCommand } from '../../src/command/command.ts';
 import { recordSemanticSourceCommit } from '../../src/semantic/erasure-producer.ts';
-import { searchIdentityWriterChanged } from '../../src/search/identity-epoch-participant-events.ts';
+import { searchIdentityWriterChanged } from '../../src/events/contracts/search-identity-epoch-participant.ts';
 import type { HistoryBarrier } from '../../src/history/registry.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import {

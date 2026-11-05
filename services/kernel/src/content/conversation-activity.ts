@@ -14,7 +14,7 @@ import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { CONTENT_EVENTS, type ContentEventType } from './events.ts';
+import { CONTENT_EVENTS, type ContentEventType } from '../events/contracts/content.ts';
 import type { AnchoredPosition } from './model.ts';
 import page from './conversation-activity-page.sql';
 import upsert from './conversation-activity-upsert.sql';

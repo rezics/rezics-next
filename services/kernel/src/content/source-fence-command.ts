@@ -15,7 +15,7 @@ import { newId, partitionOf } from '../route/route.ts';
 import readContext from '../semantic/read-context.sql';
 import { tupleRoute, type ImportedFieldGroup } from './imported-contract.ts';
 import type { RequestContext } from './model.ts';
-import type { SourceFenceEventData } from './source-fence-events.ts';
+import type { SourceFenceEventData } from '../events/contracts/content-source-fence.ts';
 import takedown from './takedown-source-fence.sql';
 import { recordPrivacyReduction } from '../semantic/public-filter-source.ts';
 

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
-import { ACCESS_EVENTS } from '../../src/access/events.ts';
+import { ACCESS_EVENTS } from '../../src/events/contracts/access.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { newId } from '../../src/route/route.ts';

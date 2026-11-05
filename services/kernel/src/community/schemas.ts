@@ -1,4 +1,4 @@
-import { REACTION_KINDS } from '../content/events.ts';
+import { REACTION_KINDS } from '../events/contracts/content.ts';
 import { RealmPresentationSchema } from './presentation.ts';
 import { t } from 'elysia';
 import { RealmPresentationImageSchema } from '../content/realm-media.ts';

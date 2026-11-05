@@ -3,7 +3,7 @@ import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { REVIEW_DISCOVERY_CHANGE_LIMIT } from './review-discovery-lifecycle.ts';
-import type { ReviewDiscoveryOrigin } from './review-discovery-events.ts';
+import type { ReviewDiscoveryOrigin } from '../events/contracts/content-review-discovery.ts';
 import type { IndexedReview, ReviewDiscoverySource } from './review-discovery.ts';
 
 /** A receiving position orders invalidations, never native content revisions. */

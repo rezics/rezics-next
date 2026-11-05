@@ -5,7 +5,7 @@ import { ensureAccountAgent, NoActiveDefinitionReleaseError } from '../semantic/
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
-import { ACCESS_EVENTS } from './events.ts';
+import { ACCESS_EVENTS } from '../events/contracts/access.ts';
 import { reverseDeletedAccountAgent } from './agent-verification.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { Account } from './account-data.ts';

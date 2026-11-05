@@ -6,7 +6,7 @@ import { createCollectionJob } from '../../src/content/collection-job.ts';
 import { createImageJob } from '../../src/content/image-job.ts';
 import { claimMedia, type MediaState } from '../../src/content/media.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
-import { CONTENT_EVENTS } from '../../src/content/events.ts';
+import { CONTENT_EVENTS } from '../../src/events/contracts/content.ts';
 import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';

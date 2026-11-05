@@ -24,7 +24,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { platformRootAnchor } from '../commerce/catalogue.ts';
-import { REACTION_KINDS } from '../content/events.ts';
+import { REACTION_KINDS } from '../events/contracts/content.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor, type Resource } from '../request/access.ts';

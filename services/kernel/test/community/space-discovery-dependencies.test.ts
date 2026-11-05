@@ -26,7 +26,7 @@ import {
 import {
   SPACE_DISCOVERY_INVALIDATED,
   type SpaceDiscoveryInvalidation,
-} from '../../src/community/space-discovery-events.ts';
+} from '../../src/events/contracts/community-space-discovery.ts';
 import { takedownSourceFence } from '../../src/content/source-fence-command.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { productionActions } from '../support/production-actions.ts';

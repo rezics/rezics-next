@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { currentCommand, runCommand, type CommandTransaction } from '../../src/command/command.ts';
-import { searchIdentityWriterChanged } from '../../src/search/identity-epoch-participant-events.ts';
+import { searchIdentityWriterChanged } from '../../src/events/contracts/search-identity-epoch-participant.ts';
 import { recordSemanticSourceCommit } from '../../src/semantic/erasure-producer.ts';
 import { epochFixture, home, type EpochFixture } from './support/identity-epoch.ts';
 import { admittedReceivingJob } from './support/identity-receiving-effects.ts';

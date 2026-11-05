@@ -15,7 +15,7 @@ import {
   pendingSpaceDiscoveryFrontiers,
   type SpaceDiscoveryFrontier,
 } from './space-discovery-frontier.ts';
-import { SPACE_DISCOVERY_INVALIDATED } from './space-discovery-events.ts';
+import { SPACE_DISCOVERY_INVALIDATED } from '../events/contracts/community-space-discovery.ts';
 import { maintainRealmMemberCounts } from './member-count.ts';
 import { PARTITIONS, partitionOf } from '../route/route.ts';
 import { createPartyLocatorEffect } from './party-locator.ts';

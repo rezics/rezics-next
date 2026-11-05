@@ -22,7 +22,7 @@ import { COMMITTED_CONTINUATION_ACTIONS, type ContinuationEntry } from '../../sr
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { WORKFLOW_APPROVAL_ACTIONS } from '../../src/access/workflow-approvals.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
-import platformGovernance from '../../src/access/platform-governance.json';
+import platformGovernance from '../../src/events/contracts/access-platform-governance.json';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../../src/tokens/list-cursor.ts';

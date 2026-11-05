@@ -36,7 +36,7 @@ import {
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { CONTENT_EVENTS } from './events.ts';
+import { CONTENT_EVENTS } from '../events/contracts/content.ts';
 import { liftTakedown } from './lift-takedown.ts';
 import { writeNotices } from './notices.ts';
 import type { RequestContext } from './model.ts';

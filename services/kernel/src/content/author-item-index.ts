@@ -8,7 +8,7 @@ import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
+import { CONTENT_EVENTS, type ContentEventData } from '../events/contracts/content.ts';
 import { lockErasureFence } from './erasure-fence.ts';
 import { eraseAccountAuthoredItem } from './account-erasure-authored.ts';
 import { markAccountErasureFound } from './account-erasure-progress.ts';

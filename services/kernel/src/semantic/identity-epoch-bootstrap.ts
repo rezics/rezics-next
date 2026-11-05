@@ -54,7 +54,7 @@ import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';
-import { IDENTITY_EPOCH_BOOTSTRAP, IDENTITY_EPOCH_PROGRESS, IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED } from './events.ts';
+import { IDENTITY_EPOCH_BOOTSTRAP, IDENTITY_EPOCH_PROGRESS, IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED } from '../events/contracts/semantic.ts';
 import type { IdentityNativeReceipt, NativeStepWork } from './identity-epoch-contract.ts';
 import subjects from './identity-epoch-bootstrap-subjects.sql';
 import members from './identity-epoch-bootstrap-members.sql';

@@ -5,7 +5,7 @@ import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';
 import { installReportReporter } from './report-locator.ts';
-import { REPORT_EVENTS } from './report-events.ts';
+import { REPORT_EVENTS } from '../events/contracts/content-report.ts';
 
 export const REPORT_LOCATOR_INSTALLATION_PAGE = 100;
 export const REPORT_LOCATOR_INSTALLED = 'com.rezics.content.report-locator.installed.v1';

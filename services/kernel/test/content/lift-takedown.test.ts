@@ -6,7 +6,7 @@ import { runCommand, type CommandEvent, type CommandOutcome } from '../../src/co
 import { createThread, createPost } from '../../src/content/commands.ts';
 import { takedown } from '../../src/content/moderation.ts';
 import { liftTakedown } from '../../src/content/lift-takedown.ts';
-import { CONTENT_EVENTS } from '../../src/content/events.ts';
+import { CONTENT_EVENTS } from '../../src/events/contracts/content.ts';
 import { readPost, readThread } from '../../src/content/reads.ts';
 import { createAuthorItemEffect } from '../../src/content/author-item-index.ts';
 import { createBoardEffect } from '../../src/content/board-projection.ts';

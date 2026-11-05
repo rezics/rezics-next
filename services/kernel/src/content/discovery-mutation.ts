@@ -35,7 +35,7 @@ import {
   DISCOVERY_DELTA,
   DISCOVERY_EVENTS,
   type DiscoveryDelta,
-} from './discovery-events.ts';
+} from '../events/contracts/content-discovery.ts';
 import { readDiscoverySource, retractDiscoveryStart } from './discovery.ts';
 import target from './discovery-mutation-target.sql';
 import read from './discovery-operation-read.sql';

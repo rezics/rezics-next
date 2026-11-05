@@ -5,7 +5,7 @@ import readTime from '../command/time.sql';
 import { withConnection } from '../database/pool.ts';
 import { PARTITIONS, ROUTES } from '../route/route.ts';
 import type { MediaStorage } from './media-storage.ts';
-import type { MediaEventData, MediaEventType } from './media-events.ts';
+import type { MediaEventData, MediaEventType } from '../events/contracts/content-media.ts';
 import selectCandidates from './select-collectable-media.sql';
 import fenceCollection from './fence-collection.sql';
 import finishCollection from './finish-collection.sql';

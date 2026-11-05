@@ -6,7 +6,7 @@ import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { RATING_EVENTS } from './events.ts';
+import { RATING_EVENTS } from '../events/contracts/rating.ts';
 import { acknowledgeRatingErasurePage } from './erasure-status.ts';
 import applyComponent from './aggregate-component-apply.sql';
 import insertComponent from './aggregate-component-insert.sql';
@@ -30,7 +30,7 @@ import {
   ratingQuestionHistogramIndex,
   ratingQuestionHistogramSize,
   type RatingQuestionScale,
-} from './question-scale.ts';
+} from '../events/contracts/rating-question-scale.ts';
 import readPublicFigurePosition from './public-figure-next-position.sql';
 import markPublicFigurePending from './public-figure-pending.sql';
 import { STANDARD_QUESTION_ID } from './votes.ts';

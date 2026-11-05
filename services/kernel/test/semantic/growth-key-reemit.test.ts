@@ -4,7 +4,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, updateSubjectIdentity } from '../../src/semantic/subject.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
-import { LINK_KEYS_CHANGED, SUBJECT_REVISED } from '../../src/semantic/events.ts';
+import { LINK_KEYS_CHANGED, SUBJECT_REVISED } from '../../src/events/contracts/semantic.ts';
 import { BATCH_ENVELOPES } from '../../src/events/log.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import {

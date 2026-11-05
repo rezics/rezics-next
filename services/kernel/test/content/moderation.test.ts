@@ -11,7 +11,7 @@ import { readReservation } from '../../src/content/media.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
 import { Value } from 'typebox/value';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { CONTENT_EVENTS } from '../../src/content/events.ts';
+import { CONTENT_EVENTS } from '../../src/events/contracts/content.ts';
 import { observeSql } from './support/sql-observer.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 

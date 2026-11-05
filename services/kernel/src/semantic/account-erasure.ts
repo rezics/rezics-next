@@ -5,7 +5,7 @@ import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
 import { SEMANTIC_ERASURE_STORES, SEMANTIC_RECEIVING_ERASURE_STORES } from './account-erasure-stores.ts';
-import { SEMANTIC_EVENTS } from './events.ts';
+import { SEMANTIC_EVENTS } from '../events/contracts/semantic.ts';
 import type { Effect } from '../events/effects.ts';
 import { recordSemanticSourceDisposition } from './erasure-producer.ts';
 

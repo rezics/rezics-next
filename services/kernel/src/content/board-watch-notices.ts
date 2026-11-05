@@ -9,7 +9,7 @@ import { readPartition } from '../partition/partition.ts';
 import type { Access } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
+import { CONTENT_EVENTS, type ContentEventData } from '../events/contracts/content.ts';
 import { finalizeOptionalNotice, NOTICE_RETENTION_MS, withWritableNoticeRoute } from './notices.ts';
 import { postReadableByAccount } from './reads.ts';
 

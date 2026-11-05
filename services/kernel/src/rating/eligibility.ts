@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
-import { ACCESS_EVENTS } from '../access/events.ts';
+import { ACCESS_EVENTS } from '../events/contracts/access.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';

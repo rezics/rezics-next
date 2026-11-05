@@ -10,7 +10,7 @@ import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandTransaction } from '../command/command.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { LINKS_MOVING, LINKS_PROJECTED } from './events.ts';
+import { LINKS_MOVING, LINKS_PROJECTED } from '../events/contracts/semantic.ts';
 import { redirectOf } from './merges.ts';
 import firstMember from './merge-moves-first-member.sql';
 import insertMember from './merge-moves-insert-member.sql';

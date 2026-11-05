@@ -15,7 +15,7 @@ import type {
 import type { CollectionResourceView } from '../library/collection-reads.ts';
 import { CollectionDiscoverySummarySchema } from '../search/index.ts';
 import { continuePageSchema } from '../library/transport-contract.ts';
-import { REACTION_KINDS } from './events.ts';
+import { REACTION_KINDS } from '../events/contracts/content.ts';
 import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';
 import { FeedParentContextSchema, FeedReviewContextSchema } from './feed-context-schema.ts';

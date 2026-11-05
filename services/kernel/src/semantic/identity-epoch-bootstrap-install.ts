@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { noEffect, registerCommandCallback, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../events/contracts/semantic.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';
 import installation from './identity-epoch-bootstrap-installation.sql';

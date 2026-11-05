@@ -1,5 +1,5 @@
 import { Type } from 'typebox';
-import { SPACE_DISCOVERY_INVALIDATED, SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
+import { SPACE_DISCOVERY_INVALIDATED, SpaceDiscoveryInvalidation } from './community-space-discovery.ts';
 
 const id = Type.String({
   pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',

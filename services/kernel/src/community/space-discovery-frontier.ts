@@ -12,7 +12,7 @@ import {
   SPACE_DISCOVERY_DEPENDENCY_PAGE,
   spaceDiscoveryDependencyReadiness,
 } from './space-discovery-dependencies.ts';
-import { SPACE_DISCOVERY_INVALIDATED, SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
+import { SPACE_DISCOVERY_INVALIDATED, SpaceDiscoveryInvalidation } from '../events/contracts/community-space-discovery.ts';
 
 export type SpaceDiscoveryFrontier = Readonly<{ partition: number; obligation: string }>;
 export type SpaceDiscoveryFrontierState = 'preparing' | 'unavailable' | 'draining' | 'settled';

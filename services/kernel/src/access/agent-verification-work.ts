@@ -11,7 +11,7 @@ import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts'
 import { classifyUnavailability } from '../request/unavailable.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Value } from 'typebox/value';
-import { ACCESS_EVENTS } from './events.ts';
+import { ACCESS_EVENTS } from '../events/contracts/access.ts';
 import { synchronizeAccountAgent } from './account-agent-effect.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { AccountAgentVerificationError } from '../semantic/agents.ts';

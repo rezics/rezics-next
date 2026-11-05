@@ -5,7 +5,7 @@ import { runCommand, type CommandReceipt } from '../command/command.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { CONTENT_EVENTS } from './events.ts';
+import { CONTENT_EVENTS } from '../events/contracts/content.ts';
 import upsert from './subject-thread-upsert.sql';
 
 const sourceTypes = [

@@ -6,7 +6,7 @@ import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
 import { createPayouts } from '../../src/commerce/payouts.ts';
-import { COMMERCE_EVENTS } from '../../src/commerce/events.ts';
+import { COMMERCE_EVENTS } from '../../src/events/contracts/commerce.ts';
 import type { CheckoutSnapshot, Order, StripePort, StripeTransaction } from '../../src/commerce/model.ts';
 import { statementPeriod, statementTotals, royaltyLines } from '../../src/commerce/royalty.ts';
 import { readOrder } from '../../src/commerce/store.ts';

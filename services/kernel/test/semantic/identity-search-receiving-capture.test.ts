@@ -27,7 +27,7 @@ import {
 } from '../../src/semantic/identity-source-consumer-maintenance.ts';
 import { currentCommand, registerCommandCallback, runCommand } from '../../src/command/command.ts';
 import { recordSemanticSourceCommit } from '../../src/semantic/erasure-producer.ts';
-import { searchIdentityWriterChanged } from '../../src/search/identity-epoch-participant-events.ts';
+import { searchIdentityWriterChanged } from '../../src/events/contracts/search-identity-epoch-participant.ts';
 import { epochFixture, home, type EpochFixture } from './support/identity-epoch.ts';
 import { admittedReceivingJob } from './support/identity-receiving-effects.ts';
 

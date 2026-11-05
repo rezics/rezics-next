@@ -30,7 +30,7 @@ import gateSql from './writer-guard-gate.sql';
 import dispatchSql from './writer-guard-dispatch.sql';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { documentActions, validateIndexObservation, type IndexAction, type SubjectDocument } from './document.ts';
-import { searchIdentityWriterChanged as changed } from './identity-epoch-participant-events.ts';
+import { searchIdentityWriterChanged as changed } from '../events/contracts/search-identity-epoch-participant.ts';
 import { readIdentityIndexIncarnation, readSearchWriterPhysicalTarget } from './identity-epoch-participant-physical.ts';
 import enroll from './identity-epoch-participant-enroll.sql';
 import settle from './identity-epoch-participant-settle.sql';

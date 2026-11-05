@@ -28,7 +28,7 @@ import {
   ratingQuestionHistogramIndex,
   ratingQuestionHistogramSize,
   type RatingQuestionScale,
-} from './question-scale.ts';
+} from '../events/contracts/rating-question-scale.ts';
 import { readVotePopulations } from './voter-realms.ts';
 import { produceIdentityRatingVoteChange } from '../semantic/identity-rating-producer.ts';
 import {

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { FeedPage } from '../../src/content/feed-contract.ts';
-import { REACTION_KINDS } from '../../src/content/events.ts';
+import { REACTION_KINDS } from '../../src/events/contracts/content.ts';
 import { createFeedActivityStore, feedRoute, type ActivityRef } from '../../src/content/feed-activity.ts';
 import { projectFeedReactions } from '../../src/content/feed-reactions.ts';
 import { observeSql } from './support/sql-observer.ts';

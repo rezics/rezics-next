@@ -30,7 +30,7 @@ import {
   isPrepaidIdentitySourceConsumerMaintenance,
   withIdentitySourceNoEffectCommand,
 } from '../semantic/identity-source-consumer-maintenance.ts';
-import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
+import { IDENTITY_EPOCH_ADMITTED } from '../events/contracts/semantic.ts';
 import type { IdentityChange, IdentityFrontier, IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
 import type {
   IdentityReceivingDisposition,

@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { runCommand, type CommandTransaction } from '../command/command.ts';
-import { COMMUNITY_EVENTS } from '../community/events.ts';
+import { COMMUNITY_EVENTS } from '../events/contracts/community.ts';
 import type { Effect } from '../events/effects.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import readRealm from './voter-realm-read.sql';

@@ -5,7 +5,7 @@ import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { LINKS_CHANGED, LINKS_VISIBILITY_CHANGED } from './events.ts';
+import { LINKS_CHANGED, LINKS_VISIBILITY_CHANGED } from '../events/contracts/semantic.ts';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import { factDataTypes, SubjectInputError, type FactRow, type Violation } from './item.ts';
 import { holderFacts } from './link-keys.ts';

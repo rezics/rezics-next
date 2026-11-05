@@ -6,7 +6,7 @@ import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { COMMUNITY_EVENTS } from './events.ts';
+import { COMMUNITY_EVENTS } from '../events/contracts/community.ts';
 import realmAuthor from './revision-locator-read-realm.sql';
 import spaceAuthor from './revision-locator-read-space.sql';
 import insert from './revision-locator-insert.sql';

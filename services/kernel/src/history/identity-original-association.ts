@@ -9,7 +9,7 @@ import {
   withSingleCommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
-import { ACCESS_EVENTS } from '../access/events.ts';
+import { ACCESS_EVENTS } from '../events/contracts/access.ts';
 import type { AgentVerificationReversal } from '../access/agent-verification.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent, Envelope } from '../events/log.ts';

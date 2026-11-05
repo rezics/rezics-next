@@ -7,7 +7,7 @@ import { accessCheck, type Access, type Actor, type AccountActor } from '../requ
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accountAgentsForSubjects } from './agents.ts';
 import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { LINKS_CHANGED } from './events.ts';
+import { LINKS_CHANGED } from '../events/contracts/semantic.ts';
 import { factDataTypes, SubjectInputError, type FactRow } from './item.ts';
 import { holderFacts, holderKeys, labelOrderKey } from './link-keys.ts';
 import { contextLinkChanges, linkChanges } from './link-changes.ts';

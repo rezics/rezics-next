@@ -608,7 +608,7 @@ import {
 } from '../../src/semantic/identity-scope-native-association.ts';
 import associationSQL from '../../src/semantic/identity-scope-committed-receipt-association.sql';
 import associationInsertSQL from '../../src/semantic/identity-scope-native-association-insert.sql';
-import { IDENTITY_SCOPE_NATIVE_ASSOCIATED } from '../../src/semantic/events.ts';
+import { IDENTITY_SCOPE_NATIVE_ASSOCIATED } from '../../src/events/contracts/semantic.ts';
 
 async function fundedInitial() {
   return frame(async (context) => {

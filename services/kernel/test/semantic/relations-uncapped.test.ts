@@ -9,7 +9,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { factDataTypes, itemFacts, type Fact } from '../../src/semantic/item.ts';
-import { LINKS_CHANGED, SUBJECT_REVISED } from '../../src/semantic/events.ts';
+import { LINKS_CHANGED, SUBJECT_REVISED } from '../../src/events/contracts/semantic.ts';
 import { linkChanges } from '../../src/semantic/link-changes.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { holderFacts } from '../../src/semantic/link-keys.ts';

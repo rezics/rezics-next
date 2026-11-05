@@ -9,7 +9,7 @@ import { withRequestDeadline } from '../request/deadline.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { identityEpochStore, identityJobPartition } from '../semantic/identity-adapters/index.ts';
-import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
+import { IDENTITY_EPOCH_ADMITTED } from '../events/contracts/semantic.ts';
 import type { IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { readSubjectOfferSource, SUBJECT_OFFER_START } from './subject-offers.ts';

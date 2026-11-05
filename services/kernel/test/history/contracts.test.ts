@@ -4,7 +4,7 @@ import { EVENT_TYPES, lookupEventType } from '../../src/events/catalogue.ts';
 import {
   SEARCH_IDENTITY_WRITER_CHANGED,
   searchIdentityWriterChanged,
-} from '../../src/search/identity-epoch-participant-events.ts';
+} from '../../src/events/contracts/search-identity-epoch-participant.ts';
 import {
   ACCOUNT_ROLE_BITS,
   ACCOUNT_ROLES,

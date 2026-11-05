@@ -11,7 +11,7 @@ import {
   REVIEW_DISCOVERY_PROGRESS,
   type ReviewDiscoveryOrigin,
   type ReviewDiscoveryWork,
-} from './review-discovery-events.ts';
+} from '../events/contracts/content-review-discovery.ts';
 
 export const REVIEW_DISCOVERY_CHANGE_LIMIT = 100;
 const zero = '00000000-0000-0000-0000-000000000000';

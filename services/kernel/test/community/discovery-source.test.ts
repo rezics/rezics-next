@@ -21,7 +21,7 @@ import {
 } from '../../src/content/discovery-mutation.ts';
 import { fromPlainText } from '@rezics/document';
 import { readDiscoverySource, prepareDiscoverySourceApply } from '../../src/content/discovery.ts';
-import { DISCOVERY_DELTA, type DiscoveryDelta } from '../../src/content/discovery-events.ts';
+import { DISCOVERY_DELTA, type DiscoveryDelta } from '../../src/events/contracts/content-discovery.ts';
 import { lookupEventType } from '../../src/events/catalogue.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createReactionRelayBase } from '../content/reaction-relay-convergence-fixture.ts';

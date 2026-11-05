@@ -4,7 +4,7 @@ import type { PoolClient } from 'pg';
 import { currentCommand, runCommand } from '../../src/command/command.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import type { WorkDimensions } from '../../src/library/collection-source.ts';
-import { searchIdentityWriterChanged } from '../../src/search/identity-epoch-participant-events.ts';
+import { searchIdentityWriterChanged } from '../../src/events/contracts/search-identity-epoch-participant.ts';
 import { recordSemanticSourceCommit } from '../../src/semantic/erasure-producer.ts';
 import {
   prepareSearchReceivingCaptures,

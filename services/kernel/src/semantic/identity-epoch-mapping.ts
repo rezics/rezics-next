@@ -11,7 +11,7 @@ import {
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../events/contracts/semantic.ts';
 import {
   identityEpochStore,
   identityJobPartition,

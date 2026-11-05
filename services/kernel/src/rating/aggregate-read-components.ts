@@ -6,7 +6,7 @@ import type { RatingAggregate } from './aggregate-effect.ts';
 import readComponents from './aggregate-read.sql';
 import readFreshness from './aggregate-read-freshness.sql';
 import readQuestion from './aggregate-read-question.sql';
-import { assertPostgresBigint, ratingQuestionHistogramSize } from './question-scale.ts';
+import { assertPostgresBigint, ratingQuestionHistogramSize } from '../events/contracts/rating-question-scale.ts';
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { Type, type TSchema } from 'typebox';
 import { Value } from 'typebox/value';
-import { CONTENT_EVENTS } from '../../src/content/events.ts';
+import { CONTENT_EVENTS } from '../../src/events/contracts/content.ts';
 
 const ids = {
   actorId: '11111111-1111-4111-8111-111111111111',

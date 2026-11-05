@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import { lookupEventType } from '../events/catalogue.ts';
-import { REVIEW_DISCOVERY_CHANGED } from '../content/review-discovery-events.ts';
+import { REVIEW_DISCOVERY_CHANGED } from '../events/contracts/content-review-discovery.ts';
 import { readReviewDiscoveryChanges, refreshReviewDiscoveryChanges } from '../content/review-discovery-changes.ts';
 import type { ReviewDiscoverySource } from '../content/review-discovery.ts';
 import { discoveryGenerations } from './generations.ts';

@@ -9,7 +9,7 @@ import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { CONTENT_EVENTS } from './events.ts';
+import { CONTENT_EVENTS } from '../events/contracts/content.ts';
 import { finalizeOptionalNotice } from './notices.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import readMentionSource from './read-mention-source.sql';

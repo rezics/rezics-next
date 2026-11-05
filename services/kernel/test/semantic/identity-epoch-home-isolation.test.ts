@@ -16,7 +16,7 @@ import acquire from '../../src/semantic/identity-epoch-admission-acquire.sql';
 import exportEmpty from '../../src/semantic/identity-epoch-bootstrap-export-empty.sql';
 import receiveEmpty from '../../src/semantic/identity-epoch-bootstrap-receive-empty.sql';
 import ackEmpty from '../../src/semantic/identity-epoch-bootstrap-ack-empty.sql';
-import { IDENTITY_EPOCH_PROGRESS } from '../../src/semantic/events.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../../src/events/contracts/semantic.ts';
 import type { IdentityAdmissionInput } from '../../src/semantic/identity-epoch-contract.ts';
 import { digest, epochFixture, home, release, type EpochFixture } from './support/identity-epoch.ts';
 

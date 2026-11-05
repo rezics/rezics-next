@@ -7,7 +7,7 @@ import type { Effect } from '../events/effects.ts';
 import { type CloudEvent } from '../events/log.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
+import { CONTENT_EVENTS, type ContentEventData } from '../events/contracts/content.ts';
 import type { BoardId, ThreadId } from './model.ts';
 import activePage from './board-rank-page.sql';
 import pinPage from './board-pin-page.sql';

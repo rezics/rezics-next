@@ -13,7 +13,7 @@ import {
   type AccountIdentitySource,
   type AccountIdentityReversalSettlement,
 } from '../../access/agent-verification-identity.ts';
-import { IDENTITY_EPOCH_PROGRESS } from '../events.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../../events/contracts/semantic.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';

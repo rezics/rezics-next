@@ -43,7 +43,7 @@ import {
   SUBJECT_MERGED,
   LINKS_CHANGED,
   LINKS_PROJECTED,
-} from './events.ts';
+} from '../events/contracts/semantic.ts';
 import listInboundLinksByProperty from './list-inbound-links-by-property.sql';
 import listInboundLinks from './list-inbound-links.sql';
 import { PageCursorError } from './page.ts';

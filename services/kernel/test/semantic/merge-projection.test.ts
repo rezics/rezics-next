@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createPool } from '../../src/database/pool.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { LINKS_CHANGED, SUBJECT_MERGED } from '../../src/semantic/events.ts';
+import { LINKS_CHANGED, SUBJECT_MERGED } from '../../src/events/contracts/semantic.ts';
 import { linkProjection, listSubjectLinks } from '../../src/semantic/links.ts';
 import { redirectOf } from '../../src/semantic/merges.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';

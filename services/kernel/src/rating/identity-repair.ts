@@ -5,7 +5,7 @@ import { noEffect, type CommandTransaction } from '../command/command.ts';
 import { createLibraryCommandRunner } from '../library/command-support.ts';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { RATING_IDENTITY_PAGE, RATING_IDENTITY_WORK, type RatingIdentityPageEvent } from './events.ts';
+import { RATING_IDENTITY_PAGE, RATING_IDENTITY_WORK, type RatingIdentityPageEvent } from '../events/contracts/rating.ts';
 import {
   identityPageDigest,
   identityRoute,

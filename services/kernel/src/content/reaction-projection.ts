@@ -5,7 +5,7 @@ import type { Effect } from '../events/effects.ts';
 import { projectBatch, type BatchResult, type CloudEvent, type Envelope } from '../events/log.ts';
 import partitionRead from '../partition/read.sql';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { CONTENT_EVENTS, REACTION_KINDS, type ContentEventData } from './events.ts';
+import { CONTENT_EVENTS, REACTION_KINDS, type ContentEventData } from '../events/contracts/content.ts';
 import readSql from './reaction-count-read.sql';
 import contributionUpsert from './reaction-contribution-upsert.sql';
 import readBaseline from './reaction-projection-baseline.sql';

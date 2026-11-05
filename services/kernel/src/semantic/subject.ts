@@ -53,7 +53,7 @@ import { rejectBulkContent, rejectContent } from './rules.ts';
 import { authoredAuthorization, installAuthoredStatement } from './authored.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { contextSnapshot } from './context.ts';
-import { LINK_KEYS_CHANGED, LINKS_CHANGED } from './events.ts';
+import { LINK_KEYS_CHANGED, LINKS_CHANGED } from '../events/contracts/semantic.ts';
 import { holderFacts } from './link-keys.ts';
 import readIdentityVisibility from './read-visibility.sql';
 import updateIdentity from './update-subject-identity.sql';

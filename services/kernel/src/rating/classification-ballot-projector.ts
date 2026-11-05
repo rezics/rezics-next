@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
-import { ACCESS_EVENTS } from '../access/events.ts';
+import { ACCESS_EVENTS } from '../events/contracts/access.ts';
 import { currentCommand, noEffect, runCommand, authoritativeTimeValue } from '../command/command.ts';
 import type { CommandEvent } from '../command/command.ts';
 import type { CloudEvent, Envelope } from '../events/log.ts';
@@ -14,7 +14,7 @@ import {
   CLASSIFICATION_BALLOT_CHANGED,
   CLASSIFICATION_BALLOT_CLEANUP,
   RATING_EVENTS,
-} from './events.ts';
+} from '../events/contracts/rating.ts';
 import type { Assessment } from './classification-ballot.ts';
 import actorStateRead from './classification-ballot-actor-state-lock.sql';
 import actorStateInsert from './classification-ballot-actor-state-insert.sql';

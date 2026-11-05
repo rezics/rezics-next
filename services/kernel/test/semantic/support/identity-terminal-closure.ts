@@ -8,7 +8,7 @@ import {
 } from '../../../src/semantic/identity-terminal-closure-command.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { routeOf } from '../../../src/route/route.ts';
-import { IDENTITY_EPOCH_PROGRESS } from '../../../src/semantic/events.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../../../src/events/contracts/semantic.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
 import { readIdentityMappings } from '../../../src/semantic/identity-epoch-read.ts';

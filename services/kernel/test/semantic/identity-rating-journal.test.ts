@@ -14,7 +14,7 @@ import type {
   IdentityRatingRepairScope,
   IdentityRatingSelectedPage,
 } from '../../src/semantic/identity-rating-parent.ts';
-import { IDENTITY_EPOCH_PROGRESS } from '../../src/semantic/events.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../../src/events/contracts/semantic.ts';
 import { epochFixture, type EpochFixture } from './support/identity-epoch.ts';
 
 let f: EpochFixture;

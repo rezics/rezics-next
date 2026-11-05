@@ -14,7 +14,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { partitionReadClientObservation } from '../database/read-snapshot.ts';
 import { createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
 import { commandAttemptDeadline } from '../command/command.ts';
-import { CLASSIFICATION_BALLOT_CHANGED, CLASSIFICATION_BALLOT_CLEANUP } from './events.ts';
+import { CLASSIFICATION_BALLOT_CHANGED, CLASSIFICATION_BALLOT_CLEANUP } from '../events/contracts/rating.ts';
 import actorStateRead from './classification-ballot-actor-state-lock.sql';
 import actorStateObserve from './classification-ballot-actor-state-read.sql';
 import actorStateInsert from './classification-ballot-actor-state-insert.sql';

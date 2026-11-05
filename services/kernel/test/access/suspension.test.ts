@@ -16,7 +16,7 @@ import { openGrowthDatabase } from '../support/growth.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
-import { ACCESS_EVENTS } from '../../src/access/events.ts';
+import { ACCESS_EVENTS } from '../../src/events/contracts/access.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { Value } from 'typebox/value';
 import { readPublicAccount } from '../../src/access/account-data.ts';

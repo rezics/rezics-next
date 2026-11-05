@@ -8,7 +8,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { type Actor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { COMMERCE_EVENTS } from '../../src/commerce/events.ts';
+import { COMMERCE_EVENTS } from '../../src/events/contracts/commerce.ts';
 import { createCommerceCommands, OfferUnavailableError } from '../../src/commerce/commands.ts';
 
 const url = process.env.DATABASE_URL;

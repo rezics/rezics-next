@@ -10,7 +10,7 @@ import {
 import type { RealmDiscoveryBinding } from '../community/discovery-source.ts';
 import type { AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { DISCOVERY_DELTA, type DiscoveryDelta } from './discovery-events.ts';
+import { DISCOVERY_DELTA, type DiscoveryDelta } from '../events/contracts/content-discovery.ts';
 import create from './discovery-create.sql';
 import read from './discovery-read.sql';
 import retract from './discovery-retract.sql';

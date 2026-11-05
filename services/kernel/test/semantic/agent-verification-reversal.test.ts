@@ -14,7 +14,7 @@ import {
   verifyAccountAgent,
 } from '../../src/semantic/index.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { LINKS_PROJECTED, SUBJECT_REVISED } from '../../src/semantic/events.ts';
+import { LINKS_PROJECTED, SUBJECT_REVISED } from '../../src/events/contracts/semantic.ts';
 import { listSubjectLinks, linkProjection } from '../../src/semantic/links.ts';
 import { readSubject, createSubject } from '../../src/semantic/subject.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';

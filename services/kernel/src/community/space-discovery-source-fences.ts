@@ -7,8 +7,8 @@ import { partitionReadClient } from '../database/read-snapshot.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
-import type { SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
-import { SPACE_DISCOVERY_INVALIDATED } from './space-discovery-events.ts';
+import type { SpaceDiscoveryInvalidation } from '../events/contracts/community-space-discovery.ts';
+import { SPACE_DISCOVERY_INVALIDATED } from '../events/contracts/community-space-discovery.ts';
 import {
   SPACE_DISCOVERY_DEPENDENCY_BASIS as basis,
   SPACE_DISCOVERY_DEPENDENCY_PAGE,

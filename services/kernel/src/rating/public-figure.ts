@@ -7,7 +7,7 @@ import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import { RATING_EVENTS } from './events.ts';
+import { RATING_EVENTS } from '../events/contracts/rating.ts';
 import drainPublicFiguresSql from './public-figure-drain.sql';
 import readFigureInputPage from './public-figure-input-page.sql';
 import readPriorInput from './population-prior-input-read.sql';

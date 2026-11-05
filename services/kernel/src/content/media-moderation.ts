@@ -5,7 +5,7 @@ import { principalCommandIdentity, runCommand, type CommandOutcome } from '../co
 import { readPartition } from '../partition/partition.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import type { MediaModerationEventData } from './media-moderation-events.ts';
+import type { MediaModerationEventData } from '../events/contracts/content-media-moderation.ts';
 import type { ModerationDependencies } from './moderation.ts';
 import type { MediaId, RequestContext, SecurityRevision } from './model.ts';
 import readMedia from './read-erased-media.sql';

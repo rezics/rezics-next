@@ -7,7 +7,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
-import { LINKS_CHANGED } from '../../src/semantic/events.ts';
+import { LINKS_CHANGED } from '../../src/events/contracts/semantic.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { readSubjectRelationCounts } from '../../src/semantic/counts.ts';

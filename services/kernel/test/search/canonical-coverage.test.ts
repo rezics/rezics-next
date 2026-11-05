@@ -49,7 +49,7 @@ async function identityEvents(original: string) {
 }
 
 test('identity invalidation has the registered closed lossless generation schema and actual original route', async () => {
-  const path = new URL('../../src/semantic/events.ts', import.meta.url);
+  const path = new URL('../../src/events/contracts/semantic.ts', import.meta.url);
   const native = await import(path.href);
   expect(native.SUBJECT_IDENTITY_CHANGED).toBe('com.rezics.subject.identity.changed.v1');
   const schema = lookupEventType(native.SUBJECT_IDENTITY_CHANGED);

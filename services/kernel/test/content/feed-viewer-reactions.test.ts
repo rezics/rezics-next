@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Actor } from '../../src/request/access.ts';
-import { REACTION_KINDS } from '../../src/content/events.ts';
+import { REACTION_KINDS } from '../../src/events/contracts/content.ts';
 import { feedReactionAdviceFromOperations } from '../../src/content/feed-reaction-advice.ts';
 
 test('native Content reaction advice distinguishes allowed, denied, sign-in and unavailable states', () => {

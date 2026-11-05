@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { runCommand } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { IDENTITY_EPOCH_PROGRESS } from '../../src/semantic/events.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../../src/events/contracts/semantic.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { readIdentityMappings } from '../../src/semantic/identity-epoch-read.ts';
 import {

@@ -7,8 +7,8 @@ import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './iden
 import { reserveIdentityTerminalClosure } from './identity-epoch-mapping.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import { bindSemanticProducerRoles } from './erasure-producer.ts';
-import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
-import { IDENTITY_EPOCH_BOOTSTRAP } from './events.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../events/contracts/semantic.ts';
+import { IDENTITY_EPOCH_BOOTSTRAP } from '../events/contracts/semantic.ts';
 import bootstrapHome from './identity-epoch-bootstrap-insert-bootstrap-home.sql';
 import deleteEmptySlot from './identity-terminal-closure-delete-empty-slot.sql';
 

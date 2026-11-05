@@ -31,7 +31,7 @@ import { readPartition } from '../partition/partition.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
-import { isStoredRatingUnit, ratingQuestionHistogramIndex } from '../rating/question-scale.ts';
+import { isStoredRatingUnit, ratingQuestionHistogramIndex } from '../events/contracts/rating-question-scale.ts';
 import questionScaleRead from '../rating/question-scale-read.sql';
 import { InvalidDocumentError, validateContentDocument, type ValidatedContentDocument } from './document.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';

@@ -5,7 +5,7 @@ import sharp, { type SharpInput, type SharpOptions } from 'sharp';
 import { thumbHashToAverageRGBA } from 'thumbhash';
 import { Value } from 'typebox/value';
 import { createPool } from '../../src/database/pool.ts';
-import { CONTENT_EVENTS } from '../../src/content/events.ts';
+import { CONTENT_EVENTS } from '../../src/events/contracts/content.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
 import { readBatch } from '../../src/events/log.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';

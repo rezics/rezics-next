@@ -3,7 +3,7 @@ import { Value } from 'typebox/value';
 import type { Envelope } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import bind from './bind-erasure-workflow.sql';
-import { OPERATION_EVENTS } from './operation-events.ts';
+import { OPERATION_EVENTS } from '../events/contracts/content-operation.ts';
 import { contentWorkSource, contentWorkWorkflowId } from './work-contract.ts';
 
 /**

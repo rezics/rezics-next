@@ -9,7 +9,7 @@ import { lookupEventType } from '../events/catalogue.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
-import { SPACE_DISCOVERY_INVALIDATED, type SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
+import { SPACE_DISCOVERY_INVALIDATED, type SpaceDiscoveryInvalidation } from '../events/contracts/community-space-discovery.ts';
 import {
   spaceDiscoveryDependencyReadiness,
   type SpaceDiscoveryDependencyReadiness,

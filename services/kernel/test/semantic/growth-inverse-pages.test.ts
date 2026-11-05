@@ -156,7 +156,7 @@ test('links projection work grows with changed links and stays flat in in-degree
     [route, anchor],
   );
   const { runCommand } = await import('../../src/command/command.ts');
-  const { LINKS_CHANGED } = await import('../../src/semantic/events.ts');
+  const { LINKS_CHANGED } = await import('../../src/events/contracts/semantic.ts');
   const { linkProjection } = await import('../../src/semantic/links.ts');
   const projection = linkProjection(db.pool);
   let revision = 1;

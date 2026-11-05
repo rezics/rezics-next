@@ -2,7 +2,7 @@ import { classifyUnavailability } from '../request/unavailable.ts';
 import { readViewerActions } from '../access/viewer-actions.ts';
 import { AuthenticationError, type Actor } from '../request/access.ts';
 import type { FeedItem, FeedReactionAdvice, FeedReactionTarget } from './feed-contract.ts';
-import { REACTION_KINDS } from './events.ts';
+import { REACTION_KINDS } from '../events/contracts/content.ts';
 import { feedReactionTargetFor } from './feed-reactions.ts';
 import { readingPageOperationState, type ReadingPageViewerActionRuntime } from './reading-page.ts';
 import type { Pool } from 'pg';

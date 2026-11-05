@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { Value } from 'typebox/value';
 import { applyRatingChanges, readAggregate, type RatingChange } from '../../src/rating/aggregate-effect.ts';
-import { POPULATION_TOTAL_DELIVERY, RATING_EVENTS, type PopulationTotalDelivery } from '../../src/rating/events.ts';
+import { POPULATION_TOTAL_DELIVERY, RATING_EVENTS, type PopulationTotalDelivery } from '../../src/events/contracts/rating.ts';
 import { createPopulationTotalEffect } from '../../src/rating/population-total.ts';
 import {
   createPublicFigureDrainEffect,

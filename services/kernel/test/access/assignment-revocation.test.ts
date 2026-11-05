@@ -5,7 +5,7 @@ import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { ACCESS_EVENTS } from '../../src/access/events.ts';
+import { ACCESS_EVENTS } from '../../src/events/contracts/access.ts';
 
 await import('reylo/register');
 const { bootstrapGovernance } = await import('../../src/access/bootstrap-governance.ts');

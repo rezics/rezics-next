@@ -6,7 +6,7 @@ import type { Effect } from '../events/effects.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
+import { CONTENT_EVENTS, type ContentEventData } from '../events/contracts/content.ts';
 import { finalizeOptionalNotice } from './notices.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { postReadableByAccount } from './reads.ts';

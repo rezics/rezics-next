@@ -8,7 +8,7 @@ import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { COMMUNITY_EVENTS } from './events.ts';
+import { COMMUNITY_EVENTS } from '../events/contracts/community.ts';
 import source from './party-locator-source.sql';
 import upsert from './party-locator-upsert.sql';
 import { lockErasureFence } from './erasure-fence.ts';

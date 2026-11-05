@@ -26,7 +26,7 @@ afterAll(async () => {
 
 // Resolve after real native setup. A missing event export must be the intended red, never a static import error.
 async function eventContract() {
-  const events: Record<string, unknown> = await import('../../src/semantic/events.ts');
+  const events: Record<string, unknown> = await import('../../src/events/contracts/semantic.ts');
   expect(
     events.SUBJECT_IDENTITY_CHANGED,
     'Missing additive semantic/events.SUBJECT_IDENTITY_CHANGED; native baseline completed',

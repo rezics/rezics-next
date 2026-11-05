@@ -10,7 +10,7 @@ import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import type { IdentityEpochState } from '../semantic/identity-epoch-contract.ts';
-import { SEMANTIC_EVENTS, SUBJECT_MERGED } from '../semantic/events.ts';
+import { SEMANTIC_EVENTS, SUBJECT_MERGED } from '../events/contracts/semantic.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { readVotePopulations } from './voter-realms.ts';

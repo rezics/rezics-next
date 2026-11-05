@@ -10,7 +10,7 @@ import {
 import { routeOf } from '../../src/route/route.ts';
 import { moveMergePage } from '../../src/semantic/merge-moves.ts';
 import { runCommand } from '../../src/command/command.ts';
-import { LINKS_PROJECTED } from '../../src/semantic/events.ts';
+import { LINKS_PROJECTED } from '../../src/events/contracts/semantic.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import inbound from '../../src/semantic/upsert-inbound-links.sql';
 import { createIdentityMappingFixture } from './support/identity-epoch-mapping.ts';

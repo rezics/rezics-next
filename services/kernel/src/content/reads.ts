@@ -73,7 +73,7 @@ import type {
   ThreadView as StoredThreadView,
   Visibility,
 } from './model.ts';
-import { REACTION_KINDS } from './events.ts';
+import { REACTION_KINDS } from '../events/contracts/content.ts';
 import { pagePostCandidates } from './post-pages.ts';
 import { pageRevisionCandidates } from './revision-pages.ts';
 import {

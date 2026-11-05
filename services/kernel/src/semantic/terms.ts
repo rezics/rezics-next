@@ -7,7 +7,7 @@ import { initializeRevisionAuthorship } from './authorship.ts';
 import { SubjectNotFoundError } from './candidates.ts';
 import { SubjectAccessDeniedError, type SubjectComponent } from './subject.ts';
 import { fencedIds, sourceTuple, fenceKey } from './fences.ts';
-import { SUBJECT_REVISED } from './events.ts';
+import { SUBJECT_REVISED } from '../events/contracts/semantic.ts';
 import { publicState, recordSubjectPageTransition } from './subject-page-publication-store.ts';
 import { writeFacts, type StoredFact } from './write-facts.ts';
 import {

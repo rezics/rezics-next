@@ -10,7 +10,7 @@ import {
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import prepare from './identity-epoch-admission-prepare.sql';
 import custodyPrepare from './identity-epoch-admission-custody-prepare.sql';
-import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../events/contracts/semantic.ts';
 import {
   claimIdentityBinding,
   lookupIdentityBinding,
@@ -63,7 +63,7 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from './read.ts';
 import { readIdentityEpochCutover } from './identity-epoch-bootstrap.ts';
-import { IDENTITY_EPOCH_ADMITTED, IDENTITY_EPOCH_HOME_AVAILABLE } from './events.ts';
+import { IDENTITY_EPOCH_ADMITTED, IDENTITY_EPOCH_HOME_AVAILABLE } from '../events/contracts/semantic.ts';
 import {
   IdentityEpochStoreError,
   identityJobPartition,

@@ -9,7 +9,7 @@ import type { Effect } from '../events/effects.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { CONTENT_EVENTS } from './events.ts';
+import { CONTENT_EVENTS } from '../events/contracts/content.ts';
 import { createAppealEffect } from './appeals.ts';
 import { writeNotices } from './notices.ts';
 import readDecisionSource from './decision-page-source.sql';

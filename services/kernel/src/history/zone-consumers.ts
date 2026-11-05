@@ -1,5 +1,5 @@
 import type { CommandTransaction } from '../command/command.ts';
-import { ZONE_EVENTS } from '../zones/events.ts';
+import { ZONE_EVENTS } from '../events/contracts/zones.ts';
 import {
   classifyEvent,
   ZONE_HISTORY_EVENT_TYPES,

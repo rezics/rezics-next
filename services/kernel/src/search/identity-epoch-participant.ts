@@ -35,7 +35,7 @@ import type { WorkDimensions } from '../library/collection-source.ts';
 import { subjectAlias } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchReceivingConfiguration } from './identity-receiving-native.ts';
-import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
+import { searchIdentityWriterChanged } from '../events/contracts/search-identity-epoch-participant.ts';
 import nextSql from './identity-epoch-participant-next.sql';
 import stepSql from './identity-epoch-participant-step.sql';
 import advanceSql from './identity-epoch-participant-advance.sql';

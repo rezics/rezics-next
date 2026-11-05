@@ -8,7 +8,7 @@ import type { Access, AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ContextNotFoundError } from './context.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
-import { RECORD_DELETED, RECORD_RESTORED } from './events.ts';
+import { RECORD_DELETED, RECORD_RESTORED } from '../events/contracts/semantic.ts';
 import { readSemanticLifecycle } from './lifecycle-state.ts';
 import readContext from './lifecycle-read-context.sql';
 import writeContext from './context-lifecycle-write.sql';

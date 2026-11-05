@@ -6,7 +6,7 @@ import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { REPORT_EVENTS, type ReportEventData } from './report-events.ts';
+import { REPORT_EVENTS, type ReportEventData } from '../events/contracts/content-report.ts';
 import { lockErasureFence } from './erasure-fence.ts';
 import { eraseAccountReportItem } from './account-erasure-reactions.ts';
 import { markAccountErasureFound } from './account-erasure-progress.ts';

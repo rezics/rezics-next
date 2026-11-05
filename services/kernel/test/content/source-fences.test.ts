@@ -5,7 +5,7 @@ import { Value } from 'typebox/value';
 import { readAccount } from '../../src/access/account-data.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { authoritativeTimeValue, IdempotencyConflictError } from '../../src/command/command.ts';
-import { CONTENT_EVENTS } from '../../src/content/events.ts';
+import { CONTENT_EVENTS } from '../../src/events/contracts/content.ts';
 import { tupleRoute, type ImportedFieldGroup } from '../../src/content/imported-contract.ts';
 import fenceRead from '../../src/content/read-source-fences.sql';
 import { takedownSourceFence } from '../../src/content/source-fence-command.ts';

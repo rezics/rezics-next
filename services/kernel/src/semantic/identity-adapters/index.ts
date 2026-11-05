@@ -81,7 +81,7 @@ import { readPartition } from '../../partition/partition.ts';
 import { readIdentityMappings, readIdentityRatingReview } from './read.ts';
 import { newId, partitionOf, routeOf } from '../../route/route.ts';
 import { GLOBAL_CONTEXT } from '../definitions.ts';
-import { IDENTITY_EPOCH_ADMITTED } from '../events.ts';
+import { IDENTITY_EPOCH_ADMITTED } from '../../events/contracts/semantic.ts';
 import { readIdentityEpochCutover } from '../identity-epoch-bootstrap.ts';
 import type {
   IdentityEpochStore,

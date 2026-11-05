@@ -7,7 +7,7 @@ import {
   readBoardCandidates,
   type BoardCandidate,
 } from '../../src/content/board-projection.ts';
-import { CONTENT_EVENTS } from '../../src/content/events.ts';
+import { CONTENT_EVENTS } from '../../src/events/contracts/content.ts';
 import { registerEffects } from '../../src/events/effects.ts';
 import { EVENT_TYPES, readBatch, type CloudEvent, type Envelope } from '../../src/events/log.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';

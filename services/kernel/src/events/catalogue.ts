@@ -1,15 +1,15 @@
 import { Type, type TSchema } from 'typebox';
-import { ZONE_EVENTS } from '../zones/events.ts';
+import { ZONE_EVENTS } from './contracts/zones.ts';
 import { Compile, type Validator } from 'typebox/compile';
-import { ACCESS_EVENTS } from '../access/events.ts';
-import { COMMERCE_EVENTS } from '../commerce/events.ts';
-import { COMMUNITY_EVENTS } from '../community/events.ts';
-import { CONTENT_EVENTS } from '../content/events.ts';
-import { REPORT_LOCATOR_EVENTS } from '../content/report-locator-events.ts';
-import { LIBRARY_EVENTS } from '../library/events.ts';
-import { RATING_EVENTS } from '../rating/events.ts';
-import { SEMANTIC_EVENTS } from '../semantic/events.ts';
-import { SEARCH_IDENTITY_EVENTS } from '../search/identity-epoch-participant-events.ts';
+import { ACCESS_EVENTS } from './contracts/access.ts';
+import { COMMERCE_EVENTS } from './contracts/commerce.ts';
+import { COMMUNITY_EVENTS } from './contracts/community.ts';
+import { CONTENT_EVENTS } from './contracts/content.ts';
+import { REPORT_LOCATOR_EVENTS } from './contracts/content-report-locator.ts';
+import { LIBRARY_EVENTS } from './contracts/library.ts';
+import { RATING_EVENTS } from './contracts/rating.ts';
+import { SEMANTIC_EVENTS } from './contracts/semantic.ts';
+import { SEARCH_IDENTITY_EVENTS } from './contracts/search-identity-epoch-participant.ts';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const digest = Type.String({ pattern: '^sha256:[0-9a-f]{64}$' });

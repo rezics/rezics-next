@@ -12,7 +12,7 @@ import { activeRelease, GLOBAL_CONTEXT } from './definitions.ts';
 import { itemFacts, resolveItem, type FactRow, type Item } from './item.ts';
 import { accountAgentId, accountAgentsForSubjects, type AccountAgentLink } from './agents.ts';
 import { AccountAgentScopeGrowthError, AccountAgentVerificationError } from './agents.ts';
-import { SUBJECT_REVISED } from './events.ts';
+import { SUBJECT_REVISED } from '../events/contracts/semantic.ts';
 import accountAgentSubject from './account-agent-subject.sql';
 import insertAccountAgentSubject from './account-agent-subject-insert.sql';
 import readAccountAgentRevocation from './account-agent-read-revocation.sql';

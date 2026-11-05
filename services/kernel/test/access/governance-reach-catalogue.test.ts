@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
-import governance from '../../src/access/platform-governance.json';
+import governance from '../../src/events/contracts/access-platform-governance.json';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');

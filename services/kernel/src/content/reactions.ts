@@ -15,7 +15,7 @@ import {
 import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
 import { prepareRealmParticipationResult, type RealmParticipationCheck } from '../community/participation.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { REACTION_KINDS } from './events.ts';
+import { REACTION_KINDS } from '../events/contracts/content.ts';
 import { ContentNotFoundError } from './commands.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';

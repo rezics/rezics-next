@@ -1,14 +1,14 @@
-import { REVIEW_DISCOVERY_EVENTS } from './review-discovery-events.ts';
-import { DISCOVERY_EVENTS, DISCOVERY_OPERATION_EVENTS } from './discovery-events.ts';
+import { REVIEW_DISCOVERY_EVENTS } from './content-review-discovery.ts';
+import { DISCOVERY_EVENTS, DISCOVERY_OPERATION_EVENTS } from './content-discovery.ts';
 import { Type, type Static } from 'typebox';
-import { BOARD_EVENTS } from './board-events.ts';
-import { MEDIA_EVENTS } from './media-events.ts';
-import { MEDIA_IMPORT_EVENTS } from './media-import-events.ts';
-import { MEDIA_MODERATION_EVENTS } from './media-moderation-events.ts';
-import { MODERATION_EVENTS } from './moderation-events.ts';
-import { OPERATION_EVENTS } from './operation-events.ts';
-import { REPORT_EVENTS } from './report-events.ts';
-import { SOURCE_FENCE_EVENTS } from './source-fence-events.ts';
+import { BOARD_EVENTS } from './content-board.ts';
+import { MEDIA_EVENTS } from './content-media.ts';
+import { MEDIA_IMPORT_EVENTS } from './content-media-import.ts';
+import { MEDIA_MODERATION_EVENTS } from './content-media-moderation.ts';
+import { MODERATION_EVENTS } from './content-moderation.ts';
+import { OPERATION_EVENTS } from './content-operation.ts';
+import { REPORT_EVENTS } from './content-report.ts';
+import { SOURCE_FENCE_EVENTS } from './content-source-fence.ts';
 
 export const REACTION_KINDS = ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'] as const;
 const reactionKind = Type.Enum(REACTION_KINDS);

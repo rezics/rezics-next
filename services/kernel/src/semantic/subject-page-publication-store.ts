@@ -36,7 +36,7 @@ import {
   SUBJECT_PAGE_DEPENDENCIES_CHANGED,
   SUBJECT_PAGE_REPAIR_REQUESTED,
   SUBJECT_PAGE_REPAIR_QUEUED,
-} from './events.ts';
+} from '../events/contracts/semantic.ts';
 import readPointStatement from './subject-page-publication-read.sql';
 import lockPointStatement from './subject-page-publication-lock.sql';
 import publishPointStatement from './subject-page-publication-publish.sql';

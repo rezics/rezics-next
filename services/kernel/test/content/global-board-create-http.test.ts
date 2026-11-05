@@ -5,7 +5,7 @@ import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { Value } from 'typebox/value';
-import { CONTENT_EVENTS } from '../../src/content/events.ts';
+import { CONTENT_EVENTS } from '../../src/events/contracts/content.ts';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { bootstrapGovernance, bootstrapLocalShowcaseBoardCreation } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';

@@ -28,7 +28,7 @@ import { requestDigest } from '../http/request.ts';
 import type { AccountActor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { EditorialConflictError, SubjectNotFoundError, writeProposal } from './candidates.ts';
-import { SUBJECT_REVISED } from './events.ts';
+import { SUBJECT_REVISED } from '../events/contracts/semantic.ts';
 import { SubjectInputError } from './item.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
 import { writeSubject, type SubjectComponent } from './subject.ts';

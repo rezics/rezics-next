@@ -15,7 +15,7 @@ const { createKernel } = await import('../../../src/http/kernel.ts');
 const { actionCatalogue } = await import('../../../src/http/request.ts');
 const { newId, routeOf } = await import('../../../src/route/route.ts');
 const appModule = await import('../../../src/http/app.ts');
-const governance = (await import('../../../src/access/platform-governance.json')).default;
+const governance = (await import('../../../src/events/contracts/access-platform-governance.json')).default;
 
 const pool = createPool(process.env.DATABASE_URL!);
 const action = 'exposure:manage_read';

@@ -171,7 +171,7 @@ async function boot(env: NodeJS.ProcessEnv) {
   try {
     await synchronizeAccountAgent(pool, personaId);
     const { accountAgentId } = await import('../../src/semantic/agents.ts');
-    const { SUBJECT_REVISED } = await import('../../src/semantic/events.ts');
+    const { SUBJECT_REVISED } = await import('../../src/events/contracts/semantic.ts');
     const { createRealmSubjectLifecycle } = await import('../../src/content/realm-subject-lifecycle.ts');
     const row = (
       await pool.query(

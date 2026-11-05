@@ -2,7 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkContext } from '../work/registry.ts';
 import { cataloguePin } from './definition-catalogue.ts';
 import { runCatalogueBuildStep, runCatalogueActivationStep } from './definition-catalogue-publication.ts';
-import { CATALOGUE_BUILD_REQUESTED, CATALOGUE_ACTIVATION_REQUESTED } from './events.ts';
+import { CATALOGUE_BUILD_REQUESTED, CATALOGUE_ACTIVATION_REQUESTED } from '../events/contracts/semantic.ts';
 
 /** Registers in the existing semantic Work module. Immutable committed input authorizes only index construction. */
 export function registerDefinitionCatalogueWork(context: WorkContext) {

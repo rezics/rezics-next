@@ -11,7 +11,7 @@ import {
   SUBJECT_MERGED,
   SUBJECT_REVISED,
   LINKS_MOVING,
-} from './events.ts';
+} from '../events/contracts/semantic.ts';
 import { wakeIdentityEpochAdmissionWaiters } from './identity-epoch-admission.ts';
 import { registerIdentityEpochCoordinator, resumeIdentityEpochJob } from './identity-epoch-coordinator.ts';
 import { runCommand } from '../command/command.ts';

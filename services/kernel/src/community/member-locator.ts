@@ -6,7 +6,7 @@ import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { COMMUNITY_EVENTS } from './events.ts';
+import { COMMUNITY_EVENTS } from '../events/contracts/community.ts';
 import { memberLocatorQuery } from './member-locator-query.ts';
 import pending from './member-locator-pending.sql';
 import upsert from './member-locator-upsert.sql';

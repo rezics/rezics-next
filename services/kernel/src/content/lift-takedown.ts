@@ -1,7 +1,7 @@
 import { assertDiscoveryMutationLocked } from './discovery-mutation.ts';
 import type { CommandEvent, CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
-import type { ModerationEventData } from './moderation-events.ts';
+import type { ModerationEventData } from '../events/contracts/content-moderation.ts';
 import type { ModerationValue } from './moderation.ts';
 import lift from './lift-takedown.sql';
 

@@ -12,7 +12,7 @@ import {
   RATING_EVENTS,
   type PopulationTotalDelivery,
   type PopulationTotalEvent,
-} from './events.ts';
+} from '../events/contracts/rating.ts';
 import applyTotal from './population-total-component-apply.sql';
 import { STANDARD_QUESTION_ID } from './votes.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
@@ -20,7 +20,7 @@ import {
   assertPopulationDeliveryDelta,
   MAX_RATING_CHANGE_PAGE,
   MAX_RATING_POPULATION_DELIVERY_DELTAS,
-} from './question-scale.ts';
+} from '../events/contracts/rating-question-scale.ts';
 
 const AGGREGATE_APPLIED = 'com.rezics.rating.aggregate.applied.v1';
 const MAX_SERIAL = 9223372036854775807n;

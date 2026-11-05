@@ -1,7 +1,7 @@
 import { hasLiveCommandTransaction, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import type { Access, AccessClient, Actor, Resource } from '../request/access.ts';
 import recordGovernanceReach from './governance-reach-record.sql';
-import governance from './platform-governance.json';
+import governance from '../events/contracts/access-platform-governance.json';
 
 export const PLATFORM_RESOURCE = Object.freeze({
   route: 0,

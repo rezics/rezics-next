@@ -31,8 +31,8 @@ import { creationDeclares } from '../access/index.ts';
 import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { baseOf, layeredRelease } from './extensions.ts';
 import { termContext } from '@rezics/definitions/extension';
-import { LINK_KEYS_CHANGED, LINKS_CHANGED } from './events.ts';
-import { SUBJECT_REVISED } from './events.ts';
+import { LINK_KEYS_CHANGED, LINKS_CHANGED } from '../events/contracts/semantic.ts';
+import { SUBJECT_REVISED } from '../events/contracts/semantic.ts';
 import { recordPrivacyReduction } from './public-filter-source.ts';
 import {
   factDataTypes,

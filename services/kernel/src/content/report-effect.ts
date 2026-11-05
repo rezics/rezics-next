@@ -12,7 +12,7 @@ import { reportBoardPlacement } from './board-report-candidates.ts';
 import boardUpsert from './board-report-upsert.sql';
 import catalogueUpsert from './catalogue-report-upsert.sql';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
-import { REPORT_EVENTS, type ReportEventData } from './report-events.ts';
+import { REPORT_EVENTS, type ReportEventData } from '../events/contracts/content-report.ts';
 import upsert from './upsert-report-target.sql';
 
 const sourceType = 'com.rezics.content.report.created.v1';

@@ -2,7 +2,7 @@ import { afterAll, expect, expectTypeOf, test } from 'bun:test';
 import pg from 'pg';
 import { newId } from '../../src/route/route.ts';
 import { runCommand, type CommandEvent } from '../../src/command/command.ts';
-import { CONTENT_EVENTS, type ContentEventData, type ContentEventType } from '../../src/content/events.ts';
+import { CONTENT_EVENTS, type ContentEventData, type ContentEventType } from '../../src/events/contracts/content.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { registerEffects } from '../../src/events/effects.ts';
 import { EVENT_TYPES, readBatch, type Envelope } from '../../src/events/log.ts';

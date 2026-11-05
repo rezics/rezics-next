@@ -3,7 +3,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { ACCESS_EVENTS } from '../../src/access/events.ts';
+import { ACCESS_EVENTS } from '../../src/events/contracts/access.ts';
 import { readBatch } from '../../src/events/log.ts';
 
 // The focused acceptance command also runs from the repository root.

@@ -53,7 +53,7 @@ import {
   CATALOGUE_ACTIVATED,
   CATALOGUE_ARTIFACT,
   CATALOGUE_ACTIVATION_REQUESTED,
-} from './events.ts';
+} from '../events/contracts/semantic.ts';
 
 export type CatalogueArtifactKind = 'root' | 'node' | 'release' | 'declaration';
 export type CatalogueBuildStatus = {

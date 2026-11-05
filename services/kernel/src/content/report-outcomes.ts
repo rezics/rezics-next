@@ -19,7 +19,7 @@ import { readPartition } from '../partition/partition.ts';
 import type { AccessClient, Actor } from '../request/access.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../route/route.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
-import { CONTENT_EVENTS } from './events.ts';
+import { CONTENT_EVENTS } from '../events/contracts/content.ts';
 import { writeNotices } from './notices.ts';
 import type { ReportDependencies, ReportTarget } from './reports.ts';
 import { ReportUnavailableError } from './reports.ts';

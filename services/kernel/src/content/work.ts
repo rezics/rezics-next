@@ -28,7 +28,7 @@ import { purgeDeletedPostPage } from './deleted-post-purge.ts';
 import { clearErasedPostRevisions } from './erased-post-cleanup.ts';
 import readOperationEnqueue from './read-operation-enqueue.sql';
 import readOperationEnqueueReceipt from './read-operation-enqueue-receipt.sql';
-import { CONTENT_EVENTS } from './events.ts';
+import { CONTENT_EVENTS } from '../events/contracts/content.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';

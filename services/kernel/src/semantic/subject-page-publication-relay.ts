@@ -5,14 +5,14 @@ import { projectBatch } from '../events/log.ts';
 import type { Relay } from '../events/relays.ts';
 import type { Access } from '../request/access.ts';
 import { partitionOf } from '../route/route.ts';
-import type { SourceFenceEventData } from '../content/source-fence-events.ts';
+import type { SourceFenceEventData } from '../events/contracts/content-source-fence.ts';
 import { fenceKey } from './fences.ts';
 import {
   SUBJECT_PAGE_DEPENDENCIES_CHANGED,
   SUBJECT_PAGE_REPAIR_REQUESTED,
   SUBJECT_PAGE_REPAIR_QUEUED,
   SUBJECT_PAGE_WORK_COMMITTED,
-} from './events.ts';
+} from '../events/contracts/semantic.ts';
 import {
   applySubjectPageDependencyDelta,
   applySubjectPageOwnerChange,

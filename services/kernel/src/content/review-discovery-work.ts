@@ -7,7 +7,7 @@ import {
   createReviewDiscoveryEffect,
   processReviewDiscoveryPage,
 } from './review-discovery-lifecycle.ts';
-import type { ReviewDiscoveryWork } from './review-discovery-events.ts';
+import type { ReviewDiscoveryWork } from '../events/contracts/content-review-discovery.ts';
 
 export const REVIEW_DISCOVERY_WORKFLOW = 'content.review-discovery.invalidate';
 

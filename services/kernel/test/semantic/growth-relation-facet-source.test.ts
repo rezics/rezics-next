@@ -10,7 +10,7 @@ import {
   type RelationFacetProbe as SharedRelationFacetProbe,
 } from '../../src/search/source.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { LINKS_CHANGED, SUBJECT_REVISED } from '../../src/semantic/events.ts';
+import { LINKS_CHANGED, SUBJECT_REVISED } from '../../src/events/contracts/semantic.ts';
 import { factDataTypes, itemFacts } from '../../src/semantic/item.ts';
 import { linkChanges } from '../../src/semantic/link-changes.ts';
 import { linkProjection } from '../../src/semantic/links.ts';

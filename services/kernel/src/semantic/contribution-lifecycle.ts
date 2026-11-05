@@ -13,7 +13,7 @@ import readSubject from './moderation-read-subject.sql';
 import readState from './contribution-lifecycle-read-state.sql';
 import bumpSecurity from './moderation-bump-security.sql';
 import listRelationContexts from './relation-context-list.sql';
-import { RECORD_DELETED, RECORD_RESTORED } from './events.ts';
+import { RECORD_DELETED, RECORD_RESTORED } from '../events/contracts/semantic.ts';
 import { revisionResource } from './authorship.ts';
 import readLocator from './contribution-lifecycle-read-locator.sql';
 

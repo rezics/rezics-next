@@ -15,7 +15,7 @@ import {
   serializeIdentityValue as json,
 } from './identity-adapters/index.ts';
 import { bindSemanticProducerRoles, identityErasureRoles } from './erasure-producer.ts';
-import { IDENTITY_EPOCH_ADMITTED, IDENTITY_EPOCH_HOME_AVAILABLE } from './events.ts';
+import { IDENTITY_EPOCH_ADMITTED, IDENTITY_EPOCH_HOME_AVAILABLE } from '../events/contracts/semantic.ts';
 import { receiveIdentityScopePrearm, cancelIdentityScopePrearm } from './identity-scoped-prearm.ts';
 import type { IdentityJobRef, IdentityNativeReceipt, NativeStepWork } from './identity-epoch-contract.ts';
 import type { IdentityPrearmTicketData, IdentityPrearmTicketLocator } from './identity-epoch-prearm-contract.ts';

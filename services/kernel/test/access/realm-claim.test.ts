@@ -3,7 +3,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { approveRealmClaim } from '../../src/access/realm-claim.ts';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
-import governance from '../../src/access/platform-governance.json';
+import governance from '../../src/events/contracts/access-platform-governance.json';
 import { NATIVE_CONTAINER_ACTIONS } from '../../src/community/actions.ts';
 import { requestRealmClaim } from '../../src/community/realm-continuity.ts';
 import { createRealm } from '../../src/community/realm.ts';

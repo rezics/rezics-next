@@ -83,7 +83,7 @@ import {
   type DiscoveryOperationReference,
 } from '../content/discovery-mutation.ts';
 import { readDiscoverySource, prepareDiscoverySourceApply, type DiscoverySourceFact } from '../content/discovery.ts';
-import type { DiscoveryDelta } from '../content/discovery-events.ts';
+import type { DiscoveryDelta } from '../events/contracts/content-discovery.ts';
 import epoch from './discovery-source-epoch.sql';
 import gate from './discovery-source-gate.sql';
 import fence from './discovery-source-fence.sql';

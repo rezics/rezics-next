@@ -11,7 +11,7 @@ import { projectBatch } from '../../src/events/log.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { SEMANTIC_EVENTS } from '../../src/semantic/events.ts';
+import { SEMANTIC_EVENTS } from '../../src/events/contracts/semantic.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from './real-access.ts';
 

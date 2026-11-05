@@ -11,7 +11,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { accountAgentId, AccountAgentVerificationError } from '../../src/semantic/agents.ts';
 import { ensureAccountAgent, verifyAccountAgent } from '../../src/semantic/account-agents.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { SUBJECT_REVISED } from '../../src/semantic/events.ts';
+import { SUBJECT_REVISED } from '../../src/events/contracts/semantic.ts';
 import { createSubject, readSubject } from '../../src/semantic/subject.ts';
 import { createRealAccess } from './real-access.ts';
 

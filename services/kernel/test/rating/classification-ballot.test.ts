@@ -15,7 +15,7 @@ import {
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { Value } from 'typebox/value';
 import { EVENT_TYPES } from '../../src/events/catalogue.ts';
-import { CLASSIFICATION_AGGREGATE_CHANGED, CLASSIFICATION_BALLOT_CHANGED } from '../../src/rating/events.ts';
+import { CLASSIFICATION_AGGREGATE_CHANGED, CLASSIFICATION_BALLOT_CHANGED } from '../../src/events/contracts/rating.ts';
 import { classificationAggregateView } from '../../src/rating/classification-ballot.ts';
 import { interleaveClassificationRead } from './support/classification-ballot-interleave.ts';
 

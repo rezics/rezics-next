@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { noEffect, runCommand } from '../../src/command/command.ts';
-import { IDENTITY_EPOCH_ADMITTED } from '../../src/semantic/events.ts';
+import { IDENTITY_EPOCH_ADMITTED } from '../../src/events/contracts/semantic.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import {
   captureIdentityReceivingSource,

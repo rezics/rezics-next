@@ -12,7 +12,7 @@ import { accessCommandAuthorization, type AccountActor } from '../../src/request
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { effectWorkflowId } from '../../src/events/effects.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
-import { SUBJECT_MERGED } from '../../src/semantic/events.ts';
+import { SUBJECT_MERGED } from '../../src/events/contracts/semantic.ts';
 import { subjectReactionMergeWorkflowId } from '../../src/content/work-contract.ts';
 import {
   assertGrowthAccessPaths,

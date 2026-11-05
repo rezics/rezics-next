@@ -1,7 +1,7 @@
 import type { Access, ActionCatalogue, ActionMetadata } from '../request/access.ts';
 import { accessRoot } from './derived-access.ts';
 import defaults from './resource-roles.json';
-import governance from './platform-governance.json';
+import governance from '../events/contracts/access-platform-governance.json';
 
 /** Trusted composition-root data, never request JSON. Organization owner/member
  * membership roles are unrelated to these resource-local grant role identifiers.

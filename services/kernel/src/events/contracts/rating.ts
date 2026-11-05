@@ -3,7 +3,7 @@ import {
   MAX_RATING_CHANGE_PAGE,
   MAX_RATING_POPULATION_DELIVERY_DELTAS,
   MAX_RATING_STORED_UNITS,
-} from './question-scale.ts';
+} from './rating-question-scale.ts';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const units = Type.Union([Type.Integer({ minimum: 0, maximum: MAX_RATING_STORED_UNITS }), Type.Null()]);

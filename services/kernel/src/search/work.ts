@@ -22,7 +22,7 @@ import type { WriteRateLimiter } from '../access/write-rate.ts';
 import type { WriteRateStageOptions } from '../access/write-rate-stage.ts';
 import type { Pool } from 'pg';
 import type { DiscoveryProducerEntry } from './index.ts';
-import { REVIEW_DISCOVERY_CHANGED } from '../content/review-discovery-events.ts';
+import { REVIEW_DISCOVERY_CHANGED } from '../events/contracts/content-review-discovery.ts';
 import { requestReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
 import { startSearchIndexing } from './runner.ts';
 import { createRatedSubjectSource } from './rated-source.ts';

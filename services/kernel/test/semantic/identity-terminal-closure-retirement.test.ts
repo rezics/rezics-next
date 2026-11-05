@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { newId } from '../../src/route/route.ts';
 import { historicalEdge } from './support/identity-terminal-closure.ts';
 import { runCommand } from '../../src/command/command.ts';
-import { IDENTITY_EPOCH_PROGRESS } from '../../src/semantic/events.ts';
+import { IDENTITY_EPOCH_PROGRESS } from '../../src/events/contracts/semantic.ts';
 import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 import { reserveIdentityTerminalClosure } from '../../src/semantic/identity-epoch-mapping.ts';

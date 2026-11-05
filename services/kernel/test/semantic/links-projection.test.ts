@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
-import { LINKS_PROJECTED } from '../../src/semantic/events.ts';
+import { LINKS_PROJECTED } from '../../src/events/contracts/semantic.ts';
 import { LINKS_CONSUMER, linkProjection } from '../../src/semantic/links.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';

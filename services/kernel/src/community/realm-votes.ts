@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { REACTION_KINDS } from '../content/events.ts';
+import { REACTION_KINDS } from '../events/contracts/content.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import read from './realm-votes.sql';
 
