@@ -14,10 +14,12 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { SUBJECT_REVISED } from '../../src/semantic/events.ts';
 import { createSubject, readSubject } from '../../src/semantic/subject.ts';
 import { createRealAccess } from './real-access.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
+configureTestReceiptKeys(pool);
 const admin = new pg.Pool({ connectionString: url, max: 2 });
 const route = 0x3460;
 const accounts = { owner: newId(route), organization: newId(route), software: newId(route) };

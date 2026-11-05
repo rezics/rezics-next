@@ -504637,10 +504637,7 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        },
-        "x-resource-types": [
-          "semantic.zone"
-        ]
+        }
       }
     },
     "/v1/zones/{id}:restore": {
@@ -506790,10 +506787,7 @@
         "x-rate-limit": {
           "family": "write",
           "units": 1
-        },
-        "x-resource-types": [
-          "semantic.zone"
-        ]
+        }
       }
     }
   }

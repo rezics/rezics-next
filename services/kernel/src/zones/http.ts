@@ -347,7 +347,7 @@ export function zoneRoutes(
         headers: conditionalHeaders,
         body: zoneSchema(ZoneTakedownInputSchema),
         response: { 200: zoneSchema(ZoneResponseSchema), ...failures },
-        detail: { ...detail('takedown', 'moderation:takedown', false, true), 'x-resource-types': ['semantic.zone'] },
+        detail: detail('takedown', 'moderation:takedown', false, true),
       },
       async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireZoneAccount(actor);
@@ -368,10 +368,7 @@ export function zoneRoutes(
         headers: conditionalHeaders,
         body: zoneSchema(ZoneTakedownInputSchema),
         response: { 200: zoneSchema(ZoneResponseSchema), ...failures },
-        detail: {
-          ...detail('release_takedown', 'moderation:takedown', false, true),
-          'x-resource-types': ['semantic.zone'],
-        },
+        detail: detail('release_takedown', 'moderation:takedown', false, true),
       },
       async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireZoneAccount(actor);
