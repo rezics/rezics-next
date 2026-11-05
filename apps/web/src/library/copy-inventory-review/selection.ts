@@ -131,8 +131,7 @@ export function useCopyInventoryReview({
     handoff(copy: ObservedCopy, run: (row: CopyItem, trigger: HTMLButtonElement | null) => void) {
       if (!available()) return;
       const row = exact(copy);
-      if (!row || !latest.current.selected.some((item) => item.id === row.id && item.revision === row.revision))
-        return;
+      if (!row || !latest.current.selected.some((item) => item.id === row.id && item.revision === row.revision)) return;
       const trigger = latest.current.selected.find((item) => item.id === row.id)?.trigger;
       run(row, trigger?.isConnected ? trigger : null);
     },
