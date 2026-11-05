@@ -916,26 +916,39 @@ Game classification keyboard opening focuses the exact newly staged, named priva
 Decision: preserve the source Context and Realm as bounded intent; non-Global readings show an unsupported
 correction state before mounting any Global editor, with a separate, explicitly named Global entry.
 
-The ordinary Subject Game correction entry carries the actual Context, selected Realm, Type and effective release
-when supplied by the page. It names an overview, never an implicitly selected classification occurrence. The
-installed `/game` canonicalizer reads that Context, keeps the validated intent across slug redirects, and the
-session rereads the Subject and active immutable Definition before presenting editing. Subject, Context or Type
-mismatch and changed effective release retire editing. The existing session/editor generation includes the full
-visit descriptor, so replacing a source cannot reuse a matching earlier caller's query result. No extra session
-read or command authority is introduced. Direct Global entry and creation keep their existing flows.
+Decision: an overview entry selects no assertion; inspection selects one exact current `{holder, property, statement}`
+occurrence, and return restores it only after the fresh public Subject, source address, Context/Realm, Type, released
+Definition, locale, effective reader and disclosed occurrence still match.
+
+The ordinary Subject Game correction entry carries the actual Context, selected Realm, Type, effective release and
+reader identity when supplied by the page. It names an overview, never an implicitly selected classification
+occurrence. A supplied locator is accepted only when its holder, property and native statement ID all occur together
+in that fresh projection; equal-valued occurrences remain separate choices. The installed `/game` canonicalizer
+reads that Context, keeps validated intent across slug redirects, and the session rereads the Subject and active
+immutable Definition before presenting editing. Subject, Context or Type mismatch and changed effective release
+retire editing. The existing session/editor generation includes the full visit descriptor and effective reader, so
+replacing a source or reader cannot reuse a matching earlier caller's query result. Direct Global entry and creation
+keep their existing flows.
 
 The route intent is at most 2,048 characters and 2,048 UTF-8 bytes. It retains one same-locale, validated relative
-Subject source address with only its established Realm selector; no root Context selector, nested history, draft,
-reader proof, advice or result is carried. Duplicate selectors, foreign subjects/locales, contradictory Realms and
-non-Global sources without a Realm address are invalid. Return links use the source address to request the ordinary
-current Subject reading; navigation itself does not claim successful recovery or restore an assertion selection.
+Subject source address with only its established Realm selector; no root Context selector, nested history, body,
+evidence, draft, credential, advice or result is carried. The optional return descriptor is also capped at 2,048
+characters and 2,048 UTF-8 bytes after encoding, and the combined address respects any lower outer-address cap. It
+retains at most one source and one exact selection/focus intent. Duplicate, unknown, oversized or contradictory
+fields, foreign subjects/locales, mismatched Realms and non-Global sources without a Realm address are rejected as a
+whole. The public destination rereads through its installed Subject and Game reader; an href never proves readback.
+Only the exact still-disclosed occurrence can receive focus. A changed or unsupported selection is announced and
+falls back to the current Game correction entry or reading heading; direct visits and missing descriptors offer an
+honest current restart. User interaction, a replaced reader or source, or a superseding return retires pending focus.
 
 The canonicalizer issues one exact Subject GET. Destination admission uses three generated reads: Subject with
 explicit Context, active Definition pointer and immutable release. The Subject ceiling is 2 MiB and the release
-ceiling is 4 MiB with at most 1,024 Types; oversized responses are unavailable, never truncated. No related-target
-hydration, scan, search or candidate refill is added. Existing classification review remains a 20-candidate window,
-with at most twelve explicitly included scalar commands. These consumer ceilings do not establish native indexed
-growth evidence. Source reading and return keep the ordinary reader's existing finite page limits.
+ceiling is 4 MiB with at most 1,024 Types; oversized responses are unavailable, never truncated. Selection uses the
+already admitted statement window; no related-target hydration, scan, search, candidate refill or new read family is
+added. Existing classification review remains a 20-candidate window, with at most twelve explicitly included scalar
+commands. Return adds no reads beyond the ordinary Subject page and Game reader's existing current first window;
+source and return keep their existing finite page limits. These consumer ceilings do not establish native indexed
+growth evidence.
 
 Manga correction retires current and nested public markup when a reload starts or is refused; private scalar, relation and authored holders retain drafts and exact unresolved commands, and resume only after a fresh read matches the original subject and Type, with nested holders rereading their own addresses before explicit retry.
 Manga creation's explicit keyboard qualifier Add orients to the admitted stable qualifier's first editing control, falling back to its labelled group; refused additions, pointer use, moved focus and retired row or Type activation stay quiet.
