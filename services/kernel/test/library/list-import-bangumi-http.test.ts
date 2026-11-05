@@ -545,10 +545,10 @@ test('score review retains source scale and native vote while requiring separate
           ordinal === 0
             ? { action: 'set', units: 0 }
             : ordinal === 3
-            ? { action: 'set', units: 13 }
-            : ordinal === 1
-              ? { action: 'clear' }
-              : { action: 'preserve' },
+              ? { action: 'set', units: 13 }
+              : ordinal === 1
+                ? { action: 'clear' }
+                : { action: 'preserve' },
       });
       reviews.push((await ok(response)).review);
     }
