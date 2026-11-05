@@ -52,14 +52,22 @@ data. A decision visits a fixed operand set. Explanations are limited to 32 node
 uses at most 2,000 half-open `[from, until)` intervals with integer-microsecond values of at most 32 decimal
 characters; incomplete evidence remains unknown.
 
-The Kernel adapter compiles the live native registrations once when it creates Access. Its first migrated consumer is
-the `collection:read` point/page profile: the existing permission statement projects local and exact Global primitive
-facts at its qualified snapshot; the core combines standing, assignment, scope, actor/principal grants, denials and
-the verified public floor. Explicit advice uses the same evaluator with the floor and resource-role grant operands
-excluded. A public floor is independent of scope. The exact `globalReach` bit is projected from Kernel's registered
-list; unregistered actions have no alternate Global path. Own-account and authenticated buyer facts retain their
-existing native action-specific sources, and other action paths remain on their established evaluator until their
-own consumer is migrated.
+The Kernel adapter compiles the live native registrations once when it creates Access. Its receiving profiles are
+every exact registered action/resource-type pair in point/page checks and `ReadDecisions`: a point infers its type
+only when the action has one registered type, a page or batch supplies its exact type, and own-account actions bind
+to the existing `access.account` target. The existing permission statement projects local and exact Global
+primitive facts at its qualified snapshot; the core combines standing, assignment, scope, actor/principal grants,
+denials and the verified public floor. Explicit advice uses the same evaluator with the floor and resource-role
+grant operands excluded. A public floor is independent of scope. The exact `globalReach` bit is projected from
+Kernel's registered list, and Global decisions retain command provenance; unregistered actions have no alternate
+Global path. Own-account and authenticated buyer facts retain their existing native action-specific sources.
+
+The point `Resource` has no resource-type field, so actions with no registered type or more than one target type keep
+the existing native SQL evaluator. For example, resource-role registrations bind `access:grant` to
+`community.realm`, `semantic.context` and `semantic.zone`; its point profile awaits a typed Resource. A batch for the
+same action can use the core only when its supplied type is registered. The pure evaluation adds no query, clock
+read, scan, per-row read or retry; native preparation, one bounded formula statement and each consumer's existing
+disclosure checks keep their current bounds.
 
 This package does not acquire facts, read time, verify native eligibility, mint preparation evidence, record a
 governance audit or authorize a writer. Kernel still owns current identity and membership checks, the authoritative

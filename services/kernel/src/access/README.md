@@ -6,7 +6,7 @@ The [adopted architecture](../../../../docs/architecture.md) places the pure cat
 bounded explanations/conformance and residual specialization behind `packages/access/src/index.ts`. Imports go
 inward through that public entry only, with no reverse or private edges. Kernel retains native facts, qualified
 completeness, opaque proofs, authoritative time, floors/fences, command admission, audit and execution. Exposure
-is a distinct consumer. The first core and Collection directory residual use are integrated; this list migration
+is a distinct consumer. The first core and Collection directory residual use are integrated; this remaining-profile migration
 adds no baseline allowance and no old/new allow-OR. Source compatibility is no native acceptance.
 
 [Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
@@ -21,14 +21,26 @@ Decision: Kernel derives the compiled policy from its existing mounted actions a
 identifier data is capped at 1 MiB, temporal integers at 32 decimal characters, and internal explanations at 32 nodes
 and 4 KiB.
 
+Decision: Kernel uses the pure core for every exact registered action/resource-type pair: points infer a type only
+when it is unique (or a page supplies it), batches use their admitted type, and own-account checks bind to the
+existing `access.account` profile. Point actions without one exact target type retain the SQL evaluator until
+`Resource` carries that operand.
+
 `services/kernel/src/access/policy-core.ts` imports the public `@rezics/access` entry and projects the live
-`ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. `permission.ts` calls this
-adapter only for the `collection:read` point/page check. Its existing `permission-check.sql` statement now returns
-qualified local and optional Global primitive grants, denials, assignment validity and deadline validity; it does not
-return a final Collection allow. The adapter evaluates every target at the same native snapshot and uses the same
-core for ordinary and explicit advice. The bounded `prepareReadDecisions().decide` Collection profile also uses
-this core. The ordinary formula retains the verified public floor independently of scope. Explicit advice excludes
-that floor and resource-role grants.
+`ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. Point/page checks and
+`prepareReadDecisions().decide` use this adapter only when the exact action/type pair is registered. The existing
+`permission-check.sql` statement supplies qualified local and optional Global primitive grants, denials, assignment
+validity and deadline validity for those profiles; its final SQL booleans are reserved for profiles whose exact
+target type is not registered or inferable. The adapter evaluates every target at the same native snapshot and uses
+the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
+`access.account`. The ordinary formula retains the verified public floor independently of scope. Explicit advice
+excludes that floor and resource-role grants. A core decision reached through registered Global authority still
+marks the same governance provenance used by command auditing.
+
+The exact type operand is deliberately not guessed for point `Resource` checks. Resource-role registrations bind
+`access:grant` to `community.realm`, `semantic.context` and `semantic.zone`; that point action keeps the existing
+bounded SQL evaluator. A `ReadDecisions` batch supplies `resourceType`, so the same action uses the core only for a
+registered type. Unregistered actions have no alternate Global path.
 
 Kernel retains actor/principal authentication, account standing, temporal membership and assignment acquisition,
 floor verification, source completeness, `AuthoritativeTime`, deadlines, weak-map preparation and capability binding,
@@ -36,9 +48,11 @@ still-valid checks, audit obligations and private disclosure. A core result is n
 operands evaluate unavailable and fail closed; complete negative rows evaluate deny. Public responses still receive
 the existing concealed/not-found mapping and never receive operand explanations.
 
-This cutover adds no query or per-row acquisition. The real Collection read cost remains preparation and current
-membership/assignment reads, one bounded final formula statement, native validity checks and Collection's existing
-`readEligibility`, `disclose` and `grantCapable` gates. `packages/access/README.md` documents the public API and limits.
+This cutover adds no query or per-row acquisition. The existing full-call cost remains preparation and current
+membership/assignment reads, one bounded final formula statement, native validity checks and each consumer's
+existing disclosure gates. `ReadDecisions` retains immutable admitted batches of at most 200 IDs, exact action/type
+checks and per-ID answers. Pure evaluation adds no query, clock read, scan, per-row read, runtime ledger or retry.
+`packages/access/README.md` documents the public API and limits.
 The admitted import edges are `services/kernel/src/access/policy-core.ts -> @rezics/access` (public entry),
 `services/kernel/src/access/policy-core.ts -> ./resource-roles.ts` (existing native role association),
 `services/kernel/src/access/permission.ts -> ./policy-core.ts`, `services/kernel/src/library/collection-reads.ts ->

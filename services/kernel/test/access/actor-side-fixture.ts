@@ -73,10 +73,13 @@ export async function actorFixture(pool: Pool, admin: Pool = pool) {
   };
   const config: PermissionConfig = {
     actions: new Map([
-      [action, { anonymous: false }],
+      [action, { anonymous: false, 'x-resource-types': ['fixture.page'] }],
       ['subject:update', { anonymous: false }],
     ]),
-    resourceRoles: { roles: { 'fixture.reader': [action] }, types: {} },
+    resourceRoles: {
+      roles: { 'fixture.reader': [action] },
+      types: { 'fixture.page': { owner: 'fixture.reader', standing: [] } },
+    },
     accountEvidence: (_, ctx) => ctx.account,
   };
   function permissions(extra: Partial<PermissionConfig> = {}) {

@@ -86,6 +86,8 @@ import { readExposure, GLOBAL_CONTEXT } from './gates/catalogue.ts';
 import {
   compileNativePolicyCatalogue,
   decideNativePermission,
+  hasNativePolicyProfile,
+  uniqueNativePolicyResourceType,
   type NativePermissionProjection,
 } from './policy-core.ts';
 import type { PolicyCatalogue } from '@rezics/access';
@@ -277,6 +279,7 @@ function preparedFormula(
   resource: Resource,
   at: string,
   floor: boolean,
+  policyCore: boolean,
   page?: ResourcePage,
   includeExplicit = false,
 ) {
@@ -285,7 +288,7 @@ function preparedFormula(
     route: resource.route,
     resource_ids: [...ids],
     include_explicit: includeExplicit && !facts.anonymous && facts.scope,
-    policy_core: action === 'collection:read',
+    policy_core: policyCore,
     include_global: isGlobalReachAction(action),
     action,
     own_account: facts.ownAccount,
@@ -384,7 +387,12 @@ async function checkPreparedPermission(
     };
     if (!stillValid()) return { allowed: false, explicit: false };
     const ids = page?.ids ?? [resource.id];
-    const formula = preparedFormula(facts, actor, action, resource, at, floor, page, includeExplicit);
+    const policyResourceType =
+      page?.resourceType ?? uniqueNativePolicyResourceType(facts.policyCatalogue, action);
+    const policyCore =
+      policyResourceType !== undefined &&
+      hasNativePolicyProfile(facts.policyCatalogue, action, policyResourceType);
+    const formula = preparedFormula(facts, actor, action, resource, at, floor, policyCore, page, includeExplicit);
     const rows = await accessNativeWork(facts.work, 'formula', formula.input, formula.shape, () =>
       permissionRead.run(client, formula.input),
     );
@@ -396,12 +404,12 @@ async function checkPreparedPermission(
         (row) =>
           typeof row.resourceId !== 'string' ||
           !ids.includes(row.resourceId) ||
-          (action === 'collection:read' ? typeof row.live !== 'boolean' : typeof row.allowed !== 'boolean'),
+          (policyCore ? typeof row.live !== 'boolean' : typeof row.allowed !== 'boolean'),
       )
     )
       return { allowed: false, explicit: false };
-    if (action === 'collection:read') {
-      const resourceType = page?.resourceType ?? facts.policyCatalogue.actionByName[action]?.resourceTypes[0] ?? '';
+    if (policyCore) {
+      const resourceType = policyResourceType!;
       const hasPrincipal = facts.principalId !== null;
       const canEvaluateExplicit = includeExplicit && !facts.anonymous && facts.scope;
       const project = (row: (typeof rows)[number]) => row as unknown as NativePermissionProjection;
@@ -439,6 +447,14 @@ async function checkPreparedPermission(
             ),
           )
         : [];
+      setGovernanceReach(
+        evidence,
+        rows.flatMap((row, index) =>
+          ordinary[index]?.reason === 'global-reach' && typeof row.resourceId === 'string'
+            ? [{ route: resource.route, id: row.resourceId }]
+            : [],
+        ),
+      );
       const decisions = Object.freeze(
         Object.fromEntries(rows.map((row, index) => [row.resourceId!, ordinary[index]?.decision === 'allow'])),
       );
@@ -514,7 +530,10 @@ function preparedCheckWork(
     if (facts.verifyFloor && !owner) return undefined;
     // false is the larger serialized boolean; the mounted native plan is identical
     // for either eligibility outcome. Undispatched branches settle at zero.
-    const formula = preparedFormula(facts, actor, action, resource, at, false);
+    const resourceType = uniqueNativePolicyResourceType(facts.policyCatalogue, action);
+    const policyCore =
+      resourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, resourceType);
+    const formula = preparedFormula(facts, actor, action, resource, at, false, policyCore);
     return addAccessWork(
       accessNativeDeclaration('formula', formula.input, formula.shape).bound,
       ...(owner ? [owner] : []),
@@ -1159,7 +1178,7 @@ export function createAccess(config: PermissionConfig): Access {
             return await within(deadline, async () => {
               const bounded = deadlineClient(client, deadline);
               const scope = identity.kind === 'account' && identity.scopes.includes(borrowedScope ?? batch.action);
-              const policyCore = action === 'collection:read';
+              const policyCore = hasNativePolicyProfile(policyCatalogue, action, batch.resourceType);
               const formulaInput = {
                 route: 0,
                 resource_ids: [...ids],
