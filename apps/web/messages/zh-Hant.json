@@ -3170,6 +3170,7 @@
   "av_refresh": "重新整理狀態",
   "av_first_page": "第一頁",
   "av_next_page": "下一頁",
+  "av_previous_page": "上一頁",
   "av_empty": "此頁沒有待審核的申請。",
   "av_profile_unavailable": "無法取得帳號個人檔案",
   "av_subject_unavailable": "無法取得目錄主體",

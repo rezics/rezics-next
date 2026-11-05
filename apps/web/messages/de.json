@@ -3170,6 +3170,7 @@
   "av_refresh": "Status aktualisieren",
   "av_first_page": "Erste Seite",
   "av_next_page": "Nächste Seite",
+  "av_previous_page": "Vorherige Seite",
   "av_empty": "Auf dieser Seite gibt es keine offenen Anträge.",
   "av_profile_unavailable": "Kontoprofil nicht verfügbar",
   "av_subject_unavailable": "Katalogeintrag nicht verfügbar",

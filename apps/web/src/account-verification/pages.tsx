@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useRef, type ButtonHTMLAttributes, type ReactNode, type RefObject } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Tombstone } from '@rezics/ui/tombstone';
@@ -37,9 +37,11 @@ function Frame({ title, children }: { title: string; children: ReactNode }) {
 export function PageState({
   state,
   retry,
+  retryButtonProps,
 }: {
   state: 'loading' | 'denied' | 'preparing' | 'unavailable' | 'invalid';
   retry?: () => void;
+  retryButtonProps?: Pick<ButtonHTMLAttributes<HTMLButtonElement>, 'onKeyDown' | 'onPointerDown'>;
 }) {
   const message = {
     loading: m.av_loading,
@@ -52,7 +54,7 @@ export function PageState({
     <div className="space-y-3 rounded-xl border border-border p-5" aria-busy={state === 'loading'}>
       <p role={state === 'unavailable' || state === 'invalid' ? 'alert' : 'status'}>{message}</p>
       {retry && state !== 'loading' && (
-        <Button type="button" variant="outline" onClick={retry}>
+        <Button type="button" variant="outline" onClick={retry} {...retryButtonProps}>
           {m.av_refresh()}
         </Button>
       )}
@@ -159,8 +161,12 @@ function ReviewPageViewContent({
   viewerId,
   submit,
   refresh,
+  retry,
   next,
+  previous,
+  canPrevious = false,
   first,
+  queueRegionRef,
   canWrite = true,
 }: {
   page: ReadState<ReviewPage> | { state: 'loading' };
@@ -168,8 +174,12 @@ function ReviewPageViewContent({
   viewerId: string | null;
   submit: SubmitOperation;
   refresh: () => void;
-  next: (cursor: string) => void;
-  first: () => void;
+  retry?: (origin?: HTMLElement | null) => void;
+  next: (cursor: string, origin?: HTMLElement | null) => void;
+  previous?: (origin?: HTMLElement | null) => void;
+  canPrevious?: boolean;
+  first: (origin?: HTMLElement | null) => void;
+  queueRegionRef?: RefObject<HTMLDivElement | null>;
   canWrite?: boolean;
 }) {
   const actions: Operation['action'][] = [];
@@ -185,10 +195,29 @@ function ReviewPageViewContent({
   );
   const disabled = !viewerId || !canWrite || operation.busy || !!operation.attempt;
   const command = operation.command;
+  const keyboardOrigin = useRef<HTMLElement | null>(null);
+  const keyboardProps: Pick<ButtonHTMLAttributes<HTMLButtonElement>, 'onKeyDown' | 'onPointerDown'> = {
+    onKeyDown: (event) => {
+      if (event.key === 'Enter' || event.key === ' ') keyboardOrigin.current = event.currentTarget;
+    },
+    onPointerDown: () => {
+      keyboardOrigin.current = null;
+    },
+  };
+  const takeKeyboardOrigin = () => {
+    const origin = keyboardOrigin.current;
+    keyboardOrigin.current = null;
+    return origin;
+  };
   return (
     <VerificationDecisions operation={operation} authorized={authorized}>
       <ReviewContent>
-        {(navigate) => (
+        {(navigate) => {
+          const move = (action: (origin: HTMLElement | null) => void) => {
+            const origin = takeKeyboardOrigin();
+            navigate(() => action(origin));
+          };
+          return (
           <Frame title={m.av_review_title()}>
             <p className="max-w-prose text-muted-foreground">{m.av_review_help()}</p>
             {viewerId &&
@@ -215,32 +244,63 @@ function ReviewPageViewContent({
                   />
                 </div>
               )}
-            {page.state !== 'ready' ? (
-              <div className="space-y-3">
-                <PageState state={page.state} retry={refresh} />
-                {page.state !== 'loading' && (
-                  <Button type="button" variant="ghost" onClick={() => navigate(first)}>
-                    {m.av_first_page()}
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-wrap gap-3">
-                  <Button type="button" variant="outline" onClick={refresh}>
-                    {m.av_refresh()}
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => navigate(first)}>
-                    {m.av_first_page()}
-                  </Button>
+            <div
+              ref={queueRegionRef}
+              role="region"
+              aria-label={m.av_review_title()}
+              tabIndex={-1}
+              className="space-y-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-solid focus-visible:outline-ring"
+            >
+              {page.state !== 'ready' ? (
+                <div className="space-y-3">
+                  <PageState
+                    state={page.state}
+                    retry={() => (retry ? retry(takeKeyboardOrigin()) : refresh())}
+                    retryButtonProps={keyboardProps}
+                  />
+                  {page.state !== 'loading' && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => move((origin) => first(origin))}
+                      {...keyboardProps}
+                    >
+                      {m.av_first_page()}
+                    </Button>
+                  )}
                 </div>
-                {page.value.requests.length === 0 && (
-                  <p role="status" className="rounded-xl border border-border p-5">
-                    {m.av_empty()}
-                  </p>
-                )}
-                <div className="space-y-5">
-                  {page.value.requests.map(({ request, account, subject }) => (
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-3">
+                    {canPrevious && previous && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => move((origin) => previous(origin))}
+                        {...keyboardProps}
+                      >
+                        {m.av_previous_page()}
+                      </Button>
+                    )}
+                    <Button type="button" variant="outline" onClick={refresh}>
+                      {m.av_refresh()}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => move((origin) => first(origin))}
+                      {...keyboardProps}
+                    >
+                      {m.av_first_page()}
+                    </Button>
+                  </div>
+                  {page.value.requests.length === 0 && (
+                    <p role="status" className="rounded-xl border border-border p-5">
+                      {m.av_empty()}
+                    </p>
+                  )}
+                  <div className="space-y-5">
+                    {page.value.requests.map(({ request, account, subject }) => (
                     <Card key={request.id}>
                       <CardHeader>
                         <CardTitle>
@@ -286,17 +346,24 @@ function ReviewPageViewContent({
                         </details>
                       </CardContent>
                     </Card>
-                  ))}
-                </div>
-                {page.value.next && (
-                  <Button type="button" variant="outline" onClick={() => navigate(() => next(page.value.next!))}>
-                    {m.av_next_page()}
-                  </Button>
-                )}
-              </>
-            )}
+                    ))}
+                  </div>
+                  {page.value.next && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => move((origin) => next(page.value.next!, origin))}
+                      {...keyboardProps}
+                    >
+                      {m.av_next_page()}
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
           </Frame>
-        )}
+          );
+        }}
       </ReviewContent>
     </VerificationDecisions>
   );

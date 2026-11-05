@@ -66,6 +66,10 @@ export const Pagination: Story = {
     const view = within(canvasElement);
     await userEvent.click(await view.findByRole('button', { name: m.av_next_page() }));
     await view.findByText(m.av_empty());
+    await userEvent.click(view.getByRole('button', { name: m.av_previous_page() }));
+    await view.findByText(m.av_evidence());
+    await userEvent.click(view.getByRole('button', { name: m.av_next_page() }));
+    await view.findByText(m.av_empty());
     await userEvent.click(view.getByRole('button', { name: m.av_first_page() }));
     await view.findByText(m.av_evidence());
   },

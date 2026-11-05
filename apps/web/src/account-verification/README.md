@@ -18,6 +18,19 @@ also run independently. Account review bounds latest-request, identity, discover
 failed publication is unknown and failed governance grants no control. Refresh retries the current cursor; First page
 explicitly restarts it. Readback must finish before a saved decision can resume through current native authority.
 
+Review-window coordinates use the released native list-cursor grammar: ASCII base64url tokens of at most 4,096
+UTF-8 bytes. Retain at most eight prior accepted coordinates and one current coordinate (36,864 bytes); one staged
+movement target may coexist with them during its read (40,960 bytes maximum). The retained history contains only
+cursor coordinates, while the query cache replaces one bounded page per reviewer observation and locale. A direct
+cursor has no inferred predecessor. Next admits one prior coordinate only after the replacement page is admitted;
+Previous removes its target only after that target is admitted; First clears history only after the cursor-free page
+is admitted. Refresh and Retry reread the current requested coordinate without changing the history.
+
+Each initial, Next, Previous, First, Refresh or Retry action invokes one existing `readReviewPage` call. That call
+runs one native discovery request and one pending-page request in parallel. A non-empty page retains the existing
+label reads: at most one batched Accounts request and one subject request per returned row (at most 20); an empty
+page adds no label requests. No history entry retains a page, row, evidence or decision draft.
+
 Decision: allow 35 seconds for the page round trip (session plus two read phases) and 25 seconds for a command
 (session plus dispatch); a deadline leaves the original command uncertain, with explicit same-input/key recovery only.
 These observation deadlines also settle non-cooperative transports and release timers and abort listeners; late

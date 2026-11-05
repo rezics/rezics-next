@@ -50,7 +50,9 @@ test('verification departures preserve all reviewed drafts and original commands
   let viewerId = 'reviewer-a',
     allowed = true,
     page = 0,
-    refreshes = 0;
+    refreshes = 0,
+    movements = 0;
+  const history: number[] = [];
   let caller = submit;
   const account: AccountPage = {
     account: null,
@@ -76,11 +78,23 @@ test('verification departures preserve all reviewed drafts and original commands
       operations={allowed ? ['verification_request.approve', 'verification_request.reject'] : []}
       submit={caller}
       refresh={() => refreshes++}
+      canPrevious={history.length > 0}
       next={() => {
+        movements++;
+        history.push(page);
         page++;
         void router.invalidate();
       }}
+      previous={() => {
+        if (history.length) {
+          movements++;
+          page = history.pop()!;
+        }
+        void router.invalidate();
+      }}
       first={() => {
+        movements++;
+        history.length = 0;
         page = 0;
         void router.invalidate();
       }}
@@ -169,6 +183,8 @@ test('verification departures preserve all reviewed drafts and original commands
     await click(next);
     expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
     await choose(false);
+    expect(page).toBe(0);
+    expect(history).toEqual([]);
     expect(fields().map((field) => field.value)).toEqual(['First evidence checked', 'Second evidence checked']);
     expect(host.querySelector('select')!.value).toBe('reject');
     expect(host.textContent).toContain(m.av_confirm({ action: m.av_reject() }));
@@ -176,8 +192,34 @@ test('verification departures preserve all reviewed drafts and original commands
     await click(next);
     await choose(true, true);
     expect(page).toBe(1);
+    expect(history).toEqual([0]);
+    expect(movements).toBe(1);
     expect(fields()[0]!.value).toBe('');
     expect(unload()).toBe(false);
+    await fill(0, 'Second window draft');
+    await act(async () => {
+      const select = host.querySelector('select')!;
+      select.value = 'reject';
+      select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    await formSubmit();
+    expect(host.textContent).toContain(m.av_confirm({ action: m.av_reject() }));
+    const previous = button(m.av_previous_page());
+    await click(previous);
+    const beforePreviousLeave = movements;
+    await choose(false);
+    expect(page).toBe(1);
+    expect(history).toEqual([0]);
+    expect(movements).toBe(beforePreviousLeave);
+    expect(fields()[0]!.value).toBe('Second window draft');
+    expect(host.querySelector('select')!.value).toBe('reject');
+    expect(host.textContent).toContain(m.av_confirm({ action: m.av_reject() }));
+    await click(previous);
+    await choose(true, true);
+    expect(page).toBe(0);
+    expect(history).toEqual([]);
+    expect(movements).toBe(beforePreviousLeave + 1);
+    expect(fields()[0]!.value).toBe('');
     await fill(0, 'Unresolved original reason');
     await formSubmit();
     await formSubmit();
@@ -204,8 +246,20 @@ test('verification departures preserve all reviewed drafts and original commands
     await act(async () => {
       await router.navigate({ to: '/en/review' });
     });
+    await fill(0, 'Detached window reason');
+    const detachedNext = button(m.av_next_page());
+    const selectedHistory = [...history];
+    const selectedPage = page;
+    const selectedMovements = movements;
+    await click(detachedNext);
+    expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
     viewerId = 'reviewer-b';
     await render();
+    expect(page).toBe(selectedPage);
+    expect(history).toEqual(selectedHistory);
+    expect(movements).toBe(selectedMovements);
+    expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(0);
+    expect(fields()[0]!.value).toBe('');
     await fill(0, 'Old caller reason');
     await formSubmit();
     await formSubmit();
