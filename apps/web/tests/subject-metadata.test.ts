@@ -232,3 +232,26 @@ test('unavailable public targets retain truthful failures and cannot populate a 
   expect(meta(result, 'og:image:alt')).toBe('REZICS');
   expect(JSON.stringify(result)).not.toContain(recorded.reads.r0.body.subject.labels.en);
 });
+
+test('title years use the reader and structured-data date meaning', () => {
+  const value = {
+    time: '+2099-01-01T00:00:00Z',
+    precision: 11,
+    calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+  };
+  for (const [content, year] of [
+    [value, true],
+    [{ ...value, time: '+2099-00-00T00:00:00Z', precision: 9 }, true],
+    [{ ...value, time: '+2099-99-99T00:00:00Z' }, false],
+    [{ ...value, precision: 12 }, false],
+    [{ ...value, calendarmodel: 'http://www.wikidata.org/entity/Q1985786' }, false],
+    [{ ...value, timezone: 60 }, false],
+    [{ ...value, before: 1 }, false],
+  ] as const) {
+    const result = head(
+      fixture({ statements: { 'schema:datePublished': [statement('schema:datePublished', 'time', content)] } }),
+    );
+    expect(meta(result, 'og:title')!.includes('2099')).toBe(year);
+    expect(Object.hasOwn(JSON.parse(result.scripts[0]!.children), 'datePublished')).toBe(year);
+  }
+});

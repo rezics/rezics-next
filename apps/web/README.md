@@ -828,6 +828,8 @@ at s = 1, 8, 64; they are not existing coverage or measurements. Existing tests 
 
 ### Page head
 
+Decision: Subject title years use the reader's supported Gregorian structured date, so malformed dates, unsupported precision, calendar conversion, timezone shifts and uncertainty cannot become a definite title year. Focused acceptance pins this agreement with JSON-LD; native public-reader, Following and publication journeys remain required browser/API acceptance.
+
 - **Touches:** No kernel read; the head uses the loaded page and matched route.
 - **Bound:** Constant per page: eight alternates, one canonical and at most one JSON-LD script.
 - **Growth check:** Page head rendering does not add a kernel request.
