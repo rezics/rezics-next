@@ -1,5 +1,6 @@
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
 import { declareBound, type Bound } from '@rezics/bounds';
+import { deadlineClient } from '../access/authenticate.ts';
 import {
   currentOperationalResources,
   hasLiveOperationalTransaction,
