@@ -76,6 +76,8 @@ test('the public entry preserves admitted Global and selected Context observatio
 test('the production graph route gates unsupported origins and a fresh Global choice uses only the original transport', async () => {
   const {
     graphPublicSourceReturnHref,
+    graphPublicPath,
+    parseGraphPublicVisit,
     subjectHref,
     base,
     publicReturn,
@@ -175,7 +177,19 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     selectedAddress.searchParams.set('depth', '2');
     selectedAddress.searchParams.set('node', otherSubject);
     const router = await mount(`${selectedAddress.pathname}${selectedAddress.search}`);
-    expect(parse(`${router.state.location.pathname}${router.state.location.searchStr}`)).toMatchObject({
+    const routeLocale = (await import('../src/paraglide/runtime.js')).getLocale();
+    const routeId = router.state.matches.at(-1)?.params.id;
+    expect(routeId).toBe(subject);
+    expect(routeLocale).toBe('en');
+    expect(
+      parseGraphPublicVisit(
+        router.state.location.searchStr,
+        router.state.location.hash,
+        String(routeId),
+        routeLocale,
+        graphPublicPath(router.state.location.pathname, routeLocale),
+      ),
+    ).toMatchObject({
       kind: 'origin',
       origin: { context, realm },
     });
