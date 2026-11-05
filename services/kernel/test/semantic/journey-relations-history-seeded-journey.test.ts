@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { LINKS_CHANGED, SUBJECT_REVISED } from '../../src/semantic/events.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { factDataTypes, itemFacts } from '../../src/semantic/item.ts';
 import { linkChanges } from '../../src/semantic/link-changes.ts';
 import { holderFacts } from '../../src/semantic/link-keys.ts';
@@ -59,90 +59,9 @@ type Persona = keyof typeof accounts | undefined;
 const citation = {
   parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/original' } }],
 };
-const itemProperty = (
-  id: string,
-  group: 'appearance' | 'credit' | 'association',
-  extra: Record<string, unknown> = {},
-) => ({
-  iri: `https://example.test/${id.slice(3)}`,
-  labels: { en: id },
-  mappings: [],
-  datatype: 'wikibase-item' as const,
-  multivalued: true,
-  qualifiers: ['ex:role', 'rezics:spoilerLevel', 'schema:position'],
-  value: valueSchema('wikibase-item'),
-  targets: ['ex:Person'],
-  relation: { inverse: 'none' as const, group, order: 'position' as const, filter: 'ex:role', ...extra },
-});
-const typeDefinition = (iri: string, label: string, properties: string[]) => ({
-  iri,
-  labels: { en: label },
-  mappings: [],
-  bases: [],
-  facets: [],
-  properties,
-});
-const release: Release = {
-  format: 'https://rezics.com/definitions/release/1',
-  catalogue: { id: 'https://example.test/relations-history-journey', version: '1' },
-  generator: { name: 'semantic-test', version: '1' },
-  prefixes: { ex: 'https://example.test/', schema: 'http://schema.org/', rezics: 'https://rezics.com/prop/' },
-  types: {
-    'ex:Work': typeDefinition('https://example.test/Work', 'Work', [
-      'ex:appearance',
-      'ex:credit',
-      'ex:related',
-      'schema:position',
-    ]),
-    'ex:Person': typeDefinition('https://example.test/Person', 'Person', ['schema:position']),
-    'ex:Role': typeDefinition('https://example.test/Role', 'Role', []),
-  },
-  properties: {
-    'ex:appearance': itemProperty('ex:appearance', 'appearance'),
-    'ex:credit': itemProperty('ex:credit', 'credit', { slotKey: 'ex:role' }),
-    'ex:related': itemProperty('ex:related', 'association'),
-    'ex:role': {
-      iri: 'https://example.test/role',
-      labels: { en: 'Role' },
-      mappings: [],
-      datatype: 'wikibase-item',
-      multivalued: false,
-      qualifiers: [],
-      value: valueSchema('wikibase-item'),
-      targets: ['ex:Role'],
-    },
-    'schema:url': {
-      iri: 'http://schema.org/url',
-      labels: { en: 'URL' },
-      mappings: [],
-      datatype: 'url',
-      multivalued: true,
-      qualifiers: [],
-      value: valueSchema('url'),
-    },
-    'schema:position': {
-      iri: 'http://schema.org/position',
-      labels: { en: 'Position' },
-      mappings: [],
-      datatype: 'quantity',
-      units: ['1'],
-      multivalued: false,
-      qualifiers: [],
-      value: valueSchema('quantity', { units: ['1'], integer: true }),
-    },
-    'rezics:spoilerLevel': {
-      iri: 'https://rezics.com/prop/spoilerLevel',
-      labels: { en: 'Spoiler' },
-      mappings: [],
-      datatype: 'quantity',
-      units: ['1'],
-      multivalued: false,
-      qualifiers: [],
-      value: valueSchema('quantity', { units: ['1'], integer: true }),
-    },
-  },
-};
-const digest = releaseDigest(release);
+const release = bundledRelease;
+const digest = bundledDigest;
+const PROPERTY = 'schema:character';
 const partitions = new Set<number>();
 let work = '';
 let role = '';
@@ -153,13 +72,13 @@ let publishedAppearance = '';
 function snak(id: string, content: unknown) {
   return { property: { id }, value: { type: 'value' as const, content } };
 }
-function appearance(target: string, position: number, spoiler = false, extraCitation = false) {
+function appearance(target: string, _position: number, spoiler = false, extraCitation = false) {
   return {
-    property: { id: 'ex:appearance' },
+    property: { id: PROPERTY },
     value: { type: 'value' as const, content: target },
     qualifiers: [
-      snak('ex:role', role),
-      snak('schema:position', { amount: `+${position}`, unit: '1' }),
+      snak('wdt:P3831', role),
+      snak('wdt:P1932', 'Lead'),
       ...(spoiler ? [snak('rezics:spoilerLevel', { amount: '+2', unit: '1' })] : []),
     ],
     references: extraCitation
@@ -254,18 +173,19 @@ beforeAll(async () => {
   ][]) {
     for (const action of granted) await real.grant({ route: 0, id: GLOBAL_CONTEXT }, persona, action);
   }
-  const published = await call('POST', '/v1/definitions/releases', 'editor', { release });
-  expect(published.digest).toBe(digest);
-  await call('POST', `/v1/definitions/releases/${digest}:activate`, 'editor', { expected_head: null });
-  role = (await call('POST', '/v1/subjects', 'editor', { type: 'ex:Role', labels: { en: 'Lead', ja: '主役' } })).subject
-    .id;
+  expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
+  role = (await call('POST', '/v1/subjects', 'editor', { type: 'skos:Concept', labels: { en: 'Lead', ja: '主役' } }))
+    .subject.id;
   partitions.add(partitionOf(routeOf(role)!));
   people = [];
   for (let index = 0; index < 16; index++) {
     const person = (
       await call('POST', '/v1/subjects', 'editor', {
-        type: 'ex:Person',
-        labels: index === 0 ? { ja: `人物${index}` } : { en: `Person ${index}`, ja: `人物${index}` },
+        type: 'wd:Q95074',
+        labels:
+          index === 0
+            ? { ja: `人物${String(index).padStart(2, '0')}` }
+            : { en: `Person ${String(index).padStart(2, '0')}`, ja: `人物${String(index).padStart(2, '0')}` },
       })
     ).subject.id;
     people.push(person);
@@ -275,18 +195,10 @@ beforeAll(async () => {
   hidden = people[15]!;
   await real.grant({ route: routeOf(hidden)!, id: hidden }, 'steward', 'moderation:hide');
   const created = await call('POST', '/v1/subjects', 'editor', {
-    type: 'ex:Work',
+    type: 'schema:Movie',
     labels: { en: 'Journey work', ja: '旅程の作品' },
     statements: {
-      'ex:appearance': people.slice(0, 4).map((target, index) => appearance(target, index + 1, index === 3, index < 2)),
-      'ex:credit': [
-        {
-          property: { id: 'ex:credit' },
-          value: { type: 'value', content: people[0]! },
-          qualifiers: [snak('ex:role', role), snak('schema:position', { amount: '+1', unit: '1' })],
-          references: [citation],
-        },
-      ],
+      [PROPERTY]: people.slice(0, 4).map((target, index) => appearance(target, index + 1, index === 3, index < 2)),
     },
   });
   work = created.subject.id;
@@ -303,8 +215,8 @@ beforeAll(async () => {
   const remainder = people.slice(4).map((target, index) => appearance(target, index + 5));
   const facts = itemFacts(
     work,
-    { labels: { en: 'Journey work', ja: '旅程の作品' }, statements: { 'ex:appearance': remainder } },
-    'ex:Work',
+    { labels: { en: 'Journey work', ja: '旅程の作品' }, statements: { [PROPERTY]: remainder } },
+    'schema:Movie',
     release,
   ).filter((fact) => fact.kind === 'statement');
   const seededRoute = routeOf(work)!;
@@ -324,7 +236,7 @@ beforeAll(async () => {
     const changes = linkChanges([], facts, factDataTypes(release, facts), {
       subject: work,
       release,
-      type: 'ex:Work',
+      type: 'schema:Movie',
       identityFacts: identity.facts,
     });
     return {
@@ -349,15 +261,15 @@ afterAll(async () => {
 
 test('ordinary relation readers exhaust a qualified graph, publish an edit, and keep independent history', async () => {
   const preview = await call('GET', `/v1/subjects/${work}`, undefined);
-  expect(preview.subject.statements['ex:appearance']).toHaveLength(12);
+  expect(preview.subject.statements['schema:character']).toHaveLength(12);
   expect(preview.subject.relationCounts ?? {}).toEqual({});
-  const first = preview.subject.statements['ex:appearance'][0];
+  const first = preview.subject.statements['schema:character'][0];
   expect(first.references).toHaveLength(2);
   expect(
     first.references.map((reference: { parts: { value: { content: string } }[] }) => reference.parts[0]?.value.content),
   ).toEqual(['https://example.test/original', 'https://example.test/copy']);
-  expect(preview.subject.statements['ex:appearance'][1].references).toHaveLength(1);
-  const spoiler = preview.subject.statements['ex:appearance'].find((row: any) =>
+  expect(preview.subject.statements['schema:character'][1].references).toHaveLength(1);
+  const spoiler = preview.subject.statements['schema:character'].find((row: any) =>
     row.qualifiers?.some(
       (snak: { property: { id: string }; value: { content: { amount: string } } }) =>
         snak.property.id === 'rezics:spoilerLevel' && snak.value.content.amount === '+2',
@@ -365,21 +277,21 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   );
   expect(spoiler?.value.content).toBe(people[3]);
 
-  const editorPage = await untilCaughtUp(work, 'relations?property=ex:appearance&limit=5');
+  const editorPage = await untilCaughtUp(work, 'relations?property=schema:character&limit=5');
   expect(editorPage.freshness).toEqual({ consistency: 'eventual', target_seconds: 10, caught_up: true });
   expect(editorPage).not.toHaveProperty('count');
-  const exhausted = await pageAll('relations', work, 'ex:appearance');
+  const exhausted = await pageAll('relations', work, 'schema:character');
   expect(exhausted.rows).toHaveLength(16);
   expect(exhausted.last.next).toBeNull();
   expect(exhausted.rows.map((row) => row.target)).toEqual(people);
   expect(new Set(people.map((id) => partitionOf(routeOf(id)!))).size).toBeGreaterThan(1);
-  expect(exhausted.rows[0]?.label).toBe('人物0');
-  expect(exhausted.rows[1]?.label).toBe('人物1');
+  expect(exhausted.rows[0]?.label).toBe('人物00');
+  expect(exhausted.rows[1]?.label).toBe('人物01');
   expect(exhausted.rows[0]?.related?.[role]?.label?.value).toBe('主役');
 
   const observer = observeSql(pool);
   try {
-    await call('GET', `/v1/subjects/${work}/relations?property=ex:appearance&limit=16`);
+    await call('GET', `/v1/subjects/${work}/relations?property=schema:character&limit=16`);
     const summaryPartitions = new Set(
       observer.records
         .filter(({ statement }) => /summaries|semantic\.summary/i.test(statement))
@@ -393,25 +305,25 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
     await observer.close();
   }
 
-  const inverse = await untilCaughtUp(people[0]!, 'links?property=ex:appearance&limit=5');
+  const inverse = await untilCaughtUp(people[0]!, 'links?property=schema:character&limit=5');
   expect(inverse.freshness.caught_up).toBe(true);
   expect(inverse.links.map((row: { subject: string }) => row.subject)).toEqual([work]);
   const retry = await call(
     'GET',
-    `/v1/subjects/${work}/relations?property=ex:appearance&limit=5&cursor=${encodeURIComponent(editorPage.next)}`,
+    `/v1/subjects/${work}/relations?property=schema:character&limit=5&cursor=${encodeURIComponent(editorPage.next)}`,
   );
   expect(retry.relations.map((row: { target: string }) => row.target)).toEqual(
     (
       await call(
         'GET',
-        `/v1/subjects/${work}/relations?property=ex:appearance&limit=5&cursor=${encodeURIComponent(editorPage.next)}`,
+        `/v1/subjects/${work}/relations?property=schema:character&limit=5&cursor=${encodeURIComponent(editorPage.next)}`,
       )
     ).relations.map((row: { target: string }) => row.target),
   );
 
   await call('POST', `/v1/subjects/${hidden}:hide`, 'steward', { reason: 'Concealed relation target' });
   await drain();
-  const afterHide = await pageAll('relations', work, 'ex:appearance', undefined);
+  const afterHide = await pageAll('relations', work, 'schema:character', undefined);
   expect(afterHide.rows.map((row) => row.target)).not.toContain(hidden);
   expect(afterHide.rows).toHaveLength(15);
   expect(afterHide.last).not.toMatchObject({ count: { value: 0 } });
@@ -420,7 +332,7 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
 
   const extra = (
     await call('POST', '/v1/subjects', 'editor', {
-      type: 'ex:Person',
+      type: 'wd:Q95074',
       labels: { en: 'Published person', ja: '公開された人物' },
     })
   ).subject.id;
@@ -437,7 +349,7 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   expect(accepted.status).toBe(200);
   const adopted = await handle('POST', `/v1/subjects/${work}:adopt`, 'acceptor', {
     context: GLOBAL_CONTEXT,
-    property: 'ex:appearance',
+    property: 'schema:character',
     target: extra,
     mode: 'replace',
     selection: [{ candidate: publishedAppearance, rank: 'normal' }],
@@ -445,11 +357,11 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   });
   expect(adopted.status).toBe(200);
   await drain();
-  const independent = await pageAll('relations', work, 'ex:appearance', undefined);
+  const independent = await pageAll('relations', work, 'schema:character', undefined);
   expect(independent.rows.map((row) => row.target)).toContain(extra);
-  const editorView = await pageAll('relations', work, 'ex:appearance', 'editor');
+  const editorView = await pageAll('relations', work, 'schema:character', 'editor');
   expect(editorView.rows.map((row) => row.target)).toContain(extra);
-  const outsider = await handle('GET', `/v1/subjects/${work}/relations?property=ex:appearance&limit=20`, 'outsider');
+  const outsider = await handle('GET', `/v1/subjects/${work}/relations?property=schema:character&limit=20`, 'outsider');
   expect(outsider.status).toBe(200);
   expect(outsider.body.relations.map((row: { target: string }) => row.target)).toContain(extra);
   const denied = await handle('POST', `/v1/subjects/${work}/candidates`, 'outsider', {
@@ -468,7 +380,7 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   expect(createDetail.change?.kind === 'terms' || createDetail.revision.kind === 'create').toBe(true);
   const afterPublish = await call('GET', `/v1/subjects/${work}`, undefined);
   expect(
-    afterPublish.subject.statements['ex:appearance'].some(
+    afterPublish.subject.statements['schema:character'].some(
       (row: { value: { content: string } }) => row.value.content === extra,
     ),
   ).toBe(true);
@@ -476,7 +388,7 @@ test('ordinary relation readers exhaust a qualified graph, publish an edit, and 
   const suspendedBearer = real.bearer('suspended');
   await suspendAccount(admin, accounts.suspended);
   const suspended = await kernel.handle(
-    new Request(`http://kernel.test/v1/subjects/${work}/relations?property=ex:appearance`, {
+    new Request(`http://kernel.test/v1/subjects/${work}/relations?property=schema:character`, {
       headers: { authorization: `Bearer ${suspendedBearer}` },
     }),
   );
@@ -501,11 +413,11 @@ async function pageAllHistory(id: string) {
 test('external relation and history input is refused without inventing a page', async () => {
   const unknownProperty = await handle('GET', `/v1/subjects/${work}/relations?property=ex:missing`);
   expect(unknownProperty.status).toBe(400);
-  const badCursor = await handle('GET', `/v1/subjects/${work}/relations?property=ex:appearance&cursor=not-a-cursor`);
+  const badCursor = await handle('GET', `/v1/subjects/${work}/relations?property=schema:character&cursor=not-a-cursor`);
   expect(badCursor.status).toBe(400);
   const filterWithoutProperty = await handle('GET', `/v1/subjects/${work}/links?filter=${role}`);
   expect(filterWithoutProperty.status).toBe(400);
-  const typed = await handle('GET', `/v1/subjects/${work}/relations?property=ex:appearance&type=ex:Person&limit=5`);
+  const typed = await handle('GET', `/v1/subjects/${work}/relations?property=schema:character&type=wd:Q95074&limit=5`);
   expect(typed.status).toBe(200);
   if (typed.body.count) {
     expect(typed.body.count.exact === true ? typed.body.count.value : typed.body.count.value).toBeGreaterThan(0);
