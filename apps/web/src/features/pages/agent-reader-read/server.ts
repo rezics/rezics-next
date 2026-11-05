@@ -20,8 +20,13 @@ export const readAgentReader = createServerFn({ method: 'GET', strict: false })
   .handler(async ({ data }): Promise<AgentReaderResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const page = await loadSettingsPage(kernelClient(data.locale), request, env as Parameters<typeof loadSettingsPage>[2], {
-      signal: request.signal,
-    });
+    const page = await loadSettingsPage(
+      kernelClient(data.locale),
+      request,
+      env as Parameters<typeof loadSettingsPage>[2],
+      {
+        signal: request.signal,
+      },
+    );
     return agentReaderResult(data.expectedReader, page);
   });
