@@ -829,10 +829,13 @@ native opaque-ID allowance does not widen that established browser rule. The con
 then display name, then localized fallback, with no truncation.
 Submission revalidates the review and uses the installed approval, execution and step-up protocol. Accepted deletion
 is distinct from cleanup completion. The browser shares `account-operation-response-bounds.ts`: approval is exactly
-`{reference,expiresAt}` with `DELETION_APPROVAL_MAX_RESPONSE_BYTES = JSON.stringify({reference:'',expiresAt:''}).length + 6 × 4096 + 27`; execution is exactly `{accountId}` with
-`DELETION_EXECUTION_MAX_RESPONSE_BYTES = JSON.stringify({accountId:''}).length + 6 × 4096`; error receiving uses the
-larger serialized closed refusal. References are opaque nonempty strings up to 4,096 UTF-16 units and expiry must be
-canonical and still future. Only the exact original `{accountId}` result matching the selected organization
+`{reference,expiresAt}` with
+`DELETION_APPROVAL_MAX_RESPONSE_BYTES = JSON.stringify({reference:'',expiresAt:''}).length + 6 × 4096 + 27`;
+execution is exactly `{accountId}` with
+`DELETION_EXECUTION_MAX_RESPONSE_BYTES = JSON.stringify({accountId:''}).length + 6 × 4096`. Error receiving uses
+`max(JSON.stringify({error:'account_operation_denied',effect_status:'not_applied'}).length,
+JSON.stringify({error:'step_up_required',effect_status:'not_applied'}).length)`. References are opaque nonempty strings
+up to 4,096 UTF-16 units and expiry must be canonical and still future. Only the exact original `{accountId}` result matching the selected organization
 acknowledges this command. Advice, status, malformed output and mismatched identity do not. An acknowledgement means
 the native tombstone committed with cleanup pending; it does not claim downstream erasure, backup removal or deletion
 of external copies. Uncertain results retain the original human, organization and key through unavailable, missing,
@@ -865,11 +868,12 @@ Decision: an original exact `{accountId}` response is the only deletion acknowle
 remains a separate observation. Entry costs one deletion-review POST. A confirmed submit adds one preflight review,
 one approval and one execution (four POSTs through the first attempt); exact unavailable approval and execution
 responses may each add one same-body retry, for six POSTs maximum through submit. Each POST has one five-second
-headers-and-body lifetime. Cached return and each explicit read Retry add one current review and zero commands; focus,
-history and departure add zero requests. Timeout, transport loss, malformed output and departure do not retry a
-command. Step-up returns to deliberate review and typed confirmation. Every review has before/after actual Auth-session
-proof. Ordinary live-human advice returns authentication-required without target, role or permission I/O, and exposes
-no target detail. An untrusted target/key survives only as the auth continuation; exact-profile denial remains denial.
+headers-and-body lifetime. Cached return retires private advice and waits for a deliberate current review; that read and
+each explicit read Retry add one review and zero commands. Focus, history and departure add zero requests. Timeout,
+transport loss, malformed output and departure do not retry a command. Step-up returns to deliberate review and typed
+confirmation. Every review has before/after actual Auth-session proof. Ordinary live-human advice returns
+authentication-required without target, role or permission I/O, and exposes no target detail. An untrusted target/key
+survives only as the auth continuation; exact-profile denial remains denial.
 
 The exact admitted profile branch separately composes two native snapshots: four account reads, four partition-anchor
 reads and two organization-role reads, plus bounded ENTRY preparations/checks and Auth proofs. If both entry and
