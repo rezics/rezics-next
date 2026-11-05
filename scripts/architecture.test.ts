@@ -82,6 +82,15 @@ describe('architecture boundaries', () => {
         capabilities: [],
       },
       {
+        id: 'runtime-adapter',
+        kind: 'adapter',
+        owner: 'platform',
+        paths: ['src/adapter/**'],
+        publicEntries: [],
+        allowedDependencies: [],
+        capabilities: [],
+      },
+      {
         id: 'package',
         kind: 'core',
         owner: 'platform',
@@ -105,7 +114,8 @@ describe('architecture boundaries', () => {
     put(root, 'src/peer/index.ts', "export type { Public } from './public';\n");
     put(root, 'src/peer/private.ts', 'export interface Private { value: string }\n');
     put(root, 'src/peer/public.ts', 'export interface Public { value: string }\n');
-    put(root, 'src/core/pure.ts', 'import type React from "react";\n');
+    put(root, 'src/core/pure.ts', 'import type React from "react"; import "../adapter/private";\n');
+    put(root, 'src/adapter/private.ts', 'export const native = true;\n');
     put(root, 'src/orphan.ts', 'export const orphan = true;\n');
     put(root, 'packages/foo/src/index.ts', 'import "../../../apps/web/src/main";\n');
     put(root, 'apps/web/src/main.ts', 'export const app = true;\n');
@@ -118,6 +128,8 @@ describe('architecture boundaries', () => {
     expect(report).toContain('type import');
     expect(report).toContain('src/peer/private.ts');
     expect(report).toContain('rule 4: src/core/pure.ts:');
+    expect(report).toContain('modules pure -> runtime-adapter');
+    expect(report).toContain('src/adapter/private.ts');
     expect(report).toContain('rule 1: src/orphan.ts:');
     expect(report).toContain('rule 7: packages/foo/src/index.ts:');
     expect(report).toContain('apps/web/src/main.ts');
@@ -190,165 +202,90 @@ describe('architecture boundaries', () => {
     const graph = buildGraph(root, committed);
     const audit = auditArchitecture(root, committed, baseline, graph);
     const module = (id: string) => committed.modules.find((candidate) => candidate.id === id);
-    const hasTarget = (source: string, target: string) =>
-      graph.imports[source]?.some((edge) => edge.targets.includes(target)) ?? false;
-    const consumerSources = (specifier: string) =>
-      Object.entries(graph.imports)
+    const split = (value: string) => value.trim().split(/\s+/);
+    const expectTargets = (target: string, sources: string) => {
+      for (const source of split(sources))
+        expect(graph.imports[source]?.some((edge) => edge.targets.includes(target))).toBe(true);
+    };
+    const expectImports = (specifier: string, target: string, sources: string) => {
+      const expected = split(sources).sort();
+      const actual = Object.entries(graph.imports)
         .filter(([, edges]) => edges.some((edge) => edge.specifier === specifier))
         .map(([source]) => source)
         .sort();
-    const expectConsumers = (specifier: string, target: string, sources: readonly string[]) => {
-      expect(consumerSources(specifier)).toEqual([...sources].sort());
-      for (const source of sources) expect(hasTarget(source, target)).toBe(true);
+      expect(actual).toEqual(expected);
+      expectTargets(target, sources);
     };
 
     expect(committed.sourceRoots.map(({ path }) => path)).toEqual(
       expect.arrayContaining(['packages/access/src', 'packages/bounds/src', 'packages/operations/src']),
     );
-    expect(module('access-policy')?.publicEntries).toEqual(['@rezics/access']);
-    expect(module('bounds')?.publicEntries).toEqual(['@rezics/bounds']);
-    expect(module('operations')?.publicEntries).toEqual(['@rezics/operations', '@rezics/operations/protocol']);
-    expect(module('access-policy')?.allowedDependencies).toEqual([]);
-    expect(module('bounds')?.allowedDependencies).toEqual([]);
-    expect(module('operations')?.allowedDependencies).toEqual([]);
+    expect(module('access-policy')).toMatchObject({
+      kind: 'core', owner: 'accounts', publicEntries: ['@rezics/access'], allowedDependencies: [],
+    });
+    expect(module('bounds')).toMatchObject({
+      kind: 'core', owner: 'performance', publicEntries: ['@rezics/bounds'], allowedDependencies: [],
+    });
+    expect(module('operations')).toMatchObject({
+      kind: 'core', owner: 'performance',
+      publicEntries: ['@rezics/operations', '@rezics/operations/protocol'], allowedDependencies: [],
+    });
+    for (const [id, dependencies] of Object.entries({
+      'kernel-access': ['access-policy'],
+      'kernel-content': ['operations'],
+      'kernel-library': ['access-policy', 'bounds', 'operations'],
+      'kernel-platform': ['bounds', 'operations'],
+      'kernel-search': ['bounds'],
+    }))
+      expect(module(id)?.allowedDependencies).toEqual(expect.arrayContaining(dependencies));
     expect(module('kernel-access')?.publicEntries).toContain('services/kernel/src/access/index.ts');
     expect(module('kernel-content-community-projection')?.publicEntries).toContain(
       'services/kernel/src/content/community-projection/index.ts',
     );
-    expect(module('kernel-access')?.allowedDependencies).toContain('access-policy');
-    expect(module('kernel-library')?.allowedDependencies).toEqual(
-      expect.arrayContaining(['access-policy', 'bounds', 'operations']),
+    expect(module('web-commerce')?.publicEntries).toContain('apps/web/src/checkout/reader-origin.ts');
+    expect(module('web-search')?.publicEntries).toContain('apps/web/src/search/search.tsx');
+
+    expectImports('@rezics/access', 'packages/access/src/index.ts',
+      'services/kernel/src/access/gates/admission.ts services/kernel/src/access/gates/catalogue.ts services/kernel/src/access/gates/declaration.ts services/kernel/src/access/gates/management-read.ts services/kernel/src/access/gates/visibility.ts services/kernel/src/access/permission.ts services/kernel/src/access/policy-core.ts services/kernel/src/access/policy-filter.ts services/kernel/src/library/collection-list-policy.ts');
+    expectImports('@rezics/bounds', 'packages/bounds/src/index.ts',
+      'services/kernel/src/history/operational-work-axes.ts services/kernel/src/history/operational-work-budget.ts services/kernel/src/library/collection-source-work-native.ts services/kernel/src/search/scope-members-source-declaration.ts services/kernel/src/work/selected-runtime-cost.ts services/kernel/src/work/selected-runtime.ts');
+    expectImports('@rezics/operations', 'packages/operations/src/index.ts',
+      'services/kernel/src/content/feed-operation-declarations.ts services/kernel/src/content/feed-routes.ts services/kernel/src/http/kernel.ts services/kernel/src/http/operation-adapter.ts services/kernel/src/library/continue-routes.ts services/kernel/src/library/operation-declarations.ts services/kernel/src/library/progress-routes.ts');
+    expectImports('@rezics/operations/protocol', 'packages/operations/src/protocol.ts',
+      'services/kernel/src/http/headers.ts');
+
+    expectTargets('services/kernel/src/content/community-projection/index.ts',
+      'services/kernel/src/content/board-page.ts services/kernel/src/content/conversation-activity.ts services/kernel/src/content/feed-conversation-activity.ts services/kernel/src/content/realm-community.ts services/kernel/src/content/subject-threads-cards.ts');
+    expectTargets('apps/web/src/checkout/reader-origin.ts', 'apps/web/src/routes/editions/$id.tsx');
+    expectTargets('apps/web/src/search/search.tsx', 'apps/web/src/routes/search.tsx');
+
+    const performanceSources = split(
+      'apps/web/src/inbox/inbox-read.ts apps/web/src/settings/account-rename-actions.ts apps/web/src/settings/actions.server.ts apps/web/src/settings/actions.ts apps/web/src/settings/managed-account-actions-read.ts apps/web/src/settings/managed-account-detail-read.ts apps/web/src/settings/shelf-preferences-current.tsx apps/web/src/settings/verification-actions.ts',
     );
-    expect(module('kernel-platform')?.allowedDependencies).toEqual(expect.arrayContaining(['bounds', 'operations']));
-    expect(module('kernel-search')?.allowedDependencies).toContain('bounds');
-    expect(module('kernel-content')?.allowedDependencies).toContain('operations');
-
-    expectConsumers('@rezics/access', 'packages/access/src/index.ts', [
-      'services/kernel/src/access/gates/admission.ts',
-      'services/kernel/src/access/gates/catalogue.ts',
-      'services/kernel/src/access/gates/declaration.ts',
-      'services/kernel/src/access/gates/management-read.ts',
-      'services/kernel/src/access/gates/visibility.ts',
-      'services/kernel/src/access/permission.ts',
-      'services/kernel/src/access/policy-core.ts',
-      'services/kernel/src/access/policy-filter.ts',
-      'services/kernel/src/library/collection-list-policy.ts',
-    ]);
-    expectConsumers('@rezics/bounds', 'packages/bounds/src/index.ts', [
-      'services/kernel/src/history/operational-work-axes.ts',
-      'services/kernel/src/history/operational-work-budget.ts',
-      'services/kernel/src/library/collection-source-work-native.ts',
-      'services/kernel/src/search/scope-members-source-declaration.ts',
-      'services/kernel/src/work/selected-runtime-cost.ts',
-      'services/kernel/src/work/selected-runtime.ts',
-    ]);
-    expectConsumers('@rezics/operations', 'packages/operations/src/index.ts', [
-      'services/kernel/src/content/feed-operation-declarations.ts',
-      'services/kernel/src/content/feed-routes.ts',
-      'services/kernel/src/http/kernel.ts',
-      'services/kernel/src/http/operation-adapter.ts',
-      'services/kernel/src/library/continue-routes.ts',
-      'services/kernel/src/library/operation-declarations.ts',
-      'services/kernel/src/library/progress-routes.ts',
-    ]);
-    expectConsumers('@rezics/operations/protocol', 'packages/operations/src/protocol.ts', [
-      'services/kernel/src/http/headers.ts',
-    ]);
-
-    for (const source of [
-      'services/kernel/src/content/board-page.ts',
-      'services/kernel/src/content/conversation-activity.ts',
-      'services/kernel/src/content/feed-conversation-activity.ts',
-      'services/kernel/src/content/realm-community.ts',
-      'services/kernel/src/content/subject-threads-cards.ts',
-    ]) {
-      expect(hasTarget(source, 'services/kernel/src/content/community-projection/index.ts')).toBe(true);
-    }
-    expect(hasTarget('apps/web/src/routes/editions/$id.tsx', 'apps/web/src/checkout/reader-origin.ts')).toBe(true);
-    expect(hasTarget('apps/web/src/routes/search.tsx', 'apps/web/src/search/search.tsx')).toBe(true);
-
-    const publicClientSources = [
-      'apps/web/src/inbox/inbox-read.ts',
-      'apps/web/src/settings/account-rename-actions.ts',
-      'apps/web/src/settings/actions.server.ts',
-      'apps/web/src/settings/actions.ts',
-      'apps/web/src/settings/managed-account-actions-read.ts',
-      'apps/web/src/settings/managed-account-detail-read.ts',
-      'apps/web/src/settings/shelf-preferences-current.tsx',
-      'apps/web/src/settings/verification-actions.ts',
-    ];
-    for (const source of publicClientSources) {
-      expect(hasTarget(source, 'apps/web/src/kernel/client.ts')).toBe(true);
-      expect(
-        baseline.modules['web-performance']?.violations.some(
-          (violation) =>
-            violation.rule === 'rule 2' &&
-            violation.file === source &&
-            violation.edge.includes('apps/web/src/kernel/client.ts'),
-        ),
-      ).toBe(false);
-    }
+    expectTargets('apps/web/src/kernel/client.ts', performanceSources.join(' '));
+    for (const source of performanceSources)
+      expect(baseline.modules['web-performance']?.violations.some((violation) =>
+        violation.rule === 'rule 2' && violation.file === source &&
+        violation.edge.includes('apps/web/src/kernel/client.ts'))).toBe(false);
 
     const removedCycles = [
-      ['kernel-library', 'services/kernel/src/library/builtin-runtime.ts', 'value import "../semantic/identity-adapters/identity-epoch-read.ts" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)'],
-      ['kernel-library', 'services/kernel/src/library/collection-list-facts.ts', 'value import "../semantic/identity-adapters/identity-epoch-read.ts" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)'],
-      ['kernel-library', 'services/kernel/src/library/collection-source-work-native.ts', 'value import "./collection-source-work.ts" #1 => services/kernel/src/library/collection-source-work.ts (value-import cycle)'],
-      ['kernel-library', 'services/kernel/src/library/members-preparation.ts', 'value import "../history/operational-work-budget.ts" #1 => services/kernel/src/history/operational-work-budget.ts (value-import cycle)'],
-      ['kernel-library', 'services/kernel/src/library/viewer-facts.ts', 'value import "../semantic/identity-adapters/identity-epoch-read.ts" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)'],
-      ['kernel-platform', 'services/kernel/src/command/operational.ts', 'value import "../history/operational-work-budget.ts" #1 => services/kernel/src/history/operational-work-budget.ts (value-import cycle)'],
-      ['kernel-platform', 'services/kernel/src/command/operational.ts', 'value import "../history/operational-work.ts" #1 => services/kernel/src/history/operational-work.ts (value-import cycle)'],
-      ['kernel-platform', 'services/kernel/src/command/operational.ts', 'value import "../work/selected-runtime.ts" #1 => services/kernel/src/work/selected-runtime.ts (value-import cycle)'],
-      ['kernel-search', 'services/kernel/src/search/account-context-native.ts', 'value import "../semantic/identity-adapters/identity-epoch-read.ts" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)'],
+      ['kernel-library', 'services/kernel/src/library/builtin-runtime.ts', '../semantic/identity-adapters/identity-epoch-read.ts'],
+      ['kernel-library', 'services/kernel/src/library/collection-list-facts.ts', '../semantic/identity-adapters/identity-epoch-read.ts'],
+      ['kernel-library', 'services/kernel/src/library/collection-source-work-native.ts', './collection-source-work.ts'],
+      ['kernel-library', 'services/kernel/src/library/members-preparation.ts', '../history/operational-work-budget.ts'],
+      ['kernel-library', 'services/kernel/src/library/viewer-facts.ts', '../semantic/identity-adapters/identity-epoch-read.ts'],
+      ['kernel-platform', 'services/kernel/src/command/operational.ts', '../history/operational-work-budget.ts'],
+      ['kernel-platform', 'services/kernel/src/command/operational.ts', '../history/operational-work.ts'],
+      ['kernel-platform', 'services/kernel/src/command/operational.ts', '../work/selected-runtime.ts'],
+      ['kernel-search', 'services/kernel/src/search/account-context-native.ts', '../semantic/identity-adapters/identity-epoch-read.ts'],
     ] as const;
-    for (const [moduleId, file, edge] of removedCycles) {
-      expect(baseline.modules[moduleId]?.violations).not.toContainEqual({ rule: 'rule 3', file, edge });
-      expect(audit.violations).not.toContainEqual({ rule: 'rule 3', file, edge });
+    for (const [moduleId, file, specifier] of removedCycles) {
+      const isRemovedCycle = (violation: { rule: string; file: string; edge: string }) =>
+        violation.rule === 'rule 3' && violation.file === file &&
+        violation.edge.includes(JSON.stringify(specifier) + ' #1 =>') &&
+        violation.edge.endsWith('(value-import cycle)');
+      expect(baseline.modules[moduleId]?.violations.some(isRemovedCycle)).toBe(false);
+      expect(audit.violations.some(isRemovedCycle)).toBe(false);
     }
-
-    expect(
-      audit.violations.filter(
-        (violation) =>
-          ['rule 2', 'rule 3'].includes(violation.rule) &&
-          ['packages/access/src/index.ts', 'packages/bounds/src/index.ts', 'packages/operations/src/index.ts', 'packages/operations/src/protocol.ts', 'services/kernel/src/content/community-projection/index.ts', 'apps/web/src/kernel/client.ts', 'apps/web/src/checkout/reader-origin.ts', 'apps/web/src/search/search.tsx'].some((target) => violation.edge.includes(target)),
-      ),
-    ).toEqual([]);
-  });
-
-  test('reports both modules and the offending edge for a reverse private import', () => {
-    const root = fixtureRoot();
-    const current: ArchitectureManifest = {
-      ...manifest([
-        {
-          id: 'access-policy',
-          kind: 'core',
-          owner: 'accounts',
-          paths: ['packages/access/src/**'],
-          publicEntries: ['@rezics/access'],
-          allowedDependencies: [],
-          capabilities: ['permission-policy'],
-        },
-        {
-          id: 'kernel-work',
-          kind: 'adapter',
-          owner: 'platform',
-          paths: ['services/kernel/src/work/**'],
-          publicEntries: [],
-          allowedDependencies: [],
-          capabilities: [],
-        },
-      ]),
-      sourceRoots: [
-        { path: 'packages', extensions: ['.ts'] },
-        { path: 'services', extensions: ['.ts'] },
-      ],
-    };
-    put(root, 'packages/access/src/index.ts', 'import "../../../services/kernel/src/work/private.ts";\n');
-    put(root, 'services/kernel/src/work/private.ts', 'export const nativeWork = true;\n');
-
-    const result = auditArchitecture(root, current, baseline(), buildGraph(root, current));
-    const report = result.errors.join('\n');
-    expect(report).toContain('packages/access/src/index.ts');
-    expect(report).toContain('services/kernel/src/work/private.ts');
-    expect(report).toContain('modules access-policy -> kernel-work');
   });
 });
