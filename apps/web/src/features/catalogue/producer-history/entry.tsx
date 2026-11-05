@@ -1,6 +1,6 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { subjectHref } from '../../../subject/subject-href';
-import { m } from '../../paraglide/messages.js';
+import { m } from '../../../paraglide/messages.js';
 import { catalogueEntries } from '../catalogue-entry';
 import { producerHistoryEntryVisit } from './visit';
 
