@@ -5,7 +5,7 @@ import { SQL_COMMENT_BYTE_BOUND, statementBytes } from '../src/sql/statement-byt
 
 test('SQL work bounds include the comment Reylo adds only at dispatch', async () => {
   for (const source of ["src/é'--query.sql", 'src/plain.sql']) {
-    const query = defineQuery<{}, { answer: number }, 'one'>({
+    const query = defineQuery<{}, { answer: number }, 'one', 'postgres'>({
       dialect: 'postgres',
       sql: 'SELECT 7 AS answer; -- trailing comment',
       params: [],
