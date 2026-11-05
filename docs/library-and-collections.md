@@ -58,14 +58,13 @@ is background evidence, not implementation evidence.
 
 ## Private consumption diary
 
-The [private diary](library-consumption-diary.md) adopts cross-subject occurrence navigation over real native
-sessions, separately from public published logs and current shelf summaries. Decision: order by immutable recording
-start descending, then full session UUID descending; use eight expiring owner navigation slots and the existing
-presented session method for exact reopening. Repeats and unfinished sessions remain separate. Recording timestamps
-are explicitly labelled audit facts. Decision: read partial dates and their independent revision from the installed
-journal owner in the bounded session seek; unknown dates remain null, without an invented historical sort.
-Native subject visibility controls optional labels. The linked contract owns installed methods,
-caller binding, bounded continuation lifecycle, concurrent edits, terminal fences and Web recovery semantics.
+The [private diary](library-consumption-diary.md) navigates native sessions across subjects, separately from public
+logs and shelf summaries. Order by immutable recorded start descending, then full session UUID descending. Use eight
+expiring owner slots and the existing presented-session method for exact reopening. Keep repeats and unfinished
+sessions separate; label recording times as audit facts. Read partial dates and their independent journal revision
+in the bounded session seek; unknown dates stay null, without an invented historical sort. Native subject visibility
+controls optional labels. The linked contract owns caller binding, continuation lifecycle, edits, terminal fences
+and Web recovery.
 
 Decision: Diary page and period reads preserve ordinary permission denial and account-independent platform closure
 as separate region outcomes, without retained facts or Retry. A refused reported-year summary cannot admit
