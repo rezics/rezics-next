@@ -1,9 +1,13 @@
+import { createHash } from 'node:crypto';
 import {
   type CollectionDiscoverySource,
   type CollectionDiscoveryKey,
   type CollectionDiscoverySnapshot,
   type CollectionDiscoveryPage,
   type CollectionDiscoveryItem,
+  type CollectionDiscoveryQuery,
+  type CollectionDiscoveryOperands,
+  type CollectionDiscoveryPosition,
 } from '../library/collection-discovery-source.ts';
 import {
   readPublicCollectionDiscoverySummaries,
@@ -11,6 +15,7 @@ import {
   type PublicCollectionDiscoveryContext,
   type PublicCollectionDiscoveryResult,
   type PublicCollectionDiscoverySummary,
+  type PublicCollectionDiscoveryOperand,
 } from '../library/collection-discovery-summaries.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { DiscoveryOwnerAdapter, DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';
@@ -20,9 +25,46 @@ export type CollectionDiscoveryPageKey = CollectionDiscoveryKey;
 export type PublicCollectionDiscoverySource = CollectionDiscoverySource;
 export type { PublicCollectionDiscoveryContext, PublicCollectionDiscoveryResult, PublicCollectionDiscoverySummary };
 
+/** Search consumes only current native eligibility operands. Withheld identities never match a filter. */
+export function collectionDiscoveryOperandMatches(
+  operand: PublicCollectionDiscoveryOperand,
+  query: CollectionDiscoveryQuery,
+): boolean {
+  return (
+    (query.presentationKind === undefined || operand.eligible.presentationKind === true) &&
+    (query.curatorAccountId === undefined || operand.eligible.curator === true) &&
+    (query.subjectId === undefined || operand.eligible.subject === true)
+  );
+}
+
+/** Popularity is descending and recency is newest first with nulls last; both use full identity ties. */
+export function compareCollectionDiscoveryOperands(
+  left: Readonly<{ key: CollectionDiscoveryKey; operand: PublicCollectionDiscoveryOperand }>,
+  right: Readonly<{ key: CollectionDiscoveryKey; operand: PublicCollectionDiscoveryOperand }>,
+  order: 'identity' | 'popularity' | 'recency',
+): number {
+  if (order === 'popularity') {
+    const leftCount = BigInt(left.operand.popularity!.followers);
+    const rightCount = BigInt(right.operand.popularity!.followers);
+    if (leftCount !== rightCount) return leftCount > rightCount ? -1 : 1;
+  } else if (order === 'recency') {
+    const leftTime = left.operand.recency[0];
+    const rightTime = right.operand.recency[0];
+    if (leftTime === null && rightTime !== null) return 1;
+    if (leftTime !== null && rightTime === null) return -1;
+    if (leftTime !== null && rightTime !== null) {
+      const leftMicros = BigInt(leftTime);
+      const rightMicros = BigInt(rightTime);
+      if (leftMicros !== rightMicros) return leftMicros > rightMicros ? -1 : 1;
+    }
+  }
+  return compare(left.key, right.key);
+}
+
 export type CollectionDiscoverySummaryReader = (
   ids: readonly string[],
   context: PublicCollectionDiscoveryContext,
+  query?: CollectionDiscoveryQuery,
 ) => Promise<PublicCollectionDiscoveryResult>;
 export type CollectionDiscoveryProducer =
   | Readonly<{
@@ -93,7 +135,6 @@ function nullableText(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
 
-/** Copy only native indexing hints. Neither the hint nor a source stamp authorizes a card. */
 function item(value: unknown, partition: number): CollectionDiscoveryItem {
   if (!record(value)) throw new TypeError('Invalid native Collection discovery item');
   const key = keyIn(value.key, partition);
@@ -121,6 +162,7 @@ function item(value: unknown, partition: number): CollectionDiscoveryItem {
     description: row.description,
     presentationKind: row.presentationKind,
     coverMediaId: row.coverMediaId,
+    operands: row.operands as CollectionDiscoveryOperands,
   };
   if (row.membershipKind === 'curated' && row.output === null)
     return { key, status: 'indexable', value: { ...common, membershipKind: 'curated', output: null } };
@@ -145,7 +187,8 @@ function item(value: unknown, partition: number): CollectionDiscoveryItem {
 }
 function snapshot(value: CollectionDiscoverySnapshot, partition: number): CollectionDiscoverySnapshot {
   if (value.status === 'unavailable') {
-    if (value.reason !== 'native_partition_unavailable') throw new TypeError('Invalid native partition status');
+    if (value.reason !== 'native_partition_unavailable' && value.reason !== 'follow_count_unavailable')
+      throw new TypeError('Invalid native Collection source status');
     return { status: 'unavailable', reason: value.reason };
   }
   if (
@@ -159,7 +202,12 @@ function snapshot(value: CollectionDiscoverySnapshot, partition: number): Collec
   )
     throw new TypeError('Invalid native Collection discovery snapshot');
   // Position belongs to the partition log; Collection revision belongs to the Collection.
-  const stamp = { partition, epoch: value.stamp.epoch, position: value.stamp.position };
+  const stamp = {
+    partition,
+    epoch: value.stamp.epoch,
+    position: value.stamp.position,
+    ...(value.stamp.followCountHealth ? { followCountHealth: value.stamp.followCountHealth } : {}),
+  };
   bounded(value.items);
   const items = value.items.map((value) => item(value, partition));
   for (let index = 1; index < items.length; index++)
@@ -190,11 +238,14 @@ function page(
 }
 function summaries(value: PublicCollectionDiscoveryResult, ids: readonly string[]): PublicCollectionDiscoveryResult {
   if (value.state === 'unavailable') {
-    if (!['native_authority', 'changed', 'access', 'partition', 'deadline'].includes(value.reason))
+    if (!['native_authority', 'changed', 'access', 'partition', 'deadline', 'follow_count'].includes(value.reason))
       throw new TypeError('Invalid current Collection disclosure status');
     return { state: 'unavailable', reason: value.reason };
   }
-  if (value.state !== 'ready' || !Array.isArray(value.summaries))
+  if (
+    value.state !== 'ready' ||
+    !Array.isArray(value.summaries)
+  )
     throw new TypeError('Invalid current Collection summaries');
   const byId = new Map<string, PublicCollectionDiscoverySummary>();
   for (const card of value.summaries) {
@@ -249,7 +300,13 @@ function summaries(value: PublicCollectionDiscoveryResult, ids: readonly string[
       byId.set(card.id, { ...common, membershipKind: 'dynamic', outputGeneration: card.outputGeneration });
     } else throw new TypeError('Invalid current dynamic Collection summary');
   }
-  return { state: 'ready', summaries: ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])) };
+  const summaries = ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+  return {
+    state: 'ready',
+    summaries,
+    operands: value.operands,
+    queryObservation: value.queryObservation,
+  };
 }
 
 /** Validation boundary over the installed Commerce contracts, also usable by owner contract tests. */
@@ -264,7 +321,7 @@ export function createCollectionDiscoveryAdapter(
   return {
     status: 'ready',
     source: {
-      async read(partitionValue, values) {
+      async read(partitionValue, values, query, context) {
         const partition = partitionKey(partitionValue);
         bounded(values);
         const keys = [
@@ -275,7 +332,7 @@ export function createCollectionDiscoveryAdapter(
             }),
           ).values(),
         ].sort(compare);
-        const result = snapshot(await producer.source.read(partition, keys), partition);
+        const result = snapshot(await producer.source.read(partition, keys, query, context), partition);
         if (
           result.status === 'available' &&
           (result.items.length !== keys.length || result.items.some((item, i) => compare(item.key, keys[i]!) !== 0))
@@ -289,17 +346,17 @@ export function createCollectionDiscoveryAdapter(
           throw new TypeError('Collection discovery has no native census authority');
         return { status: 'unavailable', reason: result.reason };
       },
-      async page(partitionValue, afterValue, limit) {
+      async page(partitionValue, afterValue, limit, query, context) {
         const partition = partitionKey(partitionValue);
         if (!Number.isSafeInteger(limit) || limit < 1 || limit > COLLECTION_DISCOVERY_BATCH_SIZE)
           throw new RangeError('Collection discovery page limit is outside its bound');
         const after = afterValue === null ? null : keyIn(afterValue, partition);
-        return page(await producer.source.page(partition, after, limit), partition, after, limit);
+        return page(await producer.source.page(partition, after, limit, query, context), partition, after, limit);
       },
     },
-    async hydrate(ids, context) {
+    async hydrate(ids, context, query) {
       const requested = idsIn(ids, partitionKey(context.partition));
-      return summaries(await producer.readSummaries(requested, context), requested);
+      return summaries(await producer.readSummaries(requested, context, query), requested);
     },
   };
 }
@@ -318,7 +375,7 @@ export function createNativeCollectionDiscoveryAdapter(
   const leaf = createCollectionDiscoveryAdapter({
     status: 'ready',
     source: dependencies.source,
-    readSummaries: (ids, context) => readPublicCollectionDiscoverySummaries(dependencies, ids, context),
+    readSummaries: (ids, context, query) => readPublicCollectionDiscoverySummaries(dependencies, ids, context, query),
   });
   if (leaf.status !== 'ready') throw new CollectionDiscoveryReadinessError(leaf.status, leaf.reason);
   return {
@@ -340,12 +397,23 @@ export function createNativeCollectionDiscoveryAdapter(
             groups.set(partition, group);
           }
           const current = new Map<string, DiscoveryOwnerMetadataSummary<'collection'>>();
+          const query = context.collectionQuery ?? {};
           for (const [partition, group] of groups) {
+            let partitionObservation: CollectionDiscoveryPosition | undefined;
             for (let offset = 0; offset < group.length; offset += COLLECTION_DISCOVERY_BATCH_SIZE) {
               const batch = group.slice(offset, offset + COLLECTION_DISCOVERY_BATCH_SIZE);
-              const source = await leaf.source.read(partition, batch.map(keyOf));
+              const source = await leaf.source.read(partition, batch.map(keyOf), query, { deadline: context.deadline });
               if (source.status !== 'available')
                 throw new CollectionDiscoveryReadinessError('unavailable', source.reason);
+              if (
+                partitionObservation &&
+                (partitionObservation.epoch !== source.stamp.epoch ||
+                  partitionObservation.position !== source.stamp.position ||
+                  JSON.stringify(partitionObservation.followCountHealth ?? null) !==
+                    JSON.stringify(source.stamp.followCountHealth ?? null))
+              )
+                throw new CollectionDiscoveryReadinessError('unavailable', 'current_source_changed');
+              partitionObservation ??= source.stamp;
               const sourceRows = new Map(
                 source.items.flatMap((item) =>
                   item.status === 'indexable' ? [[item.key.id, item.value] as const] : [],
@@ -353,30 +421,74 @@ export function createNativeCollectionDiscoveryAdapter(
               );
               // Use this request's Access, actor and deadline, never a cached viewer or indexing hint.
               const result = summaries(
-                await readPublicCollectionDiscoverySummaries({ ...dependencies, access: context.access }, batch, {
-                  actor: context.actor,
-                  partition,
-                  deadline: context.deadline,
-                  ...(context.languages ? { languages: context.languages } : {}),
-                }),
+                await readPublicCollectionDiscoverySummaries(
+                  { ...dependencies, access: context.access },
+                  batch,
+                  {
+                    actor: context.actor,
+                    partition,
+                    deadline: context.deadline,
+                    ...(context.languages ? { languages: context.languages } : {}),
+                  },
+                  query,
+                ),
                 batch,
               );
               if (result.state === 'unavailable')
                 throw new CollectionDiscoveryReadinessError('unavailable', result.reason);
+              const operands = new Map(result.operands.map((operand) => [operand.id, operand]));
               for (const card of result.summaries) {
                 const row = sourceRows.get(card.id);
-                if (!row || row.revision !== card.revision)
+                const nativeOperand = operands.get(card.id);
+                if (
+                  !row ||
+                  row.revision !== card.revision ||
+                  row.membershipKind !== card.membershipKind ||
+                  (card.membershipKind === 'dynamic' && row.output.generation !== card.outputGeneration) ||
+                  !nativeOperand ||
+                  JSON.stringify(row.operands.presentationKind) !== JSON.stringify(nativeOperand.presentationKind) ||
+                  JSON.stringify(row.operands.recency) !== JSON.stringify(nativeOperand.recency) ||
+                  (query.subjectId !== undefined &&
+                    nativeOperand.subjectMembership?.state === 'available' &&
+                    (row.operands.subjectMembership?.subjectId !== nativeOperand.subjectMembership.subjectId ||
+                      row.operands.subjectMembership.matches !== nativeOperand.subjectMembership.matches)) ||
+                  (query.popularity === true &&
+                    (!row.operands.popularity || !nativeOperand.popularity ||
+                      row.operands.popularity.followers !== nativeOperand.popularity.followers))
+                )
                   throw new CollectionDiscoveryReadinessError('unavailable', 'current_source_changed');
+                if (!collectionDiscoveryOperandMatches(nativeOperand, query)) continue;
                 current.set(card.id, {
                   id: card.id,
                   title: card.title,
                   summary: card.description,
                   revision: String(card.revision),
                   sourcePosition: source.stamp.position,
+                  queryObservation: createHash('sha256')
+                    .update(
+                      JSON.stringify({
+                        source: source.stamp,
+                        summary: result.queryObservation,
+                        operand: nativeOperand,
+                      }),
+                    )
+                    .digest('hex'),
                   card,
+                  operands: nativeOperand,
                 });
               }
             }
+            const finalSource = await leaf.source.read(partition, [], query, { deadline: context.deadline });
+            if (finalSource.status !== 'available')
+              throw new CollectionDiscoveryReadinessError('unavailable', finalSource.reason);
+            if (
+              partitionObservation &&
+              (partitionObservation.epoch !== finalSource.stamp.epoch ||
+                partitionObservation.position !== finalSource.stamp.position ||
+                JSON.stringify(partitionObservation.followCountHealth ?? null) !==
+                  JSON.stringify(finalSource.stamp.followCountHealth ?? null))
+            )
+              throw new CollectionDiscoveryReadinessError('unavailable', 'current_source_changed');
           }
           return new Map([...new Set(ids)].flatMap((id) => (current.has(id) ? [[id, current.get(id)!]] : [])));
         },

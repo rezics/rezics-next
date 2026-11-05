@@ -4,6 +4,8 @@ SELECT c.collection_id::text AS id, c.route, c.title, c.description, c.visibilit
        c.order_epoch AS "orderEpoch", c.source_generation::text AS "sourceGeneration",
        c.presentation_kind AS "presentationKind", c.cover_media_id::text AS "coverMediaId",
        c.created_at::text AS "createdAt", c.updated_at::text AS "updatedAt",
+       CASE WHEN c.membership_kind='curated'
+         THEN trunc(extract(epoch FROM c.updated_at) * 1000000)::text END AS "updatedAtEpochMicros",
        c.curator_account_id::text AS "curatorAccountId", c.curator_account_id IS NULL AS deidentified,
        a.state AS "ownerState", a.minimum_authn_epoch::text AS "ownerEpoch"
 FROM unnest(:routes::integer[], :ids::uuid[]) AS requested(route, id)

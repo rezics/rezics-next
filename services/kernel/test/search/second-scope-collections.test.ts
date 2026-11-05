@@ -5,6 +5,7 @@ import {
   createCollectionDiscoveryAdapter,
   createNativeCollectionDiscoveryAdapter,
   CollectionDiscoveryReadinessError,
+  compareCollectionDiscoveryOperands,
   type PublicCollectionDiscoverySource,
 } from '../../src/search/collection-discovery.ts';
 import type { CollectionDiscoveryItem } from '../../src/library/collection-discovery-source.ts';
@@ -40,6 +41,12 @@ const indexed: CollectionDiscoveryItem = {
     description: null,
     presentationKind: null,
     coverMediaId: null,
+    operands: {
+      presentationKind: { kind: 'mixed' },
+      subjectMembership: null,
+      popularity: null,
+      recency: [null, key(id).route, id],
+    },
     membershipKind: 'curated',
     output: null,
   },
@@ -131,7 +138,11 @@ describe('connected native Collection reader journey', () => {
   afterAll(async () => {
     await f?.close();
   });
-  const deps = () => ({ pool: f.database.pool, access: f.runtime.identity.access });
+  const deps = () => ({
+    pool: f.database.pool,
+    access: f.runtime.identity.access,
+    routeKey: f.runtime.identity.routeKey,
+  });
   const context = (id: string) => ({
     actor: { kind: 'anonymous' } as const,
     partition: partitionOf(routeOf(id)!),
@@ -164,7 +175,11 @@ describe('connected native Collection reader journey', () => {
         space: { readiness: 'unavailable' },
       },
     });
-    const current = async (ids: string[], access: Access = f.runtime.identity.access) => {
+    const current = async (
+      ids: string[],
+      access: Access = f.runtime.identity.access,
+      collectionQuery?: import('../../src/library/collection-discovery-source.ts').CollectionDiscoveryQuery,
+    ) => {
       const groups = new Map<number, ReturnType<typeof key>[]>();
       for (const id of new Set(ids)) {
         const candidateKey = key(id);
@@ -175,7 +190,7 @@ describe('connected native Collection reader journey', () => {
       }
       const candidates = new Map<string, Parameters<typeof hydrateOwnerDiscoveryHits>[1][number]>();
       for (const [partition, keys] of groups) {
-        const snapshot = await leaf.source.read(partition, keys);
+        const snapshot = await leaf.source.read(partition, keys, collectionQuery, { deadline: Date.now() + 120000 });
         if (snapshot.status !== 'available') throw new Error('Collection source is unavailable in connected journey');
         for (const item of snapshot.items) {
           if (item.status !== 'indexable') continue;
@@ -189,7 +204,12 @@ describe('connected native Collection reader journey', () => {
       return hydrateOwnerDiscoveryHits(
         registry,
         ids.flatMap((id) => (candidates.has(id) ? [candidates.get(id)!] : [])),
-        { access, actor: { kind: 'anonymous' }, deadline: Date.now() + 120000 },
+        {
+          access,
+          actor: { kind: 'anonymous' },
+          deadline: Date.now() + 120000,
+          ...(collectionQuery ? { collectionQuery } : {}),
+        },
       );
     };
     return { leaf, current };
@@ -351,7 +371,82 @@ describe('connected native Collection reader journey', () => {
     expect(await leaf.source.read(partition, [key(a.id)])).toMatchObject({
       items: [{ key: key(a.id), status: 'withdrawn' }],
     });
-    expect(await leaf.hydrate([a.id], context(a.id))).toEqual({ state: 'ready', summaries: [] });
+    expect(await leaf.hydrate([a.id], context(a.id))).toMatchObject({ state: 'ready', summaries: [], operands: [] });
     expect(await current([a.id])).toEqual([]);
   }, 120000);
+
+  test('Search receives current mixed kind, disclosed curator and indexed Subject match beyond the card preview', async () => {
+    const { leaf } = connected();
+    const collection = await f.collection({ visibility: 'public' });
+    const subjects = [];
+    for (let index = 0; index < 5; index++) subjects.push(await f.subject(`Discovery member ${index}`));
+    for (const subjectId of subjects)
+      expect((await f.send('POST', `/v1/collections/${collection.id}/members`, { subjectId })).status).toBe(201);
+
+    const query = {
+      presentationKind: { kind: 'mixed' } as const,
+      curatorAccountId: f.runtime.identity.ordinary.accountId,
+      subjectId: subjects[4]!,
+    };
+    const result = await leaf.registration.adapter.readCurrent([collection.id], {
+      access: f.runtime.identity.access,
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 120000,
+      collectionQuery: query,
+    });
+    const current = result.get(collection.id);
+    expect(current).toBeDefined();
+    expect(current?.operands).toMatchObject({
+      presentationKind: { kind: 'mixed' },
+      curator: { state: 'available', id: f.runtime.identity.ordinary.accountId },
+      subjectMembership: { state: 'available', subjectId: subjects[4], matches: true },
+      eligible: { presentationKind: true, curator: true, subject: true },
+    });
+    expect(current?.operands.recency[0]).toMatch(/^-?(0|[1-9][0-9]*)$/);
+    expect(current?.operands.recency.slice(1)).toEqual([routeOf(collection.id), collection.id]);
+    expect(current?.card.preview).toMatchObject({ state: 'available', truncated: true });
+    if (current?.card.preview.state === 'available')
+      expect(current.card.preview.members.map((member) => member.subject.id)).not.toContain(subjects[4]);
+
+    const micros = (
+      await f.database.admin.query<{ micros: string }>(
+        'SELECT trunc(extract(epoch FROM updated_at) * 1000000)::text AS micros FROM library.collection WHERE route=$1 AND collection_id=$2',
+        [routeOf(collection.id), collection.id],
+      )
+    ).rows[0]!.micros;
+    expect(current?.operands.recency).toEqual([micros, routeOf(collection.id), collection.id]);
+  }, 120000);
+});
+
+test('Search collection tie ordering uses exact counts, exact microseconds, nulls last and full identity', () => {
+  const left = {
+    key: key('00000000-0000-7000-8000-000000000021'),
+    operand: {
+      id: '00000000-0000-7000-8000-000000000021',
+      presentationKind: { kind: 'mixed' as const },
+      curator: { state: 'unavailable' as const, reason: 'deidentified' as const },
+      subjectMembership: null,
+      popularity: { followers: '9007199254740993' },
+      recency: ['1791431975123457', key('00000000-0000-7000-8000-000000000021').route, '00000000-0000-7000-8000-000000000021'] as const,
+      eligible: { presentationKind: null, curator: null, subject: null },
+    },
+  };
+  const right = {
+    key: key('00000000-0000-7000-8000-000000000022'),
+    operand: {
+      ...left.operand,
+      id: '00000000-0000-7000-8000-000000000022',
+      popularity: { followers: '9007199254740993' },
+      recency: ['1791431975123456', key('00000000-0000-7000-8000-000000000022').route, '00000000-0000-7000-8000-000000000022'] as const,
+    },
+  };
+  expect(compareCollectionDiscoveryOperands(left, right, 'popularity')).toBeLessThan(0);
+  expect(compareCollectionDiscoveryOperands(left, right, 'recency')).toBeLessThan(0);
+  expect(
+    compareCollectionDiscoveryOperands(
+      { ...left, operand: { ...left.operand, recency: [null, left.key.route, left.key.id] } },
+      right,
+      'recency',
+    ),
+  ).toBeGreaterThan(0);
 });

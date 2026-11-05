@@ -191,6 +191,7 @@ export type MixedDiscoveryRequest = DiscoveryRequest & {
 };
 export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'actor' | 'deadline'> & {
   languages?: readonly string[];
+  collectionQuery?: import('../library/collection-discovery-source.ts').CollectionDiscoveryQuery;
   descriptions?: boolean;
   spoilerThreshold?: 0 | 1 | 2;
   observeRelationRelease?: () => Promise<{
@@ -216,7 +217,9 @@ export type DiscoveryOwnerMetadataSummary<K extends DiscoveryOwnerKind = Discove
       summary: string | null;
       revision: string;
       sourcePosition: string;
+      queryObservation: string;
       card: CollectionDiscoveryCard;
+      operands: import('../library/collection-discovery-summaries.ts').PublicCollectionDiscoveryOperand;
     }>
   : K extends 'review'
     ? Readonly<{

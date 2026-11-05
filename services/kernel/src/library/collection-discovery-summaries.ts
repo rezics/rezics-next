@@ -1,8 +1,12 @@
 /** Native public Collection card hydration. Search candidates and index hints carry no authority here. */
+import { createHash } from 'node:crypto';
 import {
   prepareCollectionDiscoveryContext,
   readDiscoveryMemberKeys,
+  readDiscoverySubjectMembership,
   type CollectionDiscoveryContext,
+  type CollectionCurator,
+  type CollectionDiscoveryContextFilters,
   type DiscoveryMemberKey,
 } from './collection-discovery-context.ts';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -10,6 +14,9 @@ import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline 
 import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
+import { readFollowCountHealthObservation, type FollowCountHealthObservation } from './follow-count-health.ts';
+import { readCollectionDiscoveryFollowCounts } from './follow-count-reads.ts';
+import { FollowCountUnavailableError } from './follow-count-target.ts';
 import { prepareReadDecisions, type Actor } from '../request/access.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import {
@@ -21,6 +28,11 @@ import {
 import { readDiscoveryOutputs } from './collection-discovery-summaries-output.ts';
 import rowsQuery from './collection-discovery-summaries-rows.sql';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
+import type {
+  CollectionDiscoveryQuery,
+  CollectionDiscoveryRecency,
+  CollectionPresentationKind,
+} from './collection-discovery-source.ts';
 
 export const MAX_COLLECTION_DISCOVERY_SUMMARIES = 100;
 export type PublicCollectionDiscoveryContext = Readonly<{
@@ -59,11 +71,32 @@ export type PublicCollectionDiscoverySummary = Card &
       }>
     | Readonly<{ membershipKind: 'dynamic'; outputGeneration: string }>
   );
+export type PublicCollectionDiscoveryOperand = Readonly<{
+  id: string;
+  presentationKind: CollectionPresentationKind;
+  curator: CollectionCurator;
+  subjectMembership:
+    | Readonly<{ state: 'available'; subjectId: string; matches: boolean }>
+    | Readonly<{ state: 'withheld' }>
+    | null;
+  popularity: Readonly<{ followers: string }> | null;
+  recency: CollectionDiscoveryRecency;
+  eligible: Readonly<{
+    presentationKind: boolean | null;
+    curator: boolean | null;
+    subject: boolean | null;
+  }>;
+}>;
 export type PublicCollectionDiscoveryResult =
-  | Readonly<{ state: 'ready'; summaries: readonly PublicCollectionDiscoverySummary[] }>
+  | Readonly<{
+      state: 'ready';
+      summaries: readonly PublicCollectionDiscoverySummary[];
+      operands: readonly PublicCollectionDiscoveryOperand[];
+      queryObservation: string;
+    }>
   | Readonly<{
       state: 'unavailable';
-      reason: 'native_authority' | 'changed' | 'access' | 'partition' | 'deadline';
+      reason: 'native_authority' | 'changed' | 'access' | 'partition' | 'deadline' | 'follow_count';
     }>;
 export type PublicCollectionDiscoveryDependencies = PresentationDependencies;
 
@@ -74,12 +107,66 @@ type Observed = {
   authority: boolean;
   signature: string;
   members: readonly DiscoveryMemberKey[];
+  subjectMatches: boolean | null;
+  followers: string | null;
 };
 type Round = {
   epoch: number;
   node: string;
+  position: string;
+  followCountHealth?: FollowCountHealthObservation;
   rows: ReadonlyMap<string, Observed>;
 };
+
+function presentationMatches(
+  filter: CollectionPresentationKind | undefined,
+  presentationKind: CollectionPresentationKind,
+): boolean | null {
+  if (!filter) return null;
+  return filter.kind === 'mixed'
+    ? presentationKind.kind === 'mixed'
+    : presentationKind.kind === 'owner' && presentationKind.id === filter.id;
+}
+
+function recency(row: Row): CollectionDiscoveryRecency {
+  return [row.membershipKind === 'curated' ? row.updatedAtEpochMicros : null, row.route, row.id];
+}
+
+function operand(
+  observed: Observed,
+  curator: CollectionCurator,
+  query: CollectionDiscoveryQuery,
+  queryCurator: CollectionCurator | null | undefined,
+  querySubject: { id: string } | null | undefined,
+): PublicCollectionDiscoveryOperand {
+  const presentationKind: CollectionPresentationKind = observed.row.presentationKind === null
+    ? { kind: 'mixed' }
+    : { kind: 'owner', id: observed.row.presentationKind };
+  const subjectMembership =
+    query.subjectId === undefined
+      ? null
+      : querySubject
+        ? { state: 'available' as const, subjectId: query.subjectId, matches: observed.subjectMatches ?? false }
+        : { state: 'withheld' as const };
+  return {
+    id: observed.row.id,
+    presentationKind,
+    curator,
+    subjectMembership,
+    popularity: query.popularity ? (observed.followers === null ? null : { followers: observed.followers }) : null,
+    recency: recency(observed.row),
+    eligible: {
+      presentationKind: presentationMatches(query.presentationKind, presentationKind),
+      curator:
+        query.curatorAccountId === undefined
+          ? null
+          : queryCurator?.state === 'available' && curator.state === 'available'
+            ? queryCurator.id === curator.id
+            : false,
+      subject: query.subjectId === undefined ? null : querySubject ? (observed.subjectMatches ?? false) : null,
+    },
+  };
+}
 
 /** Copy and validate the complete request before Access preparation or any owner checkout. */
 function request(ids: readonly string[], context: PublicCollectionDiscoveryContext) {
@@ -139,6 +226,7 @@ async function round(
   dependencies: PublicCollectionDiscoveryDependencies,
   ids: readonly string[],
   context: PublicCollectionDiscoveryContext,
+  query: CollectionDiscoveryQuery = {},
 ): Promise<Round> {
   requireAccessDeadline(context.deadline);
   // Foreign authority is prepared while no Library connection is held. Repeat on final disclosure.
@@ -184,19 +272,55 @@ async function round(
         client,
         visible.map((row) => ({ ...row, outputGeneration: outputs.get(row.id)?.generation ?? null })),
       );
+      const contextSources = visible.map((row) => ({
+        ...row,
+        outputGeneration: outputs.get(row.id)?.generation ?? null,
+      }));
+      const subjectMembership =
+        query.subjectId === undefined
+          ? new Map<string, boolean>()
+          : await readDiscoverySubjectMembership(client, contextSources, query.subjectId);
+      const followCountHealth = query.popularity ? await readFollowCountHealthObservation(client) : undefined;
+      const followCounts = query.popularity
+        ? await readCollectionDiscoveryFollowCounts(
+            client,
+            visible.map((row) => ({ route: row.route, id: row.id })),
+          )
+        : new Map<string, string | null>();
+      if (
+        query.popularity &&
+        visible.some((row) => followCounts.get(row.id) === undefined || followCounts.get(row.id) === null)
+      )
+        throw new FollowCountUnavailableError('A public Collection follow total is unavailable');
       const observed = new Map<string, Observed>();
       for (const row of visible) {
         const output = outputs.get(row.id) ?? null;
+        const subjectMatches = query.subjectId === undefined ? null : (subjectMembership.get(row.id) ?? false);
+        const followers = query.popularity ? followCounts.get(row.id)! : null;
         observed.set(row.id, {
           row,
           output,
           authority: nativeAuthority(row, output),
           members: memberKeys.get(row.id) ?? [],
-          signature: JSON.stringify([signature(row, output), memberKeys.get(row.id) ?? []]),
+          subjectMatches,
+          followers,
+          signature: JSON.stringify([
+            signature(row, output),
+            memberKeys.get(row.id) ?? [],
+            subjectMatches,
+            followers,
+            followCountHealth ?? null,
+          ]),
         });
       }
       await client.query('COMMIT');
-      return { epoch: partition.epoch, node: partition.node, rows: observed };
+      return {
+        epoch: partition.epoch,
+        node: partition.node,
+        position: partition.position.toString(),
+        ...(followCountHealth ? { followCountHealth } : {}),
+        rows: observed,
+      };
     } catch (error) {
       try {
         await connection.query('ROLLBACK');
@@ -250,14 +374,21 @@ export async function readPublicCollectionDiscoverySummaries(
   dependencies: PublicCollectionDiscoveryDependencies,
   ids: readonly string[],
   context: PublicCollectionDiscoveryContext,
+  query: CollectionDiscoveryQuery = {},
 ): Promise<PublicCollectionDiscoveryResult> {
   const admitted = request(ids, context);
-  if (!admitted.ids.length) return { state: 'ready', summaries: [] };
+  if (!admitted.ids.length)
+    return {
+      state: 'ready',
+      summaries: [],
+      operands: [],
+      queryObservation: createHash('sha256').update(JSON.stringify([admitted.context.partition, query])).digest('hex'),
+    };
   const unavailable = (reason: Extract<PublicCollectionDiscoveryResult, { state: 'unavailable' }>['reason']) =>
     ({ state: 'unavailable', reason }) as const;
   try {
     const hydrate = async (): Promise<PublicCollectionDiscoveryResult> => {
-      const before = await round(dependencies, admitted.ids, admitted.context);
+      const before = await round(dependencies, admitted.ids, admitted.context, query);
       const presentations = new Map<string, Omit<CollectionPresentation, 'coverMediaId'>>();
       // Content owns media permission/variant validation. Its capabilities and connections are
       // released before Library's final snapshot; no ordinary Collection read or query runs here.
@@ -283,11 +414,22 @@ export async function readPublicCollectionDiscoverySummaries(
           .map(({ row, output }) => ({ ...row, outputGeneration: output?.generation ?? null })),
         new Map([...before.rows].map(([id, observed]) => [id, observed.members])),
         admitted.context.languages,
+        {
+          ...(query.subjectId === undefined ? {} : { subjectId: query.subjectId }),
+          ...(query.curatorAccountId === undefined ? {} : { curatorAccountId: query.curatorAccountId }),
+        },
       );
+      const final = await round(dependencies, admitted.ids, admitted.context, query);
+      if (
+        before.epoch !== final.epoch ||
+        before.node !== final.node ||
+        before.position !== final.position ||
+        JSON.stringify(before.followCountHealth ?? null) !== JSON.stringify(final.followCountHealth ?? null)
+      )
+        return unavailable('changed');
       if (!(await publicContext.current())) return unavailable('changed');
-      const final = await round(dependencies, admitted.ids, admitted.context);
-      if (before.epoch !== final.epoch || before.node !== final.node) return unavailable('changed');
       const summaries: PublicCollectionDiscoverySummary[] = [];
+      const operands: PublicCollectionDiscoveryOperand[] = [];
       for (const id of admitted.ids) {
         const current = final.rows.get(id);
         // Current withdrawal/denial wins, even when the earlier observation was unavailable.
@@ -297,9 +439,36 @@ export async function readPublicCollectionDiscoverySummaries(
         if (!current.authority || !original.authority) return unavailable('native_authority');
         if (current.signature !== original.signature) return unavailable('changed');
         summaries.push(card(current, presentations.get(id)!, publicContext.values.get(id)!));
+        operands.push(
+          operand(
+            current,
+            publicContext.values.get(id)!.curator,
+            query,
+            publicContext.queryCurator,
+            publicContext.querySubject,
+          ),
+        );
       }
       requireAccessDeadline(admitted.context.deadline);
-      return { state: 'ready', summaries };
+      const queryObservation = createHash('sha256')
+        .update(
+          JSON.stringify({
+            partition: admitted.context.partition,
+            epoch: final.epoch,
+            node: final.node,
+            position: final.position,
+            context: publicContext.observation,
+            query,
+            followCountHealth: final.followCountHealth ?? null,
+            rows: admitted.ids.flatMap((id) => {
+              const row = final.rows.get(id);
+              return row ? [[id, row.signature]] : [];
+            }),
+            operands,
+          }),
+        )
+        .digest('hex');
+      return { state: 'ready', summaries, operands, queryObservation };
     };
     return await hydrate();
   } catch (error) {

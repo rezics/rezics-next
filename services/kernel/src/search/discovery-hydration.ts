@@ -85,11 +85,24 @@ function validOwnerSummary(
     return false;
   if (kind === 'collection') {
     return (
-      Object.keys(value).length === 6 &&
-      ['id', 'title', 'summary', 'revision', 'sourcePosition', 'card'].every((key) => Object.hasOwn(value, key)) &&
+      Object.keys(value).length === 8 &&
+      [
+        'id',
+        'title',
+        'summary',
+        'revision',
+        'sourcePosition',
+        'queryObservation',
+        'card',
+        'operands',
+      ].every((key) => Object.hasOwn(value, key)) &&
       validText(value.title) &&
       validNullableText(value.summary) &&
       decimal(value.revision) &&
+      typeof value.queryObservation === 'string' &&
+      /^[a-f0-9]{64}$/.test(value.queryObservation) &&
+      object(value.operands) &&
+      value.operands.id === id &&
       object(value.card) &&
       value.card.id === id &&
       value.card.title === value.title &&

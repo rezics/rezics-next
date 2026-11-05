@@ -11,7 +11,9 @@ present.
 ## Model and definitions
 
 Collection `presentationKind` is a definitions TypeId, never a fixed vertical enum, Concept/public tag or private
-Label. Members keep their own actual Type. An owner override wins; null uses mixed presentation. Presentation
+Label. Members keep their own actual Type. An owner override wins; null uses mixed presentation. Native discovery
+represents this as `{kind:'owner',id:<TypeId>}` or `{kind:'mixed'}` so mixed remains explicit and is not inferred
+from a short preview. This `presentationKind` is distinct from the curated/dynamic `membershipKind`. Presentation
 changes no membership, profile pin, query predicate, source authority or permission. Grid/list/table remain client
 layout choices. The Collection kind guides Collection presentation; each member still uses its own Type's hints.
 
