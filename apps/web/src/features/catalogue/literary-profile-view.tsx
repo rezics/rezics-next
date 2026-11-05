@@ -528,6 +528,7 @@ function LiteraryProfileLive({
   authored,
 }: {
   id?: string | undefined;
+  address?: string | undefined;
   locale: string;
   session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   transport: LiteraryTransport;
