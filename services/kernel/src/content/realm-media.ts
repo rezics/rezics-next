@@ -1,5 +1,3 @@
-import { MediaImportRequestSchema } from '@rezics/definitions/media-import';
-import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
@@ -11,51 +9,10 @@ import { MediaUnavailableError } from './media.ts';
 import claim from './realm-media-claim.sql';
 import settings from './realm-media-settings.sql';
 import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
-
-export type RealmPresentationOptional<T> =
-  | Readonly<{ state: 'available'; value: T }>
-  | Readonly<{ state: 'none' | 'unavailable'; value: null }>;
-export type RealmPresentationImage = Readonly<{
-  id: string;
-  containerId: string;
-  digest: string;
-  width: number;
-  height: number;
-  variants: readonly Readonly<{ format: 'avif' | 'webp'; width: number; height: number }>[];
-  placeholder: Readonly<{ thumbhash: string; color: string }> | null;
-  focalPoint: Readonly<{ x: number; y: number }> | null;
-  credit: import('@rezics/definitions/media-import').MediaImportRequest['credit'] | null;
-}>;
-
-const closed = { additionalProperties: false } as const;
-const id = t.String({ format: 'uuid' });
-const nullable = <T extends import('typebox').TSchema>(schema: T) => t.Union([schema, t.Null()]);
-export const RealmPresentationImageSchema = t.Object(
-  {
-    id,
-    containerId: id,
-    digest: t.String({ pattern: '^[0-9a-f]{64}$' }),
-    width: t.Integer({ minimum: 1 }),
-    height: t.Integer({ minimum: 1 }),
-    variants: t.Array(
-      t.Object(
-        {
-          format: t.Union([t.Literal('avif'), t.Literal('webp')]),
-          width: t.Integer({ minimum: 1 }),
-          height: t.Integer({ minimum: 1 }),
-        },
-        closed,
-      ),
-      { minItems: 1, maxItems: 12 },
-    ),
-    placeholder: nullable(t.Object({ thumbhash: t.String(), color: t.String() }, closed)),
-    focalPoint: nullable(
-      t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
-    ),
-    credit: nullable(MediaImportRequestSchema.properties.credit),
-  },
-  closed,
-);
+import { RealmPresentationImageSchema } from './realm-media-schema.ts';
+import type { RealmPresentationImage } from './realm-media-schema.ts';
+export { RealmPresentationImageSchema } from './realm-media-schema.ts';
+export type { RealmPresentationImage, RealmPresentationOptional } from './realm-media-schema.ts';
 const imageValidator = Compile(RealmPresentationImageSchema);
 
 /** Exact JSON summary shared by native presentation consumers; never download authority. */
