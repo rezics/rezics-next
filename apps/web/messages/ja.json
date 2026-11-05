@@ -11013,5 +11013,8 @@
   "library_mal_label_remaining": "残りの元インデックス：{values}",
   "library_mal_label_current": "現在のネイティブ割り当て",
   "library_mal_label_none": "現在の割り当てなし",
-  "library_mal_label_cancel": "以降のインポート操作を停止"
+  "library_mal_label_cancel": "以降のインポート操作を停止",
+  "library_mal_label_upload_id": "保持された非公開アップロード ID",
+  "library_mal_label_reopen": "保持されたインポートを再表示",
+  "library_mal_label_source": "保持されたネイティブ XML"
 }

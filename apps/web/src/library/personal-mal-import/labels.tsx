@@ -180,3 +180,29 @@ export function MalCurrentAssignments({ subjectId }: { subjectId: string }) {
     </section>
   );
 }
+
+export function MalRetainedSource({ id }: { id: string }) {
+  const port = useMalImportPort();
+  const [xml, setXml] = useState<string | null>(null);
+  const [opened, setOpened] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (opened)
+      void port.source?.(id).then((result) => {
+        if (active && result.kind === 'source') setXml(result.xml);
+      });
+    return () => {
+      active = false;
+    };
+  }, [port, id, opened]);
+  return (
+    <details onToggle={(event) => setOpened(event.currentTarget.open)}>
+      <summary className="min-h-11 cursor-pointer py-2">{m.library_mal_label_source()}</summary>
+      {xml === null ? (
+        <p>{m.library_mal_unavailable()}</p>
+      ) : (
+        <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{xml}</pre>
+      )}
+    </details>
+  );
+}

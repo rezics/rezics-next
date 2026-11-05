@@ -10919,5 +10919,8 @@
   "library_mal_label_remaining": "Índices de origen restantes: {values}",
   "library_mal_label_current": "Asignaciones nativas actuales",
   "library_mal_label_none": "Sin asignaciones actuales",
-  "library_mal_label_cancel": "Detener las siguientes operaciones de importación"
+  "library_mal_label_cancel": "Detener las siguientes operaciones de importación",
+  "library_mal_label_upload_id": "ID de carga privada conservada",
+  "library_mal_label_reopen": "Reabrir importación conservada",
+  "library_mal_label_source": "Evidencia XML nativa conservada"
 }

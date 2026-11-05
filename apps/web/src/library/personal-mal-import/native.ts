@@ -171,6 +171,13 @@ export function kernelMalPort(
     }
   }
   return {
+    async source(id) {
+      const session = await withSession(request, sessionEnv, originConfigured);
+      if ('kind' in session) return session;
+      const result = await client.libraryImports.mal({ id }).source.get({ headers: headers(session.authorization) });
+      if (result.error) return failure(result.status, result.error.value);
+      return { kind: 'source', xml: result.data.xml };
+    },
     async assignments(subjectId) {
       const session = await withSession(request, sessionEnv, originConfigured);
       if ('kind' in session) return session;

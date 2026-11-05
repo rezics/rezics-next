@@ -11140,5 +11140,8 @@
   "library_mal_label_remaining": "Remaining source indices: {values}",
   "library_mal_label_current": "Current native assignments",
   "library_mal_label_none": "No current assignments",
-  "library_mal_label_cancel": "Stop further import effects"
+  "library_mal_label_cancel": "Stop further import effects",
+  "library_mal_label_upload_id": "Retained private upload ID",
+  "library_mal_label_reopen": "Reopen retained import",
+  "library_mal_label_source": "Retained native XML evidence"
 }

@@ -159,6 +159,7 @@ export type MalAdmitResult = { kind: 'admitted' } | { kind: 'conflict' } | MalFa
 
 export type MalAssignment = { id: string; labelId: string; subjectId: string; revision: number };
 export type MalImportPort = {
+  source?(id: string): Promise<{ kind: 'source'; xml: string } | MalFailure>;
   captureApply?(
     command: Extract<MalCommand, { kind: 'apply' }>,
   ): Promise<Extract<MalCommand, { kind: 'apply' }> | MalFailure>;

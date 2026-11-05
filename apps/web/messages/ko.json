@@ -10919,5 +10919,8 @@
   "library_mal_label_remaining": "남은 원본 인덱스: {values}",
   "library_mal_label_current": "현재 기본 할당",
   "library_mal_label_none": "현재 할당 없음",
-  "library_mal_label_cancel": "이후 가져오기 작업 중지"
+  "library_mal_label_cancel": "이후 가져오기 작업 중지",
+  "library_mal_label_upload_id": "보관된 비공개 업로드 ID",
+  "library_mal_label_reopen": "보관된 가져오기 다시 열기",
+  "library_mal_label_source": "보관된 기본 XML 증거"
 }
