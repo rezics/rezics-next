@@ -24,6 +24,8 @@ export function OwnClassificationsWorkspace({
   isCurrent,
   onRetry,
   onNext,
+  previous,
+  focusHeading = false,
   commands,
 }: {
   state: OwnClassificationsState;
@@ -32,7 +34,9 @@ export function OwnClassificationsWorkspace({
   locale: string;
   isCurrent: () => boolean;
   onRetry: (frontier: ClassificationFrontier) => Promise<unknown>;
-  onNext: (frontier: ClassificationFrontier) => void;
+  onNext: (frontier: ClassificationFrontier, keyboard?: boolean) => void;
+  previous?: { cursor: string | null } | null;
+  focusHeading?: boolean;
   commands?: ClassificationCommands | undefined;
 }) {
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -76,6 +80,25 @@ export function OwnClassificationsWorkspace({
         : null;
   const selected = admitted && selectedKey ? index?.get(selectedKey) : null;
   const inspect = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useLayoutEffect(() => {
+    if (focusHeading && current() && document.activeElement === document.body) heading.current?.focus();
+  }, [focusHeading]);
+  const moving = useRef(false);
+  async function move(cursor: string | null, keyboard: boolean) {
+    if (!current() || moving.current) return;
+    moving.current = true;
+    const decision = commands?.confirmMovement?.current;
+    const leave = decision ? await decision() : !protectedEditor;
+    moving.current = false;
+    if (!leave || !current()) return;
+    const target = {
+      cursor,
+      selected: frontier.selected ?? (selected ? { subjectId: selected.subjectId, associationId: selected.associationId } : null),
+    };
+    commands?.retire?.();
+    onNext(target, keyboard);
+  }
   useLayoutEffect(() => {
     if (commands && selected && current()) inspect.current?.focus();
   }, [generation, selectedKey]);
@@ -90,7 +113,7 @@ export function OwnClassificationsWorkspace({
   };
   return (
     <main className="mx-auto min-w-0 max-w-4xl space-y-6 p-4">
-      <h1 className="text-2xl font-semibold">{m.own_classifications_title({}, options)}</h1>
+      <h1 ref={heading} tabIndex={-1} className="text-2xl font-semibold">{m.own_classifications_title({}, options)}</h1>
       <p>{m.own_classifications_intro({}, options)}</p>
       {!admitted ? (
         <div role="status" className="space-y-3">
@@ -207,24 +230,17 @@ export function OwnClassificationsWorkspace({
               )}
             </section>
           ) : null}
-          {admitted.next !== null ? (
-            <Button
-              key={generation}
-              className={control}
-              disabled={protectedEditor}
-              onClick={() => {
-                if (current() && !protectedEditor)
-                  onNext({
-                    cursor: admitted.next,
-                    selected: selected
-                      ? { subjectId: selected.subjectId, associationId: selected.associationId }
-                      : frontier.selected,
-                  });
-              }}
-            >
+          <div className="flex flex-wrap gap-3">
+            {previous ? <Button className={control} onClick={(event) => void move(previous.cursor, event.detail === 0)}>
+              {m.library_collections_previous({}, options)}
+            </Button> : null}
+            {frontier.cursor !== null ? <Button className={control} onClick={(event) => void move(null, event.detail === 0)}>
+              {m.library_collections_first_page({}, options)}
+            </Button> : null}
+            {admitted.next !== null ? <Button className={control} onClick={(event) => void move(admitted.next, event.detail === 0)}>
               {m.own_classifications_next({}, options)}
-            </Button>
-          ) : null}
+            </Button> : null}
+          </div>
         </>
       )}
     </main>

@@ -85,3 +85,12 @@ Storybook supplies ready, preparing, empty, sparse, concealed, binding-mismatch,
 uncertain withdrawal and long-label states with the existing locale/theme controls and 390/1280 viewports. Supplied
 command adapters illustrate interactions; native recorded responses and browser/keyboard/screen-reader execution
 remain controller verification, separate from these authored examples.
+
+Decision: deliberate Next/Previous/First retain only eight admitted predecessor cursor coordinates plus current
+and one staged exact frontier in the mounted eligible Router visit. A successful guarded native read commits the
+coordinate; a failed movement retains its exact target for Retry without truncating the accepted path. Selected-pair
+changes start a new path on fresh admission. First removes only cursor; unrelated search/hash data survive.
+Direct later entry invents no predecessor. Browser return rereads the current pair and never restores old bodies or
+editors. The existing OwnVotesDeparture decision precedes movement; Stay leaves the editor and path intact.
+Account/credential/exposure, locale, source or same-frontier read replacement retires coordinates and pending focus.
+No URL/history payload, storage, extra observer, prefetch or cursor replay owns private navigation.

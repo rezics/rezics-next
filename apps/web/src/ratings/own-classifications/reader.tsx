@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { OwnClassificationsRead } from './actions';
 import { classificationAddressKey, indexOwnClassifications, OWN_CLASSIFICATIONS_SOURCE } from './inventory';
 import { OwnClassificationsWorkspace } from './page';
+import type { ClassificationWindows } from './window-navigation';
 import type { ClassificationCommands } from './editor';
 import type { ClassificationFrontier, OwnClassificationsState } from './types';
 
@@ -42,6 +43,7 @@ export function ClassificationsReader({
   isCurrent,
   read,
   commands,
+  windows,
   onNext = () => {},
 }: {
   initial: OwnClassificationsRead;
@@ -52,7 +54,8 @@ export function ClassificationsReader({
   isCurrent: () => boolean;
   read: OwnClassificationsReadFn;
   commands?: Omit<ClassificationCommands, 'read' | 'retire'>;
-  onNext?: (frontier: ClassificationFrontier) => void;
+  windows?: ClassificationWindows;
+  onNext?: (frontier: ClassificationFrontier, keyboard?: boolean) => void;
 }) {
   const latest = useRef({
     subject,
@@ -109,8 +112,11 @@ export function ClassificationsReader({
         : initial;
   const admitted = !!subject && classificationReadMatches(candidate, subject, locale, frontier);
   const feedback = state ?? (admitted ? candidate.state : 'preparing');
+  const [focusHeading, setFocusHeading] = useState(false);
   const refresh = async (original: ClassificationFrontier) => {
     if (!current() || inFlight.current === visit || classificationAddressKey(original) !== address) return;
+    if (windows && result?.visit === visit && result.value.state === 'ready' && !windows.staged) windows.retire();
+    setFocusHeading(false);
     inFlight.current = visit;
     setPending(visit);
     const unavailable: OwnClassificationsRead = {
@@ -122,8 +128,12 @@ export function ClassificationsReader({
     };
     try {
       const value = await read(original, visit.abort.signal);
-      if (current() && subject)
-        update({ visit, value: classificationReadMatches(value, subject, locale, original) ? value : unavailable });
+      if (current() && subject) {
+        const matches = classificationReadMatches(value, subject, locale, original);
+        if (matches && value.state === 'ready') setFocusHeading(windows?.admit(original) ?? false);
+        else if (windows) windows.focus = false;
+        update({ visit, value: matches ? value : unavailable });
+      }
     } catch {
       if (current()) update({ visit, value: unavailable });
     } finally {
@@ -144,6 +154,8 @@ export function ClassificationsReader({
       locale={locale}
       isCurrent={isCurrent}
       onNext={onNext}
+      previous={windows?.previous(frontier)}
+      focusHeading={focusHeading}
       onRetry={refresh}
       commands={
         commands && candidate.state === 'ready' && admitted ? { ...commands, read: candidate, retire } : undefined
