@@ -78,6 +78,7 @@ export async function readBuiltinPublicationRule(
     rule: {
       filter: filter(key),
       sort: 'id',
+      source: { kind: 'owner' },
       releaseDigest: row.releaseDigest,
       revision: 0,
       collectionRevision: row.revision,
