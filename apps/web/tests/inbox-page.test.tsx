@@ -563,6 +563,8 @@ test('Previous and browser return re-admit the exact unread address and restore 
     const destination = view.host.querySelector<HTMLAnchorElement>('[data-notice-id="return-origin"] a[href]');
     expect(destination?.getAttribute('href')).toBe('/threads/thread#post-return-origin');
     await act(async () => destination!.click());
+    await tick();
+    expect(view.router.state.location.pathname).toBe('/threads/thread');
     await view.settle(() => view.host.textContent?.includes('Thread destination') === true);
     await act(async () => view.router.history.back());
     await view.settle(() => view.host.textContent?.includes('Current native replacement') === true);
