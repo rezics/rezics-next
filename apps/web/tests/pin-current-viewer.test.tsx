@@ -11,9 +11,20 @@ import { m } from '../src/paraglide/messages.js';
 let viewer: { state: 'unknown' | 'signed-in' | 'signed-out'; subject?: string | null; csrfToken: string | null };
 let putAdmitted = true;
 let removeAdmitted = true;
-mock.module('../src/session/query', () => ({ useSession: () => viewer }));
+const sessionQuery = { queryKey: ['pin-current-viewer-session'] as const };
+mock.module('../src/session/query', () => ({ sessionQuery, useSession: () => viewer }));
 mock.module('../src/kernel/exposure', () => ({
   useOperation: (operation: string) => (operation === 'library_pin.put' ? putAdmitted : removeAdmitted),
+}));
+mock.module('../src/library/library-workspace-admission', () => ({
+  useLibraryWorkspaceAdmission: () => ({
+    store: {
+      read: () => ({ viewer: 0 }),
+      allowed: (operation: string) => (operation === 'library_pin.put' ? putAdmitted : removeAdmitted),
+      dispatchVersion: () => 0,
+    },
+    value: { viewer: 0, granted: [putAdmitted, removeAdmitted], dispatch: [0, 0] },
+  }),
 }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'X-CSRF-Token': viewer.csrfToken }) }));
 
@@ -116,6 +127,7 @@ async function mount(initial: Props = { collectionId: 'b', pins: loaded(), mode:
   setLocale('en', { reload: false });
   const callbacks = () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(sessionQuery.queryKey, viewer);
     const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory() });
     const waits = {
       navigation: null as ReturnType<typeof deferred<void>> | null,
@@ -138,6 +150,7 @@ async function mount(initial: Props = { collectionId: 'b', pins: loaded(), mode:
   let unmounted = false;
   const show = async (next = props) => {
     props = next;
+    current.client.setQueryData(sessionQuery.queryKey, viewer);
     await act(async () =>
       root.render(
         <StrictMode>
