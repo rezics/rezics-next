@@ -694,7 +694,7 @@ export function LabelsPageView({
         {feedback && !feedback.ok && feedback.operation ? error('label-error') : null}
         {undoForm}
         <nav aria-label={m.library_labels_heading()} className="flex flex-wrap gap-2">
-          {retryCurrent ? (
+          {!cursorRecovery && retryCurrent ? (
             <Button
               type="button"
               variant="outline"
@@ -706,7 +706,7 @@ export function LabelsPageView({
             >
               {m.subject_view_retry()}
             </Button>
-          ) : (
+          ) : !cursorRecovery ? (
             <a
               onClick={(event) => {
                 if (!alive()) event.preventDefault();
@@ -716,7 +716,7 @@ export function LabelsPageView({
             >
               {m.subject_view_retry()}
             </a>
-          )}
+          ) : null}
           {cursorRecovery && cursor !== undefined
             ? movementControl('first', m.library_collections_first_page(), () => firstPagePath)
             : null}
