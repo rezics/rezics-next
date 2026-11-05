@@ -87,7 +87,7 @@ function MyRealmsErrorPage({ error, reset }: { error: unknown; reset?: () => voi
 
 function MyRealms() {
   useMyRealmsInventoryVisit();
-  const initial = Route.useLoaderData();
+  const initial = Route.useLoaderData()! as { page: MyRealmsPage; visit: MyRealmsVisit };
   const { cursor } = Route.useSearch();
   return <MyRealmsCallerHost key={initial.visit.id} initial={initial} cursor={cursor} />;
 }
