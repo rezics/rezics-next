@@ -97,7 +97,7 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
       },
     };
     await render();
-    expect(host.querySelector('[data-property="schema:wordCount"] dd')?.textContent).toContain('1,200,001');
+    expect(host.querySelector('[data-property="schema:wordCount"] dd')?.textContent).toBe('+1200001');
     await fresh('bf:Instance');
     input = {
       ...input,

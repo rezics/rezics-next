@@ -88,9 +88,9 @@ test('mounted literary visit re-reads bounded addresses and returns focus only t
     ).toBe(true);
 
     const volumeAddress = new URL(volume.href);
-    const volume = literaryGrainExample('schema:Book');
+    const volumeInput = literaryGrainExample('schema:Book');
     window.history.replaceState({}, '', `${volumeAddress.pathname}${volumeAddress.search}`);
-    input = { ...volume, context, realm, view: 'overview' };
+    input = { ...volumeInput, context, realm, view: 'overview' };
     await render();
     const edition = [
       ...host.querySelectorAll<HTMLAnchorElement>('[data-slot="literary-window"] a[target="_blank"]'),
