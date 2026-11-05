@@ -187,7 +187,9 @@ test('same-statement qualifiers and released datatype/unit values survive editin
 
 test('item operands show stable native identities through entity controls while literals keep their datatype editor', () => {
   const itemId = '0192f3a0-6c1e-7b2a-9d4e-000000000021';
+  const itemIdTwo = '0192f3a0-6c1e-7b2a-9d4e-000000000023';
   const qualifierId = '0192f3a0-6c1e-7b2a-9d4e-000000000022';
+  const qualifierIdTwo = '0192f3a0-6c1e-7b2a-9d4e-000000000024';
   const definitions: ConditionMetadata = {
     types: {
       'ex:Work': { labels: { en: 'Work' }, facets: ['ex:related'] },
@@ -210,8 +212,8 @@ test('item operands show stable native identities through entity controls while 
       value: {
         statement: {
           property: 'ex:related',
-          in: [itemId],
-          qualifiers: [{ property: 'ex:language', in: [qualifierId] }],
+          in: [itemId, itemIdTwo],
+          qualifiers: [{ property: 'ex:language', in: [qualifierId, qualifierIdTwo] }],
         },
       },
       metadata: definitions,
@@ -224,22 +226,26 @@ test('item operands show stable native identities through entity controls while 
   expect(html).toContain('data-condition-entity-property="ex:language"');
   expect(html).toContain(`data-condition-pointer="${CONDITION_POINTER}/statement/in/chooser"`);
   expect(html).toContain(`value="${itemId}"`);
+  expect(html).toContain(`value="${itemIdTwo}"`);
   expect(html).toContain(`value="${qualifierId}"`);
+  expect(html).toContain(`value="${qualifierIdTwo}"`);
   expect(html).not.toContain('datalist');
 
   const condition: FilterDocument = {
     statement: {
       property: 'ex:related',
-      in: [itemId],
-      qualifiers: [{ property: 'ex:language', in: [qualifierId] }],
+      in: [itemId, itemIdTwo],
+      qualifiers: [{ property: 'ex:language', in: [qualifierId, qualifierIdTwo] }],
     },
   };
   expect(
     conditionAdmission(definitions)(condition, { ...state, condition, kinds: undefined, facets: {}, ranges: {} }),
   ).toEqual([]);
   const submitted = discoveryRequest({ ...state, condition }, ['ja']);
-  expect(JSON.stringify(submitted.filter)).toContain(itemId);
-  expect(JSON.stringify(submitted.filter)).toContain(qualifierId);
+  const appliedFilter = JSON.stringify(submitted.filter);
+  expect(appliedFilter).toContain(JSON.stringify(condition));
+  expect(appliedFilter.indexOf(itemId)).toBeLessThan(appliedFilter.indexOf(itemIdTwo));
+  expect(appliedFilter.indexOf(qualifierId)).toBeLessThan(appliedFilter.indexOf(qualifierIdTwo));
 
   const literal = renderToStaticMarkup(
     createElement(ConditionEditor, {
@@ -263,7 +269,7 @@ test('item operands show stable native identities through entity controls while 
       entityLookup: lookup,
     }),
   );
-  expect(invalidItem).toContain('This value is not a native item ID.');
+  expect(invalidItem).toContain('This value could not be resolved as a native item.');
   expect(invalidItem).toContain('value="Typed name"');
 });
 

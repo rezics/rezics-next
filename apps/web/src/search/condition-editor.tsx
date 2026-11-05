@@ -56,6 +56,7 @@ import {
   searchConditionEntities,
   type ConditionEntityContext,
   type ConditionEntityFailure,
+  type ConditionEntityValueFailure,
   type ResolvedConditionEntity,
 } from './condition-entity';
 import {
@@ -1313,7 +1314,8 @@ function NodeEditor({
 }
 
 function conditionEntityFailure(error: unknown): ConditionEntityFailure {
-  return error instanceof ConditionEntityLookupError ? error.failure : 'unavailable';
+  if (error instanceof ConditionEntityLookupError) return error.failure;
+  throw error;
 }
 
 function conditionEntityFailureText(failure: ConditionEntityFailure, options: MessageOptions): string {
@@ -1321,7 +1323,14 @@ function conditionEntityFailureText(failure: ConditionEntityFailure, options: Me
   if (failure === 'credentials') return m.search_suggestions_credentials({}, options);
   if (failure === 'invalid') return m.search_suggestions_invalid({}, options);
   if (failure === 'metadata') return m.condition_metadata_unavailable({}, options);
+  if (failure === 'preparing') return m.search_suggestions_preparing({}, options);
   return m.search_suggestions_unavailable({}, options);
+}
+
+function conditionEntityValueFailureText(failure: ConditionEntityValueFailure, options: MessageOptions): string {
+  if (failure === 'invalid') return m.condition_entity_invalid({}, options);
+  if (failure === 'preparing') return m.condition_entity_preparing({}, options);
+  return m.condition_entity_label_unavailable({}, options);
 }
 
 function ConditionEntityValues({
@@ -1359,7 +1368,10 @@ function ConditionEntityValues({
   const [resolved, setResolved] = useState<Record<string, { label: string; type: string }>>({});
   const [resolveFailure, setResolveFailure] = useState<ConditionEntityFailure>();
   const [suggestionFailure, setSuggestionFailure] = useState<ConditionEntityFailure>();
-  const [resolving, setResolving] = useState(identifiers.length > 0 && !context.disabled);
+  const [resolvingIds, setResolvingIds] = useState<string[]>(() =>
+    context.disabled ? [] : identifiers,
+  );
+  const [valueFailures, setValueFailures] = useState<Record<string, ConditionEntityValueFailure>>({});
   const [retry, setRetry] = useState(0);
   const attempted = useRef(new Set<string>());
   const [withheld, setWithheld] = useState<string[]>([]);
@@ -1372,7 +1384,7 @@ function ConditionEntityValues({
     for (const id of attempted.current) if (!current.has(id)) attempted.current.delete(id);
     setResolved((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => current.has(id))));
     setWithheld((previous) => previous.filter((id) => current.has(id)));
-    setResolveFailure(undefined);
+    setValueFailures((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => current.has(id))));
     setSuggestionFailure(undefined);
   }, [identifiers.join('|')]);
 
@@ -1380,17 +1392,21 @@ function ConditionEntityValues({
 
   useEffect(() => {
     if (context.disabled) {
-      setResolving(false);
+      setResolvingIds([]);
+      return;
+    }
+    if (resolveFailure) {
+      setResolvingIds([]);
       return;
     }
     const needed = identifiers.filter((id) => !resolved[id] && !attempted.current.has(id));
     if (!needed.length) {
-      setResolving(false);
+      setResolvingIds([]);
       return;
     }
     if (!requestContext.available || targetTypes.length === 0) {
       setResolveFailure(requestContext.available ? 'metadata' : 'unavailable');
-      setResolving(false);
+      setResolvingIds([]);
       return;
     }
 
@@ -1398,29 +1414,41 @@ function ConditionEntityValues({
     let active = true;
     let completed = false;
     for (const id of needed) attempted.current.add(id);
-    setResolveFailure(undefined);
-    setResolving(true);
+    setResolvingIds(needed);
     void resolveConditionEntityLabels(needed, targetTypes, requestContext, controller.signal)
-      .then(({ labels, withheld: hidden }) => {
+      .then(({ labels, withheld: hidden, failures }) => {
         if (!active) return;
         completed = true;
         setResolved((previous) => ({ ...previous, ...labels }));
         setWithheld((previous) => [...new Set([...previous.filter((id) => !needed.includes(id)), ...hidden])]);
+        setValueFailures((previous) => ({
+          ...Object.fromEntries(Object.entries(previous).filter(([id]) => !needed.includes(id))),
+          ...failures,
+        }));
       })
       .catch((error) => {
         if (!active || controller.signal.aborted) return;
         completed = true;
-        setResolveFailure(conditionEntityFailure(error));
+        const failure = conditionEntityFailure(error);
+        if (failure === 'credentials' || failure === 'restart' || failure === 'metadata') {
+          onResolvedLabels?.(requestIdentity, {});
+          setResolved({});
+          setWithheld([]);
+          setValueFailures({});
+          setResolveFailure(failure);
+          return;
+        }
+        throw error;
       })
       .finally(() => {
-        if (active) setResolving(false);
+        if (active) setResolvingIds((previous) => previous.filter((id) => !needed.includes(id)));
       });
     return () => {
       active = false;
       controller.abort();
       if (!completed) for (const id of needed) attempted.current.delete(id);
     };
-  }, [context.disabled, identifiers.join('|'), requestContext, retry, resolved, targetTypes]);
+  }, [context.disabled, identifiers.join('|'), requestContext, retry, resolveFailure, resolved, targetTypes]);
 
   const search = useCallback(
     async (query: string, signal: AbortSignal) => {
@@ -1445,28 +1473,16 @@ function ConditionEntityValues({
         : pointer.replace(/\/(type|statement).*$/, ''),
     );
   };
-  const unresolved = identifiers.filter((id) => !resolved[id]);
-  const hasInvalidOperand = values.some((value) => value !== '' && !isConditionEntityIdentifier(value));
-  const hasWithheld = unresolved.some((id) => withheld.includes(id));
-  const failure = suggestionFailure ?? resolveFailure;
-  const missingLabel = !resolving && unresolved.length > 0;
-  const repairText = hasInvalidOperand
-    ? m.condition_entity_invalid({}, options)
-    : hasWithheld
-      ? m.condition_entity_unresolved({}, options)
-      : failure
-        ? conditionEntityFailureText(failure, options)
-        : missingLabel
-          ? m.search_suggestions_unavailable({}, options)
-          : undefined;
   const canResolve = requestContext.available && targetTypes.length > 0 && !context.disabled;
-  const retryLabels = () => {
-    const retryIds = new Set(unresolved);
-    for (const id of retryIds) attempted.current.delete(id);
-    setWithheld((previous) => previous.filter((id) => !retryIds.has(id)));
-    setResolveFailure(undefined);
+  const retryLabel = (id: string, index: number) => {
+    if (!canResolve || resolveFailure || resolvingIds.length > 0 || !identifiers.includes(id) || resolved[id]) return;
+    attempted.current.delete(id);
+    setWithheld((previous) => previous.filter((value) => value !== id));
+    setValueFailures((previous) => Object.fromEntries(Object.entries(previous).filter(([value]) => value !== id)));
+    context.announce(m.condition_entity_resolving({}, options), `${pointer}/${index}`);
     setRetry((version) => version + 1);
   };
+  const resolving = resolvingIds.length > 0;
 
   return (
     <div
@@ -1477,7 +1493,22 @@ function ConditionEntityValues({
       aria-busy={resolving}
     >
       {values.map((value, index) => {
-        const selected = resolved[value.toLowerCase()];
+        const id = value.toLowerCase();
+        const selected = resolved[id];
+        const invalid = value !== '' && !isConditionEntityIdentifier(value);
+        const hidden = withheld.includes(id);
+        const valueFailure = valueFailures[id];
+        const loading = resolvingIds.includes(id);
+        const feedback = invalid
+          ? m.condition_entity_invalid({}, options)
+          : hidden
+            ? m.condition_entity_unresolved({}, options)
+            : valueFailure
+              ? conditionEntityValueFailureText(valueFailure, options)
+              : loading
+                ? m.condition_entity_resolving({}, options)
+                : undefined;
+        const retryable = hidden || valueFailure === 'unavailable' || valueFailure === 'preparing';
         return (
           <div key={`${occurrence}:${index}`} className="flex items-end gap-1">
             <EditorField
@@ -1494,9 +1525,26 @@ function ConditionEntityValues({
                     </p>
                   ) : null}
                   <Input {...props} readOnly value={value} placeholder={m.condition_choose_value({}, options)} />
+                  {feedback ? (
+                    <p role={loading ? 'status' : 'alert'} className="text-sm text-destructive">
+                      {feedback}
+                    </p>
+                  ) : null}
                 </div>
               )}
             </EditorField>
+            {retryable && canResolve && !resolveFailure ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={m.condition_entity_retry_label({ number: index + 1 }, options)}
+                disabled={resolving}
+                onClick={() => retryLabel(id, index)}
+              >
+                {m.subject_view_retry({}, options)}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="ghost"
@@ -1540,22 +1588,22 @@ function ConditionEntityValues({
           />
         </Field>
       ) : null}
-      {repairText ? (
+      {resolveFailure ? (
         <p role="alert" className="text-sm text-destructive">
-          {repairText}
+          {conditionEntityFailureText(resolveFailure, options)}
         </p>
       ) : null}
-      {canResolve && missingLabel && !context.disabled ? (
-        <Button type="button" variant="outline" size="sm" onClick={retryLabels}>
-          {m.subject_view_retry({}, options)}
-        </Button>
+      {suggestionFailure ? (
+        <p role="alert" className="text-sm text-destructive">
+          {conditionEntityFailureText(suggestionFailure, options)}
+        </p>
       ) : null}
-      {!requestContext.available && !repairText ? (
+      {!requestContext.available && !resolveFailure ? (
         <p role="status" className="text-sm text-muted-foreground">
           {m.search_suggestions_unavailable({}, options)}
         </p>
       ) : null}
-      {requestContext.available && targetTypes.length === 0 && !repairText ? (
+      {requestContext.available && targetTypes.length === 0 && !resolveFailure ? (
         <p role="status" className="text-sm text-muted-foreground">
           {m.condition_metadata_unavailable({}, options)}
         </p>

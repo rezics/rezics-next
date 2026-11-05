@@ -19,6 +19,7 @@ export type ConditionEntityContext = Readonly<{
 }>;
 
 export type ConditionEntityFailure = 'unavailable' | 'restart' | 'credentials' | 'invalid' | 'metadata' | 'preparing';
+export type ConditionEntityValueFailure = 'unavailable' | 'invalid' | 'preparing';
 
 export class ConditionEntityLookupError extends Error {
   constructor(readonly failure: ConditionEntityFailure) {
@@ -31,6 +32,7 @@ export type ResolvedConditionEntity = Readonly<{ label: string; type: string }>;
 export type ConditionEntityLabelResult = Readonly<{
   labels: Record<string, ResolvedConditionEntity>;
   withheld: readonly string[];
+  failures: Readonly<Record<string, ConditionEntityValueFailure>>;
 }>;
 
 function identifier(value: string): string | undefined {
@@ -221,11 +223,12 @@ async function readConditionEntityLabel(
   targets: readonly string[],
   context: ConditionEntityContext,
   signal: AbortSignal,
-): Promise<ResolvedConditionEntity | null> {
+): Promise<{ label: ResolvedConditionEntity } | { withheld: true }> {
   signal.throwIfAborted();
+  const url = entityUrl(id, targets, context);
   let response: Response;
   try {
-    response = await fetch(entityUrl(id, targets, context), {
+    response = await fetch(url, {
       signal,
       credentials: 'same-origin',
       cache: 'no-store',
@@ -273,7 +276,7 @@ async function readConditionEntityLabel(
   const result = value as Record<string, unknown>;
   if (result.id !== id || (result.state !== 'ready' && result.state !== 'withheld'))
     throw new ConditionEntityLookupError('invalid');
-  if (result.state === 'withheld') return null;
+  if (result.state === 'withheld') return { withheld: true };
   if (
     typeof result.type !== 'string' ||
     result.labels === null ||
@@ -295,11 +298,8 @@ async function readConditionEntityLabel(
     ),
   );
   const label = operandLabel(labels, context);
-  if (!label) return null;
-  return {
-    label,
-    type: operandLabel(typeLabels, context) || result.type,
-  };
+  if (!label) throw new ConditionEntityLookupError('invalid');
+  return { label: { label, type: operandLabel(typeLabels, context) || result.type } };
 }
 
 function uniqueResolvableIds(values: readonly string[]): string[] {
@@ -333,13 +333,15 @@ export async function resolveConditionEntityLabels(
   const unlink = linkedSignal(signal, controller);
   const labels: Record<string, ResolvedConditionEntity> = {};
   const withheld: string[] = [];
+  const failures: Record<string, ConditionEntityValueFailure> = {};
   let next = 0;
-  let failure: unknown;
+  let contextFailure: ConditionEntityLookupError | undefined;
 
   const readOne = async (id: string) => {
-    const entity = await readConditionEntityLabel(id, targets, context, controller.signal);
-    if (entity) labels[id.toLowerCase()] = entity;
-    else withheld.push(id.toLowerCase());
+    const result = await readConditionEntityLabel(id, targets, context, controller.signal);
+    const key = id.toLowerCase();
+    if ('label' in result) labels[key] = result.label;
+    else withheld.push(key);
   };
 
   const worker = async () => {
@@ -350,11 +352,14 @@ export async function resolveConditionEntityLabels(
       try {
         await readOne(id);
       } catch (error) {
-        if (!failure && !signal.aborted) {
-          failure = error;
+        if (signal.aborted || controller.signal.aborted) return;
+        if (!(error instanceof ConditionEntityLookupError)) throw error;
+        if (error.failure === 'credentials' || error.failure === 'restart' || error.failure === 'metadata') {
+          contextFailure ??= error;
           controller.abort(error);
+          return;
         }
-        return;
+        failures[id.toLowerCase()] = error.failure;
       }
     }
   };
@@ -362,8 +367,8 @@ export async function resolveConditionEntityLabels(
   try {
     await Promise.all(Array.from({ length: Math.min(resolutionConcurrency, ids.length) }, worker));
     signal.throwIfAborted();
-    if (failure) throw failure;
-    return { labels, withheld };
+    if (contextFailure) throw contextFailure;
+    return { labels, withheld, failures };
   } finally {
     unlink();
     controller.abort();
