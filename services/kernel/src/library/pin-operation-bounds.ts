@@ -216,11 +216,6 @@ export function pinTargetGateBound(input: {
   return sumBounds(maximum(exposure, sumBounds(exposure, closedAuthority)), byteCost(sqlBytes + operands + projections));
 }
 
-/** Max-width operands for the existing mounted personal_library admission hook. */
-export function pinMountedAdmissionBound(action: 'library_pin:list' | 'library_pin:update'): Bound {
-  return pinTargetGateBound({ accountId: uuid, route: 65535, group: 'personal_library', clientAction: action });
-}
-
 /** Current actor admission at the attempt's original T; Core still owns receipt and transaction custody. */
 export function pinCommandAdmissionBound(input: { route: number; accountId: string }): Bound {
   const projection = {
