@@ -21,12 +21,16 @@ import {
   classifyRun,
   devVerificationState,
   placeInWorkspace,
+  projectChecksSource,
   projectSourceInterval,
   projectVerifierLandings,
+  sourcePresentAt,
+  checkInput,
   VERIFY_CONCURRENCY,
   verifyDev,
   withTreeBun,
   type BootSmokeRepair,
+  type DevVerifierCheck,
 } from './dev-verifier.ts';
 import type { DevVerifierFinding, DevVerifierRun, Settings, Task } from './types.ts';
 
@@ -368,6 +372,55 @@ test('projects landing history once per source interval with bounded Git reads',
         git(root, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', commit).split('\n').filter(Boolean),
     );
   expect(history.tasks.map((task) => task.id).sort()).toEqual(['merge-task', 'n-0', 'n-1', 'n-2', 'n-6', 'n-7']);
+});
+
+test('projects verifier source inputs once per immutable revision with bounded Git reads', () => {
+  const root = repo();
+  mkdirSync(join(root, 'apps/widget/src'), { recursive: true });
+  writeFileSync(join(root, 'apps/widget/src/value.ts'), 'export const value = 1;\n');
+  writeFileSync(join(root, 'apps/widget/package.json'), '{}\n');
+  git(root, 'add', '.');
+  git(root, 'commit', '-m', 'widget');
+  const head = git(root, 'rev-parse', 'HEAD');
+  const settings = { mainCheckout: root, stateDirectory: join(root, '.state') } as Settings;
+  mkdirSync(settings.stateDirectory, { recursive: true });
+  const present: DevVerifierCheck = {
+    command: ['bun', 'test', 'src/value.ts'],
+    closure: ['apps/widget/src'],
+    cwd: 'apps/widget',
+  };
+  const missing: DevVerifierCheck = {
+    command: ['bun', 'test', 'src/absent.ts'],
+    closure: ['apps/widget/src'],
+    cwd: 'apps/widget',
+  };
+  const globbed: DevVerifierCheck = { command: ['bun', 'scripts/typecheck.ts'], closure: ['**'] };
+  const growing: DevVerifierCheck[] = Array.from({ length: 8 }, (_, index) => ({
+    ...present,
+    taskId: `t-${index}`,
+  }));
+  const one = projectChecksSource(root, head, [present]);
+  const many = projectChecksSource(root, head, [present, missing, globbed, ...growing]);
+  expect(one.gitReads).toBe(1);
+  expect(many.gitReads).toBe(1);
+  expect(sourcePresentAt(many, present)).toBe(true);
+  expect(sourcePresentAt(many, missing)).toBe(false);
+  expect(sourcePresentAt(many, globbed)).toBe(true);
+  for (const path of many.objects.keys()) {
+    const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${head}:${path}`], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    expect(many.objects.get(path)).toBe(result.status === 0 ? result.stdout.trim() : null);
+  }
+  expect(checkInput(settings, head, present, one)).toBe(checkInput(settings, head, present, many));
+  expect(checkInput(settings, head, globbed, many)).toBeUndefined();
+  const input = checkInput(settings, head, present, many);
+  expect(input).toEqual(expect.any(String));
+  expect(checkInput(settings, head, { ...present, cwd: undefined }, many)).not.toBe(input);
+  expect(checkInput({ ...settings, stateDirectory: join(root, '.other') } as Settings, head, present, many)).not.toBe(
+    input,
+  );
 });
 
 test('fallback landings keep acceptance while skipped kinds do not', async () => {

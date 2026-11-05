@@ -105,6 +105,11 @@ export type SourceInterval = {
   parents: Map<string, string[]>;
   gitReads: number;
 };
+export type RevisionSource = {
+  commit: string;
+  objects: Map<string, string | null>;
+  gitReads: number;
+};
 export type VerifierLandings = { interval: SourceInterval; tasks: Task[] };
 function gitText(cwd: string, args: string[], input?: string): string {
   const policy = defaultPolicy.merge;
@@ -119,6 +124,38 @@ function gitText(cwd: string, args: string[], input?: string): string {
   if (overflow) throw overflow;
   if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || `git ${args[0]} failed`);
   return result.stdout.trim();
+}
+/** One batched `cat-file --batch-check` at an immutable revision; never a per-path scan. */
+export function projectRevisionSource(cwd: string, commit: string, paths: readonly string[]): RevisionSource {
+  const unique = [...new Set(paths.filter(Boolean))];
+  const objects = new Map<string, string | null>();
+  if (!unique.length) return { commit, objects, gitReads: 0 };
+  const output = gitText(
+    cwd,
+    ['cat-file', '--batch-check'],
+    `${unique.map((path) => `${commit}:${path}`).join('\n')}\n`,
+  );
+  const lines = output ? output.split('\n') : [];
+  unique.forEach((path, index) => {
+    const line = lines[index] ?? '';
+    objects.set(path, line.endsWith(' missing') ? null : (line.split(' ')[0] || null));
+  });
+  return { commit, objects, gitReads: 1 };
+}
+function mergeRevisionSource(
+  cwd: string,
+  commit: string,
+  paths: readonly string[],
+  existing?: RevisionSource,
+): RevisionSource {
+  const needed = [...new Set(paths.filter(Boolean))];
+  const missing = existing ? needed.filter((path) => !existing.objects.has(path)) : needed;
+  if (!missing.length) return existing ?? { commit, objects: new Map(), gitReads: 0 };
+  const extra = projectRevisionSource(cwd, commit, missing);
+  if (!existing) return extra;
+  for (const [path, oid] of extra.objects) existing.objects.set(path, oid);
+  existing.gitReads += extra.gitReads;
+  return existing;
 }
 function parseNameOnlyLog(output: string): { commit: string; parents: string[]; files: string[] }[] {
   if (!output) return [];
@@ -448,14 +485,7 @@ function checkSourceFiles(check: Check): string[] {
       return check.cwd ? `${check.cwd}/${path}` : path;
     });
 }
-function sourcePresentAt(cwd: string, commit: string, check: Check): boolean {
-  for (const path of checkSourceFiles(check)) {
-    const result = spawnSync('git', ['cat-file', '-e', `${commit}:${path}`], { cwd, encoding: 'utf8' });
-    if (result.status !== 0) return false;
-  }
-  return true;
-}
-function checkInput(settings: Settings, commit: string, check: Check): string | undefined {
+function checkInputAreas(check: Check): string[] | undefined {
   const areas = new Set(['package.json', 'bun.lock', ...(check.cwd ? [check.cwd] : [])]);
   for (const path of [...check.closure, ...checkSourceFiles(check)]) {
     const segments = path.split('/');
@@ -465,13 +495,27 @@ function checkInput(settings: Settings, commit: string, check: Check): string | 
     areas.add(area.join('/'));
     if (workspace && segments[0] !== 'packages') areas.add('packages');
   }
-  const trees = [...areas].sort().map((area) => {
-    const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${commit}:${area}`], {
-      cwd: settings.mainCheckout,
-      encoding: 'utf8',
-    });
-    return [area, result.status === 0 ? result.stdout.trim() : null];
-  });
+  return [...areas];
+}
+function checkSourceQueryPaths(check: Check): string[] {
+  const files = checkSourceFiles(check);
+  const areas = checkInputAreas(check);
+  return areas ? [...new Set([...files, ...areas])] : files;
+}
+export function projectChecksSource(cwd: string, commit: string, checks: readonly Check[]): RevisionSource {
+  return projectRevisionSource(cwd, commit, checks.flatMap(checkSourceQueryPaths));
+}
+export function sourcePresentAt(source: RevisionSource, check: Check): boolean {
+  return checkSourceFiles(check).every((path) => source.objects.get(path) != null);
+}
+export function checkInput(
+  settings: Settings,
+  commit: string,
+  check: Check,
+  source: RevisionSource,
+): string | undefined {
+  const areas = checkInputAreas(check);
+  if (!areas) return undefined;
   return hash({
     version: 1,
     phase: 'failed-input',
@@ -479,7 +523,7 @@ function checkInput(settings: Settings, commit: string, check: Check): string | 
     cwd: check.cwd ?? null,
     closure: [...check.closure].sort(),
     taskId: check.taskId ?? null,
-    trees,
+    trees: [...areas].sort().map((area) => [area, source.objects.get(area) ?? null]),
     environment: environmentIdentity(settings),
     toolchain: toolchainIdentity(settings, commit),
   });
@@ -533,6 +577,24 @@ export type DevVerifierOptions = {
   runBootSmoke?: GateRunner;
   dispatchRepair?: (repair: BootSmokeRepair) => void;
 };
+
+const revisionSources = new WeakMap<DevVerifierOptions, Map<string, RevisionSource>>();
+function revisionSource(options: DevVerifierOptions, commit: string, checks: readonly Check[]): RevisionSource {
+  let cache = revisionSources.get(options);
+  if (!cache) {
+    cache = new Map();
+    revisionSources.set(options, cache);
+  }
+  const existing = cache.get(commit);
+  const source = mergeRevisionSource(
+    options.settings.mainCheckout,
+    commit,
+    checks.flatMap(checkSourceQueryPaths),
+    existing,
+  );
+  cache.set(commit, source);
+  return source;
+}
 
 const OPEN_REPAIR_STATES = new Set(['ready', 'held', 'running', 'landing', 'stopped']);
 
@@ -834,11 +896,12 @@ function reusableCheckResult(
   commit: string,
   check: IndexedCheck,
   selection: string,
+  source: RevisionSource,
 ): DevVerifierEvidence | undefined {
   const cached = cachedRun(store, runCacheKey(settings, commit, check, selection));
   if (cached && classifyRun(cached, settings.policy?.verifier) !== 'infrastructure')
     return forCheckAtCommit(cached, commit, check);
-  const input = checkInput(settings, commit, check);
+  const input = checkInput(settings, commit, check, source);
   const failed = input ? cachedRun(store, input) : undefined;
   return failed && classifyRun(failed, settings.policy?.verifier) === 'fail'
     ? forCheckAtCommit(failed, commit, check)
@@ -895,8 +958,8 @@ async function executeCheck(
 function selectionIdentity(checks: readonly IndexedCheck[]): string {
   return hash(checks.map(({ command, closure, taskId, signature }) => ({ command, closure, taskId, signature })));
 }
-function commandPresentAt(settings: Settings, commit: string, check: Check): boolean {
-  return sourcePresentAt(settings.mainCheckout, commit, check);
+function commandPresentAt(options: DevVerifierOptions, commit: string, check: Check): boolean {
+  return sourcePresentAt(revisionSource(options, commit, [check]), check);
 }
 
 async function compareRange(options: DevVerifierOptions, history: VerifierLandings): Promise<Comparison> {
@@ -909,7 +972,8 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
   }));
   const selection = selectionIdentity(checks);
   const results: ComparedCheck[] = checks.map((check) => ({ check, baseline: null, head: null }));
-  const headMissing = checks.filter((check) => !commandPresentAt(settings, target, check));
+  const targetSource = revisionSource(options, target, checks);
+  const headMissing = checks.filter((check) => !sourcePresentAt(targetSource, check));
   for (const check of headMissing) {
     const item = results[check.index]!;
     item.headReason = 'The selected command source is absent at the captured head.';
@@ -920,7 +984,8 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
   mkdirSync(settings.stateDirectory, { recursive: true });
   try {
     const missingHeadRuns = checks.filter(
-      (check) => !headMissing.includes(check) && !reusableCheckResult(store, settings, target, check, selection),
+      (check) =>
+        !headMissing.includes(check) && !reusableCheckResult(store, settings, target, check, selection, targetSource),
     );
     let headSetup: { passed: boolean; output: string; logPath: string } | undefined;
     if (missingHeadRuns.length) {
@@ -933,7 +998,7 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
     const headJobs: { check: IndexedCheck; cwd: string }[] = [];
     for (const check of checks) {
       if (!headMissing.includes(check)) {
-        const cached = reusableCheckResult(store, settings, target, check, selection);
+        const cached = reusableCheckResult(store, settings, target, check, selection, targetSource);
         if (cached) results[check.index]!.head = cached;
         else if (headSetup?.passed && headTree) headJobs.push({ check, cwd: headTree });
         else if (headSetup && !headSetup.passed)
@@ -954,7 +1019,7 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
             target,
             job.cwd,
             key,
-            checkInput(settings, target, job.check),
+            checkInput(settings, target, job.check, targetSource),
           ),
         };
       },
@@ -976,11 +1041,13 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
         );
       })
       .map(({ check }) => check);
-    const baseMissing = baselineChecks.filter((check) => !commandPresentAt(settings, base, check));
+    const baseSource = revisionSource(options, base, baselineChecks);
+    const baseMissing = baselineChecks.filter((check) => !sourcePresentAt(baseSource, check));
     for (const check of baseMissing)
       results[check.index]!.baselineReason = 'The selected command source is absent at the exact verified baseline.';
     const missingBaselineRuns = baselineChecks.filter(
-      (check) => !baseMissing.includes(check) && !reusableCheckResult(store, settings, base, check, selection),
+      (check) =>
+        !baseMissing.includes(check) && !reusableCheckResult(store, settings, base, check, selection, baseSource),
     );
     let baseSetup: { passed: boolean; output: string; logPath: string } | undefined;
     if (missingBaselineRuns.length) {
@@ -991,7 +1058,7 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
     const baseJobs: { check: IndexedCheck; cwd: string }[] = [];
     for (const check of baselineChecks) {
       if (baseMissing.includes(check)) continue;
-      const cached = reusableCheckResult(store, settings, base, check, selection);
+      const cached = reusableCheckResult(store, settings, base, check, selection, baseSource);
       if (cached) results[check.index]!.baseline = cached;
       else if (baseSetup?.passed && baseTree) baseJobs.push({ check, cwd: baseTree });
       else if (baseSetup && !baseSetup.passed)
@@ -1011,7 +1078,7 @@ async function compareRange(options: DevVerifierOptions, history: VerifierLandin
             base,
             job.cwd,
             key,
-            checkInput(settings, base, job.check),
+            checkInput(settings, base, job.check, baseSource),
           ),
         };
       },
@@ -1139,7 +1206,7 @@ async function probeAt(
   const key = runCacheKey(settings, commit, check, selection);
   const cached = cachedRun(options.store, key);
   if (cached) return cached;
-  if (missingAsPass && !commandPresentAt(settings, commit, check))
+  if (missingAsPass && !commandPresentAt(options, commit, check))
     return evidence(commit, check, { passed: true, output: '', timedOut: false }, '');
   const tree = join(settings.worktreeRoot, `dev-verify-probe-${randomUUID()}`);
   mkdirSync(settings.worktreeRoot, { recursive: true });
@@ -1148,7 +1215,7 @@ async function probeAt(
   try {
     const installed = installDependenciesCached(options, commit, tree);
     if (!installed.passed) return null;
-    if (!commandPresentAt(settings, commit, check))
+    if (!commandPresentAt(options, commit, check))
       return missingAsPass ? evidence(commit, check, { passed: true, output: '', timedOut: false }, '') : null;
     const result = await executeCheck(
       options,
@@ -1479,6 +1546,7 @@ async function smokeHead(options: DevVerifierOptions, verified: string, target: 
   try {
     const setup = installDependenciesCached(options, target, tree);
     if (!setup.passed) return false;
+    const source = revisionSource(options, target, checks);
     let failed = false;
     for (const check of checks) {
       const result = await executeCheck(
@@ -1488,7 +1556,7 @@ async function smokeHead(options: DevVerifierOptions, verified: string, target: 
         target,
         tree,
         runCacheKey(settings, target, check, selection),
-        checkInput(settings, target, check),
+        checkInput(settings, target, check, source),
       );
       const assertions = result.passed ? [] : stableAssertions(result.output, settings.policy?.verifier);
       const status = result.passed ? 'pass' : classifyRun(result, settings.policy?.verifier);

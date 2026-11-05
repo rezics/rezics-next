@@ -2278,8 +2278,8 @@ always gates its own frozen integration candidate.
 
 ### Development verification
 
-Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head independently
-after the merge train has landed its batch; it cannot hold the train lease or block later ready landings. On each new
+Landing on `dev` is a mechanical integration step. A leased verifier checks each new `dev` head
+after the merge train lands its batch; it cannot hold the train lease or block later ready landings. On each new
 dev head it first runs the repository boot smoke named in `bootSmoke.tests` (Kernel and Web client-graph boot tests by
 default; a missing file is skipped until it lands). Heads that arrive while that smoke runs coalesce onto the newest
 head; older heads are skipped for this stage. The smoke uses a local process group with `policy.verifier.bootSmokeTimeoutMs`
@@ -2297,9 +2297,8 @@ commit to that resolution task's original manager, even if an earlier owner's so
 only the culprit's integrated changes in one commit, returns the task to its manager with the exact failing log, and
 keeps the worker's source branch available for the owner's fix. It then advances the verified ref past the culprit so
 the fix can start from that verified base. A transport or other recognized infrastructure failure during a culprit
-probe is retried up to twice and remains unassigned if it still cannot run; it is not treated as an assertion. This
-moves expensive checks after integration and lets a batch share them while keeping unstable `dev` separate from
-promotion's verified input.
+probe is retried up to twice and remains unassigned if it still cannot run; it is not treated as an assertion.
+Decision: source-presence and failed-input hashes use one Git batch-check per revision; missing paths, cwd, closure/package trees, env/toolchain identity and hashes stay.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
 `.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
