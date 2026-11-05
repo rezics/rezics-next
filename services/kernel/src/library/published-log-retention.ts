@@ -16,7 +16,7 @@ import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { requireRoute, workStepDeadline } from './command-support.ts';
 import { lockPublishedLog } from './published-log-store.ts';
-import due from './published-log-due.sql';
+import { executePublishedLogDue, publishedLogDuePlan } from './published-log-bounds.ts';
 import purge from './published-log-purge.sql';
 
 export const PUBLISHED_LOG_RETENTION_SWEEP_WORKFLOW = 'library.publishedLogRetentionSweep';
@@ -105,7 +105,7 @@ export async function purgeExpiredPublishedLog(
 }
 
 async function pageDuePublishedLogs(
-  connection: Parameters<typeof due.run>[0],
+  connection: Parameters<typeof executePublishedLogDue>[0],
   input: {
     partition: number;
     cutoff: string;
@@ -113,14 +113,14 @@ async function pageDuePublishedLogs(
     limit: number;
   },
 ): Promise<PublishedLogDueKey[]> {
-  const rows = await due.run(connection, {
+  const rows = await executePublishedLogDue(connection, publishedLogDuePlan({
     partition_no: input.partition,
     cutoff: input.cutoff,
     after_time: input.after?.restoreUntil ?? null,
     after_route: input.after?.route ?? null,
     after_id: input.after?.logId ?? null,
     limit: input.limit,
-  });
+  }));
   return rows.map((row) => {
     if (!row.accountId || !row.deletionId || !row.restoreUntil)
       throw new Error('Due log has no exact deletion locator');

@@ -2,10 +2,12 @@ import type { PoolClient } from 'pg';
 import type { ProgressState } from './progress.ts';
 import deleteLog from './published-log-delete.sql';
 import insertLog from './published-log-insert.sql';
-import pageLogs from './published-log-page.sql';
 import readLog from './published-log-read.sql';
-import lockLog from './published-log-lock.sql';
 import restoreLog from './published-log-restore.sql';
+import {
+  publishedLogReadPlan, publishedLogLockPlan, publishedLogPagePlan,
+  executePublishedLogRead, executePublishedLogLock, executePublishedLogPage,
+} from './published-log-bounds.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 export type PublishedLogRecord = NonNullable<Awaited<ReturnType<typeof readLog.run>>>;
@@ -73,11 +75,11 @@ export async function readPublishedLog(
   route: number,
   logId: string,
 ): Promise<PublishedLogRecord | null> {
-  const row = await readLog.run(queryClient(client), { route, log_id: logId });
+  const row = await executePublishedLogRead(queryClient(client), publishedLogReadPlan({ route, log_id: logId }));
   return row ? normalize(row) : null;
 }
 export async function lockPublishedLog(client: Client, route: number, accountId: string, logId: string, time: string) {
-  const row = await lockLog.run(queryClient(client), { route, account_id: accountId, log_id: logId, time });
+  const row = await executePublishedLogLock(queryClient(client), publishedLogLockPlan({ route, account_id: accountId, log_id: logId, time }));
   return row ? normalize(row) : null;
 }
 export async function deletePublishedLog(client: Client, key: Episode, context: Context): Promise<boolean> {
@@ -107,13 +109,13 @@ export async function restorePublishedLog(client: Client, key: Episode, context:
 export async function pagePublishedLogs(client: Client, route: number, accountId: string, page: PublishedLogPage) {
   if (!Number.isInteger(page.limit) || page.limit < 1 || page.limit > 101)
     throw new RangeError('Page limit must be an integer from 1 through 101');
-  const rows = await pageLogs.run(queryClient(client), {
+  const rows = await executePublishedLogPage(queryClient(client), publishedLogPagePlan({
     route,
     account_id: accountId,
     after_published_at: page.after?.publishedAt ?? '1970-01-01T00:00:00.000Z',
     after_log_id: page.after?.logId ?? '00000000-0000-0000-0000-000000000000',
     has_cursor: page.after !== null,
     limit: page.limit,
-  });
+  }));
   return rows.map((row) => normalize(row) as PublishedLogRecord);
 }
