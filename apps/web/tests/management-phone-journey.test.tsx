@@ -50,8 +50,9 @@ test('directory, organization, account and recovery retain independent phone con
     await act(async () => root.render(view));
   };
   const link = (href: string) => {
-    const found = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((item) => item.getAttribute('href') === href);
-    expect(found).toBeDefined();
+    const anchors = [...host.querySelectorAll<HTMLAnchorElement>('a')];
+    expect(anchors.map((item) => item.getAttribute('href'))).toContain(href);
+    const found = anchors.find((item) => item.getAttribute('href') === href);
     return found!;
   };
   const text = () => host.textContent!;
@@ -180,6 +181,7 @@ test('directory, organization, account and recovery retain independent phone con
     for (const locale of locales) {
       window.history.replaceState(null, '', `/${locale}/accounts`);
       await setLocale(locale, { reload: false });
+      expect(getLocale()).toBe(locale);
       for (const dir of ['ltr', 'rtl'] as const) {
         host.dir = dir;
         await mount(directory());
