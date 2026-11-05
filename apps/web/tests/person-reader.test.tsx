@@ -58,9 +58,13 @@ test('ordinary Person overview places the reader; admitted authored text and lab
     expect(html).toContain('2020');
     expect(html).not.toMatch(/January|January 1|1月1日/);
     expect(html).toContain('https://example.org/biography');
+    expect(html).toContain('https://example.org/original');
     expect(html).toContain(fixture.biography);
     expect(html).toMatch(new RegExp(`/subjects/${fixture.read.subject.id}/[^"/]+/people`));
+    expect(html).toContain(m.people_biography_unsupported({}, { locale }));
     expect(html).not.toContain('wdt:P106');
+    expect(html).not.toContain('schema:hasOccupation');
+    expect(html).not.toContain('schema:occupation');
   }
 });
 
@@ -99,6 +103,13 @@ test('unsupported, absent, unknown, withheld and unhydrated values remain distin
     ...occupation,
     id: crypto.randomUUID(),
   }));
+  expect(personGroups(fixture.release, fixture.read, 'en')[1]!.fields.map((field) => [field.id, field.admitted])).toEqual(
+    [
+      ['wdt:P106', true],
+      ['schema:hasOccupation', false],
+      ['schema:occupation', false],
+    ],
+  );
   expect(personGroups(fixture.release, fixture.read, 'en')[1]!.fields[0]!.facts).toHaveLength(personBounds.facts);
   expect(draw(fixture)).toContain(m.people_facts_browse({}, { locale: 'en' }));
   expect(draw(fixture)).toContain(m.people_facts_overflow({}, { locale: 'en' }));
