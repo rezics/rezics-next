@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useLayoutEffect, useRef, useSta
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
 
 type Draft = { signature: string; changed: boolean; retire(): void };
+export type AccessDepartureOptions = { abandon?: boolean; admit?: () => boolean };
+type Destination = { run(): void; abandon: boolean; admit?: () => boolean };
 const DraftContext = createContext<(draft: Draft) => () => void>(() => () => {});
 
 /** Paging and editor replacement share the route's decision and retire reads before the destination acts. */
@@ -11,14 +13,14 @@ export function AccessDeparture({
   retire,
   abandon,
 }: {
-  children: (move: (destination: () => void) => void) => ReactNode;
+  children: (move: (destination: () => void, options?: AccessDepartureOptions) => void) => ReactNode;
   unresolved: boolean;
   retire(): void;
   abandon(): void;
 }) {
   const draft = useRef<Draft | null>(null);
   const [signature, setSignature] = useState('');
-  const destination = useRef<(() => void) | null>(null);
+  const destination = useRef<Destination | null>(null);
   const register = useCallback((value: Draft) => {
     draft.current = value;
     setSignature(value.signature);
@@ -35,21 +37,31 @@ export function AccessDeparture({
     `${unresolved}:${signature}`,
     () => {
       draft.current?.retire();
-      abandon();
-      destination.current?.();
+      const pending = destination.current;
       destination.current = null;
+      if (!pending || (pending.admit && !pending.admit())) return;
+      if (pending.abandon) abandon();
+      pending.run();
     },
     () => {
       draft.current?.retire();
       retire();
     },
   );
-  const move = (next: () => void) => {
-    destination.current = next;
+  const move = (next: () => void, options: AccessDepartureOptions = {}) => {
+    const pending: Destination = {
+      run: next,
+      abandon: options.abandon ?? true,
+      ...(options.admit ? { admit: options.admit } : {}),
+    };
+    destination.current = pending;
     departure.requestDiscard(() => {
       draft.current?.retire();
-      if (unresolved) abandon();
-      next();
+      if (destination.current !== pending) return;
+      destination.current = null;
+      if (pending.admit && !pending.admit()) return;
+      if (pending.abandon && unresolved) abandon();
+      pending.run();
     });
   };
   return <DraftContext.Provider value={register}>{children(move)}</DraftContext.Provider>;

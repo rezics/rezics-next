@@ -1,6 +1,7 @@
 import { reviewRequest, grantRequest, transferRequest } from './request';
 import { parseOwnerTransfer, type OwnerTransfer } from './owner-transfer.ts';
 import type { AccessIO, AccessState, Change, WriteResult } from './data';
+import { AccessWindowNavigation, type StagedWindowRead } from './window-navigation';
 
 export type EditorState = {
   page: AccessState;
@@ -8,12 +9,15 @@ export type EditorState = {
   busy: boolean;
   reconciling: boolean;
   pending: Change | OwnerTransfer | null;
+  canPrevious: boolean;
+  canFirst: boolean;
 };
 
 /** One immutable operation survives transport loss. A receipt never replaces a current read. */
 export class AccessRecovery {
   private listeners = new Set<() => void>();
   private state: EditorState;
+  private windows = new AccessWindowNavigation();
   private generation = 0;
   private active = true;
   private request = new AbortController();
@@ -21,7 +25,15 @@ export class AccessRecovery {
     page: AccessState,
     private io: AccessIO,
   ) {
-    this.state = { page, phase: 'idle', busy: false, reconciling: false, pending: null };
+    this.state = {
+      page,
+      phase: 'idle',
+      busy: false,
+      reconciling: false,
+      pending: null,
+      canPrevious: false,
+      canFirst: false,
+    };
   }
   snapshot = () => this.state;
   /** Effect replay may reattach this controller, but never its old continuations. */
@@ -37,6 +49,16 @@ export class AccessRecovery {
   retire = () => {
     this.active = false;
     this.generation++;
+    this.windows.reset();
+    this.state = {
+      ...this.state,
+      page: { status: 'unavailable' },
+      busy: false,
+      reconciling: false,
+      phase: this.state.busy && this.state.pending ? 'uncertain' : this.state.phase,
+      canPrevious: false,
+      canFirst: false,
+    };
   };
   dispose = () => {
     this.retire();
@@ -51,11 +73,13 @@ export class AccessRecovery {
   };
   /** A deliberate local replacement starts fresh without replaying the abandoned command. */
   abandon = () => {
-    this.retire();
+    this.active = false;
+    this.generation++;
     this.request = new AbortController();
     this.active = true;
     this.update({ pending: null, busy: false, reconciling: false, phase: 'idle' });
   };
+  isCurrentLifetime = () => this.active;
   private owns(generation: number) {
     return this.active && generation === this.generation;
   }
@@ -76,12 +100,49 @@ export class AccessRecovery {
       return { status: 'unavailable' as const };
     }
   }
-  async reload(cursor?: string) {
-    if (!this.active || this.state.busy) return;
+  async reload() {
+    if (!this.active || this.state.busy) return false;
+    const movement = this.windows.stageRefresh();
+    if (!movement) return false;
+    return this.readWindow(movement, true);
+  }
+  async next() {
+    if (!this.canStartMovement()) return false;
+    if (this.state.page.status !== 'ready' || this.state.page.page.next == null) return false;
+    const movement = this.windows.stageNext(this.state.page.page.next);
+    if (!movement) return false;
+    return this.readWindow(movement);
+  }
+  async previous() {
+    if (!this.canStartMovement()) return false;
+    const movement = this.windows.stagePrevious();
+    if (!movement) return false;
+    return this.readWindow(movement);
+  }
+  async first() {
+    if (!this.canStartMovement() || !this.state.canFirst) return false;
+    const movement = this.windows.stageFirst();
+    if (!movement) return false;
+    return this.readWindow(movement);
+  }
+  async retryPage() {
+    if (!this.active || this.state.busy) return false;
+    const movement = this.windows.retryOrFirst();
+    if (!movement) return false;
+    return this.readWindow(movement, true);
+  }
+  private canStartMovement() {
+    return this.active && !this.state.busy && !this.state.pending && !this.state.reconciling;
+  }
+  private async readWindow(movement: StagedWindowRead, allowPending = false) {
+    if (!this.active || this.state.busy || (!allowPending && this.state.pending)) return false;
     const generation = ++this.generation;
     this.update({ busy: true, page: { status: 'loading' } });
-    const page = await this.current(cursor);
-    if (this.owns(generation)) this.update({ page, busy: false });
+    const page = await this.current(movement.cursor);
+    if (!this.owns(generation)) return false;
+    if (page.status === 'ready') this.windows.admitReady();
+    this.update({ page, busy: false, canPrevious: this.windows.canPrevious, canFirst: this.windows.canFirst });
+    return page.status === 'ready';
   }
   async submit(change: Omit<Change, 'key'>) {
     if (!this.active || this.state.busy || this.state.pending) return;
@@ -118,14 +179,25 @@ export class AccessRecovery {
       result = { status: 'uncertain' };
     }
     if (!this.owns(generation)) return;
+    const movement = this.windows.stageAuthoritativeFirst();
     // Clear all old ACL data before a current authorization/disclosure read.
     this.update({
       page: { status: 'loading' },
       phase: result.status,
       reconciling: true,
       pending: result.status === 'uncertain' || result.status === 'preparing' ? pending : null,
+      canPrevious: false,
+      canFirst: false,
     });
-    const page = current ?? (await this.current());
-    if (this.owns(generation)) this.update({ page, busy: false, reconciling: false });
+    const page = current ?? (await this.current(movement.cursor));
+    if (!this.owns(generation)) return;
+    if (page.status === 'ready') this.windows.admitReady();
+    this.update({
+      page,
+      busy: false,
+      reconciling: false,
+      canPrevious: this.windows.canPrevious,
+      canFirst: this.windows.canFirst,
+    });
   }
 }
