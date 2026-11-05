@@ -167,6 +167,7 @@ test('anonymous typed public POST renders current terms without private SSR or i
   expect(selected?.subject.resolution).toEqual(recordedSubject.subject.resolution);
   expect(selected?.account).toEqual(recordedSubject.account);
   const queryClient = new QueryClient();
+  queryClient.setQueryData(['exposure', 'anonymous'], ['personal_library']);
   const router = createRouter({
     routeTree: createRootRoute({
       component: () =>

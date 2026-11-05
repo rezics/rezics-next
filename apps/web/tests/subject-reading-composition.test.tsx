@@ -97,7 +97,7 @@ test('The default Subject reader does not describe admitted incoming editions as
   );
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const exposure = await client.platform.exposure.get();
-  queryClient.setQueryData(['exposure', 'anonymous'], exposure.data?.admitted ?? []);
+  queryClient.setQueryData(['exposure', 'anonymous'], [...(exposure.data?.admitted ?? []), 'personal_library']);
   const router = createRouter({
     routeTree: createRootRoute({ component: () => content }),
     history: createMemoryHistory({ initialEntries: ['/en/subjects'] }),
