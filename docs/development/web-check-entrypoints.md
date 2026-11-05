@@ -52,10 +52,15 @@ diagnostics, not permission to drop required semantics.
 
 The local driver process inherits its receipt fd 3 and nonce, signal/cancellation controls and stdout/stderr.
 The native environment overlay does not inherit receipt authority. INT/TERM/HUP and an invocation AbortSignal reach
-that driver. The driver owns queued cancellation, physical cleanup and confirmed terminality; it must retain unknown
-remote custody and source snapshots. Web does not release that custody, delete the remote snapshot or manufacture
-receipts from logs/exit codes. Native status, timeout 124 and transport 75 pass back unchanged. Errors from private
-environment cleanup retain the command/transport failure as well.
+that driver. The driver owns queued cancellation, physical cleanup and confirmed terminality. Each focused Web check
+starts a new invocation with its own descriptor; the worker sees that invocation's result. An earlier run that is still
+marked occupied, or whose result, receipt or exit code is unknown, is not a result and is not a reason to refuse.
+Stale descriptors, journals and receipts from earlier invocations are ignored or removed best effort and never block a
+new run. Web does not reconcile an unknown earlier run in order to prevent a duplicate, manufacture receipts from
+logs/exit codes, or delete a remote snapshot it did not start. Native status, timeout 124 and transport 75 pass back
+unchanged. Private-file cleanup of this invocation is best effort and cannot replace its result.
+
+Decision: a focused Web check can always be run again; leftover occupancy adds no refusal.
 
 ## Routes and returned artifacts
 
@@ -64,7 +69,7 @@ environment cleanup retain the command/transport failure as well.
 | Web `build`                                                           | Original `vite build --config vite.config.ts`                                                                                                          | `apps/web/dist`, `apps/web/.wrangler`                                                                |
 | Web `check`, `test:stories`, `test:host`, explicit host/browser modes | Original check argv and native test selection; preparation occurs remotely before tests                                                                | Timing cache; explicit browser report directory; prepare-only template `.dev.vars`                   |
 | Web `test`                                                            | Original isolated wrapper and its Bun test argv                                                                                                        | Declared named state/profile/event paths; otherwise no persistent result tree                        |
-| `focused.ts`                                                          | Original command after remote message/route preparation; optional private network, output relay and independent process-group/fixture cleanup retained | Declared named state/profile/event paths                                                             |
+| `focused.ts`                                                          | Original command after remote message/route preparation; each call starts a new placement; leftover journals never refuse; optional private network, output relay and independent process-group/fixture cleanup retained | Declared named state/profile/event paths                                                             |
 | `storybook-build.ts`                                                  | Both original Web and UI Storybook builds in the same physical run                                                                                     | Entire selected output tree, including `ui/`, compatibility indexes and exact candidate `build.json` |
 | `storybook-deploy.ts`                                                 | Remote validation by default; explicit `--local` uses the same finite build and unchanged six smoke scenarios before local publication                 | Entire validated Storybook output tree                                                               |
 | `storybook-smoke.ts`                                                  | Same six selectors and render/image/language/cover assertions, on existing artifacts in that physical snapshot                                         | No new artifact tree                                                                                 |
@@ -130,7 +135,7 @@ fixtures retain their existing independent server/browser cleanup.
 `check-placement.test.ts` authors pure mocked placement, argv/environment/returns, native/transport failure,
 cleanup aggregation, cancellation and callable/supplied-browser regressions. It starts no browser/build/server.
 This source slice does not supply physical proof. The original native acceptance, six-smoke execution, artifact
-round trips, authenticated receipts and cancellation/unknown-terminality cases require normal integration receiving.
+round trips, authenticated receipts and cancellation cases require normal integration receiving.
 No claim of runtime release, all-launcher closure, or whole-Goal completion follows from compiler success.
 
 The integrated producer CLI, prepared-input/return verification and physical host admission remain Performance/CP

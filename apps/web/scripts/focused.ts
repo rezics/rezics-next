@@ -30,6 +30,10 @@ export type FocusedRunnerOptions = {
   prepare?: (appDirectory: string, env: NodeJS.ProcessEnv) => number | Promise<number>;
   onStart?: (runtime: { pid?: number; stateDirectory: string }) => void;
   onOutput?: (stream: 'stdout' | 'stderr', chunk: Uint8Array) => void;
+  place?: (
+    run: { root: string; cwd: string; command: string[] },
+    env: NodeJS.ProcessEnv,
+  ) => Promise<number | null>;
 };
 
 async function prepareFocusedRun(appDirectory: string, env: NodeJS.ProcessEnv): Promise<number> {
@@ -104,7 +108,8 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     throw new Error(
       'Focused check unavailable: in-process preparation/start/output hooks require actual remote custody; callbacks cannot be transferred through the finite CLI.',
     );
-  const routed = await routeWebCheck(
+  const place = options.place ?? routeWebCheck;
+  const routed = await place(
     {
       root: resolve(app, '../..'),
       cwd: appDirectory,
