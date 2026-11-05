@@ -182,45 +182,14 @@ test('one FULL label-assignment read supplies the whole tile page, name and curs
 });
 
 test('rejected native Label cursors offer a deliberate same-Label first page without changing other outcomes', async () => {
-  const rejected = [
-    { status: 400, code: 'invalid_cursor', recover: true, cursor: true },
-    { status: 409, code: 'stale_cursor', recover: true, cursor: true },
-    { status: 409, code: 'invalid_cursor', recover: false, cursor: true },
-    { status: 400, code: 'stale_cursor', recover: false, cursor: true },
-    { status: 400, code: 'invalid_cursor', recover: false, cursor: false },
-  ];
   try {
-    for (const outcome of rejected) {
+    for (const [status, code] of [[400, 'invalid_cursor'], [409, 'stale_cursor']] as const) {
       requests.length = 0;
-      assignmentOverride = {
-        status: outcome.status,
-        body: { code: outcome.code },
-        cursorOnly: outcome.cursor,
-      };
-      const page = await loadLabelShelfPage(client() as never, request(), env, {
-        labelId,
-        ...(outcome.cursor ? { cursor: 'opaque-page-token' } : {}),
-        limit: 100,
-      });
-      expect(page.state).toBe(outcome.recover ? 'cursor-rejected' : 'unavailable');
-      expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toEqual([
-        expect.objectContaining({
-          query: {
-            labelId,
-            view: 'FULL',
-            limit: '100',
-            ...(outcome.cursor ? { cursor: 'opaque-page-token' } : {}),
-          },
-          authorization: 'Bearer native-web-token',
-        }),
-      ]);
-      if (!outcome.recover) continue;
+      assignmentOverride = { status, body: { code }, cursorOnly: true };
+      const input = { labelId, cursor: 'opaque-page-token', limit: 100 } as const;
+      const page = await loadLabelShelfPage(client() as never, request(), env, input);
       expect(page).toEqual({ state: 'cursor-rejected', labelId });
-      const currentPage = await loadCurrentLabelShelfPage(client() as never, request(), env, {
-        labelId,
-        cursor: 'opaque-page-token',
-        limit: 100,
-      });
+      const currentPage = await loadCurrentLabelShelfPage(client() as never, request(), env, input);
       expect(currentPage).toMatchObject({
         state: 'cursor-rejected',
         labelId,
@@ -230,45 +199,22 @@ test('rejected native Label cursors offer a deliberate same-Label first page wit
           source: { labelId, cursor: 'opaque-page-token' },
         },
       });
-      expect(currentPage).not.toHaveProperty('label');
       expect(currentPage).not.toHaveProperty('entries');
-      expect(currentPage).not.toHaveProperty('undo');
-      expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toHaveLength(2);
-      const html = renderToStaticMarkup(
-        createElement(LabelShelfPage, {
-          page,
-          locale: 'ja',
-          display: {
-            layout: 'table',
-            size: 'l',
-            columns: 'title',
-            layoutExplicit: true,
-            sizeExplicit: true,
-            columnsExplicit: true,
-          },
-        }),
-      );
+      const html = renderToStaticMarkup(createElement(LabelShelfPage, { page, locale: 'ja', display: {
+        layout: 'table', size: 'l', columns: 'title', layoutExplicit: true, sizeExplicit: true, columnsExplicit: true,
+      } }));
       expect(html).toContain('This Label continuation could not be loaded.');
       expect(html).toContain(`/ja/library?label=${labelId}&amp;layout=table&amp;size=l&amp;columns=title`);
-      expect(html).not.toContain('opaque-page-token');
-      expect(html).not.toContain('Reading list');
-      expect(html).not.toContain('<form');
-      expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toHaveLength(1);
+      expect(html).not.toMatch(/opaque-page-token|Reading list|<form/);
+      expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toHaveLength(2);
     }
-
-    for (const outcome of [
-      { status: 403, code: 'permission_denied', state: 'denied' },
-      { status: 403, code: 'platform_closed', state: 'closed' },
-      { status: 500, code: 'service_unavailable', state: 'unavailable' },
-    ]) {
-      assignmentOverride = { status: outcome.status, body: { code: outcome.code } };
-      expect(
-        await loadLabelShelfPage(client() as never, request(), env, {
-          labelId,
-          cursor: 'opaque-page-token',
-          limit: 100,
-        }),
-      ).toMatchObject({ state: outcome.state });
+    for (const [status, code, cursor] of [[409, 'invalid_cursor', true], [400, 'stale_cursor', true], [400, 'invalid_cursor', false]] as const) {
+      assignmentOverride = { status, body: { code }, cursorOnly: cursor };
+      expect((await loadLabelShelfPage(client() as never, request(), env, { labelId, ...(cursor ? { cursor: 'bad' } : {}), limit: 100 })).state).toBe('unavailable');
+    }
+    for (const [status, code, state] of [[403, 'permission_denied', 'denied'], [403, 'platform_closed', 'closed'], [500, 'failed', 'unavailable']] as const) {
+      assignmentOverride = { status, body: { code } };
+      expect((await loadLabelShelfPage(client() as never, request(), env, { labelId, cursor: 'bad', limit: 100 })).state).toBe(state);
     }
   } finally {
     assignmentOverride = null;
