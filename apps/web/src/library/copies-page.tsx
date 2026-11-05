@@ -43,6 +43,7 @@ import { useCopyInventoryReview } from './copy-inventory-review/selection';
 import { CopyInventorySelect } from './copy-inventory-review/select';
 import { CopyInventoryHistory, hasUnresolvedHistory } from './copy-inventory-review/history';
 import { CopyInventoryFilters } from './copy-inventory-filters';
+import type { CopiesWindowMove } from './copies-windows/model';
 export { CopiesFallback } from './copies-fallback';
 const target =
   'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -971,11 +972,17 @@ export function CopiesPage({
   page,
   failure,
   originating,
+  windows,
   onRetryInventory,
 }: {
   page: CopiesPageData;
   failure?: string | undefined;
   originating?: CopiesOrigin | undefined;
+  windows?: {
+    current: string | null | undefined;
+    previous: string | null | undefined;
+    move: (direction: CopiesWindowMove, target: string | null, keyboard: boolean) => boolean;
+  };
   onRetryInventory?: (() => void) | undefined;
 }) {
   const [loaded, setLoaded] = useState({ page, generation: 0 });
@@ -987,6 +994,7 @@ export function CopiesPage({
       page={page}
       failure={failure}
       originating={originating}
+      windows={windows}
       onRetryInventory={onRetryInventory}
     />
   );
@@ -996,11 +1004,17 @@ function LoadedCopiesPage({
   page,
   failure,
   originating,
+  windows,
   onRetryInventory,
 }: {
   page: CopiesPageData;
   failure?: string | undefined;
   originating?: CopiesOrigin | undefined;
+  windows?: {
+    current: string | null | undefined;
+    previous: string | null | undefined;
+    move: (direction: CopiesWindowMove, target: string | null, keyboard: boolean) => boolean;
+  };
   onRetryInventory?: (() => void) | undefined;
 }) {
   const [copies, setCopies] = useState(page.copies);
@@ -1138,10 +1152,14 @@ function LoadedCopiesPage({
   };
   const firstPageEmpty = !page.requestedCursor && !page.next && !page.copies.length && !changed;
   const recoverable = Boolean(page.requestedCursor) || (!copies.length && !firstPageEmpty);
+  const firstAvailable = windows?.current !== undefined ? windows.current !== null : recoverable;
+  const previousAvailable = windows?.previous !== undefined;
   return (
     <div className="max-w-4xl space-y-6 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <PageHeading>{m.library_copy_heading()}</PageHeading>
+        <PageHeading id="copies-inventory-heading" tabIndex={-1}>
+          {m.library_copy_heading()}
+        </PageHeading>
         {page.inventoryState !== 'forbidden' && (!page.subjectId || page.profile?.kinds.length) ? (
           <button
             type="button"
@@ -1281,15 +1299,41 @@ function LoadedCopiesPage({
           ) : null}
         </div>
       )}
-      {page.next || recoverable ? (
+      {page.next || firstAvailable || previousAvailable ? (
         <Exposure operation="copy.list">
           <nav aria-label={m.library_copy_heading()} className="flex flex-wrap gap-3">
-            {recoverable ? (
+            {previousAvailable ? (
+              <Link
+                to="/library/copies"
+                search={{
+                  ...firstPageSearch,
+                  ...(windows?.previous === null || windows?.previous === undefined
+                    ? {}
+                    : { cursor: windows.previous }),
+                }}
+                onClick={(event) => {
+                  if (!currentPage('copy.list')) {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (windows && !windows.move('previous', windows.previous!, event.detail === 0))
+                    event.preventDefault();
+                }}
+                className={`${quiet} text-primary`}
+              >
+                {m.library_label_previous_page()}
+              </Link>
+            ) : null}
+            {firstAvailable ? (
               <Link
                 to="/library/copies"
                 search={firstPageSearch}
                 onClick={(event) => {
-                  if (!currentPage('copy.list')) event.preventDefault();
+                  if (!currentPage('copy.list')) {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (windows && !windows.move('first', null, event.detail === 0)) event.preventDefault();
                 }}
                 className={`${quiet} text-primary`}
               >
@@ -1300,7 +1344,11 @@ function LoadedCopiesPage({
               <Link
                 to="/library/copies"
                 onClick={(event) => {
-                  if (!currentPage()) event.preventDefault();
+                  if (!currentPage('copy.list')) {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (windows && !windows.move('more', page.next, event.detail === 0)) event.preventDefault();
                 }}
                 search={{ ...firstPageSearch, cursor: page.next }}
                 className={`${quiet} text-primary`}

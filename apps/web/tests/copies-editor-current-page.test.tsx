@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createContext, useContext, useLayoutEffect, type ReactNode } from 'react';
+import { act, createContext, useContext, useLayoutEffect, type ComponentProps, type ReactNode } from 'react';
 import type { CopiesPageData, CopyItem, CopyRemoved } from '../src/library/copies-read';
 import { m } from '../src/paraglide/messages.js';
 
@@ -231,11 +231,11 @@ const pageOf = (...copies: CopyItem[]): CopiesPageData => ({
 });
 const receipt = (): CopyRemoved => ({ ok: true, undo: { deletionId: crypto.randomUUID(), revision: 4 } });
 const latest = (operation: Operation) => calls[operation].at(-1)!;
-const render = (page: CopiesPageData) =>
+const render = (page: CopiesPageData, windows?: ComponentProps<typeof CopiesPage>['windows']) =>
   act(async () =>
     root.render(
       <router.RouterContextProvider router={contextRouter}>
-        <CopiesPage page={page} />
+        <CopiesPage page={page} windows={windows} />
       </router.RouterContextProvider>,
     ),
   );
@@ -682,7 +682,10 @@ test('presentation changes retain conflict review and pending/uncertain intent i
 
 test('shell dismissal uses the draft decision; completed close returns only to a current connected inventory launcher', async () => {
   const copy = item();
-  await render(pageOf(copy));
+  await render(pageOf(copy), { current: 'cursor-2', previous: null, move: () => true });
+  const previous = [...host.querySelectorAll('a')].find((link) => link.textContent === m.library_label_previous_page());
+  expect(previous?.className).toContain('min-h-11');
+  expect(previous?.className).toContain('whitespace-normal');
   const launcher = button(m.library_copy_add());
   launcher.focus();
   await click(m.library_copy_add());

@@ -587,6 +587,9 @@ test('The actual Copies route retires retained private rows and editor state on 
     absent('A');
     expect(host.textContent).toContain(m.library_copy_inventory_forbidden());
     expect(host.querySelectorAll('[data-slot="list-row"]')).toHaveLength(0);
+    expect([...host.querySelectorAll('a')].some((node) => node.textContent === m.library_label_previous_page())).toBe(
+      false,
+    );
     expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(0);
     expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.library_copy_add())).toBe(false);
     expect(listInputs.at(-1)).toMatchObject(search);
