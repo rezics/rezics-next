@@ -36,7 +36,7 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
     const subjects = new Map<string, string>();
     const receipts = new Map<string, BatchWriteResult['results'][number]>();
     let sequence = 0;
-    const fakeFetch: typeof globalThis.fetch = async (input, init) => {
+    const fakeFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const url = new URL(request.url);
       if (url.origin === auth) {
@@ -77,7 +77,7 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
         }),
       };
       return Response.json(result);
-    };
+    }) as unknown as typeof globalThis.fetch;
     const result = await runImportCli(
       [
         '--source', 'bangumi', '--source-alias', 'bangumi_cross_media', '--dump', '-', '--state', state,
