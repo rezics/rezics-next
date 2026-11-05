@@ -56,6 +56,7 @@ import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigati
 import { requestLanguages } from '../kernel/languages';
 import {
   useRealmCompletionFocus,
+  type RealmCompletion,
   type RealmCompleted,
   type RealmPublicationCompletion,
   type RealmCompletionFocus,
@@ -650,6 +651,10 @@ function SpaceHome({
     realmReadingReturn(localizedHref, getLocale()) ??
     (page.realm ? `/${getLocale()}/realms/${page.realm.id}` : localizedHref.split(/[?#]/, 1)[0]!);
   const [readingReturn, setReadingReturn] = useState(initialReturn);
+  const readingReturnRef = useRef(readingReturn);
+  readingReturnRef.current = readingReturn;
+  const pageRoot = useRef<HTMLElement | null>(null);
+  const lifetime = useSpacePageLifetime();
   const catalogueRevision = useRef(0);
   const catalogueVersion = catalogueRevision.current;
   const [spaceRestriction, restrictSpace] = useState<{ id: string; state: 'removed' | 'orphaned' } | null>(null);
@@ -723,6 +728,56 @@ function SpaceHome({
     (claimRead?.kind === 'ready'
       ? claimRead.snapshot.ownershipState === 'orphaned'
       : pageSource?.ownershipState === 'orphaned');
+  const onRealmCompleted = useCallback(
+    (receipt: RealmCompletion) => {
+      const realm = page.realm;
+      const sourceHref = realmReadingReturn(readingReturnRef.current, locale);
+      const routeHref = realmReadingReturn(initialReturn, locale);
+      if (
+        !realm ||
+        !lifetime ||
+        receipt.realmId !== realm.id ||
+        !receipt.current() ||
+        !receipt.focusEligible() ||
+        !lifetime.current() ||
+        !lifetime.matchesPage(page) ||
+        realmRemoved ||
+        orphaned ||
+        frozen ||
+        !readable ||
+        !sourceHref ||
+        !routeHref ||
+        sourceHref.split(/[?#]/u, 1)[0] !== routeHref.split(/[?#]/u, 1)[0]
+      )
+        return false;
+
+      const selection = realmReadingSelection(sourceHref);
+      if (!selection.node || !pageRoot.current) return false;
+      const regionId = selection.node === 'boards' ? 'realm-boards-heading' : 'realm-published-heading';
+      const heading = document.getElementById(regionId);
+      const shelf = heading?.closest('section[aria-labelledby]');
+      if (
+        !heading?.isConnected ||
+        !shelf ||
+        shelf.getAttribute('aria-labelledby') !== regionId ||
+        !pageRoot.current.contains(shelf)
+      )
+        return false;
+
+      const selected = selection.focus ? document.getElementById(selection.focus) : null;
+      const target = selected && shelf.contains(selected) ? selected : heading;
+      if (!target.isConnected || target.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+      target.focus({ preventScroll: true });
+      return (
+        target.isConnected &&
+        document.activeElement === target &&
+        receipt.current() &&
+        lifetime.current() &&
+        lifetime.matchesPage(page)
+      );
+    },
+    [frozen, initialReturn, lifetime, locale, orphaned, page, readable, realmRemoved],
+  );
   const managementRestricted = realmRemoved || orphaned || !readable;
   const setupAdmitted =
     !managementRestricted && setup?.kind === 'ready' && Object.values(setup.permitted).some(Boolean);
@@ -760,6 +815,7 @@ function SpaceHome({
           realm={page.realm}
           spaceId={page.space.id}
           returnTo={readingReturn}
+          onCompleted={onRealmCompleted}
           {...(nativeObservation ? { nativeObservation } : {})}
         />
       ) : null}
@@ -775,6 +831,7 @@ function SpaceHome({
     (banner && bannerVariant ? coverSrc(banner.media, bannerVariant.format, bannerVariant.width) : undefined);
   return (
     <article
+      ref={pageRoot}
       className="max-w-5xl space-y-10 text-foreground"
       {...(page.realmCarrier ? { 'data-realm-carrier': page.realmCarrier } : {})}
     >
@@ -833,6 +890,7 @@ function SpaceHome({
           frozen={frozen}
           returnTo={initialReturn}
           onReadingChange={setReadingReturn}
+          onCompleted={onRealmCompleted}
           {...(nativeShelfTransport ? { transport: nativeShelfTransport } : {})}
         />
       ) : null}

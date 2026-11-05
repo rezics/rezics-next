@@ -127,7 +127,8 @@ credential, route or frozen state retires its pending return effects before repl
 not navigate or move focus after retirement. Missing, denied and stale windows keep the native shelf's explicit
 retry/restart controls; focus restoration never takes focus from an intervening user action.
 
-The remaining acknowledged in-page participation return needs an outer source-bound completion seam from the
-existing command owners. Their current invalidation replaces the page and restarts its ephemeral selection.
-This implementation does not retain that selection across an unqualified replacement or intercept a command.
-The continuation also adopts Content's approved community mount once its public render slot is available.
+Decision: the outer Space visit consumes the existing `RealmMembership` and `RealmShelf` completion receipts and
+restores keyboard focus synchronously only to the same admitted Realm, node, cursor window and connected selected
+region while both receipt predicates and the page lifetime remain current; otherwise the command host keeps its local
+focus and recovery. The current base has no `RealmCommunityBoards` public slot, so retain one existing shelf mount and
+keep recent discussions unavailable until that official slot and contract arrive.
