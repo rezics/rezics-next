@@ -281,11 +281,14 @@ export type NativeSecurityPage =
   | { kind: 'signed-out' | 'denied' | 'unavailable' };
 export const readNativeSecurityPage = createServerOnlyFn(async (): Promise<NativeSecurityPage> => {
   try {
-    const response = await issuerSecurityRequest('/security-page');
+    const { response, body } = await issuerSecurityJsonRequest(
+      '/security-page',
+      securityFixedResponseByteBudgets.securityPage,
+    );
     if (response.status === 401) return { kind: 'signed-out' };
     if (response.status === 403) return { kind: 'denied' };
     if (response.status !== 200) return { kind: 'unavailable' };
-    const page = parseSecurityPage(await response.json());
+    const page = parseSecurityPage(body);
     return page ? { kind: 'ready', page } : { kind: 'unavailable' };
   } catch {
     return { kind: 'unavailable' };
