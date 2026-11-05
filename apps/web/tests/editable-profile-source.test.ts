@@ -76,7 +76,9 @@ test('the editable source rejects incomplete, foreign and non-closed native bodi
 test('the official private GET supplies field advice and keeps unsupported local choices review-only', async () => {
   const client = createKernelClient('https://kernel.example.test', {
     fetch: (async () =>
-      Response.json(officialProfileRead(profile), { headers: { 'cache-control': 'private, no-store' } })) as typeof fetch,
+      Response.json(officialProfileRead(profile), {
+        headers: { 'cache-control': 'private, no-store' },
+      })) as typeof fetch,
   });
   const editor = new ProfileEditor({
     read: () => loadProfileRecord(client, 'Bearer unchanged', profile.id),
@@ -208,8 +210,24 @@ test('thrown setup yields a serializable unavailable result rather than an escap
   const write = JSON.parse(
     JSON.stringify(
       await runSaveProfile({
-        before: { accountId: profile.id, kind: 'actor', displayName: null, biography: null, avatar: null, links: [], publicViews: profile.publicViews },
-        after: { accountId: profile.id, kind: 'actor', displayName: 'Later', biography: null, avatar: null, links: [], publicViews: profile.publicViews },
+        before: {
+          accountId: profile.id,
+          kind: 'actor',
+          displayName: null,
+          biography: null,
+          avatar: null,
+          links: [],
+          publicViews: profile.publicViews,
+        },
+        after: {
+          accountId: profile.id,
+          kind: 'actor',
+          displayName: 'Later',
+          biography: null,
+          avatar: null,
+          links: [],
+          publicViews: profile.publicViews,
+        },
         idempotencyKey: '123e4567-e89b-42d3-a456-426614174000',
       }),
     ),
