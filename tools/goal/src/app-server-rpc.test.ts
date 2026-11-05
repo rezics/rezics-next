@@ -50,7 +50,7 @@ function handle(message, send) {
     return;
   }
   if (message.method === 'test/late') {
-    setTimeout(() => send({ id: message.id, result: 'late' }), 80);
+    setTimeout(() => send({ id: message.id, result: 'late' }), 300);
     return;
   }
   if (message.method === 'test/never') return;
@@ -87,7 +87,7 @@ console.error('readyz: http://127.0.0.1:' + server.port + '/readyz');
 `;
 
 const policy = readControlPolicy({
-  appServer: { readinessTimeoutMs: 1000, connectTimeoutMs: 1000, requestTimeoutMs: 30, terminationGraceMs: 25 },
+  appServer: { readinessTimeoutMs: 1000, connectTimeoutMs: 1000, requestTimeoutMs: 150, terminationGraceMs: 25 },
 }).appServer;
 
 const transports: { name: string; connect(directory: string): Promise<AppServer> }[] = [
@@ -162,7 +162,7 @@ for (const transport of transports) {
       });
 
       await expect(client.request('test/late', {})).rejects.toThrow('App-server request timed out: test/late');
-      await Bun.sleep(60);
+      await Bun.sleep(200);
       await expect(client.request('test/after-late', {})).resolves.toBe('test/after-late');
 
       const pending = client.request('test/never', {});
