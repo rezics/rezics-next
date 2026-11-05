@@ -163,11 +163,11 @@ test('type and code buckets count distinct current sources and use stable count/
     complete: true,
   });
 
-  expect(answer.total).toEqual({ value: 3, relation: 'exact' });
+  expect(answer.total).toEqual({ value: 3, relation: 'lower_bound' });
   expect(answer.facets).toEqual([
     {
       property: 'type',
-      relation: 'exact',
+      relation: 'lower_bound',
       values: [
         { value: 'schema:Book', count: 2, labels: { en: 'Book', fr: 'Livre' } },
         { value: 'schema:Person', count: 1, labels: { en: 'Person' } },
@@ -175,7 +175,7 @@ test('type and code buckets count distinct current sources and use stable count/
     },
     {
       property: code,
-      relation: 'exact',
+      relation: 'lower_bound',
       values: [
         { value: 'en', count: 2, labels: {} },
         { value: 'fr', count: 2, labels: {} },
@@ -276,7 +276,7 @@ test('repeated facts and duplicate hits contribute once per source and value', a
     complete: true,
   });
 
-  expect(answer.total).toEqual({ value: 1, relation: 'exact' });
+  expect(answer.total).toEqual({ value: 1, relation: 'lower_bound' });
   expect(answer.facets[0]!.values).toEqual([
     { value: 'en', count: 1, labels: {} },
     { value: 'fr', count: 1, labels: {} },
