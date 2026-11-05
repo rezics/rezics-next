@@ -327,11 +327,15 @@ test('the mounted default Following composition retires viewer, cursor and row l
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!;
     expect(trigger.disabled).toBe(false);
     await act(async () => {
+      trigger.dispatchEvent(
+        new window.PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse', isPrimary: true }),
+      );
+      trigger.dispatchEvent(
+        new window.PointerEvent('pointerup', { bubbles: true, button: 0, pointerType: 'mouse', isPrimary: true }),
+      );
       trigger.click();
       await tick();
     });
-    const reactPropsKey = Object.getOwnPropertyNames(trigger).find((key) => key.startsWith('__reactProps$'));
-    console.log('Following trigger React props', reactPropsKey ? Object.keys((trigger as any)[reactPropsKey]) : []);
     const action = [...window.document.querySelectorAll<HTMLElement>('[role="menuitem"], button')].find(
       (item) => item.textContent === m.library_follow_unfollow(),
     );
@@ -684,6 +688,12 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     const trigger = host.querySelector<HTMLButtonElement>('[data-slot="follow-control"] button')!;
     expect(trigger.disabled).toBe(false);
     await act(async () => {
+      trigger.dispatchEvent(
+        new window.PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse', isPrimary: true }),
+      );
+      trigger.dispatchEvent(
+        new window.PointerEvent('pointerup', { bubbles: true, button: 0, pointerType: 'mouse', isPrimary: true }),
+      );
       trigger.click();
       await tick();
     });
