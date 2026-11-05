@@ -55,7 +55,7 @@
     },
     {
       "path": "docs/goals/**/*.capabilities.*",
-      "bytes": 571842
+      "bytes": 571667
     },
     {
       "path": "docs/goals/accounts.capabilities.md",
