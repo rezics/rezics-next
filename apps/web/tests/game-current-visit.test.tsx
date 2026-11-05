@@ -232,6 +232,12 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
     const returnDescriptor = gameClassificationReturn(returnFragment);
     expect(returnDescriptor).toMatchObject({
       holder: gameId,
+      context: candidateContext,
+      realm,
+      type: props.type,
+      locale: 'en',
+      release: props.release,
+      reader: null,
       property: 'schema:genre',
       statement: secondAssertion,
       focus: 'keyboard',
@@ -300,6 +306,12 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
       resolveReader(readerReady);
       await readPage;
     });
+    await waitFor(() =>
+      expect(readerHost.querySelectorAll('[data-game-current-assertion]')).toHaveLength(2),
+    );
+    expect(readerHost.querySelector('[data-current-return-selection]')?.getAttribute('data-game-current-assertion')).toBe(
+      secondAssertion,
+    );
     await waitFor(() =>
       expect(window.document.activeElement?.getAttribute('data-game-current-assertion')).toBe(secondAssertion),
     );
