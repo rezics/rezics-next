@@ -719,6 +719,8 @@ test('directory admits three exact windows, retains predecessors on failed Previ
     expect(navigation.previous).toEqual({ cursor: 'second+/=' });
     navigation.stage('previous', 'second+/=');
     navigation.request('second+/=');
+    // A reload still bound to the accepted terminal address cannot steal a staged backward movement.
+    expect(navigation.request('terminal')).toBeUndefined();
     navigation.failed();
     await panel.render(
       <ContextDirectoryView

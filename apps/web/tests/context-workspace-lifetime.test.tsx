@@ -641,7 +641,11 @@ test('directory cursor replacements keep admitted history while query, deleted a
     expect(link(m.library_collections_previous()).getAttribute('href')).toContain('cursor=second');
     ready(null);
     await act(async () => button(host as unknown as HTMLElement, m.prq_retry_page()).click());
-    await until(() => !!link(m.library_collections_previous()));
+    await until(
+      () =>
+        !!link(m.library_collections_previous()) &&
+        !link(m.library_collections_previous()).getAttribute('href')?.includes('cursor='),
+    );
     expect(link(m.library_collections_previous()).getAttribute('href')).not.toContain('cursor=');
     await move(m.library_collections_first_page());
     expect(link(m.library_collections_previous())).toBeUndefined();

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { personalRead } from '../../kernel/query';
@@ -47,11 +47,13 @@ function VisitSession({
     admission,
     contextQueryKey(admission.reader, locale, props.mode, address),
   );
+  const firstRead = useRef(true);
   const query = useQuery({
     ...personalRead,
     queryKey: visit.key,
     queryFn: ({ signal }) => {
-      const movement = navigation?.request(props.mode === 'directory' ? props.input.cursor : undefined);
+      const movement = navigation?.request(props.mode === 'directory' ? props.input.cursor : undefined, firstRead.current);
+      firstRead.current = false;
       return visit.read<DirectoryWorkspace | Result<Actions> | Result<Workspace>>(
         signal,
         (signal) => {
@@ -227,11 +229,8 @@ export function ContextRouteError() {
 
 function DirectoryComposition(props: Mode & AdmissionProps) {
   const navigation = useMemo(() => new DirectoryWindowNavigation(), []);
-  useLayoutEffect(() => {
-    const stop = props.admissions.subscribe(() => {
-      if (!props.admissions.current(props.admission)) navigation.dispose();
-    });
-    return () => {
+  useLayoutEffect(() => () => navigation.dispose(), [navigation]);
+  return () => {
       stop();
       navigation.dispose();
     };
