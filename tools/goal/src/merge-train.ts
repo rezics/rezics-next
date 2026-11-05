@@ -38,7 +38,13 @@ import { ensureGateOutcomeRefusal } from './guards.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
-import { TrainQueue, taskIntegrationTarget, type BatchLandingResult, type DevResolutionHandoff } from './train-queue.ts';
+import {
+  TrainQueue,
+  taskIntegrationTarget,
+  type BatchLandingResult,
+  type DevResolutionHandoff,
+  type TrainQueueOptions,
+} from './train-queue.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import type { IntegrationTarget, Task, Tokens } from './types.ts';
 import { WorkerStore } from './store.ts';
@@ -1888,7 +1894,8 @@ export class MergeTrain {
 
   private queueOwner(): TrainQueue<TrainConfigurationSnapshot> {
     const o = this.options;
-    return new TrainQueue({
+    let queueOptions: TrainQueueOptions<TrainConfigurationSnapshot>;
+    queueOptions = {
       mainCheckout: o.mainCheckout,
       stateDirectory: o.stateDirectory,
       integrationBranch: o.integrationBranch,
@@ -1907,7 +1914,16 @@ export class MergeTrain {
       beforeRelease: o.beforeRelease,
       promote: o.promote,
       handOff: o.handOff,
-      applyConfiguration: (configuration) => Object.assign(o, configuration),
+      applyConfiguration: (configuration) => {
+        Object.assign(o, configuration);
+        queueOptions.integrationBranch = o.integrationBranch;
+        queueOptions.storagePolicy = o.policy?.storage;
+        queueOptions.mergePolicy = o.policy?.merge;
+        queueOptions.leasePolicy = o.policy?.leases;
+        queueOptions.inboxDirectory = o.inboxDirectory;
+        queueOptions.inboxPolicy = o.policy?.inbox;
+        queueOptions.batchSize = o.integration?.batchSize;
+      },
       ensureConfigurationRevision: () => {
         o.configurationRevision ??= trainConfigurationRevision(o);
       },
@@ -1920,7 +1936,8 @@ export class MergeTrain {
       integrateOrdinary: (entry, lane, handOff, drainDev) =>
         this.integrateOrdinary(entry, lane, handOff, drainDev),
       resolveDevLanding: (pending) => this.resolveDevLanding(pending),
-    });
+    };
+    return new TrainQueue(queueOptions);
   }
 
   private async integrateBatch(entries: readonly LandingEntry[], lane: 'main' | 'dev'): Promise<BatchLandingResult> {

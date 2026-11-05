@@ -342,7 +342,12 @@ test('a resolver handoff runs after the dev lane lease is released', async () =>
       ...h.settings,
       queue: h.queue,
       fence: h.store,
-      sink: h.job,
+      sink: {
+        onGateOutcome(outcome) {
+          h.outcomes.push(outcome);
+          h.job.onGateOutcome(outcome);
+        },
+      },
       trainResolver: resolver,
       async runGate() {
         return { passed: true, output: '', timedOut: false };
