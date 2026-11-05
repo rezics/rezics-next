@@ -66,7 +66,8 @@ function returned() {
 }
 
 function expectPrivateViewCleared(host: HTMLElement, privateValues: string[]) {
-  for (const value of privateValues) expect(host.textContent).not.toContain(value);
+  const content = host.textContent ?? '';
+  for (const value of privateValues) expect(content).not.toContain(value);
   expect(host.querySelector('#automated-operator')).toBeNull();
   expect(host.querySelector('#automated-handle')).toBeNull();
   expect(host.querySelector('#automated-email')).toBeNull();
@@ -350,7 +351,10 @@ test('retirement between approval and execute aborts the later caller read witho
     const approve = page.calls.at(-1)!;
     expect(approve.path).toBe('/account-operations/approve');
     await flush(() => approve.resolve(approval()));
-    expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
+    expect(page.calls.map((call) => call.path)).toEqual([
+      '/account-management/automated/operator',
+      '/account-operations/approve',
+    ]);
 
     await flush(leave);
     expect(laterSessionSignal?.aborted).toBe(true);
@@ -358,7 +362,10 @@ test('retirement between approval and execute aborts the later caller read witho
     releaseLaterSession!(Response.json(session));
     await flush(() => {});
 
-    expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
+    expect(page.calls.map((call) => call.path)).toEqual([
+      '/account-management/automated/operator',
+      '/account-operations/approve',
+    ]);
     expect(page.host.textContent).toContain('A creation may have been sent; its result remains unresolved.');
   } finally {
     globalThis.fetch = fetch;
@@ -380,9 +387,10 @@ test('late execution acknowledgement cannot claim a replacement attempt or displ
   await flush(() => execute.resolve(Response.json({ accountId: created })));
 
   expect(restoreAutomatedAttempt()).toEqual(replacement);
-  expect(page.host.textContent).not.toContain(replacement.handle);
-  expect(page.host.textContent).not.toContain(created);
-  expect(page.host.textContent).not.toContain('The native creation workflow acknowledged completion.');
+  const content = page.host.textContent ?? '';
+  expect(content).not.toContain(replacement.handle);
+  expect(content).not.toContain(created);
+  expect(content).not.toContain('The native creation workflow acknowledged completion.');
   expectPrivateViewCleared(page.host, [human, operator.id, operator.handle, 'private-handle', created]);
 });
 
