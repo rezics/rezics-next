@@ -2,7 +2,13 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SearchInputRecovery } from '../src/search/search-input-recovery';
-import { correctSearchInput, removeSearchInput, searchFormFields, searchLoaderDeps } from '../src/search/search-params';
+import {
+  correctSearchInput,
+  removeSearchInput,
+  searchFormFields,
+  searchLoaderDeps,
+  searchUrlIntake,
+} from '../src/search/search-params';
 
 test('malformed conditions and ranges stay editable and are not omitted from search forms', () => {
   const condition = '{"and":[]}';
@@ -29,18 +35,95 @@ test('malformed conditions and ranges stay editable and are not omitted from sea
   ]) {
     const html = renderToStaticMarkup(
       createElement(SearchInputRecovery, {
-        parameter: issue.key,
-        value: issue.value,
+        issues: [
+          {
+            ...issue,
+            reason: issue.key === 'condition' ? 'invalid-condition' : 'invalid-range',
+            removal: 'structured',
+          },
+        ],
         onApply() {},
         onRemove() {},
+        locale: 'en',
       }),
     );
     expect(html).toContain('<textarea');
     expect(html).toContain(issue.value.replaceAll('"', '&quot;'));
     expect(html).toContain('Apply correction');
-    expect(html).toContain('Remove this input');
+    expect(html).toContain('Remove the entire');
     expect(html).not.toMatch(/FilterError|SyntaxError|stack/i);
   }
+});
+
+test('intake retains repeated authored order, reports each malformed operand and admits no partial request', () => {
+  const protectedFilter = JSON.stringify({
+    and: [
+      { realm: { id: '018f0000-0000-7000-8000-00a000000001' } },
+      { statement: { property: 'schema:genre', in: ['fiction'] } },
+    ],
+  });
+  const search = {
+    q: 'Mira',
+    type: 'schema:Book',
+    kinds: ['schema:Book', 'catalogue:Atlas', 'schema:Book'],
+    language: ['ja', 'bad_tag', 'zh-Hant'],
+    sort: 'popular',
+    cursor: 'opaque'.repeat(900),
+    condition: '{bad json',
+    filter: protectedFilter,
+    'f.schema:genre': ['fiction', 'fiction', 'mystery'],
+  };
+  const intake = searchUrlIntake(search);
+  expect(intake.kind).toBe('invalid');
+  if (intake.kind !== 'invalid') return;
+  expect(intake.issues.map(({ key, occurrence, reason }) => [key, occurrence, reason])).toEqual([
+    ['cursor', undefined, 'invalid-cursor'],
+    ['sort', undefined, 'invalid-order'],
+    ['language', 1, 'invalid-language'],
+    ['condition', undefined, 'invalid-condition'],
+  ]);
+  expect(intake.issues.find((issue) => issue.key === 'condition')?.value).toBe('{bad json');
+  expect(intake.issues.some((issue) => issue.key === 'filter')).toBe(false);
+
+  const edited = correctSearchInput(search, 'language', 'fr', 1);
+  expect(edited).toEqual({ ...search, language: ['ja', 'fr', 'zh-Hant'], cursor: undefined });
+  const removed = removeSearchInput(search, 'language', 1);
+  expect(removed).toEqual({ ...search, language: ['ja', 'zh-Hant'], cursor: undefined });
+});
+
+test('raw JSON-looking query text stays text, accepted arrays keep order, and over-budget visits reveal no payload', () => {
+  const rawParams = new URLSearchParams();
+  rawParams.set('q', '{"literal":true}');
+  rawParams.append('language', 'ja');
+  rawParams.append('language', 'zh-Hant');
+  rawParams.append('kinds', 'schema:Book');
+  rawParams.append('kinds', 'catalogue:Atlas');
+  rawParams.append('f.schema:genre', 'fiction');
+  rawParams.append('f.schema:genre', 'fiction');
+  rawParams.set('condition', JSON.stringify({ statement: { property: 'schema:inLanguage', in: ['en'] } }));
+  const search = {
+    q: { literal: true },
+    language: ['ja', 'zh-Hant'],
+    kinds: ['schema:Book', 'catalogue:Atlas'],
+    'f.schema:genre': ['fiction', 'fiction'],
+    condition: { statement: { property: 'schema:inLanguage', in: ['en'] } },
+  };
+  const query = `?${rawParams.toString()}`;
+  const intake = searchUrlIntake(search, query, `/search${query}`);
+  expect(intake.kind).toBe('ready');
+  if (intake.kind !== 'ready') return;
+  expect(intake.request.query).toBe('{"literal":true}');
+  expect(intake.request.languages).toEqual(['ja', 'zh-Hant']);
+  expect(intake.request.kinds).toEqual(['schema:Book', 'catalogue:Atlas']);
+  expect(intake.request.facets['schema:genre']).toEqual(['fiction', 'fiction']);
+
+  const quoted = searchUrlIntake({ q: 'literal' }, '?q=%22literal%22', '/search?q=%22literal%22');
+  expect(quoted.kind).toBe('ready');
+  if (quoted.kind === 'ready') expect(quoted.request.query).toBe('"literal"');
+
+  const overBudget = 'x'.repeat(131_073);
+  const rejected = searchUrlIntake({ q: overBudget }, `?q=${overBudget}`, `/search?q=${overBudget}`);
+  expect(rejected).toEqual({ kind: 'over-budget', fingerprint: 'over-budget' });
 });
 
 test('correcting or removing one invalid input keeps other selections and resets the continuation', () => {
