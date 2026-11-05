@@ -42,7 +42,9 @@ test('private holding clear and exact Undo preserve identity and independent sib
   const recovered = await f.send(owner.bearer, 'DELETE', `${path}?revision=${original.revision}`, undefined, key);
   expect(recovered.status).toBe(204);
   expect(recovered.headers.get('Library-Copy-Deletion-Id')).toBe(deleted.headers.get('Library-Copy-Deletion-Id'));
-  expect(recovered.headers.get('Library-Copy-Deletion-Revision')).toBe(deleted.headers.get('Library-Copy-Deletion-Revision'));
+  expect(recovered.headers.get('Library-Copy-Deletion-Revision')).toBe(
+    deleted.headers.get('Library-Copy-Deletion-Revision'),
+  );
   const deletionId = recovered.headers.get('Library-Copy-Deletion-Id');
   const revision = Number(deleted.headers.get('Library-Copy-Deletion-Revision'));
   expect(deletionId).toMatch(/^[0-9a-f-]{36}$/);

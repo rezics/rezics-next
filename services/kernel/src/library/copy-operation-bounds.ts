@@ -208,7 +208,11 @@ export function copyWorkDimensions(bound: Bound): WorkDimensions {
 export function consumeCopyCommandAttempt(plan: CopyOperationPlan): Promise<void> {
   const association = currentCommandWorkAssociation();
   if (!association) return Promise.resolve();
-  return association.run(`library.copy.${plan.kind}.${plan.branch}`, copyWorkDimensions(plan.total), async () => undefined);
+  return association.run(
+    `library.copy.${plan.kind}.${plan.branch}`,
+    copyWorkDimensions(plan.total),
+    async () => undefined,
+  );
 }
 
 /** Bind nested SQL to the already consumed operation so its leaves do not double charge. */
@@ -220,10 +224,7 @@ export function bindCopyCommandOperation<T>(plan: CopyOperationPlan, dispatch: (
 export async function executeCopyOperation<T>(plan: CopyOperationPlan, dispatch: () => Promise<T>): Promise<T> {
   if (activeCopyOperation.getStore()) return dispatch();
   const association = currentCommandWorkAssociation();
-  const reservation = association?.reserve(
-    `library.copy.${plan.kind}.${plan.branch}`,
-    copyWorkDimensions(plan.total),
-  );
+  const reservation = association?.reserve(`library.copy.${plan.kind}.${plan.branch}`, copyWorkDimensions(plan.total));
   const settle = () => reservation?.settle();
   try {
     const result = await activeCopyOperation.run(plan, dispatch);
@@ -238,9 +239,7 @@ export async function executeCopyOperation<T>(plan: CopyOperationPlan, dispatch:
 function executeCopyStatement<T>(kind: string, bound: Bound, dispatch: () => Promise<T>): Promise<T> {
   if (activeCopyOperation.getStore()) return dispatch();
   const association = currentCommandWorkAssociation();
-  return association
-    ? association.run(`library.copy.${kind}`, copyWorkDimensions(bound), dispatch)
-    : dispatch();
+  return association ? association.run(`library.copy.${kind}`, copyWorkDimensions(bound), dispatch) : dispatch();
 }
 
 export function executeCopyStatementWork<T>(kind: string, bound: Bound, dispatch: () => Promise<T>): Promise<T> {
@@ -585,7 +584,10 @@ function commandEnvelope(input: {
 }) {
   const route = input.route;
   const partition = partitionOf(route);
-  const idempotencyKeys = [...Array.from({ length: input.receiptKeys }, () => `rk1.255.${'f'.repeat(43)}`), input.requestKey];
+  const idempotencyKeys = [
+    ...Array.from({ length: input.receiptKeys }, () => `rk1.255.${'f'.repeat(43)}`),
+    input.requestKey,
+  ];
   const receiptInput = {
     partition_no: partition,
     principal_kind: 'account',
@@ -617,31 +619,35 @@ function commandEnvelope(input: {
       'ROLLBACK',
     ].map(textBound),
   );
-  const receiptBound = operationSql(
-    readReceipt.sql,
-    receiptInput,
-    {
-      candidateKeys: idempotencyKeys.length,
-      nativeRows: 1,
-      points: idempotencyKeys.length,
-      emptySeeks: idempotencyKeys.length,
-      outputBytes: input.responseBytes + Buffer.byteLength(JSON.stringify({
-        requestDigest: 'f'.repeat(64),
-        epoch: 2_147_483_647,
-        position: '-9223372036854775808',
-        transactionId: UUID,
-        response: null,
-        payloadState: 'retained',
-      })),
-    },
-  );
+  const receiptBound = operationSql(readReceipt.sql, receiptInput, {
+    candidateKeys: idempotencyKeys.length,
+    nativeRows: 1,
+    points: idempotencyKeys.length,
+    emptySeeks: idempotencyKeys.length,
+    outputBytes:
+      input.responseBytes +
+      Buffer.byteLength(
+        JSON.stringify({
+          requestDigest: 'f'.repeat(64),
+          epoch: 2_147_483_647,
+          position: '-9223372036854775808',
+          transactionId: UUID,
+          response: null,
+          payloadState: 'retained',
+        }),
+      ),
+  });
   const eventBound = operationSql(
     eventFence.sql,
     {
       partition_no: partition,
       transaction_id: UUID,
       receipt,
-      basis: { principal: { kind: 'account', id: input.accountId }, clientId: input.clientId, requestedBy: input.requestedBy },
+      basis: {
+        principal: { kind: 'account', id: input.accountId },
+        clientId: input.clientId,
+        requestedBy: input.requestedBy,
+      },
       events: [event],
     },
     {
@@ -654,11 +660,13 @@ function commandEnvelope(input: {
   );
   const partitionBound = sessionPartitionWork(partition);
   const retryRecovery = repeatBound(sumBounds(readOnly, partitionBound), 1 + Math.ceil(input.durationMs / 25));
-  const share = operationSql(
-    accountShare.sql,
-    accountInput,
-    { candidateKeys: 2, nativeRows: 2, points: 2, emptySeeks: 1, outputBytes: 256 },
-  );
+  const share = operationSql(accountShare.sql, accountInput, {
+    candidateKeys: 2,
+    nativeRows: 2,
+    points: 2,
+    emptySeeks: 1,
+    outputBytes: 256,
+  });
   const account = maximumBound(
     operationSql(accountRead.sql, accountInput, { candidateKeys: 0, nativeRows: 0, points: 0, emptySeeks: 0 }),
     operationSql(accountStateRead.sql, accountInput, {
@@ -666,19 +674,33 @@ function commandEnvelope(input: {
       nativeRows: 1,
       points: 1,
       emptySeeks: 1,
-      outputBytes: Buffer.byteLength(JSON.stringify({ kind: 'actor', state: 'active', fenced: true, minimumAuthnEpoch: '9223372036854775807' })),
+      outputBytes: Buffer.byteLength(
+        JSON.stringify({ kind: 'actor', state: 'active', fenced: true, minimumAuthnEpoch: '9223372036854775807' }),
+      ),
     }),
   );
-  const time = sumBounds(readOnly, operationSql(timeRead.sql, { at: COPY_TIME }, {
-    candidateKeys: 1,
-    nativeRows: 1,
-    points: 1,
-    emptySeeks: 1,
-    outputBytes: Buffer.byteLength(JSON.stringify({ value: COPY_TIME })),
-  }));
+  const time = sumBounds(
+    readOnly,
+    operationSql(
+      timeRead.sql,
+      { at: COPY_TIME },
+      {
+        candidateKeys: 1,
+        nativeRows: 1,
+        points: 1,
+        emptySeeks: 1,
+        outputBytes: Buffer.byteLength(JSON.stringify({ value: COPY_TIME })),
+      },
+    ),
+  );
   const terminal = maximumBound(
     sumBounds(textBound('COMMIT'), bytes(input.responseBytes)),
-    sumBounds(textBound('ROLLBACK'), textBound('SELECT partition_no AS "partitionNo", node, write_state AS "writeState", moved_to AS "movedTo", epoch, position FROM core.partition WHERE partition_no = :partition_no;')),
+    sumBounds(
+      textBound('ROLLBACK'),
+      textBound(
+        'SELECT partition_no AS "partitionNo", node, write_state AS "writeState", moved_to AS "movedTo", epoch, position FROM core.partition WHERE partition_no = :partition_no;',
+      ),
+    ),
   );
   return {
     account,
@@ -715,20 +737,57 @@ AND subject_id=:subject_id AND deletion_id IS NULL AND COALESCE(library_profile_
     operationSql(headLockSql, input, { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1 }),
     operationSql(liveCopySql, input, { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1 }),
     maximumBound(
-      declareBound({ candidateKeys: 3, nativeRows: 3, identityMetadataRows: 0, emptySeeks: 0, nativePoints: 3, witnessKeys: 0, statements: 3, bytes: Buffer.byteLength(JSON.stringify(input)) * 3, engineRequests: 0 }),
-      declareBound({ candidateKeys: 67, nativeRows: 67, identityMetadataRows: 0, emptySeeks: 65, nativePoints: 67, witnessKeys: 0, statements: 3, bytes: Buffer.byteLength(JSON.stringify(input)) * 3, engineRequests: 0 }),
+      declareBound({
+        candidateKeys: 3,
+        nativeRows: 3,
+        identityMetadataRows: 0,
+        emptySeeks: 0,
+        nativePoints: 3,
+        witnessKeys: 0,
+        statements: 3,
+        bytes: Buffer.byteLength(JSON.stringify(input)) * 3,
+        engineRequests: 0,
+      }),
+      declareBound({
+        candidateKeys: 67,
+        nativeRows: 67,
+        identityMetadataRows: 0,
+        emptySeeks: 65,
+        nativePoints: 67,
+        witnessKeys: 0,
+        statements: 3,
+        bytes: Buffer.byteLength(JSON.stringify(input)) * 3,
+        engineRequests: 0,
+      }),
     ),
   );
-  const profileMigration = operation === 'delete' ? bytes(0) : sumBounds(
-    operationSql(`INSERT INTO library.fact_source_head (route, account_id, generation) VALUES (:route,:account_id,1) ON CONFLICT DO NOTHING`, input, {
-      candidateKeys: 1,
-      nativeRows: 1,
-      points: 1,
-      emptySeeks: 1,
-    }),
-    operationSql(migrationReadSql, input, { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1 }),
-    declareBound({ candidateKeys: 4, nativeRows: 4, identityMetadataRows: 0, emptySeeks: 4, nativePoints: 4, witnessKeys: 0, statements: 5, bytes: Buffer.byteLength(JSON.stringify(input)) * 5, engineRequests: 0 }),
-  );
+  const profileMigration =
+    operation === 'delete'
+      ? bytes(0)
+      : sumBounds(
+          operationSql(
+            `INSERT INTO library.fact_source_head (route, account_id, generation) VALUES (:route,:account_id,1) ON CONFLICT DO NOTHING`,
+            input,
+            {
+              candidateKeys: 1,
+              nativeRows: 1,
+              points: 1,
+              emptySeeks: 1,
+            },
+          ),
+          operationSql(migrationReadSql, input, { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1 }),
+          declareBound({
+            candidateKeys: 4,
+            nativeRows: 4,
+            identityMetadataRows: 0,
+            emptySeeks: 4,
+            nativePoints: 4,
+            witnessKeys: 0,
+            statements: 5,
+            bytes: Buffer.byteLength(JSON.stringify(input)) * 5,
+            engineRequests: 0,
+          }),
+        );
   const copyIndexes = 18; // PK plus the 17 live, retained, export and owner-scope indexes in schema.sql.
   const copyRow = declareBound({
     candidateKeys: copyIndexes + 1,
@@ -745,12 +804,19 @@ AND subject_id=:subject_id AND deletion_id IS NULL AND COALESCE(library_profile_
     repeatBound(copyRow, operation === 'insert' ? 1 : 2),
     profileMigration,
     operationSql(sourceHeadSql, input, { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1 }),
-    repeatBound(operationSql(nativeFenceSql, { ...input, owner_id: accountId }, {
-      candidateKeys: 1,
-      nativeRows: 1,
-      points: 1,
-      emptySeeks: 1,
-    }), operation === 'insert' ? 2 : 4),
+    repeatBound(
+      operationSql(
+        nativeFenceSql,
+        { ...input, owner_id: accountId },
+        {
+          candidateKeys: 1,
+          nativeRows: 1,
+          points: 1,
+          emptySeeks: 1,
+        },
+      ),
+      operation === 'insert' ? 2 : 4,
+    ),
     repeatBound(scope, operation === 'insert' ? 1 : operation === 'update' ? 0 : 2),
   );
 }
@@ -807,7 +873,10 @@ export function copyMutationOperationPlan(
     component('command.terminal.commit-or-rollback', controls.terminal),
     component('command.receipt.lookup', controls.receipt),
     component('command.shelf', sessionShelfWork(input.route, input.accountId, false)),
-    component('copy.pre-profile-read-fences', repeatBound(sessionProfileMigrationWork(input.route, input.accountId), 3)),
+    component(
+      'copy.pre-profile-read-fences',
+      repeatBound(sessionProfileMigrationWork(input.route, input.accountId), 3),
+    ),
     component('command.partition', controls.partition),
     component('command.retry.recovery', controls.retryRecovery),
     component('command.input.serialization', bytes(Buffer.byteLength(JSON.stringify(input.commandInput)))),
@@ -815,29 +884,55 @@ export function copyMutationOperationPlan(
   ];
   const prepareRead = sumBounds(
     ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map(textBound),
-    operationSql(accountRead.sql, { route: input.route, account_id: input.accountId }, {
-      candidateKeys: 1,
-      nativeRows: 1,
-      points: 1,
-      emptySeeks: 1,
-      outputBytes: Buffer.byteLength(JSON.stringify(COPY_ACCOUNT_ROW)),
-    }),
+    operationSql(
+      accountRead.sql,
+      { route: input.route, account_id: input.accountId },
+      {
+        candidateKeys: 1,
+        nativeRows: 1,
+        points: 1,
+        emptySeeks: 1,
+        outputBytes: Buffer.byteLength(JSON.stringify(COPY_ACCOUNT_ROW)),
+      },
+    ),
   );
   const sourceInitial =
     operation === 'create' || operation === 'update' || operation === 'restore'
       ? sessionSourceWork(subject, true)
-      : declareBound({ candidateKeys: 0, nativeRows: 0, identityMetadataRows: 0, emptySeeks: 0, nativePoints: 0, witnessKeys: 0, statements: 0, bytes: 0, engineRequests: 0 });
+      : declareBound({
+          candidateKeys: 0,
+          nativeRows: 0,
+          identityMetadataRows: 0,
+          emptySeeks: 0,
+          nativePoints: 0,
+          witnessKeys: 0,
+          statements: 0,
+          bytes: 0,
+          engineRequests: 0,
+        });
   const sourceCurrent = operation === 'create' || operation === 'update' ? sessionSourceWork(subject, true) : undefined;
   const lock = operationSql(
     'SELECT copy_id FROM library.copy WHERE route = $1 AND copy_id = $2 AND account_id = $3 FOR UPDATE',
     [input.route, input.copyId, input.accountId],
-    { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1, outputBytes: Buffer.byteLength(JSON.stringify({ copy_id: UUID })) },
+    {
+      candidateKeys: 1,
+      nativeRows: 1,
+      points: 1,
+      emptySeeks: 1,
+      outputBytes: Buffer.byteLength(JSON.stringify({ copy_id: UUID })),
+    },
   );
   const loan = operationSql(
     `SELECT loan_id FROM library.copy_loan
      WHERE route=$1 AND account_id=$2 AND copy_id=$3 AND returned_on IS NULL LIMIT 1`,
     [input.route, input.accountId, input.copyId],
-    { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1, outputBytes: Buffer.byteLength(JSON.stringify({ loan_id: UUID })) },
+    {
+      candidateKeys: 1,
+      nativeRows: 1,
+      points: 1,
+      emptySeeks: 1,
+      outputBytes: Buffer.byteLength(JSON.stringify({ loan_id: UUID })),
+    },
   );
   const read = copyReadStatementPlan({ route: input.route, copy_id: input.copyId }).bound;
   const branches: Record<string, Bound> = {};
@@ -947,37 +1042,47 @@ export function copyMutationOperationPlan(
     branches['stale-expired-occupied'] = sumBounds(prepareRead, privateRead, retentionRead, controls.terminal);
   }
   branches['receipt-replay'] = bytes(0);
-  branches['pre-mutation-refusal'] = operation === 'update' || operation === 'delete' ? sumBounds(lock, read) : bytes(0);
+  branches['pre-mutation-refusal'] =
+    operation === 'update' || operation === 'delete' ? sumBounds(lock, read) : bytes(0);
   const alternatives = maximumBound(...Object.values(branches));
   const branchComponents = [
     ...shared,
-    ...(operation === 'update' || operation === 'delete' ? [component('command.preparation.copy-snapshot', sumBounds(prepareRead, read))] : []),
+    ...(operation === 'update' || operation === 'delete'
+      ? [component('command.preparation.copy-snapshot', sumBounds(prepareRead, read))]
+      : []),
     ...(operation === 'create' || operation === 'update' ? [component('source.original', sourceInitial)] : []),
   ];
-  return operationPlan(`command.${operation}`, 'native-attempt', {
-    operation,
-    route: input.route,
-    accountId: input.accountId,
-    copyId: input.copyId,
-    requestKey: input.requestKey,
-    commandInput: input.commandInput,
-    receiptKeys: input.receiptKeys,
-    sourceSubjectId: subject,
-  }, [...branchComponents, component('command.outcome-branch', alternatives)]);
+  return operationPlan(
+    `command.${operation}`,
+    'native-attempt',
+    {
+      operation,
+      route: input.route,
+      accountId: input.accountId,
+      copyId: input.copyId,
+      requestKey: input.requestKey,
+      commandInput: input.commandInput,
+      receiptKeys: input.receiptKeys,
+      sourceSubjectId: subject,
+    },
+    [...branchComponents, component('command.outcome-branch', alternatives)],
+  );
 }
 
 /** Current-owner account gate used before a command request is normalized. */
 export function copyAccountGatePlan(route: number, accountId: string): CopyOperationPlan {
-  const read = operationSql(accountRead.sql, { route, account_id: accountId }, {
-    candidateKeys: 1,
-    nativeRows: 1,
-    points: 1,
-    emptySeeks: 1,
-    outputBytes: Buffer.byteLength(JSON.stringify(COPY_ACCOUNT_ROW)),
-  });
-  return operationPlan('account-gate', 'current-owner-floor', { route, accountId }, [
-    component('account.floor', read),
-  ]);
+  const read = operationSql(
+    accountRead.sql,
+    { route, account_id: accountId },
+    {
+      candidateKeys: 1,
+      nativeRows: 1,
+      points: 1,
+      emptySeeks: 1,
+      outputBytes: Buffer.byteLength(JSON.stringify(COPY_ACCOUNT_ROW)),
+    },
+  );
+  return operationPlan('account-gate', 'current-owner-floor', { route, accountId }, [component('account.floor', read)]);
 }
 
 /** Point read owner: current floor, one RR observation, private migration gate and response projection. */
@@ -985,38 +1090,57 @@ export function copyReadOperationPlan(route: number, accountId: string, copyId: 
   const read = copyReadStatementPlan({ route, copy_id: copyId }).bound;
   const transaction = sumBounds(
     ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map(textBound),
-    operationSql(accountRead.sql, { route, account_id: accountId }, {
-      candidateKeys: 1,
-      nativeRows: 1,
-      points: 1,
-      emptySeeks: 1,
-      outputBytes: Buffer.byteLength(JSON.stringify(COPY_ACCOUNT_ROW)),
-    }),
+    operationSql(
+      accountRead.sql,
+      { route, account_id: accountId },
+      {
+        candidateKeys: 1,
+        nativeRows: 1,
+        points: 1,
+        emptySeeks: 1,
+        outputBytes: Buffer.byteLength(JSON.stringify(COPY_ACCOUNT_ROW)),
+      },
+    ),
   );
   const migration = sessionProfileMigrationWork(route, accountId);
   const branches = {
     pinned: read,
     preProfile: sumBounds(read, migration),
   };
-  return operationPlan('read', 'point', { route, accountId, copyId }, [
-    component('owner.read-only-transaction', transaction),
-    component('owner.partition', sessionPartitionWork(partitionOf(route))),
-    component('copy.read.branch', maximumBound(...Object.values(branches))),
-    component('copy.response.serialization', bytes(COPY_RESPONSE_BYTES)),
-  ], branches);
+  return operationPlan(
+    'read',
+    'point',
+    { route, accountId, copyId },
+    [
+      component('owner.read-only-transaction', transaction),
+      component('owner.partition', sessionPartitionWork(partitionOf(route))),
+      component('copy.read.branch', maximumBound(...Object.values(branches))),
+      component('copy.response.serialization', bytes(COPY_RESPONSE_BYTES)),
+    ],
+    branches,
+  );
 }
 
 /** Bounded private detail has two full owner/source observations and serializes the mounted presentation. */
-export function copyPresentationOperationPlan(route: number, accountId: string, copyId: string, subjectId: string): CopyOperationPlan {
+export function copyPresentationOperationPlan(
+  route: number,
+  accountId: string,
+  copyId: string,
+  subjectId: string,
+): CopyOperationPlan {
   const readonly = sumBounds(
     ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map(textBound),
-    operationSql(accountRead.sql, { route, account_id: accountId }, {
-      candidateKeys: 1,
-      nativeRows: 1,
-      points: 1,
-      emptySeeks: 1,
-      outputBytes: Buffer.byteLength(JSON.stringify(COPY_ACCOUNT_ROW)),
-    }),
+    operationSql(
+      accountRead.sql,
+      { route, account_id: accountId },
+      {
+        candidateKeys: 1,
+        nativeRows: 1,
+        points: 1,
+        emptySeeks: 1,
+        outputBytes: Buffer.byteLength(JSON.stringify(COPY_ACCOUNT_ROW)),
+      },
+    ),
   );
   const detail = copyDetailReadStatementPlan({ route, copy_id: copyId, account_id: accountId }).bound;
   const source = sumBounds(sessionSourceWork(subjectId, true), sessionSourceWork(subjectId, false));
@@ -1039,13 +1163,17 @@ function readOnlyTimeWork(): Bound {
       'ROLLBACK',
     ].map(textBound),
     sessionReadTimeWork(),
-    operationSql(timeRead.sql, { at: COPY_TIME }, {
-      candidateKeys: 1,
-      nativeRows: 1,
-      points: 1,
-      emptySeeks: 1,
-      outputBytes: Buffer.byteLength(JSON.stringify({ value: COPY_TIME })),
-    }),
+    operationSql(
+      timeRead.sql,
+      { at: COPY_TIME },
+      {
+        candidateKeys: 1,
+        nativeRows: 1,
+        points: 1,
+        emptySeeks: 1,
+        outputBytes: Buffer.byteLength(JSON.stringify({ value: COPY_TIME })),
+      },
+    ),
   );
 }
 
@@ -1062,20 +1190,30 @@ export type CopyInventoryOperationInput = Readonly<{
 /** The actual filtered observations, maximum-page sentinel and bounded profile-pin inventory reads. */
 export function copyInventoryOperationPlan(input: CopyInventoryOperationInput): CopyOperationPlan {
   const pageLimit = Math.min(MAX_LIBRARY_PAGE_SIZE, input.limit + 1);
-  const page = copyPageStatementPlan({
-    route: input.route,
-    account_id: input.accountId,
-    after_created_at: input.cursor ? COPY_TIME : null,
-    after_copy_id: input.cursor ? UUID : null,
-    limit: pageLimit,
-  }, input.subjectId, input.kind, input.status).bound;
-  const sentinel = copyPageStatementPlan({
-    route: input.route,
-    account_id: input.accountId,
-    after_created_at: COPY_TIME,
-    after_copy_id: UUID,
-    limit: 1,
-  }, input.subjectId, input.kind, input.status).bound;
+  const page = copyPageStatementPlan(
+    {
+      route: input.route,
+      account_id: input.accountId,
+      after_created_at: input.cursor ? COPY_TIME : null,
+      after_copy_id: input.cursor ? UUID : null,
+      limit: pageLimit,
+    },
+    input.subjectId,
+    input.kind,
+    input.status,
+  ).bound;
+  const sentinel = copyPageStatementPlan(
+    {
+      route: input.route,
+      account_id: input.accountId,
+      after_created_at: COPY_TIME,
+      after_copy_id: UUID,
+      limit: 1,
+    },
+    input.subjectId,
+    input.kind,
+    input.status,
+  ).bound;
   const options = copyInventoryValuesStatementPlan({
     route: input.route,
     account_id: input.accountId,
@@ -1083,13 +1221,17 @@ export function copyInventoryOperationPlan(input: CopyInventoryOperationInput): 
   }).bound;
   const readonly = sumBounds(
     ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map(textBound),
-    operationSql(accountRead.sql, { route: input.route, account_id: input.accountId }, {
-      candidateKeys: 1,
-      nativeRows: 1,
-      points: 1,
-      emptySeeks: 1,
-      outputBytes: Buffer.byteLength(JSON.stringify(COPY_ACCOUNT_ROW)),
-    }),
+    operationSql(
+      accountRead.sql,
+      { route: input.route, account_id: input.accountId },
+      {
+        candidateKeys: 1,
+        nativeRows: 1,
+        points: 1,
+        emptySeeks: 1,
+        outputBytes: Buffer.byteLength(JSON.stringify(COPY_ACCOUNT_ROW)),
+      },
+    ),
     sessionPartitionWork(partitionOf(input.route)),
   );
   const migration = sessionProfileMigrationWork(input.route, input.accountId);
@@ -1108,13 +1250,19 @@ export function copyInventoryOperationPlan(input: CopyInventoryOperationInput): 
     maximumPageWithSentinel: sumBounds(maximumPage, options),
     emptyPage: sumBounds(pageBranch, options),
   };
-  return operationPlan('inventory', 'two-filtered-observations', {
-    ...input,
-    cursorBytes: Buffer.byteLength(input.cursor ?? ''),
-  }, [
-    component('copy.filtered-page.first-and-current', repeatBound(observation, 2)),
-    component('copy.distinct-retained-release-pins', distinctPins),
-    component('copy.cursor.serialization', bytes(Buffer.byteLength(input.cursor ?? ''))),
-    component('copy.inventory.response-and-comparison.serialization', rawResponses),
-  ], branches);
+  return operationPlan(
+    'inventory',
+    'two-filtered-observations',
+    {
+      ...input,
+      cursorBytes: Buffer.byteLength(input.cursor ?? ''),
+    },
+    [
+      component('copy.filtered-page.first-and-current', repeatBound(observation, 2)),
+      component('copy.distinct-retained-release-pins', distinctPins),
+      component('copy.cursor.serialization', bytes(Buffer.byteLength(input.cursor ?? ''))),
+      component('copy.inventory.response-and-comparison.serialization', rawResponses),
+    ],
+    branches,
+  );
 }

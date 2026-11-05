@@ -234,7 +234,8 @@ test('an empty update advances the exact revision and emits one ordinary update 
   expect(updated.value).toMatchObject({ ...made.value, revision: 2, transactionId: updated.transactionId });
   expect((await snapshot()).updated).toBe(before.updated + 1);
   expect(await commands.updateCopy(owner, made.value.id, { revision: 1 }, requestKey)).toEqual({
-    ...updated, replayed: true,
+    ...updated,
+    replayed: true,
   });
   expect((await snapshot()).updated).toBe(before.updated + 1);
 });

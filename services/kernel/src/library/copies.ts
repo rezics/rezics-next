@@ -346,10 +346,7 @@ export function createCopyCommands(config: Dependencies) {
   async function prepareSource(owner: AccountActor, subjectId: string, at: AuthoritativeTime, deadline: number) {
     try {
       return {
-        observation: await readLibraryProfileSourceObservation(
-          { pool, access, actor: owner, at, deadline },
-          subjectId,
-        ),
+        observation: await readLibraryProfileSourceObservation({ pool, access, actor: owner, at, deadline }, subjectId),
       };
     } catch (error) {
       // Preparation cannot invalidate an authorized exact receipt.
@@ -646,31 +643,44 @@ export function createCopyCommands(config: Dependencies) {
           try {
             // This exact read owns no checkout while immutable release and original/terminal
             // disclosure adapters visit their own anchors. Errors are deferred until receipt miss.
-            const row = await readOnly(owner, async (client) => {
-              return copyPrivateReadStatementPlan({
-                route,
-                copy_id: copyId,
-                account_id: owner.accountId,
-              }).run(client);
-            }, deadline);
+            const row = await readOnly(
+              owner,
+              async (client) => {
+                return copyPrivateReadStatementPlan({
+                  route,
+                  copy_id: copyId,
+                  account_id: owner.accountId,
+                }).run(client);
+              },
+              deadline,
+            );
             if (!row) throw new LibraryNotFoundError();
             const pin = decodeLibraryProfilePin(row.status_profile_pin ?? row.library_profile_pin);
             if (pin) {
-              const release = await withConnection(pool, (client) => readRelease(deadlineClient(client, deadline), pin.releaseDigest));
+              const release = await withConnection(pool, (client) =>
+                readRelease(deadlineClient(client, deadline), pin.releaseDigest),
+              );
               const profile = release ? resolveLibraryProfilePin({ digest: pin.releaseDigest, release }, pin) : null;
               if (!profile || row.kind === null || !hasCopyStatus(profile, row.kind, row.status))
                 throw new Error('Retained copy accepted profile is unavailable');
             }
             const kindPin = decodeLibraryProfilePin(row.kind_profile_pin);
             if (kindPin) {
-              const release = await withConnection(pool, (client) => readRelease(deadlineClient(client, deadline), kindPin.releaseDigest, { composed: false }));
+              const release = await withConnection(pool, (client) =>
+                readRelease(deadlineClient(client, deadline), kindPin.releaseDigest, { composed: false }),
+              );
               const profile = release
                 ? resolveLibraryProfilePin({ digest: kindPin.releaseDigest, release }, kindPin)
                 : null;
               if (!profile?.copies?.kinds.some((kind) => kind.id === row.kind))
                 throw new Error('Retained copy accepted kind profile is unavailable');
             }
-            const currentSubject = await resolveSubject(config, owner, row.subject_id, attempt.time, { pool, deadline, time: attempt.time, ...(attempt.commandWork ? { work: attempt.commandWork.access } : {}) });
+            const currentSubject = await resolveSubject(config, owner, row.subject_id, attempt.time, {
+              pool,
+              deadline,
+              time: attempt.time,
+              ...(attempt.commandWork ? { work: attempt.commandWork.access } : {}),
+            });
             if (!currentSubject || currentSubject.subjectId !== row.subject_id) throw new LibraryNotFoundError();
             return { error: null };
           } catch (error) {
@@ -713,11 +723,15 @@ export function createCopyCommands(config: Dependencies) {
     const route = sameAccountRoute(owner.accountId, copyId);
     const deadline = workStepDeadline();
     return executeCopyOperation(copyReadOperationPlan(route, owner.accountId, copyId), () =>
-      readOnly(owner, async (client) => {
-        const copy = await store.readCopy(client, route, copyId);
-        if (!copy || copy.accountId !== owner.accountId) throw new LibraryNotFoundError();
-        return copy;
-      }, deadline),
+      readOnly(
+        owner,
+        async (client) => {
+          const copy = await store.readCopy(client, route, copyId);
+          if (!copy || copy.accountId !== owner.accountId) throw new LibraryNotFoundError();
+          return copy;
+        },
+        deadline,
+      ),
     );
   }
 
@@ -744,86 +758,86 @@ export function createCopyCommands(config: Dependencies) {
     const deadline = workStepDeadline();
     return executeCopyOperation(copyPresentationOperationPlan(route, owner.accountId, copyId, copyId), () =>
       withRequestDeadline(deadline, () =>
-      withinDeadline(deadline, async () => {
-        const time = () => withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
-        async function observed(at: AuthoritativeTime) {
-          requireActor(owner, 'copy:read');
-          const check = await accessCheck(
-            access,
-            owner,
-            'copy:read',
-            { route, id: owner.accountId },
-            { pool, deadline, time: at },
-          );
-          return readOnly(owner, async (client) => {
-            const bounded = deadlineClient(client, deadline);
-            if (!(await check(bounded, at))) throw new GrantDeniedError();
-            const partition = await readPartition(bounded, partitionOf(route));
-            const row = await copyDetailReadStatementPlan({
-              route,
-              copy_id: copyId,
-              account_id: owner.accountId,
-            }).run(bounded);
-            if (!partition || !row) throw new LibraryNotFoundError();
-            const {
-              libraryProfilePin,
-              kindProfilePin,
-              statusProfilePin,
-              mediaCondition,
-              packagingCondition,
-              ...value
-            } = row;
-            const conditionFacts = decodeCopyConditionFacts(mediaCondition, packagingCondition);
-            const copy: Copy = {
-              ...value,
-              createdAt: new Date(value.createdAt).toISOString(),
-              updatedAt: new Date(value.updatedAt).toISOString(),
-              ...(conditionFacts === undefined ? {} : { conditionFacts }),
-            };
-            return {
-              fact: {
-                copy,
-                compatibilityPin: decodeLibraryProfilePin(libraryProfilePin),
-                // The old mutable pin proves status only, never original kind.
-                kindPin: decodeLibraryProfilePin(kindProfilePin),
-                statusPin: decodeLibraryProfilePin(statusProfilePin ?? libraryProfilePin),
-              },
-              epoch: partition.epoch,
-            };
-          });
-        }
-        const at = await time();
-        try {
-          const before = await observed(at);
-          const prepared = await prepareCopyPresentation(
-            { pool, access, actor: owner, at, deadline },
-            before.fact,
-            languages,
-          );
-          const result = render
-            ? await render(before.fact.copy, prepared.presentation, prepared.disclosure)
-            : { ...before.fact.copy, presentation: prepared.presentation };
-          const finalTime = await time();
-          try {
-            let sourceFailure: { error: unknown } | null = null;
-            try {
-              await prepared.verify(finalTime);
-            } catch (error) {
-              sourceFailure = { error };
-            }
-            // Recheck native owner authority even when a foreign source fence failed.
-            const after = await observed(finalTime);
-            if (before.epoch !== after.epoch || JSON.stringify(before.fact) !== JSON.stringify(after.fact))
-              throw new CopyConflictError();
-            if (sourceFailure) throw sourceFailure.error;
-          } finally {
-            releaseOperationalTime(finalTime);
+        withinDeadline(deadline, async () => {
+          const time = () => withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
+          async function observed(at: AuthoritativeTime) {
+            requireActor(owner, 'copy:read');
+            const check = await accessCheck(
+              access,
+              owner,
+              'copy:read',
+              { route, id: owner.accountId },
+              { pool, deadline, time: at },
+            );
+            return readOnly(owner, async (client) => {
+              const bounded = deadlineClient(client, deadline);
+              if (!(await check(bounded, at))) throw new GrantDeniedError();
+              const partition = await readPartition(bounded, partitionOf(route));
+              const row = await copyDetailReadStatementPlan({
+                route,
+                copy_id: copyId,
+                account_id: owner.accountId,
+              }).run(bounded);
+              if (!partition || !row) throw new LibraryNotFoundError();
+              const {
+                libraryProfilePin,
+                kindProfilePin,
+                statusProfilePin,
+                mediaCondition,
+                packagingCondition,
+                ...value
+              } = row;
+              const conditionFacts = decodeCopyConditionFacts(mediaCondition, packagingCondition);
+              const copy: Copy = {
+                ...value,
+                createdAt: new Date(value.createdAt).toISOString(),
+                updatedAt: new Date(value.updatedAt).toISOString(),
+                ...(conditionFacts === undefined ? {} : { conditionFacts }),
+              };
+              return {
+                fact: {
+                  copy,
+                  compatibilityPin: decodeLibraryProfilePin(libraryProfilePin),
+                  // The old mutable pin proves status only, never original kind.
+                  kindPin: decodeLibraryProfilePin(kindProfilePin),
+                  statusPin: decodeLibraryProfilePin(statusProfilePin ?? libraryProfilePin),
+                },
+                epoch: partition.epoch,
+              };
+            });
           }
-          return result;
-        } finally {
-          releaseOperationalTime(at);
-        }
-      }),
+          const at = await time();
+          try {
+            const before = await observed(at);
+            const prepared = await prepareCopyPresentation(
+              { pool, access, actor: owner, at, deadline },
+              before.fact,
+              languages,
+            );
+            const result = render
+              ? await render(before.fact.copy, prepared.presentation, prepared.disclosure)
+              : { ...before.fact.copy, presentation: prepared.presentation };
+            const finalTime = await time();
+            try {
+              let sourceFailure: { error: unknown } | null = null;
+              try {
+                await prepared.verify(finalTime);
+              } catch (error) {
+                sourceFailure = { error };
+              }
+              // Recheck native owner authority even when a foreign source fence failed.
+              const after = await observed(finalTime);
+              if (before.epoch !== after.epoch || JSON.stringify(before.fact) !== JSON.stringify(after.fact))
+                throw new CopyConflictError();
+              if (sourceFailure) throw sourceFailure.error;
+            } finally {
+              releaseOperationalTime(finalTime);
+            }
+            return result;
+          } finally {
+            releaseOperationalTime(at);
+          }
+        }),
       ),
     );
   }
