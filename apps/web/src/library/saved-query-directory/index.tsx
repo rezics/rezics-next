@@ -62,34 +62,41 @@ export function SavedQueryDirectory({
           ) : null}
         </div>
       ) : queries.length ? (
-        <ul className="mt-3 space-y-3">
-          {queries.map((collection) => {
-            const href = collectionHref(collection.id, currentHref);
-            return (
-              <ContentItem
-                key={collection.id}
-                title={browseCollectionTitle(collection)}
-                href={href}
-                data-saved-query-row={collection.id}
-                trailing={
-                  <a href={href} className={buttonVariants({ size: 'lg' })}>
-                    {m.library_collection_open()}
-                  </a>
-                }
-                actions={
-                  canEditRules ? (
-                    <RuleEditLink
-                      collection={collection}
-                      viewerId={viewerId}
-                      allowed={canEditRules}
-                      className={buttonVariants({ variant: 'outline', size: 'lg' })}
-                    />
-                  ) : null
-                }
-              />
-            );
-          })}
-        </ul>
+        <>
+          <ul className="mt-3 space-y-3">
+            {queries.map((collection) => {
+              const href = collectionHref(collection.id, currentHref);
+              return (
+                <ContentItem
+                  key={collection.id}
+                  title={browseCollectionTitle(collection)}
+                  href={href}
+                  data-saved-query-row={collection.id}
+                  trailing={
+                    <a href={href} className={buttonVariants({ size: 'lg' })}>
+                      {m.library_collection_open()}
+                    </a>
+                  }
+                  actions={
+                    canEditRules ? (
+                      <RuleEditLink
+                        collection={collection}
+                        viewerId={viewerId}
+                        allowed={canEditRules}
+                        className={buttonVariants({ variant: 'outline', size: 'lg' })}
+                      />
+                    ) : null
+                  }
+                />
+              );
+            })}
+          </ul>
+          {next ? (
+            <a href={nextPageHref(next, layout)} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+              {m.library_collection_more()}
+            </a>
+          ) : null}
+        </>
       ) : (
         <div className="mt-3 space-y-2">
           <p role="status">{m.library_saved_queries_empty_page()}</p>
