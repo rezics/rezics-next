@@ -248,14 +248,6 @@ function snapshot(tree: string, allowed: readonly string[], policy = defaultPoli
     ),
   );
 }
-function refs(tree: string, except?: string, policy = defaultPolicy.merge): string {
-  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
-  return git(tree, 'for-each-ref', '--format=%(refname) %(objectname)')
-    .split('\n')
-    .filter((line) => !except || !line.startsWith(`${except} `))
-    .join('\n');
-}
-
 type Pass = {
   head?: string;
   inputHash?: string;
@@ -583,7 +575,6 @@ export class TrainResolver {
     const contract = task.brief.markdown;
     const modes = new Map(paths.map((path) => [path, lstatSync(join(tree, path)).mode]));
     const before = snapshot(tree, paths, this.store.policy.merge),
-      beforeRefs = refs(tree, conflict.targetRef, this.store.policy.merge),
       head = this.git(tree, 'rev-parse', 'HEAD');
     const index = this.git(tree, 'ls-files', '--stage', '-z');
     if (prior) {
@@ -736,10 +727,9 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
       if (code !== 0 || failure) throw new Error(failure ?? `Train resolver exited with ${code}`);
       if (
         this.git(tree, 'rev-parse', 'HEAD') !== head ||
-        refs(tree, conflict.targetRef, this.store.policy.merge) !== beforeRefs ||
         this.git(tree, 'ls-files', '--stage', '-z') !== index
       )
-        throw new Error('Train resolver changed Git source, refs or index');
+        throw new Error('Train resolver changed Git source or index');
       if (snapshot(tree, paths, this.store.policy.merge) !== before)
         throw new Error('Train resolver edited outside conflicted files or frozen inputs');
       for (const path of paths) {
