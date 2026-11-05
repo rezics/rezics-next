@@ -11,6 +11,7 @@ import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
 import { BANGUMI_MEDIA_BATCH_LIMIT, validAvailableCover, type CrossMediaMediaOutcome } from './showcase-media.ts';
 import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
+import { vndbStaffCreditConverterRevision } from './vndb-staff-credits.ts';
 
 export const showcaseLimits = Object.freeze({
   records: 768,
@@ -466,6 +467,7 @@ export function buildShowcaseManifest(input: {
   acknowledgements: readonly ShowcaseAcknowledgement[];
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
   mediaOutcomes?: readonly CrossMediaMediaOutcome[];
+  vndbCreditCandidateKeys?: readonly string[];
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
   reviewedVocabulary?: readonly ShowcaseVocabularyRecord[];
   currentBangumiGenreCandidateIds?: readonly string[];
@@ -492,6 +494,7 @@ export function buildShowcaseManifest(input: {
   const currentBangumiGameGenreCandidateIds = new Set(input.currentBangumiGameGenreCandidateIds ?? []);
   const bangumiGameGenreOwnerKeys = new Set(input.bangumiGameGenreOwnerKeys ?? []);
   const tagWeightObservations = input.tagWeightObservations ?? [];
+  const vndbCreditCandidateKeys = new Set(input.vndbCreditCandidateKeys ?? []);
   const tagWeightRefreshes = [...new Set(input.tagWeightRefreshes ?? [])].filter((id) =>
     /^v[1-9][0-9]{0,9}$/u.test(id),
   );
@@ -522,6 +525,14 @@ export function buildShowcaseManifest(input: {
   }
   const mediaOutcomes = input.mediaOutcomes ?? [];
   const allowedSources = selectedEnvelopes(plan, aliases, vocabularyRequirements, mediaOutcomes, tagWeightObservations);
+  for (const acknowledgement of acknowledgements) {
+    if (
+      acknowledgement.command.op === 'propose' &&
+      acknowledgement.command.source.converter_revision === vndbStaffCreditConverterRevision &&
+      vndbCreditCandidateKeys.has(acknowledgement.command.key)
+    )
+      allowedSources.add(envelopeKey(acknowledgement.command.source));
+  }
   const selectedBySourceKey = new Map(selected.map((row) => [`${row.source}\0${row.key}`, row]));
   const acknowledgementsByKey = new Map(acknowledgements.map((ack) => [ack.command.key, ack]));
   const graphEnvelopeKeys = new Set<string>();
@@ -638,6 +649,8 @@ export function buildShowcaseManifest(input: {
         source.source !== alias ||
         (source.external_id !== row.key && appearanceOwners.get(envelopeKey(source)) !== row.key) ||
         !allowedSources.has(envelopeKey(source)) ||
+        (source.converter_revision === vndbStaffCreditConverterRevision &&
+          !vndbCreditCandidateKeys.has(ack.command.key)) ||
         (graphEnvelopeKeys.has(envelopeKey(source)) && !eligibleGraphCommandKeys.has(ack.command.key)) ||
         (subject && ack.command.op === 'propose' && ack.command.subject !== subject.id)
       )

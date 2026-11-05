@@ -408,6 +408,7 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       readings: current.readings,
       acknowledgements: journal.acknowledgedCommands(),
       aliases: crossMediaAliases,
+      vndbCreditCandidateKeys: current.vndbCreditCandidateKeys,
       vocabularyRequirements: concepts.requirements,
     });
     const work = creditManifest.records.find((record) => record.sourceKey === 'v1')!;
@@ -415,6 +416,28 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       expect.arrayContaining(['schema:author', 'wdt:P725']),
     );
     expect(work.assertions.map((assertion) => assertion.property)).not.toContain('schema:illustrator');
+    if (!author || author.op !== 'propose') throw new Error('Expected selected VNDB author proposal');
+    const stale = {
+      ...author,
+      key: `${author.key}:stale`,
+      statement: { ...author.statement, value: { type: 'value' as const, content: randomUUID() } },
+    };
+    await captured.batch({ commands: [stale] });
+    const staleCandidate = journal
+      .acknowledgedCommands()
+      .find((entry) => entry.command.key === stale.key)?.candidateId;
+    expect(staleCandidate).toBeTruthy();
+    const afterStale = buildShowcaseManifest({
+      plan,
+      readings: current.readings,
+      acknowledgements: journal.acknowledgedCommands(),
+      aliases: crossMediaAliases,
+      vndbCreditCandidateKeys: current.vndbCreditCandidateKeys,
+      vocabularyRequirements: concepts.requirements,
+    });
+    expect(afterStale.records.find((record) => record.sourceKey === 'v1')?.assertions).not.toContainEqual(
+      expect.objectContaining({ candidateId: staleCandidate }),
+    );
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

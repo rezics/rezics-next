@@ -1092,6 +1092,9 @@ export async function publishShowcase(input: {
       acknowledgements,
       aliases: input.aliases,
       mediaOutcomes: outcomes,
+      ...(input.result.vndbCreditCandidateKeys
+        ? { vndbCreditCandidateKeys: input.result.vndbCreditCandidateKeys }
+        : {}),
       ...(input.tagWeightObservations ? { tagWeightObservations: input.tagWeightObservations } : {}),
       ...(input.tagWeightRefreshes ? { tagWeightRefreshes: input.tagWeightRefreshes } : {}),
       ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),

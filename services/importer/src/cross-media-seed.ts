@@ -2069,6 +2069,7 @@ export type CrossMediaSeedResult = {
   vndbCreditDiagnostics: SourceVocabularyGap[];
   vndbCreditVocabularyRequirements: VndbCreditVocabularyRequirement[];
   vndbCreditVocabularyUnavailable: VndbCreditVocabularyReadFailure[];
+  vndbCreditCandidateKeys?: readonly string[];
   creditRoles?: readonly BangumiCreditRoleBinding[];
   creditVocabularyRequirements?: BangumiCreditVocabularyResolution['requirements'];
   vndbCharacterProfileRequirements: ReturnType<typeof planVndbCharacterProfile>['requirements'];
@@ -2731,6 +2732,7 @@ export async function seedCrossMedia(
       vndbCreditDiagnostics: vndbCredits?.diagnostics ?? [],
       vndbCreditVocabularyRequirements: vndbCredits?.requirements ?? [],
       vndbCreditVocabularyUnavailable: vndbCredits?.vocabularyUnavailable ?? [],
+      ...(vndbCredits ? { vndbCreditCandidateKeys: [...vndbCredits.candidateKeys].sort() } : {}),
       vndbCharacterProfileRequirements: characterProfile?.requirements ?? [],
       vndbCharacterProfileOmissions: characterProfile?.omissions ?? [],
       characterDiagnostics: fidelity?.gaps ?? [],
