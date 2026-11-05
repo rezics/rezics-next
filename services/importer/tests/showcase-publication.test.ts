@@ -417,6 +417,7 @@ test('selected dump candidates publish only by exact intent and resume a refused
       publicClient,
       ...tagOptions,
     });
+    if (replayed.status !== 'published') console.error(replayed.omissions.map((omission) => omission.code));
     expect(replayed.status).toBe('published');
     expect(replayed.manifest.digest).toBe(first.manifest.digest);
     expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
