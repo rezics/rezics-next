@@ -31,7 +31,7 @@ import {
   ORDER_BATCH_SIZE,
   ORDER_WINDOW_SIZE,
 } from './ordinal.ts';
-import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { sessionShelfWork } from './session-operation-bounds.ts';
 
 const zero = (): Bound =>

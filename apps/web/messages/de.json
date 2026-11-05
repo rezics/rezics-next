@@ -11139,5 +11139,7 @@
   "library_mal_retry_source_evidence": "Quellennachweis erneut übermitteln",
   "library_mal_score_zero_source": "{value} (null bedeutet nicht bewertet)",
   "library_mal_score_source_details": "Wert: {value}; MAL-Skala: {scale}",
-  "library_mal_score_source_scale": "MAL-Skala von {min} bis {max}, Schrittweite {step}"
+  "library_mal_score_source_scale": "MAL-Skala von {min} bis {max}, Schrittweite {step}",
+  "subject_rating_control_uncertain": "Das Ergebnis ist unbekannt. Wiederhole dieselbe Anfrage oder verwirf sie und lade deine aktuelle Bewertung neu.",
+  "subject_rating_control_discard": "Anfrage verwerfen und Bewertung neu laden"
 }
