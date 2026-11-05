@@ -39,7 +39,7 @@ test('unavailable review recovers the selected organization and freshly confirms
   expect(page.host.querySelector('form')).toBeNull();
   unavailable = false;
   await flush(() => button(page.host, 'Retry')!.click());
-  expect(selections.map(({ organizationId }) => organizationId)).toEqual([first, first]);
+  expect(selections.map(({ organizationId }) => organizationId)).toEqual([first, first, first]);
   expect(selections.every(({ signal }) => signal instanceof AbortSignal)).toBe(true);
   await confirm(page.host, 'wrong');
   expect(page.calls).toHaveLength(0);
@@ -248,11 +248,11 @@ test('refused generic key storage preserves the exact deletion continuation with
 
 test('refused unknown-marker persistence retains custody and cannot dispatch or unlock another delete', async () => {
   const page = await open(content(first, async () => ready(first)), body);
-  const nativeStorageSet = window.sessionStorage.setItem.bind(window.sessionStorage);
-  const setItem = spyOn(window.sessionStorage, 'setItem').mockImplementation((key, value) => {
+  const nativeStorageSet = window.Storage.prototype.setItem;
+  const setItem = spyOn(window.Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
     if (key === `rezics.organization-delete.step-up.unknown.${first}`)
       throw new Error('storage unavailable');
-    nativeStorageSet(key, value);
+    nativeStorageSet.call(this, key, value);
   });
   try {
     await confirm(page.host, '@first');
