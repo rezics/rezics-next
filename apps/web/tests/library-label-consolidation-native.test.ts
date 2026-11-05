@@ -56,6 +56,7 @@ async function journey() {
   return { source, target, items, existing, visit, read, requests, assignments, refreshes,
     lose: (operation: string) => { lose = operation; },
     rotate: () => { authorization = `Bearer ${f.other.bearer}`; },
+    owner: () => { authorization = `Bearer ${f.owner.bearer}`; },
     retire: () => { retired = true; },
   };
 }
@@ -81,9 +82,11 @@ test('native paged review, original confirmation/apply replay and both movement 
   expect(replay.headers.get('authorization')).toBe(original.headers.get('authorization'));
   expect(replay.headers.get('idempotency-key')).toBe(original.headers.get('idempotency-key'));
   expect(await replay.json()).toEqual(await original.json());
+  j.owner();
   j.lose(':applyConsolidation');
   expect(await j.visit.apply()).toBe('unknown');
   const apply = j.requests.at(-1)!;
+  j.rotate();
   expect(await j.visit.readResult()).toBe('rejected'); // Different viewer cannot acknowledge the command.
   expect(j.visit.acknowledgementUnknown).toBe(true);
   expect(await j.visit.recover()).toBe('accepted');
