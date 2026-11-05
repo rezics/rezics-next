@@ -727,27 +727,29 @@ custody; it defines no replacement writer or completion interface.
 | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `collection-source-native.ts:readNativeCollectionRawPage`                               | Member, entry, label, session, copy and selected explicit COMPLETE output ranges exist. Missing/incomplete output remains unavailable; public capture and terminal freeze still need their authoritative producers.                                                                                                |
 | `canonical-source-bounds.ts` closed plan consumed by store, Work and receiving getters  | Indexed generation/reference/head storage supports bounded repair and publication under source fences and committed scoped observations. The default worker captures complete native dependencies; absent Semantic scope/public capture remains unavailable. Table absence or emptiness cannot establish coverage. |
-| `follow-store.ts:applyFollow`, `readFollow`, `pageFollows`                              | These operate on the owner-home raw follow row. The installed Library schema has no canonical follow pair/support/total, negative-apply, target-fence or released source/receiving receipt stores. The existing public Collection listing aggregate is a different source and cannot supply this custody.          |
-| `owner-fact-version.ts:readOwnerFactVersion` and native entry/copy/session/label stores | Raw facts and a mutation head exist; a complete structural inverse directory and native registration/birth/late-writer closure do not. Neither a head nor `canonical_source_fact` is a substitute membership authority.                                                                                            |
+| `follow-store.ts:applyFollow`, `readFollow`, `pageFollows`                              | `follow-identity.ts` now has bounded original-to-follower discovery and owner-local pair/support/total/outgoing/fence mutations; `follow_count_source_identity` indexes negative and positive source rows by target. Semantic still must drive saved changes, route owner/target handoffs and reconcile a closed follow receipt. |
+| `owner-fact-version.ts:readOwnerFactVersion` and native entry/copy/session/label stores | `owner_identity_candidate_support` and `owner_identity_candidate` now retain structural source/fact locators and bounded candidate pages recompute live state with highest `owner_write_seq`. Birth/late-writer enrollment and integration into canonical generation rebuild/readback still belong to Source and the owner query. |
 
 Semantic's installed `identity-receiving-effects.ts` now supplies the distinct receiving family. The original-home
 structural gate and ordinary published follow-count gate retain their existing meanings. Independent owner effects
 use `prepareIdentityReceivingEffect`, `lookupIdentityReceivingEffect`, same-transaction `admitHomeEffect` and
-`recordIdentityReceivingEffect`, followed by released-home `reconcileIdentityReceivingEffect`. The closed Source
-producer remains `identity-receiving-source.ts` with `IdentityReceivingSourceProducer`'s exact read/hold/lock/ACK
-exports. That module is absent here; the actual Semantic producer throws unavailable, without a substitute permit.
+`recordIdentityReceivingEffect`, followed by released-home `reconcileIdentityReceivingEffect`. These APIs are used
+by the receiver below; they do not replace native Source capture/hold or the independent control receipt.
 
 `identity-epoch-participant.ts:stepLibraryIdentityEpoch` retains the exact fixed step ABI. Unknown, PREPARING,
 cancelling and cancelled jobs are refused before Library effects. Complete receipt replay releases the read home
-before Store reconciliation. An admitted job can process one registered source invalidation per invocation; it
-still throws `identity_epoch_unavailable` until genuine ALL-role observation is available. Queue exhaustion is
-never a complete receipt, a ready zero or permission to publish. This producer writes no participant-complete row,
-imports no coordinator and registers no third participant or scheduler.
+before Store reconciliation. `createLibraryIdentityEpochReceiver({pool})` is the exact default binding for the
+Source owner: `advanceScope(key, after, context)` reads one prepaid sealed-manifest page at limit 1 and enrolls only
+operations reread from that manifest; `step(job, context)` applies at most one queued receiver effect and returns
+an explicit pending proof state. An unexhausted scope, unresolved owner handoff or missing follow closure never
+becomes a complete receipt, a ready zero or permission to publish. The ordinary step still refuses to complete
+until Semantic composes and independently reconciles the Source, owner, follow and fixed participant receipts.
 
-The Source owner's normal native handoff can call `prepareLibraryIdentitySourceInvalidation(pool, selection)`
-using the existing `IdentityReceivingSelection`, or recover a retained receiving locator with
-`registerLibraryIdentitySourceInvalidation(pool, effect)`. The Source must persist/retry that handoff: a crash
-between Semantic preparation and local queue registration leaves the already registered expected effect pending.
+The Source owner can call `prepareLibraryIdentitySourceInvalidation(pool, selection)` using the existing
+`IdentityReceivingSelection`, or recover a retained receiving locator with
+`registerLibraryIdentitySourceInvalidation(pool, effect)`. It can call the fixed receiver's `advanceScope` for a
+sealed six-driver plan. The Source must persist/retry either handoff: a crash between Semantic preparation and
+local queue registration leaves the already registered expected effect pending.
 The owned scope namespace is `library.identity.source.<role>.invalidate`, with roles member, entry, label,
 session, copy and output. These scopes mean only basis invalidation; they do not acknowledge OLD withdrawal,
 NEW addition, first-apply closure, whole-role rebuild, target fences or completed public output. The Source reader
@@ -756,32 +758,35 @@ Its immutable source ID is the actual Collection ID for this handler. An absent 
 
 In the same admitted native receiving transaction, the handler locks the actual source and active owner account,
 retains both working/ready generation bases, clears both ready/build pointers and checkpoints, marks mapping pending,
-and registers structural `(original,source,incarnation,role)` existence. Facts, original IDs, pins, sessions, copies,
-values and write sequences remain untouched. There is no per-fact/session/history directory or membership mirror.
-The actual native receiving effect and its six-scalar frontier commit with those changes. Replays resolve that
-receipt before mutation, so a lost response cannot invalidate a newer build. Source/receiving/control custody and
-Source ACK precede dequeue; an ACK failure leaves the exact work pending. A partial pending index selects one raw
-work key without scanning completed history, including lower-key registrations arriving behind previous work.
-All nested native calls share the existing five-second work deadline or a shorter caller deadline.
+and registers structural `(original,source,incarnation,role)` existence. A sealed native role operation also applies
+an idempotent owner candidate support delta, keyed by source incarnation and native fact; candidate reads recheck
+live original truth and the current `owner_write_seq` winner. Facts, original IDs, pins, sessions, copies, values and
+write sequences remain untouched. The receiving effect/frontier and these local changes commit atomically. Replays
+resolve that receipt before mutation, so a lost response cannot invalidate a newer build. Source/receiving/control
+custody precedes queue completion. The partial pending index selects one raw work key without scanning completed
+history, including lower-key registrations arriving behind previous work.
 
-The installed `native-source-custody.ts:createNativeLibrarySourceCustody` supplies actual bounded `capturePage`,
-`finishCapture`, same-CommandTransaction/native-T `readAndHold` and `releaseHold`. This participant consumes
-Semantic's receiving record/Source lock rather than substituting metadata for those holds. The missing Source
-adapter must bind its committed manifest to the actual capture identity/receipt and retain the hold through exact
-receiving/control custody. No capture-ID/generation relation is guessed here. Cross-home source/account/control
-custody and public dynamic/frozen output authority remain unavailable. The local queue presently accepts only
-same-home account/source/receiving/control work, under the actual account barrier; it cannot create late private
-control copies after terminal T. Ordinary destination disposition is separate from identity hold release.
+The installed `native-source-custody.ts:createNativeLibrarySourceCustody` supplies bounded `capturePage`,
+`finishCapture`, same-CommandTransaction/native-T `readAndHold` and `releaseHold`. Semantic's receiving record
+retains the capture identity/receipt and exact hold. The Library queue accepts only same-home account/source/
+receiving/control work, under the actual account barrier; foreign homes are retained as precise owner handoffs and
+public/frozen outputs remain owner-qualified work. The Source adapter must invoke the receiver inside its existing
+live maintenance frame and carry its opaque prepaid context through all pages. Ordinary destination disposition is
+separate from identity hold release.
 
-Remaining native bindings are the Source manifest/registration and six-driver generation/rebuild implementation,
-complete owner candidate/winner/label/support/first-apply closure, and the existing follow owner's source delivery,
-canonical pair/support/total/outgoing/negative and source/target fences. State repair must use highest live native
-`owner_write_seq` and keep conflicts; null is unbuilt. These handlers supply no alternate business writer or fake
-empty coverage. Actual mapping/Search/coordinator publication is also required for published undo acceptance.
+Remaining integration is Semantic's prepaid schedule and Source/coordinator composition: it must account for all
+planner steps, source discovery, page/verification and transitive receiving/control operations; drive every saved
+admitted change through first-apply and late-birth closure; invoke follow pages and resolve target/account handoffs;
+and publish the fixed ALL-Library receipt only after current role, owner and follow proof is independently complete.
+The candidate and follow helpers do not stand in for canonical generation rebuild/publication or claim coverage from
+an empty table. State repair must use highest live native `owner_write_seq` and preserve conflicts; null is unbuilt.
+Published undo acceptance also requires the existing Mapping/Search/coordinator composition.
 
 Retention inventory: `identity_epoch_participant_work` stores exact receiving locators at the account/control home;
-`identity_epoch_source_basis` retains detached source bases at that same home; `owner_identity_scope` stores structural
-existence there. All have partition/owner-leading discovery indexes. Receiving native effect/frontier and control
+`identity_epoch_participant_scope` stores source-plan cursor/exhaustion; `identity_epoch_participant_handoff` stores
+unresolved owner locators; `identity_epoch_source_basis` retains detached source bases; `owner_identity_candidate*`
+stores structural fact locators; and `owner_identity_scope` stores structural existence. Each has a bounded
+partition-leading index; `follow_count_source_identity` leads by target and includes negative rows. Receiving native effect/frontier and control
 custody remain in the existing Semantic ledgers, with their existing erasure-role/receipt obligations. Events contain
 job locators only; no new DBOS payload, worker or workflow output is created. These private links and bases survive
 uncertainty until actual irreversible Source/receiving/control closure, never timeout or local count exhaustion.
@@ -3335,6 +3340,8 @@ bounded page and lookahead without repeating FULL fact attachment.
 ### Native identity scope planning and current seals
 
 The canonical identity Source admits at most 100 raw keys per page. Its aggregate input is independently capped at 256; native row and identity-metadata bounds remain separate. The aggregate limit does not raise the per-page Source cap. The [Library performance contract](performance-contract.md#native-identity-scope-planning-and-current-seals) owns participant custody and cost.
+
+Decision: the fixed Library step drains each admitted Source plan from its persisted six-driver frontier and applies OLD, NEW, first-apply and handoff effects through exact receiving receipts; foreign-home and public/frozen authority remain named owner handoffs.
 
 ### Members preparation funding
 

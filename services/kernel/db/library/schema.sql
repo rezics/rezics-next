@@ -4764,7 +4764,7 @@ CREATE TABLE library.identity_epoch_participant_work (
     CONSTRAINT identity_epoch_participant_work_receiving_epoch_check CHECK ((receiving_epoch > 0)),
     CONSTRAINT identity_epoch_participant_work_receiving_partition_check CHECK (((receiving_partition >= 0) AND (receiving_partition <= 4095))),
     CONSTRAINT identity_epoch_participant_work_receiving_position_check CHECK ((receiving_position > 0)),
-    CONSTRAINT identity_epoch_participant_work_role_check CHECK ((role = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text])))
+    CONSTRAINT identity_epoch_participant_work_role_check CHECK ((role = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text, 'follow'::text])))
 );
 
 
@@ -11589,6 +11589,98 @@ ALTER TABLE ONLY library.vndb_label_adoption_item
 ALTER TABLE ONLY library.vndb_label_adoption
     ADD CONSTRAINT vndb_label_adoption_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_import(route, account_id, upload_id) ON DELETE CASCADE;
 
+
+-- Bounded ALL-Library receiving progress and structural candidate support.
+ALTER TABLE library.identity_epoch_participant_work
+    ADD COLUMN follow_after uuid,
+    ADD COLUMN follow_partition integer CHECK (((follow_partition >= 0) AND (follow_partition <= 4095))),
+    ADD COLUMN follow_complete boolean DEFAULT true NOT NULL,
+    ADD COLUMN source_route integer,
+    ADD COLUMN source_id uuid,
+    ADD COLUMN plan_key text,
+    ADD COLUMN disposition text,
+    ADD COLUMN handed_off boolean DEFAULT false NOT NULL;
+
+CREATE TABLE library.identity_epoch_participant_scope (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    source_route integer NOT NULL,
+    source_id uuid NOT NULL,
+    owner_id uuid NOT NULL,
+    plan_key text NOT NULL,
+    after_effect_key text DEFAULT ''::text NOT NULL COLLATE pg_catalog."C",
+    after_disposition text DEFAULT ''::text NOT NULL COLLATE pg_catalog."C",
+    exhausted boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_participant_scope_pkey PRIMARY KEY (partition_no, job_id, job_epoch, source_route, source_id, plan_key),
+    CONSTRAINT identity_epoch_participant_scope_partition_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT identity_epoch_participant_scope_job_epoch_check CHECK ((job_epoch > 0)),
+    CONSTRAINT identity_epoch_participant_scope_source_route_check CHECK ((source_route = ((get_byte(uuid_send(source_id), 10) * 256) + get_byte(uuid_send(source_id), 11)))),
+    CONSTRAINT identity_epoch_participant_scope_source_partition_check CHECK ((partition_no = (source_route >> 4))),
+    CONSTRAINT identity_epoch_participant_scope_owner_check CHECK ((partition_no = (((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)) >> 4))),
+    CONSTRAINT identity_epoch_participant_scope_plan_key_check CHECK ((octet_length(plan_key) = 64)),
+    CONSTRAINT identity_epoch_participant_scope_cursor_check CHECK ((octet_length(after_effect_key) <= 256) AND (octet_length(after_disposition) <= 32))
+);
+CREATE INDEX identity_epoch_participant_scope_pending ON library.identity_epoch_participant_scope USING btree (partition_no, job_id, job_epoch, source_route, source_id, plan_key) WHERE (NOT exhausted);
+CREATE INDEX identity_epoch_participant_scope_owner ON library.identity_epoch_participant_scope USING btree (partition_no, owner_id, job_id, job_epoch);
+
+CREATE INDEX follow_count_source_identity ON library.follow_count_source USING btree (target_id, partition_no, account_id) WHERE (target_type = 'subject'::text);
+
+CREATE TABLE library.owner_identity_candidate_support (
+    partition_no integer NOT NULL,
+    owner_id uuid NOT NULL,
+    canonical_id uuid NOT NULL,
+    original_id uuid NOT NULL,
+    source_id uuid NOT NULL,
+    incarnation text NOT NULL,
+    role text NOT NULL,
+    fact_id uuid NOT NULL,
+    CONSTRAINT owner_identity_candidate_support_pkey PRIMARY KEY (partition_no, owner_id, canonical_id, original_id, source_id, incarnation, role, fact_id),
+    CONSTRAINT owner_identity_candidate_support_partition_check CHECK ((partition_no >= 0) AND (partition_no <= 4095)),
+    CONSTRAINT owner_identity_candidate_support_owner_check CHECK ((partition_no = (((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)) >> 4))),
+    CONSTRAINT owner_identity_candidate_support_canonical_check CHECK ((partition_no = (((get_byte(uuid_send(canonical_id), 10) * 256) + get_byte(uuid_send(canonical_id), 11)) >> 4))),
+    CONSTRAINT owner_identity_candidate_support_incarnation_check CHECK (((octet_length(incarnation) >= 1) AND (octet_length(incarnation) <= 128))),
+    CONSTRAINT owner_identity_candidate_support_role_check CHECK ((role = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text])))
+);
+CREATE INDEX owner_identity_candidate_support_original ON library.owner_identity_candidate_support USING btree (partition_no, owner_id, original_id, canonical_id, source_id, role, fact_id);
+
+CREATE TABLE library.owner_identity_candidate (
+    partition_no integer NOT NULL,
+    owner_id uuid NOT NULL,
+    canonical_id uuid NOT NULL,
+    original_id uuid NOT NULL,
+    support bigint NOT NULL,
+    CONSTRAINT owner_identity_candidate_pkey PRIMARY KEY (partition_no, owner_id, canonical_id, original_id),
+    CONSTRAINT owner_identity_candidate_partition_check CHECK ((partition_no >= 0) AND (partition_no <= 4095)),
+    CONSTRAINT owner_identity_candidate_owner_check CHECK ((partition_no = (((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)) >> 4))),
+    CONSTRAINT owner_identity_candidate_canonical_check CHECK ((partition_no = (((get_byte(uuid_send(canonical_id), 10) * 256) + get_byte(uuid_send(canonical_id), 11)) >> 4))),
+    CONSTRAINT owner_identity_candidate_support_check CHECK ((support > 0))
+);
+CREATE INDEX owner_identity_candidate_order ON library.owner_identity_candidate USING btree (partition_no, owner_id, canonical_id, original_id);
+
+CREATE TABLE library.identity_epoch_participant_handoff (
+    partition_no integer NOT NULL,
+    job_id uuid NOT NULL,
+    job_epoch bigint NOT NULL,
+    effect_key text NOT NULL,
+    owner_id uuid NOT NULL,
+    owner_partition integer NOT NULL,
+    role text NOT NULL,
+    reason text NOT NULL,
+    locator jsonb NOT NULL,
+    resolved boolean DEFAULT false NOT NULL,
+    CONSTRAINT identity_epoch_participant_handoff_pkey PRIMARY KEY (partition_no, job_id, job_epoch, effect_key, owner_id, role, reason),
+    CONSTRAINT identity_epoch_participant_handoff_partition_check CHECK ((partition_no >= 0) AND (partition_no <= 4095)),
+    CONSTRAINT identity_epoch_participant_handoff_job_check CHECK ((partition_no = (((get_byte(uuid_send(job_id), 10) * 256) + get_byte(uuid_send(job_id), 11)) >> 4))),
+    CONSTRAINT identity_epoch_participant_handoff_epoch_check CHECK ((job_epoch > 0)),
+    CONSTRAINT identity_epoch_participant_handoff_key_check CHECK (((octet_length(effect_key) >= 1) AND (octet_length(effect_key) <= 256))),
+    CONSTRAINT identity_epoch_participant_handoff_owner_partition_check CHECK ((owner_partition >= 0) AND (owner_partition <= 4095)),
+    CONSTRAINT identity_epoch_participant_handoff_owner_check CHECK ((owner_partition = (((get_byte(uuid_send(owner_id), 10) * 256) + get_byte(uuid_send(owner_id), 11)) >> 4))),
+    CONSTRAINT identity_epoch_participant_handoff_role_check CHECK ((role = ANY (ARRAY['member'::text, 'entry'::text, 'label'::text, 'session'::text, 'copy'::text, 'output'::text, 'follow'::text]))),
+    CONSTRAINT identity_epoch_participant_handoff_reason_check CHECK ((reason = ANY (ARRAY['foreign-owner'::text, 'frozen-output'::text, 'public-output'::text, 'owner-unready'::text]))),
+    CONSTRAINT identity_epoch_participant_handoff_locator_check CHECK ((octet_length((locator)::text) <= 2048))
+);
+CREATE INDEX identity_epoch_participant_handoff_pending ON library.identity_epoch_participant_handoff USING btree (partition_no, job_id, job_epoch, effect_key) WHERE (NOT resolved);
 
 --
 -- PostgreSQL database dump complete
