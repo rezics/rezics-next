@@ -196,9 +196,8 @@ async function agreePageWithNative(
 }
 
 async function returnThroughLibrary(page: Page, subject: LibrarySubject) {
-  const library = page.locator('a[href="/en/library"]').first();
-  await library.click();
-  await page.waitForURL((url) => url.pathname === '/en/library');
+  await page.getByRole('link', { name: 'Library', exact: true }).first().click();
+  await page.waitForURL((url) => url.pathname === '/en/library' || url.pathname.endsWith('/library'));
   await hydrated(page);
   const card = page.getByRole('link').filter({ hasText: subject.label }).first();
   await card.waitFor({ state: 'visible', timeout: 60_000 });

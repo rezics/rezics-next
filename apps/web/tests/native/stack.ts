@@ -553,10 +553,6 @@ async function startStack(): Promise<
       console.info('Native web stack cleanup: complete');
     })());
   try {
-    reportStackProgress('Native web stack startup: registering kernel SQL modules');
-    // Match the kernel test preload before evaluating anything that imports SQL.
-    await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
-    reportStackProgress('Native web stack startup: kernel SQL modules registered');
     if (!process.env.DATABASE_URL) {
       reportStackProgress('Native web stack startup: starting PostgreSQL');
       const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
@@ -581,10 +577,20 @@ async function startStack(): Promise<
           await probe.query('SELECT 1');
           break;
         } catch (error) {
-          if (Date.now() >= deadline)
-            throw new Error('Disposable PostgreSQL did not become ready.', {
-              cause: error,
-            });
+          if (Date.now() >= deadline) {
+            const inspect = Bun.spawnSync([
+              'docker',
+              'inspect',
+              '-f',
+              '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} err={{.State.Error}}',
+              postgresContainer,
+            ]);
+            const logs = Bun.spawnSync(['docker', 'logs', '--tail', '40', postgresContainer]);
+            throw new Error(
+              `Disposable PostgreSQL did not become ready. ${inspect.stdout.toString().trim()} ${logs.stdout.toString()}${logs.stderr.toString()}`.trim(),
+              { cause: error },
+            );
+          }
           await Bun.sleep(500);
         } finally {
           await probe.end();
@@ -595,6 +601,10 @@ async function startStack(): Promise<
       migrate(databaseUrl);
       reportStackProgress('Native web stack startup: PostgreSQL migration complete');
     }
+    reportStackProgress('Native web stack startup: registering kernel SQL modules');
+    // Match the kernel test preload before evaluating anything that imports SQL.
+    await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
+    reportStackProgress('Native web stack startup: kernel SQL modules registered');
     reportStackProgress('Native web stack startup: preparing SQL analysis');
     // Give Reylo an owned cache and the migrated template for SQL analysis.
     runtimeDirectory = await mkdtemp(join(tmpdir(), 'native-kernel-runtime-'));
