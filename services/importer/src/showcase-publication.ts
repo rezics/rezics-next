@@ -651,7 +651,10 @@ function subjectId(read: ReviewedSubjectRead): string | null {
 }
 
 /** Reads follow canonical identity; statement ownership and adoption stay on the sealed original. */
-function currentSourceRead(read: ReviewedSubjectRead, record: Pick<ShowcaseRecord, 'provider' | 'sourceKey' | 'subjectId' | 'nativeType'>): boolean {
+function currentSourceRead(
+  read: ReviewedSubjectRead,
+  record: Pick<ShowcaseRecord, 'provider' | 'sourceKey' | 'subjectId' | 'nativeType'>,
+): boolean {
   if (subjectType(read) !== record.nativeType) return false;
   if (subjectId(read) === record.subjectId) return true;
   const identity = personIdentityForSource(record.provider, record.sourceKey, record.nativeType ?? undefined);

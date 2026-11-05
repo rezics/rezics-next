@@ -29,8 +29,12 @@ export function createPublicBulkClient(options: { origin: string; fetch?: typeof
           redirect: 'manual',
         });
         if (response.status === 308) {
-          const body = await response.json() as { redirect?: { from?: unknown; to?: unknown } };
-          if (body.redirect?.from !== current || typeof body.redirect.to !== 'string' || !subjectId.test(body.redirect.to))
+          const body = (await response.json()) as { redirect?: { from?: unknown; to?: unknown } };
+          if (
+            body.redirect?.from !== current ||
+            typeof body.redirect.to !== 'string' ||
+            !subjectId.test(body.redirect.to)
+          )
             throw new TypeError('Invalid public subject redirect');
           // Native identity redirects address Subjects on this API, never a foreign Location URL.
           current = body.redirect.to;

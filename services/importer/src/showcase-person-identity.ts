@@ -114,7 +114,9 @@ export function observePersonIdentity(identity: PersonIdentity, read: ReviewedSu
   const selected = (subject.statements[identity.property] ?? []).filter((statement) => statement.rank !== 'deprecated');
   if (selected.some((statement) => statement.value.type !== 'value' || typeof statement.value.content !== 'string'))
     return { state: 'conflicting', identity };
-  const values = selected.flatMap((statement) => statement.value.type === 'value' ? [statement.value.content as string] : []);
+  const values = selected.flatMap((statement) =>
+    statement.value.type === 'value' ? [statement.value.content as string] : [],
+  );
   if (!values.length) return { state: 'missing', identity };
   const unique = new Set(values);
   if (unique.size !== 1 || !unique.has(identity.value)) return { state: 'conflicting', identity };

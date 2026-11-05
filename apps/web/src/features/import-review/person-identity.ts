@@ -24,15 +24,13 @@ export type PersonComparison =
     };
 export type PersonReviewCommand = { body: ReviewedPersonMerge; key: string };
 export type PersonReviewResult = ProviderFailure | { ok: true; admission: ReviewedPersonAdmission };
-export type PersonPublication = ProviderFailure | { ok: true } & (
-  | { state: 'pending' | 'unconfirmed' }
-  | { state: 'published'; read: SubjectRead }
-);
+export type PersonPublication =
+  | ProviderFailure
+  | ({ ok: true } & ({ state: 'pending' | 'unconfirmed' } | { state: 'published'; read: SubjectRead }));
 export type PersonPublicationRequest = { command: PersonReviewCommand; operation: string };
 export function personPublicationInput(value: unknown): PersonPublicationRequest {
   const v = value as PersonPublicationRequest | null;
-  if (!v || typeof v.operation !== 'string' || !uuid.test(v.operation))
-    throw new TypeError('Invalid Person operation');
+  if (!v || typeof v.operation !== 'string' || !uuid.test(v.operation)) throw new TypeError('Invalid Person operation');
   return { command: personReviewCommandInput(v.command), operation: v.operation };
 }
 export type PersonReviewTransport = {
@@ -149,21 +147,32 @@ export async function readPersonPublication(
   const observed = response.data.operation;
   if (!observed.done) return { ok: true, state: 'pending' };
   const originals = command.body.subjects;
-  if (!originals.includes(observed.result.survivor) || !originals.includes(observed.result.redirected) ||
-      observed.result.survivor === observed.result.redirected)
+  if (
+    !originals.includes(observed.result.survivor) ||
+    !originals.includes(observed.result.redirected) ||
+    observed.result.survivor === observed.result.redirected
+  )
     throw new TypeError('Invalid native Person publication');
-  const responses = await Promise.all(originals.map((id) => client.subjects({ id }).get({
-    fetch: { redirect: 'follow', ...(signal === undefined ? {} : { signal }) },
-  })));
+  const responses = await Promise.all(
+    originals.map((id) =>
+      client.subjects({ id }).get({
+        fetch: { redirect: 'follow', ...(signal === undefined ? {} : { signal }) },
+      }),
+    ),
+  );
   for (const read of responses)
     if (read.status !== 200 || !read.data) return providerFailure(read.status, read.headers);
   const reads = responses.map((read) => read.data!);
-  const current = reads.every((read) =>
-    read.subject.id === observed.result.survivor && read.subject.type === 'schema:Person' &&
-    command.body.expectedIdentity.endpoints.every((endpoint) => {
-      const values = (read.subject.statements[endpoint.property] ?? []).filter((row) => row.rank !== 'deprecated');
-      return values.length > 0 && values.every((row) =>
-        row.value.type === 'value' && row.value.content === endpoint.value);
-    }));
+  const current = reads.every(
+    (read) =>
+      read.subject.id === observed.result.survivor &&
+      read.subject.type === 'schema:Person' &&
+      command.body.expectedIdentity.endpoints.every((endpoint) => {
+        const values = (read.subject.statements[endpoint.property] ?? []).filter((row) => row.rank !== 'deprecated');
+        return (
+          values.length > 0 && values.every((row) => row.value.type === 'value' && row.value.content === endpoint.value)
+        );
+      }),
+  );
   return current ? { ok: true, state: 'published', read: reads[0]! } : { ok: true, state: 'unconfirmed' };
 }

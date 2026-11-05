@@ -8,7 +8,11 @@ import type { PostHistoryPage as NativePostHistoryPage } from './kernel/content/
 import type { WatchManagementKind, WatchManagementPage } from './kernel/content/watch-management-contract';
 import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
 import type { ExportRecord } from './kernel/library/library-export-source.ts';
-import type { ReviewedPersonEndpoint, ReviewedPersonAdmission, ReviewedPersonOperation } from './reviewed-person-identity.ts';
+import type {
+  ReviewedPersonEndpoint,
+  ReviewedPersonAdmission,
+  ReviewedPersonOperation,
+} from './reviewed-person-identity.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export { zoneCollections } from './zones.ts';
@@ -148,7 +152,10 @@ type SharedRoutes<Mounted, Original> = Original extends { body: unknown; respons
     };
 
 // Many modules inherit subjectRoutes. Intersecting their repeated anonymous 422 unions grows exponentially.
-type InstalledSubjectRoutes = SharedRoutes<Routes['subjects'], ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects']>;
+type InstalledSubjectRoutes = SharedRoutes<
+  Routes['subjects'],
+  ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects']
+>;
 type InstalledSubjectGet = InstalledSubjectRoutes[':id']['get'];
 type InstalledMergePost = InstalledSubjectRoutes['$merge']['post'];
 // The native reviewed merge routes are released; declaration publication currently also
@@ -166,7 +173,7 @@ type SubjectRoutes = Omit<InstalledSubjectRoutes, ':id' | '$merge'> & {
       };
     };
   };
-  '$merge': {
+  $merge: {
     post: Omit<InstalledMergePost, 'body' | 'response'> & {
       body: InstalledMergePost['body'] & {
         expectedIdentity?: { endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint] };

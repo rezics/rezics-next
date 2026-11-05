@@ -85,7 +85,11 @@ export function ProviderPersonReview({
               source: String(values.get('bangumi-source')) as PersonReviewPair[0]['source'],
               externalId: String(values.get('bangumi-key')),
             },
-            { subject: String(values.get('vndb-subject')), source: String(values.get('vndb-source')) as PersonReviewPair[1]['source'], externalId: String(values.get('vndb-key')) },
+            {
+              subject: String(values.get('vndb-subject')),
+              source: String(values.get('vndb-source')) as PersonReviewPair[1]['source'],
+              externalId: String(values.get('vndb-key')),
+            },
           ];
           const version = ++generation.current;
           held.current = true;
@@ -108,8 +112,12 @@ export function ProviderPersonReview({
               <fieldset key={source} className="min-w-0 space-y-2 rounded border p-4">
                 <legend>{source === 'bangumi' ? 'Bangumi · wdt:P6298' : 'VNDB · wdt:P3180'}</legend>
                 <label htmlFor={`${id}-${source}-source`}>{m.person_review_claim_source({}, o)}</label>
-                <select id={`${id}-${source}-source`} name={`${source}-source`} defaultValue={`${source}_cross_media`}
-                  className="min-h-11 w-full rounded border bg-background px-3">
+                <select
+                  id={`${id}-${source}-source`}
+                  name={`${source}-source`}
+                  defaultValue={`${source}_cross_media`}
+                  className="min-h-11 w-full rounded border bg-background px-3"
+                >
                   <option value={`${source}_cross_media`}>{source}_cross_media</option>
                   <option value={source}>{source}</option>
                 </select>
@@ -159,15 +167,16 @@ export function ProviderPersonReview({
                       {original.source} · {original.externalId}
                     </p>
                     <p className="text-xs">{original.subject}</p>
-                    {['schema:name', original.source.startsWith('bangumi') ? 'wdt:P6298' : 'wdt:P3180'].flatMap((property) =>
-                      (read.subject.statements[property] ?? []).map((statement) => (
-                        <ProviderStatement
-                          key={statement.id}
-                          statement={statement}
-                          row={{ subject: read.subject.id, related: read.related }}
-                          locale={locale}
-                        />
-                      )),
+                    {['schema:name', original.source.startsWith('bangumi') ? 'wdt:P6298' : 'wdt:P3180'].flatMap(
+                      (property) =>
+                        (read.subject.statements[property] ?? []).map((statement) => (
+                          <ProviderStatement
+                            key={statement.id}
+                            statement={statement}
+                            row={{ subject: read.subject.id, related: read.related }}
+                            locale={locale}
+                          />
+                        )),
                     )}
                   </article>
                 );
@@ -231,31 +240,53 @@ export function ProviderPersonReview({
       )}
       {result?.ok && intent && (
         <div className="space-y-3">
-          <Button type="button" className="min-h-11" disabled={busy} onClick={async () => {
-            if (!visit.live() || held.current) return;
-            held.current = true;
-            setBusy(true);
-            try {
-              const next = await transport.publication({ command: intent, operation: result.admission.operation.id });
-              if (visit.live()) setPublication(next);
-            } finally {
-              held.current = false;
-              if (visit.live()) setBusy(false);
-            }
-          }}>{m.person_review_check_publication({}, o)}</Button>
-          {publication && (!publication.ok ? (
-            <p role="status">{providerOutcomeText(publication, locale)}</p>
-          ) : publication.state === 'published' ? (
-            <p role="status">
-              {m.person_review_published({}, o)}{' '}
-              <a className="inline-flex min-h-11 items-center underline"
-                href={subjectHref({ id: publication.read.subject.id,
-                  label: pickText(publication.read.subject.labels, locale).text }, locale).href}>
-                {pickText(publication.read.subject.labels, locale).text || publication.read.subject.id}
-              </a>
-            </p>
-          ) : <p role="status">{publication.state === 'pending'
-              ? m.person_review_publication_pending({}, o) : m.person_review_unconfirmed({}, o)}</p>)}
+          <Button
+            type="button"
+            className="min-h-11"
+            disabled={busy}
+            onClick={async () => {
+              if (!visit.live() || held.current) return;
+              held.current = true;
+              setBusy(true);
+              try {
+                const next = await transport.publication({ command: intent, operation: result.admission.operation.id });
+                if (visit.live()) setPublication(next);
+              } finally {
+                held.current = false;
+                if (visit.live()) setBusy(false);
+              }
+            }}
+          >
+            {m.person_review_check_publication({}, o)}
+          </Button>
+          {publication &&
+            (!publication.ok ? (
+              <p role="status">{providerOutcomeText(publication, locale)}</p>
+            ) : publication.state === 'published' ? (
+              <p role="status">
+                {m.person_review_published({}, o)}{' '}
+                <a
+                  className="inline-flex min-h-11 items-center underline"
+                  href={
+                    subjectHref(
+                      {
+                        id: publication.read.subject.id,
+                        label: pickText(publication.read.subject.labels, locale).text,
+                      },
+                      locale,
+                    ).href
+                  }
+                >
+                  {pickText(publication.read.subject.labels, locale).text || publication.read.subject.id}
+                </a>
+              </p>
+            ) : (
+              <p role="status">
+                {publication.state === 'pending'
+                  ? m.person_review_publication_pending({}, o)
+                  : m.person_review_unconfirmed({}, o)}
+              </p>
+            ))}
         </div>
       )}
       {uncertain && !busy && (

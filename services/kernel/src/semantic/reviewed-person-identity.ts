@@ -32,7 +32,12 @@ export const ReviewedPersonEndpointSchema = t.Object(
     subject: t.String({ format: 'uuid' }),
     revision: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
     securityRevision: t.String({ pattern: String.raw`^[1-9][0-9]*$(?![\s\S])` }),
-    source: t.Union([t.Literal('bangumi'), t.Literal('vndb'), t.Literal('bangumi_cross_media'), t.Literal('vndb_cross_media')]),
+    source: t.Union([
+      t.Literal('bangumi'),
+      t.Literal('vndb'),
+      t.Literal('bangumi_cross_media'),
+      t.Literal('vndb_cross_media'),
+    ]),
     externalId: t.String({ maxLength: 255 }),
     claimTransactionId: t.String({ format: 'uuid' }),
     property: t.Union([t.Literal('wdt:P6298'), t.Literal('wdt:P3180')]),
@@ -52,13 +57,13 @@ const bytes = (value: string) => new TextEncoder().encode(value).byteLength;
 export function isReviewedPersonSource(value: ReviewedPersonSource): boolean {
   return (
     bytes(value.externalId) <= 255 &&
-    ((value.source === 'bangumi' || value.source === 'bangumi_cross_media')
+    (value.source === 'bangumi' || value.source === 'bangumi_cross_media'
       ? /^person:[1-9][0-9]*$(?![\s\S])/.test(value.externalId)
       : /^s[1-9][0-9]*$(?![\s\S])/.test(value.externalId))
   );
 }
 export function reviewedPersonIdentifier(source: ReviewedPersonSource) {
-  return (source.source === 'bangumi' || source.source === 'bangumi_cross_media')
+  return source.source === 'bangumi' || source.source === 'bangumi_cross_media'
     ? { property: 'wdt:P6298' as const, value: source.externalId.slice(7) }
     : { property: 'wdt:P3180' as const, value: source.externalId };
 }

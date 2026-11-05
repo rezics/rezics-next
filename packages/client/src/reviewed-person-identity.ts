@@ -30,7 +30,7 @@ export function isReviewedPersonSource(value: unknown): value is ReviewedPersonS
   return (
     typeof v.externalId === 'string' &&
     bytes(v.externalId) <= 255 &&
-    ((v.source === 'bangumi' || v.source === 'bangumi_cross_media')
+    (v.source === 'bangumi' || v.source === 'bangumi_cross_media'
       ? /^person:[1-9][0-9]*$(?![\s\S])/.test(v.externalId)
       : (v.source === 'vndb' || v.source === 'vndb_cross_media') && /^s[1-9][0-9]*$(?![\s\S])/.test(v.externalId))
   );
@@ -50,7 +50,7 @@ export function isReviewedPersonEndpoint(value: unknown): value is ReviewedPerso
     uuid.test(v.claimTransactionId) &&
     typeof v.value === 'string' &&
     bytes(v.value) <= 255 &&
-    ((v.source === 'bangumi' || v.source === 'bangumi_cross_media')
+    (v.source === 'bangumi' || v.source === 'bangumi_cross_media'
       ? v.property === 'wdt:P6298' && v.value === v.externalId.slice(7)
       : v.property === 'wdt:P3180' && v.value === v.externalId)
   );
@@ -106,10 +106,7 @@ export function reviewedPersonRequests(client: KernelClient) {
         },
       });
     },
-    operation(
-      id: string,
-      options: { headers?: Record<string, string>; fetch?: { signal?: AbortSignal } } = {},
-    ) {
+    operation(id: string, options: { headers?: Record<string, string>; fetch?: { signal?: AbortSignal } } = {}) {
       return client.subjectIdentityOperations({ id }).get(options);
     },
     merge(

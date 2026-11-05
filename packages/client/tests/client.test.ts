@@ -202,7 +202,10 @@ test('the derived subjects group keeps native counts and routes contributed by o
     // Every mounted root group remains present in the client representation.
     const complete: Record<keyof Kernel['~Routes']['v1'], object> = client;
     // This released native group is bound while whole-Kernel declaration publication is pending.
-    const noExtraGroups: Exclude<keyof KernelClient, keyof Kernel['~Routes']['v1'] | 'subjectIdentityOperations' | '~path'> extends never
+    const noExtraGroups: Exclude<
+      keyof KernelClient,
+      keyof Kernel['~Routes']['v1'] | 'subjectIdentityOperations' | '~path'
+    > extends never
       ? true
       : false = true;
     const path: string = client['~path'];

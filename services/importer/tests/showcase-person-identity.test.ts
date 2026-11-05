@@ -10,7 +10,12 @@ import {
   personIdentityForSource,
   selectPersonReviewPair,
 } from '../src/showcase-person-identity.ts';
-import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia, type CrossMediaPort } from '../src/cross-media-seed.ts';
+import {
+  crossMediaAliases,
+  emptyCrossMediaPlan,
+  seedCrossMedia,
+  type CrossMediaPort,
+} from '../src/cross-media-seed.ts';
 import { buildShowcaseManifest } from '../src/showcase-manifest.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
@@ -101,8 +106,12 @@ test('seed review keeps admitted source bytes and original bindings across canon
     ]);
     expect(pair.sources.map((entry) => entry.record)).toEqual([plan.entities.bangumi[0]!, plan.entities.vndb[0]!]);
     expect(first.personIdentities.map((entry) => entry.currentSubjectId)).toEqual([currentPersonId, currentPersonId]);
-    const manifest = buildShowcaseManifest({ plan, readings: first.readings,
-      acknowledgements: journal.acknowledgedCommands(), aliases: crossMediaAliases });
+    const manifest = buildShowcaseManifest({
+      plan,
+      readings: first.readings,
+      acknowledgements: journal.acknowledgedCommands(),
+      aliases: crossMediaAliases,
+    });
     for (const record of manifest.records) {
       expect(record.subjectId).toBe(original.get(record.sourceKey)!);
       expect(record.assertions.length).toBeGreaterThan(0);
@@ -144,14 +153,20 @@ test('review and public reads follow native canonical redirects without changing
     const request = new Request(input, init);
     seen.push(request);
     return new URL(request.url).pathname.endsWith(original)
-      ? Response.json({ redirect: { from: original, to: cyclic ? original : currentPersonId } },
-          { status: 308, headers: { location: 'https://foreign.test/private' } })
+      ? Response.json(
+          { redirect: { from: original, to: cyclic ? original : currentPersonId } },
+          { status: 308, headers: { location: 'https://foreign.test/private' } },
+        )
       : Response.json(native);
   }) as typeof fetch;
   const publicClient = createPublicBulkClient({ origin: 'https://kernel.test', fetch: upstream });
   expect(await publicClient.readSubject(original)).toEqual(native);
-  const transport = createImportTransport({ origin: 'https://kernel.test', tokenProvider: async () => 'reviewer',
-    fetch: upstream, maxAttempts: 1 });
+  const transport = createImportTransport({
+    origin: 'https://kernel.test',
+    tokenProvider: async () => 'reviewer',
+    fetch: upstream,
+    maxAttempts: 1,
+  });
   expect(await transport.readReviewedSubject(original)).toEqual(native);
   expect(seen.every((request) => new URL(request.url).origin === 'https://kernel.test')).toBe(true);
   expect(seen.slice(0, 2).every((request) => !request.headers.has('authorization'))).toBe(true);
@@ -243,12 +258,16 @@ test('only exact source key forms on Person records participate in reviewed iden
 
 test('current identity ignores deprecated identifiers but retains conflicting non-value evidence', () => {
   const identity = personIdentityForSource('vndb', 's224', 'schema:Person')!;
-  const subject = { id: currentPersonId, type: 'schema:Person', statements: {
-    'wdt:P3180': [
-      { rank: 'normal', value: { type: 'value', content: 's224' } },
-      { rank: 'deprecated', value: { type: 'value', content: 's7' } },
-    ],
-  } };
+  const subject = {
+    id: currentPersonId,
+    type: 'schema:Person',
+    statements: {
+      'wdt:P3180': [
+        { rank: 'normal', value: { type: 'value', content: 's224' } },
+        { rank: 'deprecated', value: { type: 'value', content: 's7' } },
+      ],
+    },
+  };
   expect(observePersonIdentity(identity, read(subject)).state).toBe('current');
   subject.statements['wdt:P3180'].push({ rank: 'normal', value: { type: 'someValue', content: '' } });
   expect(observePersonIdentity(identity, read(subject)).state).toBe('conflicting');
