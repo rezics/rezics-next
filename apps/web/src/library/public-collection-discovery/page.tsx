@@ -135,7 +135,14 @@ export function PublicCollectionDiscoveryPage({
             state.status === 'not-ready' ||
             state.status === 'unavailable' ||
             state.status === 'closed') && (
-            <Button type="button" variant="outline" className="min-h-11 min-w-11" disabled={retrying} onClick={onRetry}>
+            <Button
+              data-slot="retry"
+              type="button"
+              variant="outline"
+              className="min-h-11 min-w-11"
+              disabled={retrying}
+              onClick={onRetry}
+            >
               {m.collection_discovery_retry({}, options)}
             </Button>
           )}
