@@ -9,7 +9,8 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 // Install the browser host before loading readers shared with the routed Producer test.
-const { organizationHistoryVisitReturn, subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
+const { organizationHistoryVisitReturn, subjectVisitReturn } =
+  await import('../src/features/pages/subject-visit-navigation');
 const { subjectHref } = await import('../src/subject/subject-href');
 const { peopleOrganizationId, peopleProfileFixture } = await import('../src/kernel/fake/catalogue-people-profile');
 const { m } = await import('../src/paraglide/messages.js');
