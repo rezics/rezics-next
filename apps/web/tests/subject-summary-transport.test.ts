@@ -37,6 +37,7 @@ mock.module('../src/kernel/client', () => ({
 }));
 mock.module('../src/session/request', () => ({
   prepareSession,
+  requestCsrfToken: () => null,
   sessionSubject: () => null,
   viewerCredential: () => undefined,
 }));
