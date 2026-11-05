@@ -1637,8 +1637,9 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     context: PublicFilterConsumerContext,
     page?: Page,
     publication?: PublicFilterConsumer,
+    preparationMeter?: Meter,
   ): Promise<PublicFilterConsumerCapture> {
-    const m = page?.m ?? meter(context);
+    const m = page?.m ?? preparationMeter ?? meter(context);
     if (snapshot !== 'pit' && snapshot !== 'prepared') throw new TypeError('Unknown immutable snapshot kind');
     // All grammar, private-owner and optional DSL validation precedes the first native call.
     let canonical: PublicCanonicalCaptureInput;
@@ -2022,9 +2023,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     m.cost.frontierWrites++;
     return next;
   }
-  async function repairStep(input: PublicFilterConsumerJob, context: PublicFilterConsumerContext) {
+  async function repairStep(input: PublicFilterConsumerJob, context: PublicFilterConsumerContext, m = meter(context)) {
     const job = structuredClone(input);
-    const m = meter(context);
     let use: CustodyUse | undefined;
     try {
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
@@ -2491,9 +2491,8 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       m.add(original.cost);
       if ('publication' in original) {
         if (original.status === 'pending') {
-          const repair = await repairStep({ consumer: input.consumer,
-            job: original.publication.queried.snapshot.observation }, context);
-          m.add(repair.cost);
+          await repairStep({ consumer: input.consumer,
+            job: original.publication.queried.snapshot.observation }, context, m);
         }
         return { ...original, cost: m.cost };
       }
@@ -2508,8 +2507,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         [retained.registration.partition, retained.registration.id],
       );
       if (!q || q.snapshot.kind !== 'prepared' || preparing.rows[0]!.consumer_work) {
-        const capture = await capturePlan(input.capture, 'prepared', context, undefined, input.consumer);
-        m.add(capture.cost);
+        const capture = await capturePlan(input.capture, 'prepared', context, undefined, input.consumer, m);
         if (capture.status !== 'captured') return m.unavailable('source_pending');
         q = capture.queried;
       }
@@ -2548,8 +2546,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }, context);
       m.add(completion.cost);
       if (completion.status === 'pending') {
-        const repair = await repairStep(job, context);
-        m.add(repair.cost);
+        await repairStep(job, context, m);
       }
       return { ...completion, cost: m.cost };
     } catch (error) {
