@@ -24,6 +24,7 @@ export async function prepareSession(
 ): Promise<boolean> {
   assertPublicCacheReadAllowed(request, 'session');
   const id = cookie(request, SESSION_COOKIE);
+  console.log('prepare session admission', id, validId(id), configured(env), request.headers.get('authorization'), options.refresh);
   if (id === undefined) return false;
   const requireCsrf = isUnsafeRequest(request) && carriesSession(request);
   if (requireCsrf && !isAllowedSiteOrigin(request, request.headers.get('origin'), env.SITE_ORIGINS))
@@ -49,7 +50,9 @@ export async function prepareSession(
   }
 
   const store = env.SESSIONS.get(env.SESSIONS.idFromName(id));
+  console.log('prepare session store', options.refresh === false ? 'fresh' : 'refresh');
   const result = options.refresh === false ? await store.credentialIfFresh() : await store.credential();
+  console.log('prepare session result', result.status);
   if (requireCsrf) {
     const csrfToken = result.status === 'active' || result.status === 'unavailable' ? result.csrfToken : undefined;
     if (result.status === 'absent' || !csrfTokenMatches(csrfToken, await csrfTokenFromRequest(request)))
