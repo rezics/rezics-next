@@ -216,6 +216,7 @@ mock.module('../src/subject/definitions', () => ({
 mock.module('../src/session/query', () => ({ useSession: () => browser }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': browser.csrfToken }) }));
 mock.module('../src/kernel/exposure', () => ({
+  operationIsAdmitted: () => admitted,
   useOperation: () => admitted,
   Exposure: ({ children }: { children: ReactNode }) => (admitted ? children : null),
 }));
