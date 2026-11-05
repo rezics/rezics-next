@@ -59,7 +59,7 @@ export function LiteraryCurrentAssertionInspection({
   const [inspection, setInspection] = useState<{ key: string; selection: string; evidence: string }>();
   const [failure, setFailure] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
-  const attemptRef = useRef<Attempt>();
+  const attemptRef = useRef<Attempt | undefined>(undefined);
   const heading = useRef<HTMLHeadingElement>(null);
   const visible = active();
   const availability = correctionInspectionAvailability(read.actions);
@@ -68,7 +68,7 @@ export function LiteraryCurrentAssertionInspection({
     subject.id,
     subject.type,
     subject.context,
-    read.release.digest,
+    subject.release,
     reader,
     visit?.context,
     visit?.realm,
@@ -199,7 +199,7 @@ export function LiteraryCurrentAssertionInspection({
         freshSubject.type === admitted.public.subject.type &&
         freshSubject.context === admitted.public.subject.context &&
         (!visit || freshSubject.context === visit.context) &&
-        fresh.release.digest === admitted.release.digest &&
+        freshSubject.release === admitted.public.subject.release &&
         !!fresh.release.properties[choice.locator.property] &&
         literaryFields(fresh.release, freshSubject.type, locale).scalars.includes(choice.locator.property) &&
         reader.length > 0 &&

@@ -867,8 +867,8 @@ function LiteraryProfileLive({
     query.data?.ok &&
     query.data.current?.public.subject.id === id &&
     (!visit ||
-      (query.data.current.public.subject.type === visit.type &&
-        query.data.current.public.subject.context === visit.context))
+      (query.data.current?.public.subject.type === visit.type &&
+        query.data.current?.public.subject.context === visit.context))
       ? query.data
       : undefined;
   const reload = () => {
