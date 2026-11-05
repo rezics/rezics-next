@@ -627,7 +627,7 @@ export async function readZoneSubjectRoute(input: {
     },
   });
   const view = input.view ?? 'overview';
-  const admittedSubjectId = outcome.kind === 'page' ? outcome.page.subject : input.subjectId;
+  const admittedSubjectId = outcome.kind === 'page' ? (outcome.page.subject ?? input.subjectId) : input.subjectId;
   const overview = outcome.kind === 'page' ? outcome.common?.overview : undefined;
   const basePaths = Object.fromEntries(
     locales.map((language) => {
