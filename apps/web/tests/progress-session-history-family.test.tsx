@@ -3,8 +3,6 @@ import { dirname } from 'node:path';
 import { act, Fragment, StrictMode, type ReactNode } from 'react';
 import type { ProgressChange, ProgressSessionPage as Page } from '../src/library/progress-reads';
 
-// UNRUN: composed history/hierarchy outcomes. Existing current-viewer/current-origin suites retain
-// authority, exact uncertain command and late-result coverage; native/browser acceptance is deferred.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -150,6 +148,7 @@ async function mount(
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
   const rootRoute = createRootRoute();
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -291,6 +290,7 @@ test('Discrete history and sparse unit pages preserve each exact key and every i
       [h.history(), original.session.changesNext, original.unitsCursor],
       [units, original.changesCursor, original.session.unitsNext],
     ] as const) {
+      expect(within(region).queryByRole('link', { name: m.library_window_previous() })).toBeNull();
       const href = within(region).getByRole('link', { name: m.library_progress_more() }).getAttribute('href')!;
       const url = new URL(href, window.location.href);
       expect(url.pathname).toBe(`/library/progress/${original.session.id}`);
