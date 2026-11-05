@@ -16,13 +16,15 @@ const calls: { signal: AbortSignal; path: string }[] = [];
 const serverSignals: AbortSignal[] = [];
 let preparation = Promise.resolve();
 let response = Promise.resolve();
+let ownReactionUnavailable = false;
 const id = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const native = createKernelClient('https://kernel.test', {
   fetch: async (input, init) => {
     const path = new URL(String(input)).pathname;
     calls.push({ path, signal: init!.signal! });
     await response; // Deliberately ignores cancellation: admission must still reject it.
-    if (path.endsWith('/reaction')) return Response.json({ kind: null });
+    if (path.endsWith('/reaction'))
+      return Response.json({ kind: null }, { status: ownReactionUnavailable ? 503 : 200 });
     if (path.endsWith('/reactions')) return Response.json({ counts: [], watermark: null });
     if (path.endsWith('/source-statistics')) return Response.json([]);
     return new Response(null, { status: 404 });
@@ -134,7 +136,7 @@ test('an exact live observer retains shared work; a fresh return replaces abando
   }
 });
 
-test('an own-reaction write settling before an ignored old read keeps the current vote', async () => {
+test('an own-reaction write settling before an unavailable old read keeps the current vote', async () => {
   const client = new QueryClient();
   const gate = deferred<void>();
   response = gate.promise;
@@ -143,11 +145,13 @@ test('an own-reaction write settling before an ignored old read keeps the curren
   const pending = client.fetchQuery(options);
   await tick();
   revision++;
+  ownReactionUnavailable = true;
   const written = { reader: 'reader', value: 'like' as const };
   client.setQueryData(options.queryKey, written);
   gate.resolve();
   expect(await pending).toEqual(written);
   expect(client.getQueryData(options.queryKey)).toEqual(written);
   response = Promise.resolve();
+  ownReactionUnavailable = false;
   client.clear();
 });

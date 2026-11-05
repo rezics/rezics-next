@@ -239,7 +239,8 @@ function tree(
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function until(check: () => boolean) {
   const deadline = Date.now() + 5_000;
-  while (!check() && Date.now() < deadline) await tick();
+  await act(tick);
+  while (!check() && Date.now() < deadline) await act(tick);
   expect(check()).toBe(true);
 }
 async function paint(
@@ -268,7 +269,7 @@ function chip(kind: SubjectReactionKind) {
             ? m.reaction_insightful()
             : m.reaction_sad();
   const found = chips().find((button) => button.textContent?.startsWith(label));
-  expect(found).toBeDefined();
+  expect(found, host.innerHTML).toBeDefined();
   return found!;
 }
 async function clickKind(kind: SubjectReactionKind) {

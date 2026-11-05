@@ -739,13 +739,13 @@ export const subjectOwnReactionQuery = (
         throw new Error('Subject reaction observation retired');
       const result = await readSubjectOwnReaction({ data: { id, locale, expectedReader: reader }, signal });
       signal.throwIfAborted();
-      if (!result || result.reader !== reader || !scope.isCurrent() || !scope.hasLiveObserver())
-        throw new Error('Subject reaction reader changed');
+      if (!scope.isCurrent() || !scope.hasLiveObserver()) throw new Error('Subject reaction observation retired');
       if (scope.getWriteRevision && scope.getWriteRevision() !== writeRevision) {
         const current = client.getQueryData<SubjectOwnReaction>(queryKey);
         if (current !== undefined) return current;
         throw new Error('Subject reaction read superseded by a write');
       }
+      if (!result || result.reader !== reader) throw new Error('Subject reaction reader changed');
       return result;
     },
     enabled: personalRead.enabled && scope.reader !== null && scope.isCurrent() && scope.hasLiveObserver(),
