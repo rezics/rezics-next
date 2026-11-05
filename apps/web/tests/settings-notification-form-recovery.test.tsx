@@ -2,7 +2,12 @@ import { expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import * as start from '../.storybook/react-start';
-import type { NotificationChange, NotificationPreferences, PreferencePage } from '../src/settings/preferences';
+import type {
+  NotificationChange,
+  NotificationPreferences,
+  NotificationWriteResult,
+  PreferencePage,
+} from '../src/settings/preferences';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -240,6 +245,147 @@ test('native kind forms own each field once; hydration retains choices and recov
     await click('Restore defaults');
     expect(calls).toHaveLength(9);
     expect(calls[8]!.notifications).toBeNull();
+  } finally {
+    if (root) await act(async () => root!.unmount());
+    for (const [key, descriptor] of previous)
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    await window.happyDOM.close();
+    mock.restore();
+  }
+});
+
+test('a stale first-send receipt is consumed before a failed read and later reviewed edit', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/settings' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    ...Object.fromEntries(
+      [
+        'HTMLElement',
+        'HTMLInputElement',
+        'HTMLButtonElement',
+        'Element',
+        'Node',
+        'Document',
+        'DocumentFragment',
+        'MutationObserver',
+        'ResizeObserver',
+        'FormData',
+      ].map((key) => [key, (window as any)[key]]),
+    ),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { hydrateRoot } = await import('react-dom/client');
+  const { renderToString } = await import('react-dom/server');
+  const { NotificationsCard } = await import('../src/settings/notifications');
+  const original = { reply: true, mention: true };
+  const receipt = { reply: false, mention: true };
+  const current = { reply: true, mention: true };
+  const reviewed = { reply: true, mention: false };
+  const initialPage = settingsPage(original, 7);
+  const receiptPage = settingsPage(receipt, 8);
+  const currentPage = settingsPage(current, 10);
+  const reviewedPage = settingsPage(reviewed, 11);
+  const calls: NotificationChange[] = [];
+  let resolveFirst!: (result: NotificationWriteResult) => void;
+  let reads = 0;
+  const io = {
+    save: async (input: NotificationChange) => {
+      calls.push(input);
+      if (calls.length === 1)
+        return await new Promise<NotificationWriteResult>((resolve) => {
+          resolveFirst = resolve;
+        });
+      return { ok: true as const, version: 11, notifications: reviewed, page: reviewedPage };
+    },
+    read: async () => {
+      reads += 1;
+      if (reads === 1)
+        return {
+          signedIn: true as const,
+          state: 'unavailable' as const,
+          failure: { status: 403, code: 'forbidden', retryable: false, requestId: 'current-read' },
+          securityHref: null,
+        };
+      return {
+        signedIn: true as const,
+        preferences: { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 10 },
+        notifications: current,
+        page: currentPage,
+        securityHref: null,
+      };
+    },
+  };
+  const card = (version: number) => (
+    <NotificationsCard
+      initial={initialPage}
+      version={version}
+      csrfToken="token"
+      action="/en/settings"
+      io={io}
+      onVersionChange={() => {}}
+    />
+  );
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  host.innerHTML = renderToString(card(7));
+  let root: ReturnType<typeof hydrateRoot> | undefined;
+  const click = async (text: string) =>
+    act(async () =>
+      [...host.querySelectorAll('button')]
+        .find((button) => button.textContent === text && !button.closest('[hidden]'))!
+        .click(),
+    );
+  const inputFor = (kind: string) =>
+    [...host.querySelectorAll<HTMLFormElement>('form')]
+      .find((form) => form.querySelector<HTMLInputElement>('input[name="notificationKind"]')?.value === kind)!
+      .querySelector<HTMLInputElement>('input[name="enabled"]')!;
+  const submitKind = async (kind: string, enabled: boolean) =>
+    act(async () => {
+      const input = inputFor(kind);
+      input.checked = enabled;
+      input.form!.requestSubmit();
+    });
+  try {
+    await act(async () => {
+      root = hydrateRoot(host as unknown as HTMLElement, card(7));
+    });
+    await submitKind('reply', false);
+    expect(calls).toMatchObject([{ expectedVersion: 7, notifications: { reply: false } }]);
+    await act(async () => {
+      root!.render(card(9));
+    });
+    await act(async () => {
+      resolveFirst({ ok: true, version: 8, notifications: receipt, page: receiptPage });
+      await Promise.resolve();
+    });
+    await click('Reload');
+    expect(reads).toBe(1);
+    expect(calls).toHaveLength(1);
+    await submitKind('mention', false);
+    expect(calls).toHaveLength(1);
+    await click('Reload');
+    expect(reads).toBe(2);
+    expect(calls).toHaveLength(1);
+    expect(inputFor('reply').checked).toBe(true);
+    expect(inputFor('mention').checked).toBe(false);
+    expect(host.textContent).toContain('Review current settings');
+    await click('Save reviewed choices');
+    expect(calls).toHaveLength(2);
+    expect(calls.map(({ expectedVersion, notifications }) => ({ expectedVersion, notifications }))).toEqual([
+      { expectedVersion: 7, notifications: { reply: false } },
+      { expectedVersion: 10, notifications: { mention: false } },
+    ]);
+    expect(calls[1]!.idempotencyKey).not.toBe(calls[0]!.idempotencyKey);
   } finally {
     if (root) await act(async () => root!.unmount());
     for (const [key, descriptor] of previous)
