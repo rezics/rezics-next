@@ -735,6 +735,7 @@ test('cookie command credentials survive refresh and lost deletion responses wit
   const cookie = `__Host-rezics_session=${'a'.repeat(43)}`;
   const loaded = new Request('https://rezics.test/en/library', { headers: { cookie } });
   await prepareSession(loaded, env);
+  expect(await captureEntryRestoreCredential(request, env)).toBeUndefined();
   const credential = await captureEntryRestoreCredential(loaded, env);
   expect(credential).toEqual(expect.any(String));
   const command = { subjectId, revision: 7, idempotencyKey: restoreKey, credential };
