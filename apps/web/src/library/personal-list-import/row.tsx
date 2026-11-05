@@ -172,7 +172,7 @@ export function VndbRowReview({
       </fieldset>
       {action === 'state' && !notMappable ? (
         <div className="space-y-3">
-          {row.match.status === 'matched' && row.target ? (
+          {row.target ? (
             <div className="space-y-2 rounded-md border p-3">
               <p className="break-words text-sm">{m.library_vndb_target_id({ id: row.target.targetId })}</p>
               <VndbAction
@@ -187,7 +187,9 @@ export function VndbRowReview({
                   setReplace(false);
                 }}
               >
-                {m.library_vndb_use_match()}
+                {row.match.status === 'matched'
+                  ? m.library_vndb_use_match()
+                  : m.library_vndb_use_reviewed_target()}
               </VndbAction>
             </div>
           ) : null}

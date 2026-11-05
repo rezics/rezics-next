@@ -4,6 +4,7 @@ import { subjectHref } from '../../subject/subject-href';
 import type { VndbJourneySnapshot } from './controller';
 import { VndbAction } from './controls';
 import type { VndbOutcome } from './contract';
+import { VndbPendingReview } from './pending';
 
 function outcomeId(outcome: VndbOutcome): string {
   return typeof outcome.scoreReviewId === 'string' ? outcome.scoreReviewId : outcome.reviewId!;
@@ -58,6 +59,7 @@ export function VndbResultPage({
           total: snap.outcomes.length + snap.unattemptedEffects.length,
         })}
       </p>
+      {snap.reviewCurrent ? <VndbPendingReview snap={snap} /> : null}
       {snap.stopped === 'cancelled' ? <p>{m.library_vndb_stopped_cancelled()}</p> : null}
       {snap.stopped === 'deadline' ? <p>{m.library_vndb_stopped_deadline()}</p> : null}
       <p className="text-sm text-muted-foreground">{m.library_vndb_no_rollback()}</p>
