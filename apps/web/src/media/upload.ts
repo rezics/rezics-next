@@ -60,6 +60,7 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
   let digestWriterReleased = false;
   let failure: TransferFailure | undefined;
   let digestAbort: Promise<void> = Promise.resolve();
+  let storageReadCancellation: Promise<void> = Promise.resolve();
   let pumpingOutcome: Promise<Outcome> | undefined;
   let digestOutcome: Promise<Outcome> | undefined;
   let storageOutcome: Promise<Outcome> | undefined;
@@ -72,6 +73,8 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
     failure = { kind, error };
     signalFailure();
     controller.abort(error);
+    // A rejected put may leave no reader to release a pending FixedLengthStream write.
+    if (kind === 'storage' && !fixed.readable.locked) storageReadCancellation = fixed.readable.cancel(error);
     try {
       digestAbort = digestWriter.abort(error).then(
         () => undefined,
@@ -88,6 +91,7 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
     );
     await Promise.all(started);
     await digestAbort;
+    await storageReadCancellation;
   };
 
   const releaseDigestWriter = (preserveFailure: boolean) => {
@@ -121,11 +125,38 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
       throw transferProblem(failure);
     }
 
-    const counted = request.body.pipeThrough(
+    const reader = request.body.getReader();
+    const body = new ReadableStream<Uint8Array>(
+      {
+        async pull(stream) {
+          let item: ReadableStreamReadResult<Uint8Array>;
+          try {
+            item = await reader.read();
+          } catch (error) {
+            reader.releaseLock();
+            stop('pump', error);
+            throw error;
+          }
+          if (item.done) {
+            reader.releaseLock();
+            stream.close();
+          } else stream.enqueue(item.value);
+        },
+        cancel(reason) {
+          return reader.cancel(reason).finally(() => reader.releaseLock());
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const counted = body.pipeThrough(
       new TransformStream<Uint8Array, Uint8Array>({
         async transform(chunk, stream) {
           measured += chunk.byteLength;
-          if (measured > media.byteCount) throw tooLarge();
+          if (measured > media.byteCount) {
+            const error = tooLarge();
+            stop('pump', error);
+            throw error;
+          }
           try {
             await digestWriter.write(chunk);
           } catch (error) {
@@ -135,7 +166,11 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
           stream.enqueue(chunk);
         },
         async flush() {
-          if (measured < media.byteCount) throw invalidRequest();
+          if (measured < media.byteCount) {
+            const error = invalidRequest();
+            stop('pump', error);
+            throw error;
+          }
           try {
             await digestWriter.close();
           } catch (error) {
@@ -180,6 +215,7 @@ export async function upload(request: Request, id: string, env: MediaEnv): Promi
     const [pumped, hashed, written] = await participants;
     transferSettled = true;
     await digestAbort;
+    await storageReadCancellation;
     if (request.signal.aborted && !failure) stop('request', requestAbortError());
     if (failure) throw transferProblem(failure);
     if (!pumped.ok) throw invalidRequest();
