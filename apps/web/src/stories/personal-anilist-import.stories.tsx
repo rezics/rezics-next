@@ -86,10 +86,18 @@ function makeJourneyPort() {
   let applyAttempts = 0;
   let questionRevision = 17;
   const port: AniListImportPort = {
-    async reviewLabels() { return { kind: 'unavailable' }; },
-    async applyLabels() { return { kind: 'unavailable' }; },
-    async readLabels() { return { kind: 'unavailable' }; },
-    async labelTargets() { return { kind: 'unavailable' }; },
+    async reviewLabels() {
+      return { kind: 'unavailable' };
+    },
+    async applyLabels() {
+      return { kind: 'unavailable' };
+    },
+    async readLabels() {
+      return { kind: 'unavailable' };
+    },
+    async labelTargets() {
+      return { kind: 'unavailable' };
+    },
     async preview() {
       return { kind: 'previewed', importId, count: titles.length };
     },
