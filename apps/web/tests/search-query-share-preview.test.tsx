@@ -25,7 +25,7 @@ const host = document.createElement('main');
 document.body.append(host);
 const root = createRoot(host);
 afterAll(async () => {
-  await act(() => root.unmount());
+  await act(async () => root.unmount());
   window.happyDOM.abort();
 });
 const share: QueryShare = {
@@ -47,7 +47,7 @@ const click = async (text: string) => {
 const client = new QueryClient();
 const session = { state: 'signed-in', subject: 'reader', csrfToken: null };
 const mount = (prepare: (signal: AbortSignal) => Promise<QueryShare>, key = 'visit', locale = 'en', changed = true) =>
-  act(() =>
+  act(async () =>
     root.render(
       <QueryClientProvider client={client}>
         <QuerySharePreview key={key} locale={locale} changed={changed} prepare={prepare} />
@@ -68,7 +68,7 @@ const clipboard = (writeText: (url: string) => Promise<void>) =>
 const elsewhere = document.createElement('button');
 document.body.append(elsewhere);
 beforeEach(async () => {
-  await act(() => root.render(null));
+  await act(async () => root.render(null));
   client.setQueryData(['session'], session);
 });
 
@@ -112,7 +112,7 @@ test('complete executed preview visit keeps draft edits separate, copies and reo
   expect(document.activeElement).toBe(fallback);
   expect(fallback.value).toBe(copied);
   expect(fallback.selectionEnd).toBe(copied.length);
-  await act(() => fallback.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  await act(async () => fallback.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   expect(host.querySelector('[role=region]')).toBeNull();
   expect(document.activeElement).toBe(button('Share executed query'));
 });
@@ -137,7 +137,7 @@ test('synchronous duplicate commands dispatch once; retry preserves context and 
     writes++;
     return writing.promise;
   });
-  await act(() => {
+  await act(async () => {
     button('Copy link').click();
     button('Copy link').click();
     button('Prepare again').click();
@@ -145,8 +145,8 @@ test('synchronous duplicate commands dispatch once; retry preserves context and 
   expect(writes).toBe(1);
   expect(calls).toBe(1);
   expect(host.textContent).toContain('Copying link');
-  await act(() => writing.resolve());
-  await act(() => {
+  await act(async () => writing.resolve());
+  await act(async () => {
     button('Prepare again').click();
     button('Prepare again').click();
   });
@@ -156,7 +156,7 @@ test('synchronous duplicate commands dispatch once; retry preserves context and 
   await click('Close preview');
   expect(signal.aborted).toBe(true);
   await click('Share executed query');
-  await act(() => preparation.resolve(share));
+  await act(async () => preparation.resolve(share));
   expect(calls).toBe(3);
   expect(host.textContent).toContain('"complete text"');
 });
@@ -164,9 +164,9 @@ test('synchronous duplicate commands dispatch once; retry preserves context and 
 for (const replacement of ['reader', 'request', 'locale', 'unmount', 'close'] as const) {
   test(`${replacement} retirement rejects late preparation and clipboard work without focus recovery`, async () => {
     const replace = async (prepare: () => Promise<QueryShare>) => {
-      if (replacement === 'reader') await act(() => client.setQueryData(['session'], { ...session }));
+      if (replacement === 'reader') await act(async () => client.setQueryData(['session'], { ...session }));
       else if (replacement === 'close') await click('Close preview');
-      else if (replacement === 'unmount') await act(() => root.render(null));
+      else if (replacement === 'unmount') await act(async () => root.render(null));
       else
         await mount(
           prepare,
@@ -185,12 +185,12 @@ for (const replacement of ['reader', 'request', 'locale', 'unmount', 'close'] as
     await replace(async () => share);
     expect(signal.aborted).toBe(true);
     elsewhere.focus();
-    await act(() => preparation.resolve(share));
+    await act(async () => preparation.resolve(share));
     expect(host.querySelector('[role=region]')).toBeNull();
     expect(document.activeElement).toBe(elsewhere);
     // A new visit can issue one write; neither successful nor refused late completion revives it.
     for (const refused of [false, true]) {
-      await act(() => root.render(null));
+      await act(async () => root.render(null));
       await mount(async () => share);
       await click('Share executed query');
       const writing = deferred<void>();
@@ -202,7 +202,7 @@ for (const replacement of ['reader', 'request', 'locale', 'unmount', 'close'] as
       await click('Copy link');
       await replace(async () => share);
       elsewhere.focus();
-      await act(() => (refused ? writing.reject(new Error('refused')) : writing.resolve()));
+      await act(async () => (refused ? writing.reject(new Error('refused')) : writing.resolve()));
       expect(writes).toBe(1);
       expect(host.querySelector('[role=region]')).toBeNull();
       expect(document.activeElement).toBe(elsewhere);
@@ -212,7 +212,7 @@ for (const replacement of ['reader', 'request', 'locale', 'unmount', 'close'] as
 
 test('pending refusal and queued opening or closing never take unrelated focus', async () => {
   await mount(async () => share);
-  await act(() => {
+  await act(async () => {
     button('Share executed query').focus();
     button('Share executed query').click();
     elsewhere.focus();
@@ -222,10 +222,10 @@ test('pending refusal and queued opening or closing never take unrelated focus',
   clipboard(() => writing.promise);
   await click('Copy link');
   elsewhere.focus();
-  await act(() => writing.reject(new Error('refused')));
+  await act(async () => writing.reject(new Error('refused')));
   expect(host.querySelector('textarea')).not.toBeNull();
   expect(document.activeElement).toBe(elsewhere);
-  await act(() => button('Close preview').click());
+  await act(async () => button('Close preview').click());
   expect(document.activeElement).toBe(elsewhere);
 });
 
