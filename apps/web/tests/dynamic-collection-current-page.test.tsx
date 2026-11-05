@@ -202,7 +202,7 @@ async function mount() {
       expect(button).toBeDefined();
       button!.click();
     });
-  const authorize = (subject: string, admitted = ['collection.get']) =>
+  const authorize = (subject: string, admitted = ['collections']) =>
     settle(() => {
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', csrfToken: `csrf-${subject}`, subject });
       const snapshot = viewerExposureLifetime(client).getSnapshot();
