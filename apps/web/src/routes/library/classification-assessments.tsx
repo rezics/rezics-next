@@ -97,13 +97,11 @@ function ClassificationAssessmentsRoute() {
         windows.stage(next, keyboard ?? false);
         void navigate({
           search: (current) => {
-            const {
-              cursor: _cursor,
-              selectedSubjectId: _subject,
-              selectedAssociationId: _association,
-              ...rest
-            } = current;
-            return { ...rest, ...classificationSearch(next) };
+            const updated: Record<string, unknown> = { ...current };
+            delete updated.cursor;
+            delete updated.selectedSubjectId;
+            delete updated.selectedAssociationId;
+            return { ...updated, ...classificationSearch(next) };
           },
           hash: location.hash,
         });
