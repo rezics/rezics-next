@@ -795,7 +795,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     void operation.finally(() => pending.delete(operation)).catch(() => {});
     return operation;
   };
-  function meter(context: PublicFilterConsumerContext) {
+  function meter(context: PublicFilterConsumerContext, maintenance = false) {
     const cost: ConsumerMeter = emptyConsumerCost();
     const add = (next: PublicFilterCost) => {
       for (const key of Object.keys(cost) as (keyof ConsumerMeter)[]) {
@@ -807,11 +807,12 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     const check = () => {
       if (!Number.isSafeInteger(context.deadline) || context.deadline <= Date.now())
         throw new ConsumerFailure('deadline');
+      const inputs = maintenance ? cost.inputKeys : cost.candidates;
       if (
         cost.inputKeys > 1000 ||
-        cost.accessPoints + cost.dependencyPoints > 16 + 8 * Math.max(cost.candidates, 1) ||
+        cost.accessPoints + cost.dependencyPoints > 16 + 8 * Math.max(inputs, 1) ||
         cost.bytes > 4 * 1024 * 1024 ||
-        cost.rows > 64 + 16 * Math.max(cost.candidates, 1)
+        cost.rows > 64 + 16 * Math.max(inputs, 1)
       )
         throw new ConsumerFailure('source_pending');
     };
@@ -2513,7 +2514,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     },
   };
   generationSources.set(operations, async (input, context) => {
-    const m = meter(context);
+    const m = meter(context, true);
     try {
       const original = await readNativePublicFilterPublicationCompletion(binding, { job: input.job }, context);
       m.add(original.cost);
