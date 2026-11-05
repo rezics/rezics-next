@@ -1,11 +1,18 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../../packages/conversion/src/support.ts';
-import { crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
+import { crossMediaAliases, seedCrossMedia, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
+import { prepareShowcaseTags } from '../../../importer/src/showcase-tags.ts';
+import {
+  captureShowcaseCommands,
+  publishShowcase,
+  ShowcaseJournal,
+} from '../../../importer/src/showcase-publication.ts';
+import { vndbTagsRatingMetric } from '@rezics/conversion/vndb-vocabulary';
 import {
   importVndbPublicTags,
   parseAuthoredVndbCopy,
@@ -62,7 +69,7 @@ type Candidate = {
   source?: unknown;
 };
 
-test('production operator publishes authored VNDB public tags through ordinary accept and current reads', async () => {
+async function openPublicTagWorld() {
   const previous = process.env.TMPDIR;
   const runtime = await (async () => {
     process.env.TMPDIR = tmpdir();
@@ -227,6 +234,26 @@ test('production operator publishes authored VNDB public tags through ordinary a
     const bindings = await readVndbPublicTagBindings(runtime.importTransport, known);
     expect(bindings.releaseDigest).toBe(bundledDigest);
     expect(bindings.concepts.map((item) => item.id).sort()).toEqual([contId, eroId, techId].sort());
+    return { runtime, directory, editor, known, bindings, create, candidates, acceptAdopt, ballotsBefore };
+  } catch (error) {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+test('production operator publishes authored VNDB public tags through ordinary accept and current reads', async () => {
+  const { runtime, directory, editor, known, bindings, candidates, acceptAdopt, ballotsBefore, contId, eroId, techId } =
+    await (async () => {
+      const world = await openPublicTagWorld();
+      return {
+        ...world,
+        contId: world.known.concepts[0]!.id,
+        eroId: world.known.concepts[1]!.id,
+        techId: world.known.concepts[2]!.id,
+      };
+    })();
+  try {
     const path = join(directory, 'state.sqlite');
     const first = await importVndbPublicTags({
       tables: tables(),
@@ -323,6 +350,259 @@ test('production operator publishes authored VNDB public tags through ordinary a
     const names = (await candidates(workId!, 'schema:name')).candidates.map((item) => item.statement.value.content);
     expect(names).not.toContain('Restored title after fence');
   } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 180_000);
+
+function selectedTables(): CrossMediaTables {
+  return {
+    async *rows(provider, table) {
+      if (provider !== 'vndb') return;
+      for (const id of ['v2002', 'v4']) {
+        if (table === 'vn') yield { id, olang: 'ja' };
+        if (table === 'vn_titles')
+          yield { id, lang: 'en', official: 't', title: id === 'v2002' ? 'Steins;Gate' : 'CLANNAD', latin: null };
+        if (table === 'entry_meta') yield { id, revision: 7, lastmod: '2026-10-24' };
+        if (table === 'tags_vn')
+          for (const tag of ['g105', 'g249'])
+            yield {
+              date: '2026-10-24',
+              tag,
+              vid: id,
+              uid: 'u9001',
+              vote: '3',
+              spoiler: '0',
+              ignore: 'f',
+              lie: 'f',
+              notes: null,
+            };
+      }
+      if (table === 'tags')
+        for (const id of ['g105', 'g249'])
+          yield {
+            id,
+            cat: 'cont',
+            defaultspoil: '0',
+            searchable: 't',
+            applicable: 't',
+            name: id,
+            description: null,
+            alias: null,
+          };
+    },
+  };
+}
+
+test('selected Kana weights publish independently, reopen exactly, refresh and preserve fenced editorial selections', async () => {
+  const world = await openPublicTagWorld();
+  const { runtime, editor, directory, create, candidates, acceptAdopt } = world;
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
+  try {
+    const schemeId = world.known.schemes[0]!.id;
+    const concepts = [];
+    for (const code of ['g105', 'g249']) {
+      const id = await create(`selected-${code}`, 'skos:Concept', code);
+      const source = {
+        source: 'authored-vndb-public-tags',
+        external_id: `selected-${code}`,
+        record_revision: 'unversioned',
+        digest: 'a'.repeat(64),
+        converter_revision: 'authored@1',
+        field_group: 'facts' as const,
+      };
+      const proposals = await runtime.importTransport.batch({
+        commands: [
+          { property: 'schema:url', content: vndbPublicTagConceptUri('cont', code) },
+          { property: 'skos:inScheme', content: schemeId },
+        ].map(({ property, content }) => ({
+          op: 'propose' as const,
+          key: randomUUID(),
+          source,
+          subject: id,
+          statement: {
+            property: { id: property },
+            value: { type: 'value' as const, content },
+            references: [
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value' as const, content: vndbPublicTagConceptUri('cont', code) },
+                  },
+                ],
+              },
+            ],
+          },
+        })),
+      });
+      expect(proposals.results.every((result) => result.status === 201)).toBe(true);
+      await acceptAdopt(id, 'schema:url');
+      await acceptAdopt(id, 'skos:inScheme');
+      concepts.push({ category: 'cont' as const, code, id });
+    }
+    const known = { schemes: [{ category: 'cont' as const, id: schemeId }], concepts };
+    let fetches = 0;
+    let response: Uint8Array | undefined;
+    let loseResponse = true;
+    let port = captureShowcaseCommands(
+      {
+        ...runtime.importTransport,
+        async batch(request) {
+          const reply = await runtime.importTransport.batch(request);
+          if (
+            loseResponse &&
+            request.commands.some(
+              (command) =>
+                command.op === 'propose' &&
+                command.statement.qualifiers?.some((term) => term.property.id === 'rezics:sourceTagWeight'),
+            )
+          ) {
+            loseResponse = false;
+            throw new Error('Lost selected weight response');
+          }
+          return reply;
+        },
+      },
+      journal,
+    );
+    const prepare = (fetch?: (input: string | URL, init?: RequestInit) => Promise<Response>) =>
+      prepareShowcaseTags({
+        tables: selectedTables(),
+        selectedVids: ['v2002', 'v4'],
+        known,
+        port,
+        journal,
+        fetch:
+          fetch ??
+          (async (input, init) => {
+            fetches++;
+            return globalThis.fetch(input, init);
+          }),
+      });
+    let prepared = await prepare();
+    expect(prepared.tagWeightObservations.every((row) => row.state === 'available')).toBe(true);
+    const receipt = journal.vndbTagRatingSource('v2002')!;
+    expect(receipt.snapshot).toBeTruthy();
+    response = receipt.snapshot!.bytes;
+    const digest = createHash('sha256').update(response).digest('hex');
+    const seed = () =>
+      seedCrossMedia(
+        prepared,
+        join(directory, 'selected.sqlite'),
+        port,
+        { origin: 'https://kernel.import.test' },
+        { providers: ['vndb'], vocabularyAdmission: prepared.vocabularyAdmission },
+      );
+    await expect(seed()).rejects.toThrow('Durable operations remain unresolved');
+    expect(loseResponse).toBe(false);
+    const sealed = journal.preparedCommands().map((row) => row.command);
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+    port = captureShowcaseCommands(runtime.importTransport, journal);
+    prepared = await prepare();
+    expect(fetches).toBe(2);
+    expect(journal.vndbTagRatingSource('v2002')!.snapshot!.bytes).toEqual(response);
+    const imported = await seed();
+    for (const command of sealed)
+      expect(journal.acknowledgedCommands().find((row) => row.command.key === command.key)?.command).toEqual(command);
+    const publish = () =>
+      publishShowcase({
+        plan: prepared,
+        result: imported,
+        aliases: crossMediaAliases,
+        journal,
+        review: runtime.importTransport,
+        publicClient: runtime.publicClient,
+        tagWeightObservations: prepared.tagWeightObservations,
+        tagWeightRefreshes: prepared.tagWeightRefreshes,
+      });
+    const published = await publish();
+    expect(published.omissions.filter((row) => row.sourceKey === 'v2002')).toEqual([]);
+    const work = published.published.find((row) => row.sourceKey === 'v2002')!;
+    expect(work).toBeTruthy();
+    const read = await runtime.publicClient.readSubject(work.subjectId);
+    const genres = (
+      read.subject as {
+        statements: Record<
+          string,
+          {
+            value: { content: unknown };
+            qualifiers?: { property: { id: string }; value: { content: unknown } }[];
+            references?: unknown[];
+          }[]
+        >;
+      }
+    ).statements['schema:genre']!;
+    const sourceTags = JSON.parse(new TextDecoder().decode(response)).results[0].tags as {
+      id: string;
+      rating: number;
+      spoiler: number;
+      lie: boolean;
+    }[];
+    for (const binding of concepts) {
+      const tag = sourceTags.find((row) => row.id === binding.code)!;
+      const weight = genres.find(
+        (row) =>
+          row.value.content === binding.id &&
+          row.qualifiers?.some((term) => term.property.id === 'rezics:sourceTagWeightMetric'),
+      )!;
+      expect(weight.qualifiers).toContainEqual({
+        property: { id: 'rezics:sourceTagWeightMetric' },
+        value: { type: 'value', content: vndbTagsRatingMetric },
+      });
+      expect(weight.qualifiers).toContainEqual({
+        property: { id: 'rezics:sourceTagWeight' },
+        value: { type: 'value', content: { amount: `+${tag.rating}`, unit: '1' } },
+      });
+      expect(weight.qualifiers).toContainEqual({
+        property: { id: 'rezics:spoilerLevel' },
+        value: { type: 'value', content: { amount: `+${tag.spoiler}`, unit: '1' } },
+      });
+      expect(JSON.stringify(weight.references)).toContain(digest);
+    }
+    expect(journal.vndbTagRatingSource('v2002')!.pending).toBe(false);
+    const editorial = await editor.http(`/v1/subjects/${work.subjectId}/statements`, {
+      property: { id: 'schema:genre' },
+      value: { type: 'value', content: concepts[0]!.id },
+    });
+    expect(editorial.status).toBe(201);
+    await acceptAdopt(work.subjectId, 'schema:genre');
+    const beforeFence = (await candidates(work.subjectId, 'schema:genre')).adoption;
+    const fence = await editor.http('/v1/sourceFences:takedown', {
+      source: crossMediaAliases.vndb,
+      externalId: 'v2002',
+      fieldGroup: 'facts',
+      reason: 'Rights complaint',
+    });
+    expect(fence.status).toBe(200);
+    const changed = new TextDecoder().decode(response).replace(/"rating":([0-9.]+)/u, '"rating":1.5000');
+    prepared = await prepare(
+      async (_input, init) =>
+        new Response(
+          JSON.parse(String(init?.body)).filters[2] === 'v2002'
+            ? changed
+            : '{"more":false,"results":[{"id":"v4","tags":[]}]}',
+        ),
+    );
+    expect(prepared.tagWeightObservations.find((row) => row.workId === 'v2002')!.responseDigest).not.toBe(digest);
+    await seed();
+    const fenced = await publish();
+    expect(fenced.omissions).toContainEqual({ provider: 'vndb', sourceKey: 'v2002', code: 'tag-weight-fenced' });
+    expect((await candidates(work.subjectId, 'schema:genre')).adoption).toEqual(beforeFence);
+    console.log(
+      JSON.stringify({
+        work: 'v2002',
+        subjectId: work.subjectId,
+        tags: concepts,
+        metric: vndbTagsRatingMetric,
+        responseDigest: digest,
+        readerRoute: work.readerRoute,
+      }),
+    );
+  } finally {
+    journal.close();
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
