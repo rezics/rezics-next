@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { act, type ReactNode } from 'react';
+import { act, createContext, useContext, type ReactNode } from 'react';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
@@ -64,6 +65,7 @@ test('Addon outer intent is closed, same-Subject and same-locale, with complete 
   ).toEqual({ kind: 'invalid' });
   expect(addonPublicIntentFits('界'.repeat(700))).toBe(false);
   expect(addonPublicIntentFits('a'.repeat(2048))).toBe(true);
+  expect(parseAddonPublicVisit('', addonProfileId, 'en', base + '界'.repeat(220))).toEqual({ kind: 'invalid' });
   expect(addonPublicCorrectionHref(base, { ...observed, returnHref: observed.returnHref + '界'.repeat(700) })).toBe(
     base + '?origin=!',
   );
@@ -112,8 +114,22 @@ test('the installed Addon entry, canonical route and supported session keep orig
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
+  const Content = createContext<ReactNode>(null);
+  const router = createRouter({
+    routeTree: createRootRoute({ component: () => useContext(Content) }),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  });
   const render = async (node: ReactNode) =>
-    act(async () => root.render(<QueryClientProvider client={client}>{node}</QueryClientProvider>));
+    act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <Content.Provider value={node}>
+            <RouterProvider router={router} />
+          </Content.Provider>
+        </QueryClientProvider>,
+      );
+      await router.load();
+    });
   const observed = origin();
   const loader = Route.options.loader;
   if (typeof loader !== 'function') throw new Error('Expected installed canonical loader');
@@ -145,6 +161,20 @@ test('the installed Addon entry, canonical route and supported session keep orig
       <AddonProfileEntry id={addonProfileId} label="Harbor: Northern lights" locale="en" origin={observed} />,
     );
     const href = host.querySelector('a')!.getAttribute('href')!;
+    await render(
+      <SubjectPage
+        page={publicPage()}
+        locale="en"
+        messages={subjectPageMessages()}
+        currentHref={observed.returnHref}
+        renderJsonLd={false}
+      />,
+    );
+    const publicDom = within(window.document.body);
+    await act(async () => publicDom.getByRole('button', { name: m.contribute_title() }).click());
+    await act(async () => publicDom.getByText(m.contribute_edit(), { exact: true }).click());
+    expect(window.document.querySelector('a[href*="/addon?origin="]')?.getAttribute('href')).toBe(href);
+
     expect(
       collectEditorialEntries(
         <AddonProfileEntry id={addonProfileId} label="Harbor: Northern lights" locale="en" origin={observed} />,
@@ -152,6 +182,12 @@ test('the installed Addon entry, canonical route and supported session keep orig
     ).toBe(href);
     expect(await load(href)).toMatchObject({ id: addonProfileId, visit: { kind: 'origin', origin: observed } });
     await expect(load(href, 'old-label')).rejects.toMatchObject({ options: { statusCode: 301, href } });
+    fixture.current.subject.id = addonWorkId;
+    await expect(load(href)).rejects.toMatchObject({
+      options: { href: `/en/subjects/${addonWorkId}/harbor-northern-lights/addon?origin=%21` },
+    });
+    fixture.current.subject.id = addonProfileId;
+
     const before = fixture.calls.length;
     await render(supported());
     await waitFor(() => expect(host.textContent).toContain(m.addon_base_current_title()));
