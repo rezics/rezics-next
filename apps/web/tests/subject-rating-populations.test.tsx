@@ -235,7 +235,7 @@ mock.module('../src/settings/preferences', () => ({
 }));
 
 const { createRoot } = await import('react-dom/client');
-const { QueryClient, QueryClientProvider, dehydrate, useQuery } = await import('@tanstack/react-query');
+const { QueryClient, QueryClientProvider, dehydrate, useQuery, useQueryClient } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { SubjectOverview } = await import('../src/routes/subjects/$id_.$slug');
@@ -290,6 +290,7 @@ function PopulationOwner({
   enabled?: boolean;
 }) {
   const { data } = useQuery({ ...sessionQuery, enabled: false });
+  if (extraCache) console.log('population owner session', data, useQueryClient().getQueryData(sessionQuery.queryKey));
   useQuery({ ...subjectRatingQuery(id, 'en', 'question'), enabled: false });
   return (
     <SubjectRatingPopulations
