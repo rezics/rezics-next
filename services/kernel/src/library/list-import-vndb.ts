@@ -1750,6 +1750,7 @@ export function createVndbImport(config: Config) {
             )
               throw new LibraryConflictError();
             await save(tx, account, id, choice.ordinal, { ...currentDecision, status: 'applying' });
+            return { ordinal: choice.ordinal, reviewId: choice.reviewId, status: 'applying' as const };
           },
         );
         decision = { ...decision, status: 'applying' };
