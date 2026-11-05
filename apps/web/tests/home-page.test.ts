@@ -2,12 +2,12 @@ import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { slug } from '@rezics/definitions/slug';
-import { createKernelClient } from '@rezics/client';
+import { createKernelClient, type KernelClient } from '@rezics/client';
 import { createFakeKernelFetch, createStoryRecordedKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { loadRoutePage, RoutePage } = await import('../src/features/pages/route.tsx');
+const { loadRoutePage } = await import('../src/features/pages/route.tsx');
 const { HomeCatalogue } = await import('../src/features/pages/home-catalogue');
 const { m } = await import('../src/paraglide/messages.js');
 
@@ -21,7 +21,7 @@ const messages = {
 };
 const kokoro = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 
-test('the home is the platform route template from one page read', async () => {
+test('the Home catalogue consumes the native route template from one page read', async () => {
   const fake = createFakeKernelFetch(fixtures as never);
   const calls: string[] = [];
   const counting = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -34,38 +34,28 @@ test('the home is the platform route template from one page read', async () => {
   expect(calls).toEqual(['POST /v1/pages:read']);
   if (loaded.kind !== 'page') throw new Error('expected the home page');
   expect(loaded.page.template).toEqual({ scope: 'route', key: '/' });
-  const html = renderToString(createElement(RoutePage, { page: loaded.page, locale: 'ja', messages }));
+  const html = renderToString(createElement(HomeCatalogue, { result: loaded, locale: 'ja' }));
   expect(html).not.toMatch(/<form/);
   expect(html).not.toMatch(/<input[^>]*name="q"/);
-  expect(html).toContain('href="/ja/search?type=schema%3ABook"');
-  expect(html).toContain(`href="/ja/subjects/${kokoro}/${slug('こころ')}"`);
-  expect(html).toContain('こころ');
-  expect(html).toContain('"@type":"WebSite"');
-  expect(html).toContain('"query-input":"required name=search_term_string"');
+  expect(html).toContain('href="/ja/search/list?list=books');
+  expect(html).toContain('href="/ja/search/list?list=anime');
+  expect(html).toContain('href="/ja/search/list?list=visual-novels');
+  expect(html).toContain('href="/ja/search/list?list=recipes');
 });
 
-test('the home type rows keep their heading and cards without repeating the type under each title', async () => {
+test('the Home catalogue keeps native list headings without adding type subtitles', async () => {
   const fake = createStoryRecordedKernelFetch();
   const client = createKernelClient('https://kernel.invalid', { fetch: fake });
   const loaded = await loadRoutePage(client, '/', 'ja');
   if (loaded.kind !== 'page') throw new Error('expected the home page');
-  const html = renderToString(createElement(RoutePage, { page: loaded.page, locale: 'ja', messages }));
-  expect(html).toContain('href="/ja/search?type=schema%3ABook"');
-  expect(html).toContain('href="/ja/search?type=schema%3ARecipe"');
-  const booksStart = html.indexOf('<section data-slot="type-list"');
-  const booksEnd = html.indexOf('</section>', booksStart);
-  const books = html.slice(booksStart, booksEnd);
-  const booksInOrder = [...books.matchAll(/href="\/ja\/subjects\/([^/"]+)/g)].map((match) => match[1]);
-  expect(booksInOrder).toEqual([
-    '01a17dfd-5dbf-738a-9405-9dfa9a8ec069',
-    '01a1773a-f700-7071-b5ef-2b02f7d0e8c6',
-    '01a1773a-f6ff-7684-8e44-1a013af60d4b',
-    '01a1773a-f700-7078-8000-000000000003',
-    '01a17a3b-6c01-77c8-94fd-810a3ae73369',
-    '01a1773a-f700-7078-8000-000000000001',
-  ]);
-  expect(html).toContain('吾輩は猫である');
-  expect(html).not.toContain('data-slot="cover-card-secondary"');
+  const html = renderToString(createElement(HomeCatalogue, { result: loaded, locale: 'ja' }));
+  expect([...html.matchAll(/data-slot="type-list"/g)]).toHaveLength(4);
+  expect(html).toContain('books-title');
+  expect(html).toContain('anime-title');
+  expect(html).toContain('visual-novels-title');
+  expect(html).toContain('recipes-title');
+  expect(html).not.toContain('schema:Book');
+  expect(html).not.toContain('schema:Recipe');
 });
 
 test('only an absent page is missing; an inactive publication is unavailable', async () => {
@@ -94,11 +84,15 @@ test('Home preserves rejected, missing and unavailable page reads as separate ou
   expect(rejected).toEqual({ kind: 'rejected', status: 400, code: 'unsupported_query' });
   expect(unavailable).toEqual({ kind: 'unavailable', status: 503, code: 'presentation_not_ready' });
   const network = await loadRoutePage(
-    createKernelClient('https://kernel.invalid', {
-      fetch: (async () => {
-        throw new TypeError('Failed to fetch');
-      }) as typeof fetch,
-    }),
+    {
+      pages: {
+        $read: {
+          post: async () => {
+            throw new TypeError('Failed to fetch');
+          },
+        },
+      },
+    } as unknown as KernelClient,
     '/',
   );
   expect(network).toEqual({ kind: 'unavailable', code: 'dependency_unavailable' });
@@ -114,8 +108,8 @@ test('Home preserves rejected, missing and unavailable page reads as separate ou
 
 test('the home route renders the route page', async () => {
   const route = await Bun.file(new URL('../src/routes/index.tsx', import.meta.url)).text();
-  expect(route).toContain('features/pages/route');
-  expect(route).toContain('loadRoutePage(');
-  expect(route).toContain('<RoutePage');
+  expect(route).toContain('HomeCatalogue');
+  expect(route).toContain('HomeFeedConsumer');
+  expect(route).toContain('homePageQuery(');
   expect(route).not.toContain('HomePage');
 });
