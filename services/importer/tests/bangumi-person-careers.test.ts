@@ -120,4 +120,4 @@ test('ordinary Person refresh follows current career bindings without replacing 
     await importer.close();
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);

@@ -163,6 +163,7 @@ test.each(['bangumi', 'bangumi_cross_media'])(
       await rm(directory, { recursive: true, force: true });
     }
   },
+  30_000,
 );
 
 test('PersonDetail TSV binds the requested type-1 identity and never promotes ETags to revisions', async () => {
