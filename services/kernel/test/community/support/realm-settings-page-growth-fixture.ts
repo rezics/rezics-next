@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import type { Access } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
-import { capture, openGrowthDatabase, type Population } from '../../support/growth.ts';
+import { capture, openGrowthDatabase, seed, type Population } from '../../support/growth.ts';
 import { explainPlanEntries, walkPlanTree } from '../../support/growth-plan-walk.ts';
 import type { Capture } from '../../support/growth-cost.ts';
 import {
@@ -54,6 +54,7 @@ export async function settingsPageGrowthFixture() {
       }
       const source = await f.base.call('GET', `/v1/posts/${parentId}`, { bearer: f.base.author.bearer });
       expect(source.response.status, source.text).toBe(200);
+      if (!source.value.post) throw new Error('Expected the native post read to return its selected post');
       const authored = await f.call('POST', `/v1/posts/${parentId}/revisions`, {
         body: { body: rulesBody() },
         headers: { 'if-match': JSON.stringify(source.value.post.revisionId) },

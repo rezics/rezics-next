@@ -476,47 +476,43 @@ export async function claimReviewGrowthFixture() {
       expect(value.code).toBe(code);
     }
     async function measureListingPaths(expected: readonly RealmClaimReviewPage['claimRequests'][number][]) {
+      const expectedPage = (claimRequests: unknown, next: unknown) => ({
+        claimRequests,
+        next,
+        selectedRequest: null,
+        realmPresentation: { state: 'unavailable' as const },
+      });
       const first = await listAt(100, undefined, 'reviewer', growthKernel);
-      expect(first).toEqual({ claimRequests: expected.slice(0, 20), next: expect.any(String) });
+      expect(first).toEqual(expectedPage(expected.slice(0, 20), expect.any(String)));
       const deep = await listAt(100, first.next!, 'reviewer', growthKernel);
-      expect(deep).toEqual({ claimRequests: expected.slice(20), next: expect.any(String) });
-      expect(await listAt(100, deep.next!, 'reviewer', growthKernel)).toEqual({ claimRequests: [], next: null });
+      expect(deep).toEqual(expectedPage(expected.slice(20), expect.any(String)));
+      expect(await listAt(100, deep.next!, 'reviewer', growthKernel)).toEqual(expectedPage([], null));
 
       await setReviewTime(1);
       const filtered = await listAt(100, undefined, 'reviewer', growthKernel);
-      expect(filtered).toEqual({ claimRequests: [], next: expect.any(String) });
+      expect(filtered).toEqual(expectedPage([], expect.any(String)));
       const filteredDeep = await listAt(100, filtered.next!, 'reviewer', growthKernel);
-      expect(filteredDeep).toEqual({ claimRequests: [], next: expect.any(String) });
-      expect(await listAt(100, filteredDeep.next!, 'reviewer', growthKernel)).toEqual({
-        claimRequests: [],
-        next: null,
-      });
+      expect(filteredDeep).toEqual(expectedPage([], expect.any(String)));
+      expect(await listAt(100, filteredDeep.next!, 'reviewer', growthKernel)).toEqual(expectedPage([], null));
       const filteredOne = await listAt(1, undefined, 'reviewer', growthKernel);
-      expect(filteredOne).toEqual({ claimRequests: [], next: expect.any(String) });
-      expect(await listAt(1, filteredOne.next!, 'reviewer', growthKernel)).toEqual({
-        claimRequests: [],
-        next: expect.any(String),
-      });
+      expect(filteredOne).toEqual(expectedPage([], expect.any(String)));
+      expect(await listAt(1, filteredOne.next!, 'reviewer', growthKernel)).toEqual(expectedPage([], expect.any(String)));
       await setReviewTime(2);
-      expect(await listAt(100, filtered.next!, 'reviewer', growthKernel)).toEqual({
-        claimRequests: expected.slice(20),
-        next: expect.any(String),
-      });
-      expect(await listAt(1, filteredOne.next!, 'reviewer', growthKernel)).toEqual({
-        claimRequests: [expected[1]!],
-        next: expect.any(String),
-      });
+      expect(await listAt(100, filtered.next!, 'reviewer', growthKernel)).toEqual(
+        expectedPage(expected.slice(20), expect.any(String)),
+      );
+      expect(await listAt(1, filteredOne.next!, 'reviewer', growthKernel)).toEqual(
+        expectedPage([expected[1]!], expect.any(String)),
+      );
 
       await rejectListAt('not_found', 'claimant', 1, undefined, growthKernel);
-      expect(await listAt(100, undefined, 'control', growthKernel)).toEqual({
-        claimRequests: expected.slice(0, 20),
-        next: expect.any(String),
-      });
+      expect(await listAt(100, undefined, 'control', growthKernel)).toEqual(
+        expectedPage(expected.slice(0, 20), expect.any(String)),
+      );
       await revokeDuringGrowthList();
-      expect(await listAt(100, undefined, 'control', growthKernel)).toEqual({
-        claimRequests: expected.slice(0, 20),
-        next: expect.any(String),
-      });
+      expect(await listAt(100, undefined, 'control', growthKernel)).toEqual(
+        expectedPage(expected.slice(0, 20), expect.any(String)),
+      );
     }
     async function revokeDuringGrowthList() {
       const barrier = growthObserver!.hold({ statement: reviewPage.sql }, 'after');

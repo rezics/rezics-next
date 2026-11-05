@@ -84,14 +84,12 @@ const fence = async (record: string) =>
       },
     }),
   );
-async function history(records: string[]) {
+async function history(records: readonly [string, string, string]) {
   const id = await fixture.createSubject();
-  const digests: string[] = [];
-  for (const record of records) {
-    const stored = await json(await write(id, { ...value(record), expectedObservation: digests.at(-1) ?? null }));
-    digests.push(stored.observation.digest);
-  }
-  return { id, digests };
+  const first = await json(await write(id, { ...value(records[0]), expectedObservation: null }));
+  const second = await json(await write(id, { ...value(records[1]), expectedObservation: first.observation.digest }));
+  const third = await json(await write(id, { ...value(records[2]), expectedObservation: second.observation.digest }));
+  return { id, digests: [first.observation.digest, second.observation.digest, third.observation.digest] as const };
 }
 
 test('a concealed lookahead and raw item preserve current head and bounded continuation', async () => {
@@ -100,7 +98,7 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
     digests: [old, middle, latest],
   } = await history(['101', '102', '103']);
   await fence('102');
-  observer.records.length = 0;
+  const observationStart = observer.records.length;
   const first = await page(id);
   expect(first.head.digest).toBe(latest);
   expect(first.history!.items.map((item) => item.digest)).toEqual([latest!]);
@@ -114,7 +112,7 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   expect(last.head).toEqual(first.head);
   expect(last.history!.items.map((item) => item.digest)).toEqual([old!]);
   expect(last.history!.nextCursor).toBeNull();
-  const fetched = observer.records.filter((row) => row.statement === payloadQuery.sql);
+  const fetched = observer.records.slice(observationStart).filter((row) => row.statement === payloadQuery.sql);
   expect(fetched).toHaveLength(3);
   expect(JSON.stringify(fetched.map((row) => row.parameters))).not.toContain(middle!);
   await json(await inspect(id, `?digest=${middle}`), 404);

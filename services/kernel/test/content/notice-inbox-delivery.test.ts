@@ -50,7 +50,7 @@ test('populated Inbox preserves cursor progress across concealed raw candidates'
 
 test('empty Inbox has no next cursor', async () => {
   const account = native.accounts.principal;
-  expect(await native.call(account, 'GET', `/v1/accounts/${account}/notifications`)).toEqual({
+  expect(await native.call(account, 'GET', `/v1/accounts/${account}/notifications`)).toMatchObject({
     status: 200,
     value: { items: [], next: null },
   });

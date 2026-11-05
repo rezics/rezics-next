@@ -156,6 +156,7 @@ test('rating-question directory pages retain bounded native Access work across s
         const prepared = await prepareScenario(fixture, scenario);
         const name = `rating question directory ${scenario} under ${axis}`;
         const serializedBytes = new Map<number, number[]>();
+        let currentScale = QUESTION_DIRECTORY_SCALES[0]!;
         const report = await checkGrowth(fixture.database, {
           name,
           scales: QUESTION_DIRECTORY_SCALES,
@@ -165,6 +166,7 @@ test('rating-question directory pages retain bounded native Access work across s
           byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
           indexProbes: 128,
           grow: async (_database, scale, previous) => {
+            currentScale = scale;
             if (axis === 'unrelated-catalogue')
               await fixture.seedQuestionRange(
                 unrelatedPrefix[scenario],
@@ -181,7 +183,7 @@ test('rating-question directory pages retain bounded native Access work across s
             // checkGrowth samples replay this same signed position and viewer credential.
             if (scenario === 'first') {
               const result = await page(await fixture.request('/v1/rating-questions'), 200, (body) =>
-                recordSerializedBytes(serializedBytes, scale, body),
+                recordSerializedBytes(serializedBytes, currentScale, body),
               );
               expect<unknown>(result.ratingQuestions).toEqual(prepared.expected);
               expect(result.next).toEqual(expect.any(String));
@@ -190,10 +192,14 @@ test('rating-question directory pages retain bounded native Access work across s
 
             const response = await fixture.request(pagePath(prepared.cursor!));
             if (scenario === 'denied-current-authority') {
-              await problem(response, 404, 'not_found', (body) => recordSerializedBytes(serializedBytes, scale, body));
+              await problem(response, 404, 'not_found', (body) =>
+                recordSerializedBytes(serializedBytes, currentScale, body),
+              );
               return response.status;
             }
-            const result = await page(response, 200, (body) => recordSerializedBytes(serializedBytes, scale, body));
+            const result = await page(response, 200, (body) =>
+              recordSerializedBytes(serializedBytes, currentScale, body),
+            );
             if (scenario === 'terminal-empty') expect(result).toEqual({ ratingQuestions: [], next: null });
             else {
               expect<unknown>(result.ratingQuestions).toEqual(prepared.expected);

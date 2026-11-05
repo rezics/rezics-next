@@ -24,7 +24,7 @@ beforeEach(async () => {
 
 test('mounted personas retain exact opening/reply revisions, cursor, guest controls and concealment', async () => {
   const thread = await f.thread();
-  const posts = [];
+  const posts: Array<{ id: string; revisionId: string }> = [];
   for (let i = 0; i < 22; i++) posts.push(await f.post(thread.id, `Exact reply ${i}`));
   const first = await f.page(thread.id);
   expect(first.response.status, first.text).toBe(200);

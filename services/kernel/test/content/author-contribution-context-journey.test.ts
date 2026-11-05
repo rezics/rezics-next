@@ -99,7 +99,7 @@ test('mounted public author pages retain exact review citations and anonymous im
       routeKey: f.system.routeKey,
     };
     const context = {
-      actor: { kind: 'account' as const, accountId: f.author.accountId },
+      actor: f.system.actors.author.actor,
       deadline: Date.now() + 120_000,
     };
     const [thread, post] = await Promise.all([

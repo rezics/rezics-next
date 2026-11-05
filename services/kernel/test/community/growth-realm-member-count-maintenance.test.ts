@@ -34,6 +34,7 @@ const countLock = /(?:PERFORM|SELECT)\s+(?:1|\*)[\s\S]*FROM\s+community\.realm_m
  * hence to its backend and transaction, rather than a later count read. */
 function countWork(source: StatementOccurrence, changed: boolean): Cost {
   expect(source.backend).toBeDefined();
+  if (source.planDocuments === undefined) throw new Error('Expected native member writes to include nested plans');
   const nested = source.planDocuments.flatMap((document) => explainPlanEntries(document));
   const deltas = nested.filter((entry) => countDelta.test(entry.queryText ?? ''));
   expect(deltas).toHaveLength(changed ? 1 : 0);
