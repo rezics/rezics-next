@@ -22,11 +22,13 @@ disclosed Realm title remains carrier context; following is neither Realm member
 
 Decision: Home public-owner cards keep exact owner navigation usable while missing curator/presentation and bounded private follow admission remain explicitly unavailable, without per-card enrichment.
 
-The native Collection summary currently contains only `id`, `title` and nullable `description`; Space adds
+The native Collection summary carries `id`, `title`, nullable `description` and Search's complete closed `card`,
+including admitted curator, cover, presentation and preview completeness; Home shares its schema through Search's
+public schema-only entry. Installed Web receiving must consume the official publication. Space adds
 `address`, optional `summary` and optional nullable `realm: {id,title}`. These fields do not distinguish withheld
 context from dependency failure. Web does not label either an empty value or an absent field as withheld.
-Content/Search producers must supply bounded admitted curator identity/public presentation and explicit
-missing/withheld/unavailable/available-empty context states before those distinctions can render.
+Collection card context retains its native available/unavailable curator and available/empty/withheld/unavailable
+preview states. Space context requires explicit native states before additional distinctions can render.
 
 The feed page has no native own-follow projection or directional follow actions for these owners. The producer
 handoff is a separate authenticated page/batch projection bounded to the returned 20 exact Collection/Space IDs,
