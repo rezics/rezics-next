@@ -164,7 +164,10 @@ function recoveryUnavailable(operationId: string): LibraryBulkRecoveryRead {
 }
 
 export const readBulkOperationRecovery = createServerFn({ method: 'GET' })
-  .validator(validateOperationId)
+  .validator((input: unknown) => {
+    const address = validateOperationId(input);
+    return (input as { cursor?: unknown }).cursor === undefined ? { ...address, cursor: undefined } : validatePageInput(input);
+  })
   .handler(async ({ data }): Promise<LibraryBulkRecoveryRead> => {
     const request = getRequest();
     setResponseHeader('cache-control', 'private, no-store');
@@ -174,7 +177,7 @@ export const readBulkOperationRecovery = createServerFn({ method: 'GET' })
         return { state: 'forbidden', operationId: data.operationId };
       const authorization = viewerCredential(request);
       if (!authorization) return { state: 'forbidden', operationId: data.operationId };
-      return await readBulkOperationFromNative(kernelClient(), data.operationId, authorization);
+      return await readBulkOperationFromNative(kernelClient(), data.operationId, authorization, data.cursor);
     } catch {
       return recoveryUnavailable(data.operationId);
     }

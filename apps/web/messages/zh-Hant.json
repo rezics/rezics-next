@@ -10953,5 +10953,6 @@
   "library_archive_entry_update": "明確更新已審核的本機條目",
   "library_archive_entry_assign": "新增已審核的指派",
   "library_archive_entry_state_id": "目前支援的狀態 ID",
-  "library_archive_entry_select": "選取記錄 {ordinal}"
+  "library_archive_entry_select": "選取記錄 {ordinal}",
+  "library_bulk_recovery_invalid": "此結果位址無效。"
 }

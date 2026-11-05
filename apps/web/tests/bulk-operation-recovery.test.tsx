@@ -132,10 +132,11 @@ test('keeps native cursor paging on the same operation and rejects obsolete or u
   });
 
   expect(bulkRecoveryStatus(current.outcomes[0]!)).toBe('unattempted');
-  expect(bulkRecoveryStatus(accepted.state === 'available' ? accepted.outcomes[1]! : outcome('pending'))).toBe(
+  expect(bulkRecoveryStatus(accepted.state === 'available' ? accepted.outcomes[0]! : outcome('pending'))).toBe(
     'success',
   );
   expect(accepted.state === 'available' && accepted.next).toBeNull();
+  expect(accepted.state === 'available' && accepted.outcomes).toHaveLength(1);
   expect(
     appendBulkOutcomePage({
       addressOperationId: '01b5b3de-6ad2-7fc8-a604-e058df922099',

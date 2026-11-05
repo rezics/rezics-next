@@ -10854,5 +10854,6 @@
   "library_archive_entry_update": "Geprüften lokalen Eintrag ausdrücklich ändern",
   "library_archive_entry_assign": "Geprüfte Zuordnung hinzufügen",
   "library_archive_entry_state_id": "Aktuelle unterstützte Status-ID",
-  "library_archive_entry_select": "Datensatz {ordinal} auswählen"
+  "library_archive_entry_select": "Datensatz {ordinal} auswählen",
+  "library_bulk_recovery_invalid": "Diese Ergebnisadresse ist ungültig."
 }

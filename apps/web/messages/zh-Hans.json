@@ -10866,5 +10866,6 @@
   "library_archive_entry_update": "明确更新已审核的本地条目",
   "library_archive_entry_assign": "添加已审核的分配",
   "library_archive_entry_state_id": "当前支持的状态 ID",
-  "library_archive_entry_select": "选择记录 {ordinal}"
+  "library_archive_entry_select": "选择记录 {ordinal}",
+  "library_bulk_recovery_invalid": "此结果地址无效。"
 }

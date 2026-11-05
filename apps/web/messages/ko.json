@@ -10854,5 +10854,6 @@
   "library_archive_entry_update": "검토한 로컬 항목을 명시적으로 업데이트",
   "library_archive_entry_assign": "검토한 할당 추가",
   "library_archive_entry_state_id": "현재 지원되는 상태 ID",
-  "library_archive_entry_select": "레코드 {ordinal} 선택"
+  "library_archive_entry_select": "레코드 {ordinal} 선택",
+  "library_bulk_recovery_invalid": "이 결과 주소는 유효하지 않습니다."
 }

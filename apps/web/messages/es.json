@@ -10854,5 +10854,6 @@
   "library_archive_entry_update": "Actualizar explícitamente la entrada local revisada",
   "library_archive_entry_assign": "Añadir esta asignación revisada",
   "library_archive_entry_state_id": "ID de estado actual compatible",
-  "library_archive_entry_select": "Seleccionar registro {ordinal}"
+  "library_archive_entry_select": "Seleccionar registro {ordinal}",
+  "library_bulk_recovery_invalid": "Esta dirección de resultados no es válida."
 }

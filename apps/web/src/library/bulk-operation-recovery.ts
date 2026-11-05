@@ -19,7 +19,7 @@ export type LibraryBulkCancelIntent = {
 };
 export type LibraryBulkRecoveryRead =
   | { state: 'available'; operation: LibraryBulkOperation; outcomes: LibraryBulkOutcome[]; next: string | null }
-  | { state: 'expired' | 'forbidden' | 'unavailable'; operationId: string };
+  | { state: 'expired' | 'forbidden' | 'invalid' | 'unavailable'; operationId: string };
 export type LibraryBulkOutcomePageRead = BulkOutcomePageRead;
 export type LibraryBulkRecoveryStatus = 'unattempted' | 'running' | 'skipped' | 'failed' | 'success';
 
@@ -176,5 +176,27 @@ export function appendBulkOutcomePage(input: {
     current.next !== requestedCursor
   )
     return current;
-  return { ...current, outcomes: [...current.outcomes, ...page.outcomes], next: page.next };
+  return { ...current, outcomes: page.outcomes, next: page.next };
+}
+
+/** Coordinates only; a staged request never changes the accepted path until success. */
+export class BulkOutcomeWindows {
+  cursor: string | undefined;
+  predecessors: Array<string | undefined> = [];
+  target: { cursor: string | undefined; kind: 'next' | 'previous' | 'first' | 'refresh' } | undefined;
+  stage(kind: 'next' | 'previous' | 'first' | 'refresh', next?: string | null) {
+    const cursor = kind === 'first' ? undefined : kind === 'previous'
+      ? this.predecessors.at(-1) : kind === 'next' ? next ?? undefined : this.cursor;
+    this.target = { cursor, kind };
+    return this.target;
+  }
+  commit(target: NonNullable<BulkOutcomeWindows['target']>) {
+    if (this.target !== target) return false;
+    if (target.kind === 'next') this.predecessors = [...this.predecessors, this.cursor].slice(-8);
+    if (target.kind === 'previous') this.predecessors.pop();
+    if (target.kind === 'first') this.predecessors = [];
+    this.cursor = target.cursor;
+    this.target = undefined;
+    return true;
+  }
 }

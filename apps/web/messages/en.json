@@ -11075,5 +11075,6 @@
   "library_archive_entry_update": "Explicitly update reviewed local Entry",
   "library_archive_entry_assign": "Add this reviewed assignment",
   "library_archive_entry_state_id": "Current supported state ID",
-  "library_archive_entry_select": "Select record {ordinal}"
+  "library_archive_entry_select": "Select record {ordinal}",
+  "library_bulk_recovery_invalid": "This result address is invalid."
 }

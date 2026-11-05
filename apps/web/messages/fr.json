@@ -10854,5 +10854,6 @@
   "library_archive_entry_update": "Modifier explicitement l’entrée locale révisée",
   "library_archive_entry_assign": "Ajouter cette affectation révisée",
   "library_archive_entry_state_id": "Identifiant d’état actuellement pris en charge",
-  "library_archive_entry_select": "Sélectionner l’enregistrement {ordinal}"
+  "library_archive_entry_select": "Sélectionner l’enregistrement {ordinal}",
+  "library_bulk_recovery_invalid": "Cette adresse de résultats est invalide."
 }

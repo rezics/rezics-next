@@ -94,13 +94,15 @@ export type CapturedCancelCommand = {
 
 export type BulkRecoveryNativeRead =
   | { state: 'available'; operation: BulkOperation; outcomes: BulkOutcomes['outcomes']; next: string | null }
-  | { state: 'expired' | 'forbidden' | 'unavailable'; operationId: string };
+  | { state: 'expired' | 'forbidden' | 'invalid' | 'unavailable'; operationId: string };
 export type BulkOutcomePageRead =
   | { state: 'available'; page: BulkOutcomes }
-  | { state: 'expired' | 'forbidden' | 'unavailable'; operationId: string };
+  | { state: 'expired' | 'forbidden' | 'invalid' | 'unavailable'; operationId: string };
 
-function failureState(status: number, missingMeansExpired = false): 'expired' | 'forbidden' | 'unavailable' {
+function failureState(status: number, missingMeansExpired = false): 'expired' | 'forbidden' | 'invalid' | 'unavailable' {
   if (status === 401 || status === 403) return 'forbidden';
+  if (status === 400 || status === 422) return 'invalid';
+  if (status === 410) return 'expired';
   if (status === 404 && missingMeansExpired) return 'expired';
   return 'unavailable';
 }
@@ -110,6 +112,7 @@ export async function readBulkOperationFromNative(
   client: KernelClient,
   operationId: string,
   authorization: string,
+  cursor?: string,
 ): Promise<BulkRecoveryNativeRead> {
   const operationResult = await client.libraryOperations({ operationId }).get({
     headers: { authorization },
@@ -121,7 +124,7 @@ export async function readBulkOperationFromNative(
   if (operation.id !== operationId) return { state: 'unavailable', operationId };
 
   const resultPage = await client.libraryOperations({ operationId }).outcomes.get({
-    query: { limit: 20 },
+    query: { limit: 20, ...(cursor === undefined ? {} : { cursor }) },
     headers: { authorization },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });

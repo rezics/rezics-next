@@ -10948,5 +10948,6 @@
   "library_archive_entry_update": "レビューしたローカルエントリーを明示的に更新",
   "library_archive_entry_assign": "レビューした割り当てを追加",
   "library_archive_entry_state_id": "現在対応する状態ID",
-  "library_archive_entry_select": "レコード {ordinal} を選択"
+  "library_archive_entry_select": "レコード {ordinal} を選択",
+  "library_bulk_recovery_invalid": "この結果のアドレスは無効です。"
 }
