@@ -422,7 +422,11 @@ test('Recovery presentation retains the original uncertain create through refres
     const before = writes.length;
     try {
       await show();
-      (form().querySelector('input[name="name"]') as HTMLInputElement).value = 'Original draft';
+      const name = form().querySelector('input[name="name"]') as HTMLInputElement;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(name, 'Original draft');
+        name.dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
       send = async () => {
         throw new Error('Reply lost');
       };
