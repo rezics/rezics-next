@@ -2,19 +2,73 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import * as start from '../.storybook/react-start';
 import { producerRecoveryExample } from '../src/features/pages/producer-history-reading/examples';
-import { producerStudioId } from '../src/kernel/fake/producer-history';
+import { producerHistoryFixture, producerStudioId } from '../src/kernel/fake/producer-history';
 import { organizationHistoryVisitReturnFragment } from '../src/features/pages/subject-visit-navigation';
-import { candidateContext } from '../src/subject/candidates';
+import { candidateContext, type Candidate } from '../src/subject/candidates';
+import type { RelationConfirmation, RelationProposal } from '../src/subject/relation-candidates';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
-const admitted = producerRecoveryExample().first;
+const example = producerRecoveryExample();
+const windows = producerHistoryFixture('windows');
+let failBackward = false;
+const commands: (RelationProposal | RelationConfirmation)[] = [];
+let proposed = false;
+let accepted = false;
+const candidate: Candidate = {
+  id: '00000000-0000-4000-8000-00000000e299',
+  source: null,
+  retracted: null,
+  retraction: null,
+  release: example.fixture.studio.subject.release,
+  revision: 2,
+  decision: null,
+  head: null,
+  rank: null,
+  statement: {
+    ...example.fixture.studio.subject.statements['wdt:P749']![1]!,
+    id: '00000000-0000-4000-8000-00000000e299',
+  },
+};
+mock.module('../src/features/catalogue/relation-editor-actions', () => ({
+  readSubjectRelationEditor: async () => ({
+    ...example.relationRead,
+    authority: {
+      disclosure: 'available',
+      actions: {
+        state: 'available',
+        context: candidateContext,
+        operations: ['subject.propose', 'subject.accept_candidate', 'subject.adopt'],
+      },
+    },
+    page: {
+      candidates: proposed ? [{ ...candidate, decision: accepted ? 'accepted' : null, head: accepted ? 1 : null }] : [],
+      adoption: { mode: 'replace', head: 1 },
+      next: null,
+    },
+  }),
+  proposeSubjectRelation: async ({ data }: { data: RelationProposal }) => {
+    commands.push(data);
+    proposed = true;
+    return { ok: true, candidate: candidate.id };
+  },
+  confirmSubjectRelation: async ({ data }: { data: RelationConfirmation }) => {
+    commands.push(data);
+    accepted = true;
+    return { ok: true, kind: data.operation === 'adopt' ? 'selected' : 'accepted', public: example.fixture.studio };
+  },
+}));
 const producerReads: { data: Record<string, unknown> }[] = [];
 mock.module('../src/features/catalogue/producer-history/actions', () => ({
   readSubjectProducerHistory: async (input: { data: Record<string, unknown> }) => {
     producerReads.push(input);
-    return admitted;
+    const { stream, cursor, session } = input.data as { stream?: string; cursor?: string; session?: string };
+    if (failBackward) {
+      failBackward = false;
+      return { ok: false, reason: 'unavailable' };
+    }
+    return windows.transport.read(stream, cursor, session);
   },
 }));
 
@@ -22,7 +76,7 @@ const locale = 'en';
 const globalContext = candidateContext;
 const unsupportedContext = '00000000-0000-4000-8000-00000000d812';
 const realm = '00000000-0000-4000-8000-00000000d813';
-const selected = '00000000-0000-4000-8000-00000000d814';
+const selected = windows.studio.subject.statements['wdt:P749']![1]!.id;
 
 function historyFragment(context: string) {
   return organizationHistoryVisitReturnFragment({
@@ -31,8 +85,8 @@ function historyFragment(context: string) {
     locale,
     property: 'wdt:P749',
     candidate: selected,
-    revision: 7,
-    release: 'organization-release',
+    revision: 1,
+    release: windows.studio.subject.release,
     focus: 'keyboard',
   });
 }
@@ -71,6 +125,7 @@ test('public Organization entry preserves Context and current return, refuses un
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createMemoryHistory, createRootRouteWithContext, createRoute, createRouter, Outlet, RouterProvider } =
     await import('@tanstack/react-router');
+  const { OrganizationReader } = await import('../src/features/catalogue/organization-reader/view');
   const { ProducerHistoryEntry } = await import('../src/features/catalogue/producer-history/entry');
   const { Route: ProducerRoute } = await import('../src/routes/subjects/$id_.$slug.producer');
   const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -96,13 +151,23 @@ test('public Organization entry preserves Context and current return, refuses un
   function PublicOrigin() {
     const { context } = OriginRoute.useSearch();
     const currentHref = `/${locale}/subjects/${producerStudioId}/paper-lantern-studio?context=${context}${historyFragment(context)}`;
-    return h(ProducerHistoryEntry, {
-      id: producerStudioId,
-      label: 'Paper Lantern Studio',
-      locale,
-      context,
-      currentHref,
-    });
+    return h(
+      'div',
+      {},
+      context === globalContext &&
+        h(OrganizationReader, {
+          read: { public: windows.studio, release: windows.release },
+          locale,
+          currentHref,
+        }),
+      h(ProducerHistoryEntry, {
+        id: producerStudioId,
+        label: 'Paper Lantern Studio',
+        locale,
+        context,
+        currentHref,
+      }),
+    );
   }
 
   ProducerRoute.update({
@@ -131,6 +196,7 @@ test('public Organization entry preserves Context and current return, refuses un
     [...host.querySelectorAll<HTMLAnchorElement>('a')].find((item) => item.textContent === name)!;
   const navigate = async (href: string) =>
     act(async () => {
+      window.history.replaceState(null, '', href);
       await router.navigate({ href });
       await tick();
     });
@@ -161,6 +227,63 @@ test('public Organization entry preserves Context and current return, refuses un
     const pageReturn = link(messages.m.producer_history_back());
     expect(pageReturn.getAttribute('href')).toBe(admittedReturn);
 
+    const button = (name: string, region: ParentNode = host) =>
+      [...region.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent === name)!;
+    const click = async (name: string, region: ParentNode = host) => act(async () => button(name, region).click());
+    const m = messages.m;
+    await click(m.producer_history_more());
+    await click(m.producer_history_more());
+    expect(host.textContent).toContain(m.producer_history_empty());
+    expect(host.querySelectorAll('li[data-slot="list-row"]')).toHaveLength(0);
+    failBackward = true;
+    await click(m.producer_history_previous());
+    const failedTarget = producerReads.at(-1)!.data;
+    expect(host.textContent).toContain(m.producer_history_unavailable());
+    button(m.producer_history_retry()).focus();
+    await click(m.producer_history_retry());
+    expect(producerReads.at(-1)!.data).toEqual(failedTarget);
+    expect(failedTarget).toMatchObject({ cursor: 'window-2', session: 'window-session-1' });
+    expect(window.document.activeElement?.tagName).toBe('H2');
+    await click(m.producer_history_first());
+    expect(producerReads.at(-1)!.data.cursor).toBeUndefined();
+    expect(producerReads.at(-1)!.data.session).toBeUndefined();
+    await click(m.producer_history_more());
+    await click(m.producer_history_previous());
+    const origin = producerReads.at(-1)!.data;
+    const occurrences = host.querySelectorAll('li[data-slot="list-row"]');
+    expect(occurrences).toHaveLength(2);
+    expect(occurrences[0]!.querySelector('h2,h3')!.textContent).toBe(
+      occurrences[1]!.querySelector('h2,h3')!.textContent,
+    );
+    await click(m.producer_history_inspect(), occurrences[1]!);
+    await click(m.producer_history_correct(), occurrences[1]!);
+    await click(m.relation_open());
+    for (const action of [m.relation_propose(), m.candidate_accept(), m.candidate_adopt()]) {
+      await click(action);
+      const group = host.querySelector(`[aria-label="${m.candidate_confirm_title({ action })}"]`)!;
+      button(action, group).focus();
+      await click(action, group);
+    }
+    expect(commands[0]).toMatchObject({
+      id: producerStudioId,
+      slot: { property: 'wdt:P749', target: example.fixture.similar.subject.id },
+    });
+    expect(commands).toHaveLength(3);
+    expect(producerReads.at(-1)!.data).toEqual(origin);
+    expect(host.querySelector('li[aria-current="true"] h2,li[aria-current="true"] h3')).toBe(
+      window.document.activeElement,
+    );
+    expect(host.textContent).toContain(m.producer_history_correction_retired());
+    await click(m.producer_history_retired_close());
+    expect(
+      [...host.querySelectorAll('button')].some((item) => item.textContent === m.producer_history_previous()),
+    ).toBe(false);
+    await navigate(link(m.producer_history_back()).getAttribute('href')!);
+    expect(router.state.location.hash).toBe(historyFragment(globalContext).slice(1));
+    expect(host.querySelector('[role="region"]')?.textContent).toContain(selected);
+    expect(window.document.activeElement).toBe(host.querySelector('[role="region"]'));
+    const journeyReads = producerReads.length - 1;
+
     await navigate(`/${locale}/subjects/${producerStudioId}/paper-lantern-studio?context=${unsupportedContext}`);
     const unsupportedEntry = link(messages.m.producer_history_title());
     const unsupportedHref = new URL(unsupportedEntry.getAttribute('href')!, 'https://site.test');
@@ -168,7 +291,7 @@ test('public Organization entry preserves Context and current return, refuses un
     const unsupportedReturn = unsupportedHref.searchParams.get('via')!;
     await navigate(`${unsupportedHref.pathname}${unsupportedHref.search}`);
     expect(host.textContent).toContain(messages.m.producer_history_context_unavailable());
-    expect(producerReads.length).toBe(1);
+    expect(producerReads.length).toBe(1 + journeyReads);
     const refusalReturn = link(messages.m.producer_history_back());
     expect(refusalReturn.getAttribute('href')).toBe(unsupportedReturn);
     const globalVisit = link(messages.m.producer_history_global_visit());
@@ -180,21 +303,21 @@ test('public Organization entry preserves Context and current return, refuses un
     await navigate(`${globalHref.pathname}${globalHref.search}`);
     await act(async () => tick());
     expect(router.state.location.search.context).toBeUndefined();
-    expect(producerReads.length).toBe(2);
-    expect(producerReads[1]!.data.context).toBeUndefined();
+    expect(producerReads.length).toBe(2 + journeyReads);
+    expect(producerReads[1 + journeyReads]!.data.context).toBeUndefined();
     expect(host.textContent).toContain(messages.m.producer_history_title());
 
     await navigate(`/${locale}/subjects/${producerStudioId}/paper-lantern-studio/producer`);
     await act(async () => tick());
     expect(router.state.location.search).toEqual({});
-    expect(producerReads.length).toBe(3);
+    expect(producerReads.length).toBe(3 + journeyReads);
 
     const realmReturn = `/${locale}/subjects/${producerStudioId}/paper-lantern-studio?context=${globalContext}&realm=${realm}#connections`;
     await navigate(
       `/${locale}/subjects/${producerStudioId}/paper-lantern-studio/producer?context=${globalContext}&realm=${realm}&via=${encodeURIComponent(realmReturn)}`,
     );
     expect(host.textContent).toContain(messages.m.producer_history_context_unavailable());
-    expect(producerReads.length).toBe(3);
+    expect(producerReads.length).toBe(3 + journeyReads);
     const realmGlobal = new URL(
       link(messages.m.producer_history_global_visit()).getAttribute('href')!,
       'https://site.test',
@@ -204,7 +327,25 @@ test('public Organization entry preserves Context and current return, refuses un
     expect(realmGlobal.searchParams.get('via')).toBe(realmReturn);
     await navigate(`${realmGlobal.pathname}${realmGlobal.search}`);
     await act(async () => tick());
-    expect(producerReads.length).toBe(4);
+    expect(producerReads.length).toBe(4 + journeyReads);
+
+    await click(m.producer_history_more());
+    expect(button(m.producer_history_previous())).toBeDefined();
+    for (const [key, value] of [
+      [['session'], { state: 'signed-in', subject: 'origin-reader', csrfToken: 'csrf-origin' }],
+      [['exposure', 'viewer'], { spoilerLevel: 0 }],
+      [['session'], { state: 'signed-in', subject: 'other-reader', csrfToken: 'csrf-other' }],
+      [['session'], { state: 'signed-in', subject: 'origin-reader', csrfToken: 'csrf-origin' }],
+    ] as const) {
+      await act(async () => {
+        queryClient.setQueryData(key, value);
+        await tick();
+      });
+      expect(
+        [...host.querySelectorAll('button')].some((item) => item.textContent === m.producer_history_previous()),
+      ).toBe(false);
+      await click(m.producer_history_more());
+    }
 
     const oversized = producerHistoryEntryVisit({
       href: `/${locale}/subjects/${producerStudioId}/paper-lantern-studio/producer?context=${unsupportedContext}`,

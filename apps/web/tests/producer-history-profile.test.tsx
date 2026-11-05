@@ -88,6 +88,22 @@ test('producer history binds admitted direction and inverse, keeps similar names
       'native-next',
     ),
   ).toEqual({ ok: false, reason: 'invalid' });
+  const windows = producerHistoryFixture('windows');
+  let window = await windows.transport.read();
+  for (let page = 0; page < 2; page++) {
+    if (!window.ok) throw new Error('Expected admitted native window');
+    window = await windows.transport.read(window.stream!.key, window.next!, window.session);
+  }
+  expect(window.ok && window.rows).toEqual([]);
+  expect(window.ok && window.caughtUp).toBe(true);
+  expect(
+    windows.calls.filter((call) => call.path.endsWith('/relations')).map((call) => [call.query.limit, call.session]),
+  ).toEqual([
+    ['20', null],
+    ['20', 'window-session-1'],
+    ['20', 'window-session-2'],
+  ]);
+  expect(windows.calls).toHaveLength(6);
   const inverse = await fixture.transport.read('inverse:wdt:P749');
   expect(inverse.ok && inverse.stream?.meaning).toBe('subsidiary');
   expect(inverse.ok && inverse.rows[0]?.summary?.id).toBe(producerSimilarId);

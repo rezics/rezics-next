@@ -79,7 +79,21 @@ function ProducerHistoryPageLive({
   const origin = subjectHref({ id, label: title.text }, locale).href;
   const failure = slice.phase === 'failed' ? slice.failure : undefined;
   const busy = slice.phase === 'loading';
-  const selectedIndex = selected?.revision === slice.revision ? selected.index : undefined;
+  const returned = read && slice.intent.selection;
+  const returnedRow = returned && read?.rows[returned.index];
+  const returnedSlot = returnedRow && stream && producerHistoryCorrection(returnedRow, stream)?.slot;
+  // Only the same occurrence at the same native origin can be restored; never scan by label or ID.
+  const returnedIndex =
+    returned &&
+    returnedRow?.holder === returned.holder &&
+    returnedRow.statementId === returned.statement &&
+    returnedRow.statement &&
+    JSON.stringify(returnedSlot) === JSON.stringify(returned.slot)
+      ? returned.index
+      : undefined;
+  const selectedIndex = selected?.revision === slice.revision ? selected.index : returnedIndex;
+  const admittedSelection = useRef<number | undefined>(undefined);
+  admittedSelection.current = returnedIndex;
   const correctionCurrent = !!draft && !draft.retired && draft.revision === slice.revision && !!read;
   useLayoutEffect(() => {
     const intent = focusAfterClose.current;
@@ -89,13 +103,7 @@ function ProducerHistoryPageLive({
     else sliceHeading.current?.focus();
   }, [draft, lease, slice.revision]);
 
-  function selection() {
-    const row = selectedIndex === undefined ? undefined : read?.rows[selectedIndex];
-    return row && selectedIndex !== undefined
-      ? { index: selectedIndex, holder: row.holder, statement: row.statementId }
-      : undefined;
-  }
-  function load(intent: HistoryIntent, event?: MouseEvent<HTMLButtonElement>) {
+  function load(intent: HistoryIntent, event?: Pick<MouseEvent<HTMLElement>, 'currentTarget' | 'detail'>) {
     if (!lifetime.active()) return;
     readFocus.cancel();
     lease.retire();
@@ -105,16 +113,18 @@ function ProducerHistoryPageLive({
     setDraft((current) => (current ? { ...current, retired: true } : undefined));
     const pending = reader.request(intent);
     const revision = reader.currentRevision();
-    let complete = false;
     readFocus.begin(
       event,
       () => reader.owned(revision),
-      () => sliceHeading.current,
-      () => complete,
+      () => {
+        const index = reader.currentRevision() === revision ? admittedSelection.current : undefined;
+        return index === undefined
+          ? sliceHeading.current
+          : sliceHeading.current?.ownerDocument.getElementById(`${streamId}-org-${index}`);
+      },
+      () => reader.admitted(revision),
     );
-    void pending.finally(() => {
-      complete = true;
-    });
+    void pending;
   }
   function inspect(index: number, button: HTMLButtonElement) {
     if (!lease.active() || !read?.rows[index]) return;
@@ -140,7 +150,7 @@ function ProducerHistoryPageLive({
       ...correction,
       instance: ++nextInstance.current,
       session: read?.session,
-      origin: reader.intent(stream.key, slice.intent.cursor, { index, holder: row.holder, statement: row.statementId }),
+      origin: reader.reload({ index, holder: row.holder, statement: row.statementId, slot: correction.slot }),
       occurrence: index,
       revision: slice.revision,
       holderLabel: holder.text || m.subject_value_unlabelled({}, o),
@@ -165,7 +175,7 @@ function ProducerHistoryPageLive({
         qualifiers: [],
         references: [],
       },
-      origin: reader.intent(stream.key, slice.intent.cursor),
+      origin: reader.reload(),
       occurrence: undefined,
       revision: slice.revision,
       holderLabel: stream.direction === 'forward' ? title.text : target.title,
@@ -230,7 +240,7 @@ function ProducerHistoryPageLive({
               id={streamId}
               className="min-w-0 max-w-full [&_select]:min-h-11"
               value={reader.key ?? ''}
-              onChange={(event) => load(reader.intent(event.target.value, undefined, selection()))}
+              onChange={(event) => load(reader.replace(event.target.value))}
             >
               {reader.streams.map((item) => (
                 <NativeSelectOption key={item.key} value={item.key}>
@@ -282,20 +292,24 @@ function ProducerHistoryPageLive({
                 ))}
               </ul>
               <div className="flex flex-wrap gap-2">
-                {read.next && (
+                {reader.previous && (
                   <Button
                     className={actionClass}
                     variant="outline"
-                    onClick={(event) => load(reader.intent(stream.key, read.next ?? undefined, selection()), event)}
+                    onClick={(event) => load(reader.previous!(), event)}
                   >
+                    {m.producer_history_previous({}, o)}
+                  </Button>
+                )}
+                <Button className={actionClass} variant="outline" onClick={(event) => load(reader.first(), event)}>
+                  {m.producer_history_first({}, o)}
+                </Button>
+                {read.next && (
+                  <Button className={actionClass} variant="outline" onClick={(event) => load(reader.more(), event)}>
                     {m.producer_history_more({}, o)}
                   </Button>
                 )}
-                <Button
-                  className={actionClass}
-                  variant="outline"
-                  onClick={(event) => load(reader.intent(stream.key, slice.intent.cursor, selection()), event)}
-                >
+                <Button className={actionClass} variant="outline" onClick={(event) => load(reader.reload(), event)}>
                   {m.candidate_reload({}, o)}
                 </Button>
                 <Button className={actionClass} variant="outline" onClick={(event) => load(reader.restart(), event)}>
@@ -382,7 +396,16 @@ function ProducerHistoryPageLive({
               requireCloseConfirmation={draft.confirmClose}
               onClose={closeDraft}
               onSelected={() => {
-                if (correctionCurrent && lease.active()) load(draft.origin);
+                if (correctionCurrent && lease.active()) {
+                  const source = draft.returnFocus.ownerDocument.activeElement;
+                  load(
+                    draft.origin,
+                    source instanceof HTMLElement &&
+                      (source.tagName === 'BUTTON' || source === source.ownerDocument.body)
+                      ? { currentTarget: source, detail: 0 }
+                      : undefined,
+                  );
+                }
               }}
             />
           </CatalogueCurrentReading>
