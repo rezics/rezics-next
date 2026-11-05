@@ -71,7 +71,9 @@ Workers run their acceptance command once after their last relevant edit. When t
 returns the required `waiting` exit object with that UUID as a bare string in `checks`, then ends its turn. It does not
 invoke `--wait`, poll status, inspect logs or processes, or start a duplicate. Goal owns check continuation: it waits for
 the terminal result or records that the run ended without one, then resumes the same session with the actual result
-records. The waiting result has the shape `{"status":"waiting","checks":["<bare UUID>"]}`; replace the placeholder with
+records. The resume text names a copy of each finished check's whole log in the worktree's temporary area, and a worker
+with a failed check reads that copy before it reports. The waiting result has the shape
+`{"status":"waiting","checks":["<bare UUID>"]}`; replace the placeholder with
 the exact UUID and do not add a label or prefix to that string. A resumed worker does not return another waiting result
 for the same check ids; it uses the supplied records as evidence and runs a new acceptance check only after relevant
 edits when the current contract requires it. A terminal success result has an empty `checks` array; only still-running
@@ -85,6 +87,7 @@ call with a yield of at least 300 seconds. A supplied acceptance command defines
 dev product brief without one, the worker chooses focused validation and reports its exact command and actual result;
 the missing command never counts as a pass.
 Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
+Decision: an owner decision whose summary does not fit the worker prompt is delivered as a pointer to a file in the worktree, each finished check's whole log is copied into the worktree and named in its result, and a worker's temporary directory is a short `/tmp` path that settlement removes, so browser Unix sockets fit the path limit.
 
 A task whose paths touch `apps/web` or `packages/ui`, or an interface task without either, works against Storybook
 served from its own worktree (`storybook.ts`). Each catalogue gets a loopback port derived from the worktree path, so
@@ -1963,8 +1966,10 @@ and decisions from earlier attempts cannot supersede a later current-attempt dec
 start or replace an attempt; delivery waits for the next normal prompt boundary.
 The event command does not sweep or resume workers. Acceptance and delivery events cannot be submitted directly.
 The decision shares the existing 20,000-character total prompt limit and process input byte limit with the ordinary
-prompt. References that do not fit remain pending; if the summary itself cannot fit, launch refuses the oversized
-prompt without recording delivery. Only a successful launch records delivery against the accepted event sequence.
+prompt. References that do not fit remain pending. A summary that does not fit is replaced by a one-line pointer to a file
+in the worker worktree's temporary area, which holds the whole decision and its references and is written before the
+worker starts. The pointer and the pending notice are appended even past the limits, so no decision refuses a launch.
+Only a successful launch records delivery against the accepted event sequence.
 Projection decision: each prompt parses decisions and deliveries in one event traversal, keeps the earliest sequence
 per decision identity, selects by controller timestamp then event sequence, and reads each referenced path once.
 No projection cache is persisted, and the delivery protocol is unchanged.
