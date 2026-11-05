@@ -9,7 +9,8 @@ import {
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
-import type { DiscoveryOwnerRegistry, DiscoveryRegistry, DiscoveryRequest } from './discovery.ts';
+import type { DiscoveryOwnerRegistry, DiscoveryRegistry } from './discovery.ts';
+import type { DiscoveryRequest } from './discovery-api.ts';
 import { discoveryKindDirectory } from './discovery-registry.ts';
 import { admitProperties, validateHitOptions, validateSearchLimit } from './hits.ts';
 import { parseText, positiveText, textSyntaxProblem, TextSyntaxError } from './text.ts';

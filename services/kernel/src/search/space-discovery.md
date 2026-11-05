@@ -1,7 +1,7 @@
 # Space discovery adapter
 
-`nativeSpaceDiscoveryAdapter` binds Search to Content's `spaceDiscoverySource` and
-`readSpaceDiscoverySummaries` in `services/kernel/src/community/space-discovery.ts`. The Search leaf identifies one
+The composition root binds Content's `spaceDiscoverySource` and `readSpaceDiscoverySummaries` from the Community
+entry through Search's `createSpaceDiscoveryAdapter`. The Search leaf identifies one
 Space as `{ owner: 'content', kind: 'space', route, id }`; the stable document id is
 `discovery-v1:space:<space UUID>`. A hosted Realm is carried in `realm_id` and the current summary's `realmId`; it
 enriches the same Space hit and never creates a second identity. Search text uses the producer's `name` and

@@ -19,7 +19,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { problemResponse } from '../../src/http/problem.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { projectBatch } from '../../src/events/log.ts';

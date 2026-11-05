@@ -3,7 +3,9 @@ import { randomBytes } from 'node:crypto';
 import { createPool } from '../../src/database/pool.ts';
 import { subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
-import { readSearchConfig, searchWorkModule } from '../../src/search/work.ts';
+import { readSearchConfig, createSearchWorkModule } from '../../src/search/work.ts';
+import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
+import { createKernelRuntimeDefaults } from '../../src/composition/runtime-defaults.ts';
 import { ConfigError, readConfig, startServer } from '../../src/server.ts';
 import type { WorkContext, WorkService } from '../../src/work/registry.ts';
 
@@ -16,6 +18,7 @@ const search = createOpenSearch(searchUrl);
 const kernelDirectory = new URL('../..', import.meta.url).pathname;
 const key = () => randomBytes(32).toString('base64url');
 const env = { DATABASE_URL: databaseUrl, KERNEL_ROUTE_KEY: key(), KERNEL_SESSION_KEYS: `1:${key()}`, KERNEL_PORT: '0' };
+const searchWorkModule = createSearchWorkModule(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
 const prefixes: string[] = [];
 afterAll(async () => {
   for (const prefix of prefixes) {

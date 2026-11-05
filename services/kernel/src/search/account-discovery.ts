@@ -39,10 +39,9 @@ import { reviewDiscoveryDocument } from './review-discovery.ts';
 import {
   assertDiscoveryCapabilityBinding,
   DiscoveryProducerCoverageError,
-  type DiscoveryMetadataKind,
-  type DiscoveryMetadataProducers,
 } from './generations.ts';
-import type { ReviewDiscoveryRefresh } from '../content/review-discovery-changes.ts';
+import type { DiscoveryMetadataKind, DiscoveryMetadataProducers, DiscoveryOmittedKind } from './index.ts';
+import type { ReviewDiscoveryRefresh } from '../content/index.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { accountDocumentActions } from './document.ts';
 import type { SubjectSource } from './source.ts';
@@ -262,7 +261,8 @@ export async function nativeDiscoveryRegistry(
     release?: Release;
     languages?: readonly string[];
     ownerAdapters?: DiscoveryOwnerAdapterSlots;
-    omittedKinds?: import('./discovery.ts').DiscoveryRegistryOptions['omittedKinds'];
+    accounts?: AccountDiscoverySource;
+    omittedKinds?: readonly DiscoveryOmittedKind[];
   },
 ) {
   const release = options?.release ?? (await activeRelease(pool))?.release;
@@ -277,6 +277,7 @@ export async function nativeDiscoveryRegistry(
       icons: Object.fromEntries(Object.keys(release.types).map((kind) => [kind, 'file-text'])),
     },
     accounts: {
+      ...(options?.accounts ? { source: options.accounts } : {}),
       labels: { en: 'Accounts' },
       icon: 'user-round',
     },

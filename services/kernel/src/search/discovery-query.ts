@@ -8,7 +8,7 @@ import { assertCompleteSearch } from './complete-search.ts';
 import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import type { SearchSortValue } from './cursor.ts';
 import { MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT, MIXED_DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
-import { HANDLE_LOOKUP_PATTERN } from '../access/handle-policy.ts';
+import { discoveryNativeQuery } from './discovery-native-query.ts';
 import {
   MATCH_EVIDENCE_LIMITS,
   readEngineMatchEvidence,
@@ -153,36 +153,6 @@ export function readDiscoveryCandidates(
 /** Execute only inside the native consumer's retained execution/custody. This helper supplies no privacy ACK.
  * A PIT belongs to the canonical queried observation; callers must not use a mutable alias as a substitute.
  */
-export function discoveryNativeQuery(
-  plan: Pick<DiscoveryQueryPlan, 'query' | 'filter' | 'boost'>,
-): Record<string, unknown> {
-  const should: Record<string, unknown>[] =
-    plan.boost === undefined
-      ? []
-      : [
-          { term: { 'names.exact': { value: plan.boost, boost: 10 } } },
-          { match_phrase: { names: { query: plan.boost, boost: 3 } } },
-          ...(HANDLE_LOOKUP_PATTERN.test(plan.boost)
-            ? [
-                {
-                  constant_score: {
-                    filter: {
-                      bool: {
-                        filter: [
-                          { term: { owner: 'accounts' } },
-                          { term: { 'handle.exact': plan.boost.toLowerCase() } },
-                        ],
-                      },
-                    },
-                    boost: 10,
-                  },
-                },
-              ]
-            : []),
-        ];
-  return { bool: { must: plan.query ?? { match_all: {} }, filter: plan.filter, ...(should.length ? { should } : {}) } };
-}
-
 export async function queryDiscoveryCandidates(
   search: OpenSearch,
   registry: DiscoveryRegistry,

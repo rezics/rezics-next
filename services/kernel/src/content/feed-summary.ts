@@ -1,6 +1,6 @@
 import { documentText } from '@rezics/document';
 import type { PostEntry } from './reads.ts';
-import type { AccountDiscoverySummary } from '../search/discovery.ts';
+import type { AccountDiscoverySummary } from '../search/index.ts';
 import type { FeedAuthor } from './feed-contract.ts';
 
 export const FEED_EXCERPT_LIMIT = 160;

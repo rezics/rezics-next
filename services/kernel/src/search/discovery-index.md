@@ -5,8 +5,8 @@ metadata kind. A candidate generation is identified by its generation number, da
 UUID. Its registered kind set is frozen at allocation; replacement builds a new physical index and never reinterprets
 an older generation or receipt.
 
-**Decision:** Missing or preparing owner population producers omit only their own kind; every admitted producer still
-proves all native partitions, and hit and kind cursors bind the available and omitted kind sets.
+**Decision:** A missing or preparing native producer omits only its own kind; a newly ready kind stays `preparing`
+until a replacement physical generation publishes it.
 
 ## Producer readiness
 
@@ -18,31 +18,30 @@ common generation and writer lifecycle; it does not create a second eligibility 
 
 Registry ownership follows the current scope table: `collection` uses Commerce, while `review` and `space` use Content.
 
-The default query registry binds Commerce with `createNativeCollectionDiscoveryAdapter`, reviews with
-Content's `createReviewDiscoverySource` and `createReviewDiscoveryAdapter` (or the worker's supplied
-`ReviewDiscoverySource`), and Spaces with `nativeSpaceDiscoveryAdapter`. The actual query caller is
-`createDefaultDiscoverySearch`; the worker caller is `searchWorkModule.register` → `startSearchIndexing` →
-`startDiscoveryIndexing`. These adapters supply current owner reads; their registration alone is not generation
-population evidence.
+Decision: keep the shared discovery source contract in the declared `kernel-search` service entry; a separate package would require its own conformance vectors and two production consumers.
 
-Decision: use the English labels “Collections”, “Reviews” and “Spaces” with the `library`, `message-square` and
-`users` icons until the owner adapters supply localized kind metadata.
+The composition root `createDiscoveryProducerEntry` constructs the owner-native Account, Collection, review and
+Space sources alongside the existing rated Subject source. It returns the public `DiscoveryProducerEntry` from
+`search/index.ts`; the HTTP query service and default worker both consume that same entry shape. Search adapts those
+sources for current reads and generation population. Registration alone is not generation population evidence.
 
-The retained generation runner now allocates up to five independent producer frontiers: Accounts, semantic Subjects,
-Collections, reviews and Spaces. It snapshots metadata producer readiness before allocation. An absent producer or a
-producer reporting `preparing` or `unavailable` is omitted from the candidate and its registered current-reader slot;
-the omission is returned with the available kind directory. A present producer that becomes unready during native work
-still invalidates that work, and wrong owners, duplicate registrations, changed witnesses and incomplete registered
-coverage remain errors. Each admitted producer advances only after its exact actions are visible at the captured
-physical UUID. Existing active generations and relays remain available while a replacement is incomplete. Native
-census or source-fence capability remains typed unavailable; neither counts nor empty scans certify it.
+The owner adapters use localized labels for Collections, Reviews and Spaces with the `library`, `message-square` and
+`users` icons.
+
+The retained generation runner maintains up to five independent producer frontiers: Accounts, semantic Subjects,
+Collections, reviews and Spaces. An absent producer or one reporting `preparing` or `unavailable` is omitted from its
+candidate and current-reader slot. The omission appears with the available kind directory. A producer that becomes
+unready during native work invalidates that work; wrong owners, duplicate registrations, changed witnesses and
+incomplete registered coverage remain errors. Each admitted producer advances only after its exact actions are visible
+at the captured physical UUID. Existing active generations and relays remain available while a replacement prepares.
+Native census or source-fence capability remains typed unavailable; neither counts nor empty scans certify it.
 
 Only owner-approved public metadata may enter these documents. Realm rating figures, private Collection membership
 and Collection predicates remain outside the public index. Current summaries continue to hydrate from their owners.
 
 ## Build, catch-up and publication
 
-Allocation first binds the replay consumer, registered kinds and physical incarnation. Each admitted native owner
+Allocation first binds the replay consumer, registered kinds and physical incarnation. Each supported native owner
 population is exhausted independently by bounded keyset pages ordered by full `(route, id)` keys. A page frontier is
 stored only after the shared exact-version writer settles its actions against the captured physical target. Native
 positions are observations, not a substitute for enumerating every eligible key.
@@ -59,12 +58,10 @@ its own cursor only after the exact target actions settle; a failed group is dra
 amortizes registry and capability-witness setup without inferring completion or dropping any producer evidence.
 Decision: Search discovery batches at most 128 durable owner/partition frontiers per advancement, with population concurrency 8 and final certification concurrency 16, preserving every producer evidence check and post-action cursor.
 A changed observation restarts that producer's native pass. The durable `native_complete` flag distinguishes raw
-completion from indexed-hit exhaustion; an admitted producer must complete every partition even when its population is
-empty. Reconciliation repeats when native positions or owner revisions move. Publication requires every registered
+completion from indexed-hit exhaustion. Reconciliation repeats when native positions or owner revisions move. Publication requires every
 producer population to be complete, replay to be current, all reconciliation partitions to be certified and the
 physical UUID to remain unchanged. Only then does an observed alias switch make the candidate active; the former
-generation becomes retiring after that observation. An empty partition is evidence only after its producer's actual
-native terminal page and completion/certification have been observed.
+generation becomes retiring after that observation.
 
 Empty native partitions register replay with the Core checkpoint sentinel `(epoch NULL, position 0)`. Nonempty
 partitions retain their actual epoch and position; subsequent relay advances use the ordinary checkpoint CAS.
@@ -76,19 +73,17 @@ deletes the exact physical index incarnation, then reclaims bounded copy locator
 Account erasure retains its late-item acknowledgement protocol through retirement. Generation observations establish
 index readiness only; current owner authorization and disclosure checks remain authoritative.
 
-The actual default worker path is `searchWorkModule.register` → `startSearchIndexing` →
-`startDiscoveryIndexing` → `advanceDiscovery`. Each step resolves the Commerce Collection source, Content review
-source and native Space source into an availability snapshot, then wires only ready producers into the independent
-population, relay and reconciliation frontiers. Publication requires complete populations for every registered
-producer, caught-up replay, current keyed reconciliation, the strict available registry, the captured physical UUID
-and durable native frontiers to agree. Current owner hydration alone does not make an incomplete generation ready.
+The actual default worker path is `worker.ts` → `createKernelWorkModules` → `searchWorkModule.register` →
+`startSearchIndexing` → `startDiscoveryIndexing` → `advanceDiscovery`. The worker root injects
+`createDiscoveryProducerEntry`; its returned producers feed the five independent population, relay and
+reconciliation frontiers. Publication requires complete populations for each registered producer, caught-up replay,
+current keyed reconciliation, the current registry, the captured physical UUID and durable native frontiers to agree.
+Current owner hydration alone does not make an incomplete generation ready.
 
-Content's native `spaceDiscoverySource` returns the complete `SpaceDiscoveryDependencyReadiness` through
-`nativeSpaceDiscoveryAdapter.source.dependencies`. Search retains the entire ready result, including opaque
+Content's native `spaceDiscoverySource` returns the complete `SpaceDiscoveryDependencyReadiness` through the
+Search Space adapter's `source.dependencies`. Search retains the entire ready result, including opaque
 `generation`, `cut` and capability fields, in `discovery_generation.capability` with the observed physical UUID and
-allocation incarnation. Population, relay, reconciliation, activation and final disclosure recheck each admitted
-witness binding. If a Space witness is not ready before a request, Space is omitted and no Space hit is admitted; if it
-changes during a retained read, the final native guard still refuses that assembly.
+allocation incarnation. Population, relay, reconciliation, activation and final disclosure recheck that binding.
 Collection pages also retain their native partition epoch; Review caps each request at Content's native `REVIEW_DISCOVERY_PAGE_LIMIT`, retains the signed `pageWithCut` continuation and
 rejects a changed cut instead of retrying it indefinitely. Installed machinery and matching counts confer no coverage.
 
@@ -98,20 +93,17 @@ Abandoned candidates retire immediately; a previously active target retains the 
 Collection, Review and Space reconciliation positions are compared only to their respective native readers. Core
 partition heads continue to certify Accounts/Subjects and relay checkpoints, not metadata domains.
 
-Each default worker step performs at most one bounded readiness probe per configured metadata producer. A request
-resolves the same availability before opening its retained reader; available producers are rechecked by current
-capability guards. Omitted producers have no population or final-certification calls in that generation, and their
-omission state is included in the response's kind metadata and cursor digest. A newly ready producer remains visibly
-`preparing` until the active generation contains its kind. Availability changes allocate a new namespace-local
-physical generation through ordinary worker advancement; requests do not rebuild or drain it.
+Each worker step snapshots configured producer readiness. Requests resolve the same availability against the active
+generation; only admitted kinds receive current readers and final capability checks. Omitted states bind into the kind
+directory and cursor digest. An availability change uses ordinary worker advancement to allocate a physical
+replacement; requests keep the active generation in service while that replacement prepares.
 
-For admitted producer i, complete preparation costs `sum(P_i * C_i(B_i))` plus actual action bytes, writes and durable state;
+For producer i, complete preparation costs `sum(P_i * C_i(B_i))` plus actual action bytes, writes and durable state;
 the 128-frontier selection and eight-page concurrency change elapsed time, not that sum. A reconciliation restart adds
 another native raw pass and indexed cleanup; an epoch replacement adds a fresh physical population. Neither term is
 absorbed into a retained-count cap. Final certification still examines all 4096 partitions: it reads Account witnesses
 in bounded groups of 100 and, for each partition, performs an actual empty-key current-position read for every admitted
-metadata producer, with at most 16 partitions in flight. Empty native reads and empty terminal pages still count;
-readiness probes add a fixed per-step cost even when a producer is omitted.
+metadata producer, with at most 16 partitions in flight. Empty native reads and empty terminal pages still count.
 Unchanged keyed replay verifies the exact visible winner before advancing.
 
 Review's `C_i` includes five Content snapshots, two ancestry walks (`d <= 33`, `2d+25` local statements), Semantic

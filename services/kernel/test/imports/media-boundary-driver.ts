@@ -817,7 +817,7 @@ async function mediaGrowth(
 }
 
 async function workerHost(): Promise<RpcHost> {
-  const { KERNEL_WORK_MODULES } = await import('../../src/work/modules.ts');
+  const { KERNEL_WORK_MODULES } = await import('../support/default-work-modules.ts');
   const database = await openGrowthDatabase();
   const observer = await observeMediaPool(database.pool);
   const client = await createWorkClient(database.url, database.openPool());

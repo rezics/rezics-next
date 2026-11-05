@@ -1,5 +1,4 @@
 import {
-  publicCollectionDiscoverySource,
   type CollectionDiscoverySource,
   type CollectionDiscoveryKey,
   type CollectionDiscoverySnapshot,
@@ -313,12 +312,12 @@ export type NativeCollectionDiscoveryAdapter = ReadyCollectionDiscoveryAdapter &
 
 /** Connect the native source and current disclosure reader; this is not generation readiness. */
 export function createNativeCollectionDiscoveryAdapter(
-  dependencies: PublicCollectionDiscoveryDependencies,
+  dependencies: PublicCollectionDiscoveryDependencies & Readonly<{ source: CollectionDiscoverySource }>,
   metadata: DiscoveryOwnerAdapter<'collection', 'commerce'>['metadata'],
 ): NativeCollectionDiscoveryAdapter {
   const leaf = createCollectionDiscoveryAdapter({
     status: 'ready',
-    source: publicCollectionDiscoverySource({ pool: dependencies.pool }),
+    source: dependencies.source,
     readSummaries: (ids, context) => readPublicCollectionDiscoverySummaries(dependencies, ids, context),
   });
   if (leaf.status !== 'ready') throw new CollectionDiscoveryReadinessError(leaf.status, leaf.reason);
