@@ -35,7 +35,7 @@ const sectionV2 = t.Union([
   t.Literal('journals'),
 ]);
 function sectionTuple<const Sections extends readonly string[]>(sections: Sections) {
-  return t.Tuple(
+  return t.Tuple<{ -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>> }>(
     sections.map((section) => t.Literal(section)) as {
       -readonly [K in keyof Sections]: ReturnType<typeof t.Literal<Sections[K]>>;
     },
@@ -104,7 +104,7 @@ const state = t.Union([
   t.Literal('expired'),
   t.Literal('limit'),
 ]);
-const statusSchema = t.Union([
+export const statusSchema = t.Union([
   t.Object({ ...manifestV1Fields, state, first: nullable }, closed),
   t.Object({ ...manifestV2Fields, state, first: nullable }, closed),
   t.Object({ ...manifestV3Fields, state, first: nullable }, closed),
@@ -268,13 +268,15 @@ const providerRecords = [
     },
     closed,
   ),
-  ...(['vndbEvidence', 'anilistEvidence'] as const).map((section) =>
-    t.Object(
-      { section: t.Literal(section), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
-      closed,
-    ),
+  t.Object(
+    { section: t.Literal('vndbEvidence'), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
+    closed,
   ),
-];
+  t.Object(
+    { section: t.Literal('anilistEvidence'), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
+    closed,
+  ),
+] as const;
 const finalManifest = t.Union([
   t.Object({ ...manifestV1Fields, rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
   t.Object(

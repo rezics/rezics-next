@@ -74,9 +74,9 @@ status_choices AS (
   ) AS next
   WHERE previous.ordinal < parameters.max_options
 )
-SELECT 'kind'::text AS dimension, id, "copyId", "copyKind", "profilePin"
+SELECT true AS "isKind", id, "copyId", "copyKind", "profilePin"
 FROM kind_choices
 UNION ALL
-SELECT 'status'::text AS dimension, id, "copyId", "copyKind", "profilePin"
+SELECT false AS "isKind", id, "copyId", "copyKind", "profilePin"
 FROM status_choices
-ORDER BY dimension, id;
+ORDER BY "isKind" DESC, id;

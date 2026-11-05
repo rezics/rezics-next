@@ -4,6 +4,8 @@ import { Value } from 'typebox/value';
 import { appellantIdentitySchema, targetContextSchema } from '../../src/content/appeal-routes.ts';
 import { copyConditionValueSchema, copyListContextSchema } from '../../src/library/personal-routes.ts';
 import { COPY_CONDITION_CHOICES, type CopyConditionValue } from '../../src/library/copy-condition.ts';
+import { statusSchema } from '../../src/library/library-export-routes.ts';
+import { libraryExportManifest, exportSections, exportSectionsV2, exportSectionsV3, exportSectionsV4 } from '../../src/library/library-export-format.ts';
 import { QueryShareSchema } from '../../src/search/http/query-share-schemas.ts';
 
 test('appeal identity and context preserve unavailable states in declarations and wire schemas', () => {
@@ -32,4 +34,20 @@ test('Search share reasons are a closed declared union', () => {
   expectTypeOf<Static<typeof QueryShareSchema>['reason']>().toEqualTypeOf<(typeof reasons)[number]>();
   for (const reason of reasons) expect(Value.Check(QueryShareSchema.properties.reason, reason)).toBe(true);
   expect(Value.Check(QueryShareSchema.properties.reason, 'exception text')).toBe(false);
+});
+
+test('each archive manifest retains the ordered native section tuple', () => {
+  type Status = Static<typeof statusSchema>;
+  expectTypeOf<Extract<Status, { version: 1 }>['sections']>().toEqualTypeOf<[...typeof exportSections]>();
+  expectTypeOf<Extract<Status, { version: 2 }>['sections']>().toEqualTypeOf<[...typeof exportSectionsV2]>();
+  expectTypeOf<Extract<Status, { version: 3 }>['sections']>().toEqualTypeOf<[...typeof exportSectionsV3]>();
+  expectTypeOf<Extract<Status, { version: 4 }>['sections']>().toEqualTypeOf<[...typeof exportSectionsV4]>();
+  for (const version of [1, 2, 3, 4] as const) {
+    const manifest = libraryExportManifest({
+      export_id: 'export', created_at: 'captured', expires_at: 'expires', format_version: version,
+    });
+    const status = { ...manifest, fullExport: false, state: 'ready', first: null };
+    expect(Value.Check(statusSchema, status)).toBe(true);
+    expect(Value.Check(statusSchema, { ...status, sections: [...manifest.sections].reverse() })).toBe(false);
+  }
 });

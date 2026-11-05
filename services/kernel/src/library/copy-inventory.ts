@@ -44,11 +44,19 @@ export async function readCopyInventoryValues(
   route: number,
   accountId: string,
 ): Promise<CopyInventoryValue[]> {
-  return optionsQuery.run(queryClient(client), {
+  const values = await optionsQuery.run(queryClient(client), {
     route,
     account_id: accountId,
     limit: MAX_COPY_FILTER_OPTIONS + 1,
   });
+  return values.map((value) => ({
+    dimension: value.isKind ? 'kind' : 'status',
+    // Both native branches select a copy primary key and a non-null vocabulary ID.
+    id: value.id!,
+    copyId: value.copyId!,
+    copyKind: value.copyKind,
+    profilePin: value.profilePin,
+  }));
 }
 
 function unavailableFacet(): CopyInventoryFacet {

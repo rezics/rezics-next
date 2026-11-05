@@ -132,7 +132,7 @@ const copyInventoryChoiceSchema = t.Object(
 const copyInventoryFacetSchema = t.Object(
   {
     state: t.Union([t.Literal('available'), t.Literal('unavailable')]),
-    choices: t.Array(copyInventoryChoiceSchema, { maxItems: 64 }),
+    choices: t.Immutable(t.Array(copyInventoryChoiceSchema, { maxItems: 64 })),
   },
   closed,
 );
@@ -283,7 +283,7 @@ export const copyListContextSchema = t.Union([
   t.Object(
     {
       state: t.Literal('available'),
-      work: t.Array(copyListContextIdentitySchema, { maxItems: 3 }),
+      work: t.Immutable(t.Array(copyListContextIdentitySchema, { maxItems: 3 })),
       facts: t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
     },
     closed,

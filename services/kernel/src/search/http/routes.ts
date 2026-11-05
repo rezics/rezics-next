@@ -265,7 +265,7 @@ export function searchRoutes<App>(
             },
           });
         }
-        async function mixed(): Promise<DiscoveryHttpPage> {
+        async function mixed(): Promise<Static<typeof DiscoveryPageSchema, { PublicFigure: typeof PublicFigureSchema }>> {
           set.headers['cache-control'] = 'private, no-store';
           const check = await prepare();
           return admission.run('normal', job, async () => {
@@ -308,7 +308,7 @@ export function searchRoutes<App>(
             return emptyRecovery ? { ...page, emptyRecovery } : page;
           });
         }
-        async function catalogue(): Promise<SearchHttpResponse> {
+        async function catalogue(): Promise<Static<typeof searchResponse, { PublicFigure: typeof PublicFigureSchema }>> {
           const check = await prepare();
           return admission.run('normal', job, async () => {
             if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
