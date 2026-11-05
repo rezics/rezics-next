@@ -103,10 +103,7 @@ function ReadingVisit({
     },
     [namespace, position, projection.references.byPosition],
   );
-  const mentionAttributes = useCallback(
-    (occurrence: number) => linkAttributes(-1 - occurrence),
-    [linkAttributes],
-  );
+  const mentionAttributes = useCallback((occurrence: number) => linkAttributes(-1 - occurrence), [linkAttributes]);
   const setRoot = useCallback(
     (element: HTMLDivElement | null) => {
       focusBoundaryRef.current = element;

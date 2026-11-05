@@ -198,14 +198,14 @@ export function projectPostReading(
         identities && typeof accountId === 'string' && Object.hasOwn(identities.mentions, accountId)
           ? identities.mentions[accountId]
           : undefined;
-      if (!hidden && account) {
+      if (!hidden && account && identities) {
         referenceEligible++;
         if (referenceEntries.length < postReferenceLimit) {
           const entry: PostReferenceEntry = {
             position,
             ordinal: referenceEligible,
             label: `@${account.handle}`,
-            href: `/${encodeURIComponent(identities!.locale)}/@${encodeURIComponent(account.handle)}`,
+            href: `/${encodeURIComponent(identities.locale)}/@${encodeURIComponent(account.handle)}`,
             destination: 'web',
           };
           referenceEntries.push(entry);
