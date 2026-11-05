@@ -848,6 +848,7 @@ export function QuestionManagementPage({
   const historyCursor = windows.history.requested;
   const confirmMovement = useRef<(() => Promise<boolean>) | null>(null);
   const movementPending = useRef(false);
+  const cancelDirectoryMovement = useRef<(() => void) | null>(null);
   const [navigationBusy, setNavigationBusy] = useState(false);
   const directoryHeading = useRef<HTMLHeadingElement>(null);
   const historyHeading = useRef<HTMLHeadingElement>(null);
@@ -1076,12 +1077,19 @@ export function QuestionManagementPage({
     movementPending.current = true;
     setNavigationBusy(true);
     focusMovement('directory', keyboard);
+    const cancelled = new Promise<void>((resolve) => {
+      cancelDirectoryMovement.current = resolve;
+    });
     try {
-      await navigate({
-        ...(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {}),
-        ...(cursor === null ? {} : { cursor }),
-      });
+      await Promise.race([
+        cancelled,
+        navigate({
+          ...(address?.selectedQuestionId ? { selectedQuestionId: address.selectedQuestionId } : {}),
+          ...(cursor === null ? {} : { cursor }),
+        }),
+      ]);
     } finally {
+      cancelDirectoryMovement.current = null;
       movementPending.current = false;
       if (isVisitCurrent()) {
         windows.focus = null;
@@ -1406,6 +1414,7 @@ export function QuestionManagementPage({
       />
       <OwnVotesDeparture
         confirmMovement={confirmMovement}
+        onStay={() => cancelDirectoryMovement.current?.()}
         dirty={dirty && !postAcknowledgementRead}
         locked={Object.values(commandStates).some((state) => state === 'sending' || state === 'uncertain')}
         isCurrent={() => sessionCurrent === true && initial.state === 'preparing' && isVisitCurrent()}
