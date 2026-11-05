@@ -45,6 +45,8 @@ Only admitted source-site rows containing a parsed public Bangumi /subject/N URL
 
 Game names retain locale; cited publication dates preserve admitted precision and unsupported forms omit. Genres remain unsplit source literals; player counts require complete admitted forms. TVAnime run facts, copyright notices, official sites and descriptive links retain separate properties and citations. Malformed fields do not suppress valid siblings. Creator and voice credits retain selected source relationships and exact role/person citations. Character identity, appearance, aliases and physical quantities stay on Character; units and blood-type Concepts are never guessed.
 
+Decision: for TVAnime, top-level `name_cn` and infobox `中文名` are independent source observations. Keep differing values as separate cited `schema:name` facts; only exact duplicate property, language and text tuples deduplicate.
+
 ### VNDB
 
 COPY preserves null, empty and missing Latin cells as different source values in the normalized digest. An exactly empty optional Latin cell omits only its Romanized alias; whitespace, missing and wrong-type values remain errors. Selected release names and aliases do not rank from translation flags. Dates retain year/month/day precision; TBA and absent are distinct gaps where no released status property exists. Producer par maps current to selected and sub selected to current under P749; P355 and reciprocal rows are not invented. Spoilers remain qualifiers. Votes, list membership and user data are excluded from catalogue conversion. COPY unknown, absent and malformed values stay distinct.
