@@ -27,13 +27,18 @@ const read = mock(() => {
 const readCurrent = mock(() => {
   throw new Error('Unexpected current Labels read');
 });
-mock.module('../src/library/labels-actions', () => ({
+const labelsActionsModule = Bun.resolveSync('../src/library/labels-actions', import.meta.dir);
+const labelsReadRouteModule = Bun.resolveSync('../src/library/labels-read-route', import.meta.dir);
+mock.module(labelsActionsModule, () => ({
   manageLabel: (input: { data: LabelInput; headers: HeadersInit }) => {
     writes.push(structuredClone(input));
     return send(input.data);
   },
+  labelsFormPost: () => {
+    throw new Error('Unexpected Labels form POST');
+  },
 }));
-mock.module('../src/library/labels-read-route', () => ({ readLabelsPage: read, readLabelsCurrent: readCurrent }));
+mock.module(labelsReadRouteModule, () => ({ readLabelsPage: read, readLabelsCurrent: readCurrent }));
 afterAll(() => mock.restore());
 
 const query = '  読書 %_ + & ?  ';
