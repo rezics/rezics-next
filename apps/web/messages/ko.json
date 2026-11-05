@@ -10361,5 +10361,15 @@
   "library_rule_results_page_empty": "규칙을 읽을 준비가 되었습니다. 이 페이지에는 항목이 없으며 다음 페이지가 있을 수 있습니다.",
   "library_rule_results_incomplete": "일부 조건이 적용되지 않아 이 응답만으로 결과가 비어 있다고 판단할 수 없습니다.",
   "library_rule_results_retry": "저장된 규칙 다시 읽기",
-  "character_person_results": "캐릭터 및 인물 검색 결과"
+  "character_person_results": "캐릭터 및 인물 검색 결과",
+  "search_quantity_range_help": "두 경계는 경계와 같은 값을 포함합니다. 한쪽을 열어 두려면 해당 끝을 비워 두세요.",
+  "search_quantity_unitless_count": "단위 없는 개수 (1)",
+  "search_quantity_unit_marker": "선언된 {unit} 표식(물리 단위가 아님)",
+  "search_quantity_unit_not_admitted": "이 속성에서 허용되지 않음: {unit}",
+  "search_quantity_unit_label_unavailable": "표시 이름을 사용할 수 없음: {unit}",
+  "search_quantity_unit_missing": "단위가 없습니다. 공개된 단위를 선택하세요",
+  "search_quantity_unit_change_title": "단위 의미를 바꿀까요?",
+  "search_quantity_unit_change_message": "입력한 크기는 그대로 유지되지만 {from} 대신 {to}를 의미하게 됩니다. 단위를 바꾸려면 확인하세요.",
+  "search_quantity_unit_change_confirm": "단위 바꾸기",
+  "search_quantity_unit_change_cancel": "현재 단위 유지"
 }

@@ -59,6 +59,7 @@ import { useDiscoveryPersonalResults } from './discovery-personal-host';
 
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 import { ConditionEditor } from './condition-editor';
+import { searchQuantityUnitText } from './condition-quantity';
 import type { ConditionEntityContext } from './condition-entity';
 import { SearchRealmDiscovery } from './realm-discovery';
 import { isRealmDiscoverySearch, type RealmDiscoveryReader } from './realm-discovery-loader';
@@ -710,6 +711,13 @@ export function SearchPage({
   });
   if (data?.discovery && personal.state) data = { ...data, discovery: personal.state };
   const options = messageOptions(locale);
+  const unitMessages = {
+    missing: () => m.search_quantity_unit_missing({}, options),
+    unitless: () => m.search_quantity_unitless_count({}, options),
+    marker: (unit: string) => m.search_quantity_unit_marker({ unit }, options),
+    notAdmitted: (unit: string) => m.search_quantity_unit_not_admitted({ unit }, options),
+    unavailable: (unit: string) => m.search_quantity_unit_label_unavailable({ unit }, options),
+  };
   const type = data?.type;
   const result = data?.result;
   const discovery = data?.discovery;
@@ -863,8 +871,19 @@ export function SearchPage({
   for (const [property, range] of Object.entries(data?.ranges ?? {}))
     add(
       `range:${property}`,
-      `${label(data?.conditionMetadata?.properties[property]?.labels, m.search_constraint_identity_property_unavailable({}, options))}: ${range.gte ?? '…'} – ${range.lte ?? '…'}${
-        range.unit ? ` (${m.search_constraint_identity_unit_unavailable({}, options)})` : ''
+      `${label(data?.conditionMetadata?.properties[property]?.labels, m.search_constraint_identity_property_unavailable({}, options))}: ${
+        range.gte === undefined ? '…' : `≥ ${range.gte}`
+      } – ${range.lte === undefined ? '…' : `≤ ${range.lte}`}${
+        data?.conditionMetadata?.properties[property]?.datatype === 'quantity'
+          ? ` (${searchQuantityUnitText(
+              range.unit,
+              data.conditionMetadata.properties[property]?.units ?? [],
+              locale,
+              unitMessages,
+            )})`
+          : range.unit
+            ? ` (${range.unit})`
+            : ''
       }`,
       {
         ...navigationState,

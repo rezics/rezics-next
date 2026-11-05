@@ -1,6 +1,9 @@
 import { pickText } from '@rezics/composition';
 import type { Related } from './types';
 
+/** The read-only label projection quantity consumers may use without owning subject state. */
+export type QuantityUnitLabels = Readonly<Record<string, { labels?: Record<string, string> }>>;
+
 /** Exact unit identities from the admitted catalogue; symbols never choose or convert an amount. */
 export const unitSymbols: Record<string, string> = {
   'http://www.wikidata.org/entity/Q1238720': 'vol',
@@ -16,7 +19,7 @@ export const unitSymbols: Record<string, string> = {
 };
 
 /** Empty means explicitly unitless; null means the unit has no disclosed reading label. */
-export function quantityUnitLabel(unit: string, related: Related, locale: string): string | null {
+export function quantityUnitLabel(unit: string, related: QuantityUnitLabels, locale: string): string | null {
   if (unit === '1') return '';
   if (Object.hasOwn(unitSymbols, unit)) return unitSymbols[unit]!;
   const labels = Object.hasOwn(related, unit) ? related[unit]?.labels : undefined;

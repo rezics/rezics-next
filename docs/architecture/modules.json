@@ -663,7 +663,8 @@
         "apps/web/src/kernel/client.ts",
         "apps/web/src/session/index.ts",
         "apps/web/src/session/reader.ts",
-        "apps/web/src/subject/definitions.ts"
+        "apps/web/src/subject/definitions.ts",
+        "apps/web/src/subject/quantity-presentation.ts"
       ],
       "allowedDependencies": [
         "client",

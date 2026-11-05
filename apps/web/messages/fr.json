@@ -10361,5 +10361,15 @@
   "library_rule_results_page_empty": "La règle est prête. Cette page ne contient aucun membre ; d’autres pages peuvent suivre.",
   "library_rule_results_incomplete": "Certaines conditions n’ont pas été appliquées ; cette réponse ne peut donc pas établir un résultat vide.",
   "library_rule_results_retry": "Relire la règle enregistrée",
-  "character_person_results": "Résultats des personnages et des personnes"
+  "character_person_results": "Résultats des personnages et des personnes",
+  "search_quantity_range_help": "Les deux bornes incluent les valeurs égales. Laissez une extrémité vide pour garder ce côté ouvert.",
+  "search_quantity_unitless_count": "Compte sans unité (1)",
+  "search_quantity_unit_marker": "Marqueur {unit} déclaré ; ce n’est pas une unité physique",
+  "search_quantity_unit_not_admitted": "Non admise pour cette propriété : {unit}",
+  "search_quantity_unit_label_unavailable": "Nom d’affichage indisponible : {unit}",
+  "search_quantity_unit_missing": "Unité manquante ; choisissez une unité publiée",
+  "search_quantity_unit_change_title": "Remplacer le sens de l’unité ?",
+  "search_quantity_unit_change_message": "Les valeurs saisies resteront identiques, mais signifieront {to} au lieu de {from}. Confirmez pour remplacer l’unité.",
+  "search_quantity_unit_change_confirm": "Remplacer l’unité",
+  "search_quantity_unit_change_cancel": "Garder l’unité actuelle"
 }

@@ -10411,5 +10411,15 @@
   "library_rule_results_page_empty": "規則已就緒。此頁沒有成員；可能還有後續頁。",
   "library_rule_results_incomplete": "部分條件未套用，因此此回應不能證明結果為空。",
   "library_rule_results_retry": "重新讀取已儲存規則",
-  "character_person_results": "角色與人物搜尋結果"
+  "character_person_results": "角色與人物搜尋結果",
+  "search_quantity_range_help": "兩個界限都包含相等的值。留空一端可保持該側開放。",
+  "search_quantity_unitless_count": "無單位計數 (1)",
+  "search_quantity_unit_marker": "已宣告的 {unit} 標記；不是物理單位",
+  "search_quantity_unit_not_admitted": "此屬性不允許使用：{unit}",
+  "search_quantity_unit_label_unavailable": "顯示名稱無法使用：{unit}",
+  "search_quantity_unit_missing": "缺少單位；請選擇已發布的單位",
+  "search_quantity_unit_change_title": "要取代單位的意義嗎？",
+  "search_quantity_unit_change_message": "已輸入的數值會保持不變，但意義會從 {from} 改為 {to}。確認後取代單位。",
+  "search_quantity_unit_change_confirm": "取代單位",
+  "search_quantity_unit_change_cancel": "保留目前單位"
 }

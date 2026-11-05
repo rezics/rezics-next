@@ -10361,5 +10361,15 @@
   "library_rule_results_page_empty": "La regla está lista. Esta página no tiene miembros; puede haber más páginas.",
   "library_rule_results_incomplete": "No se aplicaron algunas condiciones, por lo que esta respuesta no confirma un resultado vacío.",
   "library_rule_results_retry": "Volver a leer la regla guardada",
-  "character_person_results": "Resultados de personajes y personas"
+  "character_person_results": "Resultados de personajes y personas",
+  "search_quantity_range_help": "Ambos límites incluyen los valores iguales. Deja un extremo vacío para mantener ese lado abierto.",
+  "search_quantity_unitless_count": "Recuento sin unidad (1)",
+  "search_quantity_unit_marker": "Marcador {unit} declarado; no es una unidad física",
+  "search_quantity_unit_not_admitted": "No admitida para esta propiedad: {unit}",
+  "search_quantity_unit_label_unavailable": "Nombre visible no disponible: {unit}",
+  "search_quantity_unit_missing": "Falta la unidad; elige una unidad publicada",
+  "search_quantity_unit_change_title": "¿Reemplazar el significado de la unidad?",
+  "search_quantity_unit_change_message": "Las magnitudes introducidas no cambiarán, pero significarán {to} en lugar de {from}. Confirma para reemplazar la unidad.",
+  "search_quantity_unit_change_confirm": "Reemplazar unidad",
+  "search_quantity_unit_change_cancel": "Mantener la unidad actual"
 }

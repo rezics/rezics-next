@@ -10504,5 +10504,15 @@
   "library_rule_results_page_empty": "The rule is ready. This page has no members; more pages may remain.",
   "library_rule_results_incomplete": "Some conditions were not applied, so this response cannot establish an empty result.",
   "library_rule_results_retry": "Retry reading the saved rule",
-  "character_person_results": "Character and People results"
+  "character_person_results": "Character and People results",
+  "search_quantity_range_help": "Both bounds include equal values. Leave either end empty to keep that side open.",
+  "search_quantity_unitless_count": "Unitless count (1)",
+  "search_quantity_unit_marker": "Declared {unit} marker; not a physical unit",
+  "search_quantity_unit_not_admitted": "Not admitted for this property: {unit}",
+  "search_quantity_unit_label_unavailable": "Display name unavailable: {unit}",
+  "search_quantity_unit_missing": "Unit missing; choose a released unit",
+  "search_quantity_unit_change_title": "Replace the unit meaning?",
+  "search_quantity_unit_change_message": "The entered magnitudes will stay the same, but they will mean {to} instead of {from}. Confirm to replace the unit.",
+  "search_quantity_unit_change_confirm": "Replace unit",
+  "search_quantity_unit_change_cancel": "Keep current unit"
 }

@@ -10411,5 +10411,15 @@
   "library_rule_results_page_empty": "ルールの読み込みは完了しました。このページにメンバーはありません。続きのページがある場合があります。",
   "library_rule_results_incomplete": "一部の条件が適用されていないため、この応答から結果が空だとは判断できません。",
   "library_rule_results_retry": "保存済みルールを再読み込み",
-  "character_person_results": "キャラクターと人物の検索結果"
+  "character_person_results": "キャラクターと人物の検索結果",
+  "search_quantity_range_help": "両方の境界は同じ値を含みます。片側を開いたままにするには、その端を空欄にします。",
+  "search_quantity_unitless_count": "単位なしの個数 (1)",
+  "search_quantity_unit_marker": "宣言された {unit} マーカー（物理単位ではありません）",
+  "search_quantity_unit_not_admitted": "このプロパティでは使用できません: {unit}",
+  "search_quantity_unit_label_unavailable": "表示名を利用できません: {unit}",
+  "search_quantity_unit_missing": "単位がありません。公開済みの単位を選択してください",
+  "search_quantity_unit_change_title": "単位の意味を置き換えますか？",
+  "search_quantity_unit_change_message": "入力した数値はそのままですが、{from} ではなく {to} を表すようになります。単位を置き換えるには確認してください。",
+  "search_quantity_unit_change_confirm": "単位を置き換える",
+  "search_quantity_unit_change_cancel": "現在の単位を保持"
 }
