@@ -69,6 +69,7 @@ import {
   loadCanonicalEpisodeChecklist,
   recordCanonicalEpisodes,
 } from './episode-checklist/server';
+import { progressSessionAddress } from './progress-address';
 
 const buttonClass =
   'inline-flex min-h-[44px] min-w-[44px] items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -150,20 +151,30 @@ export function CurrentProgressDetail({
   const viewer = browser ? snapshot.viewer : loaded.viewer;
   const locale = getLocale();
   const location = useLocation();
+  const router = useRouter();
   const historyScope = JSON.stringify([
     viewer,
     address.id,
     address.logs,
     locale,
+    location.pathname,
+    location.hash,
+    location.search.history,
     detailReads.map((op) => snapshot.admissions.get(op)?.id),
   ]);
   const historyAuthority = useMemo(() => ({}), [historyScope, snapshot.identity, snapshot.observation]);
   type Visit = {
     authority: object;
-    location: object;
+    location: typeof location;
     address: ProgressDetailAddress;
     paths: HistoryPaths;
-    staged?: { target: HistoryTarget; address: ProgressDetailAddress; keyboard: boolean; focus: Element | null };
+    staged?: {
+      target: HistoryTarget;
+      address: ProgressDetailAddress;
+      keyboard: boolean;
+      focus: Element | null;
+      entered?: boolean;
+    };
     admitted?: string;
   };
   const visitRef = useRef<Visit | null>(null);
@@ -249,6 +260,27 @@ export function CurrentProgressDetail({
     };
   }
   const boundary = ref.current;
+  useLayoutEffect(
+    () =>
+      router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+        const currentVisit = visitRef.current;
+        const staged = currentVisit?.staged;
+        // Only one deliberate navigation carries coordinates. A second event,
+        // including equal replacement and A/B/A, retires them before React publishes.
+        const eligible =
+          currentVisit &&
+          staged &&
+          !staged.entered &&
+          toLocation.pathname === currentVisit.location.pathname &&
+          toLocation.hash === currentVisit.location.hash &&
+          toLocation.search.history === currentVisit.location.search.history &&
+          sameAddress(progressSessionAddress({ ...toLocation.search, id: staged.address.id }), staged.address);
+        if (eligible) staged.entered = true;
+        else visitRef.current = null;
+        if (ref.current) ref.current.active = false;
+      }),
+    [router],
+  );
   const mounted = useRef(0);
   useLayoutEffect(() => {
     mounted.current++;
