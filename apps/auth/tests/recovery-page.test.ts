@@ -1,10 +1,43 @@
-import { expect, spyOn, test } from 'bun:test';
+import { afterAll, expect, spyOn, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, createElement } from 'react';
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
-import { loadRecoveryPage, parseRecoveryPage } from '../src/recovery-page';
+import { loadRecoveryPage, parseRecoveryPage, useRecoveryPage, type RecoveryPageStage } from '../src/recovery-page';
 const limits = { minPasswordLength: 8, maxPasswordLength: 128 };
 const encode = (value: string) => new TextEncoder().encode(value);
 const responseWithReader = (reader: object) =>
   ({ status: 200, headers: new Headers(), body: { getReader: () => reader } }) as unknown as Response;
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
+);
+const dom = new Window({ url: 'https://auth.test/recovery' });
+const globals = {
+  window: dom,
+  document: dom.document,
+  navigator: dom.navigator,
+  HTMLElement: dom.HTMLElement,
+  Element: dom.Element,
+  Node: dom.Node,
+  MutationObserver: dom.MutationObserver,
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const previous = new Map(
+  [...Object.keys(globals)].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+const { createRoot } = await import('react-dom/client');
+function Advice({ stage }: { stage: RecoveryPageStage }) {
+  const { state } = useRecoveryPage(stage);
+  return createElement('output', null, state.kind === 'ready' ? `${state.page.stage}:${state.page.viewer.kind}` : state.kind);
+}
+afterAll(async () => {
+  for (const [key, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+  await dom.happyDOM.close();
+});
 
 test('page reads send only a stage, bound responses and keep outages explicitly unavailable', async () => {
   const request = spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(recoveryPage('complete', limits)));
@@ -98,6 +131,44 @@ test('completed bodies do not await cancellation; an aborted stalled read releas
     expect(cancelled).toBe(true);
     expect(readReleased).toBe(true);
   } finally {
+    request.mockRestore();
+  }
+});
+
+test('a late step-up completion cannot replace advice for the current stage', async () => {
+  let completeOld!: (response: Response) => void;
+  let oldSignal: AbortSignal | undefined;
+  const request = spyOn(globalThis, 'fetch')
+    .mockImplementationOnce((_input, init) => {
+      oldSignal = init?.signal as AbortSignal;
+      return new Promise((resolve) => (completeOld = resolve));
+    })
+    .mockResolvedValueOnce(Response.json(recoveryPage('start', limits)));
+  const host = document.body.appendChild(document.createElement('div'));
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(createElement(Advice, { stage: 'step-up' }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+      root.render(createElement(Advice, { stage: 'start' }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(oldSignal?.aborted).toBe(true);
+    expect(host.textContent).toBe('start:signed-out');
+    await act(async () => {
+      completeOld(
+        Response.json(
+          recoveryPage('step-up', limits, { kind: 'signed-in', account_id: 'obsolete', email: 'old@example.test' }),
+        ),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(host.textContent).toBe('start:signed-out');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
     request.mockRestore();
   }
 });
