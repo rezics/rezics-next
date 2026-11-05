@@ -173,7 +173,7 @@ test('a failed registration-page refresh preserves an unresolved attempt without
 
   await p.setPage(p.registrationPage);
   expect(p.host.querySelector('input[name="handle"]')).toBeNull();
-  expect(p.host.querySelector('#signup-uncertain-panel')?.textContent).toContain('Reader_1');
+  expect(p.host.querySelector('#signup-uncertain-panel')?.textContent).toContain('reader_1');
   expect(p.calls).toHaveLength(1); // Revalidation and challenge loading never replay creation.
 });
 
@@ -188,11 +188,11 @@ test('a newly signed-in viewer closes pending signup advice and fences its late 
     verification: { configured: true },
     actions: { register: false, continue: true },
   });
-  expect(document.body.textContent).toContain('You are already signed in');
+  expect(document.body.textContent).toContain('A current account is signed in');
   expect(p.host.querySelector('input[name="password"]')).toBeNull();
   await flush(() => signup.resolve(Response.json({ accountId: 'created' }, { status: 201 })));
   expect(p.calls).toHaveLength(1); // A stale 201 cannot start sign-in or redirect this viewer.
-  expect(document.body.textContent).toContain('You are already signed in');
+  expect(document.body.textContent).toContain('A current account is signed in');
 });
 
 test('malformed acknowledgement retains exact retry; admitted retry starts only one separate sign-in', async () => {
