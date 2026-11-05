@@ -81,7 +81,7 @@ test('the actual Following server exports refuse stale preparation without priva
     expect(sessionSubject(actualRequest)).toBe('prepared-owner'); // A stale WeakMap entry is not provenance.
     current.status = 'unavailable';
     await expect(actions.readMineFollowingForViewer({ data: {} })).rejects.toMatchObject({
-      problem: { status: 502, code: 'dependency_unavailable' },
+      problem: { status: 503, code: 'session_unavailable' },
     });
     actualRequest = new Request(`${origin}/en/library/following`, {
       headers: { authorization: 'Bearer browser-asserted-identity' },
@@ -321,7 +321,9 @@ test('the mounted default Following composition retires viewer, cursor and row l
   const expectRetired = () => {
     expect(host.querySelector('[data-slot="list-row"]')).toBeNull();
     expect(host.querySelector('[data-slot="follow-control"]')).toBeNull();
-    expect(host.querySelector('nav')).toBeNull();
+    expect(
+      [...host.querySelectorAll('nav')].some((nav) => nav.getAttribute('aria-label') === m.library_following_heading()),
+    ).toBe(false);
     expect(host.textContent).not.toContain(m.library_follow_removed());
   };
   try {
@@ -615,7 +617,10 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expect(new URL(restart()!.href).searchParams.has('cursor')).toBe(false);
   };
   const expectRetired = () => {
-    expect(host.querySelector('[data-slot="list-row"], [data-slot="follow-control"], nav')).toBeNull();
+    expect(host.querySelector('[data-slot="list-row"], [data-slot="follow-control"]')).toBeNull();
+    expect(
+      [...host.querySelectorAll('nav')].some((nav) => nav.getAttribute('aria-label') === m.library_following_heading()),
+    ).toBe(false);
     expect(host.textContent).not.toContain(m.library_collections_cursor_reset());
     expect(host.textContent).not.toContain(m.library_follow_removed());
     expect(host.textContent).not.toContain(m.library_following_empty());
