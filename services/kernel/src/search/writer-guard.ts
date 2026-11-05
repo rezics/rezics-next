@@ -1,5 +1,8 @@
 import type { Pool } from 'pg';
-import { readNativePublicFilterPublicationCompletion, type PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+import {
+  readNativePublicFilterPublicationCompletion,
+  type PublicFilterSourceBinding,
+} from '../semantic/public-filter-source-binding.ts';
 import {
   readAccountDiscoveryRepairObservation,
   type AccountDiscoveryRepairObservation,
@@ -765,7 +768,10 @@ export type SearchWriterPublicationGuard = SearchWriterGuard &
 
 // The generation owner installs the original native binding on its existing writer.
 const publicationBindings = new WeakMap<SearchWriterPublicationGuard, PublicFilterSourceBinding>();
-export function bindSearchWriterPublicationSource(guard: SearchWriterPublicationGuard, binding: PublicFilterSourceBinding) {
+export function bindSearchWriterPublicationSource(
+  guard: SearchWriterPublicationGuard,
+  binding: PublicFilterSourceBinding,
+) {
   publicationBindings.set(guard, binding);
 }
 
@@ -994,7 +1000,11 @@ export function createSearchWriterGuard(options: {
     if (erasure.rowCount !== 1) return pendingPublication();
     return erasure.rows[0]!;
   }
-  async function publicationSource(value: SearchWriterPublicationFence, context: PublicFilterConsumerContext, cost: PublicFilterCost) {
+  async function publicationSource(
+    value: SearchWriterPublicationFence,
+    context: PublicFilterConsumerContext,
+    cost: PublicFilterCost,
+  ) {
     const job = await withReadTransaction(options.pool, (tx) => publicationJob(tx, value));
     if (!job.barrier) {
       const binding = publicationBindings.get(guard);

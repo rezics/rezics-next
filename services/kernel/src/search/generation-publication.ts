@@ -406,18 +406,35 @@ export function createSearchGenerationPublication(
     return completion.publication.queried;
   }
   async function completeSource(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
-    const custody = await readGenerationPublicationCustody(pool, job.consumer, job.source_home, context,
-      job.observation ?? undefined);
+    const custody = await readGenerationPublicationCustody(
+      pool,
+      job.consumer,
+      job.source_home,
+      context,
+      job.observation ?? undefined,
+    );
     add(meter, custody.cost);
     if (!('definition' in custody)) throw new Pending('source_pending');
-    const completion = await advanceNativeGenerationSource({
-      pool, search, source, binding, clock: config.clock, meaning, context,
-      physicalTarget: job.physical_target, ...(registry ? { registry } : {}),
-    }, {
-      job: job.job, consumer: job.consumer,
-      capture: publicationCapture(custody.definition.capture) as PublicFilterConsumerCaptureInput,
-      ...(job.observation ? { observation: job.observation } : {}),
-    }, context);
+    const completion = await advanceNativeGenerationSource(
+      {
+        pool,
+        search,
+        source,
+        binding,
+        clock: config.clock,
+        meaning,
+        context,
+        physicalTarget: job.physical_target,
+        ...(registry ? { registry } : {}),
+      },
+      {
+        job: job.job,
+        consumer: job.consumer,
+        capture: publicationCapture(custody.definition.capture) as PublicFilterConsumerCaptureInput,
+        ...(job.observation ? { observation: job.observation } : {}),
+      },
+      context,
+    );
     add(meter, completion.cost);
     if ('publication' in completion && !job.observation) {
       job.observation = completion.publication.queried.snapshot.observation;
