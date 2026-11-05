@@ -922,15 +922,15 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const franchiseReturn = workFranchiseReturn(fragment);
     const finiteWorkRegion = Boolean(
       subject?.[2] &&
-        subject[2] !== 'overview' &&
-        isView(subject[2]) &&
-        node !== null &&
-        streamProperty !== null &&
-        streamDirection !== null &&
-        (property === null || property === streamProperty) &&
-        (fragment === '#work-franchise' ||
-          (franchiseReturn?.node === node &&
-            franchiseReturn.stream === `${streamDirection === 'inverse' ? 'in' : 'out'}:${streamProperty}`)),
+      subject[2] !== 'overview' &&
+      isView(subject[2]) &&
+      node !== null &&
+      streamProperty !== null &&
+      streamDirection !== null &&
+      (property === null || property === streamProperty) &&
+      (fragment === '#work-franchise' ||
+        (franchiseReturn?.node === node &&
+          franchiseReturn.stream === `${streamDirection === 'inverse' ? 'in' : 'out'}:${streamProperty}`)),
     );
     const organizationReturn = organizationHistoryVisitReturn(fragment);
     if (

@@ -967,8 +967,8 @@ export function SubjectPage({
   const finiteWorkRegionAddress = subjectVisitReturn(currentAddress, locale);
   const finiteWorkRegionRequested = Boolean(
     workSelection &&
-      finiteWorkRegionAddress &&
-      new URL(finiteWorkRegionAddress, 'https://rezics.invalid').hash.startsWith('#work-franchise'),
+    finiteWorkRegionAddress &&
+    new URL(finiteWorkRegionAddress, 'https://rezics.invalid').hash.startsWith('#work-franchise'),
   );
   const workReturn = workAddress ? contextHref(workAddress.href, realm) : undefined;
   const workRelationsHref =

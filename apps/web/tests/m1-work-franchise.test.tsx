@@ -97,7 +97,10 @@ function read(
 function pageFor(source: SubjectRead): SubjectPageData {
   const content = [
     workDocument.content[0]!,
-    { type: 'OutgoingRelations', props: { id: 'franchise', title: { en: 'Related works' }, property, limit: 8, paged: true } },
+    {
+      type: 'OutgoingRelations',
+      props: { id: 'franchise', title: { en: 'Related works' }, property, limit: 8, paged: true },
+    },
     ...Object.keys(source.subject.statements)
       .filter((key) => key !== property)
       .map((key) =>
@@ -554,7 +557,13 @@ test('each VN, anime and book relation stream keeps its selected region through 
     const selection = { node: 'franchise', property, direction: 'forward' as const, cursor };
     const routeSearch = Object.fromEntries(new URL(origin, 'https://rezics.invalid').searchParams);
     for (const validate of [validateFiniteSearch, validateViewSearch])
-      expect(validate(routeSearch)).toMatchObject({ node: selection.node, streamProperty: property, streamDirection: 'forward', cursor, realm: id(960) });
+      expect(validate(routeSearch)).toMatchObject({
+        node: selection.node,
+        streamProperty: property,
+        streamDirection: 'forward',
+        cursor,
+        realm: id(960),
+      });
     expect(subjectVisitReturn(`${origin}#work-franchise`, 'ja')).toBe(`${origin}#work-franchise`);
     const finiteHtml = await render(source, selectedPage, `${origin}#work-franchise`, selection);
     const finiteHrefs = [...finiteHtml.matchAll(/href="([^"]+)"/g)].map(
@@ -565,14 +574,19 @@ test('each VN, anime and book relation stream keeps its selected region through 
     expect(finiteConnection).toBeDefined();
     const finiteVia = finiteConnection!.searchParams.get('via')!;
     const finiteOrigin = new URL(finiteVia, finiteConnection);
-    expect(['realm', 'node', 'streamProperty', 'streamDirection', 'cursor'].map((key) => finiteOrigin.searchParams.get(key))).toEqual([id(960), selection.node, property, 'forward', cursor]);
+    expect(
+      ['realm', 'node', 'streamProperty', 'streamDirection', 'cursor'].map((key) => finiteOrigin.searchParams.get(key)),
+    ).toEqual([id(960), selection.node, property, 'forward', cursor]);
     const finiteInspection = finiteHrefs.find((url) => url.pathname.endsWith('/value'));
     expect(finiteInspection).toBeDefined();
     const inspectedVia = finiteInspection!.searchParams.get('via')!;
     const inspectedOrigin = new URL(inspectedVia, finiteInspection!);
     expect(workFranchiseReturn(inspectedOrigin.hash)).toMatchObject({ node: 'franchise', stream: 'out:wdt:P144' });
     expect((await render(source, selectedPage, inspectedVia, selection)).match(/data-work-stream=/g)).toHaveLength(1);
-    for (const [key, value] of [['node', 'other'], ['streamProperty', 'schema:author']] as const) {
+    for (const [key, value] of [
+      ['node', 'other'],
+      ['streamProperty', 'schema:author'],
+    ] as const) {
       const mismatchedOrigin = new URL(inspectedVia, finiteInspection!);
       mismatchedOrigin.searchParams.set(key, value);
       const mismatchedAddress = `${mismatchedOrigin.pathname}${mismatchedOrigin.search}${mismatchedOrigin.hash}`;
