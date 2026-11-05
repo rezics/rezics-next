@@ -60,11 +60,7 @@ import { LibraryConflictError } from './entry-errors.ts';
 export { LibraryConflictError } from './entry-errors.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import partitionEpochRead from './entry-partition-epoch-read.sql';
-import {
-  ENTRY_STATE_HISTORY_PAGE_LIMIT,
-  entryOperationPlan,
-  withEntryOperation,
-} from './entry-operation-bounds.ts';
+import { ENTRY_STATE_HISTORY_PAGE_LIMIT, entryOperationPlan, withEntryOperation } from './entry-operation-bounds.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -725,7 +721,10 @@ export function createEntryCommands(config: Dependencies) {
             next: null,
           };
         }
-        const epoch = await partitionEpochRead.run({ query: client.query.bind(client) }, { partition_no: partitionOf(route) });
+        const epoch = await partitionEpochRead.run(
+          { query: client.query.bind(client) },
+          { partition_no: partitionOf(route) },
+        );
         const cursorBinding = stateHistoryBinding(accountOwner, subjectId, current.incarnationId, limit);
         let afterRevision: number | null = null;
         let cursorCoverage: 'complete' | 'partial' | null = null;
@@ -1106,7 +1105,10 @@ export function createEntryCommands(config: Dependencies) {
     const operationPlan = entryOperationPlan('library.entry.list', options, limit + 1);
     return withEntryOperation(operationPlan, () =>
       snapshot(actor, 'library_entry:list', async (client, accountOwner, route) => {
-        const epoch = await partitionEpochRead.run({ query: client.query.bind(client) }, { partition_no: partitionOf(route) });
+        const epoch = await partitionEpochRead.run(
+          { query: client.query.bind(client) },
+          { partition_no: partitionOf(route) },
+        );
         const cursorBinding = binding(accountOwner, selectedState);
         let after: [string, string] | null = null;
         if (options.cursor !== undefined) {

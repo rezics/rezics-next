@@ -75,7 +75,12 @@ function jsonBytes(value: unknown): number {
 // expand one UTF-8 source byte to at most six JSON bytes; profile IDs themselves are at most 64.
 const profilePinBytes =
   Buffer.byteLength(
-    JSON.stringify({ provenance: 'profile', releaseDigest: `sha256:${'f'.repeat(64)}`, acceptingType: '', profileId: '' }),
+    JSON.stringify({
+      provenance: 'profile',
+      releaseDigest: `sha256:${'f'.repeat(64)}`,
+      acceptingType: '',
+      profileId: '',
+    }),
   ) +
   RELEASE_LIMITS.bytes * 6 +
   64 * 6;
@@ -95,8 +100,7 @@ const entryProjectionBytes =
       transactionId: 'f'.repeat(36),
       libraryProfilePin: null,
     }),
-  ) +
-  profilePinBytes;
+  ) + profilePinBytes;
 
 const partitionProjectionBytes = jsonBytes({ epoch: 2147483647 });
 const migrationProjectionBytes = jsonBytes({ phase: 'legacy' });
@@ -149,10 +153,38 @@ function operationStatements(kind: EntryOperationKind, input: unknown, limit: nu
   switch (kind) {
     case 'library.entry.read':
       return [
-        { sql: entryRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: pointBindBytes, outputBytes: entryProjectionBytes },
-        { sql: entryRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: pointBindBytes, outputBytes: entryProjectionBytes },
-        { sql: migrationPhaseRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: legacyBindBytes, outputBytes: migrationProjectionBytes },
-        { sql: migrationPhaseRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: legacyBindBytes, outputBytes: migrationProjectionBytes },
+        {
+          sql: entryRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: pointBindBytes,
+          outputBytes: entryProjectionBytes,
+        },
+        {
+          sql: entryRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: pointBindBytes,
+          outputBytes: entryProjectionBytes,
+        },
+        {
+          sql: migrationPhaseRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: legacyBindBytes,
+          outputBytes: migrationProjectionBytes,
+        },
+        {
+          sql: migrationPhaseRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: legacyBindBytes,
+          outputBytes: migrationProjectionBytes,
+        },
       ];
     case 'library.entry.list':
       return [
@@ -165,14 +197,49 @@ function operationStatements(kind: EntryOperationKind, input: unknown, limit: nu
           bindBytes: listBindBytes,
           outputBytes: entryProjectionBytes * listLimit,
         },
-        { sql: partitionEpochRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: partitionBindBytes, outputBytes: partitionProjectionBytes },
-        { sql: migrationPhaseRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: legacyBindBytes, outputBytes: migrationProjectionBytes },
+        {
+          sql: partitionEpochRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: partitionBindBytes,
+          outputBytes: partitionProjectionBytes,
+        },
+        {
+          sql: migrationPhaseRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: legacyBindBytes,
+          outputBytes: migrationProjectionBytes,
+        },
       ];
     case 'library.entry.state-history':
       return [
-        { sql: entryRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: pointBindBytes, outputBytes: entryProjectionBytes },
-        { sql: migrationPhaseRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: legacyBindBytes, outputBytes: migrationProjectionBytes },
-        { sql: partitionEpochRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: partitionBindBytes, outputBytes: partitionProjectionBytes },
+        {
+          sql: entryRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: pointBindBytes,
+          outputBytes: entryProjectionBytes,
+        },
+        {
+          sql: migrationPhaseRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: legacyBindBytes,
+          outputBytes: migrationProjectionBytes,
+        },
+        {
+          sql: partitionEpochRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: partitionBindBytes,
+          outputBytes: partitionProjectionBytes,
+        },
         {
           sql: page.sql,
           nativeRows: ENTRY_STATE_HISTORY_RETAINED_LIMIT,
@@ -184,9 +251,30 @@ function operationStatements(kind: EntryOperationKind, input: unknown, limit: nu
       ];
     case 'library.entry.state-review':
       return [
-        { sql: entryRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: pointBindBytes, outputBytes: entryProjectionBytes },
-        { sql: migrationPhaseRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: legacyBindBytes, outputBytes: migrationProjectionBytes },
-        { sql: historyRead.sql, nativeRows: 1, candidates: 1, points: 1, bindBytes: historyBindBytes, outputBytes: stateChangeProjectionBytes },
+        {
+          sql: entryRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: pointBindBytes,
+          outputBytes: entryProjectionBytes,
+        },
+        {
+          sql: migrationPhaseRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: legacyBindBytes,
+          outputBytes: migrationProjectionBytes,
+        },
+        {
+          sql: historyRead.sql,
+          nativeRows: 1,
+          candidates: 1,
+          points: 1,
+          bindBytes: historyBindBytes,
+          outputBytes: stateChangeProjectionBytes,
+        },
       ];
   }
 }
