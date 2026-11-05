@@ -419,6 +419,41 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
     expect(ui.host.textContent).toContain(ui.m.screen_visit_occurrence_missing());
     expect(ui.host.querySelector(`#${contract.screenCurrentInspectionId(statement.id)}`)).toBeNull();
     expect(ui.host.innerHTML).not.toContain(statement.id);
+
+    await go(contract.screenCurrentVisitHref(entry.pathname, { ...visit, definition: '0'.repeat(64) })!);
+    expect(ui.host.textContent).toContain(ui.m.screen_visit_reading_changed());
+    expect(ui.host.querySelector('[data-screen-current-evidence="selected"]')).toBeNull();
+
+    const handoff = '00000000-0000-4000-8000-000000000908';
+    const incompatible = new URL(contract.screenCurrentVisitHref(entry.pathname, visit)!, 'https://site.invalid');
+    incompatible.searchParams.set('classificationHandoff', handoff);
+    await go(incompatible.pathname + incompatible.search);
+    expect(ui.host.textContent).toContain(ui.m.screen_visit_invalid());
+    expect(ui.host.textContent).not.toContain(ui.m.screen_visit_unsupported());
+    expect(new URL(link(ui.m.screen_visit_global())!.getAttribute('href')!, 'https://site.invalid')
+      .searchParams.get('classificationHandoff')).toBe(handoff);
+    await go(`${entry.pathname}?screenVisit=malformed&classificationHandoff=${handoff}`);
+    expect(ui.host.textContent).toContain(ui.m.screen_visit_invalid());
+    expect(ui.host.querySelector('input, textarea')).toBeNull();
+
+    // Interaction during the fresh return read cancels automatic focus.
+    nativeSubject = structuredClone(fixture.facts.date.publicRead);
+    nativeSubject.subject.id = subjectId;
+    nativeSubject.subject.type = 'schema:Movie';
+    nativeSubject.subject.context = contextId;
+    nativeSubject.subject.release = digest;
+    nativeSubject.subject.labels = { en: 'The observatory' };
+    let resolveReturn!: (read: SubjectRead) => void;
+    pendingNative = () => new Promise((resolve) => { resolveReturn = resolve; });
+    await go(contract.screenCurrentReturnHref(visit)!);
+    await act(async () => {
+      ui.window.document.dispatchEvent(new ui.window.Event('pointermove', { bubbles: true }));
+    });
+    pendingNative = undefined;
+    await act(async () => { resolveReturn(nativeSubject); });
+    await settle();
+    expect(ui.host.querySelector(`#${contract.screenCurrentInspectionId(statement.id)}`)).not.toBeNull();
+    expect(ui.window.document.activeElement?.id).not.toBe(contract.screenCurrentInspectionId(statement.id));
   } finally {
     pendingNative = undefined;
     echoContext = false;
