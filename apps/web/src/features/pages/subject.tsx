@@ -704,13 +704,15 @@ export function SubjectPage({
         }
       : undefined;
   const albumVisit =
-    read && workAddress && read.subject.type === 'schema:MusicAlbum'
-      ? createAlbumCurrentVisitLink(
-          `${workAddress.href}/album`,
-          albumOrigin,
-          locale,
-          validateAlbumReturnAddress,
-        ).token
+    read?.subject.type === 'schema:MusicAlbum'
+      ? workAddress
+        ? createAlbumCurrentVisitLink(
+            `${workAddress.href}/album`,
+            albumOrigin,
+            locale,
+            validateAlbumReturnAddress,
+          ).token
+        : 'unsupported'
       : undefined;
   const albumCurrent = useMemo<AlbumCurrentReading | undefined>(
     () =>
@@ -832,7 +834,7 @@ export function SubjectPage({
               id={read.subject.id}
               label={subjectPageTitle(page, locale)}
               locale={locale}
-              visit={albumVisit}
+              visit={albumVisit ?? 'unsupported'}
             />
           )}
           {read.subject.type === 'schema:Recipe' && (
@@ -873,7 +875,7 @@ export function SubjectPage({
                 id={read.subject.id}
                 label={subjectPageTitle(page, locale)}
                 locale={locale}
-                visit={albumVisit}
+                visit={albumVisit ?? 'unsupported'}
               />
             )}
           </>
