@@ -266,10 +266,9 @@ test('malformed and oversized selected work links stay atomic bounded gaps', asy
     expect(malformed.workLinks.some((link) => link.owner === 'v411' && link.linkId === 1)).toBe(false);
     expect(malformed.edges.some((edge) => edge.holder === 'v411' && edge.property === 'wdt:P5732')).toBe(false);
 
-    const oversizedJoins = Array.from(
-      { length: vndbLimits.maxLinks + 1 },
-      (_, index) => `v411\t${index + 1}`,
-    ).join('\n');
+    const oversizedJoins = Array.from({ length: vndbLimits.maxLinks + 1 }, (_, index) => `v411\t${index + 1}`).join(
+      '\n',
+    );
     await writeFile(join(paths.vndb, 'db', 'vn_extlinks'), `${oversizedJoins}\n`);
     await writeFile(
       extlinksPath,

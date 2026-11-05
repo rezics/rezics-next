@@ -193,9 +193,9 @@ test('default seed publishes the cited VN work link on its own identity and refr
     );
     expect(commands.map((command) => JSON.stringify(command))).toEqual(firstCommandBodies);
     expect(reopened.workLinks).toEqual(first.workLinks);
-    expect(
-      subjectId(reopened.readings.find((row) => row.source === 'vndb' && row.externalId === sourceWork)!),
-    ).toBe(vnId);
+    expect(subjectId(reopened.readings.find((row) => row.source === 'vndb' && row.externalId === sourceWork)!)).toBe(
+      vnId,
+    );
 
     const bridgeCandidates = await candidates(vnId, 'wdt:P5732');
     const bridge = bridgeCandidates.candidates.find((candidate) => candidate.source?.external_id === sourceWork)!;
