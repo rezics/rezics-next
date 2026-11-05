@@ -118,7 +118,7 @@ Selected Bangumi Person/Organization images use only GET `/v0/persons/{id}` `Per
 
 ## Deletion
 
-Imports owns its source-backed candidates and retained local acquisition state. Vanished fields retract only matching owned candidates through ordinary APIs; subjects, independent adoption and unrelated statements survive. Shared takedown/withdrawal fences prevent refresh or replay from restoring removed material; see the [deletion contract](../../docs/deletion.md).
+Imports owns source candidates and local acquisition state. Vanished fields retract only matching owned candidates through ordinary APIs; subjects, adoption and unrelated statements survive. Shared fences prevent replay/refresh restoring withdrawn material; see the [deletion contract](../../docs/deletion.md).
 
 ## Cost
 
@@ -206,7 +206,7 @@ One selected Character; at most 16 preferred names, 64 aliases and 85 commands. 
 
 ### Bangumi PersonDetail name import
 
-At most 64 selected Persons and 64 shared responses/provider/acquisition; TSV body or response ≤65,536 bytes. One Person yields at most two name proposals; infobox ≤64 entries, names ≤4,096 UTF-8 bytes/500 codepoints and ≤16 diagnostics. No graph roots or identity lookup.
+At most 64 selected Persons/responses per provider/acquisition; TSV body or response ≤65,536 bytes. At most two name proposals/Person; infobox ≤64 entries, names ≤4,096 UTF-8 bytes/500 codepoints and ≤16 diagnostics. No graph roots or identity lookup.
 
 ### Import Open Library Work first publication date
 

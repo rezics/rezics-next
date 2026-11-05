@@ -10,20 +10,20 @@ A maintainer can import licensed provider records, inspect omissions, recover sa
 
 ## Required source coverage
 
-The four launch sources are Bangumi, VNDB, Open Library and Wikidata. Exact grains, formats, revisions, rights, citations and exclusions are defined in the module contracts. Acceptance uses pinned, legally usable fixtures; live provider availability is not required.
+Launch sources are Bangumi, VNDB, Open Library and Wikidata. Their grains, formats, revisions, rights, citations and exclusions live in module contracts. Acceptance uses pinned legal fixtures, not live provider availability.
 
-- **Bangumi:** native JSONL and PersonDetail identity, Person Chinese names, supported subject types, attributed summaries, independent cover rights, type-specific omissions, refresh and source fences.
-- **VNDB:** real COPY headers and grouped native keys, source revisions, permitted metadata and bounded associations; no creative prose or images.
-- **Open Library:** five-column TSV and separate Work/Edition grains, including Work `first_publish_date` and Edition-only page-count/ISBN behavior; no unlicensed prose or covers.
-- **Wikidata:** native item JSONL/revision and exact released type, property, qualifier and reference mappings; unresolved relations stay unresolved.
+- **Bangumi:** native identity, Person names, attributed summaries, separate cover rights, omissions and source fences.
+- **VNDB:** COPY headers/native keys, source revisions, permitted metadata, bounded associations; no prose or images.
+- **Open Library:** five-column TSV, separate Work/Edition grains, Work `first_publish_date`, Edition page counts/ISBNs; no unlicensed prose or covers.
+- **Wikidata:** item JSONL/revisions and exact released claims; unresolved relations stay unresolved.
 
 ## Ordinary import and recovery acceptance
 
-Cover the authenticated account-key CLI, current Auth/Access decisions, public batch and source-metadata APIs, current subject/candidate reads, independent editor selection and anonymous public return. The importer never writes storage through a private path.
+Cover account-key CLI, current Auth/Access, public batch/source-metadata APIs, current subject/candidate reads, editor selection and anonymous return. No private storage writes.
 
-For every source, cover initial import, unchanged reopen, changed record, re-import, disappearance, suspicious mass disappearance, ownership fences, malformed/unsupported values, bounded readers, retryable unavailability, unknown delivery and resume. Denial and unavailability are not success. Retry replays the exact sealed bytes and command key under current authority before replacement; source/field fences prevent replay or refresh from restoring withdrawn material.
+For each source cover initial import, unchanged reopen, changed/reimported records, disappearance and mass-stop, ownership fences, malformed/unsupported values, bounded readers, unavailability, unknown delivery and resume. Denial is not success. Retry replays exact sealed bytes/key under current authority; source/field fences prevent restoring withdrawn material.
 
-Retained metadata remains integrated native acceptance: [coordinator](../../services/kernel/test/library/list-import-metadata-coordinator.test.ts), [entry metadata](../../services/kernel/test/library/entry-import-metadata.test.ts), [VNDB HTTP](../../services/kernel/test/library/list-import-vndb-http.test.ts) and [Bangumi HTTP](../../services/kernel/test/library/list-import-bangumi-http.test.ts) cover selected metadata, partial application, confirmation replay and provider adapters. Extraction/reader corrections remain with their owner.
+Retained metadata stays integrated native acceptance: [coordinator](../../services/kernel/test/library/list-import-metadata-coordinator.test.ts), [entry metadata](../../services/kernel/test/library/entry-import-metadata.test.ts), [VNDB HTTP](../../services/kernel/test/library/list-import-vndb-http.test.ts) and [Bangumi HTTP](../../services/kernel/test/library/list-import-bangumi-http.test.ts) cover selection, partial application, confirmation replay and adapters. Extraction corrections stay with their owner.
 
 ## Provider-specific contract acceptance
 
@@ -33,9 +33,9 @@ A configured alias and exact provider external ID remain one tuple across genera
 
 ### Bangumi people and careers
 
-Keep Person identity, biography, credits, names and careers independent. Type-1 `name` is `und`; `name_cn` or exact PersonDetail infobox key `简体中文名` is `zh`; ambiguous Chinese evidence withholds only `zh`. Ordinary P106 requires the actual Person, exact source key, source careers Scheme, exact current bound Concept, released property and career citation. The pure converter emits none; source Concepts claim no canonical occupation or cross-provider equivalence. Showcase-only acquisition and replay belong to [career acquisition](../../services/importer/README.md#bangumi-person-career-acquisition).
+Keep Person identity, biography, credits, names and careers independent. Type-1 `name` is `und`; `name_cn` or exact PersonDetail infobox key `简体中文名` is `zh`; ambiguous evidence withholds only `zh`. P106 requires the actual Person/source key, source careers Scheme, current bound Concept, released property and exact citation. Pure conversion emits none; source Concepts assert no canonical occupation/equivalence. Showcase-only acquisition/replay belongs to [career acquisition](../../services/importer/README.md#bangumi-person-career-acquisition).
 
-Career [conversion](../../packages/conversion/tests/bangumi-person-careers.test.ts), [showcase](../../services/importer/tests/showcase-bangumi-person-careers.test.ts) and [native](../../services/kernel/test/imports/bangumi-person-careers.test.ts) cases cover mapping, replay and current reads. Person-name [projection](../../packages/conversion/tests/bangumi-person-names.test.ts), [ordinary import](../../services/importer/tests/bangumi-person-names.test.ts), [shared acquisition](../../services/importer/tests/showcase-bangumi-person-names.test.ts) and authored [native case](../../services/kernel/test/imports/bangumi-person-names.test.ts) cover each stage; native execution is integration-owned.
+Career [conversion](../../packages/conversion/tests/bangumi-person-careers.test.ts), [showcase](../../services/importer/tests/showcase-bangumi-person-careers.test.ts) and [native](../../services/kernel/test/imports/bangumi-person-careers.test.ts) cases cover mapping, replay and current reads. Person-name [projection](../../packages/conversion/tests/bangumi-person-names.test.ts), [ordinary import](../../services/importer/tests/bangumi-person-names.test.ts), [shared receipt](../../services/importer/tests/showcase-bangumi-person-names.test.ts) and authored [native case](../../services/kernel/test/imports/bangumi-person-names.test.ts) state each stage; execution is integration-owned.
 
 ### Bangumi work, Book, Game and Character outcomes
 
@@ -49,23 +49,23 @@ Only optional Work `first_publish_date` creates its independently cited `schema:
 
 ### VNDB, Wikidata and media outcomes
 
-Preserve VNDB table/key, release, staff, producer, Character, tag, language, date, identifier and website meanings, including direction, qualifiers and unknown/absent distinctions. Current Global Context authorization precedes source-statistic receipt evaluation; `source_statistic:write` is VNDB-only and catalogue setup uses a separate credential. Six [pinned cases](../../specs/imports-vndb-statistics.test.ts) and the [native wrapper](../../services/kernel/test/imports/vndb-statistics-outcomes.test.ts) require seven-scope Auth/Access, statistic PUT/current GET, safe reopen/update and exact unknown-delivery replay, no `c_rating` or native votes, reduced-scope/revoked denial, and baseline protection on acquisition/disappearance failure. Wikidata uses exact released property/qualifier mappings. Source metadata, prose, cover intent and bytes have separate permissions; pending reservation is not available media. Replay uses original requests; only available media enters separately accepted/adopted candidates. Rights withdrawal and takedown fences prevent refresh restoring removed material; see [Content](../../services/kernel/src/content/README.md) and [deletion policy](../deletion.md).
+Preserve VNDB native keys, release/staff/producer/Character/tag, language/date/identifier/website meanings, direction, qualifiers and unknown/absent distinctions. Positive `c_average`/`c_votecount` yields `c_average/100` on 1–10, as of dump date; zero votes remove the statistic. Commerce-owned Global Context authorization precedes receipts; `source_statistic:write` is VNDB-only, separate from catalogue setup. Six [pinned cases](../../specs/imports-vndb-statistics.test.ts) and the [native wrapper](../../services/kernel/test/imports/vndb-statistics-outcomes.test.ts) retain seven-scope Auth/Access, PUT/current GET, reopen/update, exact unknown-delivery replay, no `c_rating`/native votes, reduced-scope/revoked denial and baseline protection on acquisition/disappearance failure. Wikidata uses exact released mappings. Metadata, prose and covers have separate rights; a reservation is not media. Replay uses original requests; only available media enters reviewed candidates. Withdrawal/takedown fences prevent refresh restoring material; see [Content](../../services/kernel/src/content/README.md) and [deletion policy](../deletion.md).
 
 ## Receiving and growth acceptance
 
-Pure converter cases establish mapping, validation, provenance, bounds and determinism only. They do not prove native acceptance/adoption, Context return, API receiving, public visibility or growth.
+Pure converter cases establish mapping, validation, provenance, bounds and determinism; they do not prove native acceptance/adoption, Context return, API receiving, visibility or growth.
 
 Retain receiving obligations for import-to-discovery Context, assertion/return, provider metadata and label extraction, and consumer reads. Source compatibility or documentation is not evidence. Detailed receiving remains with the Person/profession and reviewed-catalogue owners.
 
 ### Import-to-discovery
 
-Import supported facts, separately accept/adopt through ordinary Semantic APIs, then discover traceable Work/Edition/Release facts through Search/facets, Collections, Zones and TypeLists using shared released meanings. Cover current Context and public/private separation across importer proposals, editor accept/adopt, anonymous/editor reads, and independent Alice/Bob populations and support/state. Reduced, unscoped/delegated, suspended-valid and revoked callers repeat relevant reads/writes; private grants cannot leak. Hidden Concepts, source fences, aliases with hidden originals and late revocation affect membership, order, counts, cursors and final disclosure.
+Import selected Work/Edition/Release facts, accept/adopt through Semantic, then verify current reads and discover shared meanings via Search/facets, Collections, Zones and TypeLists. Cover Context/public-private separation across importer proposals, editor actions, anonymous/editor reads and separate Alice/Bob populations, grants and state. Reduced, unscoped/delegated, suspended-valid and revoked callers repeat relevant reads/writes; private grants cannot leak. Hidden Concepts, source fences, aliases with hidden originals and late revocation affect membership, order, counts, cursors and disclosure.
 
-Use released controls and actual mappings only. Bangumi tag/form and VNDB name/link mappings do not establish platform/form; Open Library and Wikidata mappings do not establish cross-surface populations. Imports owns mapping/transport; Semantic owns shared fixtures, releases, Concept receipts, selection/adoption and identity; Search owns indexing/facets/query; Commerce owns Collections and owner queries; Semantic owns Zone routing; Content owns source/media disclosure; Web owns publication. Keep [discovery user cases](../../services/kernel/test/imports/discovery-user-cases.test.ts) as acceptance, not completion evidence.
+Use released controls and actual mappings. Bangumi tag/form and VNDB name/link do not establish platform/form; Open Library/Wikidata do not establish cross-surface populations. Imports owns mapping/transport; Semantic owns fixtures, releases, receipts, selection/adoption, identity and Zone routing; Search owns indexing/facets/queries; Commerce owns Collections/owner queries; Content owns disclosure; Web owns publication. [Discovery cases](../../services/kernel/test/imports/discovery-user-cases.test.ts) remain acceptance, not completion evidence.
 
-Preserve original native scenarios for connected source/CLI recovery, media recovery, import-to-discovery, statistics and source-only refresh. Authored fixtures claim only fields they contain, not native source execution. Retained-metadata cases above remain integrated acceptance; pure-core cases do not replace them.
+Retain original native scenarios for connected CLI recovery, media recovery, import-to-discovery, statistics and source-only refresh. Fixtures claim only authored fields, not native execution. Retained-metadata cases stay integrated; pure-core cases do not replace them.
 
-Three-scale growth evidence covers conversion work and API writes. Preserve existing database statement, row, byte, page, fan-out and command bounds. Pure-core checks do not replace native receiving or growth evidence. Do not claim Goal completion until all scoped outcomes are promoted with their acceptance.
+Three-scale growth covers conversion and API writes with existing statement, row, byte, page, fan-out and command bounds. Pure-core checks do not replace native receiving/growth. Do not claim completion until all outcomes are promoted with acceptance.
 
 ## Acceptance entry points
 

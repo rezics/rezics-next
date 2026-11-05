@@ -1,6 +1,6 @@
 # @rezics/conversion
 
-This package turns one licensed source record into bounded, deterministic source data and portable create or proposal commands. It is pure: it does not acquire records or media, call an API, write storage, authorize, accept or adopt a proposal, or retract a prior candidate. The platform importer owns acquisition, replay, rights metadata and ordinary API writes; see the [importer contract](../../services/importer/README.md).
+This pure package deterministically turns one licensed record into bounded source data and portable create/proposal commands. It does not acquire data/media, call APIs, write storage, authorize, accept, adopt or retract. The platform importer owns acquisition, replay, rights and API writes; see the [importer contract](../../services/importer/README.md).
 
 ## Package API
 
@@ -22,9 +22,9 @@ Current exports: Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@5, W
 
 ConversionInput carries the provider-native external_id, record_revision and record. Revisions are never inferred from dump dates, checksums, row order or converter versions. A missing native revision remains null where permitted; Wikidata uses literal unversioned only when the entity has no lastrevid. Other required provider revisions must match their native record.
 
-Context carries trusted values separately from source data: the selected source alias, an existing subject UUID, resolved native references, available media UUIDs, normalized vocabulary rows, and admitted source-classification facts. Converters do not resolve a source name to an identity, discover graph rows or treat source-body values as caller bindings.
+Context separates trusted caller values from source data: alias, existing subject UUID, resolved references, available media, normalized vocabulary rows and admitted source classifications. Converters do not resolve identities, discover graph rows or treat body values as bindings.
 
-Results contain normalized source data, its digest, diagnostics and portable commands. The caller sends commands through the ordinary bulk contract in definitions. Ordinary imports create proposals; only a separately authorized review path can accept and adopt them. A converter return is not evidence of acceptance, adoption or public visibility.
+Results contain normalized data, digest, diagnostics and portable commands sent through the ordinary bulk contract. Imports create proposals; separate authorized review accepts/adopts and current reads verify return. A converter return proves none of those states.
 
 ## Source mappings and limits
 
@@ -35,7 +35,7 @@ Results contain normalized source data, its digest, diagnostics and portable com
 | Open Library | Native TSV Work/Edition rows map to Book/bf:Instance and retain IDs/relations. Work `first_publish_date` maps to cited `schema:datePublished`; page counts, validated ISBN-13 and dates stay on Edition.                                                                                          | CC0-1.0 permits bibliographic metadata only; unknown-licensed prose and covers are excluded.                                                            |
 | Wikidata     | One JSONL item; exact bundled type, property, rank, datatype, qualifier and time/quantity mappings govern claims; unresolved relations remain unresolved.                                                                                                                                         | CC0-1.0 structured data. Unsupported properties, instructions, user/talk content and Commons images are excluded.                                       |
 
-Provider allowlists never traverse unknown/private subtrees or truncate values. Malformed/unadmitted input becomes bounded diagnostics or omissions, not substitutes. IDs, revisions, labels, citations and languages retain provider meaning; locale uses explicit fields/tags, not spelling or order.
+Provider allowlists never traverse unknown/private subtrees or truncate values. Malformed/unadmitted input becomes bounded diagnostics/omissions, not substitutes. IDs, revisions, labels, citations and locales retain explicit provider fields, not spelling/order inference.
 
 Bangumi locales follow pinned fields. Type-1 Person `name`→`und`; `name_cn` or exact parsed PersonDetail infobox key `简体中文名`→`zh`. Ambiguous, malformed or over-bound Chinese evidence withholds only `zh`; exact text enters the digest, while ETag/Last-Modified are cache metadata. TVAnime work links are cited descriptive wdt:P973, separate from unfetched schema:url sites. Game website/work-link keep exact URL bytes. Source profile selects Book/BookSeries; ISBN, publisher, volume and edition facts never assert on the work. Character identity, appearance, aliases and physical quantities stay on Character; units and blood-type Concepts are never guessed.
 
@@ -47,7 +47,7 @@ Only a Work may use optional top-level Open Library first_publish_date. The exac
 
 The cross-media converter retains at most seven authentic careers only for a type-1 Person and emits no P106. The separate mapper requires that Person, exact `person:<id>`, source-owned careers Scheme, current bound Concept, released P106 and `#/career` citation; see [Registered source vocabulary mapping](../../services/importer/README.md#registered-source-vocabulary-mapping). Source Concepts claim no canonical occupation or cross-provider equivalence. Malformed items cannot erase valid neighbors; empty, unknown, malformed or Organization cases yield no unsupported occupation. Identifier, biography, credits and career citations stay independent.
 
-The reviewed career feature range retains its original revision identities: cross-media-entities@12, bangumi-vocabulary@3 and source-vocabulary@3. These identify that reviewed range, not the current combined registration shown above. The showcase-only fallback is documented under [Explicit local showcase publication](../../services/importer/README.md#explicit-local-showcase-publication).
+The reviewed career range keeps its original cross-media-entities@12, bangumi-vocabulary@3 and source-vocabulary@3 identities; these are not the current registration. The showcase-only fallback is under [Explicit local showcase publication](../../services/importer/README.md#explicit-local-showcase-publication).
 
 ### Other provider-owned source details
 
