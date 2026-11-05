@@ -10933,7 +10933,7 @@
   "library_archive_entry_subject": "開啟標準 Subject",
   "library_archive_entry_read_current": "讀取實際目前事實",
   "library_archive_entry_current": "目前原生事實",
-  "library_archive_entry_results_refresh": "讀取下一頁結果／重新整理",
+  "library_archive_entry_results_refresh": "重新整理此頁",
   "library_archive_entry_cancel": "取消未開始的效果／重試取消",
   "library_archive_entry_expired": "私密證據已到期。已接納的書庫更改仍然保留。不能再重試原始命令。",
   "library_archive_entry_prune": "清理最多 100 筆到期證據",

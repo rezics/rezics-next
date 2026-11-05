@@ -10834,7 +10834,7 @@
   "library_archive_entry_subject": "Ouvrir le Subject canonique",
   "library_archive_entry_read_current": "Lire les données actuelles réelles",
   "library_archive_entry_current": "Données natives actuelles",
-  "library_archive_entry_results_refresh": "Lire la page de résultats suivante / actualiser",
+  "library_archive_entry_results_refresh": "Actualiser cette page",
   "library_archive_entry_cancel": "Annuler les effets non démarrés / réessayer l’annulation",
   "library_archive_entry_expired": "Les preuves privées ont expiré. Les changements acceptés restent dans la bibliothèque. Les commandes originales ne peuvent plus être réessayées.",
   "library_archive_entry_prune": "Supprimer jusqu’à 100 preuves expirées",

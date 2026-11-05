@@ -11055,7 +11055,7 @@
   "library_archive_entry_subject": "Open canonical Subject",
   "library_archive_entry_read_current": "Read actual current facts",
   "library_archive_entry_current": "Current native facts",
-  "library_archive_entry_results_refresh": "Read next native result page / refresh",
+  "library_archive_entry_results_refresh": "Refresh this page",
   "library_archive_entry_cancel": "Cancel unstarted effects / retry cancellation",
   "library_archive_entry_expired": "Private evidence expired. Accepted Library changes remain. Original commands can no longer be retried.",
   "library_archive_entry_prune": "Prune up to 100 expired evidence records",

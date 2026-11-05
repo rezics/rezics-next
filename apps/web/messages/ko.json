@@ -10834,7 +10834,7 @@
   "library_archive_entry_subject": "정규 Subject 열기",
   "library_archive_entry_read_current": "실제 현재 정보 읽기",
   "library_archive_entry_current": "현재 네이티브 정보",
-  "library_archive_entry_results_refresh": "다음 결과 페이지 읽기 / 새로 고침",
+  "library_archive_entry_results_refresh": "이 페이지 새로 고침",
   "library_archive_entry_cancel": "시작하지 않은 효과 취소 / 취소 재시도",
   "library_archive_entry_expired": "비공개 증거가 만료되었습니다. 수락된 라이브러리 변경은 유지됩니다. 원래 명령은 더 이상 재시도할 수 없습니다.",
   "library_archive_entry_prune": "만료된 증거 최대 100개 삭제",
