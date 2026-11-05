@@ -351,7 +351,7 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
           },
         ];
       });
-    const manifest = buildShowcaseManifest({
+    const creditManifest = buildShowcaseManifest({
       plan,
       readings: first.readings,
       acknowledgements,
@@ -410,7 +410,7 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       aliases: crossMediaAliases,
       vocabularyRequirements: concepts.requirements,
     });
-    const work = manifest.records.find((record) => record.sourceKey === 'v1')!;
+    const work = creditManifest.records.find((record) => record.sourceKey === 'v1')!;
     expect(work.assertions.map((assertion) => assertion.property)).toEqual(
       expect.arrayContaining(['schema:author', 'wdt:P725']),
     );
