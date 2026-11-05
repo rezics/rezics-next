@@ -528,7 +528,7 @@ export function normalizeSourceStatement(
   }
 
   if (Array.isArray(body.qualifiers)) {
-    const qualifiers = body.qualifiers.flatMap((raw): { property: string; value: string }[] => {
+    const qualifiers = body.qualifiers.flatMap((raw): NonNullable<IndexedStatement['qualifiers']> => {
       if (
         !sourceObject(raw) ||
         typeof raw.property !== 'string' ||
@@ -546,6 +546,20 @@ export function normalizeSourceStatement(
       ) {
         const level = readNativeSpoilerLevel(content);
         return level === null ? [] : [{ property: raw.property, value: level }];
+      }
+      if (
+        qualifierDefinition?.datatype === 'quantity' &&
+        definition?.qualifiers?.includes(raw.property) &&
+        sourceObject(content) &&
+        typeof content.amount === 'string' &&
+        typeof content.unit === 'string' &&
+        qualifierDefinition.units?.includes(content.unit)
+      ) {
+        const amount = Number(content.amount);
+        if (Number.isFinite(amount))
+          return [
+            { property: raw.property, value: content.amount, facet: { kind: 'quantity', amount, unit: content.unit } },
+          ];
       }
       return (qualifierDefinition?.datatype === 'wikibase-item' || qualifierDefinition?.datatype === 'string') &&
         typeof content === 'string'

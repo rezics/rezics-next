@@ -494,6 +494,11 @@ function renderReviewTree(
                 </p>
               ) : null}
               <CurrentFieldStatus state={qualifier.currentState} />
+              {qualifier.range ? (
+                <p>
+                  {m.saved_filter_review_range()} <code>{JSON.stringify(qualifier.range)}</code>
+                </p>
+              ) : null}
               <ul className="min-w-0 space-y-1">
                 {qualifier.values.map((entry, valueIndex) => (
                   <li key={value.path + '-qualifier-value-' + index + '-' + valueIndex}>

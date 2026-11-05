@@ -187,6 +187,12 @@ These requirements do not claim the current native planner/projection/privacy se
 
 ## Cost
 
+Quantity qualifiers accept `{property,range:{gte?,lte?,unit}}` in place of `in`. The released parent
+property must declare the qualifier, its datatype must be quantity, and its released units must admit
+the explicit unit. Bounds use the existing finite numeric range grammar. All qualifiers constrain the
+same statement; a quantity on another assertion cannot satisfy the range. Equality qualifiers retain
+their existing item, string and spoiler-level grammar. Ranges occupy the same bounded qualifier/leaf slot.
+
 Parsing is linear in the input and bounded by the limits: at most 32 leaves, each with at most 64 values and 4
 qualifiers of 64 values; at most 16 alternatives per `or`; depth 4. Admission walks the expanded document once; a
 saved filter expands at most once per leaf and never recursively, so the expanded document obeys the same limits. The

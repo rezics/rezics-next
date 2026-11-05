@@ -10,6 +10,7 @@ export type ReviewQualifier = {
   currentLabel?: string;
   currentState: CurrentFieldState;
   values: ReviewValue[];
+  range?: FilterRange;
 };
 
 export type ReviewOperand = {
@@ -186,7 +187,9 @@ export function savedFilterReviewTree(
                 qualifiers: statement.qualifiers.map((qualifier) => ({
                   property: qualifier.property,
                   ...fieldMeaning(qualifier.property, 'property', accepted, current, locale),
-                  values: qualifier.in.map((exact) => ({ exact })),
+                  ...('in' in qualifier
+                    ? { values: qualifier.in.map((exact) => ({ exact })) }
+                    : { values: [], range: qualifier.range }),
                 })),
               }
             : {}),

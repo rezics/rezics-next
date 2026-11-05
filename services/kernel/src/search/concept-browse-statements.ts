@@ -161,7 +161,10 @@ export function conceptStatementRequest(
       ? {
           qualifiers: Object.freeze(
             filter.statement.qualifiers.map((q) =>
-              Object.freeze({ property: q.property, in: Object.freeze([...q.in]) }),
+              Object.freeze({
+                property: q.property,
+                ...('in' in q ? { in: Object.freeze([...q.in]) } : { range: Object.freeze({ ...q.range }) }),
+              }),
             ),
           ),
         }
