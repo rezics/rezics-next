@@ -111,20 +111,21 @@ CREATE INDEX worker_attempts_state ON worker_attempts(json_extract(body, '$.stat
   {
     module: 'worker',
     version: 11,
-    sql: `CREATE TABLE worker_current_attempts (
+    sql: `-- Keep JSON scalar storage classes unchanged, especially numeric-looking process start strings.
+CREATE TABLE worker_current_attempts (
       task_id TEXT PRIMARY KEY,
       sequence INTEGER NOT NULL,
       current_attempt INTEGER NOT NULL,
-      task_state ANY,
-      goal ANY,
-      manager ANY,
-      urgent ANY NOT NULL,
-      attempt_state ANY,
-      pid ANY,
-      process_start ANY,
-      process_boot ANY,
-      process_group ANY,
-      cli ANY
+      task_state BLOB,
+      goal BLOB,
+      manager BLOB,
+      urgent BLOB NOT NULL,
+      attempt_state BLOB,
+      pid BLOB,
+      process_start BLOB,
+      process_boot BLOB,
+      process_group BLOB,
+      cli BLOB
     );
 INSERT INTO worker_current_attempts
 SELECT t.id, t.sequence, t.current_attempt,
