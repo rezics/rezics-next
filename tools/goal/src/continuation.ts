@@ -138,7 +138,13 @@ function readContinuationProjection(
         }
       }
   }
-  return { root, overlapDirectories, dispatchedNames, reviewFiles, continuationCount };
+  return {
+    root,
+    overlapDirectories,
+    dispatchedNames,
+    ...(reviewFiles ? { reviewFiles } : {}),
+    continuationCount,
+  };
 }
 
 /** Build the single projection shared by one backlog admission or one source-task harvest. */
