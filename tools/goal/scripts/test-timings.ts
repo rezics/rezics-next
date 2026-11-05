@@ -65,7 +65,7 @@ export function selectTestFiles(cwd: string, argv: string[]): string[] {
 export function parseTestTimings(file: string, output: string): TestTiming[] {
   const tests: TestTiming[] = [];
   for (const raw of output.split(/\r?\n/)) {
-    const line = raw.trim();
+    const line = raw.replace(/\x1B\[[0-9;]*m/g, '').trim();
     const match = TEST_LINE.exec(line);
     if (!match) continue;
     const result = match[1]!;

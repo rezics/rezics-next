@@ -84,10 +84,13 @@ test('runs matching files in isolated processes and prints wall times slowest fi
     expect(result.output).toContain('Files (slowest first)');
     expect(result.output).toContain('Tests (slowest first)');
     expect(result.output).toMatch(/Total: \d+\.\d{3}s/);
-    const slow = result.files.find((file) => file.file === 'slow.test.ts')!;
-    const fast = result.files.find((file) => file.file === 'fast.test.ts')!;
-    expect(slow.ms).toBeGreaterThan(fast.ms);
-    expect(result.output.indexOf('slow.test.ts')).toBeLessThan(result.output.indexOf('fast.test.ts'));
+    const slow = result.tests.find((item) => item.name === 'slow case');
+    const fast = result.tests.find((item) => item.name === 'fast case');
+    expect(slow, result.output).toBeDefined();
+    expect(fast, result.output).toBeDefined();
+    expect(slow!.ms).toBeGreaterThan(fast!.ms);
+    const testsSection = result.output.slice(result.output.indexOf('Tests (slowest first)'));
+    expect(testsSection.indexOf('slow case')).toBeLessThan(testsSection.indexOf('fast case'));
     const directories = [...result.files.map((file) => /TMPDIR=(\S+)/.exec(file.output)?.[1] ?? '')];
     expect(directories[0]).not.toBe('');
     expect(directories[1]).not.toBe('');
