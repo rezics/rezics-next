@@ -205,7 +205,7 @@ test('the private Collections route retains admitted cursor coordinates across l
   };
   const click = async (element: HTMLElement) => {
     await act(async () => {
-      element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+      element.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await flush();
