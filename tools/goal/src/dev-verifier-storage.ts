@@ -49,11 +49,7 @@ export function saveRun(store: DevVerifierStorage, run: DevVerifierRun, policy =
   }
 }
 
-export function knownExisting(
-  store: DevVerifierStorage,
-  signature: string,
-  policy = defaultPolicy.verifier,
-): boolean {
+export function knownExisting(store: DevVerifierStorage, signature: string, policy = defaultPolicy.verifier): boolean {
   try {
     if (store.devVerifierHasKnownExisting) return store.devVerifierHasKnownExisting(signature);
     if (store.devVerifierFindings)

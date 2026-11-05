@@ -760,7 +760,9 @@ test('verifier evidence persistence keeps store writes authoritative, tolerates 
     await verifyDev({ ...ctx, store: failingStore, runGate });
     expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
     expect(attemptedFindings.some((finding) => finding.status === 'existing')).toBe(true);
-    expect((database.db.query('SELECT count(*) AS count FROM dev_verifier_runs').get() as { count: number }).count).toBe(0);
+    expect(
+      (database.db.query('SELECT count(*) AS count FROM dev_verifier_runs').get() as { count: number }).count,
+    ).toBe(0);
     expect(
       (database.db.query('SELECT count(*) AS count FROM dev_verifier_findings').get() as { count: number }).count,
     ).toBe(0);
@@ -774,9 +776,9 @@ test('verifier evidence persistence keeps store writes authoritative, tolerates 
     };
     await verifyDev({ ...ctx, store: fallbackStore, runGate });
 
-    const run = database.db.query('SELECT cache_key, created_at, body FROM dev_verifier_runs ORDER BY rowid DESC').get() as
-      | { cache_key: string; created_at: string; body: string }
-      | undefined;
+    const run = database.db
+      .query('SELECT cache_key, created_at, body FROM dev_verifier_runs ORDER BY rowid DESC')
+      .get() as { cache_key: string; created_at: string; body: string } | undefined;
     expect(run).toBeDefined();
     const decodedRun = JSON.parse(run!.body) as DevVerifierRun;
     expect([run!.cache_key, run!.created_at, decodedRun.key, decodedRun.createdAt]).toEqual([
@@ -791,7 +793,9 @@ test('verifier evidence persistence keeps store writes authoritative, tolerates 
     ).toBeLessThanOrEqual(2);
 
     const findingRow = database.db
-      .query('SELECT range_key, identity, signature, base_commit, head_commit, status, created_at, body FROM dev_verifier_findings')
+      .query(
+        'SELECT range_key, identity, signature, base_commit, head_commit, status, created_at, body FROM dev_verifier_findings',
+      )
       .get() as
       | {
           range_key: string;
@@ -832,7 +836,11 @@ test('verifier evidence persistence keeps store writes authoritative, tolerates 
     databaseOpen = false;
     chmodSync(databasePath, 0o444);
     try {
-      expect(devVerificationState(root, ctx.settings.stateDirectory).findings).toEqual({ existing: 1, new: 0, unknown: 0 });
+      expect(devVerificationState(root, ctx.settings.stateDirectory).findings).toEqual({
+        existing: 1,
+        new: 0,
+        unknown: 0,
+      });
     } finally {
       chmodSync(databasePath, 0o644);
     }
