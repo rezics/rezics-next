@@ -295,11 +295,13 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const show = async (
       viewer: { state: string; subject?: string; csrfToken: string | null },
       admitted = operations,
+      reuseSession = false,
     ) => {
       menus.length = 0;
       await act(async () => {
         const currentSession = queryClient.getQueryData<typeof viewer>(['session']);
         if (
+          !reuseSession ||
           currentSession?.state !== viewer.state ||
           currentSession?.subject !== viewer.subject ||
           currentSession?.csrfToken !== viewer.csrfToken
@@ -419,7 +421,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await submit('rename');
       expect(writes[2]!.data).toEqual(uncertain);
       expect(writes[2]!.csrf).toBe('session-B');
-      await show(session('B', 'session-B-rotated'));
+      await show(session('B', 'session-B-rotated'), operations, true);
       busy(); // The current view retains the outstanding attempt.
       await settleWrite(2, { ok: false, reason: 'conflict' });
       expect(pendingReads[1]!.data).toEqual({ cursor: search.cursor, query: search.q });
