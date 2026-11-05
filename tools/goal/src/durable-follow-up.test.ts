@@ -1,6 +1,7 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { GateOutcome } from './contracts.ts';
 import { completeContinuation, harvestContinuations } from './continuation.ts';
 import { readControlPolicy } from './policy.ts';
@@ -377,6 +378,85 @@ test('seven planner continuations that share owner docs reach the ready backlog'
     expect(result.queued).toHaveLength(7);
     expect(result.proposed).toEqual([]);
     expect(existsSync(join(h.settings.stateDirectory, 'backlog', 'fixture', 'proposed'))).toBe(false);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('a growing continuation batch reuses one inventory and incorporates publications into review counts', () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const ref = { taskId: task.id, attempt: attempt.attempt };
+    const source = join(task.worktree, '.temp/continuation');
+    const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
+    const dispatched = join(backlog, 'dispatched');
+    mkdirSync(source, { recursive: true });
+    mkdirSync(dispatched, { recursive: true });
+
+    // Existing dispatches from this source attempt are siblings, even when their scopes match the first remainder.
+    for (let index = 0; index < 5; index++) {
+      const sibling = h.tasks.dispatch(h.briefFile);
+      h.store.updateTask({ taskId: sibling.id, attempt: 0 }, (current) => {
+        current.state = 'running';
+        current.brief.paths = ['apps/web/src/journeys/j1.ts'];
+        current.brief.markdown = '# Journey 1';
+      });
+      writeFileSync(
+        join(dispatched, `${sibling.id}-continuation-${task.id.slice(0, 8)}-${ref.attempt}-sibling.md`),
+        'sibling\n',
+      );
+    }
+
+    // Continuation archives count as continuations. Ten ordinary drafts leave room for five new ones.
+    for (let index = 0; index < 9; index++) {
+      const manager = join(backlog, `manager-${index}.md`);
+      writeFileSync(manager, continuationMarkdown(`# Manager ${index}`, `apps/web/src/manager/m${index}.ts`));
+    }
+    const partialDraft = join(backlog, 'partial.md');
+    writeFileSync(partialDraft, '---\ngoal: [\n---\nunfinished draft\n');
+    for (let index = 1; index <= 8; index++)
+      writeFileSync(
+        join(source, `journey-${String(index).padStart(2, '0')}.md`),
+        continuationMarkdown(`# Journey ${index}`, `apps/web/src/journeys/j${index}.ts, ${SHARED_PATHS}`),
+      );
+
+    const readdir = spyOn(fs, 'readdirSync');
+    const readFile = spyOn(fs, 'readFileSync');
+    try {
+      const result = harvestContinuations(h.store, h.settings, task, ref);
+
+      expect(result.queued).toHaveLength(5);
+      expect(result.proposed).toHaveLength(3);
+      expect(result.queued.map((file) => basename(file))).toEqual(
+        Array.from(
+          { length: 5 },
+          (_, index) =>
+            `continuation-${task.id.slice(0, 8)}-${ref.attempt}-journey-${String(index + 1).padStart(2, '0')}.md`,
+        ),
+      );
+      expect(result.proposed.map(({ file }) => basename(file))).toEqual(
+        Array.from(
+          { length: 3 },
+          (_, index) =>
+            `continuation-${task.id.slice(0, 8)}-${ref.attempt}-journey-${String(index + 6).padStart(2, '0')}.md`,
+        ),
+      );
+      expect(result.dropped).toEqual([]);
+      expect(result.retained).toEqual([]);
+      expect(readdir.mock.calls.filter(([path]) => String(path) === dispatched)).toHaveLength(1);
+      expect(readFile.mock.calls.filter(([path]) => String(path) === partialDraft)).toHaveLength(1);
+      expect(readFile.mock.calls.filter(([path]) => String(path) === join(backlog, 'manager-0.md'))).toHaveLength(1);
+      for (const directory of [backlog, join(backlog, 'held'), join(backlog, '.dispatching')])
+        expect(readdir.mock.calls.filter(([path]) => String(path) === directory)).toHaveLength(1);
+      expect(result.proposed.map(({ reason }) => reason)).toEqual(
+        Array.from({ length: 3 }, () => 'Goal continuation review is enabled; release or retire this proposal'),
+      );
+    } finally {
+      readFile.mockRestore();
+      readdir.mockRestore();
+    }
   } finally {
     h.dispose();
   }

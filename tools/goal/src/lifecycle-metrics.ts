@@ -164,16 +164,57 @@ function dateValue(value: Date | number): Date {
   return date;
 }
 
-function hasTable(db: Database, name: string): boolean {
-  return Boolean(db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
+const metricTables = [
+  'worker_tasks',
+  'worker_attempts',
+  'worker_events',
+  'worker_promotions',
+  'flow_events',
+  'landing_queue',
+  'lifecycle_transition_events',
+  'lifecycle_quarantines',
+] as const;
+
+const metricColumnTables = [
+  'worker_attempts',
+  'worker_events',
+  'flow_events',
+  'lifecycle_transition_events',
+  'lifecycle_quarantines',
+] as const;
+
+type SchemaCapabilities = {
+  tables: ReadonlySet<string>;
+  columns: ReadonlyMap<string, ReadonlySet<string>>;
+};
+
+function readSchemaCapabilities(db: Database): SchemaCapabilities {
+  const placeholders = metricTables.map(() => '?').join(', ');
+  const tables = new Set(
+    (
+      db
+        .query(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${placeholders})`)
+        .all(...metricTables) as { name: string }[]
+    ).map((row) => row.name),
+  );
+  const columns = new Map<string, ReadonlySet<string>>();
+  for (const table of metricColumnTables) {
+    if (!tables.has(table)) continue;
+    columns.set(
+      table,
+      new Set((db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((column) => column.name)),
+    );
+  }
+  return { tables, columns };
 }
 
-function hasColumns(db: Database, table: string, required: readonly string[]): boolean {
-  if (!hasTable(db, table)) return false;
-  const columns = new Set(
-    (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((column) => column.name),
-  );
-  return required.every((column) => columns.has(column));
+function hasTable(schema: SchemaCapabilities, name: string): boolean {
+  return schema.tables.has(name);
+}
+
+function hasColumns(schema: SchemaCapabilities, table: string, required: readonly string[]): boolean {
+  const columns = schema.columns.get(table);
+  return Boolean(columns && required.every((column) => columns.has(column)));
 }
 
 function age(at: string | null, nowMs: number): number | null {
@@ -238,8 +279,8 @@ const queueActions: Record<string, { start: string[]; end: string[] }> = {
   promotion: { start: ['requested'], end: ['promoted'] },
 };
 
-function pendingQueueWaits(db: Database, nowMs: number): LifecycleMetricEntry[] {
-  if (!hasTable(db, 'worker_tasks')) return [];
+function pendingQueueWaits(db: Database, nowMs: number, schema: SchemaCapabilities): LifecycleMetricEntry[] {
+  if (!hasTable(schema, 'worker_tasks')) return [];
   const actions = Object.entries(queueActions).flatMap(([stage, stageActions]) => [
     ...stageActions.start.map((action) => [stage, action, 1] as const),
     ...stageActions.end.map((action) => [stage, action, 0] as const),
@@ -292,15 +333,33 @@ function pendingQueueWaits(db: Database, nowMs: number): LifecycleMetricEntry[] 
     stage: string;
     at: string;
   }[];
-  const pending = rows.filter((wait) => {
-    if (wait.stage === 'landing' && hasTable(db, 'landing_queue')) {
-      const queue = db
-        .query('SELECT delivered FROM landing_queue WHERE task=? AND attempt=?')
-        .get(wait.task_id, wait.attempt) as { delivered: number } | null;
-      if (queue?.delivered === 1) return false;
+  const landingWaits = rows.filter((wait) => wait.stage === 'landing');
+  const deliveredAttempts = new Map<string, Set<number>>();
+  if (landingWaits.length && hasTable(schema, 'landing_queue')) {
+    const delivered = db
+      .query(`
+        WITH pending(task, attempt) AS (
+          SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]')
+          FROM json_each(?)
+        )
+        SELECT queue.task, queue.attempt
+        FROM pending
+        JOIN landing_queue AS queue USING (task, attempt)
+        WHERE queue.delivered = 1
+      `)
+      .all(JSON.stringify(landingWaits.map((wait) => [wait.task_id, wait.attempt]))) as {
+      task: string;
+      attempt: number;
+    }[];
+    for (const row of delivered) {
+      const attempts = deliveredAttempts.get(row.task) ?? new Set<number>();
+      attempts.add(row.attempt);
+      deliveredAttempts.set(row.task, attempts);
     }
-    return true;
-  });
+  }
+  const pending = rows.filter(
+    (wait) => wait.stage !== 'landing' || !deliveredAttempts.get(wait.task_id)?.has(wait.attempt),
+  );
   return pending
     .map((wait) => ({
       taskId: wait.task_id,
@@ -313,44 +372,53 @@ function pendingQueueWaits(db: Database, nowMs: number): LifecycleMetricEntry[] 
     .sort((a, b) => (a.enteredAt ?? '').localeCompare(b.enteredAt ?? '') || a.taskId.localeCompare(b.taskId));
 }
 
-function currentStateWaits(db: Database, nowMs: number, hasTransitions: boolean): LifecycleMetricEntry[] {
-  if (!hasTable(db, 'worker_tasks') || !hasTable(db, 'worker_attempts')) return [];
+function currentStateWaits(
+  db: Database,
+  nowMs: number,
+  hasTransitions: boolean,
+  schema: SchemaCapabilities,
+): LifecycleMetricEntry[] {
+  if (!hasTable(schema, 'worker_tasks') || !hasTable(schema, 'worker_attempts')) return [];
   const rows = db
     .query(`
-      SELECT a.task_id, a.attempt, 'attempt' AS kind
-      FROM worker_attempts AS a
-      JOIN worker_tasks AS t ON t.id = a.task_id AND t.current_attempt = a.attempt
-      WHERE json_extract(a.body, '$.state') = 'waiting'
-        AND json_extract(t.body, '$.state') NOT IN ('integrated', 'merged', 'stopped', 'cancelled', 'verified')
-      UNION ALL
-      SELECT t.id AS task_id, t.current_attempt AS attempt, 'task' AS kind
-      FROM worker_tasks AS t
-      WHERE json_extract(t.body, '$.state') = 'waiting'
+      WITH current_waits AS (
+        SELECT a.task_id, a.attempt, 'attempt' AS kind
+        FROM worker_attempts AS a
+        JOIN worker_tasks AS t ON t.id = a.task_id AND t.current_attempt = a.attempt
+        WHERE json_extract(a.body, '$.state') = 'waiting'
+          AND json_extract(t.body, '$.state') NOT IN ('integrated', 'merged', 'stopped', 'cancelled', 'verified')
+        UNION ALL
+        SELECT t.id AS task_id, t.current_attempt AS attempt, 'task' AS kind
+        FROM worker_tasks AS t
+        WHERE json_extract(t.body, '$.state') = 'waiting'
+      )
+      SELECT w.task_id, w.attempt, w.kind,
+        ${hasTransitions ? "CASE WHEN latest.phase = 'waiting' THEN latest.entered_at END" : 'NULL'} AS entered_at
+      FROM current_waits AS w
+      ${
+        hasTransitions
+          ? `LEFT JOIN lifecycle_transition_events AS latest
+              ON latest.entity = w.kind AND latest.entity_id = w.task_id AND latest.attempt = w.attempt
+             AND latest.sequence = (
+               SELECT candidate.sequence FROM lifecycle_transition_events AS candidate
+               WHERE candidate.entity = w.kind AND candidate.entity_id = w.task_id AND candidate.attempt = w.attempt
+               ORDER BY candidate.sequence DESC LIMIT 1
+             )`
+          : ''
+      }
     `)
-    .all() as { task_id: string; attempt: number; kind: 'task' | 'attempt' }[];
-  return rows.map((row) => {
-    let enteredAt: string | null = null;
-    if (hasTransitions) {
-      const transition = db
-        .query(`
-          SELECT phase, entered_at FROM lifecycle_transition_events
-          WHERE entity=? AND entity_id=? AND attempt=? ORDER BY sequence DESC LIMIT 1
-        `)
-        .get(row.kind, row.task_id, row.attempt) as { phase: string; entered_at: string | null } | null;
-      if (transition?.phase === 'waiting') enteredAt = transition.entered_at;
-    }
-    return {
-      taskId: row.task_id,
-      attempt: row.attempt,
-      kind: row.kind,
-      enteredAt,
-      ageMs: age(enteredAt, nowMs),
-    };
-  });
+    .all() as { task_id: string; attempt: number; kind: 'task' | 'attempt'; entered_at: string | null }[];
+  return rows.map((row) => ({
+    taskId: row.task_id,
+    attempt: row.attempt,
+    kind: row.kind,
+    enteredAt: row.entered_at,
+    ageMs: age(row.entered_at, nowMs),
+  }));
 }
 
-function orphanedLandings(db: Database): LifecycleMetrics['orphanedLandings'] {
-  if (!hasTable(db, 'worker_tasks') || !hasTable(db, 'landing_queue'))
+function orphanedLandings(db: Database, schema: SchemaCapabilities): LifecycleMetrics['orphanedLandings'] {
+  if (!hasTable(schema, 'worker_tasks') || !hasTable(schema, 'landing_queue'))
     return { available: false, count: null, taskIds: [] };
   const taskIds = (
     db
@@ -370,8 +438,13 @@ function orphanedLandings(db: Database): LifecycleMetrics['orphanedLandings'] {
   return { available: true, count: taskIds.length, taskIds };
 }
 
-function promotionPhase(db: Database, nowMs: number, hasTransitions: boolean): LifecycleMetrics['promotion'] {
-  if (!hasTable(db, 'worker_promotions')) return { available: false, phase: null, phaseAgeMs: null };
+function promotionPhase(
+  db: Database,
+  nowMs: number,
+  hasTransitions: boolean,
+  schema: SchemaCapabilities,
+): LifecycleMetrics['promotion'] {
+  if (!hasTable(schema, 'worker_promotions')) return { available: false, phase: null, phaseAgeMs: null };
   const row = db
     .query(
       "SELECT json_extract(body, '$.id') AS promotion_id, json_extract(body, '$.phase') AS phase FROM worker_promotions WHERE id=1",
@@ -396,8 +469,13 @@ function byCause(rows: { cause: string }[]): Record<string, number> {
   return counts;
 }
 
-function quarantines(db: Database, now: Date, start: Date): LifecycleMetrics['quarantines'] {
-  if (!hasColumns(db, 'lifecycle_quarantines', LIFECYCLE_RECORD_READER_CONTRACT.quarantines.columns))
+function quarantines(
+  db: Database,
+  now: Date,
+  start: Date,
+  schema: SchemaCapabilities,
+): LifecycleMetrics['quarantines'] {
+  if (!hasColumns(schema, 'lifecycle_quarantines', LIFECYCLE_RECORD_READER_CONTRACT.quarantines.columns))
     return {
       available: false,
       currentCount: null,
@@ -486,6 +564,7 @@ function devResolverOutcomes(
   start: string,
   end: string,
   limit: number,
+  schema: SchemaCapabilities,
 ): ConflictMetrics['devResolverOutcomes'] {
   const unavailable: ConflictMetrics['devResolverOutcomes'] = {
     available: false,
@@ -494,7 +573,7 @@ function devResolverOutcomes(
     returnedToWorker: { count: null, reasons: null },
     inProgress: null,
   };
-  if (!hasColumns(db, 'flow_events', ['sequence', 'task_id', 'attempt', 'stage', 'action', 'at', 'detail']))
+  if (!hasColumns(schema, 'flow_events', ['sequence', 'task_id', 'attempt', 'stage', 'action', 'at', 'detail']))
     return unavailable;
   const starts = db
     .query(`
@@ -543,12 +622,18 @@ function devResolverOutcomes(
 }
 
 /** Read existing producer facts only. No resolution event or historical occurrence time is synthesized. */
-function conflictMetrics(db: Database, start: string, end: string, limit: number): ConflictMetrics {
+function conflictMetrics(
+  db: Database,
+  start: string,
+  end: string,
+  limit: number,
+  schema: SchemaCapabilities,
+): ConflictMetrics {
   const result = unavailableConflicts(
     'The producer records rebase outcomes and retry setup, but not all conflicts, conflict occurrence times or owner/rerere/replay resolution identities.',
   );
-  result.devResolverOutcomes = devResolverOutcomes(db, start, end, limit);
-  if (!hasColumns(db, 'worker_events', ['sequence', 'task_id', 'attempt', 'kind', 'at', 'body'])) return result;
+  result.devResolverOutcomes = devResolverOutcomes(db, start, end, limit, schema);
+  if (!hasColumns(schema, 'worker_events', ['sequence', 'task_id', 'attempt', 'kind', 'at', 'body'])) return result;
   // These reader-owned indexes are installed only when the optional source exists, not by a cross-module migration.
   // Window reads must not repeatedly parse settled event/attempt history on host sweeps.
   db.exec('CREATE INDEX IF NOT EXISTS lifecycle_metrics_event_window ON worker_events(kind, at, sequence)');
@@ -559,7 +644,7 @@ function conflictMetrics(db: Database, start: string, end: string, limit: number
     'CREATE INDEX IF NOT EXISTS lifecycle_metrics_flow_integration ON flow_events(task_id, stage, action, at, attempt)',
   );
 
-  const hasAttempts = hasColumns(db, 'worker_attempts', ['task_id', 'attempt', 'body']);
+  const hasAttempts = hasColumns(schema, 'worker_attempts', ['task_id', 'attempt', 'body']);
   if (hasAttempts)
     db.exec(`CREATE INDEX IF NOT EXISTS lifecycle_metrics_attempt_window
       ON worker_attempts(json_extract(body, '$.startedAt'), task_id, attempt)`);
@@ -718,13 +803,14 @@ function lifecycleMetricsWithWidth(
   const nowMs = now.getTime();
   const start = new Date(nowMs - HOUR_MS);
   ensureFlow(db);
+  const schema = readSchemaCapabilities(db);
   const hasTransitions = hasColumns(
-    db,
+    schema,
     LIFECYCLE_RECORD_READER_CONTRACT.transitions.table,
     LIFECYCLE_RECORD_READER_CONTRACT.transitions.columns,
   );
-  const queues = pendingQueueWaits(db, nowMs);
-  const stateWaits = currentStateWaits(db, nowMs, hasTransitions);
+  const queues = pendingQueueWaits(db, nowMs, schema);
+  const stateWaits = currentStateWaits(db, nowMs, hasTransitions, schema);
   const entries = [...stateWaits, ...queues].sort((a, b) => {
     const aAt = a.enteredAt ? Date.parse(a.enteredAt) : Number.NEGATIVE_INFINITY;
     const bAt = b.enteredAt ? Date.parse(b.enteredAt) : Number.NEGATIVE_INFINITY;
@@ -745,10 +831,10 @@ function lifecycleMetricsWithWidth(
       entries,
       queues,
     },
-    orphanedLandings: orphanedLandings(db),
-    promotion: promotionPhase(db, nowMs, hasTransitions),
-    quarantines: quarantines(db, now, start),
-    conflicts: conflictMetrics(db, start.toISOString(), now.toISOString(), policy.lifecycle.conflictWindowRows),
+    orphanedLandings: orphanedLandings(db, schema),
+    promotion: promotionPhase(db, nowMs, hasTransitions, schema),
+    quarantines: quarantines(db, now, start, schema),
+    conflicts: conflictMetrics(db, start.toISOString(), now.toISOString(), policy.lifecycle.conflictWindowRows, schema),
   };
 }
 

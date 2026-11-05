@@ -1,48 +1,19 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
-import defaults from '../defaults.json';
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
-import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join } from 'node:path';
 import type { AppServer, CodexPool, Notification } from './app-server.ts';
-import { connectPool, textInput } from './app-server.ts';
-import { agentEnvironmentKeys } from './agents.ts';
 import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
+import { ManagerSessionTransport } from './manager-session-transport.ts';
 import { renderManagerOpening } from './prompts.ts';
 import { recordFlow } from './flow.ts';
 import type { PromptBudgetManifest } from './types.ts';
 import type { ProcessIdentity } from './process.ts';
 import type { ManagerWindows } from './windows.ts';
-
-// Managers run with full access, like workers; the maintainer is not there to answer approval requests.
-const FULL_ACCESS = { approvalPolicy: 'never', sandbox: 'danger-full-access' } as const;
-const CODEX_MANAGER_MODEL = 'gpt-6.1-sol';
-
-function codexThreadConfig(spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>) {
-  return {
-    model_reasoning_effort: spec.effort,
-    model_auto_compact_token_limit: spec.compactTokens ?? defaults.integration.managerCompactTokens,
-  };
-}
-
-function codexTurnSettings(spec: Pick<ManagerSpec, 'effort'>) {
-  return { model: CODEX_MANAGER_MODEL, effort: spec.effort };
-}
-
-/** `ThreadGoalSetParams` from installed `codex-cli 0.164.0`; no idle-continuation field is acknowledged. */
-function activeGoalSet(threadId: string, spec: Pick<ManagerSpec, 'objective' | 'budget'>) {
-  return {
-    threadId,
-    origin: 'user' as const,
-    objective: spec.objective,
-    status: 'active' as const,
-    tokenBudget: spec.budget,
-  };
-}
 
 export type ManagerLimits = { turns: number; turnsWithoutDecision: number; wallMs: number };
 export type ManagerSpec = {
@@ -192,19 +163,24 @@ function managerHasDecision(db: Database, id: string, threadId: string, turnId: 
 }
 
 export class ManagerSessions {
-  private pools = new Map<string, Promise<AppServer>>();
   private chains = new Map<string, Promise<unknown>>();
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private watcher: Watching;
   private closed = false;
   private readonly policy: ControlPolicy;
-  private unsubscribers: (() => void)[] = [];
+  private readonly transport: ManagerSessionTransport;
   constructor(
     private readonly db: Database,
     readonly inbox: SqliteManagerInbox,
     private readonly services: ManagerServices,
   ) {
     this.policy = services.policy ?? defaultPolicy;
+    this.transport = new ManagerSessionTransport(
+      services,
+      this.policy.appServer,
+      inbox.stateDirectory,
+      (notification) => this.notification(notification),
+    );
     migrate(db, [
       {
         module: 'managers',
@@ -360,34 +336,6 @@ export class ManagerSessions {
         return;
     }
   }
-  private client(pool: CodexPool): Promise<AppServer> {
-    const key = pool.codexHome;
-    const existing = this.pools.get(key);
-    if (existing) return existing;
-    const tracked = new Set<string>();
-    const onStart = (identity: ProcessIdentity) => {
-      const key = `${identity.pid}:${identity.start}:${identity.boot}`;
-      if (tracked.has(key)) return;
-      tracked.add(key);
-      this.services.onAppServerStart?.(identity);
-    };
-    const connecting = this.services.connect
-      ? this.services.connect(pool, onStart)
-      : connectPool(pool, onStart, undefined, this.policy.appServer);
-    const client = connecting.then(async (server) => {
-      try {
-        if (server.identity) onStart(server.identity);
-      } catch (error) {
-        await server.close();
-        throw error;
-      }
-      this.unsubscribers.push(server.onNotification((notification) => this.notification(notification)));
-      return server;
-    });
-    this.pools.set(key, client);
-    void client.catch(() => this.pools.delete(key));
-    return client;
-  }
   private notification(notification: Notification): void {
     if (this.closed) return;
     const state = this.list().find(
@@ -503,58 +451,6 @@ export class ManagerSessions {
       policy: this.policy,
     });
   }
-  private claudeArgv(spec: ManagerSpec, session: string[], prompt: string): string[] {
-    const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
-    const hook = (command: string) => [...this.services.command, 'manager', command, spec.id].map(quote).join(' ');
-    const settings = {
-      skipDangerousModePermissionPrompt: true,
-      hooks: {
-        UserPromptSubmit: [{ hooks: [{ type: 'command', command: hook('turn-start') }] }],
-        Stop: [{ hooks: [{ type: 'command', command: hook('turn-end') }] }],
-      },
-    };
-    // Claude keeps its account state in ~/.claude.json, not in its default configuration directory; pointing
-    // CLAUDE_CONFIG_DIR at that directory would start an unauthenticated, untrusted session.
-    const configDirectory =
-      resolve(spec.pool.codexHome) === join(homedir(), '.claude') ? [] : [`CLAUDE_CONFIG_DIR=${spec.pool.codexHome}`];
-    return [
-      'env',
-      ...this.providerBoundaryUnsets(),
-      `GOAL_MANAGER=${spec.id}`,
-      ...configDirectory,
-      spec.pool.executable ?? 'claude',
-      ...session,
-      '--model',
-      'claude-opus-5-5',
-      '--permission-mode',
-      'bypassPermissions',
-      '--name',
-      `${spec.goal} manager`,
-      '--autocompact',
-      String(spec.compactTokens ?? defaults.integration.managerCompactTokens),
-      '--settings',
-      JSON.stringify(settings),
-      prompt,
-    ];
-  }
-  private providerBoundaryUnsets(): string[] {
-    const keys = new Set([
-      ...agentEnvironmentKeys(process.env),
-      'GOAL_MANAGER',
-      'GOAL_TASK_ID',
-      'GOAL_ATTEMPT',
-      'GOAL_CHECK_WAIT_FILE',
-    ]);
-    return [...keys].flatMap((key) => ['-u', key]);
-  }
-  // The opening goes to a file, not argv: the CLI process would otherwise match a `pgrep -f` for any command the
-  // opening names, and a manager that stopped its inbox watcher by pattern once killed its own session that way.
-  private openingPointer(spec: ManagerSpec, prompt: string): string {
-    const path = join(this.inbox.stateDirectory, 'managers', `${spec.id}.opening.md`);
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, prompt);
-    return `Read ${path} completely and follow it.`;
-  }
   private recordPromptLaunch(state: ManagedManagerState): void {
     if (!state.promptManifest) return;
     recordFlow(this.db, {
@@ -569,44 +465,14 @@ export class ManagerSessions {
   // A Claude manager hears its inbox through its own background watcher, so a session that exited never sees new
   // events; the next event resumes it in its window.
   private reviveClaude(state: ManagedManagerState): void {
-    if (!state.threadId || !this.inbox.pending(state.id).length) return;
-    const alive = this.services.windows.alive?.(state.id);
-    if (alive === false) {
-      this.services.windows.respawn?.(
-        state.id,
-        this.claudeArgv(
-          state,
-          ['--resume', state.threadId],
-          'The control plane resumed your exited session. Read and acknowledge your inbox, then continue.',
-        ),
-        state.cwd,
-      );
-      return;
-    }
-    // A live session that ended its turn without a watcher never wakes on its own (web sat 2 h on 13 unread events on
-    // 2026-10-26): type the wake into it, once per event.
-    const waking = this.inbox.notifications(state.id);
-    if (!waking.length || !this.services.windows.prompt) return;
-    this.services.windows.prompt(
-      state.id,
-      `${waking.length} new inbox event(s): read them with bun tools/goal/src/cli.ts inbox read ${state.id}, act and acknowledge; start bun tools/goal/src/cli.ts inbox wait ${state.id} in the background before you end the turn.`,
+    if (!state.threadId) return;
+    const notified = this.transport.reviveClaude(
+      state,
+      state.threadId,
+      this.inbox.pending(state.id).length > 0,
+      this.inbox.notifications(state.id),
     );
-    for (const event of waking) this.inbox.notified(event.id);
-  }
-  private registerCodexViewer(state: ManagedManagerState, client: AppServer): void {
-    const viewer = [state.pool.executable ?? 'codex', 'resume', state.threadId!];
-    if (client.endpoint) viewer.push('--remote', client.endpoint);
-    this.services.windows.register(
-      state.id,
-      [
-        'env',
-        ...this.providerBoundaryUnsets(),
-        `CODEX_HOME=${state.pool.codexHome}`,
-        `GOAL_MANAGER=${state.id}`,
-        ...viewer,
-      ],
-      state.cwd,
-    );
+    for (const id of notified) this.inbox.notified(id);
   }
   private validateSpec(spec: ManagerSpec): void {
     if (
@@ -659,31 +525,20 @@ export class ManagerSessions {
       .immediate();
     try {
       if (spec.engine === 'codex') {
-        const client = await this.client(spec.pool);
-        const started = await client.request('thread/start', {
-          ...FULL_ACCESS,
-          cwd: spec.cwd,
-          model: CODEX_MANAGER_MODEL,
-          config: codexThreadConfig(spec),
-        });
-        const threadId = started.thread.id as string;
+        const client = await this.transport.client(spec.pool);
+        const threadId = await this.transport.startThread(client, spec);
         state.threadId = threadId;
         this.save(state);
-        const goal = await client.request('thread/goal/set', activeGoalSet(threadId, spec));
-        state.goalState = goal.goal;
+        state.goalState = await this.transport.setActiveGoal(client, spec, threadId);
         state.status = 'running';
         this.save(state);
-        this.registerCodexViewer(state, client);
+        this.transport.registerCodexViewer(state, threadId, client);
         const continuationFile = history?.length ? this.continuationPath(spec) : undefined;
         const opening =
           continuationFile && existsSync(continuationFile) ? this.opening(spec, continuationFile) : this.opening(spec);
         state.promptManifest = opening.manifest;
-        const turn = await client.request('turn/start', {
-          threadId: state.threadId,
-          ...codexTurnSettings(spec),
-          input: textInput(opening.prompt),
-        });
-        this.turnStarted(state, turn.turn.id);
+        const turnId = await this.transport.startTurn(client, spec, state.threadId, opening.prompt);
+        this.turnStarted(state, turnId);
         this.recordPromptLaunch(state);
         if (state.pendingRenewal) {
           state.pendingRenewal.ready = true;
@@ -695,11 +550,7 @@ export class ManagerSessions {
         state.threadId = randomUUID();
         const opening = this.opening(spec);
         state.promptManifest = opening.manifest;
-        this.services.windows.register(
-          spec.id,
-          this.claudeArgv(spec, ['--session-id', state.threadId], this.openingPointer(spec, opening.prompt)),
-          spec.cwd,
-        );
+        this.transport.registerClaudeSession(spec, state.threadId, opening.prompt);
         state.status = 'running';
         this.recordPromptLaunch(state);
       }
@@ -1037,28 +888,10 @@ export class ManagerSessions {
   private async pauseRemote(state: ManagerState): Promise<void> {
     assertManagedManager(state);
     if (state.engine === 'codex' && state.threadId) {
-      const client = await this.client(state.pool);
-      const goal = await client.request('thread/goal/set', {
-        threadId: state.threadId,
-        status: 'paused',
-        origin: 'user',
-      });
-      state.goalState = goal.goal;
+      const client = await this.transport.client(state.pool);
+      state.goalState = await this.transport.setGoalStatus(client, state.threadId, 'paused');
       this.save(state);
-      if (state.activeTurnId) {
-        try {
-          await client.request('turn/interrupt', { threadId: state.threadId, turnId: state.activeTurnId });
-        } catch {
-          const resumed = await client.request('thread/resume', {
-            ...FULL_ACCESS,
-            threadId: state.threadId,
-            model: CODEX_MANAGER_MODEL,
-            config: codexThreadConfig(state),
-          });
-          const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
-          if (active) await client.request('turn/interrupt', { threadId: state.threadId, turnId: active.id });
-        }
-      }
+      if (state.activeTurnId) await this.transport.interruptTurn(client, state, state.threadId, state.activeTurnId);
     }
   }
   private async stopInternal(id: string): Promise<void> {
@@ -1082,75 +915,27 @@ export class ManagerSessions {
     if (isResidentSupermanager(state)) return;
     if (state.status !== 'running') return;
     if (state.engine === 'claude') return this.reviveClaude(state);
-    const client = await this.client(state.pool);
+    const client = await this.transport.client(state.pool);
     for (const event of this.inbox.notifications(id)) {
       state = this.get(id);
       assertManagedManager(state);
-      if (state.activeTurnId) {
-        // turn/steer has no model or effort fields, so active turns inherit the settings pinned at turn/start.
-        try {
-          await client.request('turn/steer', {
-            threadId: state.threadId,
-            expectedTurnId: state.activeTurnId,
-            input: textInput(event.event.summary),
-          });
-        } catch {
-          // A completion can race the steer precondition. Rejoin to learn the live turn, then start/steer.
-          const resumed = await client.request('thread/resume', {
-            ...FULL_ACCESS,
-            threadId: state.threadId,
-            model: CODEX_MANAGER_MODEL,
-            config: codexThreadConfig(state),
-          });
-          const active = resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress');
-          state.activeTurnId = active?.id ?? null;
+      const delivered = await this.transport.deliverToSession(
+        client,
+        state,
+        state.threadId!,
+        state.activeTurnId,
+        event.event.summary,
+        (turnId) => {
+          state.activeTurnId = turnId;
           this.save(state);
-          if (active)
-            await client.request('turn/steer', {
-              threadId: state.threadId,
-              expectedTurnId: active.id,
-              input: textInput(event.event.summary),
-            });
-          else await this.startWakeTurn(client, state, event.event.summary);
-        }
-      } else await this.startWakeTurn(client, state, event.event.summary);
+        },
+      );
+      if (delivered.kind === 'started') {
+        this.turnStarted(state, delivered.turnId);
+        this.save(state);
+      }
       this.inbox.notified(event.id);
     }
-  }
-  /** An idle manager has ended its turn; the delivered event starts a new turn on its persisted thread. */
-  private async startWakeTurn(client: AppServer, state: ManagedManagerState, summary: string): Promise<void> {
-    const start = () =>
-      client.request('turn/start', {
-        threadId: state.threadId,
-        ...codexTurnSettings(state),
-        input: textInput(summary),
-      });
-    let turn;
-    try {
-      turn = await start();
-    } catch {
-      // A replaced app-server has not loaded the thread, or a turn began meanwhile: rejoin it, then start or steer.
-      const resumed = await client.request('thread/resume', {
-        ...FULL_ACCESS,
-        threadId: state.threadId,
-        model: CODEX_MANAGER_MODEL,
-        config: codexThreadConfig(state),
-      });
-      const active = resumed.thread.turns?.findLast((item: any) => item.status === 'inProgress');
-      if (active) {
-        state.activeTurnId = active.id;
-        this.save(state);
-        await client.request('turn/steer', {
-          threadId: state.threadId,
-          expectedTurnId: active.id,
-          input: textInput(summary),
-        });
-        return;
-      }
-      turn = await start();
-    }
-    this.turnStarted(state, turn.turn.id);
-    this.save(state);
   }
   async wake(id: string): Promise<void> {
     return this.serial(id, () => this.dispatch(id));
@@ -1164,13 +949,8 @@ export class ManagerSessions {
     if (!evidence.passed) {
       // A model-completed Codex goal must become active before the unmet event starts a new turn.
       if (state.engine === 'codex' && state.threadId && state.goalState?.status === 'complete') {
-        const client = await this.client(state.pool);
-        const updated = await client.request('thread/goal/set', {
-          threadId: state.threadId,
-          status: 'active',
-          origin: 'user',
-        });
-        state.goalState = updated.goal;
+        const client = await this.transport.client(state.pool);
+        state.goalState = await this.transport.setGoalStatus(client, state.threadId, 'active');
         this.save(state);
       }
       this.inbox.deliver({
@@ -1193,13 +973,8 @@ export class ManagerSessions {
     assertManagedManager(completed);
     completed.status = 'complete';
     if (completed.engine === 'codex' && completed.threadId) {
-      const client = await this.client(completed.pool);
-      const updated = await client.request('thread/goal/set', {
-        threadId: completed.threadId,
-        status: 'complete',
-        origin: 'user',
-      });
-      completed.goalState = updated.goal;
+      const client = await this.transport.client(completed.pool);
+      completed.goalState = await this.transport.setGoalStatus(client, completed.threadId, 'complete');
     }
     this.save(completed);
     const event = {
@@ -1273,19 +1048,12 @@ export class ManagerSessions {
             return;
           }
           if (current.engine === 'codex' && current.threadId) {
-            const client = await this.client(current.pool);
-            const resume = client.request('thread/resume', {
-              ...FULL_ACCESS,
-              threadId: current.threadId,
-              model: CODEX_MANAGER_MODEL,
-              config: codexThreadConfig(current),
-            });
+            const client = await this.transport.client(current.pool);
+            const resume = this.transport.resumeThread(client, current, current.threadId);
             reportProgress();
             const resumed = await resume;
-            current.activeTurnId =
-              resumed.thread.turns?.findLast((turn: any) => turn.status === 'inProgress')?.id ?? null;
-            const goal = await client.request('thread/goal/get', { threadId: current.threadId });
-            current.goalState = goal.goal;
+            current.activeTurnId = resumed.activeTurnId;
+            current.goalState = await this.transport.getGoal(client, current.threadId);
           }
           reportProgress();
           if (current.status === 'starting') {
@@ -1296,9 +1064,9 @@ export class ManagerSessions {
           }
           this.save(current);
           if (current.engine === 'codex' && current.threadId) {
-            const client = await this.client(current.pool);
+            const client = await this.transport.client(current.pool);
             this.services.windows.unregister(current.id);
-            this.registerCodexViewer(current, client);
+            this.transport.registerCodexViewer(current, current.threadId, client);
           }
           if (await this.handleGoalUpdate(current)) return;
           if (!(await this.checkLimits(current))) {
@@ -1314,13 +1082,9 @@ export class ManagerSessions {
     if (this.closed) return;
     this.closed = true;
     this.watcher.close();
-    for (const unsubscribe of this.unsubscribers) unsubscribe();
+    this.transport.unsubscribe();
     for (const timer of this.timers.values()) clearTimeout(timer);
     await this.flush();
-    for (const client of this.pools.values()) {
-      try {
-        await (await client).close();
-      } catch {}
-    }
+    await this.transport.close();
   }
 }

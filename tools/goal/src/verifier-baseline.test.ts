@@ -10,6 +10,7 @@ import { gateRunner, type GateRunner } from './merge.ts';
 
 const roots: string[] = [];
 const temporaryRoot = join(import.meta.dir, '../../../.temp/goal-verifier-baseline');
+const fixturePackageManager = `bun@${Bun.version}`;
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -36,6 +37,26 @@ function repository(): string {
     join(root, 'scripts/legacy-failure.ts'),
     "console.error('AssertionError: existing acceptance failure'); process.exitCode = 1;\n",
   );
+  writeFileSync(join(root, '.gitignore'), 'node_modules/\n');
+  mkdirSync(join(root, 'toolchain/bin'), { recursive: true });
+  writeFileSync(
+    join(root, 'toolchain/package.json'),
+    JSON.stringify({ name: 'bun', version: Bun.version, bin: { bun: 'bin/bun.exe' } }),
+  );
+  writeFileSync(join(root, 'toolchain/bin/bun.exe'), `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
+  writeFileSync(
+    join(root, 'package.json'),
+    JSON.stringify({
+      name: 'baseline-fixture',
+      packageManager: fixturePackageManager,
+      dependencies: { bun: 'file:./toolchain' },
+    }),
+  );
+  const lock = spawnSync(process.execPath, ['install', '--lockfile-only', '--ignore-scripts'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  if (lock.status !== 0) throw new Error(lock.stderr);
   git(root, 'add', '.');
   git(root, 'commit', '-m', 'base');
   const base = git(root, 'rev-parse', 'HEAD');
@@ -147,7 +168,7 @@ test('an existing baseline failure is recorded durably while a healthy landing a
   let affectedCalls = 0;
   const runGate = gateRunner(10_000, ctx.stateDirectory);
   const observeGate: GateRunner = async (command, cwd, log) => {
-    if (command.join(' ') === affected.join(' ')) affectedCalls++;
+    if (command.slice(-2).join('\0') === affected.slice(-2).join('\0')) affectedCalls++;
     return runGate(command, cwd, log);
   };
 
@@ -181,13 +202,16 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
   const root = repository();
   const base = git(root, 'rev-parse', 'dev-verified');
   commit(root, 'tools/goal/src/fixture.ts', 'export const fixture = true;\n', 'add fixture source');
-  const head = commit(
-    root,
-    'tools/goal/src/fixture.test.ts',
-    "console.log('fixture test');\n",
-    'add fixture sibling test',
-  );
-  git(root, 'update-ref', 'refs/heads/dev', head, base);
+  commit(root, 'tools/goal/src/fixture.test.ts', "console.log('fixture test');\n", 'add fixture sibling test');
+  commit(root, 'apps/widget/bunfig.toml', '[install]\n', 'add widget bunfig');
+  commit(root, 'apps/widget/src/widget.ts', 'export const widget = true;\n', 'add widget source');
+  commit(root, 'apps/widget/src/helper.ts', 'export const helper = true;\n', 'add widget helper');
+  commit(root, 'apps/widget/src/widget.test.ts', "console.log('widget');\n", 'add widget test');
+  commit(root, 'apps/widget/src/helper.test.ts', "console.log('helper');\n", 'add helper test');
+  commit(root, 'services/worker/bunfig.toml', '[install]\n', 'add worker bunfig');
+  commit(root, 'services/worker/src/worker.ts', 'export const worker = true;\n', 'add worker source');
+  const finalHead = commit(root, 'services/worker/src/worker.test.ts', "console.log('worker');\n", 'add worker test');
+  git(root, 'update-ref', 'refs/heads/dev', finalHead, base);
   const ctx = context(root);
   const verifierCommand = ['bun', 'run', 'scripts/typecheck.ts'];
   const legacyAffectedCommand = ['bun', 'test', 'scripts/typecheck.ts'];
@@ -195,24 +219,41 @@ test('the verifier uses configured verifier checks and candidate sibling tests',
   ctx.settings.verifierChecks = [{ paths: ['tools/goal/src/**'], command: verifierCommand }];
   ctx.settings.affectedTests = [{ paths: ['tools/goal/src/**'], command: legacyAffectedCommand }];
   ctx.settings.siblingTests = { command: siblingCommand };
-  const executed: string[][] = [];
+  const executed: { command: string[]; cwd: string }[] = [];
 
   try {
     await verifyDev({
       ...ctx,
-      runGate: runner(async (command) => {
-        executed.push([...command]);
+      runGate: runner(async (command, cwd) => {
+        executed.push({ command: [...command], cwd });
         return { passed: true, output: '', timedOut: false };
       }),
     });
-    expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
-    expect(executed.filter((command) => command.join(' ') === verifierCommand.join(' '))).toHaveLength(1);
-    expect(executed.filter((command) => command.join(' ') === legacyAffectedCommand.join(' '))).toHaveLength(0);
+    expect(
+      executed.filter(({ command }) => command.at(-2) === 'run' && command.at(-1) === 'scripts/typecheck.ts'),
+    ).toHaveLength(1);
+    expect(
+      executed.filter(({ command }) => command.at(-2) === 'test' && command.at(-1) === 'scripts/typecheck.ts'),
+    ).toHaveLength(0);
     expect(
       executed.filter(
-        (command) => command.join(' ') === [...siblingCommand, 'tools/goal/src/fixture.test.ts'].join(' '),
+        ({ command }) => command.at(-2) === 'test' && command.at(-1) === 'tools/goal/src/fixture.test.ts',
       ),
     ).toHaveLength(1);
+    expect(
+      executed
+        .filter(
+          ({ command }) =>
+            command.at(-3) === 'test' && command.slice(-2).join(' ') === 'src/helper.test.ts src/widget.test.ts',
+        )
+        .map(({ cwd }) => cwd.split('/').slice(-2).join('/')),
+    ).toEqual(['apps/widget']);
+    expect(
+      executed
+        .filter(({ command }) => command.at(-2) === 'test' && command.at(-1) === 'src/worker.test.ts')
+        .map(({ cwd }) => cwd.split('/').slice(-2).join('/')),
+    ).toEqual(['services/worker']);
+    expect(git(root, 'rev-parse', 'dev-verified')).toBe(finalHead);
   } finally {
     ctx.close();
   }
@@ -481,7 +522,7 @@ test('missing baseline commands, baseline setup failures, and exhausted transpor
     await verifyDev({ ...setupContext, store: restarted, runGate: setupRunner });
     expect(
       readdirSync(setupContext.stateDirectory).filter((name) => name.startsWith('dev-verify-install-')),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     restarted.db.close();
   } finally {
     try {
@@ -591,6 +632,37 @@ test('a new assertion without a task in the verified range remains unowned and u
     const finding = ctx.store.devVerifierFindings().find((item) => item.headCommit === head);
     expect(finding).toMatchObject({ status: 'new', headCommit: head });
     expect(finding).not.toHaveProperty('taskId');
+  } finally {
+    ctx.close();
+  }
+});
+
+test('a command source missing at the captured head remains unknown without running a baseline', async () => {
+  const root = repository();
+  const base = git(root, 'rev-parse', 'dev-verified');
+  const head = commit(root, 'services/kernel/change.ts', 'export const changed = true;\n', 'landing change');
+  git(root, 'update-ref', 'refs/heads/dev', head, base);
+  const missingCommand = ['bun', 'test', 'services/kernel/missing.test.ts'];
+  const ctx = context(root, [task('missing-head-source', base, head, ['services/kernel/**'], missingCommand)]);
+  const calls: string[] = [];
+  try {
+    await verifyDev({
+      ...ctx,
+      runGate: async (command) => {
+        calls.push(command.join(' '));
+        return { passed: true, output: '', timedOut: false };
+      },
+    });
+    expect(ctx.store.devVerifierFindings()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: 'unknown',
+          reason: 'The selected command source is absent at the captured head.',
+        }),
+      ]),
+    );
+    expect(calls.some((command) => command.includes('missing.test.ts'))).toBe(false);
+    expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
   } finally {
     ctx.close();
   }

@@ -244,13 +244,8 @@ export type GuardLedgerRow = GuardDefinition & {
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const attemptKey = (taskId: string, attempt: number) => `${taskId}:${attempt}`;
-const durationHours = (record: Pick<AttemptRecord, 'startedAt' | 'endedAt'>): number => {
-  const duration = Date.parse(record.endedAt) - Date.parse(record.startedAt);
+const durationHours = (duration: number): number => {
   return Number.isFinite(duration) ? Math.max(0, duration) / HOUR_MS : 0;
-};
-const inWindow = (value: string, start: number, now: number) => {
-  const time = Date.parse(value);
-  return Number.isFinite(time) && time >= start && time <= now;
 };
 
 export function guardLedger(
@@ -259,30 +254,96 @@ export function guardLedger(
   now = Date.now(),
 ): GuardLedgerRow[] {
   const start = now - 7 * DAY_MS;
-  const recordsByAttempt = new Map(records.map((record) => [attemptKey(record.taskId, record.attempt), record]));
-  const attemptsByAttempt = new Map(attempts.map((attempt) => [attemptKey(attempt.taskId, attempt.attempt), attempt]));
+  const detailsByRecord = new WeakMap<
+    AttemptRecord,
+    { endedAt: number; durationHours: number; nextAttemptKey: string }
+  >();
+  const recordsByAttempt = new Map<string, AttemptRecord>();
+  for (const record of records) {
+    const taskId = record.taskId;
+    const attempt = record.attempt;
+    const endedAt = Date.parse(record.endedAt);
+    detailsByRecord.set(record, {
+      endedAt,
+      durationHours: durationHours(endedAt - Date.parse(record.startedAt)),
+      nextAttemptKey: attemptKey(taskId, attempt + 1),
+    });
+    recordsByAttempt.set(attemptKey(taskId, attempt), record);
+  }
+  const attemptsByAttempt = new Map<string, Attempt>();
+  for (const attempt of attempts) attemptsByAttempt.set(attemptKey(attempt.taskId, attempt.attempt), attempt);
+
+  type GuardTotals = {
+    firings: number;
+    attemptHours: number;
+    nextAttemptHours: number;
+    tokens: number;
+    nextAttempts: number;
+    rewritten: number;
+    landed: number;
+  };
+  const totalsByGuard = new Map<GuardId, GuardTotals>();
+  for (const id of Object.keys(GUARDS) as GuardId[])
+    totalsByGuard.set(id, {
+      firings: 0,
+      attemptHours: 0,
+      nextAttemptHours: 0,
+      tokens: 0,
+      nextAttempts: 0,
+      rewritten: 0,
+      landed: 0,
+    });
+
+  for (const record of records) {
+    const details = detailsByRecord.get(record)!;
+    if (!Number.isFinite(details.endedAt) || details.endedAt < start || details.endedAt > now) continue;
+    const guardIds = new Set(record.guardIds ?? []);
+    if (guardIds.size === 0) continue;
+
+    const tokens = record.tokens.input + record.tokens.output;
+    const nextRecord = recordsByAttempt.get(details.nextAttemptKey);
+    const nextAttempt = attemptsByAttempt.get(details.nextAttemptKey);
+    let nextAttemptHours = 0;
+    let rewritten = false;
+    let landed = false;
+    let hasNext = false;
+    if (nextRecord && nextAttempt) {
+      hasNext = true;
+      nextAttemptHours = detailsByRecord.get(nextRecord)!.durationHours;
+      rewritten = Boolean(nextAttempt.newBriefHash);
+      landed = nextRecord.outcome === 'passed' || nextRecord.outcome === 'verified';
+    }
+
+    for (const id of guardIds) {
+      const totals = totalsByGuard.get(id);
+      if (!totals) continue;
+      totals.firings++;
+      totals.attemptHours += details.durationHours;
+      totals.tokens += tokens;
+      if (hasNext) {
+        totals.nextAttempts++;
+        totals.nextAttemptHours += nextAttemptHours;
+        if (rewritten) totals.rewritten++;
+        if (landed) totals.landed++;
+      }
+    }
+  }
+
   return (Object.keys(GUARDS) as GuardId[])
     .map((id) => {
-      const firings = records.filter((record) => inWindow(record.endedAt, start, now) && record.guardIds?.includes(id));
-      const next = firings.flatMap((record) => {
-        const nextRecord = recordsByAttempt.get(attemptKey(record.taskId, record.attempt + 1));
-        const nextAttempt = attemptsByAttempt.get(attemptKey(record.taskId, record.attempt + 1));
-        return nextRecord && nextAttempt ? [{ record: nextRecord, attempt: nextAttempt }] : [];
-      });
-      const rewritten = next.filter(({ attempt }) => Boolean(attempt.newBriefHash)).length;
-      const landed = next.filter(({ record }) => record.outcome === 'passed' || record.outcome === 'verified').length;
-      const rewrittenShare = next.length ? rewritten / next.length : null;
+      const totals = totalsByGuard.get(id)!;
+      const rewrittenShare = totals.nextAttempts ? totals.rewritten / totals.nextAttempts : null;
       return {
         id,
         ...GUARDS[id],
-        firings: firings.length,
-        attemptHours: firings.reduce((sum, record) => sum + durationHours(record), 0),
-        nextAttemptHours: next.reduce((sum, item) => sum + durationHours(item.record), 0),
-        tokens: firings.reduce((sum, record) => sum + record.tokens.input + record.tokens.output, 0),
+        firings: totals.firings,
+        attemptHours: totals.attemptHours,
+        nextAttemptHours: totals.nextAttemptHours,
+        tokens: totals.tokens,
         rewrittenShare,
-        landedShare: next.length ? landed / next.length : null,
+        landedShare: totals.nextAttempts ? totals.landed / totals.nextAttempts : null,
         action:
-          firings.length >= 20 && rewrittenShare !== null && rewrittenShare < 0.1
+          totals.firings >= 20 && rewrittenShare !== null && rewrittenShare < 0.1
             ? ('repairable in place' as const)
             : ('monitor' as const),
       };

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AttemptFence, GateOutcome } from './contracts.ts';
 import { openDb } from './db.ts';
@@ -76,13 +77,24 @@ test('a process running stale control-plane code hands the train to a fresh proc
 });
 
 test('code currency compares the running code with the control plane on main', async () => {
-  const { codeVersion } = await import('./runtime-version.ts');
+  const { captureLoadedCodeVersion, codeVersion } = await import('./runtime-version.ts');
   const repo = repository();
   try {
     const started = codeVersion(repo.main, 'base');
     expect(codeVersion(repo.main, 'base')).toBe(started);
     repo.commit('base', 'changed');
     expect(codeVersion(repo.main, 'base')).not.toBe(started);
+
+    mkdirSync(join(repo.main, 'tools/goal'), { recursive: true });
+    writeFileSync(join(repo.main, 'tools/goal/STAMP'), 'v1\n');
+    git(repo.main, 'add', '--', 'tools/goal/STAMP');
+    git(repo.main, 'commit', '-m', 'Add tools/goal');
+    const loaded = captureLoadedCodeVersion(repo.main);
+    expect(loaded).toBe(codeVersion(repo.main, 'tools/goal'));
+    const mainBefore = git(repo.main, 'rev-parse', 'main');
+    repo.commit('base', 'unrelated');
+    expect(git(repo.main, 'rev-parse', 'main')).not.toBe(mainBefore);
+    expect(captureLoadedCodeVersion(repo.main)).toBe(loaded);
   } finally {
     repo.close();
   }

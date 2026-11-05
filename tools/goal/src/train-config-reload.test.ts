@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRuntime } from './config.ts';
 import { runIntegration } from './integration-cli.ts';
+import { git } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 
 const setPrelandingTypecheck = (file: string, enabled: boolean) => {
@@ -16,6 +17,10 @@ test('a running train reloads local settings between landings and logs each revi
   let runtime: ReturnType<typeof createRuntime> | undefined;
   let changed = false;
   try {
+    mkdirSync(join(h.root, 'tools/goal/src'), { recursive: true });
+    writeFileSync(join(h.root, 'tools/goal/src/runtime.ts'), 'export const revision = 1;\n');
+    git(h.root, 'add', '--', 'tools/goal/src/runtime.ts');
+    git(h.root, 'commit', '-m', 'Add tools/goal');
     h.ensureDev();
     setPrelandingTypecheck(h.settings.localFile, true);
     h.settings.integration.devPrelandingTypecheck = true;

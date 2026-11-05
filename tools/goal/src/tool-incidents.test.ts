@@ -8,6 +8,7 @@ import { WorkerJob } from './job.ts';
 import { harness } from './test-support.ts';
 import {
   listOpenToolIncidents,
+  projectToolIncidentStatus,
   recordToolBlockerFailure,
   resolveToolIncidentsAfterAttempt,
   toolIncidentRetryAllowed,
@@ -137,6 +138,12 @@ test('later and integrated probes release held retries without another probe', (
   try {
     const { refs, inbox, incident } = seedIncident(h, now, errorLine);
     const heldRefs = refs.filter((ref) => ref.taskId !== incident.probe.taskId);
+    const projection = projectToolIncidentStatus(h.store, h.store.tasks());
+    expect(projection.toolIncidents).toEqual([incident]);
+    const byAttempt = projection.forAttempt(h.store.task(heldRefs[0]!.taskId), h.store.attempt(heldRefs[0]!))!;
+    expect(byAttempt).toEqual(incident);
+    byAttempt.taskIds.push('changed-copy');
+    expect(projection.toolIncidents[0]!.taskIds).not.toContain('changed-copy');
     const laterNotBefore = new Date(now + 60 * 60_000).toISOString();
     for (const ref of refs)
       h.store.updateRetryIntent(ref, (intent) => {
@@ -155,6 +162,9 @@ test('later and integrated probes release held retries without another probe', (
     const task = h.store.task(laterRef.taskId);
 
     expect(resolveToolIncidentsAfterAttempt(h.store, laterRef, task, laterAttempt)).toEqual([incident]);
+    const resolvedProjection = projectToolIncidentStatus(h.store, h.store.tasks());
+    expect(resolvedProjection.toolIncidents).toEqual([]);
+    expect(resolvedProjection.forAttempt(h.store.task(heldRefs[0]!.taskId), h.store.attempt(heldRefs[0]!))).toBeNull();
     expect(recordToolBlockerFailure(h.store, task, laterAttempt, h.settings, inbox, now + 1)).toEqual({
       incident: null,
       opened: false,
@@ -191,6 +201,11 @@ test('later and integrated probes release held retries without another probe', (
     });
 
     expect(listOpenToolIncidents(h.store)).toEqual([]);
+    const finishedProjection = projectToolIncidentStatus(h.store, h.store.tasks());
+    expect(finishedProjection.toolIncidents).toEqual([]);
+    expect(
+      finishedProjection.forAttempt(h.store.task(nextHeldRefs[0]!.taskId), h.store.attempt(nextHeldRefs[0]!)),
+    ).toBeNull();
     expect(nextHeldRefs.map((ref) => toolIncidentRetryAllowed(h.store, ref, now))).toEqual([true, true]);
     expect(nextHeldRefs.map((ref) => h.store.retryIntent(ref)?.status)).toEqual(['pending', 'pending']);
     expect(h.store.attempts(nextIncident.probe.taskId)).toHaveLength(3);

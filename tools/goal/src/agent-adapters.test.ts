@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { agentAdapter, type AgentAdapter } from './agents.ts';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { agentAdapter, type AgentAdapter, type AgentLaunchOptions } from './agents.ts';
 import { launchCommand } from './launch.ts';
-import type { Cli, Pool, Profile } from './types.ts';
+import type { Cli, Pool, Profile, Settings } from './types.ts';
 
 const pool = (cli: Cli): Pool => ({
   name: cli,
@@ -17,6 +19,186 @@ const profile = (cli: Cli): Profile => ({
   model: cli === 'codex' ? 'gpt-6-luna' : 'claude-sonnet',
   effort: 'high',
   poolClass: 'implementation',
+});
+
+test('Codex launch modes preserve argv, local settings and the checkout schema path', () => {
+  const codex: Settings['codex'] = {
+    serviceTier: 'local-priority',
+    compactTokens: { sol: 31, luna: 41 },
+    solContextWindow: 51,
+    toolOutputTokens: 61,
+    backgroundTerminalMaxTimeoutMs: 71,
+  };
+  const sol: Profile = { ...profile('codex'), model: 'gpt-6.1-sol', serviceTier: 'fast' };
+  const base: AgentLaunchOptions = {
+    profile: sol,
+    pool: pool('codex'),
+    worktree: '/work',
+    prompt: 'task',
+    codex,
+  };
+  const schema = join(import.meta.dir, '../worker-result.schema.json');
+  const solConfig = [
+    '--json',
+    '-m',
+    'gpt-6.1-sol',
+    '-c',
+    'model_reasoning_effort=high',
+    '-c',
+    'model_auto_compact_token_limit=31',
+    '-c',
+    'tool_output_token_limit=61',
+    '-c',
+    'features.unified_exec=true',
+    '-c',
+    'background_terminal_max_timeout=71',
+    '-c',
+    'service_tier="local-priority"',
+    '-c',
+    'model_context_window=51',
+    '-c',
+    'features.multi_agent=false',
+    '-c',
+    'features.multi_agent_v2=false',
+  ];
+  const args = (overrides: Partial<AgentLaunchOptions> = {}, selectedProfile = sol) =>
+    launchCommand({ ...base, ...overrides, profile: selectedProfile })[1];
+  expect(existsSync(schema)).toBe(true);
+
+  expect(args({ mcpServers: [{ name: 'storybook', url: 'http://127.0.0.1:6007/mcp' }] })).toEqual([
+    'exec',
+    ...solConfig,
+    '-c',
+    'mcp_servers."storybook".url="http://127.0.0.1:6007/mcp"',
+    '--dangerously-bypass-approvals-and-sandbox',
+    '--output-schema',
+    schema,
+    '-C',
+    '/work',
+    '--',
+    'task',
+  ]);
+  expect(args({ resumeSession: 'thread-1' })).toEqual([
+    'exec',
+    '-C',
+    '/work',
+    'resume',
+    'thread-1',
+    ...solConfig,
+    '--dangerously-bypass-approvals-and-sandbox',
+    '--output-schema',
+    schema,
+    '--',
+    'task',
+  ]);
+  expect(args({ promptViaStdin: true })).toEqual([
+    'exec',
+    ...solConfig,
+    '--dangerously-bypass-approvals-and-sandbox',
+    '--output-schema',
+    schema,
+    '-C',
+    '/work',
+    '--',
+    '-',
+  ]);
+  expect(args({ readOnly: true })).toEqual([
+    'exec',
+    ...solConfig,
+    '-s',
+    'read-only',
+    '-c',
+    'approval_policy="never"',
+    '-C',
+    '/work',
+    '--',
+    'task',
+  ]);
+  expect(args({ research: true })).toEqual([
+    'exec',
+    ...solConfig,
+    '--dangerously-bypass-approvals-and-sandbox',
+    '-c',
+    'web_search="live"',
+    '--output-schema',
+    schema,
+    '-C',
+    '/work',
+    '--',
+    'task',
+  ]);
+  expect(args({ consultation: true, mcpServers: [{ name: 'ignored', url: 'http://127.0.0.1:1/mcp' }] })).toEqual([
+    'exec',
+    '--skip-git-repo-check',
+    '--ignore-user-config',
+    '-c',
+    'project_doc_max_bytes=0',
+    '-c',
+    'web_search="disabled"',
+    ...solConfig,
+    '--dangerously-bypass-approvals-and-sandbox',
+    '--output-schema',
+    schema,
+    '-C',
+    '/work',
+    '--',
+    'task',
+  ]);
+  expect(
+    args({
+      resolver: true,
+      research: true,
+      mcpServers: [{ name: 'ignored', url: 'http://127.0.0.1:1/mcp' }],
+    }),
+  ).toEqual([
+    'exec',
+    '--skip-git-repo-check',
+    '--ignore-user-config',
+    '-c',
+    'project_doc_max_bytes=0',
+    '-c',
+    'web_search="disabled"',
+    ...solConfig,
+    '-s',
+    'workspace-write',
+    '-c',
+    'approval_policy="never"',
+    '-C',
+    '/work',
+    '--',
+    'task',
+  ]);
+
+  const luna: Profile = { ...sol, model: 'gpt-6-luna' };
+  expect(args({}, luna)).toEqual([
+    'exec',
+    '--json',
+    '-m',
+    'gpt-6-luna',
+    '-c',
+    'model_reasoning_effort=high',
+    '-c',
+    'model_auto_compact_token_limit=41',
+    '-c',
+    'tool_output_token_limit=61',
+    '-c',
+    'features.unified_exec=true',
+    '-c',
+    'background_terminal_max_timeout=71',
+    '-c',
+    'service_tier="local-priority"',
+    '-c',
+    'features.multi_agent=false',
+    '-c',
+    'features.multi_agent_v2=false',
+    '--dangerously-bypass-approvals-and-sandbox',
+    '--output-schema',
+    schema,
+    '-C',
+    '/work',
+    '--',
+    'task',
+  ]);
 });
 
 describe('agent adapters', () => {
@@ -123,7 +305,6 @@ describe('agent adapters', () => {
 });
 
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { withAgentAdapter } from './agents.ts';
 import { WorkerJob } from './job.ts';
 import { harness } from './test-support.ts';

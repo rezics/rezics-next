@@ -100,6 +100,9 @@ verifier runs the root typecheck after integration. The train does not run affec
 import or page-story checks before dev advances. Promotion runs the full gate on the candidate before advancing
 `main`.
 
+Decision: The main/dev queue drain, lane leases, outcome replay and post-release recheck have one owner in
+`src/train-queue.ts`; `MergeTrain` supplies typed candidate, check, resolver and publication callbacks.
+
 Decision: A missing local `.sql` declaration followed by at least two TS18046/TS7006 cascades that outnumber
 cascades in changed files is an infrastructure result; landing proceeds and the independent verifier checks the root
 after integration.
@@ -162,9 +165,15 @@ ref guards and finite retry budget. Other main and dev work retains independent
 lanes. Each lane remains serial. A train releases its lease and checks its lane's
 queue again, reacquiring the lease to drain a request that arrived during shutdown. Detached train processes wait for
 the lane lease and recheck the control-plane version while they wait. Every process records the Git object id for
-`main:tools/goal` when it starts; a stale train finishes its active landing, releases its lease and hands the remaining
-queue to current code before it can take another request. Pumps used by short commands still return quietly when
-another process holds the lane lease.
+`main:tools/goal` when it starts and writes that loaded revision onto its lane lease; a later settings reload or a moved
+ref does not recapture it. `goal status` reports each live train's loaded revision from that lease, distinct from the
+settings revision, and reports a stopped or missing lane rather than substituting the status process's own code. After
+finishing the current landing, including resolver work, a stale train releases both lane leases and exits without taking
+another request so the ordinary controller spawn can start current main code. An unrelated main change outside
+`tools/goal` does not retire trains. Pumps used by short commands still return quietly when another process holds the
+lane lease.
+Decision: persist the `tools/goal` object id captured at process start on the lane lease; after the current landing,
+release both leases and exit so replacement starts from published main; status reads that captured id, not current main.
 Detached trains reload effective local train settings between landings; each landing log records the SHA-256 revision of the settings used for that landing.
 Failures return to the same profile and session, trigger one consultation, or reach the owning manager's inbox as
 described under [integration](#integration-promotion-culprit-isolation-and-attempt-fencing).
@@ -201,6 +210,8 @@ source only, or unobserved. An unavailable observation is not described as prove
 never renders as present: prepared-base and current-source presence each require the integrated commit to be an ancestor
 of that tip. A new context supersedes future-tense instructions in an older prompt, retry manifest or
 attempt result; recovery does not reuse an older attempt's context.
+
+Decision: Each capture reads each distinct included dependency ID once, batches valid delivered-commit checks, and reuses ancestry observations per distinct commit/tip pair. The projection lasts only for that capture so later captures observe changed task rows and Git objects.
 
 When a waiting session wakes on a finished failed check, Goal includes the exact result identity, command, exit status
 and original log path. It reads only a UUID-owned log in that task's check directory and includes at most 4 KiB of its
@@ -445,12 +456,14 @@ Each member's acceptance command runs concurrently against the final batch candi
 times out, or changes its worktree, the train retries the members individually so the failure is attributed to its task.
 `promotionParallelism` defaults to `4` and caps concurrent promotion checks.
 
+Decision: settings resolution and decoding live in `settings.ts`; `config.ts` remains the supported public settings entry and owns runtime composition.
+
 ### Control-plane policy
 
 The table is the policy reference for values supplied by `defaults.json`. Local settings use the same dotted
 paths as nested objects and override individual leaves; omitted leaves retain the package default. For example,
 `{"policy":{"capacity":{"maxWorkers":16},"backlog":{"lowWater":4}}}` changes only those two limits.
-`config.ts` validates policy values before composing the runtime. Numeric `policy` leaves are positive safe integers,
+`settings.ts` validates policy values while decoding local settings, before `config.ts` composes the runtime. Numeric `policy` leaves are positive safe integers,
 except the memory floor and extra memory reserve, which accept zero. The worker memory fraction is finite and in
 `(0, 1]`; container age is a finite non-negative number of hours. Retry schedules are non-empty arrays of safe integer
 milliseconds: tool retries permit zero, while settlement pauses must be positive. Manager continuation and unused-allowance alert percentages cannot exceed 100. A host still opts into admission with `capacity.json`; its explicit
@@ -950,6 +963,8 @@ owner/rerere/replay resolution. Owner-landing capability is therefore `unavailab
 conflict-to-landed duration, total open conflicts and their age, and resolution-method counters remain unknown.
 An empty recorded window does not establish zero conflicts or zero conflict-created attempts.
 
+Decision: Each lifecycle-metrics pass reads source schema capabilities once and checks delivered membership with one set-based lookup over current landing waits; the snapshot stays report-local so schema changes appear on the next call.
+
 Decision: Resolver prompts use stdin; each dev conflict is counted once per accepted attempt as landed, returned to the worker with a reason, or still in progress in the trailing-hour flow report.
 
 A clean replay of the resolution onto a moved dev head lands without another resolver session; a replay conflict starts
@@ -986,6 +1001,8 @@ current waits, orphaned landings, promotion state, quarantines and shared tool i
 records. Missing source history is `unknown`; an empty counter is not inferred from missing evidence. Landing counts
 are task outcomes, not changed-line volume. Worker diff churn is labeled separately and is not presented as delivered
 product work.
+
+Decision: Current waiting-state ages use one report-local task/attempt cohort projection with indexed latest-transition lookups by sequence; the report stays uncached and lifecycle ownership stays unchanged.
 
 Decision: Guard-ending buckets use each worker record's own `endedAt` through a bounded index, independently of attempt timestamps, while retaining historical classifications and exact report text.
 
@@ -1085,7 +1102,7 @@ scales in both modes, retaining the current attempt, events and replacement/leas
 Decision: settled-history fixtures use terminal task states; held, ready, stopped and landing tasks belong to the
 active-work axis and cannot be counted as unrelated settled history.
 
-`sqlite-work.test-support.ts` builds a fixture-only extension under `.temp` using `cc` and SQLite development headers.
+`test-support/sqlite-work.ts` builds a fixture-only extension under `.temp` using `cc` and SQLite development headers.
 Through the hosting engine's extension API it reads [SQLite statement counters](https://sqlite.org/c3ref/stmt_status.html)
 on the actual Bun statements: native runs, VM instructions, full-table-scan steps and sorts. Each mapped read
 execution must run once, use 1–1000 VM instructions and zero full-table-scan steps at these fixed live sizes;
@@ -1412,6 +1429,8 @@ same session; [cp-sync](#control-plane-on-dev-cp-sync) is its release gate to `m
 `main`, formats its changes, installs root and `tools/goal/` dependencies, then runs
 `bun run --cwd tools/goal typecheck` and the complete `bun test --timeout 30000 tools/goal/src` suite.
 
+Decision: `launch-smoke.ts` remains the sole executable entry; lazy lifecycle scenarios live in `launch-smoke-scenarios.ts`, bounded evidence/report helpers live in `launch-smoke-evidence.ts`, and the inner child still dispatches through the candidate entry.
+Decision: Promotion command planning, exact-candidate check execution, result persistence/cache identity and infrastructure reruns live in `promotion-checks.ts`; `promotion.ts` remains the coordinator for promotion decisions and ref publication and re-exports the existing command API.
 Changes to the worker launch path also run `tools/goal/scripts/launch-smoke.ts` on the candidate after the control-plane checks.
 The smoke builds a disposable worktree with the candidate merged on top of current `dev`, dispatches one tiny task through
 the real worker launch and settle path, starts a real `scripts/worker-check.ts` command, and waits for its result before
@@ -1471,6 +1490,11 @@ resumes the same attempt, and records named scenario and regression evidence. A 
 candidate, dev script tree and scenario results. A failed, timed-out, capacity-waiting or incomplete suite or contract
 is unverified and cannot certify `main`; no baseline allowance can turn a required failure into a pass. Candidate
 mutation or a stale main, stabilize or dev ref invalidates the run and starts validation again.
+
+Lifecycle fixtures live in `test-support/lifecycle-fixture.ts`, `test-support/lifecycle-scenarios.ts` and
+`test-support/sqlite-work.ts`; they are retained support, not runtime inventory. `src/test-support.ts` and
+`src/test-environment.ts` remain the injected process-ownership adapter and Bun preload. Decision: existing
+consumer tests pin those APIs; no tests that only assert a directory name.
 
 The existing local-placement, compatibility and smoke test fixtures share `checkScriptFixture` in `src/test-support.ts`.
 It captures the development ref as one immutable commit before reading files, including the manifest and lockfile
@@ -1576,6 +1600,8 @@ integration head.
 `defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. A rebase resolves a conflict in a declared generated path at either stage by keeping the integration side, running each matching command in the train worktree, staging its generated outputs and continuing through the ordinary landing checks. This includes `bun.lock`: the train keeps the integration lockfile and runs `bun install` against the merged manifests, stages the regenerated lockfile and continues. Retries use the same declarations and regeneration commands. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed rebase conflict is resolved only when every non-generated conflict is Markdown, an already supported import-only conflict, or a configured flat JSON message catalog; any other conflict stays with the worker before regeneration runs. Markdown rebase conflicts use `git merge-file --union` to keep both sides' additions; the landing log and the owning Goal's integration notice name each such file for section-order review, including unions performed during a retry and in a batch landing. Configured `jsonMessageConflicts` patterns use a three-way key merge, retain the checked-out catalog's order and append keys introduced by the worker, and format the result with the repository formatter. A key changed to different values on both sides remains a conflict and the error names that key. Other non-generated conflicts on main or stabilize stay with the worker. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
 
 Dev landing conflicts that rerere and the mechanical resolvers do not settle go to the bounded `TrainResolver` in its own worktree with the task brief, base and both sides. The train releases the dev lease while it runs; a resolved commit returns to the front of the dev queue. `policy.trainResolver.devAttempts` bounds repeated resolution (default `3`). If resolution fails, times out or reaches that bound, the same attempt returns to its worker. The landing outcome and log record the method (`rerere`, `mechanical`, `resolver` or `worker`) and resolver token totals.
+
+Decision: Keep the accepted worker source fixed across dev movement; retry composition after a replay conflict, then replay a clean resolution onto the newest dev head before the existing landing publishes it.
 
 Resolver prompts include conflict hunks with context, source contracts and instructions for reading each Git stage; long compiler output includes its first and last lines plus the full log path.
 
@@ -1881,6 +1907,9 @@ The event command does not sweep or resume workers. Acceptance and delivery even
 The decision shares the existing 20,000-character total prompt limit and process input byte limit with the ordinary
 prompt. References that do not fit remain pending; if the summary itself cannot fit, launch refuses the oversized
 prompt without recording delivery. Only a successful launch records delivery against the accepted event sequence.
+Projection decision: each prompt parses decisions and deliveries in one event traversal, keeps the earliest sequence
+per decision identity, selects by controller timestamp then event sequence, and reads each referenced path once.
+No projection cache is persisted, and the delivery protocol is unchanged.
 
 #### Native Storybook publication
 
@@ -2143,6 +2172,9 @@ host's socket. The host skips the minute while the previous child is still runni
   recognized idempotently. Stale, foreign, cancelled, live or otherwise ineligible tasks move to `failed/` with a
   reason. Briefs without this marker continue to create new tasks.
 
+  Decision: Build one projection per continuation harvest or claimed brief; refresh between admissions and include each
+  harvest publication before checking siblings.
+
 - **Stopped tasks.** A product task that has been `stopped` for more than 60 minutes since its last event, with no
   pending retry, is cancelled through the `goal cancel` path, at most 20 per Goal per run, longest stopped first. Its
   brief is written to `failed/<task-id>.md` and its blocker and branch to `failed/<task-id>.reason`; each owner
@@ -2202,13 +2234,19 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 `status`, `attempts` and `report` are read-only: they do not recover orphans, record manager commands or drain queued
 work. For held tasks, `status` keeps `waitingFor` as the blocking dependency IDs and adds `dependencies` entries with
 their state and readiness. Missing or malformed dependencies have state `unknown`; readiness follows the same target
-and integration-commit policy used to release held work.
+and integration-commit policy used to release held work. The same `status` object includes `trains`: each main and dev
+lane with `state` `running`, `stopped` or `missing`, and for a recorded owner the captured `codeVersion` of the
+`tools/goal` tree that process loaded. That field is not the current `main` ref and is not the settings revision.
+Decision: status builds an invocation-local projection from its selected task cohort and one incident-history read,
+reusing current attempt, retry intent and probe task state reads only within that response.
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
 
 For an attempt that has started, `stop` and `cancel` persist the requested disposition before signaling its recorded process groups. `status <task>` shows `terminationRequest` as requested, unknown or complete; missing process identity stays unknown. Host recovery may settle that request only after every recorded run PID is gone and a fresh scan finds no live process whose working directory is inside the task's worktree. It records the requested terminal result once. A stop abandons any retry already queued for that attempt; a later explicit retry queues a new one.
+Decision: a setup-failed attempt with no `worker-run-started` event, no process and no current PID file is never-launched. Recovery settles stop or cancel from that lifecycle evidence and worktree absence without writing a PID, leaves earlier run PIDs, checks and landing candidates untouched, then applies the existing retry fence. A completed cancel stays fenced. Live worktree descendants or unreadable PID evidence keep the request unknown. Tests cover failed setup, live descendants, unreadable evidence, true cancellation and repeated reconciliation.
 The request fences worker settlement and replacement until its disposition is committed (`settledAt`). Physical
-confirmation alone does not authorize a retry. Recovery leaves a later explicit retry of a settled stop queued.
+confirmation alone does not authorize a retry. Recovery leaves a later explicit retry of a settled stop queued. An
+explicit `retry` of the same task resumes that unsettled stop first, then uses the same fence.
 
 A retry resumes the previous attempt's provider session while the pool, CLI and model stay the same. `--fresh-session`
 starts the next attempt in a new session instead, keeping the branch, worktree, commits and uncommitted work; the
@@ -2254,6 +2292,14 @@ session while keeping its manager history and budget. An already-running provide
 that handoff; the host does not edit a live process environment. A resident supermanager remains an external session
 and is never launched or resumed by host recovery. Codex managers use a goal budget. Claude uses its configured
 executable and configuration directory, interactive window and turn-accounting hooks.
+The Stdio and WebSocket transports share one internal JSON-RPC implementation for request tracking, deadlines,
+notifications, response decoding, initialization and terminal rejection; framing, connection, readiness and owned
+child lifecycle remain with the transports ([control-plane simplification research](research/control-plane-simplification.md)).
+Decision: ManagerSessions is the durable Goal coordinator; `manager-session-transport.ts` owns the provider connection
+cache, concrete Codex/Claude session requests, viewer argv and window prompt/respawn. Prompt rendering, launch-manifest
+accounting, inbox delivery, renewal and budget stay with ManagerSessions. Extraction tests pin saved-thread ordering,
+retired-thread notifications, once-per-identity start, interrupt fallback, reconnect after a failed connect, and close
+flushing pending work.
 Every Codex manager `turn/start` pins `gpt-6.1-sol` and the manager's configured effort, including the opening,
 idle inbox wakes, and renewed continuation threads. The app-server `turn/steer` request accepts input and an
 `expectedTurnId`, but no model or effort override, so steering keeps the active turn's pinned settings. Recovery and
@@ -2306,6 +2352,7 @@ keeps the worker's source branch available for the owner's fix. It then advances
 the fix can start from that verified base. A transport or other recognized infrastructure failure during a culprit
 probe is retried up to twice and remains unassigned if it still cannot run; it is not treated as an assertion.
 Decision: source-presence and failed-input hashes use one Git batch-check per revision; missing paths, cwd, closure/package trees, env/toolchain identity and hashes stay.
+Decision: comparison, evidence construction and failure attribution live in `dev-verifier-comparison.ts`; `dev-verifier.ts` retains orchestration while planning, execution/classification and persistence stay with their existing owners.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
 `.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
@@ -2542,6 +2589,10 @@ quota-parser exports remain available for historical imports. Test an adapter th
 `withAgentAdapter`, whose binding stays local to that asynchronous lifecycle. Agents that cannot resume set
 `canResume` to false; retries then start a fresh session with the retry manifest.
 
+Codex keeps launch argv construction in `src/agents/codex-command.ts`, event normalization and incremental usage
+interpretation in `src/agents/codex-events.ts`, and adapter composition plus provider filesystem access in
+`src/agents/codex.ts`. The composition module retains the `parseCodexSessionUsage` and `parseCodexAllowance` exports.
+
 ## Baseline findings and release gates
 
 This policy supersedes the earlier `Development verification` overview above. `dev-verified` records verifier progress
@@ -2562,12 +2613,17 @@ unknown rather than clean baseline results. Findings and exact run evidence are 
 unchanged finding does not start another sweep after restart. Baseline runs, probes and retries all share the ordinary
 three-check concurrency cap.
 
+Decision: run and finding persistence live in `dev-verifier-storage.ts`; the verifier retains execution order and the existing store-method precedence, SQLite fallbacks and failure behavior.
+
 Decision: the landing train and dev verifier share pure changed-path selection. Each caller retains its configured order,
 closures, exclusions, workspace placement and execution authority.
 
 Decision: each verification builds one source-interval landing history (one Git log of `base..target`, plus one optional
 batched extra-commit read). That projection is not reused across source intervals, and a landing is not treated as
 verified unless its acceptance passed on that exact head.
+
+Decision: `dev-verifier-plan.ts` owns read-only source projections and verifier check planning; `dev-verifier.ts`
+retains hashes, cache policy, execution, comparison, findings and lifecycle writes.
 
 Each fresh verifier tree installs its own dependencies, even after an earlier tree's setup passed. Installation uses
 an available matching repository Bun or bootstraps with the verifier process's Bun, and logs the executable used.
@@ -2608,10 +2664,9 @@ changing its environment configuration.
 `rezics-goal-host.service` runs `_manager-host` with `Restart=always` and a 60-second watchdog. The host signals
 readiness after binding its socket and sends heartbeats from its event loop every half watchdog interval. A crash,
 kill or stopped event loop therefore causes systemd to restart it. `KillMode=process` limits host termination to the
-main PID; worker scopes in `rezics-workers.slice` beneath `rezics.slice` and the merge train survive. The host keeps
-socket leasing, worker adoption, manager recovery and owned app-server cleanup. Host liveness journals, startup
-leases, supervisor processes and code-polling self-restarts are removed. An ordinary CLI can ask systemd to start an
-absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
+main PID; worker scopes in `rezics-workers.slice` beneath `rezics.slice` and the merge train survive.
+Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
+An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 
 The maintenance timer starts a bounded oneshot every minute. `goal maintenance reap` reaps recorded worker groups
 whose worktree has been deleted, checking process birth identity. `goal maintenance alarm` evaluates product-output

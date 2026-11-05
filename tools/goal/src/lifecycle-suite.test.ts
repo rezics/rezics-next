@@ -7,8 +7,8 @@ import {
   MANAGER_INCIDENT_REGRESSIONS,
   REQUIRED_LIFECYCLE_SCENARIOS,
   runSmallPromotionScenario,
-} from './lifecycle-scenarios.ts';
-import { recordSystemdRun, requireWorkerCheck, writeEvidenceAtomically } from './lifecycle-fixture.ts';
+} from '../test-support/lifecycle-scenarios.ts';
+import { recordSystemdRun, requireWorkerCheck, writeEvidenceAtomically } from '../test-support/lifecycle-fixture.ts';
 
 test('the required dev worker-check runner fails closed when it is absent', () => {
   const missing = join(tmpdir(), `missing-worker-check-${randomUUID()}.ts`);

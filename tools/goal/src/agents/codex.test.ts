@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { agentAdapter, type AgentAdapter, type AgentLaunchOptions } from '../agents.ts';
 import { launchCommand } from '../launch.ts';
 import type { Cli, Pool, Profile } from '../types.ts';
-import { codexAdapter } from './codex.ts';
+import { codexAdapter, parseCodexSessionUsage } from './codex.ts';
 
 function options(cli: Cli = 'codex'): AgentLaunchOptions {
   const profile: Profile = { cli, model: 'gpt-6.1-sol', effort: 'high', poolClass: 'implementation' };
@@ -23,6 +23,90 @@ function options(cli: Cli = 'codex'): AgentLaunchOptions {
     prompt: 'Resolve only the supplied source paths.',
   };
 }
+
+test('Codex normalization keeps command identity, rollout usage and completed-answer selection', () => {
+  const usage = { input_tokens: 8, cached_input_tokens: 5, output_tokens: 2 };
+  expect(codexAdapter.parseEvent!({ type: 'turn.completed', usage, usage_mode: 'delta' }, false)).toEqual({
+    usage: { tokens: { input: 8, cached: 5, output: 2 }, delta: true },
+  });
+  expect(
+    codexAdapter.parseEvent!(
+      { type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: usage } } },
+      true,
+    ),
+  ).toEqual({ usage: { tokens: { input: 8, cached: 5, output: 2 }, delta: false } });
+  expect(codexAdapter.parseEvent!({ type: 'turn.completed', usage }, true)).toBeNull();
+  expect(
+    codexAdapter.parseEvent!({ type: 'item.started', item: { type: 'agent_message', text: 'streamed' } }, false),
+  ).toBeNull();
+  expect(
+    codexAdapter.parseEvent!(
+      { type: 'event_msg', payload: { type: 'message', role: 'assistant', content: [{ text: 'rollout echo' }] } },
+      true,
+    ),
+  ).toBeNull();
+  expect(
+    codexAdapter.parseEvent!({ type: 'item.completed', item: { type: 'agent_message', text: 'final report' } }, false),
+  ).toEqual({ answer: 'final report' });
+  expect(
+    codexAdapter.parseEvent!(
+      {
+        type: 'response_item',
+        payload: { type: 'message', role: 'assistant', content: [{ text: 'final' }, { text: ' answer' }] },
+      },
+      false,
+    ),
+  ).toEqual({ answer: 'final\n answer' });
+  expect(
+    codexAdapter.parseEvent!(
+      { type: 'item.completed', item: { type: 'command_execution', id: 'command-1', command: 'bun test' } },
+      false,
+    )?.commands,
+  ).toEqual([{ id: 'command-1', text: 'bun test' }]);
+  expect(
+    codexAdapter.parseEvent!(
+      { type: 'item.completed', payload: { type: 'function_call', call_id: 'call-1', arguments: '{"cmd":' } },
+      false,
+    )?.commands,
+  ).toBeUndefined();
+});
+
+test('Codex session usage array and incremental consumers agree at interval boundaries', () => {
+  const start = Date.parse('2026-10-25T00:00:00.000Z');
+  const end = Date.parse('2026-10-25T00:01:00.000Z');
+  const events = [
+    {
+      timestamp: new Date(start).toISOString(),
+      type: 'token_usage_record',
+      response_id: 'response-1',
+      payload: {
+        usage: { input_tokens: 100, cached_input_tokens: 70, output_tokens: 20, reasoning_output_tokens: 3 },
+        settings: { model: 'gpt-6.1-sol', effort: 'high', service_tier: 'priority' },
+      },
+    },
+    {
+      timestamp: new Date(start).toISOString(),
+      type: 'token_usage_record',
+      response_id: 'response-1',
+      payload: { usage: { input_tokens: 900, output_tokens: 500 } },
+    },
+    { timestamp: new Date(end).toISOString(), type: 'session.compacted' },
+    {
+      timestamp: new Date(end + 1).toISOString(),
+      type: 'token_usage_record',
+      usage: { input_tokens: 900, output_tokens: 500 },
+    },
+  ];
+  const arrayResult = parseCodexSessionUsage(events, start, end);
+  const incremental = codexAdapter.createUsageAccumulator!(start, end);
+  for (const event of events) incremental.add(event);
+  expect(incremental.finish()).toEqual(arrayResult);
+  expect(arrayResult).toEqual({
+    tokens: { input: 100, cached: 70, output: 20 },
+    usage: { model: 'gpt-6.1-sol', effort: 'high', serviceTier: 'priority', reasoning: 3, compactions: 1 },
+    source: 'codex-session',
+  });
+});
 
 test('the Codex resolver constructs a fresh sandbox command without ordinary worker permissions or schema', () => {
   // Flag-like source evidence must stay opaque, never participate in command rewriting.

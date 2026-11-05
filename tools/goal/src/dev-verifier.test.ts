@@ -1,6 +1,8 @@
 import { afterEach, expect, test } from 'bun:test';
+import { Database } from 'bun:sqlite';
 import { readControlPolicy } from './policy.ts';
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -16,6 +18,9 @@ import { spawnSync } from 'node:child_process';
 import { acquireDirectoryLease } from './lease.ts';
 import { parseBrief } from './briefs.ts';
 import { bootSmokeEnvironment } from './verification.ts';
+import { executeCheck } from './dev-verifier-execution.ts';
+import { openDb } from './db.ts';
+import { WorkerStore } from './store.ts';
 import {
   bootSmokeRepairBrief,
   classifyRun,
@@ -186,6 +191,86 @@ test('classifies check outcomes and runs Web tests from their workspace', () => 
   });
 });
 
+test('execution preserves caught runner output, transport retries, and source-bound log identity', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'goal-verifier-execution-'));
+  roots.push(root);
+  const stateDirectory = join(root, '.state');
+  const tree = join(root, 'candidate');
+  mkdirSync(stateDirectory, { recursive: true });
+  mkdirSync(join(tree, 'apps/widget'), { recursive: true });
+  const runs = new Map<string, DevVerifierRun>();
+  const execution = {
+    settings: {
+      mainCheckout: root,
+      stateDirectory,
+      policy: readControlPolicy({ verifier: { checkAttempts: 2 } }),
+    },
+    readRun: (key: string) => runs.get(key)?.evidence,
+    saveRun: (run: DevVerifierRun) => runs.set(run.key, run),
+  };
+  const check: DevVerifierCheck = {
+    command: ['node', 'widget.test.js'],
+    closure: ['apps/widget/**'],
+    cwd: 'apps/widget',
+  };
+  const logs: string[] = [];
+  const retried = await executeCheck(
+    execution,
+    async (command, cwd, logPath) => {
+      expect(command).toEqual(check.command);
+      expect(cwd).toBe(join(tree, 'apps/widget'));
+      logs.push(logPath);
+      if (logs.length === 1) throw new Error('ETIMEDOUT while connecting to check host');
+      writeFileSync(logPath, 'retried successfully');
+      return { passed: true, output: 'retried successfully', timedOut: false };
+    },
+    check,
+    'head-commit',
+    tree,
+    'retry-run',
+    'retry-input',
+  );
+  expect(retried.output).toBe('attempt 1: ETIMEDOUT while connecting to check host\nattempt 2: retried successfully');
+  expect(retried.logPath).toBe(logs[1]!);
+  expect(readFileSync(retried.logPath, 'utf8')).toBe('retried successfully');
+  expect(logs[0]!).not.toBe(logs[1]!);
+
+  const thrown = await executeCheck(
+    execution,
+    async () => {
+      throw new Error('AssertionError: runner threw');
+    },
+    check,
+    'source-commit',
+    tree,
+    'product-run',
+    'product-input',
+  );
+  expect(thrown.output).toBe('AssertionError: runner threw');
+  expect(thrown.result).toBe('fail');
+  expect(runs.get('product-run')?.evidence).toEqual(thrown);
+  expect(runs.get('product-input')?.evidence.commit).toBe('source-commit');
+
+  let reran = false;
+  const rebound = await executeCheck(
+    execution,
+    async () => {
+      reran = true;
+      return { passed: true, output: '', timedOut: false };
+    },
+    check,
+    'later-commit',
+    tree,
+    'later-run',
+    'product-input',
+  );
+  expect(reran).toBe(false);
+  expect(rebound.commit).toBe('later-commit');
+  expect(rebound.cwd).toBe(check.cwd);
+  expect(rebound.logPath).toBe(thrown.logPath);
+  expect(rebound.output).toBe(thrown.output);
+});
+
 test('uses the candidate pinned Bun and falls back to the installed producer artifact only when absent', () => {
   const root = mkdtempSync(join(tmpdir(), 'goal-pinned-bun-'));
   roots.push(root);
@@ -319,6 +404,7 @@ test('worker-owned briefs keep affected verification without inventing an accept
       return { passed: true, output: '', timedOut: false };
     },
   });
+  expect(commands.some((command) => command.includes('TYPECHECK_CHANGED=services/kernel/change.ts'))).toBe(true);
   expect(commands).toContain('affected-check');
   expect(commands).not.toContain('');
   expect(commands.some((command) => command.startsWith('acceptance'))).toBe(false);
@@ -420,6 +506,14 @@ test('projects verifier source inputs once per immutable revision with bounded G
   expect(checkInput(settings, head, { command: present.command, closure: present.closure }, many)).not.toBe(input);
   writeFileSync(join(settings.stateDirectory, 'remote-check-hosts.json'), '{"hosts":[]}');
   expect(checkInput(settings, head, present, many)).not.toBe(input);
+
+  const next = commit(root, 'apps/widget/src/value.ts', 'export const value = 2;\n', 'change widget');
+  const newer = projectChecksSource(root, next, [present]);
+  const oldObject = one.objects.get('apps/widget/src/value.ts');
+  expect(oldObject).toEqual(expect.any(String));
+  expect(newer).toMatchObject({ commit: next, gitReads: 1 });
+  expect(newer.objects.get('apps/widget/src/value.ts')).not.toBe(oldObject);
+  expect(one.objects.get('apps/widget/src/value.ts')).toBe(oldObject);
 });
 
 test('fallback landings keep acceptance while skipped kinds do not', async () => {
@@ -714,4 +808,130 @@ test('one existing-failure probe leaves unsampled prefixes unproven without reve
   expect(ctx.updates).toEqual([]);
   expect(git(root, 'rev-parse', 'dev')).toBe(head);
   expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
+});
+
+test('verifier evidence persistence keeps store writes authoritative, tolerates failures, and falls back to SQLite', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev-verified');
+  const head = commit(root, 'services/kernel/persisted.ts', 'export const persisted = true;\n', 'landing');
+  git(root, 'branch', '-f', 'dev', head);
+  const ctx = setup(root, [landedTask(base, head)]);
+  ctx.settings.policy = readControlPolicy({ verifier: { runRows: 2, findingRows: 1 } });
+  const databasePath = join(ctx.settings.stateDirectory, 'goal.sqlite');
+  const database = new WorkerStore(openDb(databasePath));
+  let databaseOpen = true;
+  const attemptedFindings: DevVerifierFinding[] = [];
+  const failingStore = {
+    ...ctx.store,
+    db: database.db,
+    saveDevVerifierRun: () => {
+      throw new Error('run write failed');
+    },
+    saveDevVerifierFinding: (finding: DevVerifierFinding) => {
+      attemptedFindings.push(finding);
+      throw new Error('finding write failed');
+    },
+  };
+  const runGate = async (command: readonly string[]) =>
+    command[0] === 'affected-check'
+      ? { passed: false, output: 'AssertionError: retained verifier failure', timedOut: false }
+      : { passed: true, output: '', timedOut: false };
+
+  try {
+    await verifyDev({ ...ctx, store: failingStore, runGate });
+    expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
+    expect(attemptedFindings.some((finding) => finding.status === 'existing')).toBe(true);
+    expect(
+      (database.db.query('SELECT count(*) AS count FROM dev_verifier_runs').get() as { count: number }).count,
+    ).toBe(0);
+    expect(
+      (database.db.query('SELECT count(*) AS count FROM dev_verifier_findings').get() as { count: number }).count,
+    ).toBe(0);
+
+    git(root, 'branch', '-f', 'dev-verified', base);
+    const fallbackStore = {
+      db: database.db,
+      tasks: ctx.store.tasks,
+      task: ctx.store.task,
+      updateTask: ctx.store.updateTask,
+    };
+    await verifyDev({ ...ctx, store: fallbackStore, runGate });
+
+    const run = database.db
+      .query('SELECT cache_key, created_at, body FROM dev_verifier_runs ORDER BY rowid DESC')
+      .get() as { cache_key: string; created_at: string; body: string } | undefined;
+    expect(run).toBeDefined();
+    const decodedRun = JSON.parse(run!.body) as DevVerifierRun;
+    expect([run!.cache_key, run!.created_at, decodedRun.key, decodedRun.createdAt]).toEqual([
+      decodedRun.key,
+      decodedRun.createdAt,
+      decodedRun.key,
+      decodedRun.createdAt,
+    ]);
+    expect(decodedRun.evidence).toHaveProperty('result');
+    expect(
+      (database.db.query('SELECT count(*) AS count FROM dev_verifier_runs').get() as { count: number }).count,
+    ).toBeLessThanOrEqual(2);
+
+    const findingRow = database.db
+      .query(
+        'SELECT range_key, identity, signature, base_commit, head_commit, status, created_at, body FROM dev_verifier_findings',
+      )
+      .get() as
+      | {
+          range_key: string;
+          identity: string;
+          signature: string;
+          base_commit: string;
+          head_commit: string;
+          status: string;
+          created_at: string;
+          body: string;
+        }
+      | undefined;
+    expect(findingRow).toBeDefined();
+    const decodedFinding = JSON.parse(findingRow!.body) as DevVerifierFinding;
+    expect([
+      findingRow!.range_key,
+      findingRow!.identity,
+      findingRow!.signature,
+      findingRow!.base_commit,
+      findingRow!.head_commit,
+      findingRow!.status,
+      findingRow!.created_at,
+    ]).toEqual([
+      decodedFinding.rangeKey,
+      decodedFinding.identity,
+      decodedFinding.signature,
+      decodedFinding.baseCommit,
+      decodedFinding.headCommit,
+      decodedFinding.status,
+      decodedFinding.createdAt,
+    ]);
+    expect(decodedFinding.status).toBe('existing');
+    expect(
+      (database.db.query('SELECT count(*) AS count FROM dev_verifier_findings').get() as { count: number }).count,
+    ).toBeLessThanOrEqual(1);
+
+    database.db.close();
+    databaseOpen = false;
+    chmodSync(databasePath, 0o444);
+    try {
+      expect(devVerificationState(root, ctx.settings.stateDirectory).findings).toEqual({
+        existing: 1,
+        new: 0,
+        unknown: 0,
+      });
+    } finally {
+      chmodSync(databasePath, 0o644);
+    }
+
+    const absentState = join(root, '.no-finding-table');
+    mkdirSync(absentState, { recursive: true });
+    const absentDatabase = new Database(join(absentState, 'goal.sqlite'));
+    absentDatabase.close();
+    expect(devVerificationState(root, absentState).findings).toEqual({ existing: 0, new: 0, unknown: 0 });
+  } finally {
+    if (databaseOpen) database.db.close();
+  }
 });

@@ -70,6 +70,59 @@ function gitValue(cwd: string, args: string[], policy: ContextPolicy): GitValue 
   return { value: result.stdout.trim() };
 }
 
+type CommitObservation =
+  | { availability: 'available' }
+  | { availability: 'missing' }
+  | { availability: 'unknown'; reason: string };
+
+function dependencyCommitObservations(
+  cwd: string,
+  commits: string[],
+  policy: ContextPolicy,
+): Map<string, CommitObservation> {
+  const observations = new Map<string, CommitObservation>();
+  if (!commits.length) return observations;
+  const result = spawnSync('git', ['cat-file', '--batch-check'], {
+    cwd,
+    encoding: 'utf8',
+    input: commits.map((commit) => `${commit}^{commit}`).join('\n') + '\n',
+    maxBuffer: policy.probeBufferBytes,
+  });
+  if (result.status !== 0) {
+    const reason =
+      bounded(result.error?.message ?? result.stderr?.trim(), policy.diagnosticCharacters) ??
+      'Git could not verify dependency commit availability';
+    for (const commit of commits) observations.set(commit.toLowerCase(), { availability: 'unknown', reason });
+    return observations;
+  }
+
+  const lines = result.stdout.trimEnd().split('\n');
+  if (lines.length !== commits.length) {
+    for (const commit of commits)
+      observations.set(commit.toLowerCase(), {
+        availability: 'unknown',
+        reason: 'Git returned an incomplete dependency object observation',
+      });
+    return observations;
+  }
+  for (const [index, line] of lines.entries()) {
+    const objectType = line.trim().split(/\s+/, 3)[1];
+    const commit = commits[index]!;
+    observations.set(
+      commit.toLowerCase(),
+      objectType === 'commit'
+        ? { availability: 'available' }
+        : objectType === 'missing'
+          ? { availability: 'missing' }
+          : {
+              availability: 'unknown',
+              reason: 'Git returned an invalid dependency object observation',
+            },
+    );
+  }
+  return observations;
+}
+
 function isCommit(cwd: string, value: string | null, policy: ContextPolicy): boolean {
   if (!value || !OBJECT_ID.test(value)) return false;
   const result = spawnSync('git', ['cat-file', '-e', `${value}^{commit}`], {
@@ -96,14 +149,74 @@ function ancestorPresence(cwd: string, commit: string, tip: string, policy: Cont
   };
 }
 
-function dependencyReceipt(
+type DependencyRecord = ReturnType<WorkerStore['dependency']>;
+type DependencyCommitFacts =
+  | { availability: 'missing' }
+  | { availability: 'unknown'; reason: string }
+  | { availability: 'available'; sourceSeen: Ancestry; baseSeen: Ancestry };
+type DependencyProjection = {
+  records: Map<string, DependencyRecord>;
+  commits: Map<string, DependencyCommitFacts>;
+};
+
+function dependencyProjection(
   store: WorkerStore,
+  ids: string[],
+  source: { worktree: string | null; head: string | null; base: string | null; verified: boolean },
+  policy: ContextPolicy,
+): DependencyProjection {
+  const records = new Map<string, DependencyRecord>();
+  for (const id of ids) if (!records.has(id)) records.set(id, store.dependency(id));
+
+  const candidates = new Map<string, string>();
+  if (source.verified && source.worktree && source.head)
+    for (const record of records.values()) {
+      const state = record?.state;
+      const commit = record?.task_commit;
+      if ((state === 'integrated' || state === 'merged') && typeof commit === 'string' && OBJECT_ID.test(commit))
+        candidates.set(commit.toLowerCase(), commit);
+    }
+
+  const availability = source.worktree
+    ? dependencyCommitObservations(source.worktree, [...candidates.values()], policy)
+    : new Map<string, CommitObservation>();
+  const ancestry = new Map<string, Ancestry>();
+  const observeAncestor = (commit: string, tip: string) => {
+    const key = `${commit.toLowerCase()}\0${tip.toLowerCase()}`;
+    let observation = ancestry.get(key);
+    if (!observation) {
+      observation = ancestorPresence(source.worktree!, commit, tip, policy);
+      ancestry.set(key, observation);
+    }
+    return observation;
+  };
+  const commits = new Map<string, DependencyCommitFacts>();
+  for (const [key, commit] of candidates) {
+    const object = availability.get(key);
+    if (object?.availability !== 'available') {
+      commits.set(
+        key,
+        object ?? { availability: 'unknown', reason: 'Git could not verify dependency commit availability' },
+      );
+      continue;
+    }
+    const sourceSeen = observeAncestor(commit, source.head!);
+    const baseSeen = source.base
+      ? observeAncestor(commit, source.base)
+      : { presence: 'unknown' as const, reason: 'prepared task base is unavailable' };
+    commits.set(key, { availability: 'available', sourceSeen, baseSeen });
+  }
+  return { records, commits };
+}
+
+function dependencyReceipt(
   id: string,
+  dependency: DependencyRecord,
+  projection: DependencyProjection,
   source: { worktree: string | null; head: string | null; base: string | null; verified: boolean },
   policy: ContextPolicy,
 ): DependencyReceipt {
   const name = bounded(id, policy.textCharacters) ?? '<unknown dependency>';
-  const dependency = store.dependency(id);
   if (!dependency)
     return {
       id: name,
@@ -156,7 +269,8 @@ function dependencyReceipt(
       precondition: 'unknown',
       reason: 'the current task source identity could not be verified',
     };
-  if (!isCommit(source.worktree, commit, policy))
+  const facts = projection.commits.get(commit.toLowerCase());
+  if (!facts || facts.availability !== 'available')
     return {
       id: name,
       state,
@@ -165,16 +279,14 @@ function dependencyReceipt(
       sourcePresence: 'unknown',
       basePresence: 'unknown',
       precondition: 'unknown',
-      reason: 'the dependency commit is not available in the current task checkout',
+      reason:
+        facts?.availability === 'unknown'
+          ? facts.reason
+          : 'the dependency commit is not available in the current task checkout',
     };
 
-  const sourceSeen = ancestorPresence(source.worktree, commit, source.head, policy);
-  const baseSeen =
-    source.base && source.base !== source.head
-      ? ancestorPresence(source.worktree, commit, source.base, policy)
-      : source.base
-        ? sourceSeen
-        : { presence: 'unknown' as const, reason: 'prepared task base is unavailable' };
+  const sourceSeen = facts.sourceSeen;
+  const baseSeen = facts.baseSeen;
   const sourcePresence = sourceSeen.presence;
   const basePresence = baseSeen.presence;
   const precondition =
@@ -303,7 +415,20 @@ export function captureLaunchContext(
   const source = sourceFacts(task, policy);
   const rawAfter = (task.brief as { after?: unknown }).after;
   const after = Array.isArray(rawAfter) ? rawAfter : null;
-  const receipts = (after ?? []).slice(0, policy.dependencies).map((value, index) => {
+  const included = (after ?? []).slice(0, policy.dependencies);
+  const ids = included.filter((value): value is string => typeof value === 'string');
+  const projection = dependencyProjection(
+    store,
+    ids,
+    {
+      worktree: source.worktree,
+      head: source.head,
+      base: source.base,
+      verified: source.verified,
+    },
+    policy,
+  );
+  const receipts = included.map((value, index) => {
     if (typeof value !== 'string')
       return {
         id: `<invalid dependency ${index + 1}>`,
@@ -316,8 +441,9 @@ export function captureLaunchContext(
         reason: 'historical task record contains an invalid dependency id',
       };
     return dependencyReceipt(
-      store,
       value,
+      projection.records.get(value),
+      projection,
       {
         worktree: source.worktree,
         head: source.head,

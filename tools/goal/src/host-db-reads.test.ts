@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerStore } from './store.ts';
-import { observeSqliteWork, type SqliteWork } from './sqlite-work.test-support.ts';
+import { observeSqliteWork, type SqliteWork } from '../test-support/sqlite-work.ts';
 
 const root = join(process.cwd(), '.temp', `host-db-reads-${crypto.randomUUID()}`);
 mkdirSync(root, { recursive: true });
