@@ -571,12 +571,7 @@ export class ShelfPreferenceDraftRecovery {
         writeResponse: shelfResponse(reason, result.failure),
         writeBusy: false,
         current: false,
-        advice:
-          result.reason === 'forbidden'
-            ? deniedShelfUpdate(this.state.advice)
-            : result.reason === 'conflict'
-              ? undefined
-              : this.state.advice,
+        advice: result.reason === 'forbidden' ? deniedShelfUpdate(this.state.advice) : this.state.advice,
       });
       return;
     }
@@ -667,7 +662,6 @@ export class ShelfPreferenceDraftRecovery {
       this.update({
         phase: 'conflict',
         current: false,
-        advice: undefined,
       });
       return;
     }

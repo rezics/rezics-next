@@ -325,7 +325,7 @@ test('mounted unavailable recovery retains display and filters, retires the curs
           cursor: 'obsolete',
         } as const;
         await act(async () => root.render(createElement(ShelfScoreUnavailable, { locale: 'en', view })));
-        expect(host.querySelector('[role="alert"]')?.textContent).toContain('not available');
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('not current');
         expect(host.querySelector('[data-shelf-score-state]')?.getAttribute('data-shelf-score-state')).toBe(
           'unavailable',
         );
