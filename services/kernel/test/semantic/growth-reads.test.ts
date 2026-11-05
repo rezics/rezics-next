@@ -729,6 +729,7 @@ test('semantic covering reads use unforced indexed access as their populations g
       after_order: start ? String(start - 1).padStart(8, '0') : '',
       after_statement: afterStatement,
       page_limit: 26,
+      scan_limit: null,
     };
     const expected: string[] = [];
     for (let ordinal = start; ordinal < scale && expected.length < 26; ordinal++) {
