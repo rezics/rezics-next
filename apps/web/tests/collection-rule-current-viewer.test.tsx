@@ -14,6 +14,14 @@ afterAll(() => mock.restore());
 
 type Props = ComponentProps<typeof CollectionRuleEditor>;
 const admitted = ['collection.create', 'collection_rule.get', 'collection_rule.update', 'library_label.list'];
+let uiQueue = Promise.resolve();
+async function reserveUi() {
+  const previous = uiQueue;
+  let release!: () => void;
+  uiQueue = new Promise<void>((resolve) => (release = resolve));
+  await previous;
+  return release;
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: Error) => void;
@@ -54,6 +62,7 @@ function ready(viewerId = 'alice', id = 'alpha', revision = 7): Extract<RulePage
 // These mounted source regressions are intentionally deferred by the launch contract.
 // Use the already installed DOM fixture, real editor and real shared ConditionEditor.
 async function mount(initial: Partial<Props> = {}) {
+  const releaseUi = await reserveUi();
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -145,11 +154,13 @@ async function mount(initial: Partial<Props> = {}) {
         else Reflect.deleteProperty(globalThis, key);
       }
       await window.happyDOM.close();
+      releaseUi();
     },
   };
 }
 
 async function mountCurrent(page: RulePage) {
+  const releaseUi = await reserveUi();
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -214,6 +225,7 @@ async function mountCurrent(page: RulePage) {
         else Reflect.deleteProperty(globalThis, key);
       }
       await window.happyDOM.close();
+      releaseUi();
     },
   };
 }
