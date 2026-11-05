@@ -22,11 +22,19 @@ import {
   showcaseDigest,
   showcaseLimits,
   showcaseVocabularyExternalId,
+  type ShowcaseAcknowledgement,
   type ShowcaseTagAssociation,
+  type ShowcaseTagAssociationWithdrawal,
   type ShowcaseTagParentBinding,
+  type ShowcaseTagParentRefresh,
   type ShowcaseVocabularyRequirement,
 } from './showcase-manifest.ts';
-import { bindShowcaseTagParents, withholdShowcaseTagAssociations } from './showcase-cross-provider-tags.ts';
+import {
+  bindShowcaseTagParents,
+  showcaseTagParentCommand,
+  showcaseTagParentSourceFence,
+  withholdShowcaseTagAssociations,
+} from './showcase-cross-provider-tags.ts';
 import type { ShowcaseJournal } from './showcase-publication.ts';
 import {
   acquireShowcaseVndbTagRatings,
@@ -96,6 +104,7 @@ export type ShowcaseTagPlan = VndbPublicTagPlan & {
   invalidParentTags: string[];
   tagParentEvidence: ShowcaseTagParentBinding[];
   parentBindingGaps: CrossMediaGap[];
+  tagParentRefreshes: ShowcaseTagParentRefresh[];
   truncated: boolean;
 };
 
@@ -526,6 +535,7 @@ function composePlan(
     invalidParentTags: projected.invalidParentTags,
     tagParentEvidence: [],
     parentBindingGaps: [],
+    tagParentRefreshes: [],
     truncated: projected.truncated,
   };
 }
@@ -555,8 +565,64 @@ function associationBindings(
     .sort((left, right) => left.sourceKey.localeCompare(right.sourceKey));
 }
 
+function associationWithdrawals(
+  admitted: readonly AdmittedPublicTag[],
+  unavailableTagCodes: readonly string[],
+): ShowcaseTagAssociationWithdrawal[] {
+  const unavailable = new Set(unavailableTagCodes);
+  return admitted
+    .filter((row) => unavailable.has(row.tag))
+    .map((row) => ({ workId: row.vid, sourceKey: row.path, tagId: row.tag }))
+    .sort((left, right) => left.sourceKey.localeCompare(right.sourceKey));
+}
+
 function associationRefreshes(planned: ShowcaseTagPlan, selectedVids: readonly string[]): string[] {
   return planned.truncated || planned.gaps.length ? [] : [...new Set(selectedVids)];
+}
+
+function tagParentRefreshes(
+  projected: Awaited<ReturnType<typeof projectShowcaseTagTables>>,
+  planned: ShowcaseTagPlan,
+  parentBindingGaps: readonly CrossMediaGap[],
+  bindings: SourceVocabularyBindings,
+): ShowcaseTagParentRefresh[] {
+  if (
+    projected.truncated ||
+    projected.gaps.length ||
+    planned.truncated ||
+    planned.gaps.length ||
+    parentBindingGaps.length ||
+    bindings.releaseDigest !== bundledDigest
+  )
+    return [];
+  return [...projected.dictionary.values()]
+    .flatMap((tag) => {
+      const taxonomy = vndbPublicTagTaxonomy(tag.category);
+      const concept = bindings.concepts.find((item) => item.taxonomy === taxonomy && item.code === tag.id);
+      const scheme = bindings.schemes.find((item) => item.taxonomy === taxonomy);
+      if (
+        !concept ||
+        !scheme ||
+        concept.type !== 'skos:Concept' ||
+        scheme.type !== 'skos:ConceptScheme' ||
+        concept.releaseDigest !== bundledDigest ||
+        scheme.releaseDigest !== bundledDigest ||
+        concept.schemeId !== scheme.id
+      )
+        return [];
+      return [
+        {
+          category: tag.category,
+          tagId: tag.id,
+          childId: concept.id,
+          schemeId: scheme.id,
+          childUri: vndbPublicTagConceptUri(tag.category, tag.id),
+          schemeUri: vndbPublicTagScheme(tag.category),
+          releaseDigest: bundledDigest,
+        },
+      ];
+    })
+    .sort((left, right) => left.childId.localeCompare(right.childId));
 }
 
 /** Finite selected-family tag plan for the default real-dump seed. */
@@ -584,6 +650,7 @@ export async function planShowcaseTags(input: {
     admitted: withholdShowcaseTagAssociations(planned.admitted, parents.unavailableTagCodes),
     tagParentEvidence: parents.tagParentEvidence,
     parentBindingGaps: parents.gaps,
+    tagParentRefreshes: tagParentRefreshes(projected, planned, parents.gaps, input.bindings),
   };
 }
 
@@ -594,8 +661,10 @@ export type ShowcaseTagsResult = VndbPublicTagsResult & {
   truncated: boolean;
   bindings: SourceVocabularyBindings;
   associationBindings: ShowcaseTagAssociation[];
+  tagAssociationWithdrawals: ShowcaseTagAssociationWithdrawal[];
   tagParentEvidence: ShowcaseTagParentBinding[];
   parentBindingGaps: CrossMediaGap[];
+  tagParentRefreshes: ShowcaseTagParentRefresh[];
   associationRefreshes: string[];
   tagWeightObservations: readonly VndbTagRatingObservation[];
   tagWeightRefreshes: readonly string[];
@@ -638,8 +707,10 @@ export async function prepareShowcaseTags(input: {
     admitted,
     bindings,
     associationBindings: associationBindings(admitted, bindings),
+    tagAssociationWithdrawals: associationWithdrawals(planned.admitted, parents.unavailableTagCodes),
     tagParentEvidence: parents.tagParentEvidence,
     parentBindingGaps: parents.gaps,
+    tagParentRefreshes: tagParentRefreshes(projected, planned, parents.gaps, bindings),
     gaps: withParentGaps.gaps,
     associationRefreshes: associationRefreshes(withParentGaps, input.selectedVids),
     vocabularyAdmission: vndbPublicTagVocabularyAdmission(bindings, admitted, ratingAcquisition.snapshots),
@@ -701,9 +772,11 @@ export async function importShowcaseTags(input: {
     invalidParentTags: planned.invalidParentTags,
     tagParentEvidence: parents.tagParentEvidence,
     parentBindingGaps: parents.gaps,
+    tagParentRefreshes: tagParentRefreshes(projected, planned, parents.gaps, bindings),
     truncated: planned.truncated,
     bindings,
     associationBindings: associationBindings(admitted, bindings),
+    tagAssociationWithdrawals: associationWithdrawals(planned.admitted, parents.unavailableTagCodes),
     associationRefreshes: associationRefreshes(withImportGaps, input.selectedVids),
     tagWeightObservations: ratingAcquisition.observations,
     tagWeightRefreshes: [...new Set(input.selectedVids)],
@@ -951,6 +1024,84 @@ async function sendMissingTagCommands(input: {
     return true;
   });
   if (commands.length) await sendTagCommandPages(input.port, commands);
+}
+
+/** Journal and propose exact source-parent assertions only while their current source tuple is open. */
+export async function prepareShowcaseTagParentPublications(input: {
+  evidence: readonly ShowcaseTagParentBinding[];
+  port: Pick<CrossMediaPort, 'batch' | 'fence'>;
+  journal: ShowcaseJournal;
+}): Promise<{
+  acknowledgements: ShowcaseAcknowledgement[];
+  gaps: CrossMediaGap[];
+  unavailableTagCodes: string[];
+}> {
+  const commands: BatchCommand[] = [];
+  const gaps: CrossMediaGap[] = [];
+  const unavailable = new Set<string>();
+  const byKey = new Map<string, ShowcaseTagParentBinding>();
+  for (const binding of input.evidence) {
+    const fence = await showcaseTagParentSourceFence(input.port.fence, binding);
+    if (fence !== 'open') {
+      unavailable.add(binding.child);
+      gaps.push({
+        source: 'vndb',
+        fields: ['tags_parents.id', 'tags_parents.parent'],
+        record: { id: binding.child, parent: binding.parent, path: binding.path, main: binding.main },
+        reason: fence === 'fenced' ? 'VNDB tag parent source tuple is fenced' : 'VNDB tag parent source fence is unavailable',
+      });
+      continue;
+    }
+    const command = showcaseTagParentCommand(binding);
+    commands.push(command);
+    byKey.set(command.key, binding);
+  }
+  if (commands.length)
+    await sendMissingTagCommands({ port: input.port, journal: input.journal, commands });
+
+  const acknowledgements: ShowcaseAcknowledgement[] = [];
+  const acknowledgedByKey = new Map(input.journal.acknowledgedCommands().map((row) => [row.command.key, row]));
+  for (const command of commands) {
+    const acknowledgement = acknowledgedByKey.get(command.key);
+    const binding = byKey.get(command.key)!;
+    if (!acknowledgement) {
+      unavailable.add(binding.child);
+      gaps.push({
+        source: 'vndb',
+        fields: ['tags_parents.id', 'tags_parents.parent'],
+        record: { id: binding.child, parent: binding.parent, path: binding.path, main: binding.main },
+        reason: 'VNDB tag parent proposal has no acknowledged candidate',
+      });
+      continue;
+    }
+    if (acknowledgement.commandDigest !== showcaseDigest(command))
+      throw new TypeError('VNDB tag parent ACK changed its exact command body');
+    if (acknowledgement.command.op !== 'propose' || !acknowledgement.candidateId) {
+      unavailable.add(binding.child);
+      gaps.push({
+        source: 'vndb',
+        fields: ['tags_parents.id', 'tags_parents.parent'],
+        record: { id: binding.child, parent: binding.parent, path: binding.path, main: binding.main },
+        reason: 'VNDB tag parent proposal did not return a candidate',
+      });
+      continue;
+    }
+    acknowledgements.push(acknowledgement);
+  }
+  const descendants = new Map<string, string[]>();
+  for (const binding of input.evidence) {
+    const children = descendants.get(binding.parent) ?? [];
+    children.push(binding.child);
+    descendants.set(binding.parent, children);
+  }
+  const queue = [...unavailable];
+  for (let offset = 0; offset < queue.length; offset += 1)
+    for (const child of descendants.get(queue[offset]!) ?? [])
+      if (!unavailable.has(child)) {
+        unavailable.add(child);
+        queue.push(child);
+      }
+  return { acknowledgements, gaps, unavailableTagCodes: [...unavailable].sort() };
 }
 
 /** Map journal-acknowledged tag identities into the existing known-binding file shape. */

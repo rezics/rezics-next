@@ -2,11 +2,16 @@ import { expect, test } from 'bun:test';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import { vndbPublicTagScheme, vndbPublicTagTaxonomy } from '../../../packages/conversion/src/support.ts';
-import { bindShowcaseTagParents, withholdShowcaseTagAssociations } from '../src/showcase-cross-provider-tags.ts';
+import {
+  bindShowcaseTagParents,
+  showcaseTagParentCommand,
+  showcaseTagParentSourceFence,
+  withholdShowcaseTagAssociations,
+} from '../src/showcase-cross-provider-tags.ts';
 import { projectShowcaseTagTables } from '../src/showcase-tags.ts';
 import { parseAuthoredVndbCopy } from '../src/vndb-public-tags.ts';
 import { emptyCrossMediaPlan, type CrossMediaTables } from '../src/cross-media-seed.ts';
-import { buildShowcaseManifest } from '../src/showcase-manifest.ts';
+import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
 
 function tables(parents: string[], categories: Record<string, string>): CrossMediaTables {
   const records: Record<string, Record<string, unknown>[]> = {
@@ -112,6 +117,69 @@ test('source parent edges resolve by exact current identities and withhold child
   });
   expect(manifest.tagParentEvidence).toEqual(resolved.tagParentEvidence);
   expect(manifest.tagParentGaps).toEqual(wrongScheme.gaps);
+});
+
+test('a parent proposal cites the exact source path and both bound endpoints without turning main into a qualifier', async () => {
+  const projected = await projectShowcaseTagTables(tables(['g1\tg2\tt'], { g1: 'cont', g2: 'cont' }), ['v2002']);
+  const [binding] = bindShowcaseTagParents({
+    sourceParents: projected.sourceParents,
+    invalidParentTags: projected.invalidParentTags,
+    bindings: bindings(),
+  }).tagParentEvidence;
+  expect(binding).toBeDefined();
+  const command = showcaseTagParentCommand(binding!);
+  expect(command.subject).toBe(binding!.childId);
+  expect(command.source.external_id).toBe('/tags_parents/g1/g2');
+  expect(command.source.converter_revision).toBe('vndb-public-tag-vocabulary@1');
+  expect(command.statement.property.id).toBe('skos:broader');
+  expect(command.statement.value).toEqual({ type: 'value', content: binding!.parentId });
+  expect(command.statement.qualifiers).toBeUndefined();
+  expect(command.statement.references?.flatMap((reference) => reference.parts.map((part) => part.value))).toEqual([
+    { type: 'value', content: binding!.childUri },
+    { type: 'value', content: binding!.parentUri },
+  ]);
+  expect(command.rights).toMatchObject({ license: 'ODbL-1.0', attribution: expect.stringContaining('VNDB') });
+
+  const seen: unknown[] = [];
+  expect(
+    await showcaseTagParentSourceFence(async (input) => {
+      seen.push(input);
+      return { fenced: false, securityRevision: null };
+    }, binding!),
+  ).toBe('open');
+  expect(seen).toEqual([{ source: 'vndb_cross_media', externalId: binding!.path, fieldGroup: 'facts' }]);
+  expect(
+    await showcaseTagParentSourceFence(async () => ({ fenced: true, securityRevision: 'revoked' }), binding!),
+  ).toBe('fenced');
+  expect(
+    await showcaseTagParentSourceFence(async () => ({ fenced: false, securityRevision: 'unavailable' }), binding!),
+  ).toBe('unavailable');
+
+  const acknowledgement = {
+    command,
+    commandDigest: showcaseDigest(command),
+    candidateId: '00000000-0000-4000-8000-000000000001',
+  };
+  const manifest = buildShowcaseManifest({
+    plan: emptyCrossMediaPlan(),
+    readings: [],
+    acknowledgements: [acknowledgement],
+    tagParentAcknowledgements: [acknowledgement],
+    tagParentEvidence: [binding!],
+    aliases: { bangumi: 'bangumi_cross_media', vndb: 'vndb_cross_media' },
+  });
+  const child = manifest.vocabulary.find((record) => record.subjectId === binding!.childId);
+  expect(child?.provenance).toBe('source-parent-binding');
+  expect(child?.assertions).toContainEqual(
+    expect.objectContaining({
+      tagParentPath: binding!.path,
+      property: 'skos:broader',
+      rights: command.rights,
+    }),
+  );
+  expect(manifest.tagParentPublications).toMatchObject([
+    { path: binding!.path, childId: binding!.childId, parentId: binding!.parentId, status: 'proposed' },
+  ]);
 });
 
 test('missing bound ancestry withholds descendants without matching dictionary labels', async () => {

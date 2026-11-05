@@ -64,7 +64,7 @@ COPY conversion retains exact table origins and native keys. Null, empty and mis
 
 The local showcase keeps `vn_relations.side` and `par` as addressable gaps until the typed work-relations result supplies the mapped direction, current endpoint identities and citation. It does not emit a generic property from those inventory strings.
 
-Decision: `sourceParents` retains child/parent keys, category, path, main. Missing, cyclic or cross-category ancestry withholds edges; source closure grants no native hierarchy admission or equivalence.
+The `sourceParents` projection retains child/parent keys, category, path and `main`. Missing, cyclic or cross-category ancestry withholds dependent associations. Resolved edges enter native publication only through the exact current-category reviewed flow described below; `main` remains bookkeeping and does not set a native qualifier.
 
 Public tags need COPY rows and current reviewed Scheme/Concept bindings. Kana weights need an exact current /vn response for the selected work/tag, retaining decimal rating, response digest and endpoint. Exclude user IDs, notes and votes; COPY votes are never weights, confidence or ratings. Changed or missing bindings withhold only their association.
 
@@ -241,11 +241,11 @@ At most 32 admitted links per owner and a 64 KiB projection; public website URL 
 
 ### Cost: shared reviewed VNDB tags and Kana weights
 
-Decision: retain parent edges as source evidence with exact source paths and current native IDs; require both endpoints in the same current category Scheme before keeping dependent work-tag associations. `main` remains VNDB tree bookkeeping, not a native qualifier.
+Decision: publish each exact `tags_parents` path as a cited ODbL VNDB `skos:broader` candidate on its bound child Concept; require current child, parent and Scheme identities in the same category Scheme, separate acceptance/adoption, and an independent public read before dependent work-tag associations. Retire only VNDB-managed parent/member selections for complete current inventories or exact unresolved associations, preserving unrelated editorial facts. `main` remains VNDB tree bookkeeping, not a native qualifier; source labels do not establish cross-provider identity.
 
 - **Touches:** selected tags, tag parents, selected work associations, closed dictionary, current reviewed bindings and exact Kana response receipts.
 - **Bound:** at most 96 selected works, 512 dictionary tags, 256 associations, 1,024 parent edges, 8 closure steps, 512 vocabulary records and 64 KiB per selected-work record. Kana reads at most 512 bound tags; each response is at most 64 KiB, 6 MiB total, 3.5 seconds per request and 120 seconds per run. Pending replay adds no source request. No user vote aggregate or unrelated row materialization.
-- **Growth check:** services/importer/tests/showcase-tags.test.ts and showcase-publication.test.ts cover selected rows, bounded Kana reads, exact evidence, withheld ratings, refresh and replay; showcase-cross-provider-tags.test.ts covers exact current parent bindings and dependent association withholding; services/kernel/test/imports/vndb-public-tags.test.ts retains native review/adoption and independent reads.
+- **Growth check:** services/importer/tests/showcase-tags.test.ts and showcase-publication.test.ts cover selected rows, bounded Kana reads, exact evidence, withheld ratings, refresh and replay; showcase-cross-provider-tags.test.ts covers exact current parent bindings, source path citations and source fences; services/kernel/test/imports/m1-cross-provider-tags.test.ts covers separate hierarchy acceptance/adoption and an independent public read; services/kernel/test/imports/vndb-public-tags.test.ts retains native tag review/adoption and independent reads.
 
 ### Cost: VNDB work links and franchise relations
 
