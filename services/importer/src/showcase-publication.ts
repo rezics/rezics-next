@@ -652,10 +652,20 @@ function sourceIdentity(record: ShowcaseRecord): { property: string; value: stri
   return null;
 }
 
+function sourceIdentityProperty(record: ShowcaseRecord): string | null {
+  const identity = sourceIdentity(record);
+  if (identity) return identity.property;
+  return record.provider === 'bangumi' &&
+    record.kind === 'organization' &&
+    /^person:[1-9][0-9]*$/u.test(record.sourceKey)
+    ? 'schema:name'
+    : null;
+}
+
 function phase(record: ShowcaseRecord, assertion: ShowcaseAssertion): number {
   if (record.kind === 'source-vocabulary' && record.nativeType === 'skos:ConceptScheme') return 0;
   if (record.kind === 'source-vocabulary' && record.nativeType === 'skos:Concept') return 1;
-  if (assertion.property === sourceIdentity(record)?.property) return 2;
+  if (assertion.property === sourceIdentityProperty(record)) return 2;
   return 3;
 }
 
@@ -1889,7 +1899,7 @@ export async function publishShowcase(input: {
     const concept = vocabularyById.get(id);
     if (concept?.nativeType === 'skos:Concept' && concept.schemeId) dependencyIds.add(concept.schemeId);
     let dependencyReady = true;
-    const identityProperty = group.property === sourceIdentity(group.record)?.property;
+    const identityProperty = group.property === sourceIdentityProperty(group.record);
     if (group.record.kind !== 'source-vocabulary' && !identityProperty) {
       const sourceRead = await publicRead(id);
       if (
