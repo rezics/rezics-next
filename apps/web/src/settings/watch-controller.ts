@@ -141,6 +141,9 @@ const initial: WatchState = {
   retired: false,
 };
 
+// One response deadline survives a Watch view controller remount under the same installed Settings owner.
+const watchWriteRetryAt = new WeakMap<object, number>();
+
 /** One bounded page and one original unresolved intent, scoped to the installed Settings observation. */
 export class WatchController {
   private state: WatchState = initial;
@@ -149,10 +152,35 @@ export class WatchController {
   private request: AbortController | undefined;
   private unsubscribe: (() => void) | undefined;
   private recovery: ReadRequest | undefined;
+  private readonly ownerScope: object;
   constructor(
     private io: WatchManagementIO,
     private owner: WatchOwner,
-  ) {}
+    ownerScope: object = owner,
+  ) {
+    this.ownerScope = ownerScope;
+    const deadline = watchWriteRetryAt.get(ownerScope) ?? 0;
+    if (deadline > Date.now()) this.state = { ...initial, writeRetryAt: deadline };
+    else watchWriteRetryAt.delete(ownerScope);
+  }
+
+  private writeWaitActive() {
+    const now = Date.now();
+    const viewDeadline = this.state.writeRetryAt;
+    const ownerDeadline = watchWriteRetryAt.get(this.ownerScope) ?? 0;
+    return Math.max(viewDeadline > now ? viewDeadline : 0, ownerDeadline > now ? ownerDeadline : 0) > now;
+  }
+
+  private keepWriteWait(retryAfter?: string) {
+    const now = Date.now();
+    const viewDeadline = this.state.writeRetryAt;
+    const ownerDeadline = watchWriteRetryAt.get(this.ownerScope) ?? 0;
+    const previous = Math.max(viewDeadline > now ? viewDeadline : 0, ownerDeadline > now ? ownerDeadline : 0);
+    const deadline = Math.max(previous, preferenceRetryDeadline(retryAfter, now));
+    if (deadline > now) watchWriteRetryAt.set(this.ownerScope, deadline);
+    else watchWriteRetryAt.delete(this.ownerScope);
+    return deadline;
+  }
 
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -187,14 +215,14 @@ export class WatchController {
   };
   needsDecision = () => this.current() && this.state.command !== null;
   canWrite = () => this.current() && !!this.owner.credential();
-  canRemove = () => this.canWrite() && this.state.actions?.remove === 'available';
+  canRemove = () => this.canWrite() && this.state.actions?.remove === 'available' && !this.writeWaitActive();
   canRetryOriginal = () =>
     this.canWrite() &&
     this.state.command !== null &&
     this.state.write === 'uncertain' &&
     this.state.read === 'ready' &&
     this.state.actions?.remove === 'available' &&
-    Date.now() >= this.state.writeRetryAt;
+    !this.writeWaitActive();
 
   refresh = () => {
     const request = this.recovery ?? {
@@ -400,9 +428,7 @@ export class WatchController {
       // Bound waiting without claiming cancellation reversed a dispatched command.
       const result = await withManagedReadDeadline(() => this.io.stop(command, command.credential));
       if (!this.current() || this.state.command !== command) return;
-      let writeRetryAt = 0;
-      if (result.kind === 'uncertain') writeRetryAt = preferenceRetryDeadline(result.problem.retryAfter);
-      else if (replay && result.kind !== 'removed') writeRetryAt = preferenceRetryDeadline(result.problem.retryAfter);
+      const writeRetryAt = this.keepWriteWait(result.kind === 'removed' ? undefined : result.problem.retryAfter);
       if (result.kind === 'removed') {
         const currentRevisionRemains = this.state.rows.some(
           (row) =>
