@@ -222,9 +222,7 @@ export class RealmMembersVisit {
   canPrevious = () => this.navigation.predecessors.length > 0 && this.value.read.kind === 'ready';
 
   canFirst = () =>
-    this.navigation.current !== null &&
-    this.navigation.current.cursor !== null &&
-    this.value.read.kind === 'ready';
+    this.navigation.current !== null && this.navigation.current.cursor !== null && this.value.read.kind === 'ready';
 
   moreAddress = (): MemberAddress | null => {
     if (!this.admitted() || this.value.read.kind !== 'ready' || this.value.selection) return null;

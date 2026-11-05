@@ -266,7 +266,12 @@ test('Realm and source replacement during a staged read cannot show or focus the
         pageBound: 20,
         readPage: async () => ({
           kind: 'ready',
-          page: { realm: { id: replacementRealm, label: replacementLabel }, authority: 'replacement', rows: [], next: null },
+          page: {
+            realm: { id: replacementRealm, label: replacementLabel },
+            authority: 'replacement',
+            rows: [],
+            next: null,
+          },
         }),
         readSelected: async () => ({ kind: 'unavailable' }),
       },
