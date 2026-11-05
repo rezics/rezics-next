@@ -157,13 +157,7 @@ export type PublicCollectionPage = {
 };
 
 type CollectionDirectoryPage = {
-  collections: (
-    | CuratedCollectionView
-    | SavedDynamicCollectionView
-    | (BuiltinCollectionView & {
-        allowedVisibilityActions?: readonly ('private' | 'unlisted' | 'public')[];
-      })
-  )[];
+  collections: CollectionResourceView[];
   next: string | null;
   ownerManagement?: 'owner';
   ownerAccountId?: string;
