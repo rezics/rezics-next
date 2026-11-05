@@ -82,7 +82,7 @@ class PopulationRegistry {
       if (
         event.type === 'removed' ||
         (replaced && previous !== undefined) ||
-        (event.type === 'updated' && event.action.type === 'success' && event.action.manual)
+        (previous !== undefined && event.type === 'updated' && event.action.type === 'success')
       ) {
         this.epoch++;
         this.notify();

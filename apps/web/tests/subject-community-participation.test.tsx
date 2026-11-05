@@ -501,7 +501,7 @@ test('community body survives initial session preparation while private advice w
         licence: 'MIT',
         reactions: { like: 2 },
         viewerReaction: 'like' as const,
-        actions: { reply: 'available' as const, reaction: 'available' as const, watch: null, overflow: false },
+        actions: { reply: 'available' as const, reaction: null, watch: null, overflow: false },
       },
     ],
     next: null,

@@ -268,6 +268,8 @@ const paths = (suffix: string, privateOnly = false) =>
   );
 const directoryQueries = () => cache.getQueryCache().findAll({ queryKey: ['subject-rating-populations'] });
 const boxes = () => Array.from(host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+const selectedNames = () =>
+  Array.from(host.querySelectorAll<HTMLElement>('[data-slot="rating-comparison"] h4')).map((heading) => heading.textContent);
 const button = (text: string) =>
   Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((node) => node.textContent === text)!;
 async function tick() {
@@ -604,7 +606,7 @@ test('Actual bounded population directory/selection/labels/aggregates and mounte
   pendingLabel.resolve(Response.json({ realm: { realmId: ids[0], title: names.get(ids[0]!) } }));
   await act(tick);
   expect(boxes()[0]?.checked).toBe(false);
-  expect(host.querySelector('[data-slot="rating-selected"]')?.textContent).not.toContain(names.get(ids[0]!)!);
+  expect(selectedNames()).not.toContain(names.get(ids[0]!)!);
   expect(paths('/ratings/populations')).toHaveLength(before);
   aggregateGate = deferred<Response>();
   const cleared = aggregateGate;
@@ -834,7 +836,7 @@ test('current Realm refusal conceals a previously selected identity and masked z
     await cache.refetchQueries({ queryKey: selectedQuery.queryKey });
   });
   await until(() => host.querySelectorAll('[data-slot="rating-comparison"]').length === 0);
-  expect(host.textContent).not.toContain(names.get(ids[0]!)!);
+  expect(selectedNames()).not.toContain(names.get(ids[0]!)!);
   expect(host.textContent).not.toContain('No ratings yet');
   expect(boxes()).toHaveLength(19);
   expect(host.textContent).toContain(m.rating_population_concealed());
