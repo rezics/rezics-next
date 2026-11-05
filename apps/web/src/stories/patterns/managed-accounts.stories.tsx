@@ -152,10 +152,15 @@ export const IndependentCursors: Story = {
     await organizations.findByRole('alert');
     await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
     await userEvent.click(responsibilities.getByRole('button', { name: m.managed_next() }));
-    await expect(responsibilities.queryByRole('button')).toBeNull();
+    await responsibilities.findByText(m.managed_no_responsibilities());
+    await expect(responsibilities.getByRole('button', { name: m.managed_next() })).toBeDisabled();
+    await expect(responsibilities.getByRole('button', { name: m.prq_previous() })).toBeEnabled();
+    await expect(responsibilities.getByRole('button', { name: m.settings_managed_restart_list() })).toBeEnabled();
     await userEvent.click(organizations.getByRole('button', { name: m.settings_retry() }));
     await organizations.findByRole('button', { name: m.managed_next() });
-    await expect(responsibilities.queryByRole('button')).toBeNull();
+    await expect(responsibilities.getByRole('button', { name: m.managed_next() })).toBeDisabled();
+    await expect(responsibilities.getByRole('button', { name: m.prq_previous() })).toBeEnabled();
+    await expect(responsibilities.getByRole('button', { name: m.settings_managed_restart_list() })).toBeEnabled();
   },
 };
 export const PartialPreparing: Story = {
@@ -317,12 +322,16 @@ export const StaleCursorIndependentRecovery: Story = {
     const responsibilities = within(canvas.getByRole('list', { name: m.managed_operated_title() }).parentElement!);
     await userEvent.click(responsibilities.getByRole('button', { name: m.managed_next() }));
     await responsibilities.findByRole('alert');
+    await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
     await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
-    await waitFor(() => expect(organizations.queryByRole('button')).toBeNull());
+    await organizations.findByText(m.managed_no_organizations());
+    await expect(organizations.getByRole('button', { name: m.managed_next() })).toBeDisabled();
+    await expect(organizations.getByRole('button', { name: m.prq_previous() })).toBeEnabled();
+    await expect(organizations.getByRole('button', { name: m.settings_managed_restart_list() })).toBeEnabled();
     await userEvent.click(responsibilities.getByRole('button', { name: m.settings_managed_restart_list() }));
     await responsibilities.findByText(m.managed_no_responsibilities());
     await expect(responsibilities.queryByRole('link')).toBeNull();
-    await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
+    await expect(organizations.getByText(m.managed_no_organizations())).toBeVisible();
     await expect(organizations.getByRole('button', { name: m.prq_previous() })).toBeEnabled();
     await expect(organizations.getByRole('button', { name: m.settings_managed_restart_list() })).toBeEnabled();
   },
