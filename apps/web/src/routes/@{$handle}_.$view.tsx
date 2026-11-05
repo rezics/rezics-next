@@ -110,7 +110,12 @@ function AgentViewRoute() {
   const { searchStr, hash, pathname } = useLocation();
   const queryClient = useQueryClient();
   const query = agentViewQuery(handle, locale, view, cursor, searchStr);
-  const { data, dataUpdatedAt } = useSuspenseQuery(query);
+  const { data, dataUpdatedAt } = useSuspenseQuery({
+    ...query,
+    ...(view === 'collections'
+      ? { refetchOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false }
+      : {}),
+  });
   const queryIdentity = JSON.stringify(query.queryKey);
   useEffect(() => {
     if (view !== 'collections') return;
@@ -137,7 +142,7 @@ function AgentViewRoute() {
     search: searchStr,
     hash,
     navigate: (href) => {
-      void router.navigate({ href: `${pathname}${href}` });
+      router.history.push(`${pathname}${href}`);
     },
     retry: () => {
       void router.invalidate();
