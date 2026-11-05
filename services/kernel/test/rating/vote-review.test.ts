@@ -112,11 +112,16 @@ test('supported native guarded effects retain exact retries, current readback an
     const target = await createLocalSubject();
     const before = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);
     expect(before.guard.subject.identity).toMatchObject({
-      version: 1, requestedOriginalId: target, canonicalTerminalId: target, sourceHomes: [0],
+      version: 1,
+      requestedOriginalId: target,
+      canonicalTerminalId: target,
+      sourceHomes: [0],
     });
     expect(Object.isFrozen(before.guard.subject.identity!.controlLocators)).toBe(true);
-    expect(await votes.putVoteOutcome(voter, input(target, null, before.guard), crypto.randomUUID()))
-      .toEqual({ vote: null, component: null });
+    expect(await votes.putVoteOutcome(voter, input(target, null, before.guard), crypto.randomUUID())).toEqual({
+      vote: null,
+      component: null,
+    });
     const legacy = { ...before.guard, subject: { canonicalId: target, epochs: before.guard.subject.epochs } };
     await expect(votes.putVoteOutcome(voter, input(target, 0, legacy), crypto.randomUUID())).rejects.toMatchObject({
       reason: 'atomic_guard_unavailable',
@@ -131,7 +136,8 @@ test('supported native guarded effects retain exact retries, current readback an
     const current = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);
     expect(current.currentVote).toMatchObject({ state: 'counted', units: 0, countedRevision: 1 });
     expect(await votes.putVoteOutcome(voter, input(target, 0, current.guard), crypto.randomUUID())).toEqual({
-      vote: committed.vote, component: null,
+      vote: committed.vote,
+      component: null,
     });
     const cleared = await votes.putVoteOutcome(voter, input(target, null, current.guard), crypto.randomUUID());
     expect(cleared.vote?.units).toBeNull();
@@ -139,33 +145,49 @@ test('supported native guarded effects retain exact retries, current readback an
     // An uncertain retry uses precisely the original input/key after business state changes.
     expect(await votes.putVoteOutcome(voter, prepared.input, prepared.receipt.requestKey)).toEqual(committed);
     expect(await votes.reconcilePutVote(voter, prepared.receipt)).toEqual(committed);
-    await expect(votes.putVoteOutcome(voter, input(target, 0, current.guard), prepared.receipt.requestKey))
-      .rejects.toMatchObject({ name: 'IdempotencyConflictError' });
-    await expect(votes.putVoteOutcome(voter, input(target, 5, before.guard), crypto.randomUUID()))
-      .rejects.toMatchObject({ reason: 'own_vote_changed' });
+    await expect(
+      votes.putVoteOutcome(voter, input(target, 0, current.guard), prepared.receipt.requestKey),
+    ).rejects.toMatchObject({ name: 'IdempotencyConflictError' });
+    await expect(
+      votes.putVoteOutcome(voter, input(target, 5, before.guard), crypto.randomUUID()),
+    ).rejects.toMatchObject({ reason: 'own_vote_changed' });
     const competing = await createLocalSubject();
     const absent = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, competing);
     const own = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);
-    await expect(votes.putVoteOutcome(voter, input(target, 5, {
-      ...own.guard, subject: { ...own.guard.subject, identity: absent.guard.subject.identity! },
-    }), crypto.randomUUID())).rejects.toMatchObject({ name: 'VoteInvalidError', field: 'guard' });
-    const writers = await Promise.allSettled([3, 4].map((units) =>
-      votes.putVoteOutcome(voter, input(competing, units, absent.guard), crypto.randomUUID()),
-    ));
+    await expect(
+      votes.putVoteOutcome(
+        voter,
+        input(target, 5, {
+          ...own.guard,
+          subject: { ...own.guard.subject, identity: absent.guard.subject.identity! },
+        }),
+        crypto.randomUUID(),
+      ),
+    ).rejects.toMatchObject({ name: 'VoteInvalidError', field: 'guard' });
+    const writers = await Promise.allSettled(
+      [3, 4].map((units) => votes.putVoteOutcome(voter, input(competing, units, absent.guard), crypto.randomUUID())),
+    );
     expect(writers.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
     expect(writers.find((outcome) => outcome.status === 'rejected')).toMatchObject({
       reason: { code: 'vote_review_stale', reason: 'own_vote_changed' },
     });
     const changed = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);
-    await local.database.admin.query('UPDATE rating.question SET revision=revision+1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+    await local.database.admin.query('UPDATE rating.question SET revision=revision+1 WHERE id=$1', [
+      STANDARD_QUESTION_ID,
+    ]);
     try {
       expect(await votes.putVoteOutcome(voter, prepared.input, prepared.receipt.requestKey)).toEqual(committed);
-      await expect(votes.putVoteOutcome(voter, input(target, 5, changed.guard), crypto.randomUUID()))
-        .rejects.toMatchObject({ reason: 'question_changed' });
-      await local.database.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE account_id=$1', [voter.accountId]);
+      await expect(
+        votes.putVoteOutcome(voter, input(target, 5, changed.guard), crypto.randomUUID()),
+      ).rejects.toMatchObject({ reason: 'question_changed' });
+      await local.database.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE account_id=$1', [
+        voter.accountId,
+      ]);
       await expect(votes.reconcilePutVote(voter, prepared.receipt)).rejects.toMatchObject({ name: 'GrantDeniedError' });
     } finally {
-      await local.database.admin.query('UPDATE rating.question SET revision=revision-1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+      await local.database.admin.query('UPDATE rating.question SET revision=revision-1 WHERE id=$1', [
+        STANDARD_QUESTION_ID,
+      ]);
     }
   } finally {
     await local.close();

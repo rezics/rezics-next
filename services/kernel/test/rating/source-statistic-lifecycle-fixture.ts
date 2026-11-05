@@ -32,7 +32,9 @@ export type SourceStatisticLifecycleFixture = Awaited<ReturnType<typeof createSo
 /** Production Kernel and shared Access with signed account tokens over a migrated isolated database.
  * The optional native figure fixture
  * supplies real public figures and worker-produced rating controls for the composed lifecycle acceptance. */
-export async function createSourceStatisticLifecycleFixture(options: { nativeFigures?: boolean; accountRoute?: number } = {}) {
+export async function createSourceStatisticLifecycleFixture(
+  options: { nativeFigures?: boolean; accountRoute?: number } = {},
+) {
   let database: GrowthDatabase | undefined;
   let nativeFigures: FigureFixture | undefined;
   let closeBase: (() => Promise<void>) | undefined;
