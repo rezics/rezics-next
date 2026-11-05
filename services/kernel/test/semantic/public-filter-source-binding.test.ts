@@ -428,9 +428,10 @@ test('Native public Source repair step and complete original cut are durably rev
     );
     // Restart after the original observation: the persisted job resolves that same cut/execution.
     const restarted = () => createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
-    expect((await readNativePublicFilterPublicationCompletion(restarted(), { job }, readContext())).status).not.toBe(
-      'complete',
-    );
+    expect(await readNativePublicFilterPublicationCompletion(restarted(), { job }, readContext())).toMatchObject({
+      status: 'pending',
+      publication,
+    });
     const first = await consumer.operations.repairStep(capture.repair, readContext());
     expect(first.status).toBe('progress');
     if (first.status !== 'progress') throw new Error(`Incomplete Source repair ${first.status}`);
