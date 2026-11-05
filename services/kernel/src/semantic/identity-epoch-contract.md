@@ -98,6 +98,11 @@ original bindings and withholds credits until independent current canonical Pers
 publication. Content keeps its sole publisher; Rating/Content retain original COMMIT/ROLLBACK obligations.
 Native races/growth and integration remain required.
 
+Decision: colocated store callers keep a single `authorization`; HTTP merge supplies `authorizationFor` per
+partition because admission home and the redirected Subject partition can differ. Independent public readback is
+the one-hop 308 plus the survivor GET. Foreign-home reviewed Person evidence answers HTTP 503
+`atomic_guard_unavailable`. `done: true` still requires mapping and both participant receipts.
+
 ## Concurrent control and coherent admission
 
 ### Immutable cut before any new effect

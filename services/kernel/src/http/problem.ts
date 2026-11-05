@@ -245,6 +245,14 @@ export function problemResponse(
   } else if (error instanceof TooManyEventsError) {
     code = 'too_many_events';
     detail = error.message;
+  } else if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code: unknown }).code === 'atomic_guard_unavailable'
+  ) {
+    code = 'atomic_guard_unavailable';
+    headers.set('retry-after', '1');
   } else {
     switch (classifyUnavailability(error)) {
       case 'overloaded':

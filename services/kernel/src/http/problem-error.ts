@@ -105,6 +105,7 @@ export const PROBLEMS = {
   internal_error: { status: 500, title: 'Internal Server Error', retryable: false },
   overloaded: { status: 503, title: 'Service Overloaded', retryable: true },
   partition_unavailable: { status: 503, title: 'Partition Unavailable', retryable: true },
+  atomic_guard_unavailable: { status: 503, title: 'Atomic Guard Unavailable', retryable: true },
   transaction_retry_exhausted: { status: 503, title: 'Transaction Retry Exhausted', retryable: true },
   deadline_exceeded: { status: 503, title: 'Deadline Exceeded', retryable: true },
   dependency_unavailable: { status: 503, title: 'Dependency Unavailable', retryable: true },

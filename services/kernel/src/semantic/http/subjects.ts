@@ -4,6 +4,7 @@ import { readDocument } from '../../content/document-read.ts';
 import {
   ReviewedPersonEndpointSchema,
   ReviewedPersonExpectationSchema,
+  ReviewedPersonGuardUnavailableError,
   validReviewedPersonExpectation,
   isReviewedPersonSource,
 } from '../reviewed-person-identity.ts';
@@ -293,6 +294,7 @@ function candidateError(error: unknown): never {
     if (error.code === 'identity_epoch_busy') throw new ProblemError('overloaded');
     throw new ProblemError('partition_unavailable');
   }
+  if (error instanceof ReviewedPersonGuardUnavailableError()) throw new ProblemError('atomic_guard_unavailable');
   if (error instanceof SubjectNotFoundError) throw new ProblemError('not_found');
   if (error instanceof ContextNotFoundError) throw new ProblemError('not_found');
   if (error instanceof EditorialConflictError) throw new ProblemError('conflict');
@@ -1064,6 +1066,7 @@ function subjectRoutes(
             'semantic_not_ready',
             'overloaded',
             'partition_unavailable',
+            'atomic_guard_unavailable',
             'transaction_retry_exhausted',
             'deadline_exceeded',
           ),
