@@ -337,6 +337,11 @@ test('last interactive credential of a person cannot be removed', async () => {
     await expect(f.apply(op)).rejects.toMatchObject({ status: 409 });
     expect((await f.pool.query('SELECT password FROM account WHERE "userId"=\'human\'')).rows[0].password).toBeString();
     await f.pool.query("INSERT INTO auth_public_key VALUES ('human','retained',$1)", [f.publicJwk]);
+    await expect(f.apply(op)).rejects.toMatchObject({ status: 409 });
+    await f.pool.query(
+      `INSERT INTO passkey(id,"userId","credentialID","publicKey",counter,"deviceType","backedUp","createdAt")
+       VALUES ('retained-passkey','human','retained-credential','unit-public-key',0,'singleDevice',false,now())`,
+    );
     expect((await f.apply(op)).replayed).toBe(false);
   } finally {
     await f.close();
