@@ -14,8 +14,8 @@ export const Route = createFileRoute('/accounts/')({
   loaderDeps: ({ search }) => search,
   gcTime: 0,
   loader: ({ deps, abortController, context }) =>
-    readManagementWindow(context.queryClient, 'inventory', () =>
-      readManagedAccounts({ data: deps, signal: abortController.signal }),
+    readManagementWindow(context.queryClient, 'inventory', abortController.signal, (signal) =>
+      readManagedAccounts({ data: deps, signal }),
     ),
   head: ({ match }) =>
     pageHead({ title: m.managed_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),

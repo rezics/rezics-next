@@ -71,6 +71,7 @@ test('mounted router windows reread exact native targets, retain failed movement
   session('A');
   const stop = browserObservation(client).subscribe(() => {});
   const calls: Cursors[] = [];
+  const signals: AbortSignal[] = [];
   let fail: boolean | 'signed-out' = false;
   let release: ((page: Page<Inventory | Detail>) => void) | undefined;
   let defer = false;
@@ -90,9 +91,10 @@ test('mounted router windows reread exact native targets, retain failed movement
     validateSearch: readCursors,
     loaderDeps: ({ search }) => search,
     gcTime: 0,
-    loader: ({ deps }) =>
-      readManagementWindow(client, detail ? organization.id : 'inventory', async () => {
+    loader: ({ deps, abortController }) =>
+      readManagementWindow(client, detail ? organization.id : 'inventory', abortController.signal, async (signal) => {
         calls.push({ ...deps });
+        signals.push(signal);
         if (defer)
           return new Promise<Page<Inventory | Detail>>((resolve) => {
             release = resolve;
@@ -249,6 +251,7 @@ test('mounted router windows reread exact native targets, retain failed movement
       session('A', 'new-credential');
     });
     expect(host.querySelector('[data-management-feed]')).toBeNull();
+    expect(signals.at(-1)!.aborted).toBe(true);
     defer = false;
     await act(async () => {
       release!(ready(true, { membersCursor: 'late-A' }));
