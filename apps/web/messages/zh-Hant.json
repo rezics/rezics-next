@@ -8427,6 +8427,8 @@
   "realm_members_sparse": "本頁沒有可揭露的帳號，還有後續頁面。",
   "realm_members_empty": "沒有可揭露的目前成員。",
   "realm_members_more": "更多",
+  "realm_members_previous": "上一頁",
+  "realm_members_first": "第一頁",
   "realm_members_refresh": "重新整理名單",
   "realm_members_denied": "你無權列舉此 Realm 的成員。",
   "realm_members_preparing": "成員管理正在準備中。請手動重試。",

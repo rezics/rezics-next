@@ -8419,6 +8419,8 @@
   "realm_members_sparse": "Auf dieser Seite werden keine Konten offengelegt. Weitere Seiten sind verfügbar.",
   "realm_members_empty": "Es werden keine aktuellen Mitglieder offengelegt.",
   "realm_members_more": "Weiter",
+  "realm_members_previous": "Zurück",
+  "realm_members_first": "Erste Seite",
   "realm_members_refresh": "Liste aktualisieren",
   "realm_members_denied": "Du darfst die Mitglieder dieses Realms nicht auflisten.",
   "realm_members_preparing": "Die Mitgliederverwaltung wird vorbereitet. Versuche es erneut.",

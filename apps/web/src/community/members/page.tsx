@@ -3,6 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import type { FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
+import type { MemberAddress } from './source';
 import { RealmMembersVisit } from './visit';
 import { boundedRealmMemberPage, type MemberIdentity, type RealmMembersSource } from './source';
 import { MemberAddition } from './addition';
@@ -61,6 +62,7 @@ export function RealmMembersPage({
   const [accountIdInvalid, setAccountIdInvalid] = useState(false);
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
   const returnFocus = useRef<{ visit: RealmMembersVisit; accountId: string; from: Element | null } | null>(null);
+  const movementFocus = useRef<{ visit: RealmMembersVisit; address: MemberAddress; from: Element | null } | null>(null);
   const selectedAddress = snapshot.selection?.address;
   const lastFocused = useRef<typeof selectedAddress>(undefined);
   useLayoutEffect(() => {
@@ -83,11 +85,37 @@ export function RealmMembersPage({
     else heading.current?.focus();
   }, [snapshot, visit, caller]);
 
+  useLayoutEffect(() => {
+    const request = movementFocus.current;
+    if (!request) return;
+    if (request.visit !== visit || snapshot.read.kind === 'retired') {
+      movementFocus.current = null;
+      return;
+    }
+    if (snapshot.read.kind === 'loading') return;
+    movementFocus.current = null;
+    if (
+      snapshot.read.kind !== 'ready' ||
+      snapshot.address.realmId !== request.address.realmId ||
+      snapshot.address.cursor !== request.address.cursor ||
+      !visit.isAcceptedAddress(request.address) ||
+      (document.activeElement !== request.from && document.activeElement !== document.body)
+    )
+      return;
+    heading.current?.focus();
+  }, [snapshot, visit]);
+
   function close() {
     const address = snapshot.selection?.address;
     if (address) returnFocus.current = { visit, accountId: address.accountId, from: document.activeElement };
     visit.closeSelection();
     lastFocused.current = undefined;
+  }
+
+  function movePage(address: MemberAddress | null, move: () => Promise<unknown>) {
+    if (!address || !visit.isCurrent()) return;
+    movementFocus.current = { visit, address, from: document.activeElement };
+    void move();
   }
 
   const { read, selection } = snapshot;
@@ -313,16 +341,37 @@ export function RealmMembersPage({
           ) : (
             <p role="status">{read.page.next !== null ? m.realm_members_sparse() : m.realm_members_empty()}</p>
           )}
-          <nav aria-label={m.realm_members_heading()} className="flex flex-wrap gap-3">
-            {read.page.next !== null ? (
-              <Button variant="outline" className="min-h-11 whitespace-normal" onClick={() => void visit.more()}>
-                {m.realm_members_more()}
-              </Button>
-            ) : null}
-            <Button variant="ghost" className="min-h-11 whitespace-normal" onClick={() => void visit.refresh()}>
-              {m.realm_members_refresh()}
-            </Button>
-          </nav>
+          {visit.canPrevious() || visit.canFirst() || read.page.next !== null ? (
+            <nav aria-label={m.realm_members_heading()} className="flex flex-wrap gap-3">
+              {visit.canPrevious() ? (
+                <Button
+                  variant="outline"
+                  className="min-h-11 whitespace-normal"
+                  onClick={() => movePage(visit.previousAddress(), visit.previous)}
+                >
+                  {m.realm_members_previous()}
+                </Button>
+              ) : null}
+              {visit.canFirst() ? (
+                <Button
+                  variant="outline"
+                  className="min-h-11 whitespace-normal"
+                  onClick={() => movePage(visit.firstAddress(), visit.first)}
+                >
+                  {m.realm_members_first()}
+                </Button>
+              ) : null}
+              {read.page.next !== null ? (
+                <Button
+                  variant="outline"
+                  className="min-h-11 whitespace-normal"
+                  onClick={() => movePage(visit.moreAddress(), visit.more)}
+                >
+                  {m.realm_members_more()}
+                </Button>
+              ) : null}
+            </nav>
+          ) : null}
         </section>
       ) : (
         <section aria-labelledby={id} className="space-y-4">
@@ -340,7 +389,11 @@ export function RealmMembersPage({
                       : m.realm_members_unavailable()}
           </p>
           {read.kind === 'failed' || read.kind === 'unavailable' || read.kind === 'preparing' ? (
-            <Button variant="outline" className="min-h-11 whitespace-normal" onClick={() => void visit.retryPage()}>
+            <Button
+              variant="outline"
+              className="min-h-11 whitespace-normal"
+              onClick={() => movePage(snapshot.address, visit.retryPage)}
+            >
               {m.realm_members_retry_page()}
             </Button>
           ) : null}

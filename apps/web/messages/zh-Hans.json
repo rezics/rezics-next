@@ -8424,6 +8424,8 @@
   "realm_members_sparse": "本页没有可披露的账号，还有后续页面。",
   "realm_members_empty": "没有可披露的当前成员。",
   "realm_members_more": "更多",
+  "realm_members_previous": "上一页",
+  "realm_members_first": "第一页",
   "realm_members_refresh": "刷新列表",
   "realm_members_denied": "你无权列举此 Realm 的成员。",
   "realm_members_preparing": "成员管理正在准备中。请手动重试。",

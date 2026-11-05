@@ -8422,6 +8422,8 @@
   "realm_members_sparse": "このページに開示されるアカウントはありません。次のページがあります。",
   "realm_members_empty": "開示される現在のメンバーはいません。",
   "realm_members_more": "次へ",
+  "realm_members_previous": "前へ",
+  "realm_members_first": "最初のページ",
   "realm_members_refresh": "一覧を更新",
   "realm_members_denied": "この Realm のメンバーを列挙する権限がありません。",
   "realm_members_preparing": "メンバー管理を準備中です。再試行してください。",

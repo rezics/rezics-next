@@ -7,6 +7,16 @@ import type {
   MemberSelectionRead,
   RealmMembersSource,
 } from './source';
+import {
+  acceptWindowMove,
+  clearStagedMove,
+  emptyWindowNavigation,
+  sameCoordinate,
+  stageWindowMove,
+  type StagedWindowMove,
+  type WindowDirection,
+  type WindowNavigation,
+} from './window-navigation';
 
 type DisclosedRow = Extract<MemberRow, { kind: 'disclosed' }>;
 type Selection = {
@@ -22,7 +32,7 @@ export type MembersSnapshot = {
   selection: Selection | null;
 };
 
-/** One page, one exact selection, no cached identity or command authority. */
+/** One current page, bounded coordinate history, one exact selection, no cached command authority. */
 export class RealmMembersVisit {
   private value: MembersSnapshot;
   private rows = new Map<string, DisclosedRow>();
@@ -33,6 +43,7 @@ export class RealmMembersVisit {
   private pageOperation = 0;
   private selectedOperation = 0;
   private pageBusy = false;
+  private navigation: WindowNavigation = emptyWindowNavigation();
   private stop: (() => void) | undefined;
   private observation: ReturnType<NonNullable<RealmMembersSource['observe']>> | undefined;
 
@@ -79,6 +90,8 @@ export class RealmMembersVisit {
     this.stop = undefined;
     this.observation = undefined;
     this.rows.clear();
+    this.pageBusy = false;
+    this.navigation = emptyWindowNavigation();
     this.value = {
       read: { kind: 'retired' },
       address: { realmId: this.realmId, cursor: null },
@@ -108,7 +121,11 @@ export class RealmMembersVisit {
       this.stop();
       this.stop = undefined;
     }
-    if (this.admitted()) void this.readPage(this.value.address);
+    if (this.admitted()) {
+      const address = { realmId: this.realmId, cursor: null };
+      const move = stageWindowMove(this.navigation, 'initial', address, null);
+      void this.readPage(move);
+    }
     return () => {
       this.connected = false;
       this.connection++;
@@ -118,6 +135,7 @@ export class RealmMembersVisit {
       this.stop?.();
       this.stop = undefined;
       this.rows.clear();
+      this.navigation = emptyWindowNavigation();
       if (!this.retired)
         this.value = {
           read: { kind: 'loading' },
@@ -158,8 +176,9 @@ export class RealmMembersVisit {
     return index;
   }
 
-  private async readPage(address: MemberAddress) {
-    if (!this.admitted() || this.pageBusy) return;
+  private async readPage(move: StagedWindowMove): Promise<boolean> {
+    if (!this.admitted() || this.pageBusy || this.navigation.staged !== move) return false;
+    const address = move.target;
     const operation = ++this.pageOperation;
     const connection = this.connection;
     this.pageBusy = true;
@@ -171,28 +190,84 @@ export class RealmMembersVisit {
     let read: MemberPageRead;
     try {
       read = await this.source.readPage({ ...address });
-    } catch {
-      read = { kind: 'failed' };
+    } finally {
+      if (connection === this.connection && operation === this.pageOperation) this.pageBusy = false;
     }
-    if (!this.admitted() || connection !== this.connection || operation !== this.pageOperation) return;
-    this.pageBusy = false;
+    if (
+      !this.admitted() ||
+      connection !== this.connection ||
+      operation !== this.pageOperation ||
+      this.navigation.staged !== move
+    )
+      return false;
     if (read.kind === 'ready') {
       const index = this.index(read.page);
-      if (index) this.rows = index;
-      else read = { kind: 'unavailable' };
+      if (!index || (move.authority !== null && read.page.authority !== move.authority)) {
+        read = { kind: 'unavailable' };
+      } else {
+        this.rows = index;
+        this.navigation = acceptWindowMove(this.navigation, move);
+      }
     }
+    if (read.kind === 'denied') this.navigation = clearStagedMove(this.navigation, move);
     this.value = {
       read,
       address: read.kind === 'denied' ? { realmId: this.realmId, cursor: null } : address,
       selection: null,
     };
     this.emit();
+    return read.kind === 'ready' && sameCoordinate(this.navigation.current, address);
   }
 
-  more = async () => {
-    if (!this.admitted() || this.value.read.kind !== 'ready') return;
+  canPrevious = () => this.navigation.predecessors.length > 0 && this.value.read.kind === 'ready';
+
+  canFirst = () =>
+    this.navigation.current !== null &&
+    this.navigation.current.cursor !== null &&
+    this.value.read.kind === 'ready';
+
+  moreAddress = (): MemberAddress | null => {
+    if (!this.admitted() || this.value.read.kind !== 'ready' || this.value.selection) return null;
     const next = this.value.read.page.next;
-    if (next !== null) await this.readPage({ realmId: this.realmId, cursor: next });
+    return next === null ? null : { realmId: this.realmId, cursor: next };
+  };
+
+  previousAddress = (): MemberAddress | null => {
+    if (!this.admitted() || !this.canPrevious() || this.value.selection) return null;
+    return this.navigation.predecessors.at(-1) ?? null;
+  };
+
+  firstAddress = (): MemberAddress | null => {
+    if (!this.admitted() || !this.canFirst() || this.value.selection) return null;
+    return { realmId: this.realmId, cursor: null };
+  };
+
+  isAcceptedAddress = (address: MemberAddress) =>
+    this.admitted() && this.value.read.kind === 'ready' && sameCoordinate(this.navigation.current, address);
+
+  private beginMove(direction: Exclude<WindowDirection, 'initial'>, target: MemberAddress): StagedWindowMove | null {
+    if (!this.admitted() || this.pageBusy || this.value.read.kind !== 'ready' || this.value.selection) return null;
+    return stageWindowMove(this.navigation, direction, target, this.value.read.page.authority);
+  }
+
+  more = async (): Promise<boolean> => {
+    const target = this.moreAddress();
+    if (!target) return false;
+    const move = this.beginMove('more', target);
+    return move ? this.readPage(move) : false;
+  };
+
+  previous = async (): Promise<boolean> => {
+    const target = this.previousAddress();
+    if (!target) return false;
+    const move = this.beginMove('previous', target);
+    return move ? this.readPage(move) : false;
+  };
+
+  first = async (): Promise<boolean> => {
+    if (!this.admitted() || this.pageBusy || this.value.read.kind !== 'ready' || this.value.selection) return false;
+    const move = this.beginMove('first', { realmId: this.realmId, cursor: null });
+    return move ? this.readPage(move) : false;
   };
 
   retryPage = async () => {
@@ -202,12 +277,13 @@ export class RealmMembersVisit {
       this.value.read.kind !== 'preparing'
     )
       return;
-    await this.readPage(this.value.address);
+    const move = this.navigation.staged;
+    if (!move) return false;
+    return this.readPage(move);
   };
 
-  refresh = async () => {
-    await this.readPage({ realmId: this.realmId, cursor: null });
-  };
+  /** Existing callers that explicitly refresh the roster continue to read the cursor-free first page. */
+  refresh = this.first;
 
   select = async (accountId: string) => {
     if (!this.admitted() || this.pageBusy || this.value.read.kind !== 'ready') return;
@@ -255,12 +331,7 @@ export class RealmMembersVisit {
       selection: { address, read: { kind: 'loading' }, ...(previousRead ? { previous: previousRead } : {}) },
     };
     this.emit();
-    let read: MemberSelectionRead;
-    try {
-      read = await this.source.readSelected({ ...address });
-    } catch {
-      read = { kind: 'failed' };
-    }
+    const read = await this.source.readSelected({ ...address });
     if (
       !this.admitted() ||
       connection !== this.connection ||

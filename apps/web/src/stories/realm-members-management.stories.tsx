@@ -128,6 +128,15 @@ function fixture(
   };
 }
 const ready = fixture('ready');
+const threeWindows: RealmMembersSource = {
+  ...ready,
+  readPage: async ({ cursor }) => {
+    const current = await ready.readPage({ realmId, cursor });
+    if (current.kind !== 'ready') return current;
+    const index = cursor === null ? 0 : cursor === 'window-2' ? 1 : 2;
+    return { ...current, page: { ...current.page, next: index < 2 ? `window-${index + 2}` : null } };
+  },
+};
 const meta = {
   title: 'Patterns/Community/Realm members management',
   component: RealmMembersPage,
@@ -169,6 +178,25 @@ export const Sparse: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.realm_members_more() }));
     await expect(await canvas.findByRole('button', { name: /account-02/ })).toBeVisible();
+  },
+};
+export const ThreeWindowReturn: Story = {
+  args: { source: threeWindows },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.realm_members_more() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.realm_members_more() }));
+    await expect(canvas.getByRole('button', { name: m.realm_members_previous() })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.realm_members_first() })).toBeVisible();
+    expect(canvas.queryByRole('button', { name: m.realm_members_more() })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_members_previous() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_members_previous() }));
+    await expect(canvas.getByRole('button', { name: m.realm_members_more() })).toBeVisible();
+    expect(canvas.queryByRole('button', { name: m.realm_members_previous() })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_members_more() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_members_first() }));
+    expect(canvas.queryByRole('button', { name: m.realm_members_previous() })).toBeNull();
+    expect(canvas.queryByRole('button', { name: m.realm_members_first() })).toBeNull();
   },
 };
 export const Denied: Story = { args: { source: fixture('denied') } };

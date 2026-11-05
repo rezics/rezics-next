@@ -8419,6 +8419,8 @@
   "realm_members_sparse": "Aucun compte n’est divulgué sur cette page. D’autres pages sont disponibles.",
   "realm_members_empty": "Aucun membre actuel n’est divulgué.",
   "realm_members_more": "Suite",
+  "realm_members_previous": "Précédent",
+  "realm_members_first": "Première page",
   "realm_members_refresh": "Actualiser la liste",
   "realm_members_denied": "Vous ne pouvez pas consulter les membres de ce Realm.",
   "realm_members_preparing": "La gestion des membres se prépare. Réessayez.",
