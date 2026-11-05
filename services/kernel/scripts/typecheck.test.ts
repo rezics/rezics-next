@@ -24,7 +24,10 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
   );
   chmodSync(tsc, 0o755);
   const emitter = join(bin, 'bun');
-  writeFileSync(emitter, '#!/bin/sh\n[ -n "$DATABASE_URL" ] || exit 9\n[ "$1" = scripts/client.ts ] || exit 9\nexit 0\n');
+  writeFileSync(
+    emitter,
+    '#!/bin/sh\n[ -n "$DATABASE_URL" ] || exit 9\n[ "$1" = scripts/client.ts ] || exit 9\nexit 0\n',
+  );
   chmodSync(emitter, 0o755);
   let dumps = {
     'db/schema.sql': 'create table first (id integer);',
