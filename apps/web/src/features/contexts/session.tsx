@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { personalRead } from '../../kernel/query';
@@ -13,6 +13,7 @@ import {
   readContextTargets,
   readContextWorkspace,
 } from './actions';
+import { DirectoryWindowNavigation } from './directory-window-navigation';
 import type { SettingsRead } from './settings';
 import { ContextAdmissions, ContextWork, useContextVisit, type ContextAdmission } from './lifetime';
 import {
@@ -31,7 +32,7 @@ import { ContextCreateView, ContextDetailView, ContextDirectoryView, ContextFeed
 type Mode = { mode: 'directory'; input: DirectoryInput } | { mode: 'create' } | { mode: 'detail'; id: string };
 type AdmissionProps = { admissions: ContextAdmissions; admission: ContextAdmission; locale: string };
 
-function VisitSession({ admissions, admission, locale, ...props }: Mode & AdmissionProps) {
+function VisitSession({ admissions, admission, locale, navigation, ...props }: Mode & AdmissionProps & { navigation?: DirectoryWindowNavigation }) {
   const client = useQueryClient();
   const address = props.mode === 'detail' ? props.id : props.mode === 'directory' ? props.input : null;
   const visit = useContextVisit(
@@ -43,8 +44,9 @@ function VisitSession({ admissions, admission, locale, ...props }: Mode & Admiss
   const query = useQuery({
     ...personalRead,
     queryKey: visit.key,
-    queryFn: ({ signal }) =>
-      visit.read<DirectoryWorkspace | Result<Actions> | Result<Workspace>>(
+    queryFn: ({ signal }) => {
+      const movement = navigation?.request();
+      return visit.read<DirectoryWorkspace | Result<Actions> | Result<Workspace>>(
         signal,
         (signal) => {
           visit.assertCurrent();
@@ -57,9 +59,14 @@ function VisitSession({ admissions, admission, locale, ...props }: Mode & Admiss
           });
         },
         (result) => {
+          if (props.mode === 'directory' && 'page' in result) {
+            if (result.page.kind === 'ready') navigation?.accept(props.input.cursor, movement);
+            else navigation?.failed();
+          }
           if (props.mode === 'detail' && 'session' in result) visit.session = result.session ?? visit.session;
         },
-      ),
+      );
+    },
     gcTime: 0,
     retry: false,
   });
@@ -143,6 +150,7 @@ function VisitSession({ admissions, admission, locale, ...props }: Mode & Admiss
                 : ((query.data as DirectoryWorkspace | undefined) ?? null)
           }
           reload={reload}
+          {...(navigation ? { navigation } : {})}
         />
       ) : props.mode === 'create' ? (
         <ContextCreateView
@@ -192,8 +200,9 @@ export function ContextSession(props: Mode) {
     return (
       <ContextFeedback locale={locale} failure={{ kind: state === 'signed-out' ? 'signed-out' : 'unavailable' }} />
     );
-  const identity = JSON.stringify([admission.id, locale, props]);
-  return <VisitSession key={identity} {...props} admissions={admissions} admission={admission} locale={locale} />;
+  const identity = JSON.stringify([admission.id, locale, props.mode === 'directory'
+    ? [props.mode, props.input.query, props.input.deleted] : props]);
+  return <DirectoryComposition key={identity} {...props} admissions={admissions} admission={admission} locale={locale} />;
 }
 export function ContextPending() {
   return <p role="status">{m.ctxw_loading()}</p>;
@@ -201,4 +210,16 @@ export function ContextPending() {
 export function ContextRouteError() {
   const router = useRouter();
   return <ContextFeedback locale={getLocale()} failure={unavailable} retry={() => void router.invalidate()} />;
+}
+
+function DirectoryComposition(props: Mode & AdmissionProps) {
+  const navigation = useMemo(() => new DirectoryWindowNavigation(), []);
+  useLayoutEffect(() => {
+    const stop = props.admissions.subscribe(() => {
+      if (!props.admissions.current(props.admission)) navigation.dispose();
+    });
+    return () => { stop(); navigation.dispose(); };
+  }, [navigation, props.admissions, props.admission]);
+  return <VisitSession key={JSON.stringify(props.mode === 'directory' ? props.input : props.mode)}
+    {...props} {...(props.mode === 'directory' ? { navigation } : {})} />;
 }

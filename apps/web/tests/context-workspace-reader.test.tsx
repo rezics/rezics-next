@@ -381,7 +381,7 @@ test('directory links preserve exact selection, cursor, native form and independ
         ),
       ).toBe(true);
     }
-    const retry = button(panel.host, m.ctxw_reread({}, o));
+    const retry = button(panel.host, m.prq_retry_page({}, o));
     retry.focus();
     await act(async () => userEvent.keyboard('{Enter}'));
     expect(args).toEqual([[]]);
@@ -678,4 +678,58 @@ test('personal Context departure keeps creation and delete recovery on Stay and 
   } finally {
     await panel.dispose();
   }
+});
+
+
+test('directory admits three exact windows, retains predecessors on failed Previous and bounds coordinates', async () => {
+  const { DirectoryWindowNavigation } = await import('../src/features/contexts/directory-window-navigation');
+  const navigation = new DirectoryWindowNavigation();
+  const input = directoryInput({ query: 'Readers' });
+  const supplied = contextFixture().initialDirectory(input);
+  if (supplied.page.kind !== 'ready') throw new Error('Expected fixture page');
+  const first = supplied.page.value;
+  const panel = await mount(<ContextDirectoryView locale="en" input={input} data={supplied} navigation={navigation} reload={noop} />);
+  const show = async (cursor: string | undefined, next: string | null) => panel.render(
+    <ContextDirectoryView locale="en" input={{ ...input, cursor }}
+      data={{ ...supplied, page: { kind: 'ready', value: { ...first, contexts: cursor ? [] : first.contexts, next } } }}
+      navigation={navigation} reload={noop} />);
+  const admit = (direction: 'next' | 'previous' | 'first', cursor: string | undefined) => {
+    navigation.stage(direction, cursor);
+    navigation.accept(cursor, navigation.request());
+  };
+  try {
+    navigation.accept(undefined, undefined);
+    admit('next', 'second+/=');
+    await show('second+/=', 'terminal');
+    expect(visibleText(panel.host)).toContain(m.ctxw_empty_page({}, o));
+    admit('next', 'terminal');
+    await show('terminal', null);
+    expect(visibleText(panel.host)).toContain(m.ctxw_empty_final_page({}, o));
+    expect(navigation.previous).toEqual({ cursor: 'second+/=' });
+    navigation.stage('previous', 'second+/=');
+    navigation.request();
+    navigation.failed();
+    await panel.render(<ContextDirectoryView locale="en" input={{ ...input, cursor: 'second+/=' }}
+      data={{ ...supplied, page: { kind: 'stale' } }} navigation={navigation} reload={noop} />);
+    expect(visibleText(panel.host)).toContain(m.ctxw_stale({}, o));
+    expect(navigation.previous).toEqual({ cursor: 'second+/=' });
+    navigation.accept('second+/=', navigation.request()); // Ordinary reload cannot commit the failed movement.
+    expect(navigation.previous).toEqual({ cursor: 'second+/=' });
+    navigation.retry('second+/=');
+    navigation.accept('second+/=', navigation.request());
+    expect(navigation.previous).toEqual({ cursor: undefined });
+    admit('previous', undefined);
+    await show(undefined, 'second+/=');
+    expect(navigation.previous).toBeUndefined();
+    expect(panel.host.querySelector(`a[href="${detailHref('en', fixtureId)}"]`)).not.toBeNull();
+    for (let index = 0; index < 12; index++) admit('next', String(index));
+    for (let index = 10; index >= 3; index--) {
+      expect(navigation.previous).toEqual({ cursor: String(index) });
+      admit('previous', String(index));
+    }
+    expect(navigation.previous).toBeUndefined();
+    admit('first', undefined);
+    expect(navigation.previous).toBeUndefined();
+    navigation.dispose();
+  } finally { await panel.dispose(); }
 });

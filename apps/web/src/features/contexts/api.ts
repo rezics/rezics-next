@@ -157,7 +157,6 @@ export function createContextApi(
       directory.list(input, headers()).catch(() => unavailable),
       actions(PAGE_GLOBAL_CONTEXT),
     ]);
-    if (page.kind === 'signed-out' || page.kind === 'denied') return { page, creation: page };
     return { page, creation };
   }
   async function submit(input: Command): Promise<MutationResult> {

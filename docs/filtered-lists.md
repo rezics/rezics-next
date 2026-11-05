@@ -452,3 +452,20 @@ Search writes the direct catalogue and prepared public checks; Commerce writes t
 owner checks; the owner of `POST /v1/zones/{id}:readPage` writes the composed-page check, each using its native
 plan. Performance owns the harness enforcing these counted-unit ceilings and reviews the checks. The old
 256-proof tests do not count.
+
+## Context directory consumer
+
+The signed-in Context directory requests 20 native rows and keeps one current page, with an independent creation
+permission read. One mounted eligible visit retains at most eight admitted predecessor cursor coordinates,
+its current coordinate and one staged exact target. Cursor input is bounded by the native 4,096-character
+contract and search by 256 characters; these finite consumer costs do not claim a response-byte bound.
+History contains no DTOs, labels, credentials, permissions or command operands. Query, Active/Deleted selection,
+locale, admission, mode and actual departure begin a new visit; cursor address replacement preserves the visit.
+
+Decision: Previous rereads a retained native coordinate; First omits the cursor. Only exact successful admission
+commits movement. Failure retains the raw target for deliberate Retry and preserves predecessors; ordinary reload
+cannot commit that staged movement. Direct entry and browser Back/Forward invent no predecessors. Empty terminal
+pages retain backward controls; empty pages with native next remain traversable. Stale cursors require deliberate
+First recovery, without resets, chain walks, counts, hidden retries or reordering. Keyboard movement hands focus to
+the committed heading only while still eligible; failure, replacement, disposal or moved focus cancels it.
+Navigation uses existing localized Previous, First page, Next and Retry this page vocabulary in all released locales.
