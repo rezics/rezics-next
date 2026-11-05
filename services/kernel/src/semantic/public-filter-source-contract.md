@@ -883,3 +883,9 @@ indexes and receipt frontiers, not a resource safety clock or permission copy.
   work; joins, control keys, failures and replay remain charged. No serving sweep or allowance reset is added.
 - Growth check: mixed ACK gap/p+1, missing-seal, old-cut, late-writer and physical no-resurrection controls
   remain deferred native obligations. Authored regression and workspace typing do not establish their outcome.
+
+Decision: generation maintenance retains its original prepared bootstrap, observation and execution before
+repair dispatch, then resumes the existing Search repair job. Search composes the completion reader through
+its ordinary publication writer fence; changed-since-start remains a disclosure fact and does not replace or
+invalidate verified original settlement. The fence empties the original prepared proof payload only after its
+readers release, retaining immutable proof metadata for restart; every other copy still blocks the drain.
