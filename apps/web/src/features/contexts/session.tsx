@@ -32,7 +32,13 @@ import { ContextCreateView, ContextDetailView, ContextDirectoryView, ContextFeed
 type Mode = { mode: 'directory'; input: DirectoryInput } | { mode: 'create' } | { mode: 'detail'; id: string };
 type AdmissionProps = { admissions: ContextAdmissions; admission: ContextAdmission; locale: string };
 
-function VisitSession({ admissions, admission, locale, navigation, ...props }: Mode & AdmissionProps & { navigation?: DirectoryWindowNavigation }) {
+function VisitSession({
+  admissions,
+  admission,
+  locale,
+  navigation,
+  ...props
+}: Mode & AdmissionProps & { navigation?: DirectoryWindowNavigation }) {
   const client = useQueryClient();
   const address = props.mode === 'detail' ? props.id : props.mode === 'directory' ? props.input : null;
   const visit = useContextVisit(
@@ -200,9 +206,14 @@ export function ContextSession(props: Mode) {
     return (
       <ContextFeedback locale={locale} failure={{ kind: state === 'signed-out' ? 'signed-out' : 'unavailable' }} />
     );
-  const identity = JSON.stringify([admission.id, locale, props.mode === 'directory'
-    ? [props.mode, props.input.query, props.input.deleted] : props]);
-  return <DirectoryComposition key={identity} {...props} admissions={admissions} admission={admission} locale={locale} />;
+  const identity = JSON.stringify([
+    admission.id,
+    locale,
+    props.mode === 'directory' ? [props.mode, props.input.query, props.input.deleted] : props,
+  ]);
+  return (
+    <DirectoryComposition key={identity} {...props} admissions={admissions} admission={admission} locale={locale} />
+  );
 }
 export function ContextPending() {
   return <p role="status">{m.ctxw_loading()}</p>;
@@ -218,8 +229,16 @@ function DirectoryComposition(props: Mode & AdmissionProps) {
     const stop = props.admissions.subscribe(() => {
       if (!props.admissions.current(props.admission)) navigation.dispose();
     });
-    return () => { stop(); navigation.dispose(); };
+    return () => {
+      stop();
+      navigation.dispose();
+    };
   }, [navigation, props.admissions, props.admission]);
-  return <VisitSession key={JSON.stringify(props.mode === 'directory' ? props.input : props.mode)}
-    {...props} {...(props.mode === 'directory' ? { navigation } : {})} />;
+  return (
+    <VisitSession
+      key={JSON.stringify(props.mode === 'directory' ? props.input : props.mode)}
+      {...props}
+      {...(props.mode === 'directory' ? { navigation } : {})}
+    />
+  );
 }

@@ -580,9 +580,9 @@ test('a fresh uncertain create retries the exact original sealed command and key
   envelopes.length = 0;
 });
 
-
 test('directory cursor replacements keep admitted history while query, deleted and private replacement retire it and late focus', async () => {
-  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+    await import('@tanstack/react-router');
   const { directoryInput } = await import('../src/features/contexts/model');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, signedIn());
@@ -590,19 +590,39 @@ test('directory cursor replacements keep admitted history while query, deleted a
   const supplied = fixture.initialDirectory(directoryInput({}));
   if (supplied.page.kind !== 'ready') throw new Error('Expected fixture directory');
   const page = supplied.page.value;
-  const ready = (next: string | null) => { directoryResult = { ...supplied, page: { kind: 'ready', value: { ...page, next } } }; };
+  const ready = (next: string | null) => {
+    directoryResult = { ...supplied, page: { kind: 'ready', value: { ...page, next } } };
+  };
   ready('second');
   const parent = createRootRoute();
-  const route = createRoute({ getParentRoute: () => parent, path: '/my/contexts', validateSearch: directoryInput,
-    component: () => <ContextSession mode="directory" input={route.useSearch()} /> });
-  const router = createRouter({ routeTree: parent.addChildren([route]), history: createMemoryHistory({ initialEntries: ['/my/contexts'] }) });
+  const route = createRoute({
+    getParentRoute: () => parent,
+    path: '/my/contexts',
+    validateSearch: directoryInput,
+    component: () => <ContextSession mode="directory" input={route.useSearch()} />,
+  });
+  const router = createRouter({
+    routeTree: parent.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: ['/my/contexts'] }),
+  });
   await act(async () => router.load());
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  await act(async () => root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>));
-  const link = (label: string) => [...host.querySelectorAll('a')].find(node => node.textContent?.trim() === label)!;
-  const move = async (label: string) => { const node = link(label); node.focus(); await act(async () => node.click()); await flush(); };
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    ),
+  );
+  const link = (label: string) => [...host.querySelectorAll('a')].find((node) => node.textContent?.trim() === label)!;
+  const move = async (label: string) => {
+    const node = link(label);
+    node.focus();
+    await act(async () => node.click());
+    await flush();
+  };
   try {
     await until(() => !!link(m.ctxw_next()));
     ready('third');
@@ -632,14 +652,36 @@ test('directory cursor replacements keep admitted history while query, deleted a
       await move(m.ctxw_next());
       expect(link(m.library_collections_previous())).toBeDefined();
       if (replacement === 'query' || replacement === 'deleted')
-        await act(async () => router.navigate({ href: replacement === 'query' ? '/my/contexts?query=Other&cursor=second' : '/my/contexts?deleted=true&cursor=second' }));
+        await act(async () =>
+          router.navigate({
+            href:
+              replacement === 'query'
+                ? '/my/contexts?query=Other&cursor=second'
+                : '/my/contexts?deleted=true&cursor=second',
+          }),
+        );
       else await act(async () => replace(client, replacement));
       await flush();
       expect(link(m.library_collections_previous())).toBeUndefined();
     }
+    ready('late');
+    await act(async () => router.navigate({ href: '/my/contexts?query=Late' }));
+    await until(() => !!link(m.ctxw_next()));
+    const gate = hold('directory');
+    await move(m.ctxw_next());
+    await gate.entered.promise;
+    await act(async () => replace(client, 'aba'));
+    await flush();
+    const search = host.querySelector('input')!;
+    search.focus();
+    await act(async () => gate.delivery.resolve('success'));
+    await flush();
+    expect(document.activeElement).toBe(search);
+    expect(link(m.library_collections_previous())).toBeUndefined();
   } finally {
     directoryResult = undefined;
     await act(async () => root.unmount());
-    client.clear(); host.remove();
+    client.clear();
+    host.remove();
   }
 });
