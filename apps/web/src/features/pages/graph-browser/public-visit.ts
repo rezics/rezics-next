@@ -89,7 +89,14 @@ export function graphPublicSourceReturnHref({
 }
 
 export function graphPublicOriginHref(base: string, origin: GraphPublicOrigin): string {
-  const href = `${base}?${new URLSearchParams({ origin: JSON.stringify(origin) })}`;
+  const value = {
+    subject: origin.subject,
+    context: origin.context,
+    locale: origin.locale,
+    ...(origin.realm === undefined ? {} : { realm: origin.realm }),
+    returnHref: origin.returnHref,
+  };
+  const href = `${base}?${new URLSearchParams({ origin: JSON.stringify(value) })}`;
   const url = new URL(href, 'https://rezics.invalid');
   return graphPublicIntentFits(href) && graphPublicIntentFits(`${url.pathname}${url.search}${url.hash}`)
     ? href

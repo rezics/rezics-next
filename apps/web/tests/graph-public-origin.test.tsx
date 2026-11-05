@@ -75,7 +75,6 @@ test('the public entry preserves admitted Global and selected Context observatio
 
 test('the production graph route gates unsupported origins and a fresh Global choice uses only the original transport', async () => {
   const {
-    graphGlobalVisitHref,
     graphPublicSourceReturnHref,
     subjectHref,
     base,
@@ -129,11 +128,14 @@ test('the production graph route gates unsupported origins and a fresh Global ch
   queryClient.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
   const content = createContext(null as import('react').ReactNode);
   const rootRoute = createRootRoute({ component: () => useContext(content) ?? h(Outlet) });
-  const graphRoute = Route.update({ getParentRoute: () => rootRoute } as never);
+  const graphRoute = Route.update({
+    id: '/subjects/$id_/$slug/graph',
+    path: '/subjects/$id_/$slug/graph',
+    getParentRoute: () => rootRoute,
+  } as never);
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host);
-  let freshRoot: ReturnType<typeof createRoot> | undefined;
 
   const mount = async (href: string) => {
     const url = new URL(href, 'https://site.test');
@@ -178,11 +180,6 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     expect(fresh).not.toBeNull();
     const freshParams = new URL(fresh!.href).searchParams;
     expect([...freshParams.keys()]).toEqual(['publicReturn']);
-    const freshRoute = graphGlobalVisitHref(
-      selectedAddress.pathname,
-      freshParams.get('publicReturn')!,
-    );
-
     const globalHref = catalogueEntries.graph({ id: subject, label: 'Origin', locale: 'en', origin: observed }).href;
     const globalAddress = new URL(globalHref, 'https://site.test');
     const routeAddress = (url: URL) => `${url.pathname.replace(/^\/en(?=\/)/, '')}${url.search}`;
@@ -196,31 +193,16 @@ test('the production graph route gates unsupported origins and a fresh Global ch
     await act(async () => staleResults[0]!({ ok: false, reason: 'denied' }));
     expect(host.textContent).not.toContain('not available for the current session');
 
-    const queryHost = window.document.createElement('main');
-    window.document.body.append(queryHost);
-    freshRoot = createRoot(queryHost);
-    const freshUrl = new URL(freshRoute, 'https://site.test');
-    const freshRootRoute = createRootRoute({ component: () => useContext(content) ?? h(Outlet) });
-    const freshGraphRoute = Route.update({ getParentRoute: () => freshRootRoute } as never);
-    const freshRouter = createRouter({
-      routeTree: freshRootRoute.addChildren([freshGraphRoute] as never),
-      history: createMemoryHistory({
-        initialEntries: [`${freshUrl.pathname.replace(/^\/en(?=\/)/, '')}${freshUrl.search}`],
-      }),
-    });
-    await act(async () => {
-      freshRoot!.render(h(QueryClientProvider, { client: queryClient }, h(RouterProvider, { router: freshRouter })));
-      await freshRouter.load();
-    });
+    await act(async () => router.history.push(routeAddress(new URL(fresh!.href, 'https://site.test'))));
     await waitFor(() => expect(calls).toHaveLength(3));
     expect(calls[2]!.data).toMatchObject({ id: subject, locale: 'en', expectedReader: null });
     expect(calls[2]!.data).not.toHaveProperty('context');
     expect(calls[2]!.data).not.toHaveProperty('realm');
     expect(calls[2]!.data).not.toHaveProperty('node');
     expect(calls[2]!.data).not.toHaveProperty('edge');
-    expect(queryHost.textContent).toContain('current Global catalogue');
-    expect(queryHost.textContent).not.toContain('selected Context or Realm');
-    expect([...queryHost.querySelectorAll('a')].some((link) => link.getAttribute('href') === publicReturn)).toBe(true);
+    expect(host.textContent).toContain('current Global catalogue');
+    expect(host.textContent).not.toContain('selected Context or Realm');
+    expect([...host.querySelectorAll('a')].some((link) => link.getAttribute('href') === publicReturn)).toBe(true);
 
     await act(async () => {
       queryClient.setQueryData(sessionQuery.queryKey, {
@@ -234,7 +216,6 @@ test('the production graph route gates unsupported origins and a fresh Global ch
   } finally {
     await act(async () => {
       root.unmount();
-      freshRoot?.unmount();
     });
     queryClient.clear();
     mock.module('../src/features/pages/graph-browser/actions', () => originalActions);
