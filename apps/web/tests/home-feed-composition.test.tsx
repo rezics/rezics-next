@@ -19,6 +19,7 @@ import {
   type HomeFeedStory,
 } from '../src/kernel/fake/home-feed-stories';
 import { setLocale } from '../src/paraglide/runtime.js';
+import homePageRecording from '../src/kernel/recorded/home-page.json';
 
 let request = new Request('https://rezics.example/en');
 let sessionReads = 0;
@@ -82,6 +83,12 @@ test('The default home route renders a bounded mixed discovery Following and Con
     const call = new Request(input, init);
     calls.push(call);
     const url = new URL(call.url);
+    if (url.pathname === '/v1/pages:read') {
+      expect(call.method).toBe('POST');
+      expect(await call.json()).toEqual({ target: { route: '/' }, languages: ['en'] });
+      expect(call.headers.has('authorization')).toBe(false);
+      return Response.json(homePageRecording);
+    }
     if (url.pathname === '/v1/rating-questions') {
       expect(url.searchParams.get('limit')).toBe('20');
       expect([...url.searchParams.keys()].sort()).toEqual(
@@ -202,8 +209,8 @@ test('The default home route renders a bounded mixed discovery Following and Con
   expect(publicHtml).not.toContain('Letters from B-612');
   expect(publicHtml).not.toContain('data-feed-source="continue"');
   expect(sessionReads).toBe(0);
-  expect(calls).toHaveLength(1);
-  expect(calls[0]!.headers.has('authorization')).toBe(false);
+  expect(calls.map((call) => new URL(call.url).pathname).sort()).toEqual(['/v1/feedItems', '/v1/pages:read']);
+  expect(calls.every((call) => !call.headers.has('authorization'))).toBe(true);
 
   request = new Request('https://rezics.example/en', {
     headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
