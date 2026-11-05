@@ -313,7 +313,7 @@ test('a Subject reader continues three public pages, adds a later curated Collec
       provenance: { viewer: 'A', csrfToken: 'csrf-A' },
     }),
   );
-  await act(async () => host.querySelector<HTMLButtonElement>('button[data-collection-inspect]')!.click());
+  await act(async () => window.document.querySelector<HTMLButtonElement>('button[data-collection-inspect]')!.click());
   expect(host.textContent).toContain(m.library_destination_curator_unavailable());
   expect(members).toHaveLength(0);
   await click(m.library_destination_choose());
@@ -388,7 +388,7 @@ test('empty continuing pages, expired cursors, denied add and original retry sta
   expect(original.collectionId).toBe(id(101));
   await act(async () => members[0]!.reject(new Error('lost member')));
   expect(host.textContent).toContain(m.library_subject_unavailable());
-  await act(async () => host.querySelector<HTMLButtonElement>('button[data-collection-inspect]')!.click());
+  await act(async () => window.document.querySelector<HTMLButtonElement>('button[data-collection-inspect]')!.click());
   await click(m.library_destination_choose());
   expect(members).toHaveLength(1);
   await click(m.library_selection_retry());
@@ -423,10 +423,14 @@ test('sign-out and Subject replacement retire private chooser work and keep a pu
       provenance: { viewer: 'A', csrfToken: 'csrf-A' },
     }),
   );
-  await act(async () => host.querySelector<HTMLButtonElement>('button[data-collection-inspect]')!.click());
-  expect(host.querySelector('[data-collection-inspection]')).not.toBeNull();
-  await click(m.library_subject_continuation_next());
-  expect(host.querySelector('[data-collection-inspection]')).toBeNull();
+  await act(async () => window.document.querySelector<HTMLButtonElement>('button[data-collection-inspect]')!.click());
+  const inspection = window.document.querySelector('[data-collection-inspection]');
+  expect(inspection).not.toBeNull();
+  const nextOwned = [...inspection!.parentElement!.querySelectorAll('button')].find(
+    (node) => node.textContent?.trim() === m.library_subject_continuation_next(),
+  )!;
+  await act(async () => nextOwned.click());
+  expect(window.document.querySelector('[data-collection-inspection]')).toBeNull();
   await click(m.library_subject_continuation_next());
   const pendingPublic = publics[0]!;
   const pendingChooser = pickers[1]!;
