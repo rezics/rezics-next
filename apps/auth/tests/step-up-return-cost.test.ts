@@ -4,6 +4,7 @@ import { creationFixture } from './creation-page-fixture';
 import { managementOperationStepUpUrl, storePendingRenameReviewStepUp } from '../src/management-operation-step-up';
 import { managementOperationProfile } from '../src/management-operations';
 import { recheckStepUpReturn } from '../src/step-up-return';
+import { confirmStepUp } from '../src/step-up';
 
 creationFixture();
 
@@ -69,4 +70,33 @@ test('ordinary and retained reviews stay within their existing whole-call reads'
     false,
   );
   request.mockRestore();
+});
+
+test('native suspension is a known step-up refusal after one authentication request', async () => {
+  const paths: string[] = [];
+  const request = spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    paths.push(String(input));
+    return Promise.resolve(Response.json({ error: 'account_suspended', code: 'ACCOUNT_SUSPENDED' }, { status: 403 }));
+  });
+  const events: string[] = [];
+  try {
+    const result = await confirmStepUp(
+      'person@example.test',
+      'private password',
+      '?return_to=%2Fsecurity',
+      'https://auth.test',
+      () => true,
+      {
+        onDispatch: () => events.push('dispatched'),
+        onRefused: () => events.push('refused'),
+        onAcknowledged: () => events.push('acknowledged'),
+      },
+    );
+    expect(result.ok).toBe(false);
+    expect(result.ok ? '' : result.message).not.toBeNull();
+    expect(events).toEqual(['dispatched', 'refused']);
+    expect(paths).toEqual(['/signin']);
+  } finally {
+    request.mockRestore();
+  }
 });

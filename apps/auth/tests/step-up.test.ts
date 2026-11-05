@@ -35,7 +35,7 @@ type Call = {
 const calls: Call[] = [];
 let startStatus: 200 | 400 | 429 | 503 = 200;
 let completeStatus: 200 | 400 | 401 | 429 | 503 = 200;
-let signInStatus: 200 | 401 | 429 | 503 = 200;
+let signInStatus: 200 | 401 | 403 | 429 | 503 = 200;
 
 // Copied from apps/auth/tests/recovery.test.ts's fake Auth and reduced to the browser HTTP contract.
 const fake = Bun.serve({
@@ -74,7 +74,9 @@ const fake = Bun.serve({
       }
       if (signInStatus === 429) headers.set('retry-after', String(retryAfter));
       return Response.json(
-        { error: signInStatus === 503 ? 'unavailable' : 'authentication_denied' },
+        signInStatus === 403
+          ? { error: 'account_suspended', code: 'ACCOUNT_SUSPENDED' }
+          : { error: signInStatus === 503 ? 'unavailable' : 'authentication_denied' },
         { status: signInStatus, headers },
       );
     }
@@ -315,9 +317,9 @@ test(
 );
 
 test(
-  'a wrong password, rate limit or outage keeps the person on the page with a localized message',
+  'a credential refusal, suspension, rate limit or outage stays on the page with a localized message',
   async () => {
-    for (const status of [401, 429, 503] as const) {
+    for (const status of [401, 403, 429, 503] as const) {
       signInStatus = status;
       calls.length = 0;
       const { page, origin } = await open(`/step-up?${stepUpQuery}`);
@@ -334,7 +336,7 @@ test(
         expect(signIns()).toHaveLength(1);
         postedSignIn(signIns()[0], origin);
         expect(authorizations()).toEqual([]);
-        if (status === 401) {
+        if (status === 401 || status === 403) {
           expect(message).toMatch(/email\s+or\s+password/i);
           expect(message).toMatch(/incorrect|wrong|invalid/i);
           expect(message).not.toMatch(

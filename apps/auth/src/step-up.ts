@@ -159,7 +159,12 @@ function observeResult(
   observer?: StepUpAttemptObserver,
 ): void {
   if (result.ok) notify(observer?.onAcknowledged);
-  else if (result.reason === 'credentials' || result.reason === 'rate-limited') notify(observer?.onRefused);
+  else if (
+    result.reason === 'credentials' ||
+    result.reason === 'suspended' ||
+    result.reason === 'rate-limited'
+  )
+    notify(observer?.onRefused);
 }
 
 function passkeyCurrentCheck(isCurrent: () => boolean, observer?: StepUpAttemptObserver): () => boolean {
@@ -174,7 +179,7 @@ function passkeyCurrentCheck(isCurrent: () => boolean, observer?: StepUpAttemptO
   };
 }
 
-// 401, 429 and 503 stay on the page. signIn already collapsed the Auth result to these three outcomes.
+// Known credential refusals and throttling stay on the page with their localized recovery copy.
 export function stepUpFailure(result: Exclude<SignInResult, { ok: true }>): string {
   if (result.reason === 'credentials' || result.reason === 'suspended')
     return failureMessage(401, 'authentication_denied', null);
