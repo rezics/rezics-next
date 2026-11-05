@@ -218,7 +218,7 @@ for (const stage of ['review', 'approval', 'issuance', 'readback'] as const)
             return lateApproval.promise;
           });
         if (stage === 'approval') {
-          void p.submit();
+          await p.submit();
           await approvalStarted.promise;
         } else {
           await p.submit();
