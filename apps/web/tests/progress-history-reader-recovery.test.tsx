@@ -65,6 +65,7 @@ mock.module('../src/library/progress-server', () => ({
   finishProgressSession: unexpectedRequest,
 }));
 const { createRoot } = await import('react-dom/client');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { within, userEvent } = await import('storybook/test');
@@ -134,6 +135,8 @@ async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
+  const client = new QueryClient();
+  client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
   const route = createRootRoute();
   const detail = createRoute({ getParentRoute: () => route, path: '/library/progress/$id' });
   const router = createRouter({
@@ -146,9 +149,11 @@ async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
     act(async () =>
       root.render(
         <StrictMode>
+          <QueryClientProvider client={client}>
           <RouterContextProvider router={router}>
             <ProgressSessionPage page={p} logsCursor={cursors.logs} originating={originating} />
           </RouterContextProvider>
+          </QueryClientProvider>
         </StrictMode>,
       ),
     );
@@ -169,6 +174,7 @@ async function mount(initial: LoadedPage, originating?: ProgressDetailOrigin) {
     close: async () => {
       await act(async () => root.unmount());
       host.remove();
+      client.clear();
       setLocale('en', { reload: false });
     },
   };
