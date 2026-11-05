@@ -2967,7 +2967,7 @@ export function createPublicFilterSourceBinding(
         observation.status !== 'observed' ||
         !observation.routingComplete ||
         observation.unacknowledged.length ||
-        observation.blocking.length
+        observation.blocking.some(({ phase, scope }) => phase === 'pending' || scope === 'unresolved')
       )
         return { status: 'pending' as const, publication, reason: 'owner_unavailable' as const, cost };
       return {
