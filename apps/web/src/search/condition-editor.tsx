@@ -514,7 +514,9 @@ function NodeEditor({
     statementValue && 'in' in statementValue
       ? statementValue.in.filter(Boolean).map((id) => {
           const resolved =
-            resolvedOperands?.request === operandRequest ? resolvedOperands.labels[id.toLowerCase()]?.label : undefined;
+            operandRequest && resolvedOperands?.request === operandRequest
+              ? resolvedOperands.labels[id.toLowerCase()]?.label
+              : undefined;
           if (resolved) return resolved;
           if (!context.entityLookup)
             return name(context.values[property ?? '']?.find((choice) => choice.value === id)?.labels, id);
