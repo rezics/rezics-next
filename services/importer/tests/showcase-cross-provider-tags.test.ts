@@ -94,7 +94,10 @@ test('source parent edges resolve by exact current identities and withhold child
   expect(wrongScheme.gaps[0]?.record).toEqual({ id: 'g1', parent: 'g2' });
   expect(
     withholdShowcaseTagAssociations(
-      [{ tag: 'g1', work: 'v2002' }, { tag: 'g9', work: 'v2002' }],
+      [
+        { tag: 'g1', work: 'v2002' },
+        { tag: 'g9', work: 'v2002' },
+      ],
       wrongScheme.unavailableTagCodes,
     ),
   ).toEqual([{ tag: 'g9', work: 'v2002' }]);
