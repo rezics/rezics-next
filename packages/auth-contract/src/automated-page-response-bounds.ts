@@ -1,6 +1,6 @@
 /** Fixed closed bounds for the automated-creation operator advice page.
- * Strings are measured in UTF-16 code units. The byte allowance covers JSON
- * syntax plus six UTF-8 bytes per code unit for worst-case JSON escaping.
+ * Labels are measured in UTF-16 code units. The byte allowance covers JSON
+ * syntax, ASCII UUID/handle values, and worst-case six-byte escaping for names.
  */
 export const AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH = 36;
 export const AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH = 64;
@@ -32,14 +32,14 @@ const variants = [
 export const AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES = Math.max(
   ...variants.map((value) => {
     const hasOperator = value.operator !== null;
-    const stringUnits =
+    const asciiUnits =
       AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH +
       (hasOperator
         ? AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH +
-          AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH +
-          AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH
+          AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH
         : 0);
+    const escapableUnits = hasOperator ? AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH : 0;
     // These ASCII skeletons have equal UTF-8 byte and UTF-16 lengths.
-    return JSON.stringify(value).length + stringUnits * 6;
+    return JSON.stringify(value).length + asciiUnits + escapableUnits * 6;
   }),
 );
