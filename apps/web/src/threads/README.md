@@ -101,6 +101,10 @@ claim-failure/check/reupload path and gains no claimability from these attachmen
 Decision: The UI editor's narrow `renderUpload` port delegates existing retry, dismissal and replacement operations;
 Threads owns localized stage/recovery copy, while the editor remains the sole insertion, description and position owner.
 
+Decision: Publish-with-attachment acceptance is the native host walk of a Global Work Board post, a second-member
+reply, exact reservation retry, type-refusal replacement, one Stay decision, and an anonymous fresh read. Component
+and fake-kernel composer tests remain focused regressions, not that walk.
+
 This behavior protects against accidental departure. Signed-in, admitted new-thread and reply editors also offer
 optional [browser-only writing recovery](#browser-only-writing-recovery). Unsaved changes and current-visit exact
 retry still need the departure guard. Inline edits remain current-visit-only. The guard does not create, replay or
