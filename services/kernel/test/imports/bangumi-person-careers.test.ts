@@ -49,30 +49,6 @@ function planFor(name: string, revision: string): CrossMediaPlan {
   return plan;
 }
 
-function bindingsFor(...codes: string[]): SourceVocabularyBindings {
-  const schemeId = '00000000-0000-4000-8000-000000000101';
-  return {
-    releaseDigest: bundledDigest,
-    schemes: [
-      {
-        taxonomy: 'bangumi.person.career',
-        id: schemeId,
-        uri: 'https://rezics.com/schemes/bangumi/careers',
-        type: 'skos:ConceptScheme',
-        releaseDigest: bundledDigest,
-      },
-    ],
-    concepts: codes.map((code, index) => ({
-      taxonomy: 'bangumi.person.career',
-      code,
-      id: `00000000-0000-4000-8000-${String(201 + index).padStart(12, '0')}`,
-      type: 'skos:Concept' as const,
-      schemeId,
-      releaseDigest: bundledDigest,
-    })),
-  };
-}
-
 function idOf(result: { readings: { externalId: string; subject: unknown }[] }, externalId: string): string {
   const reading = result.readings.find((row) => row.externalId === externalId);
   const id = (reading?.subject as { subject?: { id?: unknown } } | undefined)?.subject?.id;
