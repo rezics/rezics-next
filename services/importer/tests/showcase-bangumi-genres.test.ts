@@ -6,9 +6,27 @@ import { join } from 'node:path';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import { emptyCrossMediaPlan, seedCrossMedia } from '../src/cross-media-seed.ts';
 import { ImportSession } from '../src/import-session.ts';
-import { seedReviewedCatalogue, type ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
+import { sameStatementProvenance } from '../src/statement-provenance.ts';
+import {
+  readReviewedBangumiBinding,
+  seedReviewedCatalogue,
+  type ReviewedCataloguePort,
+} from '../src/reviewed-catalogue.ts';
 
 const context = '00000000-0000-8000-8000-000000000000';
+test('statement provenance admits data descriptors before projecting semantic fields', () => {
+  let reads = 0;
+  const statement = { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://vndb.org/v2002' } };
+  const accessor = Object.defineProperty({ ...statement }, 'value', {
+    enumerable: true,
+    get() {
+      reads++;
+      return statement.value;
+    },
+  });
+  expect(sameStatementProvenance(accessor, statement)).toBe(false);
+  expect(reads).toBe(0);
+});
 type Candidate = {
   id: string;
   subject: string;
@@ -146,6 +164,53 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
   };
   return port as unknown as ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2];
 }
+
+test('current reviewed binding accepts transport JSON records and still refuses changed statement provenance', async () => {
+  const directory = await mkdtemp(join(import.meta.dir, '../../../.temp/reviewed-binding-'));
+  const path = join(directory, 'state.sqlite');
+  const native = fakePort();
+  let changed = false;
+  const port: ReviewedCataloguePort = {
+    ...native,
+    async reviewedCandidates(...args) {
+      const page = JSON.parse(JSON.stringify(await native.reviewedCandidates(...args)), (_key, value) =>
+        value && typeof value === 'object' && !Array.isArray(value) ? Object.setPrototypeOf(value, null) : value,
+      );
+      for (const candidate of page.candidates) {
+        const statement = candidate.statement;
+        Object.assign(statement, {
+          id: candidate.id,
+          rank: 'normal',
+          qualifiers: [],
+          rezics: { release: 'released', revision: 1 },
+        });
+        statement.property.data_type = 'url';
+        for (const reference of statement.references ?? []) {
+          reference.hash = 'native-reference-hash';
+          for (const part of reference.parts) part.property.data_type = 'url';
+        }
+      }
+      if (changed && page.candidates[0]) page.candidates[0].statement.references = [];
+      return page;
+    },
+  };
+  try {
+    const result = await seedReviewedCatalogue({ path, port });
+    const session = new ImportSession(path);
+    try {
+      expect(await readReviewedBangumiBinding(session.bindings, port)).toEqual({
+        sourceConcept: result.subjects['source-harem']!,
+        canonicalConcept: result.subjects['canonical-harem']!,
+      });
+      changed = true;
+      expect(await readReviewedBangumiBinding(session.bindings, port)).toBeNull();
+    } finally {
+      session.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test('default cross-media seed binds the exact editor tag and resumes unchanged facts across a current-binding outage', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-genre-'));

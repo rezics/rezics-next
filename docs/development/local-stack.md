@@ -53,10 +53,11 @@ a fresh persona can submit the bounded dataset batches. Explicit existing overri
 families, authorization and operator checks retain their normal policy.
 
 Decision: local persona setup opens mounted anonymous GET exposure groups plus the explicit M1 `search` (path 9,
-mixed Search) and `search_advanced` (path 10, filters and POST `/v1/subjects:facets`) groups through ordinary platform
+mixed Search), `search_advanced` (path 10, filters and POST `/v1/subjects:facets`), and `personal_library` for the
+protected VN source-statistic writer (path 2) and personal Library (path 20), through ordinary platform
 commands; `seed:dev` composes that same setup. Future additions must name a concrete M1 path here and in the bounded
 list in `services/auth/scripts/dev-stack.ts`; anonymous POST routes are not scanned for openings.
-Production configuration and private/write gates retain their defaults.
+Production configuration and unlisted private/write gates retain their defaults.
 A public exposure opening admits that group, while ordinary route and resource permissions still apply. Kernel and
 both app servers bind loopback. Do not expose this development database or host to a network.
 If an opening fails, setup reports the group and native error, exits unsuccessfully and tells you which task to rerun
@@ -85,7 +86,9 @@ task dev:reset
 ```
 
 This explicitly deletes the configured local PostgreSQL container and volume, including both development databases,
-then migrates fresh databases. It keeps generated keys and the OpenSearch volume. It retires the active local importer journals under
+then migrates fresh databases. It keeps generated keys and the OpenSearch volume, and allocates a fresh local search
+namespace so generations in the deleted database cannot collide with retained indices. Ordinary setup preserves that
+namespace. It retires the active local importer journals under
 `.temp/local-stack/seed-archives/`, preserving their contents while the next seed starts without old native UUIDs. Re-run `task dev`; the persona and
 public-read openings are rebuilt. This command is destructive: use it only for your own development stack, never a
 shared database. It never prunes Docker. Normal `dev:infra` never resets data automatically.

@@ -659,6 +659,16 @@ export class RecordBindings {
     return entry ? mediaJournal(entry) : null;
   }
 
+  /** Exact current-intent points keep an unadmitted asset eligible on an unchanged source refresh. */
+  hasUnsubmittedMedia(input: Owner, digest: string): boolean {
+    const o = ownerInput(input);
+    ensure(typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest));
+    const binding = this.binding(o);
+    if (!binding?.cover_key) return false;
+    const entry = this.mediaEntry(o, binding.cover_key);
+    return entry?.accepted === null && (JSON.parse(entry.bytes) as MediaImportRequest).provenance.digest === digest;
+  }
+
   /** The current job contributes a cover ID only after a real matching available snapshot. */
   mediaIds(input: Owner): { cover?: string } {
     const o = ownerInput(input);

@@ -12,6 +12,7 @@ import {
   type CrossMediaPort,
 } from '../src/cross-media-seed.ts';
 import { acquireBangumiCoverSources } from '../src/showcase-media.ts';
+import { ImportTransportError } from '../src/import-client.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 
 const sourceUrl = 'https://lain.bgm.tv/pic/cover/l/12/34/101.jpg';
@@ -55,6 +56,12 @@ test('default selected Bangumi media intent resumes its journalled reservation t
   let sealedBody = '';
   let sealedKey = '';
   let mediaRequest: MediaImportRequest | undefined;
+  let refusal: ImportTransportError | undefined = new ImportTransportError(
+    503,
+    undefined,
+    'dependency_unavailable',
+    true,
+  );
   try {
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe('https://api.bgm.tv/v0/subjects/101');
@@ -105,10 +112,11 @@ test('default selected Bangumi media intent resumes its journalled reservation t
         return { subject: { id, type: 'wd:Q20631656', labels: { en: 'STEINS;GATE' }, statements: {} } };
       },
       async requestMedia(bytes: string, key: string) {
-        reservations += 1;
         sealedBody = bytes;
         sealedKey = key;
         mediaRequest = JSON.parse(bytes) as MediaImportRequest;
+        if (refusal) throw refusal;
+        reservations += 1;
         return {
           status: 202,
           body: { media: { id: mediaId, containerId: subjectId, purpose: 'cover', state: 'reserved' } },
@@ -147,6 +155,29 @@ test('default selected Bangumi media intent resumes its journalled reservation t
       },
     } as unknown as CrossMediaPort;
     const port = captureShowcaseCommands(fake, journal);
+    const run = () =>
+      seedCrossMedia(
+        firstPlan,
+        statePath,
+        port,
+        { origin: 'https://fixture.test' },
+        {
+          providers: ['bangumi'],
+          mediaDeadlineMs: 0,
+        },
+      );
+    const unavailable = await run();
+    expect(unavailable.mediaOutcomes[0]).toMatchObject({ status: 'unavailable', containerId: subjectId });
+    expect(unavailable.runs.bangumi?.status).toBe('committed');
+    expect(unavailable.mediaOutcomes[0]?.mediaId).toBeUndefined();
+    expect(reservations).toBe(0);
+    expect(statusReads).toBe(0);
+    refusal = new ImportTransportError(403, undefined, 'forbidden');
+    await expect(run()).rejects.toThrow('Cross-media bangumi import failed');
+    refusal = new ImportTransportError(429, undefined, 'rate_limited', true);
+    expect((await run()).mediaOutcomes[0]).toMatchObject({ status: 'unavailable' });
+    expect(reservations).toBe(0);
+    refusal = undefined;
     const initial = await seedCrossMedia(
       firstPlan,
       statePath,

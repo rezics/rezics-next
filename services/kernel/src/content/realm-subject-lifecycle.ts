@@ -95,7 +95,7 @@ type Source = CandidateVersion &
     partition: number;
     eventId: string;
     eventIndex: number;
-    transactionId: string;
+    transactionId: string | null;
   }>;
 type ThreadState = Readonly<{
   realm: string | null;
@@ -183,12 +183,17 @@ async function sourceAnchor(pool: Pool, event: CloudEvent, nativeId: string, dea
       row.event_count > 1000
     )
       throw new TypeError('Realm Subject event has no unique native outbox anchor');
-    const receipt = await client.query<{ transaction_id: string }>(
-      `SELECT transaction_id FROM core.receipt WHERE partition_no=$1 AND epoch=$2 AND position=$3`,
-      [partition, epoch, position.toString()],
-    );
-    const transactionId = receipt.rows[0]?.transaction_id;
-    if (receipt.rows.length !== 1 || !transactionId)
+    // Internal semantic/community commands need no idempotency receipt. Their exact native outbox
+    // anchor is still required; opening revision events additionally bind their recorded transaction.
+    const needsReceipt = [threadCreated, postCreated, postPublished, revisionCreated].includes(event.type as never);
+    const receipt = needsReceipt
+      ? await client.query<{ transaction_id: string }>(
+          `SELECT transaction_id FROM core.receipt WHERE partition_no=$1 AND epoch=$2 AND position=$3`,
+          [partition, epoch, position.toString()],
+        )
+      : null;
+    const transactionId = receipt?.rows[0]?.transaction_id ?? null;
+    if (needsReceipt && (receipt?.rows.length !== 1 || !transactionId))
       throw new TypeError('Realm Subject event has no original transaction receipt');
     return {
       partition,
@@ -411,6 +416,7 @@ export function createRealmSubjectLifecycle(input: {
     const native = await readThreadState(pool, thread, deadline);
     if (!native?.realm) return;
     if ([threadCreated, postCreated, postPublished, revisionCreated].includes(event.type as never)) {
+      if (!source.transactionId) throw new TypeError('Realm Subject revision has no original transaction receipt');
       await verifyRevisionAnchor(pool, thread, String(data.revisionId), source.transactionId, deadline);
       if (data.itemId !== native.opening) return;
     }
