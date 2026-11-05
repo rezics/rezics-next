@@ -371,6 +371,7 @@
       },
       "devDependencies": {
         "@rezics/client": "workspace:*",
+        "@rezics/conversion": "workspace:*",
         "@types/pg": "8.23.1",
         "@types/spdx-license-ids": "3.0.0",
         "dbmate": "2.37.0",
