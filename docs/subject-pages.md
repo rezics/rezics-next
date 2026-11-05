@@ -2520,7 +2520,8 @@ Decision: name Sources activation uses the existing validated same-locale `via` 
 Realm and stores its closed view descriptor only in ordinary browser history. Back, Forward and the explicit
 `SubjectSourcesPage.returnTo` link transfer the same validated descriptor through the existing Names return adapter.
 A state-less return or new tab focuses the newly admitted names section and restarts its local window. Sources
-continues to own native disclosure and provider selection.
+continues to own native disclosure and provider selection. A departure whose descriptor exceeds the history budget
+still navigates with its validated return URL and restarts without local state.
 
 ### Supplied names Cost
 

@@ -241,13 +241,14 @@ test('Context and release replacement permanently retire actions and late copy/a
   });
 });
 
-for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'connected'] as const)
+for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'connected', 'budget'] as const)
   test(`fresh exact-name Sources return: ${outcome}`, async () => {
     await mounted(async (host, draw) => {
       let current = personReaderExample().read;
       const spelling = 'Exact—Mél/旅 24';
+      const language = outcome === 'budget' ? 'en-' + 'a-'.repeat(4500) + 'a' : 'en';
       current.subject.labels = { en: 'Selected', ja: '旅人' };
-      current.subject.aliases = { en: Array.from({ length: 48 }, (_, i) => `Exact—Mél/旅 ${i}`) };
+      current.subject.aliases = { [language]: Array.from({ length: 48 }, (_, i) => `Exact—Mél/旅 ${i}`) };
       let returning = false;
       const history = createMemoryHistory({
         initialEntries: [`/en/subjects/${current.subject.id}/selected?realm=${realm}`],
@@ -280,7 +281,7 @@ for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'co
       await act(async () => router.load());
       await draw(h(RouterProvider, { router }));
       host.querySelector('details')!.open = true;
-      const group = host.querySelector<HTMLDetailsElement>('[data-name-language="en"]')!;
+      const group = host.querySelector<HTMLDetailsElement>(`[data-name-language="${language}"]`)!;
       group.open = true;
       await act(async () => [...group.querySelectorAll('button')].find((b) => b.textContent === 'More names')!.click());
       const copy = group.querySelector<HTMLButtonElement>('button')!;
@@ -289,6 +290,16 @@ for (const outcome of ['surviving', 'removed', 'language', 'role', 'window', 'co
       await act(async () => host.querySelector<HTMLAnchorElement>('[data-names-sources] a')!.click());
       await act(async () => router.load());
       const saved = namesReturn(Reflect.get(history.location.state, 'namesReturn'), 'en')!;
+      if (outcome === 'budget') {
+        expect(saved).toBeUndefined();
+        current = structuredClone(current);
+        await act(async () => host.querySelector<HTMLAnchorElement>('a')!.click());
+        await act(async () => router.load());
+        expect(host.textContent).toContain('The saved names view is unavailable');
+        expect(document.activeElement?.tagName).toBe('SUMMARY');
+        history.destroy();
+        return;
+      }
       expect(saved.focus).toMatchObject({
         kind: 'name',
         language: 'en',
@@ -338,7 +349,7 @@ test('history focus accepts only a bounded language, role and opaque identity', 
   expect(namesReturn({ ...base, focus: { ...focus, spelling: 'not carried' } }, 'en')?.focus).toEqual(focus);
   for (const patch of [
     { language: 'bad_tag' },
-    { language: 'x'.repeat(2049) },
+    { language: 'en-' + 'a-'.repeat(4096) + 'a' },
     { role: 'legal' },
     { identity: 'copied spelling' },
     { kind: 'row' },
