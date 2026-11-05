@@ -1,10 +1,13 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { PagePaths } from '../src/shell/head';
-import { ZoneSubjectRoute, type ZoneSubjectRouteData } from '../src/zones/zone-shell';
 import { locales } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+const { ZoneSubjectRoute, type ZoneSubjectRouteData } = await import('../src/zones/zone-shell');
 
 const zoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';

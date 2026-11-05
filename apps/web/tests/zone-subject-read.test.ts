@@ -1,6 +1,9 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { readZonePage, readZonePageForRoute, validateZonePageInput } from '../src/zones/zone-read';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+const { readZonePage, readZonePageForRoute, validateZonePageInput } = await import('../src/zones/zone-read');
 
 const zoneId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11';
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
