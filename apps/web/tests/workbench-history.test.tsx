@@ -1,13 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { m } from '../src/paraglide/messages.js';
-import {
-  openWorkbenchHistory,
-  returnFromWorkbenchHistory,
-  WorkbenchHistoryUnavailable,
-} from '../src/moderation/workbench-history';
-import { workbenchSearch } from '../src/moderation/workbench-queue/scope';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { openWorkbenchHistory, returnFromWorkbenchHistory, WorkbenchHistoryUnavailable } =
+  await import('../src/moderation/workbench-history');
+const { workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
 
 test('history keeps a board and queue cursor while preserving a separate opaque history cursor', () => {
   const queue = workbenchSearch({
