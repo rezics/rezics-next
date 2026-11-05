@@ -363,21 +363,23 @@ function sourceVocabularyOriginMatches(
         const parsed = new URL(origin.url);
         parsed.hash = row.path;
         const sourceUrl = parsed.href;
-        return command.statement.references?.some((reference) => {
-          let citedUrl = false;
-          let citedRevision = false;
-          for (const part of reference.parts) {
-            if (part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === sourceUrl)
-              citedUrl = true;
-            if (
-              part.property.id === 'schema:version' &&
-              part.value.type === 'value' &&
-              part.value.content === (origin.revision ?? 'unversioned')
-            )
-              citedRevision = true;
-          }
-          return citedUrl && citedRevision;
-        }) ?? false;
+        return (
+          command.statement.references?.some((reference) => {
+            let citedUrl = false;
+            let citedRevision = false;
+            for (const part of reference.parts) {
+              if (part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === sourceUrl)
+                citedUrl = true;
+              if (
+                part.property.id === 'schema:version' &&
+                part.value.type === 'value' &&
+                part.value.content === (origin.revision ?? 'unversioned')
+              )
+                citedRevision = true;
+            }
+            return citedUrl && citedRevision;
+          }) ?? false
+        );
       } catch {
         return false;
       }

@@ -313,11 +313,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal {
     return source;
   }
 
-  personCareerSource(
-    sourceAlias: string,
-    externalId: string,
-    archiveDigest: string,
-  ): BangumiPersonCareerSource | null {
+  personCareerSource(sourceAlias: string, externalId: string, archiveDigest: string): BangumiPersonCareerSource | null {
     const row = this.#db
       .query<{ source_json: string }, [string, string, string]>(
         'SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=?',
@@ -343,7 +339,8 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal {
     const body = json(source);
     const prior = this.personCareerSource(source.sourceAlias, source.externalId, source.archiveDigest);
     if (prior) {
-      if (json(prior) !== body) throw new TypeError('Bangumi Person career source changed under the same archive digest');
+      if (json(prior) !== body)
+        throw new TypeError('Bangumi Person career source changed under the same archive digest');
       return prior;
     }
     this.#db
@@ -505,7 +502,11 @@ function sourceVocabularyCitation(record: ShowcaseRecord, uri: string): boolean 
     return uri === record.sourceUri || uri === bangumiCharacterKindsSource;
   if (/^https:\/\/rezics\.com\/schemes\/bangumi\/appearance-roles(?:\/[1-3])?$/u.test(record.sourceUri))
     return uri === record.sourceUri || uri === bangumiAppearanceRolesSource;
-  if (/^https:\/\/rezics\.com\/schemes\/bangumi\/careers\/(?:producer|mangaka|artist|seiyu|writer|illustrator|actor)$/u.test(record.sourceUri))
+  if (
+    /^https:\/\/rezics\.com\/schemes\/bangumi\/careers\/(?:producer|mangaka|artist|seiyu|writer|illustrator|actor)$/u.test(
+      record.sourceUri,
+    )
+  )
     return uri === record.sourceUri || uri === bangumiPersonCareersSource;
   return false;
 }
@@ -1194,7 +1195,11 @@ export async function publishShowcase(input: {
                 host !== 'bangumi.tv' &&
                 host !== 'www.bgm.tv' &&
                 host !== 'www.bangumi.tv' &&
-                !(record.kind === 'person' && assertion.property === 'wdt:P106' && sourceCitationMatchesRecord(record, uri)) &&
+                !(
+                  record.kind === 'person' &&
+                  assertion.property === 'wdt:P106' &&
+                  sourceCitationMatchesRecord(record, uri)
+                ) &&
                 !(assertion.property === 'schema:image' && host === 'lain.bgm.tv') &&
                 !sourceVocabularyCitation(record, uri)
               : host !== 'vndb.org' && !host.endsWith('.vndb.org');

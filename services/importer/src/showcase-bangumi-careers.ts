@@ -28,10 +28,13 @@ function etag(value: string | null): string | undefined {
 
 function selectedPeople(plan: CrossMediaPlan): SourceRecord[] {
   const selected = new Set(
-    plan.members.filter((member) => member.source === 'bangumi' && member.kind === 'person').map((member) => member.key),
+    plan.members
+      .filter((member) => member.source === 'bangumi' && member.kind === 'person')
+      .map((member) => member.key),
   );
   const rows = plan.entities.bangumi.filter(
-    (row) => selected.has(row.key) && /^person:[1-9][0-9]*$/u.test(row.key) && Number.isSafeInteger(Number(row.key.slice(7))),
+    (row) =>
+      selected.has(row.key) && /^person:[1-9][0-9]*$/u.test(row.key) && Number.isSafeInteger(Number(row.key.slice(7))),
   );
   if (rows.length > peopleLimit) throw new RangeError('Selected Bangumi Person career limit exceeded');
   return rows;
@@ -49,7 +52,9 @@ function receipt(source: BangumiPersonCareerSource, row: SourceRecord): BangumiP
     !/^[0-9a-f]{64}$/u.test(source.responseDigest ?? '') ||
     !Array.isArray(source.careers) ||
     source.careers.length > 7 ||
-    source.careers.some((career) => typeof career !== 'string' || !career.isWellFormed() || Buffer.byteLength(career, 'utf8') > 64)
+    source.careers.some(
+      (career) => typeof career !== 'string' || !career.isWellFormed() || Buffer.byteLength(career, 'utf8') > 64,
+    )
   )
     throw new TypeError('Invalid sealed Bangumi Person career source');
   return source;
@@ -200,31 +205,47 @@ export function bangumiPersonCareerAdmission(
 ) {
   const byPerson = new Map(sources.map((source) => [source.externalId, source]));
   return {
-    request({ owner, conversion, subject }: { owner: { source: string; external_id: string }; conversion: { normalized?: unknown; converter_revision?: string }; subject?: string }) {
+    request({
+      owner,
+      conversion,
+      subject,
+    }: {
+      owner: { source: string; external_id: string };
+      conversion: { normalized?: unknown; converter_revision?: string };
+      subject?: string;
+    }) {
       if (owner.source !== sourceAlias || !owner.external_id.startsWith('person:') || !subject) return undefined;
       const normalized = object(conversion.normalized);
       if (!normalized || !Array.isArray(normalized.career)) return undefined;
-      const identityType = normalized.type === 1 ? 'schema:Person' : normalized.type === 2 || normalized.type === 3 ? 'schema:Organization' : undefined;
+      const identityType =
+        normalized.type === 1
+          ? 'schema:Person'
+          : normalized.type === 2 || normalized.type === 3
+            ? 'schema:Organization'
+            : undefined;
       if (!identityType) return undefined;
       const source = byPerson.get(owner.external_id);
-      const origin = source?.sourceStatus === 'available'
-        ? {
-            externalId: owner.external_id,
-            revision: source.etag ?? null,
-            digest: source.responseDigest!,
-            url: source.endpoint,
-            converterRevision: conversion.converter_revision!,
-          }
-        : undefined;
+      const origin =
+        source?.sourceStatus === 'available'
+          ? {
+              externalId: owner.external_id,
+              revision: source.etag ?? null,
+              digest: source.responseDigest!,
+              url: source.endpoint,
+              converterRevision: conversion.converter_revision!,
+            }
+          : undefined;
       const rows = normalized.career.flatMap((code) =>
         typeof code === 'string'
-          ? [{
-              kind: 'person-career' as const,
-              person: { id: subject, type: identityType, releaseDigest: bindings.releaseDigest },
-              code,
-              path: '/career',
-              ...(origin ? { origin } : {}),
-            }]
+          ? [
+              {
+                kind: 'person-career' as const,
+                person: { id: subject, type: identityType, releaseDigest: bindings.releaseDigest },
+                code,
+                path: '/career',
+                ...(origin ? { origin } : {}),
+              },
+            ]
           : [],
       );
       return { bindings, rows };

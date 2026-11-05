@@ -101,10 +101,10 @@ test('selected actual Persons use bounded API career fallback and sealed source 
         }) as unknown as typeof globalThis.fetch,
         sleep: async () => {},
       });
-      expect(replay.entities.bangumi.find(({ key }) => key === 'person:8101')?.payload).toHaveProperty(
-        'career',
-        ['producer', 'writer'],
-      );
+      expect(replay.entities.bangumi.find(({ key }) => key === 'person:8101')?.payload).toHaveProperty('career', [
+        'producer',
+        'writer',
+      ]);
       expect(replay.personCareerSources).toEqual(selected.personCareerSources);
     } finally {
       reopened.close();

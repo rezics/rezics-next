@@ -28,7 +28,12 @@ import {
 } from '@rezics/conversion/cross-media-entities';
 import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
-import type { NativeIdentity, SourceVocabularyGap, SourceVocabularyInput, SourceVocabularyRow } from '@rezics/conversion';
+import type {
+  NativeIdentity,
+  SourceVocabularyGap,
+  SourceVocabularyInput,
+  SourceVocabularyRow,
+} from '@rezics/conversion';
 import type { ConversionInput, SourceId } from '@rezics/conversion';
 import { projectSourceClassification } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
@@ -254,8 +259,7 @@ function sourceVocabularyResult(
         const key = `/career\0${code}`;
         if (!explicit.has(key)) explicit.set(key, { kind: 'person-career', person: identity, code, path: '/career' });
       }
-      for (const [key, row] of explicit)
-        if (row.person === undefined) explicit.set(key, { ...row, person: identity });
+      for (const [key, row] of explicit) if (row.person === undefined) explicit.set(key, { ...row, person: identity });
       rows.splice(0, rows.length, ...rows.filter((row) => row.kind !== 'person-career'), ...explicit.values());
     }
   }

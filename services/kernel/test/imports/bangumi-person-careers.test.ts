@@ -13,7 +13,10 @@ import {
   type CrossMediaPlan,
   type CrossMediaPort,
 } from '../../../importer/src/cross-media-seed.ts';
-import { bangumiPersonCareerAdmission, acquireBangumiPersonCareerSources } from '../../../importer/src/showcase-bangumi-careers.ts';
+import {
+  bangumiPersonCareerAdmission,
+  acquireBangumiPersonCareerSources,
+} from '../../../importer/src/showcase-bangumi-careers.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import {
   captureShowcaseCommands,
@@ -129,15 +132,23 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       { origin: runtime.origin },
       {
         providers: ['bangumi'],
-        vocabularyAdmissions: [bangumiPersonCareerAdmission(crossMediaAliases.bangumi, emptyBindings, plan.personCareerSources)],
+        vocabularyAdmissions: [
+          bangumiPersonCareerAdmission(crossMediaAliases.bangumi, emptyBindings, plan.personCareerSources),
+        ],
       },
     );
     const personId = idOf(initial, 'person:8101');
     expect(initial.runs.bangumi?.status).toBe('committed');
-    expect(capturedCommands(runtime).some((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P106')).toBe(false);
+    expect(
+      capturedCommands(runtime).some(
+        (command) => command.op === 'propose' && command.statement.property.id === 'wdt:P106',
+      ),
+    ).toBe(false);
 
     const schemes = await prepareShowcaseBangumiSelectedCharacterVocabulary({ plan, port, journal, stage: 'schemes' });
-    expect(schemes.requirements.map(({ sourceUri }) => sourceUri)).toContain('https://rezics.com/schemes/bangumi/careers');
+    expect(schemes.requirements.map(({ sourceUri }) => sourceUri)).toContain(
+      'https://rezics.com/schemes/bangumi/careers',
+    );
     await publishShowcase({
       plan,
       result: initial,
@@ -147,7 +158,12 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       publicClient,
       vocabularyRequirements: schemes.requirements,
     });
-    const concepts = await prepareShowcaseBangumiSelectedCharacterVocabulary({ plan, port, journal, stage: 'concepts' });
+    const concepts = await prepareShowcaseBangumiSelectedCharacterVocabulary({
+      plan,
+      port,
+      journal,
+      stage: 'concepts',
+    });
     expect(concepts.requirements.map(({ sourceKey }) => sourceKey)).toContain('bangumi.person.career:producer');
     await publishShowcase({
       plan,
@@ -159,10 +175,14 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       vocabularyRequirements: concepts.requirements,
     });
     const current = await readShowcaseBangumiSelectedCharacterVocabulary({ plan, port, journal });
-    const producer = current.concepts.find(({ taxonomy, code }) => taxonomy === 'bangumi.person.career' && code === 'producer');
+    const producer = current.concepts.find(
+      ({ taxonomy, code }) => taxonomy === 'bangumi.person.career' && code === 'producer',
+    );
     expect(producer).toBeDefined();
     const producerRead = await port.readReviewedSubject(producer!.id);
-    expect((producerRead as { subject: { labels: Record<string, string> } }).subject.labels).toEqual({ und: 'producer' });
+    expect((producerRead as { subject: { labels: Record<string, string> } }).subject.labels).toEqual({
+      und: 'producer',
+    });
 
     const careerAdmission = bangumiPersonCareerAdmission(crossMediaAliases.bangumi, current, plan.personCareerSources);
     const careerCaptureStart = runtime.captures.length;
@@ -222,11 +242,13 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       vocabularyRequirements: concepts.requirements,
     });
 
-    const stableCandidates = (await runtime.importTransport.reviewedCandidates(personId, {
-      property: 'wdt:P106',
-      context: GLOBAL_CONTEXT,
-      limit: 100,
-    })).candidates;
+    const stableCandidates = (
+      await runtime.importTransport.reviewedCandidates(personId, {
+        property: 'wdt:P106',
+        context: GLOBAL_CONTEXT,
+        limit: 100,
+      })
+    ).candidates;
     const restarted = await seedCrossMedia(
       plan,
       importPath,
@@ -236,11 +258,13 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     );
     expect(idOf(restarted, 'person:8101')).toBe(personId);
     expect(
-      (await runtime.importTransport.reviewedCandidates(personId, {
-        property: 'wdt:P106',
-        context: GLOBAL_CONTEXT,
-        limit: 100,
-      })).candidates.map(({ id }) => id),
+      (
+        await runtime.importTransport.reviewedCandidates(personId, {
+          property: 'wdt:P106',
+          context: GLOBAL_CONTEXT,
+          limit: 100,
+        })
+      ).candidates.map(({ id }) => id),
     ).toEqual(stableCandidates.map(({ id }) => id));
 
     const changedBytes = JSON.stringify({ id: 8101, career: ['actor'] });
@@ -249,7 +273,11 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       fetch: (async () => new Response(changedBytes, { headers: { etag: '"person-8101-v2"' } })) as typeof fetch,
       sleep: async () => {},
     });
-    const withheldAdmission = bangumiPersonCareerAdmission(crossMediaAliases.bangumi, current, changedPlan.personCareerSources);
+    const withheldAdmission = bangumiPersonCareerAdmission(
+      crossMediaAliases.bangumi,
+      current,
+      changedPlan.personCareerSources,
+    );
     const withheldCaptureStart = runtime.captures.length;
     const withheld = await seedCrossMedia(
       changedPlan,
@@ -265,7 +293,12 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       ),
     ).toBe(false);
 
-    const actorConcepts = await prepareShowcaseBangumiSelectedCharacterVocabulary({ plan: changedPlan, port, journal, stage: 'concepts' });
+    const actorConcepts = await prepareShowcaseBangumiSelectedCharacterVocabulary({
+      plan: changedPlan,
+      port,
+      journal,
+      stage: 'concepts',
+    });
     await publishShowcase({
       plan: changedPlan,
       result: withheld,
@@ -276,14 +309,21 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       vocabularyRequirements: actorConcepts.requirements,
     });
     const actorBindings = await readShowcaseBangumiSelectedCharacterVocabulary({ plan: changedPlan, port, journal });
-    const actor = actorBindings.concepts.find(({ taxonomy, code }) => taxonomy === 'bangumi.person.career' && code === 'actor');
+    const actor = actorBindings.concepts.find(
+      ({ taxonomy, code }) => taxonomy === 'bangumi.person.career' && code === 'actor',
+    );
     expect(actor).toBeDefined();
     const refreshed = await seedCrossMedia(
       changedPlan,
       importPath,
       port,
       { origin: runtime.origin },
-      { providers: ['bangumi'], vocabularyAdmissions: [bangumiPersonCareerAdmission(crossMediaAliases.bangumi, actorBindings, changedPlan.personCareerSources)] },
+      {
+        providers: ['bangumi'],
+        vocabularyAdmissions: [
+          bangumiPersonCareerAdmission(crossMediaAliases.bangumi, actorBindings, changedPlan.personCareerSources),
+        ],
+      },
     );
     expect(idOf(refreshed, 'person:8101')).toBe(personId);
     await publishShowcase({
@@ -300,20 +340,30 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     expect(publicRead['wdt:P6298']?.[0]?.value.content).toBe('8101');
     expect(publicRead['schema:abstract']).toHaveLength(1);
     expect(publicRead['wdt:P106']?.map(({ value }) => value.content)).toContain(actor?.id);
-    const occupation = (await runtime.importTransport.reviewedCandidates(personId, {
-      property: 'wdt:P106',
-      context: GLOBAL_CONTEXT,
-      limit: 100,
-    })).candidates.find((candidate) => candidate.statement.value.type === 'value' && candidate.statement.value.content === actor?.id);
+    const occupation = (
+      await runtime.importTransport.reviewedCandidates(personId, {
+        property: 'wdt:P106',
+        context: GLOBAL_CONTEXT,
+        limit: 100,
+      })
+    ).candidates.find(
+      (candidate) => candidate.statement.value.type === 'value' && candidate.statement.value.content === actor?.id,
+    );
     expect(occupation?.source).toMatchObject({
       source: crossMediaAliases.bangumi,
       external_id: 'person:8101',
       converter_revision: expect.stringMatching(/^cross-media-entities@\d+\+bangumi@\d+$/u),
     });
-    expect(occupation?.statement.references?.some((reference) =>
-      reference.parts.some((part) => part.value.type === 'value' && part.value.content === 'https://api.bgm.tv/v0/persons/8101#/career'),
-    )).toBe(true);
-    expect(createHash('sha256').update(changedBytes).digest('hex')).toBe(changedPlan.personCareerSources?.[0]?.responseDigest);
+    expect(
+      occupation?.statement.references?.some((reference) =>
+        reference.parts.some(
+          (part) => part.value.type === 'value' && part.value.content === 'https://api.bgm.tv/v0/persons/8101#/career',
+        ),
+      ),
+    ).toBe(true);
+    expect(createHash('sha256').update(changedBytes).digest('hex')).toBe(
+      changedPlan.personCareerSources?.[0]?.responseDigest,
+    );
 
     await editor.takedown(crossMediaAliases.bangumi, 'person:8101', 'facts');
     const fencedBytes = JSON.stringify({ id: 8101, career: ['actor'] });
@@ -330,14 +380,19 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       { origin: runtime.origin },
       {
         providers: ['bangumi'],
-        vocabularyAdmissions: [bangumiPersonCareerAdmission(crossMediaAliases.bangumi, actorBindings, fencedPlan.personCareerSources)],
+        vocabularyAdmissions: [
+          bangumiPersonCareerAdmission(crossMediaAliases.bangumi, actorBindings, fencedPlan.personCareerSources),
+        ],
       },
     );
     expect(fenced.runs.bangumi?.status).toBe('committed');
     expect(idOf(fenced, 'person:8101')).toBe(personId);
     expect(
       capturedCommands(runtime, fenceCaptureStart).some(
-        (command) => command.op === 'propose' && command.source.external_id === 'person:8101' && command.statement.property.id === 'wdt:P106',
+        (command) =>
+          command.op === 'propose' &&
+          command.source.external_id === 'person:8101' &&
+          command.statement.property.id === 'wdt:P106',
       ),
     ).toBe(false);
     expect(statements(await publicClient.readSubject(personId))['schema:abstract']).toHaveLength(1);
