@@ -110,12 +110,7 @@ test(
   'member Subject and selected view routes render inside the Zone while nonmembers stay concealed',
   async () => {
     for (const [path, expectedText, canonical, view] of [
-      [
-        `/en/zones/${zoneId}/subjects/${subjectId}`,
-        'Kokoro',
-        `/en/subjects/${subjectId}/kokoro`,
-        'overview',
-      ],
+      [`/en/zones/${zoneId}/subjects/${subjectId}`, 'Kokoro', `/en/subjects/${subjectId}/kokoro`, 'overview'],
       [
         `/en/zones/${zoneId}/subjects/${subjectId}/details`,
         'Kokoro details in the Zone',

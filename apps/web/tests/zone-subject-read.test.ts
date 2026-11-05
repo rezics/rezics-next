@@ -56,8 +56,7 @@ test('native Zone refusal stops before the common Global Subject read', async ()
       const request = new Request(input, init);
       const url = new URL(request.url);
       requests.push(url.pathname);
-      if (url.pathname === `/v1/zones/${zoneId}:readPage`)
-        return Response.json({ code: 'not_found' }, { status: 404 });
+      if (url.pathname === `/v1/zones/${zoneId}:readPage`) return Response.json({ code: 'not_found' }, { status: 404 });
       return Response.json({}, { status: 500 });
     }) as typeof fetch,
   });

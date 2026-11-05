@@ -76,8 +76,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function validTarget(value: unknown): value is ZonePageRequest['target'] {
   if (!isRecord(value)) return false;
   const keys = Object.keys(value);
-  if (keys.length === 1 && keys[0] === 'route' && typeof value.route === 'string')
-    return value.route.length <= 255;
+  if (keys.length === 1 && keys[0] === 'route' && typeof value.route === 'string') return value.route.length <= 255;
   if (
     (keys.length === 1 || keys.length === 2) &&
     keys.includes('subject') &&
