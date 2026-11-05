@@ -181,12 +181,68 @@ async function mount(initialAddress = { year: 2020 } as ReturnType<typeof diaryS
       act(async () => {
         await router.navigate({ to: '/library/history', search: address });
       }),
+    currentAddress: () => diarySearch(router.state.location.search),
+    back: () =>
+      act(async () => {
+        router.history.back();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
+    forward: () =>
+      act(async () => {
+        router.history.forward();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
     show,
     close: async () => {
       await act(async () => root.unmount());
       host.remove();
     },
   };
+}
+
+function diaryLoad(
+  address: ReturnType<typeof diarySearch>,
+  next: string | null,
+  continuation: string | null,
+  revision = address.snapshot ?? (address.year === undefined ? allTimeSummary.currentness.revision : summary.currentness.revision),
+): PrivateDiaryLoad {
+  const currentness = { state: 'snapshot' as const, revision };
+  return {
+    ...loaded,
+    address,
+    reportedYear:
+      address.year === undefined
+        ? null
+        : { kind: 'ready', value: { ...summary, year: address.year, currentness } },
+    summary:
+      address.year === undefined
+        ? { kind: 'ready', value: { ...allTimeSummary, currentness } }
+        : { kind: 'not-selected' },
+    diary: {
+      kind: 'ready',
+      page: {
+        occurrences: [],
+        next,
+        continuation,
+        expiresAt: null,
+        order: 'recorded_started_desc_id_desc',
+        currentness,
+      },
+    },
+  };
+}
+
+function pageButton(host: HTMLElement, label: string) {
+  const found = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent === label);
+  expect(found).toBeDefined();
+  return found!;
+}
+
+async function clickPageButton(host: HTMLElement, label: string) {
+  await act(async () => {
+    pageButton(host, label).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 }
 
 test('native year read uses one addressed summary, retains exact strings and rejects a mismatched year', async () => {
@@ -584,8 +640,7 @@ test('bucket return restores exact frontier/focus and rejects old bucket or chan
       expect(new URL(open.href).pathname).toBe('/library/progress/' + id);
       const returned = historyReturn(new URL(open.href).searchParams.get('history'))!;
       expect(returned).toMatchObject({ ...address, snapshot: summary.currentness.revision });
-      const next = [...h.host.querySelectorAll('a')].find((a) => a.textContent === m.library_diary_next())!;
-      expect(new URL(next.href).searchParams.get('month')).toBe('2');
+      expect(pageButton(h.host, m.library_diary_next()).className).toContain('min-h-11');
       await h.navigate(returned);
       await h.show({ ...value, address: returned });
       expect(h.host.querySelector('ol')).not.toBeNull();
@@ -670,5 +725,163 @@ test('bucket return restores exact frontier/focus and rejects old bucket or chan
     } finally {
       await h.close();
     }
+  }
+});
+
+test('three admitted windows retain exact predecessors through a failed terminal read and replace only at the first window', async () => {
+  const cancelled: string[] = [];
+  nativeClient = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === 'POST') {
+        const body = (await request.json()) as { continuation: string };
+        cancelled.push(body.continuation);
+        return Response.json({ cancelled: true });
+      }
+      return Response.json({});
+    },
+  });
+  const firstAddress = {
+    year: 2020,
+    month: 2,
+    snapshot: 'opaque',
+    returnTo: '/library?from=diary',
+  };
+  const secondCursor = 'cursor/+?q=原文#% &==';
+  const thirdCursor = 'next/+?q=別頁#% &==';
+  const h = await mount(firstAddress);
+  try {
+    await h.show(diaryLoad(firstAddress, secondCursor, 'native-slot'));
+    await clickPageButton(h.host, m.library_diary_next());
+    const secondAddress = h.currentAddress();
+    expect(secondAddress).toMatchObject({ ...firstAddress, cursor: secondCursor });
+    await h.show(diaryLoad(secondAddress, thirdCursor, 'native-slot'));
+    await clickPageButton(h.host, m.library_diary_next());
+    const thirdAddress = h.currentAddress();
+    expect(thirdAddress).toMatchObject({ ...firstAddress, cursor: thirdCursor });
+
+    await h.show({ ...diaryLoad(thirdAddress, null, 'native-slot'), diary: { kind: 'unavailable' } });
+    expect(h.host.textContent).toContain(m.library_diary_read_unavailable());
+    await clickPageButton(h.host, m.library_selection_retry());
+    expect(h.currentAddress()).toMatchObject(thirdAddress);
+    await h.show(diaryLoad(thirdAddress, null, 'native-slot'));
+    expect(h.host.textContent).toContain(m.library_diary_page_empty());
+    expect(document.activeElement).toBe(h.host.querySelector('#library-diary-occurrences'));
+    expect(pageButton(h.host, m.library_continue_previous_window())).toBeDefined();
+    expect(pageButton(h.host, m.library_continue_first_window())).toBeDefined();
+
+    await clickPageButton(h.host, m.library_continue_previous_window());
+    expect(h.currentAddress()).toMatchObject({ ...firstAddress, cursor: secondCursor });
+    await h.show(diaryLoad(secondAddress, thirdCursor, 'native-slot'));
+    expect(cancelled).toEqual([]);
+
+    await clickPageButton(h.host, m.library_continue_previous_window());
+    const returnedFirst = h.currentAddress();
+    expect(returnedFirst).toMatchObject(firstAddress);
+    expect(returnedFirst.cursor).toBeUndefined();
+    await h.show(diaryLoad(returnedFirst, secondCursor, 'fresh-slot'));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(cancelled).toEqual(['native-slot']);
+    expect(
+      [...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_previous_window()),
+    ).toBe(false);
+  } finally {
+    await h.close();
+  }
+});
+
+test('direct later entry has no invented predecessor; First and period Back/Forward use fresh admitted bases', async () => {
+  const cancelled: string[] = [];
+  nativeClient = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === 'POST') {
+        const body = (await request.json()) as { continuation: string };
+        cancelled.push(body.continuation);
+        return Response.json({ cancelled: true });
+      }
+      return Response.json({});
+    },
+  });
+  const direct = { year: 2020, month: 2, cursor: 'direct-later', snapshot: 'opaque', returnTo: '/library' };
+  const h = await mount(direct);
+  try {
+    await h.show(diaryLoad(direct, null, 'direct-slot'));
+    expect(h.host.querySelectorAll('button').length).toBeGreaterThan(0);
+    expect([...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_previous_window())).toBe(
+      false,
+    );
+    await clickPageButton(h.host, m.library_continue_first_window());
+    const first = h.currentAddress();
+    expect(first).toMatchObject({ year: 2020, month: 2, snapshot: 'opaque', returnTo: '/library' });
+    expect(first.cursor).toBeUndefined();
+    await h.show(diaryLoad(first, null, 'first-slot'));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(cancelled).toEqual(['direct-slot']);
+    expect([...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_first_window())).toBe(
+      false,
+    );
+
+    const nextPeriod = { year: 2021, month: 3, returnTo: '/library' };
+    await h.navigate(nextPeriod);
+    expect(h.host.querySelector('ol')).toBeNull();
+    await h.show(diaryLoad(nextPeriod, null, 'period-slot', 'period-2021'));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(h.host.querySelector('#library-diary-active-period')?.textContent).toBe(
+      m.library_diary_period_month({ month: 'March', year: 2021 }),
+    );
+    expect([...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_previous_window())).toBe(
+      false,
+    );
+
+    await h.back();
+    expect(h.currentAddress()).toMatchObject(first);
+    await h.show(diaryLoad(first, null, 'back-slot'));
+    expect([...h.host.querySelectorAll('button')].some((item) => item.textContent === m.library_continue_previous_window())).toBe(
+      false,
+    );
+    await h.forward();
+    expect(h.currentAddress()).toMatchObject(nextPeriod);
+    await h.show(diaryLoad(nextPeriod, null, 'forward-slot', 'period-2021'));
+    expect(h.host.querySelector('#library-diary-active-period')?.textContent).toBe(
+      m.library_diary_period_month({ month: 'March', year: 2021 }),
+    );
+  } finally {
+    await h.close();
+  }
+});
+
+test('Close retries the exact failed continuation before returning', async () => {
+  const cancelled: string[] = [];
+  let attempt = 0;
+  nativeClient = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === 'POST') {
+        const body = (await request.json()) as { continuation: string };
+        cancelled.push(body.continuation);
+        attempt += 1;
+        if (attempt === 1) return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+        return Response.json({ cancelled: true });
+      }
+      return Response.json({});
+    },
+  });
+  const returnTo = '/library?selected=origin';
+  const address = { year: 2020, returnTo };
+  const h = await mount(address);
+  const assigned: string[] = [];
+  const originalAssign = window.location.assign;
+  window.location.assign = ((value: string | URL) => assigned.push(String(value))) as typeof window.location.assign;
+  try {
+    await h.show(diaryLoad(address, null, 'close-exact'));
+    await clickPageButton(h.host, m.library_diary_return());
+    expect(h.host.textContent).toContain(m.library_diary_cancel_unavailable());
+    await clickPageButton(h.host, m.library_selection_retry());
+    expect(cancelled).toEqual(['close-exact', 'close-exact']);
+    expect(assigned).toEqual([returnTo]);
+  } finally {
+    window.location.assign = originalAssign;
+    await h.close();
   }
 });

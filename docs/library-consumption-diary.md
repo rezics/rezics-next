@@ -8,6 +8,27 @@ meaning and terminal fences. This reader creates only bounded navigation metadat
 Decision: order occurrences by immutable native recording start time descending, then full session UUID descending;
 use eight expiring owner navigation slots and the existing presented session method for addressed reopening.
 
+Decision: Web keeps at most eight admitted predecessor coordinates in one route visit; a cursorless Previous or First
+re-reads the first window and cancels the replaced continuation only after that window is admitted.
+
+## Web window navigation
+
+One eligible signed-in route visit holds zero to eight admitted predecessor addresses, one current address and at
+most one staged target. It holds cursor and period coordinates only; the displayed occurrence rows remain the one
+current native page. Next stages the supplied `next` cursor and adds the current address to predecessor history only
+after the exact target returns ready for the same viewer, credential, permission and applicable summary/page
+revision. A failed target remains staged for an explicit retry, with accepted predecessors intact. Previous rereads
+its exact retained cursor. Previous to the cursorless first address and First issue one fresh first-page read; after
+admission they clear predecessor history and cancel the replaced continuation. A period change likewise starts an
+independent first-page basis and cancels its replaced continuation after admission.
+
+Direct later addresses and reloads start without predecessor coordinates. Cursor navigation replaces the current
+browser entry, while period selection and the addressed occurrence return retain the ordinary route history. Viewer,
+credential, permission, stale revision or route-visit replacement retires the in-memory coordinates and pending
+focus. A currentness mismatch on a filtered page uses the explicit restart that drops the old revision. Movement
+performs one native Diary read and retains no prior page DTO, rows or occurrence archive; this is browser navigation
+metadata only and allocates no native slot by itself.
+
 ## Installed methods for the existing Web diary
 
 The typed Eden client exposes `client.v1.libraryDiary.get({ query: { limit, cursor, year, month } })` and

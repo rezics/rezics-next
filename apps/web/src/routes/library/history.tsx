@@ -16,7 +16,7 @@ export const Route = createFileRoute('/library/history')({
     await prepareExposure(args.context.queryClient);
   },
   validateSearch: diarySearch,
-  loaderDeps: ({ search }) => ({ cursor: search.cursor, year: search.year, month: search.month }),
+  loaderDeps: ({ search }) => ({ cursor: search.cursor, year: search.year, month: search.month, snapshot: search.snapshot }),
   loader: ({ deps }) => readPrivateDiary({ data: deps }),
   staleTime: 0,
   gcTime: 0,
@@ -28,7 +28,7 @@ export const Route = createFileRoute('/library/history')({
     const session = useSession();
     return (
       <PrivateDiaryPage
-        key={JSON.stringify([session.subject, session.csrfToken, search])}
+        key={JSON.stringify([session.state, session.subject, session.csrfToken])}
         loaded={loaded}
         session={session}
         address={search}

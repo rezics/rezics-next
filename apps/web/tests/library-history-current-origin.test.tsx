@@ -6,6 +6,7 @@ import * as start from '../.storybook/react-start';
 import type { MineFollowingRead } from '../src/library/mine-following-actions';
 import type { MyLogsViewerHistory } from '../src/library/logs-server';
 import type { CurrentFollowState, FollowWriteInput, FollowWriteResult } from '../src/library/follow-records';
+import { PrivateDiaryWindowNavigation } from '../src/library/private-diary/window-navigation';
 
 // UNRUN: bounded composed regressions for integration. Controlled transport completion is not
 // native authorization, browser, cost or whole-Goal proof. Existing server/provenance tests remain intact.
@@ -427,6 +428,29 @@ test('observed suspended address/target ABA cannot revive retained callers or po
   expect(client.getQueryData(followStateQuery('A', targetId).queryKey)).toBeUndefined();
   await settle(freshEdge, { subject: 'A', targetId, edge: { state: 'ready', following: true } });
   expect(host.textContent).toContain(m.library_following());
+});
+
+test('private diary predecessor state is bounded and retires on equal admission replacement and A/B/A source changes', () => {
+  const navigation = new PrivateDiaryWindowNavigation('A');
+  let address = { year: 2020 };
+  let load = {};
+  navigation.observe({ source: 'A', address, admitted: true, continuation: 'slot-A', load });
+  for (let index = 1; index <= 10; index += 1) {
+    const target = { year: 2020, cursor: `opaque-${index}` };
+    expect(navigation.stage('next', target, false)).toBe(true);
+    load = {};
+    navigation.observe({ source: 'A', address: target, admitted: true, continuation: 'slot-A', load });
+    address = target;
+  }
+  expect(navigation.predecessors).toHaveLength(8);
+  expect(navigation.previousAddress()).toMatchObject({ cursor: 'opaque-9' });
+
+  navigation.observe({ source: 'A', address, admitted: true, continuation: 'slot-A', load: {} });
+  expect(navigation.previousAddress()).toBeNull();
+  navigation.observe({ source: 'B', address, admitted: true, continuation: 'slot-B', load: {} });
+  expect(navigation.previousAddress()).toBeNull();
+  navigation.observe({ source: 'A', address, admitted: true, continuation: 'slot-A2', load: {} });
+  expect(navigation.previousAddress()).toBeNull();
 });
 
 test('directional deletion survives denied reads and create loss, while cache ABA retires removal and healthy rotation preserves exact uncertain intent', async () => {

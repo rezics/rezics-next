@@ -10,6 +10,7 @@ import { cancelPrivateDiary } from './server';
 import { PRIVATE_DIARY_PAGE_BYTES, PRIVATE_DIARY_PAGE_LIMIT } from './native';
 import { ReadingOccurrence } from './reading-occurrence';
 import { ReadingPeriod } from './reading-period';
+import { PrivateDiaryWindowNavigation } from './window-navigation';
 
 type ReaderSession = ReturnType<typeof useSession>;
 const useReviewCommitEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
@@ -45,10 +46,15 @@ export function PrivateDiaryPage({
       live.current = false;
     };
   }, []);
-  const binding = useRef({ loaded, address, session, href: location.href });
-  binding.current = { loaded, address, session, href: location.href };
   const [closing, setClosing] = useState(false);
-  const [closeUnavailable, setCloseUnavailable] = useState(false);
+  const [closeRetry, setCloseRetry] = useState<
+    { source: string; viewer: string; csrfToken: string; continuation: string } | null
+  >(null);
+  const [replacementRetry, setReplacementRetry] = useState<
+    { source: string; viewer: string; csrfToken: string; continuation: string } | null
+  >(null);
+  const [windowVersion, setWindowVersion] = useState(0);
+  const occurrencesHeading = useRef<HTMLHeadingElement>(null);
   const currentReturn = safeReturnTo(returnTo ?? address.returnTo);
   const load =
     allowed &&
@@ -61,6 +67,20 @@ export function PrivateDiaryPage({
     loaded.csrfToken === session.csrfToken;
   const authorizedLoad = load ? loaded : null;
   const authenticated = authorizedLoad !== null;
+  const sourceKey = JSON.stringify([
+    session.state,
+    session.subject,
+    session.csrfToken,
+    allowed,
+    loaded.kind === 'ready' ? loaded.viewer : null,
+    loaded.kind === 'ready' ? loaded.csrfToken : null,
+  ]);
+  const navigationRef = useRef<PrivateDiaryWindowNavigation | null>(null);
+  if (!navigationRef.current) navigationRef.current = new PrivateDiaryWindowNavigation(sourceKey);
+  const navigation = navigationRef.current;
+  if (navigation.source !== sourceKey) navigation.resetSource(sourceKey);
+  const binding = useRef({ loaded, address, session, href: location.href, source: sourceKey });
+  binding.current = { loaded, address, session, href: location.href, source: sourceKey };
   const retired =
     authorizedLoad?.diary.kind === 'retired' ||
     authorizedLoad?.summary.kind === 'retired' ||
@@ -86,6 +106,19 @@ export function PrivateDiaryPage({
       : page && !currentPage && (yearSummary?.kind === 'denied' || yearSummary?.kind === 'closed')
         ? yearSummary.kind
         : null;
+  const admitted =
+    authenticated && !retired && authorizedLoad?.diary.kind === 'ready' && page !== null && currentPage;
+  const activeCloseRetry = closeRetry?.source === sourceKey ? closeRetry : null;
+  const activeReplacementRetry = replacementRetry?.source === sourceKey ? replacementRetry : null;
+  const navigationReady =
+    admitted &&
+    navigation.source === sourceKey &&
+    navigation.canUse(address) &&
+    !closing &&
+    !activeCloseRetry &&
+    !activeReplacementRetry;
+  const previousAddress = navigationReady ? navigation.previousAddress() : null;
+  const canStartFirst = navigationReady && navigation.canStartFirst(address);
   const reviewIdentity = {
     loaded,
     authorizedLoad,
@@ -118,40 +151,137 @@ export function PrivateDiaryPage({
       document.getElementById('diary-occurrence-' + address.focus)?.focus();
   }, [visiblePage, address.focus]);
   useEffect(() => {
+    const change = navigation.observe({
+      source: sourceKey,
+      address,
+      admitted: Boolean(admitted),
+      continuation: page?.continuation,
+      load: loaded,
+      retire: retired || stalePage || pageRefusal !== null,
+    });
+    if (change.changed) setWindowVersion((version) => version + 1);
+    if (change.focus && admitted && navigation.canUse(address) && location.pathname.endsWith('/library/history'))
+      occurrencesHeading.current?.focus();
+    if (change.cancelContinuation && authorizedLoad) {
+      const identity = authorizedLoad;
+      const expected = binding.current;
+      const continuation = change.cancelContinuation;
+      void cancelPrivateDiary({
+        data: { viewer: identity.viewer, csrfToken: identity.csrfToken, continuation },
+      })
+        .catch(() => 'unavailable' as const)
+        .then((result) => {
+          const current = binding.current;
+          if (
+            !live.current ||
+            current.href !== expected.href ||
+            current.loaded !== expected.loaded ||
+            current.source !== expected.source ||
+            current.session.subject !== expected.session.subject ||
+            current.session.csrfToken !== expected.session.csrfToken ||
+            !navigation.canUse(current.address)
+          )
+            return;
+          if (result === 'unavailable')
+            setReplacementRetry({ source: sourceKey, viewer: identity.viewer, csrfToken: identity.csrfToken, continuation });
+        });
+    }
+  }, [
+    admitted,
+    address,
+    authorizedLoad,
+    loaded,
+    location.href,
+    location.pathname,
+    navigation,
+    page?.continuation,
+    pageRefusal,
+    retired,
+    sourceKey,
+    stalePage,
+    windowVersion,
+  ]);
+  useEffect(() => {
     if (retired) window.location.assign(currentReturn);
   }, [currentReturn, retired]);
 
+  useEffect(() => {
+    setCloseRetry(null);
+    setReplacementRetry(null);
+  }, [sourceKey]);
+
+  function moveWindow(movement: 'next' | 'previous' | 'first', target: DiaryAddress, focus: boolean) {
+    if (!navigationReady || !navigation.stage(movement, { ...target, returnTo: currentReturn }, focus)) return;
+    setWindowVersion((version) => version + 1);
+    void router.navigate({
+      to: '/library/history',
+      replace: true,
+      search: { ...target, returnTo: currentReturn },
+    });
+  }
+
+  async function retryReplacementCancellation() {
+    if (!activeReplacementRetry || !authorizedLoad) return;
+    const attempt = activeReplacementRetry;
+    const expected = binding.current;
+    const result = await cancelPrivateDiary({
+      data: { viewer: attempt.viewer, csrfToken: attempt.csrfToken, continuation: attempt.continuation },
+    }).catch(() => 'unavailable' as const);
+    const current = binding.current;
+    if (
+      !live.current ||
+      current.href !== expected.href ||
+      current.loaded !== expected.loaded ||
+      current.source !== expected.source ||
+      current.session.subject !== expected.session.subject ||
+      current.session.csrfToken !== expected.session.csrfToken
+    )
+      return;
+    if (result !== 'unavailable') setReplacementRetry(null);
+  }
+
   async function closeDiary() {
-    if (!authorizedLoad || retired || !page?.continuation || closing) {
+    const continuation = activeCloseRetry?.continuation ?? navigation.continuation ?? page?.continuation;
+    if (!authorizedLoad || retired || !continuation || closing) {
       window.location.assign(currentReturn);
       return;
     }
+    const identity = activeCloseRetry ?? {
+      source: sourceKey,
+      viewer: authorizedLoad.viewer,
+      csrfToken: authorizedLoad.csrfToken,
+      continuation,
+    };
+    const expected = binding.current;
     setClosing(true);
     const result = await cancelPrivateDiary({
       data: {
-        viewer: authorizedLoad.viewer,
-        csrfToken: authorizedLoad.csrfToken,
-        continuation: page.continuation,
+        viewer: identity.viewer,
+        csrfToken: identity.csrfToken,
+        continuation: identity.continuation,
       },
     }).catch(() => 'unavailable' as const);
     const current = binding.current;
     if (
       !live.current ||
-      current.href !== location.href ||
-      current.loaded !== loaded ||
-      current.session.subject !== session.subject ||
-      current.session.csrfToken !== session.csrfToken ||
-      !sameDiaryAddress(current.address, address)
+      current.href !== expected.href ||
+      current.loaded !== expected.loaded ||
+      current.source !== expected.source ||
+      current.session.subject !== expected.session.subject ||
+      current.session.csrfToken !== expected.session.csrfToken ||
+      !sameDiaryAddress(current.address, expected.address)
     )
       return;
     setClosing(false);
     if (result === 'unavailable') {
-      setCloseUnavailable(true);
+      setCloseRetry(identity);
       return;
     }
-    setCloseUnavailable(false);
+    setCloseRetry(null);
     window.location.assign(currentReturn);
   }
+
+  const routeNavigationAvailable = !closing && !activeCloseRetry && !activeReplacementRetry;
 
   return (
     <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6">
@@ -165,12 +295,27 @@ export function PrivateDiaryPage({
               disabled={closing}
               onClick={() => void closeDiary()}
             >
-              {closing ? m.library_diary_closing() : m.library_diary_return()}
+              {closing
+                ? m.library_diary_closing()
+                : activeCloseRetry
+                  ? m.library_selection_retry()
+                  : m.library_diary_return()}
             </button>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">{m.library_diary_help()}</p>
-        {closeUnavailable ? <p role="status">{m.library_diary_cancel_unavailable()}</p> : null}
+        {activeCloseRetry || activeReplacementRetry ? (
+          <p role="status">{m.library_diary_cancel_unavailable()}</p>
+        ) : null}
+        {activeReplacementRetry ? (
+          <button
+            type="button"
+            className="min-h-11 rounded-md border px-3"
+            onClick={() => void retryReplacementCancellation()}
+          >
+            {m.library_selection_retry()}
+          </button>
+        ) : null}
       </header>
 
       {retired ? (
@@ -179,7 +324,7 @@ export function PrivateDiaryPage({
         </p>
       ) : null}
 
-      {authenticated && !retired ? (
+      {authenticated && !retired && routeNavigationAvailable ? (
         <form
           className="flex flex-wrap items-end gap-3"
           onSubmit={(event) => {
@@ -215,7 +360,7 @@ export function PrivateDiaryPage({
           </Link>
         </form>
       ) : null}
-      {address.year !== undefined && authenticated && !retired ? (
+      {address.year !== undefined && authenticated && !retired && routeNavigationAvailable ? (
         <ReportedYearPanel
           year={address.year}
           address={{ ...address, returnTo: currentReturn }}
@@ -223,7 +368,7 @@ export function PrivateDiaryPage({
           retry={() => void router.invalidate()}
         />
       ) : null}
-      {authenticated && !retired && authorizedLoad ? (
+      {authenticated && !retired && authorizedLoad && routeNavigationAvailable ? (
         <ReadingPeriod
           address={address}
           returnTo={currentReturn}
@@ -270,7 +415,12 @@ export function PrivateDiaryPage({
       ) : visiblePage ? (
         <section aria-labelledby="library-diary-occurrences" className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-2">
-            <h2 id="library-diary-occurrences" className="text-lg font-semibold">
+            <h2
+              id="library-diary-occurrences"
+              ref={occurrencesHeading}
+              tabIndex={-1}
+              className="text-lg font-semibold"
+            >
               {m.library_diary_occurrences()}
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -295,24 +445,62 @@ export function PrivateDiaryPage({
               ))}
             </ol>
           )}
-          {visiblePage.next ? (
-            <Link
-              className="inline-flex min-h-11 items-center rounded-md border px-4"
-              to="/library/history"
-              replace
-              search={{
-                cursor: visiblePage.next,
-                year: address.year,
-                month: address.month,
-                snapshot: address.snapshot,
-                returnTo: currentReturn,
-              }}
-            >
-              {m.library_diary_next()}
-            </Link>
-          ) : (
-            <p className="text-sm text-muted-foreground">{m.library_diary_end()}</p>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {navigationReady ? (
+              <>
+                {previousAddress ? (
+                  <button
+                    type="button"
+                    className="min-h-11 rounded-md border px-4"
+                    onClick={(event) => moveWindow('previous', previousAddress, event.detail === 0)}
+                  >
+                    {m.library_continue_previous_window()}
+                  </button>
+                ) : null}
+                {canStartFirst ? (
+                  <button
+                    type="button"
+                    className="min-h-11 rounded-md border px-4"
+                    onClick={(event) =>
+                      moveWindow(
+                        'first',
+                        {
+                          year: address.year,
+                          month: address.month,
+                          snapshot: address.snapshot,
+                        },
+                        event.detail === 0,
+                      )
+                    }
+                  >
+                    {m.library_continue_first_window()}
+                  </button>
+                ) : null}
+                {visiblePage.next ? (
+                  <button
+                    type="button"
+                    className="min-h-11 rounded-md border px-4"
+                    onClick={(event) =>
+                      moveWindow(
+                        'next',
+                        {
+                          cursor: visiblePage.next!,
+                          year: address.year,
+                          month: address.month,
+                          snapshot: address.snapshot,
+                        },
+                        event.detail === 0,
+                      )
+                    }
+                  >
+                    {m.library_diary_next()}
+                  </button>
+                ) : (
+                  <p className="self-center text-sm text-muted-foreground">{m.library_diary_end()}</p>
+                )}
+              </>
+            ) : null}
+          </div>
         </section>
       ) : null}
     </main>
