@@ -343,6 +343,36 @@ test('mounted keyboard appeal return restores the activator only after exact que
   cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   cache.setQueryData(['session'], session);
   const history = workbenchQueueWindowHistory(cache);
+  const beginAppealReturn = history.beginAppealReturn.bind(history);
+  let returnObservation: unknown;
+  history.beginAppealReturn = (input) => {
+    const visit = (history as unknown as { appealVisit?: Record<string, unknown> }).appealVisit;
+    const accepted = beginAppealReturn(input);
+    returnObservation = {
+      accepted,
+      visit: visit && {
+        visitId: visit.visitId,
+        appealId: visit.appealId,
+        mode: visit.mode,
+        pending: visit.pending,
+        generation: visit.generation,
+        fence: visit.fence,
+      },
+      input: {
+        visitId: input.visitId,
+        appealId: input.appealId,
+        search: input.search,
+        state: input.page.state,
+        generation: input.page.generation,
+        fence: input.page.readerBinding && {
+          source: input.page.readerBinding.source,
+          revision: input.page.readerBinding.revision,
+          retired: input.page.readerBinding.retired,
+        },
+      },
+    };
+    return accepted;
+  };
   const queueSearch = workbenchSearch({ queue: 'appeals', board: 'board', cursor: 'captured' });
   const selectedSearch = workbenchSearch({ ...queueSearch, case: selected.id });
   const queueRaw: WorkbenchRead = {
@@ -423,6 +453,7 @@ test('mounted keyboard appeal return restores the activator only after exact que
   await act(async () => {
     returnLink.dispatchEvent(new browser.MouseEvent('click', { bubbles: true, detail: 0 }));
   });
+  console.log('appeal return observation', JSON.stringify(returnObservation));
   await transition;
   expect(current.search.cursor).toBe('captured');
   expect(current.search.case).toBeUndefined();
