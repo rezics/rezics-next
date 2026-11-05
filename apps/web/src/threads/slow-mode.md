@@ -8,7 +8,7 @@ scope.
 
 The native interval is any whole second from `0` (off) through `86400`, default off.
 Decision: retain preset choices `0`, `30`, `60`, `300` and add the current nonpreset value to the controls; do not expose free-text changes yet. It covers successful new threads and replies by
-one account on one board. Edits are not limited. Failed writes and receipt replays do not start a cooldown. Current
+one account on one board, including drafts and revisions. Failed writes and receipt replays do not start a cooldown. Current
 board-curation authority exempts the moderator; Web never invents that exemption locally.
 
 ## Eligibility display
@@ -44,6 +44,8 @@ exact original sender, credentials, key and interval. A definitive conflict requ
 before a new intent. Browser clocks never grant sending authority.
 
 ## Board reading after a setting
+
+Decision: an acknowledged interval change refreshes active same-Board, same-account and same-credential point advice through the existing queries, preserving each composer's draft and command identity. Each reader obtains its own native exemption and eligibility; the setting response never supplies another reader's admission. Replacing the policy source retires its old controls. Native security episodes remain internal; the installed policy DTO is unchanged.
 
 An applied interval change reconciles the current board reading without repeating the setting command. Slow mode does
 not increment Content's pin revision; the current cursor remains usable unless a separate pin change invalidates it.

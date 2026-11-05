@@ -231,7 +231,7 @@ test('creation acknowledgment selects the exact created id and a lost acknowledg
         labelRevision: 1,
         revision: 1,
         grain: body.grain,
-        scale: body.scale,
+        scale: call === 2 ? { displayStep: 2, max: 20, min: 0 } : { ...body.scale, min: 1 },
         lifecycle: { state: 'active', revision: 1 },
       },
       { status: 201 },
@@ -246,6 +246,8 @@ test('creation acknowledgment selects the exact created id and a lost acknowledg
   expect(await harness.requests[1]!.clone().text()).toBe(intent.serializedBody);
   expect([...harness.requests[0]!.headers]).toEqual([...harness.requests[1]!.headers]);
   expect(harness.requests[0]!.url).toBe(harness.requests[1]!.url);
+  expect(await client.execute(intent)).toEqual({ kind: 'uncertain' });
+  expect(harness.requests).toHaveLength(3);
 });
 
 test('a different credential episode cannot send a retained original intent', async () => {

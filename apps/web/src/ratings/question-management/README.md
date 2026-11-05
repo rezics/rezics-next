@@ -2,6 +2,8 @@
 
 This follows [Web](../../../../../docs/goals/web.md), the current [types](types.ts), [page](page.tsx),
 [address](address.ts) and [named route](../../routes/realms/$id_.questions.tsx).
+Decision: creation acknowledgements compare scale operands by value; JSON property order cannot turn the committed original definition into an uncertain command. A different scale remains uncertain and cannot select a new question.
+
 The existing management reader and commands own admission, immutable definitions, caption compare-and-set,
 lifecycle and authorization. This consumer only navigates their current native windows.
 
