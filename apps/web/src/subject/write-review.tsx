@@ -1,7 +1,7 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { createServerFn } from '@tanstack/react-start';
 import { useRef, useState } from 'react';
-import { readMyRealmsPageForReview, type ReviewMyRealmsRead } from '../community/space-actions';
+import { readMyRealmsPageForReview } from '../community/space-actions';
 import type { RealmLink } from '../community/space';
 import { m } from '../paraglide/messages.js';
 import { SignInPrompt } from '../threads/composer';
@@ -19,7 +19,6 @@ import {
   reviewEntryVisitIsCurrent,
   useWriteReviewVisit,
   type ReviewEntryReadTicket,
-  type ReviewReaderProvenance,
 } from './write-review-lifetime';
 
 export const REALM_PAGE_LIMIT = 20;
@@ -35,10 +34,6 @@ type BoardReadState =
   | { state: 'failed'; cursor?: string; expired: boolean }
   | { state: 'ready'; page: ReviewDestinationPage; cursor?: string };
 type InspectionState = { state: 'idle' | 'loading' | 'failed' | 'denied' | 'changed'; boardId?: string };
-type ReaderResult =
-  | { kind: 'ready'; page: ReviewDestinationPage; provenance: ReviewReaderProvenance }
-  | { kind: 'mismatch' };
-
 function sameSource(
   left: Readonly<{ partition: number; epoch: number; position: string }>,
   right: Readonly<{ partition: number; epoch: number; position: string }>,
@@ -84,7 +79,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
       const result = (await readMyRealmsPageForReview({
         data: { expected, ...(cursor ? { cursor } : {}) },
         signal: ticket.controller.signal,
-      })) as ReviewMyRealmsRead;
+      }));
       if (!reviewEntryReadIsCurrent(ticket)) return;
       if (result.kind !== 'ready' || !result.page.signedIn || !sameReviewReader(expected, result.provenance)) {
         setRealms({ state: 'failed', ...(cursor === undefined ? {} : { cursor }), expired: false });
@@ -124,7 +119,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
           expected,
         },
         signal: ticket.controller.signal,
-      })) as ReaderResult;
+      }));
       if (!reviewEntryReadIsCurrent(ticket)) return;
       if (result.kind !== 'ready' || !sameReviewReader(expected, result.provenance)) {
         setBoards({ state: 'failed', ...(cursor === undefined ? {} : { cursor }), expired: false });
@@ -172,7 +167,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
           expected,
         },
         signal: ticket.controller.signal,
-      })) as ReaderResult;
+      }));
       if (!reviewEntryReadIsCurrent(ticket)) return;
       if (result.kind !== 'ready' || !sameReviewReader(expected, result.provenance)) {
         setInspection({ state: 'failed', boardId: board.id });
