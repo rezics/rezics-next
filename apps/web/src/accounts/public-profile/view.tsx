@@ -32,7 +32,7 @@ export function PublicAccountState({
         <EmptyDescription>{text}</EmptyDescription>
       </EmptyHeader>
       {state === 'unavailable' && retry && (
-        <Button variant="outline" onClick={retry}>
+        <Button variant="outline" className="min-h-11 min-w-11 whitespace-normal wrap-anywhere" onClick={retry}>
           {m.public_account_retry()}
         </Button>
       )}
