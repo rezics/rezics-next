@@ -1,13 +1,14 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Page } from 'playwright';
-import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/bootstrap-governance.ts';
-import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { routeOf } from '../../../../services/kernel/src/route/route.ts';
 import { startFakeStripe } from '../../../../services/kernel/test/commerce/support/fake-stripe.ts';
 import { createNativeEditionFixture } from '../../../../services/kernel/test/commerce/support/native-edition-fixture.ts';
 import { startAuthStack, type AuthJourney, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
+
+const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
+const PLATFORM_RESOURCE = { route: 0, id: GLOBAL_CONTEXT } as const;
 
 const offerTitle = 'Exact edition offer';
 const subjectTitle = 'Native offer subject';

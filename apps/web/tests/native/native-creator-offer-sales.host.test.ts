@@ -3,13 +3,10 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Page } from 'playwright';
 import { subjectHref } from '../../src/subject/subject-href';
+import { startNativeCreatorOfferSalesFixture, taxCode } from './native-creator-offer-sales-fixture.ts';
 
 setDefaultTimeout(900_000);
-async function loadFixture() {
-  await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
-  return import('./native-creator-offer-sales-fixture.ts');
-}
-type NativeCreatorOfferSalesFixture = Awaited<ReturnType<Awaited<ReturnType<typeof loadFixture>>['startNativeCreatorOfferSalesFixture']>>;
+type NativeCreatorOfferSalesFixture = Awaited<ReturnType<typeof startNativeCreatorOfferSalesFixture>>;
 let fixture: NativeCreatorOfferSalesFixture | undefined;
 afterAll(async () => {
   await fixture?.close();
@@ -27,7 +24,6 @@ async function screenshot(page: Page, name: string) {
 }
 
 test('creator publishes an eligible edition offer, finds it on the Subject, revises, delists and inspects a signed test-mode sale', async () => {
-  const { startNativeCreatorOfferSalesFixture, taxCode } = await loadFixture();
   fixture = await startNativeCreatorOfferSalesFixture();
   const { edition, stack, accountIds } = fixture;
   const evidence: Record<string, unknown> = {

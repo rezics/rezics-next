@@ -47,6 +47,7 @@ beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:batch_write');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:read');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'gate:subject_identity');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:accept');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
@@ -54,7 +55,7 @@ beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'gate:subject_identity');
   await pool.query(
     `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
-     VALUES ('subject_identity', tstzrange('2000-01-01', NULL, '[)'), $1)`,
+     VALUES ('subject_identity', tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $1)`,
     [subjectIdentityOpening],
   );
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
@@ -126,7 +127,11 @@ const edition = (title: string, workId: string) =>
 const byId = (a: Record<string, any>, b: Record<string, any>) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const linkOf = (source: Record<string, any>, property: string) => {
   const type = source.type as string;
-  const types = (source.types as string[] | undefined) ?? [type, 'schema:Thing'];
+  const inherited = (source.types as string[] | undefined) ?? [type, 'schema:Thing'];
+  const types =
+    type === 'schema:Book' && !inherited.includes('schema:CreativeWork')
+      ? [...inherited.filter((item) => item !== 'schema:Thing'), 'schema:CreativeWork', 'schema:Thing']
+      : inherited;
   const label = source.labels.en as string;
   return {
     subject: source.id as string,

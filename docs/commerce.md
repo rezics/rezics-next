@@ -120,6 +120,7 @@ Decision: the creator offer and historical sales walk binds a published Content 
 ordinary create/revise/delist, Subject discovery and a signed test-mode sale. Historical sale identities stay the
 captured order, offer and subject locators; later offer terms do not rewrite them. Offer:create is granted on the
 platform resource first; Global board:create for that walk is installed through the local showcase helper before the
-ordinary board:create grant. Subject-offer listing waits for the durable worker. Web host tests register Reylo before
-importing kernel SQL rather than compiling it from the Web test graph. Subject merge kernel tests open
-gate:subject_identity so the snake-case identity-operation GET can boot.
+ordinary board:create grant. Subject-offer listing waits for the durable worker. Web host tests keep platform
+resource constants in the fixture and let the native stack register Reylo after its database exists, rather than
+compiling kernel SQL from the Web test graph. Subject merge kernel tests open gate:subject_identity so the
+snake-case identity-operation GET can boot.

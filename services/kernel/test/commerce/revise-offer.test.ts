@@ -39,19 +39,6 @@ const publisherScopes = [
 ];
 const global = { route: 0, id: GLOBAL_CONTEXT };
 
-async function grant(accountId: string, resource: { route: number; id: string }, actions: string[]) {
-  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
-    { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30_000) },
-    {
-      resource,
-      subject: { kind: 'account', id: accountId },
-      actions,
-      valid: '(,)',
-      key: entryKey(),
-    },
-  );
-}
-
 beforeAll(async () => {
   f = await createProfileEntryFixture();
   commands = createCommerceCommands({ pool: f.pool, access: f.access });
@@ -61,12 +48,29 @@ beforeAll(async () => {
   for (const group of ['selling', 'purchases']) {
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
   }
-  for (const person of [seller, other]) {
-    await grant(person.actor.accountId, PLATFORM_RESOURCE, ['offer:create']);
-  }
   await bootstrapLocalShowcaseBoardCreation(f.pool, f.steward.actor.accountId);
+  const grants = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
   for (const person of [seller, other]) {
-    await grant(person.actor.accountId, global, ['board:create']);
+    await grants.create(
+      { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30_000) },
+      {
+        resource: PLATFORM_RESOURCE,
+        subject: { kind: 'account', id: person.actor.accountId },
+        actions: ['offer:create'],
+        valid: '(,)',
+        key: entryKey(),
+      },
+    );
+    await grants.create(
+      { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30_000) },
+      {
+        resource: global,
+        subject: { kind: 'account', id: person.actor.accountId },
+        actions: ['board:create', 'subject:create'],
+        valid: '(,)',
+        key: entryKey(),
+      },
+    );
   }
   const publisher = await createNativeEditionFixture((method, path, body, headers) =>
     f.sendWithHeaders(seller.bearer, method, path, body, headers),
