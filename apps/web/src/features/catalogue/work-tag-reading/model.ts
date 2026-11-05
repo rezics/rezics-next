@@ -154,13 +154,12 @@ export function projectWorkTags(input: {
         hasSpoilerQualifier: spoilerParts.length > 0,
         spoilerQualifiers,
       };
+      // Apply disclosure before deriving rows, empty state or pagination. Even an
+      // anonymous placeholder would reveal the existence of a hidden association.
+      if (row.spoilerLevel > spoilerThreshold) continue;
       rows.push(row);
-
-      // Hidden associations do not contribute labels or counts before their own gate is opened.
-      if (row.spoilerLevel <= spoilerThreshold) {
-        if (conceptLabel(row.targetId, related, definitions, locale)) disclosedCount += 1;
-        else hasUnavailable = true;
-      }
+      if (conceptLabel(row.targetId, related, definitions, locale)) disclosedCount += 1;
+      else hasUnavailable = true;
     }
   }
 

@@ -76,7 +76,7 @@ const definitions = {
 
 const model: WorkTagProjection = {
   state: 'available',
-  rows,
+  rows: rows.filter((row) => row.spoilerLevel === 0),
   disclosedCount: 28,
   hasUnavailable: false,
   workHref: `/en/subjects/${subjectId}/demo-work`,

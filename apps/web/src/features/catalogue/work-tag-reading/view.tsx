@@ -5,7 +5,6 @@ import type { Related } from '../../../subject/types';
 import { catalogueEntries } from '../catalogue-entry';
 import { SourceTagWeight } from '../source-tag-weight';
 import { m } from '../../../paraglide/messages.js';
-import { SpoilerGate } from '../../pages/values';
 import type { WorkTagReturnSelection } from './entry';
 import { conceptLabel, WORK_TAG_PAGE_SIZE, type WorkTagAssertion, type WorkTagProjection } from './model';
 
@@ -96,50 +95,6 @@ function TagDetails({
   );
 }
 
-function TagRow({
-  row,
-  related,
-  definitions,
-  locale,
-  spoilerThreshold,
-  model,
-  workHref,
-  returnToFor,
-}: {
-  row: WorkTagAssertion;
-  related: Related;
-  definitions?: Pick<Release, 'types' | 'properties'> | undefined;
-  locale: string;
-  spoilerThreshold: number;
-  model: WorkTagProjection;
-  workHref: string;
-  returnToFor?: ((selection: WorkTagReturnSelection) => string) | undefined;
-}) {
-  const o = { locale: locale as never };
-  const details = (
-    <TagDetails
-      row={row}
-      related={related}
-      definitions={definitions}
-      locale={locale}
-      workHref={workHref}
-      spoilerThreshold={spoilerThreshold}
-      returnToFor={returnToFor}
-    />
-  );
-  return row.spoilerLevel > spoilerThreshold ? (
-    <SpoilerGate
-      key={`${model.sourceKey}:${row.key}`}
-      label={m.subject_work_tag_reveal({}, o)}
-      hideLabel={m.subject_work_tag_hide({}, o)}
-    >
-      {details}
-    </SpoilerGate>
-  ) : (
-    details
-  );
-}
-
 export function WorkTagReadingView({
   model,
   related,
@@ -211,13 +166,12 @@ export function WorkTagReadingView({
               <ul aria-label={facet.label.text} className="grid min-w-0 gap-2">
                 {facet.rows.map((row) => (
                   <li key={row.key} className="min-w-0">
-                    <TagRow
+                    <TagDetails
                       row={row}
                       related={related}
                       definitions={definitions}
                       locale={locale}
                       spoilerThreshold={spoilerThreshold}
-                      model={model}
                       workHref={returnHref}
                       returnToFor={returnToFor}
                     />

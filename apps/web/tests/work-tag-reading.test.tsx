@@ -72,12 +72,12 @@ test('projection retains distinct assertions and counts only labelled tags admit
   });
 
   expect(model?.state).toBe('available');
-  expect(model?.rows).toHaveLength(30);
+  expect(model?.rows).toHaveLength(28);
   expect(model?.rows[0]?.targetId).toBe(model?.rows[1]?.targetId);
   expect(model?.rows[0]?.key).not.toBe(model?.rows[1]?.key);
-  expect(model?.rows[14]?.spoilerQualifiers).toEqual([{ property: 'rezics:spoilerLevel', in: ['2'] }]);
+  expect(model?.rows.some((row) => row.spoilerLevel > 0)).toBe(false);
   expect(model?.disclosedCount).toBe(27);
-  expect(model?.rows[29]?.targetId).toBe(targets[29]);
+  expect(model?.rows[27]?.targetId).toBe(targets[29]);
   expect(model?.sourceKey).toContain('release-a');
 });
 
@@ -113,4 +113,25 @@ test('empty, unsupported and unavailable facet readings stay distinct', () => {
   expect(empty?.state).toBe('empty');
   expect(unsupported?.state).toBe('unsupported');
   expect(unavailable?.state).toBe('unavailable');
+});
+
+test('hidden membership cannot change rows, empty state or pagination; a preference change restores exact assertions', () => {
+  const visible = assertion(0, id(0));
+  const hidden = Array.from({ length: 24 }, (_, index) => assertion(index + 1, id(index + 1), 2));
+  const project = (statements: Stmt[], spoilerThreshold = 0) =>
+    projectWorkTags({
+      subject: subject(statements),
+      related: related([id(0)]),
+      definitions: definitions(),
+      locale: 'en',
+      spoilerThreshold,
+    })!;
+  const withHidden = project([...hidden, visible]);
+  expect(withHidden.rows).toEqual(project([visible]).rows);
+  expect(withHidden.disclosedCount).toBe(1);
+  expect(withHidden.hasUnavailable).toBe(false);
+  expect(project(hidden).state).toBe('empty');
+  const revealed = project([...hidden, visible], 2);
+  expect(revealed.rows.map((row) => row.statement)).toEqual([...hidden, visible]);
+  expect(revealed.rows[0]?.spoilerQualifiers).toEqual([{ property: 'rezics:spoilerLevel', in: ['2'] }]);
 });
