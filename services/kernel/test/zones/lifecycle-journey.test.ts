@@ -70,7 +70,9 @@ test('deleting a public Zone hides it at once, restores only inside its window, 
   const withheld = await f.raw(zone.id);
   expect(withheld!.state).toBe('deleted');
   expect(withheld!.restore_until).toEqual(restoreUntil);
-  expect(withheld!.withholding).toEqual({ '/labels/en': {} });
+  // The decision records the element's identity chain and the revision it was bound at.
+  expect(Object.keys(withheld!.withholding)).toEqual(['/labels/en']);
+  expect(withheld!.withholding['/labels/en'].chain).toEqual([{ key: 'labels' }, { key: 'en' }]);
 
   // Restore inside the window keeps the takedown; the withheld label stays absent for readers.
   f.advance(29 * day);
@@ -152,17 +154,19 @@ test('takedown is platform-only, names existing fields, and stale or repeated de
   expect(row!.owner_id).toBeTruthy();
 });
 
-test('configuration cannot change a withheld value, unrelated fields still save, and delegates read no configuration', async () => {
+test('edits rebind a covered page through reorder and edit, retain superseded and removed originals, and release only live coverage', async () => {
   const body = createBody();
   body.configuration.scope = [];
   body.configuration.labels.en = `Array label ${randomUUID()}`;
+  const notes = `Notes ${randomUUID()}`;
   body.configuration.pages = [
     { route: '', document: page(`Front ${randomUUID()}`) },
-    { route: 'notes', document: page(`Notes ${randomUUID()}`) },
+    { route: 'notes', document: page(notes) },
   ];
   const created = await f.call('owner', 'POST', '/v1/zones', body);
   expect(created.status, JSON.stringify(created.body)).toBe(201);
-  const path = `/v1/zones/${created.body.zone.id}`;
+  const zone = created.body.zone.id as string;
+  const path = `/v1/zones/${zone}`;
   const taken = await f.call(
     'operator',
     'POST',
@@ -171,43 +175,92 @@ test('configuration cannot change a withheld value, unrelated fields still save,
     f.conditional(created.body.zone.revision),
   );
   expect(taken.status, JSON.stringify(taken.body)).toBe(200);
-
   const configuration = await f.call('owner', 'GET', `${path}/configuration`);
   expect(configuration.status).toBe(200);
   const current = configuration.body.configuration;
-  const movedPages = await f.call(
+
+  // Reordering moves the covered page and its decision together; readers still get no notes page.
+  const reordered = await f.call(
     'owner',
     'PUT',
     `${path}/configuration`,
-    { configuration: { ...current, pages: [current.pages[0]] }, mounts: [] },
+    { configuration: { ...current, pages: [current.pages[1], current.pages[0]] }, mounts: [] },
     f.conditional(taken.body.zone.revision),
   );
-  expect(movedPages.status, JSON.stringify(movedPages.body)).toBe(409);
-  const replaced = await f.call(
+  expect(reordered.status, JSON.stringify(reordered.body)).toBe(200);
+  expect((await f.read(zone, 'anonymous', { route: 'notes' })).status).toBe(404);
+  expect((await f.read(zone)).status).toBe(200);
+  const moved = await f.raw(zone);
+  expect(Object.keys(moved!.withholding)).toEqual(['/pages/0/document']);
+  expect(moved!.withholding.custody).toBeUndefined();
+
+  // Delegates get no configuration while a live decision exists.
+  await f.grant(zone, 'editor', 'zone:configure');
+  expect((await f.call('editor', 'GET', `${path}/configuration`)).status).toBe(403);
+
+  // Editing the covered page keeps its decision on the edited page and retains the superseded original.
+  const replaced = `Replaced ${randomUUID()}`;
+  const edited = await f.call(
     'owner',
     'PUT',
     `${path}/configuration`,
     {
       configuration: {
         ...current,
-        pages: [current.pages[0], { ...current.pages[1], document: page(`Replaced ${randomUUID()}`) }],
+        pages: [{ ...current.pages[1], document: page(replaced) }, current.pages[0]],
       },
       mounts: [],
     },
-    f.conditional(taken.body.zone.revision),
+    f.conditional(reordered.body.zone.revision),
   );
-  expect(replaced.status, JSON.stringify(replaced.body)).toBe(409);
+  expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+  expect((await f.read(zone, 'anonymous', { route: 'notes' })).status).toBe(404);
+  const afterEdit = await f.raw(zone);
+  expect(Object.keys(afterEdit!.withholding)).toEqual(['/pages/0/document']);
+  expect(afterEdit!.withholding.custody).toEqual([
+    expect.objectContaining({ pointer: '/pages/0/document', version: reordered.body.zone.revision }),
+  ]);
+  expect(JSON.stringify(afterEdit!.withholding.custody)).toContain(notes);
 
-  await f.grant(created.body.zone.id, 'editor', 'zone:configure');
-  expect((await f.call('editor', 'GET', `${path}/configuration`)).status).toBe(403);
+  // Removing the covered page retains its current original and clears the live decision; nothing is guessed.
+  const removed = await f.call(
+    'owner',
+    'PUT',
+    `${path}/configuration`,
+    { configuration: { ...current, pages: [current.pages[0]] }, mounts: [] },
+    f.conditional(edited.body.zone.revision),
+  );
+  expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+  const afterRemoval = await f.raw(zone);
+  expect(afterRemoval!.withholding.custody).toHaveLength(2);
+  expect(afterRemoval!.withholding.custody[1]).toEqual(
+    expect.objectContaining({ pointer: '/pages/0/document', version: edited.body.zone.revision }),
+  );
+  expect(JSON.stringify(afterRemoval!.withholding.custody[1])).toContain(replaced);
+  expect(Object.keys(afterRemoval!.withholding).filter((key) => key.startsWith('/'))).toEqual([]);
+  // Retained originals are never part of any configuration read.
+  const owned = await f.call('owner', 'GET', `${path}/configuration`);
+  expect(owned.body.configuration.pages).toHaveLength(1);
+  expect(JSON.stringify(owned.body)).not.toContain(replaced);
 
+  // Named release addresses live coverage only; the removed page's decision is already gone.
+  const releasedGone = await f.call(
+    'operator',
+    'POST',
+    `${path}:releaseTakedown`,
+    { pointers: ['/pages/0/document'] },
+    f.conditional(removed.body.zone.revision),
+  );
+  expect(releasedGone.status).toBe(409);
+
+  // An unrelated edit saves and keeps the retained originals.
   const unrelated = await f.call(
     'owner',
     'PUT',
     `${path}/configuration`,
-    { configuration: { ...current, labels: { en: `Renamed ${randomUUID()}` } }, mounts: [] },
-    f.conditional(taken.body.zone.revision),
+    { configuration: { ...current, pages: [current.pages[0]], labels: { en: `Renamed ${randomUUID()}` } }, mounts: [] },
+    f.conditional(removed.body.zone.revision),
   );
   expect(unrelated.status, JSON.stringify(unrelated.body)).toBe(200);
-  expect((await f.raw(created.body.zone.id))!.withholding).toEqual({ '/pages/1/document': {} });
+  expect((await f.raw(zone))!.withholding.custody).toHaveLength(2);
 });

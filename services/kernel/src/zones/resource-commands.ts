@@ -34,7 +34,7 @@ import {
   zoneOwnerIsActive,
   type ZoneHead,
 } from './resource-store.ts';
-import { changeTakedown, changesWithheldValue } from './takedown.ts';
+import { changeTakedown, rebindWithholding, withholdingJson } from './takedown.ts';
 
 export type ZoneMutation = 'configure' | 'publish' | 'delete' | 'restore' | 'takedown' | 'release_takedown';
 
@@ -305,6 +305,8 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
           const configuration = prepared.prepared(currentCommand(tx));
           const at = authoritativeTimeValue(command.time);
           const next: ZoneHead = { ...row };
+          // Every compare-and-set advances the revision by one; withholding decisions record the revision they bind at.
+          const nextVersion = String(BigInt(row.revision) + 1n);
           if (operation === 'restore') {
             if (row.state !== 'deleted' || !row.restoreUntil) throw new ProblemError('conflict');
             const eligibility = await tx.query<{ restorable: boolean }>(
@@ -317,7 +319,9 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
             next.restoreUntil = null;
           } else if (platform) {
             // Takedown keeps state, visibility, configuration and the deletion clock; only decisions change.
-            next.withholding = changeTakedown(row, (input as ZoneTakedownInput).pointers, operation === 'takedown');
+            next.withholding = withholdingJson(
+              changeTakedown(row, (input as ZoneTakedownInput).pointers, operation === 'takedown', nextVersion),
+            );
           } else {
             if (row.state !== 'active') throw new ProblemError('not_found');
             if (operation === 'delete') {
@@ -338,11 +342,11 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
                   ? { ...requested, primaryLanguage: row.configuration.primaryLanguage }
                   : requested;
               const mounts = (input as ZoneConfigureInput).mounts;
-              // A decision keeps the only retained original at its pointer; an edit that changes that value is refused.
-              if (changesWithheldValue(row, configured, mounts)) throw new ProblemError('conflict');
               next.configuration = configured;
               next.mounts = mounts;
               next.releaseDigest = configuration!.releaseDigest;
+              // Decisions follow their elements; superseded or removed originals stay in restricted custody.
+              next.withholding = withholdingJson(rebindWithholding(row, configured, mounts, nextVersion));
             }
           }
           await enrollResourceRecordSources(tx, [{ kind: 'zone', zoneId: id }], { kind: `zone.${operation}` });
