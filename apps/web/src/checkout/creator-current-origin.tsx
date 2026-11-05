@@ -15,18 +15,22 @@ type Observation = {
   admission: 'preparing' | 'admitted' | 'closed' | 'unavailable';
   observation: number | null;
   exposure: number | null;
+  exposureSubject: string | null;
+  admitted: readonly string[] | null;
 };
 type Slot<T> = { value?: T };
 type Workspace = {
   subject: string | null;
   initial: boolean;
-  read: unknown;
+  acceptedDisplay: unknown;
+  refreshRetained: boolean;
   intents: Map<string, Slot<unknown>>;
 };
 const workspace = (subject: string | null): Workspace => ({
   subject,
   initial: true,
-  read: undefined,
+  acceptedDisplay: undefined,
+  refreshRetained: false,
   intents: new Map(),
 });
 const closed: Observation = {
@@ -37,6 +41,8 @@ const closed: Observation = {
   admission: 'preparing',
   observation: null,
   exposure: null,
+  exposureSubject: null,
+  admitted: null,
 };
 
 function observe(client: QueryClient | undefined, operation: Operation): Observation {
@@ -67,6 +73,8 @@ function observe(client: QueryClient | undefined, operation: Operation): Observa
           : exposure.data?.subject === subject && operationIsAdmitted(operation, exposure.data.admitted)
             ? 'admitted'
             : 'closed',
+    exposureSubject: exposure?.status === 'success' ? exposure.data.subject : null,
+    admitted: exposure?.status === 'success' ? exposure.data.admitted : null,
   };
 }
 
@@ -81,14 +89,35 @@ const identity = (value: Observation) =>
     value.exposure,
   ]);
 
+function sameOperations(left: readonly string[] | null, right: readonly string[] | null) {
+  return left !== null && right !== null && left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function sameAdmittedOwner(before: Observation, after: Observation) {
+  return (
+    before.state === 'signed-in' &&
+    after.state === 'signed-in' &&
+    !!before.subject &&
+    before.subject === after.subject &&
+    before.admission === 'admitted' &&
+    after.admission === 'admitted' &&
+    before.observation === after.observation &&
+    before.exposureSubject === after.exposureSubject &&
+    sameOperations(before.admitted, after.admitted)
+  );
+}
+
 /** An episode can retire from cache notifications, without waiting for a React render or commit. */
 class CreatorCurrentOrigin implements CreatorOfferGuard {
   readonly id = crypto.randomUUID();
   readonly observed: Observation;
   readonly visitIdentity: string;
+  readonly refreshRetained: boolean;
   retired = false;
   private users = 0;
   private mounted = false;
+  private readAccepted: boolean;
+  private trackingRetainedDisplay = false;
   private releases: (() => void)[] = [];
   private listeners = new Set<() => void>();
 
@@ -100,26 +129,48 @@ class CreatorCurrentOrigin implements CreatorOfferGuard {
   ) {
     this.observed = observe(client, operation);
     this.visitIdentity = JSON.stringify([operation, expected ?? null, identity(this.observed)]);
+    this.refreshRetained = workspace.refreshRetained && workspace.acceptedDisplay !== undefined;
+    workspace.refreshRetained = false;
+    this.readAccepted = !this.refreshRetained;
   }
+
+  private healthyCsrfRenewal = (next: Observation) =>
+    this.workspace.subject === this.observed.subject &&
+    this.observed.csrfToken !== next.csrfToken &&
+    next.csrfToken !== null &&
+    sameAdmittedOwner(this.observed, next);
 
   observe = () => {
     const next = observe(this.client, this.operation);
-    if (this.retired) return next;
+    if (this.retired) {
+      if (this.trackingRetainedDisplay && !this.healthyCsrfRenewal(next)) {
+        this.workspace.acceptedDisplay = undefined;
+        this.workspace.refreshRetained = false;
+        this.workspace.initial = false;
+        this.trackingRetainedDisplay = false;
+      }
+      return next;
+    }
+    const healthyRenewal = this.healthyCsrfRenewal(next);
     if (
-      next.state !== 'signed-in' ||
-      next.subject !== this.workspace.subject ||
-      next.csrfToken !== this.observed.csrfToken ||
-      next.sessionVersion !== this.observed.sessionVersion ||
-      (this.observed.admission === 'admitted' &&
-        next.observation === this.observed.observation &&
-        next.exposure !== this.observed.exposure) ||
-      next.admission === 'closed' ||
-      next.admission === 'unavailable'
+      !healthyRenewal &&
+      (next.state !== 'signed-in' ||
+        next.subject !== this.workspace.subject ||
+        next.csrfToken !== this.observed.csrfToken ||
+        next.sessionVersion !== this.observed.sessionVersion ||
+        (this.observed.admission === 'admitted' &&
+          (next.observation !== this.observed.observation || next.exposure !== this.observed.exposure)) ||
+        next.admission === 'closed' ||
+        next.admission === 'unavailable')
     )
-      this.workspace.read = undefined;
+      this.workspace.acceptedDisplay = undefined;
     if (!this.retired && identity(next) !== identity(this.observed)) {
       // Same-owner healthy observation renewal can reuse the accepted read, but never its
       // in-flight response. Explicit authority loss discards the read, retaining only intent.
+      if (healthyRenewal && this.workspace.acceptedDisplay !== undefined) {
+        this.workspace.refreshRetained = true;
+        this.trackingRetainedDisplay = true;
+      }
       if (
         this.observed.admission === 'admitted' ||
         next.state === 'signed-out' ||
@@ -144,6 +195,10 @@ class CreatorCurrentOrigin implements CreatorOfferGuard {
       actual.admission === 'admitted' &&
       (!this.expected || actual.subject === this.expected)
     );
+  };
+  isReadCurrent = () => this.isCurrent() && this.readAccepted;
+  acceptRead = () => {
+    if (this.isCurrent()) this.readAccepted = true;
   };
   csrfToken = () => (this.isCurrent() ? observe(this.client, this.operation).csrfToken : null);
   snapshot = () => this.retired;

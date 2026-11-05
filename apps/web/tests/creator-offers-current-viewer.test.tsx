@@ -70,6 +70,8 @@ mock.module('cloudflare:workers', () => ({
 }));
 afterAll(() => mock.restore());
 const readers = await import('../src/checkout/creator-offers');
+const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+const { sessionQuery } = await import('../src/session/query');
 
 function list(subject = A, cursor: string | null = null, title = 'Origin offer'): CreatorOffersCurrentRead {
   return {
@@ -155,6 +157,8 @@ async function mounted() {
   document.body.append(host);
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const lifetime = viewerExposureLifetime(client);
+  const keepObservation = lifetime.subscribe(() => {});
   const lists: { data: { cursor?: string }; work: ReturnType<typeof deferred<CreatorOffersCurrentRead>> }[] = [];
   const editions: {
     data: { contentEditionId?: string };
@@ -200,12 +204,35 @@ async function mounted() {
     locale?: string;
   } = {}) => {
     await act(async () => {
-      client.setQueryData(['session'], session);
-      client.setQueryData(
-        ['exposure', 'viewer'],
-        [...(admitted ? ['selling'] : []), ...(publicOffer ? ['purchases'] : [])],
-      );
-      client.setQueryData(['exposure', 'anonymous'], ['selling', 'purchases']);
+      const previous = client.getQueryData<Viewer>(sessionQuery.queryKey);
+      if (
+        !previous ||
+        previous.state !== session.state ||
+        previous.subject !== session.subject ||
+        previous.csrfToken !== session.csrfToken
+      )
+        client.setQueryData(sessionQuery.queryKey, session);
+      const observation = lifetime.getSnapshot();
+      if (observation.state === 'signed-in') {
+        const options = viewerExposureQuery(observation.observation);
+        const value = {
+          subject: observation.observation.subject,
+          admitted: [...(admitted ? ['selling'] : []), ...(publicOffer ? ['purchases'] : [])],
+        };
+        const current = client.getQueryData<typeof value>(options.queryKey);
+        if (
+          !current ||
+          current.subject !== value.subject ||
+          current.admitted.length !== value.admitted.length ||
+          current.admitted.some((operation, index) => operation !== value.admitted[index])
+        )
+          client.setQueryData(options.queryKey, value);
+      }
+      client.setQueryData(['exposure', 'anonymous'], {
+        subject: null,
+        admitted: ['selling', 'purchases'],
+        state: 'ready',
+      });
       root.render(
         <StrictMode>
           <QueryClientProvider client={client}>
@@ -277,6 +304,7 @@ async function mounted() {
     oldSubmit,
     async dispose() {
       await act(async () => root.unmount());
+    keepObservation();
       client.clear();
       spies.forEach((spy) => spy.mockRestore());
       host.remove();

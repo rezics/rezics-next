@@ -168,7 +168,7 @@ function CreatorRead({
   origin: Origin;
 }) {
   const [initialData] = useState<Outcome | undefined>(() => {
-    const retained = origin.workspace.read as Read | undefined;
+    const retained = origin.workspace.acceptedDisplay as Read | undefined;
     const value = retained ?? (seed ? initial : undefined);
     return matches(value, subject, address) ? { kind: 'accepted', value } : undefined;
   });
@@ -190,12 +190,13 @@ function CreatorRead({
       }
     },
     ...(initialData ? { initialData } : {}),
-    refetchOnMount: !initialData,
+    refetchOnMount: origin.refreshRetained ? 'always' : !initialData,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  if (origin.isCurrent() && query.isFetchedAfterMount && query.data?.kind === 'accepted') origin.acceptRead();
   const [display, setDisplay] = useState(() => ({
     outcome: initialData,
     value: initialData?.kind === 'accepted' ? initialData.value : undefined,
@@ -211,7 +212,7 @@ function CreatorRead({
     });
   }
   if (hydrated && !origin.isCurrent()) return <Notice kind="preparing" address={address} locale={locale} />;
-  if (display.value && origin.isCurrent()) origin.workspace.read = display.value;
+  if (display.value && origin.isCurrent()) origin.workspace.acceptedDisplay = display.value;
   const data = display.value?.data;
   let content;
   if (!data)
