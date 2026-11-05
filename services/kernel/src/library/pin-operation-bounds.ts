@@ -152,9 +152,7 @@ export function pinOwnerObservationBound(input: { route: number; accountId: stri
     bytes: 0,
   });
   const sqlBytes =
-    statementBytes(accountRead) +
-    statementBytes(readTime) +
-    controls.reduce((n, sql) => n + Buffer.byteLength(sql), 0);
+    statementBytes(accountRead) + statementBytes(readTime) + controls.reduce((n, sql) => n + Buffer.byteLength(sql), 0);
   const inputBytes =
     serializedBytes([input.route, input.accountId]) + serializedBytes({ at: '' }) + serializedBytes(input.cursor ?? '');
   const cursorOutput = input.cursor === undefined ? 0 : Buffer.byteLength(input.cursor);
@@ -312,9 +310,7 @@ export function pinCommandAdmissionBound(input: { route: number; accountId: stri
       bytes: 0,
     }),
     byteCost(
-      statementBytes(accountRead) +
-        serializedBytes([input.route, input.accountId]) +
-        serializedBytes(projection),
+      statementBytes(accountRead) + serializedBytes([input.route, input.accountId]) + serializedBytes(projection),
     ),
   );
 }
