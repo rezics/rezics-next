@@ -1870,7 +1870,7 @@ export async function drainGenerationPublicationProofCopy(
   const row = retained.rows[0]!;
   const prepared = await tx.query(
     `UPDATE search.public_filter_prepared SET rows=$3,state='erasing'
-     WHERE partition_no=0 AND registration=$1 AND build=$2 AND rows<>$3`,
+     WHERE partition_no=0 AND registration=$1 AND build=$2 AND (state<>'erasing' OR rows<>$3)`,
     [row.registration, '0:' + row.bootstrap, encode([])],
   );
   const observation = await tx.query(

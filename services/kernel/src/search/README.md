@@ -1897,8 +1897,11 @@ the affected home, and physical recreation invalidates the entire old job.
 
 Activation first obtains the ordinary producer's durable publication fence and advances its native all-enrolled
 writer/uncertain-first-apply/retained-copy drain. A second finite pass compares under that continuously held
-barrier. Current Source evidence comes from an existing immutable custody observation, the selected native
-binding join and canonical all-native-homes Source observation. Missing custody, routing, Source or native
+barrier. Source evidence comes from `readNativePublicFilterPublicationCompletion` for the original persisted
+job/bootstrap/observation/execution. The existing native preparation and repair owner retains that tuple before
+dispatch or adoption, and resumes the same repair after restart. Changed-since-start remains a disclosure fact;
+verified original repair, current ACK, independent settlement and no pending or unresolved homes still gate
+maintenance completion. Missing custody, routing, Source or native
 barrier evidence returns typed unready; no observation readiness is minted here. Old PIT/prepared observations
 remain bound to their own exact physical target and definition.
 
@@ -1925,8 +1928,10 @@ public-runtime acceptance pass is inferred from compilation.
 
 Decision: Search accepts generation-publication completion only from Semantic's delivered original native
 Source completion for the persisted job and cut. Consumer checkpoints, counts, Account-erasure barriers and
-elapsed time do not satisfy the fence; activation stays pending until that callable is delivered, joined and
-verified.
+elapsed time do not satisfy the fence. The ordinary writer resolves that actual reader before reporting drained
+or held. Its original prepared proof payload is emptied only after original readers release, while immutable
+proof metadata remains available for replay. Every other retained copy and dispatched writer still blocks the
+drain. Reconciliation retries preserve the original Source tuple and the retained alias intent.
 
 Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits and meter public-filter costs;
 steps retain a scalar frontier rather than rechecking every partition in one request. Source enumeration runs
