@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
