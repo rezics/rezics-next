@@ -97,7 +97,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   const port: SlowModePort = {
     read: async ({ signal }) => {
       readCalls++;
-      readSignals.push(signal);
+      readSignals.push(signal!);
       if (heldReads === 0) return read;
       heldReads--;
       return new Promise((resolve) => delayedReads.push(resolve));
@@ -291,7 +291,9 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
       await appeared(m.slow_mode_setting_legend());
       const oldSignals = readSignals.slice();
       const before = readCalls;
-      await act(async () => { await replace(); });
+      await act(async () => {
+        await replace();
+      });
       await appeared(m.slow_mode_setting_legend());
       expect(readCalls).toBeGreaterThan(before);
       expect(oldSignals.every((signal) => signal.aborted)).toBe(true);
