@@ -25,6 +25,8 @@ export type CommandWorkAssociation = Readonly<{
 const associations = new WeakSet<object>();
 const requestFrame = new AsyncLocalStorage<CommandWorkAssociation>();
 
+export { withQueryAccounting as withNativeCommandAccounting } from '../database/pool.ts';
+
 export function registerCommandWorkAssociation(association: CommandWorkAssociation): void {
   associations.add(association);
 }

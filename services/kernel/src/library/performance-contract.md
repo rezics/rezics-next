@@ -1,38 +1,45 @@
 # Library native-operation authority
 
-This leaf owns Collection operation bounds and custody across Library consumers. The detailed SQL derivations and
-operation-specific growth suites remain in the [Library Cost sections](README.md#cost); this contract does not claim
-those suites have passed. Shared native bounds and evidence are owned by the [Kernel performance contract](../../performance-contract.md).
+This leaf owns Library operation bounds and caller custody. Operation-specific SQL and growth suites remain in
+[Library Cost](README.md#cost); the [Kernel contract](../../performance-contract.md) owns shared finite bounds.
+A declaration is neither a native grant nor acceptance evidence.
 
 ## Collection operation costs
 
-Decision: keep each native repair page at 128 raw original occurrences, independently of Source's 100-key ceiling; charge the failed edit, separately authorized begin, each outbox/DBOS continuation, and deliberate retry as separate stages.
+Keep repair pages at 128 raw occurrences independently of Source's 100-key ceiling. Charge the failed edit,
+separately authorized repair begin, each committed page/event and each DBOS enqueue/retry separately. History SQL
+retains 128 entries, the 51-row sentinel, exact original operands and escaped maxima for both metadata snapshots.
+The original body/key survives repair; the failed edit commits no receipt. Enqueue charges one engine request
+separately from its event fence. Full actor/History/result composition remains with its command owner.
 
-Price the complete operation: request and status reads, checkpoints, activation, preparation, authorization, locks,
-serialization, receipt and effect work, source fences, negative or discarded candidates, and every nested disclosure.
-A short returned page, deduplicated terminal set or fixed candidate declaration does not reduce physical work already
-performed. Apply the existing 100 raw-key and 262,144-row native ceilings and the published Search maxima. Producer
-declarations describe admissible work; they are not native grants, pagination evidence or funding.
+Every operation retains all nine axes: candidate keys, native rows, identity metadata rows, native points,
+witness keys, statements, bytes, empty seeks and engine requests. Use pure `@rezics/bounds` sums/repeats, retain
+negative/discarded work, and preserve native 100-key/262,144-row ceilings. Never reprice from returned row counts.
 
-Library owns one immutable closed nine-axis operation set: `candidateKeys`, `nativeRows`,
-`identityMetadataRows`, `nativePoints`, `witnessKeys`, `statements`, `bytes`, `emptySeeks` and `engineRequests`.
-Use overflow-safe sums, complete nested costs, explicit aliases and deterministic conflict resolution. Actual
-Progress/Continue and Content Feed callers consume these descriptors.
+## Follow operation composition
 
-`collection-history-bounds.ts` now binds each metadata-history SQL leaf to its exact stored operands and bounded
-projection. Capture composes curator reconciliation, transition append, the 129-row prune scan and partial-coverage
-update once; the snapshot projection reserves escaped schema maxima for both sides of all five metadata fields.
-First/next page, empty page, state and exact-revision leaves retain the 128-entry journal bound and 51-row page
-sentinel. These are DAO declarations only. The dense-order journey keeps the failed add/move command and the
-separately authorized repair-begin command in their existing `runCommand` transactions. A failed edit commits no
-receipt and returns dependency-unavailable; the original request body and key remain available for a deliberate,
-currently authorized retry after repair. Each committed page writes its next exact locator to the existing outbox in
-the same fence transaction. The existing outbox effect then enqueues that locator through the DBOS client with the
-current workflow name, maintenance queue, step identity and return-existing policy. Page SQL and event-fence bytes
-are charged in the page declaration; the enqueue is a separate `engineRequests: 1` continuation term and is not
-double-counted in the event fence. The page wrapper preserves the existing one-command-attempt-per-DBOS-attempt
-retry composition. Full actor Access/receipt/History/result-envelope cost derivation remains in
-`.temp/continuation/dense-collection-edit-costs.md`.
+Decision: retain the native journey; bind immutable original SQL operands at dispatch. Entry consumes the same
+nested mutation declaration on its original transaction/client/time, without another runner or admission.
+
+`follow-operation-bounds.ts` retains all nine axes and native adapter bind order. Mutation includes the installed
+source hook's account probe, owner insert/lock, previous-source lock, replacement upsert and signed owner delta,
+including legacy first touch. No-effect conflict fires no hook; dispatched row bounds remain charged. Count delivery,
+bootstrap, target replacement and account withdrawal remain separate owner work, outside synchronous success.
+
+Core retains its live client and native controls, time, partition, receipt, event fence, rollback and bounded retries.
+One absolute deadline covers pre-run preparation and every attempted Collection/subject/Space candidate. Native Access
+owns account/action/group and original/current disclosure through its accounting port. SQL-only leaves retain zero
+engine requests alongside explicit eight-axis translation. Current account state/fence/authentication epoch/scopes
+precede receipt replay; deferred target failure preserves original authorized recovery. Stored originals never move.
+
+Create/refollow/removal bind exact upsert/readback/event. Stored removal reads no target home; absent removal uses
+the ordinary resolver. Unchanged mutation rolls back, emits no receipt/event and reads the current own edge.
+Membership preserves trusted original account/space/step and implied intent. Explicit negatives survive implied calls.
+
+Private reads retain mounted Authentication admission. First fetch is `min(100,size+1)` with a separate one-row probe
+at size 100. Both indexed cursor arms charge discarded occurrences. Seals retain operation, owner, kind/all, following
+state and native epoch; frontiers retain raw updatedAt/targetId. BASIC adds no disclosure. FULL keeps current Semantic
+summaries and Community destination/actions. Final serialization cannot refund hidden or coalesced native work.
 
 ## Whole-query publication
 
@@ -56,8 +63,7 @@ Preserve original opaque evidence, one original client, current owner and deadli
 current authorization and source checks, and native consumption before the tracked transaction. Drain and release
 exactly once, including terminal release after useful-work expiry; preserve same-client rollback and native caps.
 History and Work bind their execution adapters at service roots ([History](../history/README.md#selected-native-executor-binding),
-[Work](../work/README.md#selected-execution-producer)). This documentation does not authorize cross-owner mutable
-quotes or funding, refill, price profiles, another admission protocol, a second consumer or a new writer.
+[Work](../work/README.md#selected-execution-producer)). No cross-owner mutable quote, refill, price profile, second consumer or new writer is authorized.
 
 The [architecture](../../../../docs/architecture.md#modules-and-boundaries) owns permission-core purity, public
 edges and adapter direction; [verification](../../../../docs/development/verification.md#capability-evidence)

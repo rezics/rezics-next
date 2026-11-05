@@ -11,7 +11,7 @@ import type {
 } from './following-space-contract.ts';
 import { readAccount, readPublicAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
-import { readSpace } from '../community/space.ts';
+import { readSpace, spaceReadEligibility } from '../community/space.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -19,10 +19,12 @@ import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
-import type { SubjectSummary } from '../semantic/summaries.ts';
+import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
+import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { readSubject } from '../semantic/subject.ts';
 import { relatedReadEligibility, subjectReadEligibility } from '../semantic/eligibility.ts';
+import { resolveSubject } from './subject-anchor.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -90,11 +92,28 @@ class ViewReader {
     readonly deps: Dependencies,
     readonly actor: Actor,
     readonly deadline: number,
+    readonly follow = false,
   ) {}
 
   async subject(id: string): Promise<Summary | null> {
     const { pool, access, routeKey } = this.deps;
     const actor = this.actor;
+    if (this.follow) {
+      const resolved = await resolveSubject(this.deps, actor, id, undefined, {
+        pool,
+        deadline: this.deadline,
+        work: currentCommandWorkAssociation()?.access,
+      });
+      if (!resolved) return null;
+      const observed = await readSubjectSummaryObservation(
+        { ...this.deps, actor, deadline: this.deadline, work: currentCommandWorkAssociation()?.access },
+        [resolved.subjectId],
+      );
+      // An independently changed source cannot authorize disclosure of the older
+      // projection. This is the Semantic owner's native currentness observation.
+      if (!(await observed.current())) throw new ProblemError('dependency_unavailable');
+      return observed.summaries.get(resolved.subjectId) ?? null;
+    }
     const deadline = this.deadline;
     async function readAnchor(anchorId: string) {
       const route = routeOf(anchorId);
@@ -104,9 +123,16 @@ class ViewReader {
         id: anchorId,
         eligibility: subjectReadEligibility({ route, id: anchorId }),
       };
-      const check = await accessCheck(access, actor, 'subject:read', resource, { pool, deadline });
+      const check = await accessCheck(access, actor, 'subject:read', resource, {
+        pool,
+        deadline,
+      });
       return readSubject(pool, anchorId, (client) => check(client), GLOBAL_CONTEXT, routeKey, {
-        prepareAuthorization: () => accessCheck(access, actor, 'subject:read', resource, { pool, deadline }),
+        prepareAuthorization: () =>
+          accessCheck(access, actor, 'subject:read', resource, {
+            pool,
+            deadline,
+          }),
         async authorize(client, id, batch) {
           const route = routeOf(id);
           if (route === null) return false;
@@ -165,31 +191,17 @@ class ViewReader {
     const route = routeOf(id);
     if (route === null) return null;
     const identity = { route, id };
-    const sink: { value: Awaited<ReturnType<typeof readSpace>> } = { value: null };
-    const eligibility = createResourcePublicEligibility({
-      resource: identity,
-      action: 'space:read',
-      async prepare() {
-        return { ready: true };
-      },
-      async verify({ client, at }) {
-        sink.value = await readSpace(client, id, at);
-        return sink.value !== null;
-      },
-    });
     const check = await accessCheck(
       access,
       this.actor,
       'space:read',
-      {
-        ...identity,
-        eligibility,
-      },
-      { pool, deadline: this.deadline },
+      { ...identity, eligibility: spaceReadEligibility(identity) },
+      { pool, deadline: this.deadline, ...(this.follow ? { work: currentCommandWorkAssociation()?.access } : {}) },
     );
-    return withConnection(pool, async (client) => {
+    return withConnection(pool, async (connection) => {
+      const client = deadlineClient(connection, this.deadline);
       if (!(await check(client))) return null;
-      const value = sink.value;
+      const value = await readSpace(client, id);
       return value ? { id, type, label: value.title ?? '' } : null;
     });
   }
@@ -203,6 +215,7 @@ export async function fullView<T>(
   body: T,
   options: Readonly<{
     deadline?: number;
+    follow?: true;
     followingSpaces?: (
       actor: Actor,
       ids: readonly string[],
@@ -211,7 +224,7 @@ export async function fullView<T>(
   }> = {},
 ): Promise<Embedding<T>> {
   if (view !== 'FULL') return body as Embedding<T>;
-  const reader = new ViewReader(deps, actor, options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS));
+  const reader = new ViewReader(deps, actor, options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS), options.follow);
   const rows = Object.values(body as Record<string, unknown>).flatMap((value) =>
     Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [],
   ) as Record<string, unknown>[];

@@ -1,3 +1,4 @@
+import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
@@ -57,6 +58,7 @@ export type SummaryReaderDependencies = {
   access: Access;
   actor: Actor;
   deadline: number;
+  work?: AccessWorkAccounting;
   maySeeCover?: SummaryDependencies['maySeeCover'];
 };
 type SummaryAuthorize = SummaryDependencies['authorize'];
@@ -182,7 +184,7 @@ export async function readSubjectSummaryObservation(
               deps.actor,
               'subject:read',
               { route, id, eligibility: relatedReadEligibility({ route, id }, batch) },
-              { pool: deps.pool, deadline: deps.deadline },
+              { pool: deps.pool, deadline: deps.deadline, work: deps.work },
             ),
           );
         }
@@ -237,7 +239,7 @@ async function readSummaryBatch(
             deps.actor,
             'subject:read',
             { route: routeOf(id)!, id, eligibility: relatedReadEligibility({ route: routeOf(id)!, id }, batch) },
-            { pool: deps.pool, deadline },
+            { pool: deps.pool, deadline, work: deps.work },
           ),
         )
       : deps.authorize;

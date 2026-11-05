@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import type { AccessWorkAccounting } from './work.ts';
 import type { Pool } from 'pg';
 import { Compile } from 'typebox/compile';
 import type { Static, TSchema } from 'typebox';
@@ -174,6 +175,7 @@ export async function readViewerActions(
     resources: ViewerActionResources;
     bindings: ViewerActionBindings;
     clock: () => Date;
+    work?: AccessWorkAccounting;
   },
   actor: Actor,
   refs: readonly Reference[],
@@ -215,7 +217,7 @@ export async function readViewerActions(
   const actions = new Set([...typeActions.values()].flatMap((values) => [...values]));
   let readTime: AuthoritativeTime | undefined;
   try {
-    const context = { pool: deps.pool, deadline };
+    const context = { pool: deps.pool, deadline, work: deps.work };
     const decisions = await prepareReadDecisions(deps.access, { actor, actions, typeActions, context });
     const time = viewerActionReadTime(deps.access, context);
     readTime = time;

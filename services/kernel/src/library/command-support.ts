@@ -32,6 +32,13 @@ import {
 } from './session-operation-bounds.ts';
 
 import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
+import {
+  consumeFollowWork,
+  followAccountAuthorizationWork,
+  followCommandPlan,
+  followNativeWork,
+  withFollowCommandWork,
+} from './follow-operation-bounds.ts';
 
 export const WORK_STEP_DEADLINE_MS = 5_000;
 
@@ -61,6 +68,7 @@ export type OwnAccountCommand = {
   sessionOperation?: SessionOperationKind;
   sessionPreparation?: boolean;
   deadline?: number;
+  followOperation?: true;
 };
 
 export type TrustedAccountCommand = {
@@ -69,6 +77,8 @@ export type TrustedAccountCommand = {
   input: unknown;
   /** Local cost owners may bind this execution to their existing descriptor. */
   execution?: LibraryCommandExecutionBinding;
+  followOperation?: true;
+  deadline?: number;
 };
 
 /** Wrap an existing Library command without changing its identity, authorization,
@@ -121,21 +131,26 @@ function ownActor(actor: Actor): AccountActor {
   return actor;
 }
 
-function activeAccountAuthorization(accountId: string, route: number): CommandAuthorization {
+function activeAccountAuthorization(accountId: string, route: number, follow = false): CommandAuthorization {
   return {
     action: 'library:account-command',
     resource: Object.freeze({ route, id: accountId }),
     denied: () => new GrantDeniedError(),
     async authorize(tx) {
-      try {
-        await shareAccount(tx, accountId);
-      } catch (error) {
-        if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
-        throw error;
-      }
-      const current = await readAccountCommandState(tx, route, accountId);
-      if (!current || current.kind !== 'actor' || current.state !== 'active') throw new GrantDeniedError();
-      return 'execute';
+      const authorize = async () => {
+        try {
+          await shareAccount(tx, accountId);
+        } catch (error) {
+          if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
+          throw error;
+        }
+        const current = await readAccountCommandState(tx, route, accountId);
+        if (!current || current.kind !== 'actor' || current.state !== 'active') throw new GrantDeniedError();
+        return 'execute' as const;
+      };
+      return follow
+        ? consumeFollowWork('authorize', followAccountAuthorizationWork(accountId), authorize)
+        : authorize();
     },
   };
 }
@@ -176,15 +191,34 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
             request.sessionPreparation ?? false,
             Math.max(0, deadline - Date.now()),
           );
+    const followPlan = request.followOperation
+      ? followCommandPlan(
+          {
+            accountId: owner.accountId,
+            clientId: owner.clientId,
+            requestedBy: owner.requestedBy,
+            kind: request.kind,
+            key: request.requestKey,
+            input: request.input,
+          },
+          deadline,
+        )
+      : undefined;
     // Capture original command identity before any permission preparation awaits.
-    const commandInput = plan?.original.input ?? request.input;
+    const commandInput = followPlan?.original.input ?? plan?.original.input ?? request.input;
     const native = config.access
       ? await accessCommandAuthorization(
           config.access,
           owner,
           request.action,
           { route, id: owner.accountId },
-          { pool, deadline },
+          {
+            pool,
+            deadline,
+            ...(request.followOperation && currentCommandWorkAssociation()
+              ? { work: currentCommandWorkAssociation()!.access }
+              : {}),
+          },
           () => new GrantDeniedError(),
         )
       : undefined;
@@ -199,35 +233,46 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
         return evidence;
       },
       async authorize(tx, attempt, evidence) {
+        const reservation = request.followOperation
+          ? currentCommandWorkAssociation()?.reserve(
+              'library.follow.authorize',
+              followNativeWork(followAccountAuthorizationWork(owner.accountId)).dimensions,
+            )
+          : undefined;
         try {
-          await shareAccount(tx, owner.accountId);
-        } catch (error) {
-          if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
-          throw error;
-        }
-        const accessWork = currentCommandWorkAssociation()?.access;
-        const current = accessWork
-          ? await readAccount(tx, route, owner.accountId, accessWork)
-          : await readAccountCommandState(tx, route, owner.accountId);
-        if (
-          !current ||
-          current.kind !== 'actor' ||
-          current.state !== 'active' ||
-          current.fenced ||
-          !Number.isSafeInteger(owner.authnEpoch) ||
-          owner.authnEpoch <= 0 ||
-          current.minimumAuthnEpoch > BigInt(owner.authnEpoch) ||
-          !owner.scopes.includes(request.action)
-        )
-          throw new GrantDeniedError();
-        if (receiptOnly) {
-          if (native && (await native.authorize(tx, attempt, evidence)) !== 'execute') throw new GrantDeniedError();
+          try {
+            await shareAccount(tx, owner.accountId);
+          } catch (error) {
+            if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
+            throw error;
+          }
+          const accessWork = currentCommandWorkAssociation()?.access;
+          const current =
+            accessWork && !request.followOperation
+              ? await readAccount(tx, route, owner.accountId, accessWork)
+              : await readAccountCommandState(tx, route, owner.accountId);
+          if (
+            !current ||
+            current.kind !== 'actor' ||
+            current.state !== 'active' ||
+            current.fenced ||
+            !Number.isSafeInteger(owner.authnEpoch) ||
+            owner.authnEpoch <= 0 ||
+            current.minimumAuthnEpoch > BigInt(owner.authnEpoch) ||
+            !owner.scopes.includes(request.action)
+          )
+            throw new GrantDeniedError();
+          if (receiptOnly) {
+            if (native && (await native.authorize(tx, attempt, evidence)) !== 'execute') throw new GrantDeniedError();
+            await authorizePrepared?.(tx, attempt);
+            return 'receipt-only';
+          }
           await authorizePrepared?.(tx, attempt);
-          return 'receipt-only';
+          if (native && (await native.authorize(tx, attempt, evidence)) !== 'execute') throw new GrantDeniedError();
+          return 'execute';
+        } finally {
+          reservation?.settle();
         }
-        await authorizePrepared?.(tx, attempt);
-        if (native && (await native.authorize(tx, attempt, evidence)) !== 'execute') throw new GrantDeniedError();
-        return 'execute';
       },
     };
 
@@ -250,12 +295,22 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
           async (tx, command) => {
             const enter = () => enterShelfWrite(tx, { route, accountId: owner.accountId });
             if (plan) await consumeSessionWork('shelf-gate', sessionShelfWork(route, owner.accountId, false), enter);
+            else if (followPlan)
+              await consumeFollowWork('shelf', sessionShelfWork(route, owner.accountId, false), enter);
             else await enter();
             return body(tx, command);
           },
         ),
       );
-    return runLibraryCommand(() => (plan ? withSessionCommandPlan(plan, execute) : execute()), request.execution);
+    return runLibraryCommand(
+      () =>
+        followPlan
+          ? withFollowCommandWork(followPlan, execute)
+          : plan
+            ? withSessionCommandPlan(plan, execute)
+            : execute(),
+      request.execution,
+    );
   }
 
   async function ownAccount<T>(
@@ -346,29 +401,49 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       basis: null,
     });
 
-    return runLibraryCommand(
-      () =>
+    const deadline = request.deadline ?? workStepDeadline();
+    const followPlan = request.followOperation
+      ? followCommandPlan(
+          {
+            accountId,
+            clientId: null,
+            requestedBy: null,
+            kind: request.kind,
+            key: request.stepKey,
+            input: request.input,
+          },
+          deadline,
+        )
+      : undefined;
+
+    return runLibraryCommand(() => {
+      const execute = () =>
         runCommand(
           pool,
           {
             partition: partitionOf(route),
-            deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+            deadline,
             clock,
             receipt: {
               actorAccountId: accountId,
               kind: request.kind,
               key: request.stepKey,
-              digest: digest(identity, request.kind, request.input),
+              digest: digest(identity, request.kind, followPlan?.original.input ?? request.input),
             },
-            authorization: { ...activeAccountAuthorization(accountId, route), ...(prepare ? { prepare } : {}) },
+            authorization: {
+              ...activeAccountAuthorization(accountId, route, request.followOperation),
+              ...(prepare ? { prepare } : {}),
+            },
           },
           async (tx, command) => {
-            await enterShelfWrite(tx, { route, accountId });
+            const enter = () => enterShelfWrite(tx, { route, accountId });
+            if (followPlan) await consumeFollowWork('shelf', sessionShelfWork(route, accountId, false), enter);
+            else await enter();
             return body(tx, command);
           },
-        ),
-      request.execution,
-    );
+        );
+      return followPlan ? withFollowCommandWork(followPlan, execute) : execute();
+    }, request.execution);
   }
 
   return { ownAccount, ownAccountPrepared, ownAccountReceiptOnly, trustedAccount };

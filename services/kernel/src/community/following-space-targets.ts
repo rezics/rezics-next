@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import {
@@ -250,6 +251,7 @@ export async function followingSpaceTargets(
         resources,
         bindings: dependencies.bindings,
         clock: dependencies.clock,
+        work: currentCommandWorkAssociation()?.access,
       },
       actor,
       refs,

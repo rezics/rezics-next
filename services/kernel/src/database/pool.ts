@@ -65,14 +65,45 @@ export function createPool(
   return pool;
 }
 
-export async function withConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+/** Accounting only: the executor retains its original client and cleanup custody. */
+export type QueryAccounting = Readonly<{
+  query<T>(sql: string, operands: readonly unknown[], dispatch: () => Promise<T>): Promise<T>;
+  connection<T>(dispatch: () => Promise<T>): Promise<T>;
+}>;
+const queryAccounting = new AsyncLocalStorage<QueryAccounting>();
+export function withQueryAccounting<T>(accounting: QueryAccounting, run: () => Promise<T>): Promise<T> {
+  return queryAccounting.run(accounting, run);
+}
+
+export function withConnection<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  const accounting = queryAccounting.getStore();
+  const dispatch = () => checkedOutConnection(pool, work, accounting);
+  return accounting ? accounting.connection(dispatch) : dispatch();
+}
+
+async function checkedOutConnection<T>(
+  pool: Pool,
+  work: (client: PoolClient) => Promise<T>,
+  accounting: QueryAccounting | undefined,
+): Promise<T> {
   const client = await pool.connect();
   const parent = heldPools.getStore();
   const next = new Set(parent);
   next.add(pool);
+  const originalQuery = client.query;
+  if (accounting) {
+    client.query = ((...args: unknown[]) => {
+      const statement = args[0] as string | { text: string; values?: readonly unknown[] };
+      const sql = typeof statement === 'string' ? statement : statement.text;
+      const operands =
+        typeof statement === 'string' ? ((args[1] as readonly unknown[] | undefined) ?? []) : (statement.values ?? []);
+      return accounting.query(sql, operands, () => Reflect.apply(originalQuery, client, args));
+    }) as PoolClient['query'];
+  }
   try {
     return await heldPools.run(next, () => work(client));
   } finally {
+    client.query = originalQuery;
     client.release(brokenClients.get(client));
   }
 }

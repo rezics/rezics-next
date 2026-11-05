@@ -811,6 +811,18 @@ test('a kind page of 100 probes one more row from that kind', async () => {
       last.follows.filter((follow: { targetId: string }) => follow.targetId.startsWith(`${prefix}-`)),
     ).toHaveLength(1);
     expect(last.next).toBeNull();
+    // Remove the one remaining candidate after issuing the frontier. Reusing
+    // that same sealed deep cursor yields an authentic empty terminal page.
+    await db.admin.query('DELETE FROM library.follow WHERE route=$1 AND account_id=$2 AND target_id=$3', [
+      route,
+      accounts.owner,
+      last.follows[0].targetId,
+    ]);
+    const empty = await json(
+      await request('GET', `/v1/follows?targetType=collection&limit=100&cursor=${encodeURIComponent(first.next)}`),
+    );
+    expect(empty.follows).toEqual(last.follows.slice(1));
+    expect(empty.next).toBeNull();
   } finally {
     await db.admin.query(
       'DELETE FROM library.follow WHERE route = $1 AND account_id = $2 AND target_id::text LIKE $3',
