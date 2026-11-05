@@ -347,6 +347,9 @@ when present and the native operator marking for automation. Delegation does not
 Each operand can deny independently. Unknown actions and missing evidence deny; native resource, time,
 suspension, revocation and fence floors remain. Signed-in identity, a role label, page advice or review link
 establishes no allowed action. Consumers use supported Access preparations rather than reproduce this formula.
+Decision: resource Access retains an uncertain command with its original caller and transport across departure
+and return; only explicit retry may send it, and a later refusal cannot settle the earlier unknown outcome.
+Session replacement retires its callbacks and private observations; it never lends the replacement session to that command.
 The existing anonymous public floor remains resource/catalogue-bound and subject to applicable denials; a
 narrower token does not remove public visibility. Extraction introduces no baseline allowance or old/new allow-OR.
 
