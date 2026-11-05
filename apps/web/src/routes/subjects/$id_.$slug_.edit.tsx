@@ -31,8 +31,26 @@ import {
   subjectChangesReturnForReview,
 } from '../../features/catalogue/subject-changes-navigation';
 import { captureCandidateSession } from '../../subject/candidate-lifetime';
+import {
+  factsGlobalVisitHref,
+  factsPublicIntentFits,
+  factsPublicVisitUnsupported,
+  parseFactsPublicVisit,
+} from '../../features/catalogue/facts-public-visit';
+import { FactsPublicVisitNotice } from '../../features/catalogue/subject-facts-entry';
+import { subjectHref } from '../../subject/subject-href';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function retireFactsPublicVisit(search: string): string {
+  const query = search.split('#', 1)[0] ?? '';
+  if (!query.startsWith('?')) return search;
+  const params = new URLSearchParams(query);
+  if (!params.has('origin') && !params.has('publicReturn')) return search;
+  // Retire the old observation and all correction interpretation on the redirected identity.
+  // The invalid marker keeps the user on an explicit recovery screen instead of opening a bare editor.
+  return '?origin=!';
+}
 
 const canonicalEditor = createServerFn({ method: 'GET', strict: false })
   .validator((value: { id: string; slug: string; locale: string; search: string }) => {
@@ -44,7 +62,7 @@ const canonicalEditor = createServerFn({ method: 'GET', strict: false })
       value.slug.length > 128 ||
       typeof value.locale !== 'string' ||
       typeof value.search !== 'string' ||
-      value.search.length > 2048
+      !factsPublicIntentFits(value.search)
     )
       throw notFound();
     return value;
@@ -63,7 +81,7 @@ const canonicalEditor = createServerFn({ method: 'GET', strict: false })
       throw redirect(
         canonicalRedirect(
           `${subjectHref({ id: canonical.value.id, label: canonical.value.label }, data.locale).href}/edit`,
-          data.search,
+          retireFactsPublicVisit(data.search),
         ),
       );
     }
@@ -73,6 +91,13 @@ const canonicalEditor = createServerFn({ method: 'GET', strict: false })
 export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
   staticData: { publicCache: false },
   validateSearch: (input: Record<string, unknown>) => {
+    const origin =
+      typeof input.origin === 'string'
+        ? input.origin
+        : input.origin !== null && typeof input.origin === 'object'
+          ? JSON.stringify(input.origin)
+          : undefined;
+    const publicReturn = typeof input.publicReturn === 'string' ? input.publicReturn : undefined;
     const property = typeof input.property === 'string' && input.property.length <= 256 ? input.property : undefined;
     const statement =
       typeof input.statement === 'string' && input.statement.length <= 128 ? input.statement : undefined;
@@ -90,6 +115,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
           : undefined;
     const validExact = !!reviewProperty && !!candidate && !!context && !property && !statement;
     return {
+      origin,
+      publicReturn,
       property,
       statement,
       reviewProperty: validExact ? reviewProperty : undefined,
@@ -99,25 +126,45 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
         input.returnTo === 'queue' || input.returnTo === 'changes' || input.returnTo === 'sources'
           ? input.returnTo
           : undefined,
-      reviewInvalid: hasExact && !validExact,
+      ...(hasExact && !validExact ? { reviewInvalid: true } : {}),
     };
   },
-  loader: ({ params, location }) =>
-    canonicalEditor({
-      data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
-    }),
+  loaderDeps: ({ search }) => ({ origin: search.origin, publicReturn: search.publicReturn }),
+  loader: async ({ params, location }) => {
+    const locale = getLocale();
+    const search = keepSearch('', location.searchStr, location.hash);
+    const path = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(params.id)}/${encodeURIComponent(params.slug)}/edit`;
+    const searchFits = factsPublicIntentFits(search);
+    const canonical = await canonicalEditor({ data: { ...params, locale, search: searchFits ? search : '?origin=!' } });
+    return {
+      ...canonical,
+      visit: searchFits ? parseFactsPublicVisit(search, params.id, locale, path) : { kind: 'invalid' as const },
+    };
+  },
   head: () => ({ meta: [{ title: m.facts_title() }, { name: 'robots', content: 'noindex' }] }),
   component: candidateSession(CorrectionRoute),
 });
 
 function CorrectionRoute(): ReactElement {
   const queryClient = useQueryClient();
-  const { id } = Route.useLoaderData();
+  const { id, visit } = Route.useLoaderData();
   const { slug } = Route.useParams();
   const { property, statement, reviewProperty, candidate, context, returnTo, reviewInvalid } = Route.useSearch();
   const locale = getLocale();
-  const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
-  const editorWork = useCatalogueLifetime(JSON.stringify([id, locale, property, statement]));
+  const visitIdentity =
+    visit.kind === 'origin'
+      ? JSON.stringify(['origin', visit.origin])
+      : visit.kind === 'fresh'
+        ? JSON.stringify(['fresh', visit.returnHref])
+        : visit.kind;
+  const unsupportedVisit = factsPublicVisitUnsupported(visit);
+  const generalSubjectHref = `${subjectHref({ id, label: slug }, locale).href}#connections`;
+  const freshGlobalHref =
+    visit.kind === 'origin'
+      ? factsGlobalVisitHref(`${subjectHref({ id, label: slug }, locale).href}/edit`, id, locale, visit.origin.returnHref)
+      : undefined;
+  const candidateWork = useCandidateWork(JSON.stringify([id, locale, visitIdentity]));
+  const editorWork = useCatalogueLifetime(JSON.stringify([id, locale, property, statement, visitIdentity]));
   const { state, subject: reader } = useSession();
   const queueSource = useMemo(() => providerSessionSource(queryClient), [queryClient]);
   const admission = useSyncExternalStore(queueSource.subscribe, queueSource.snapshot, () => null);
@@ -153,6 +200,21 @@ function CorrectionRoute(): ReactElement {
   const returnHref = providerReturn ? '/imports/review' : (changesReturn?.href ?? correctionReturn?.href);
   const returnUnavailable =
     (returnTo === 'queue' && !providerReturn) || (returnTo === 'changes' && !changesReturn && !correctionReturn);
+  const publicVisitReturn =
+    visit.kind === 'origin' ? (
+      <p className="px-6 pt-4">
+        <a
+          className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          href={visit.origin.returnHref}
+        >
+          {m.facts_public_return({}, { locale: locale as never })}
+        </a>
+      </p>
+    ) : visit.kind === 'fresh' ? (
+      <div className="px-6 pt-4">
+        <FactsPublicVisitNotice state="fresh" returnHref={visit.returnHref} locale={locale} />
+      </div>
+    ) : null;
   const correctionReturnLink =
     returnTo === 'changes' && !reviewProperty ? (
       returnHref ? (
@@ -171,6 +233,7 @@ function CorrectionRoute(): ReactElement {
       )
     ) : null;
   const read = async () => {
+    if (!candidateWork.live() || !editorWork.live()) return { ok: false, reason: 'denied' } as const;
     const result = await readCorrection({
       data: editorRequest({ id, property, statement }, editorWork),
       headers: csrfHeaders(),
@@ -178,18 +241,36 @@ function CorrectionRoute(): ReactElement {
     return editorWork.live() ? result : ({ ok: false, reason: 'denied' } as const);
   };
   const query = useQuery({
-    queryKey: ['statement-editor', id, property, statement, locale, candidateWork.generation],
+    queryKey: ['statement-editor', id, property, statement, locale, candidateWork.generation, editorWork.generation],
     queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),
-    enabled: state === 'signed-in' && !reviewInvalid,
+    enabled: state === 'signed-in' && !reviewInvalid && visit.kind !== 'invalid' && !unsupportedVisit,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  if (unsupportedVisit && visit.kind === 'origin')
+    return (
+      <div className="p-6">
+        <FactsPublicVisitNotice
+          state="unsupported"
+          returnHref={visit.origin.returnHref}
+          freshHref={freshGlobalHref}
+          locale={locale}
+        />
+      </div>
+    );
+  if (visit.kind === 'invalid')
+    return (
+      <div className="p-6">
+        <FactsPublicVisitNotice state="invalid" returnHref={generalSubjectHref} locale={locale} />
+      </div>
+    );
   if (state === 'signed-out')
     return (
       <div className="p-6">
+        {publicVisitReturn}
         <EditorFailure reason="denied" locale={locale} />
       </div>
     );
@@ -202,6 +283,7 @@ function CorrectionRoute(): ReactElement {
   if (query.isError)
     return (
       <div className="space-y-3 p-6">
+        {publicVisitReturn}
         <EditorFailure reason="unavailable" locale={locale} />
         <button type="button" onClick={() => candidateWork.live() && void query.refetch()}>
           {m.correction_reload()}
@@ -210,13 +292,15 @@ function CorrectionRoute(): ReactElement {
     );
   if (!query.data)
     return (
-      <p role="status" className="p-6">
-        {m.candidate_loading()}
-      </p>
+      <div className="space-y-3 p-6">
+        {publicVisitReturn}
+        <p role="status">{m.candidate_loading()}</p>
+      </div>
     );
   if (!property)
     return (
       <>
+        {publicVisitReturn}
         {correctionReturnLink}
         <SubjectFacts
           key={`${id}:${locale}`}

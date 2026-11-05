@@ -275,6 +275,14 @@ export function SubjectFrame({
   const base = subjectHref({ id: frame.id, label: title }, locale).href;
   const observedContext = context ?? frame.context;
   const releaseOrigin = `${location.pathname}${observedContext ? `?${new URLSearchParams({ context: observedContext })}` : ''}`;
+  const factsOrigin = observedContext
+    ? {
+        subject: frame.id,
+        context: observedContext,
+        ...(realm ? { realm } : {}),
+        returnHref: contextHref(base, realm),
+      }
+    : undefined;
   const facts = [typeLabel, frame.date].filter((fact): fact is string => !!fact);
   return (
     <div data-slot="subject-frame" className="flex min-w-0 flex-col gap-4">
@@ -351,7 +359,7 @@ export function SubjectFrame({
                 <CharacterProfileEntry work={frame.id} locale={locale} />
               )}
               <AuthoredFieldEntry id={frame.id} title={title} locale={locale} />
-              <SubjectFactsEntry id={frame.id} label={title} locale={locale} />
+              <SubjectFactsEntry id={frame.id} label={title} locale={locale} origin={factsOrigin} />
               {frame.type === 'schema:Recipe' && <RecipeEditorEntry id={frame.id} label={title} locale={locale} />}
               {isScreenType(frame.type) && <ScreenProfileEntry id={frame.id} label={title} locale={locale} />}
               {(frame.type === 'schema:ComicSeries' || frame.type === 'schema:PublicationVolume') && (
