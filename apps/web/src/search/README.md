@@ -61,6 +61,10 @@ BottomSheet's own focus lifecycle. The header retains the scoped filter through 
 remain unavailable until a native scoped suggestion loader exists; the missing loader never changes the scoped Search
 action into a Global request.
 
+Decision: condition entity label reads settle independently per exact UUID. Transient unavailable and preparing
+outcomes, withheld values and invalid values stay attached to their operand; credentials or release restart retire all
+labels for that current operand owner. Explicit retry reads only the affected unresolved UUIDs.
+
 Filters edits title display-language preferences as an ordered list of at most eight: add from the interface locale
 list or enter any valid BCP 47 tag admitted by the current API, preserve existing valid authored tags, remove or move
 individual entries, and use the page-language default only when the user clears the list. These preferences order

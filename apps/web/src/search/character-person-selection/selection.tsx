@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { EntityPicker } from '@rezics/ui/entity-picker';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
@@ -68,12 +68,13 @@ function Operand({
   const label = kind === 'work' ? m.character_person_works({}, opts) : m.character_person_role({}, opts);
   const headingId = useId();
   const [retry, setRetry] = useState(0);
-  const key = JSON.stringify([reader.identity, context, targets, ids, retry]);
+  const key = JSON.stringify([reader.identity, context, targets, ids]);
+  const retryPlan = useRef<{ key: string; ids: string[] } | undefined>(undefined);
   const [labels, setLabels] = useState<Labels>();
   const [failure, setFailure] = useState<unknown>();
   const available = reader.ready && context.available && targets.length > 0;
   const currentLabels = labels?.key === key && reader.current() ? labels : undefined;
-  const resolved = currentLabels?.state === 'ready' && !failure ? (currentLabels.value?.labels ?? {}) : {};
+  const resolved = currentLabels?.value?.labels ?? {};
   const ready =
     ids.length === 0 ||
     (available && currentLabels?.state === 'ready' && ids.every((id) => resolved[id.toLowerCase()]));
@@ -82,22 +83,46 @@ function Operand({
   useEffect(() => {
     setFailure(undefined);
     if (!available || !reader.current()) return;
+    const plan = retryPlan.current?.key === key ? retryPlan.current.ids : undefined;
+    if (retryPlan.current?.key === key) retryPlan.current = undefined;
+    const requested = plan ?? [...ids];
+    const requestedKeys = new Set(requested.map((id) => id.toLowerCase()));
     const controller = new AbortController();
     let active = true;
-    setLabels({ key, state: 'loading' });
-    void resolveConditionEntityLabels(ids, targets, context, controller.signal).then(
-      (value) => {
-        if (active && !controller.signal.aborted && reader.current()) setLabels({ key, state: 'ready', value });
-      },
-      (error) => {
-        if (active && !controller.signal.aborted && reader.current()) setLabels({ key, state: 'failed', error });
-      },
+    setLabels((previous) =>
+      previous?.key === key ? { ...previous, state: 'loading', error: undefined } : { key, state: 'loading' },
     );
+    void resolveConditionEntityLabels(requested, targets, context, controller.signal)
+      .then((value) => {
+        if (!active || controller.signal.aborted || !reader.current()) return;
+        setLabels((previous) => {
+          const prior = previous?.key === key ? previous.value : undefined;
+          return {
+            key,
+            state: 'ready',
+            value: {
+              labels: { ...(prior?.labels ?? {}), ...value.labels },
+              withheld: [
+                ...new Set([...(prior?.withheld ?? []).filter((id) => !requestedKeys.has(id)), ...value.withheld]),
+              ],
+              failures: {
+                ...Object.fromEntries(Object.entries(prior?.failures ?? {}).filter(([id]) => !requestedKeys.has(id))),
+                ...value.failures,
+              },
+            },
+          };
+        });
+      })
+      .catch((error) => {
+        if (!active || controller.signal.aborted || !reader.current()) return;
+        if (!(error instanceof ConditionEntityLookupError)) throw error;
+        setLabels({ key, state: 'failed', error });
+      });
     return () => {
       active = false;
       controller.abort();
     };
-  }, [key, available]);
+  }, [key, available, retry]);
 
   const search = useCallback(
     async (text: string, signal: AbortSignal) => {
@@ -116,10 +141,27 @@ function Operand({
     [key],
   );
 
-  const error = failure ?? currentLabels?.error;
+  const labelFailure = ids
+    .map((id) => currentLabels?.value?.failures[id.toLowerCase()])
+    .find((value) => value !== undefined);
+  const error =
+    failure ??
+    currentLabels?.error ??
+    (labelFailure ? new ConditionEntityLookupError(labelFailure) : undefined);
   const unresolved = ids.length > 0 && !ready;
   const loading = available && ids.length > 0 && (!currentLabels || currentLabels.state === 'loading');
   const disabled = !available || (kind === 'work' && ids.length >= CHARACTER_PERSON_WORK_LIMIT);
+  const retryIds = ids.filter((id) => {
+    const normalized = id.toLowerCase();
+    return (
+      !resolved[normalized] &&
+      (currentLabels?.value?.withheld.includes(normalized) ||
+        currentLabels?.value?.failures[normalized] === 'unavailable' ||
+        currentLabels?.value?.failures[normalized] === 'preparing')
+    );
+  });
+  const retryAvailable =
+    (error instanceof ConditionEntityLookupError && error.failure === 'restart') || retryIds.length > 0;
   return (
     <section aria-labelledby={headingId} className="space-y-2" aria-busy={loading}>
       <h2 id={headingId} className="text-sm font-medium">
@@ -180,14 +222,18 @@ function Operand({
           {m.condition_entity_unresolved({}, opts)}
         </p>
       )}
-      {(error || (unresolved && !loading)) && available && (
+      {(retryAvailable || (unresolved && !loading && !error)) && available && (
         <button
           type="button"
           className="text-sm underline"
           onClick={() => {
             if (!reader.current()) return;
             if (error instanceof ConditionEntityLookupError && error.failure === 'restart') retryMetadata();
-            else setRetry((value) => value + 1);
+            else {
+              if (!retryIds.length) return;
+              retryPlan.current = { key, ids: retryIds };
+              setRetry((value) => value + 1);
+            }
           }}
         >
           {m.character_person_retry({}, opts)}
