@@ -1,5 +1,5 @@
 import { publicCollectionDirectoryHref } from './address';
-import type { MouseEvent, Ref } from 'react';
+import type { FormEvent, MouseEvent, Ref } from 'react';
 import { CollectionDiscoveryCard } from '../showcase-collection/discovery-card';
 import { Button } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../../shell/page-heading';
@@ -7,6 +7,12 @@ import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import type { PublicCollectionDiscoveryState } from './read';
 import type { Coordinate, Movement } from './window-navigation';
+import {
+  continuePublicCollectionDirectory,
+  parsePublicCollectionDirectoryAddress,
+  selectPublicCollectionDirectory,
+  type PublicCollectionDirectorySelection,
+} from './address';
 
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -19,19 +25,23 @@ function collectionHref(locale: string, id: string) {
 export function PublicCollectionDiscoveryPage({
   state,
   locale,
+  selection = {},
   cursor,
   continuation = cursor !== undefined,
   retrying = false,
   onRetry,
+  onSelect,
   headingRef,
   navigation,
 }: {
   state: PublicCollectionDiscoveryState;
   locale: string;
+  selection?: PublicCollectionDirectorySelection;
   cursor?: string;
   continuation?: boolean;
   retrying?: boolean;
   onRetry: () => void;
+  onSelect: (selection: PublicCollectionDirectorySelection) => void;
   headingRef?: Ref<HTMLHeadingElement>;
   navigation?: {
     previous?: Coordinate;
@@ -46,7 +56,18 @@ export function PublicCollectionDiscoveryPage({
     'inline-flex min-h-11 min-w-11 max-w-full items-center justify-center rounded-md border border-input bg-background px-3 py-2 text-center text-sm font-medium text-primary underline-offset-4 hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring whitespace-normal';
   const hrefFor = (coordinate: Coordinate) =>
     navigation?.href(coordinate) ??
-    publicCollectionDirectoryHref(locale, coordinate === null ? {} : { cursor: coordinate });
+    publicCollectionDirectoryHref(locale, continuePublicCollectionDirectory(selection, coordinate ?? undefined));
+  const applySelection = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const parsed = parsePublicCollectionDirectoryAddress({
+      presentationKind: form.get('presentationKind'),
+      curator: form.get('curator'),
+      subject: form.get('subject'),
+      order: form.get('order'),
+    });
+    if (parsed.state === 'ready') onSelect(selectPublicCollectionDirectory(parsed.address));
+  };
   const control = (label: string, movement: Movement, coordinate: Coordinate, slot: string) => (
     <a
       data-slot={slot}
@@ -64,6 +85,60 @@ export function PublicCollectionDiscoveryPage({
         {m.collection_discovery_heading({}, options)}
       </PageHeading>
       <p className="max-w-3xl text-muted-foreground">{m.collection_discovery_intro({}, options)}</p>
+      <form
+        data-slot="public-collection-discovery-filters"
+        className="grid min-w-0 gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-5"
+        onSubmit={applySelection}
+      >
+        <label className="grid min-w-0 gap-1 text-sm font-medium">
+          {m.collection_discovery_kind_label({}, options)}
+          <input
+            name="presentationKind"
+            defaultValue={selection.presentationKind ?? ''}
+            maxLength={256}
+            placeholder={m.collection_discovery_kind_placeholder({}, options)}
+            className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
+          />
+        </label>
+        <label className="grid min-w-0 gap-1 text-sm font-medium">
+          {m.collection_discovery_curator_label({}, options)}
+          <input
+            name="curator"
+            defaultValue={selection.curator ?? ''}
+            maxLength={36}
+            pattern="[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+            placeholder={m.collection_discovery_identity_placeholder({}, options)}
+            className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
+          />
+        </label>
+        <label className="grid min-w-0 gap-1 text-sm font-medium">
+          {m.collection_discovery_subject_label({}, options)}
+          <input
+            name="subject"
+            defaultValue={selection.subject ?? ''}
+            maxLength={36}
+            pattern="[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+            placeholder={m.collection_discovery_identity_placeholder({}, options)}
+            className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
+          />
+        </label>
+        <label className="grid min-w-0 gap-1 text-sm font-medium">
+          {m.collection_discovery_order_label({}, options)}
+          <select
+            name="order"
+            defaultValue={selection.order ?? 'recent'}
+            className="min-h-11 min-w-0 rounded-md border border-input bg-background px-3 font-normal"
+          >
+            <option value="recent">{m.collection_discovery_order_recent({}, options)}</option>
+            <option value="popular">{m.collection_discovery_order_popular({}, options)}</option>
+          </select>
+        </label>
+        <div className="flex items-end">
+          <Button type="submit" className="min-h-11 w-full">
+            {m.collection_discovery_apply({}, options)}
+          </Button>
+        </div>
+      </form>
       {state.status === 'ready' ? (
         <section aria-label={m.collection_discovery_heading({}, options)} className="space-y-5">
           {state.collections.length > 0 ? (
@@ -98,7 +173,9 @@ export function PublicCollectionDiscoveryPage({
             <p role="status" className="rounded-lg border p-4 text-muted-foreground">
               {cursor || state.next
                 ? m.collection_discovery_page_empty({}, options)
-                : m.collection_discovery_empty({}, options)}
+                : selection.presentationKind !== undefined || selection.curator || selection.subject
+                  ? m.collection_discovery_filtered_empty({}, options)
+                  : m.collection_discovery_empty({}, options)}
             </p>
           )}
           <nav aria-label={m.collection_discovery_heading({}, options)} className="flex flex-wrap gap-2">
@@ -123,6 +200,8 @@ export function PublicCollectionDiscoveryPage({
                 ? m.collection_discovery_preparing({}, options)
                 : state.status === 'restart'
                   ? m.collection_discovery_restart_required({}, options)
+                : state.status === 'invalid-selection'
+                  ? m.collection_discovery_invalid_selection({}, options)
                   : state.status === 'denied'
                     ? continuation
                       ? m.collection_discovery_continuation_refused({}, options)

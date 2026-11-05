@@ -26,6 +26,7 @@ import type {
 export type {
   AccountDiscoverySource,
   AccountDiscoverySummary,
+  CollectionDirectorySelection,
   AccountFrontier,
   AccountPage,
   AccountPageKey,
@@ -87,7 +88,16 @@ export function discoveryIdentity(owner: DiscoveryKey['owner'], id: string): str
 export type DiscoveryDocument =
   | { owner: 'semantic'; kind: string; value: IndexedSubject }
   | { owner: 'accounts'; kind: 'account'; value: IndexedAccount };
-export type DiscoveryDomain = 'text' | 'kind' | 'type' | 'statement' | 'owner' | 'collection' | 'zone' | 'realm';
+export type DiscoveryDomain =
+  | 'text'
+  | 'kind'
+  | 'type'
+  | 'statement'
+  | 'owner'
+  | 'collection'
+  | 'collectionDirectory'
+  | 'zone'
+  | 'realm';
 export type DiscoveryTruth = boolean | 'not_applicable' | 'not_proven';
 export type DiscoveryCondition =
   | { and: readonly DiscoveryCondition[] }

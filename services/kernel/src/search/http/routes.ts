@@ -142,6 +142,27 @@ export function searchRoutes<App>(
               ),
             ),
             kindCountLeaf: t.Optional(t.Integer({ minimum: 0 })),
+            collectionDirectory: t.Optional(
+              t.Object(
+                {
+                  presentationKind: t.Optional(t.String({ minLength: 1, maxLength: 256 })),
+                  curator: t.Optional(
+                    t.String({
+                      format: 'uuid',
+                      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+                    }),
+                  ),
+                  subject: t.Optional(
+                    t.String({
+                      format: 'uuid',
+                      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+                    }),
+                  ),
+                  order: t.Union([t.Literal('recent'), t.Literal('popular')]),
+                },
+                object,
+              ),
+            ),
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
             population: t.Optional(t.Object({ realm: t.String({ format: 'uuid' }) }, object)),

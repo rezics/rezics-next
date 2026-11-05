@@ -290,6 +290,11 @@ function executeDiscoverySearch(
   const execute: DiscoverySearch = async (principal, request, context) => {
     const { registry, release, digest } = await config.resolve(request);
     const admitted = admitDiscoveryRequest(request, registry, release);
+    // The visible Collection directory is accepted only when its native owner has registered the
+    // current listing predicates and ordering. Missing Commerce operands mean preparation, never an
+    // unfiltered or index-hint-only response.
+    if (admitted.collectionDirectory && !registry.domains?.('collection').includes('collectionDirectory'))
+      throw ready();
     const matchEvidencePlan = admitted.text
       ? compileMatchEvidence(compileText(admitted.text, { field: 'search_text', prefix: 't' }))
       : undefined;

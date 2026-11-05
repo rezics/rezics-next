@@ -20,6 +20,7 @@ import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import { resolveNavigation } from '../src/shell/navigation';
 
 const readCalls: (string | null)[] = [];
+const readRequests: DiscoveryRequest[] = [];
 let readWindow: (cursor: string | null) => Promise<PublicCollectionDiscoveryState> = async () => {
   throw new Error('Unexpected public Collection page request');
 };
@@ -34,6 +35,7 @@ mock.module('../src/kernel/client', () => ({
         post: async (request: DiscoveryRequest) => {
           const cursor = request.cursor ?? null;
           readCalls.push(cursor);
+          readRequests.push(structuredClone(request));
           const page = await readWindow(cursor);
           if (page.status !== 'ready') return { status: 503, error: { detail: 'Search unavailable' } };
           return {
@@ -90,6 +92,7 @@ const globals = {
   PointerEvent: window.PointerEvent,
   KeyboardEvent: window.KeyboardEvent,
   FocusEvent: window.FocusEvent,
+  FormData: window.FormData,
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
@@ -191,7 +194,14 @@ function nativeHit(id: string, title: string) {
 
 test('uses Search collection kind paging and keeps only native public summaries and order', async () => {
   let sent: DiscoveryRequest | undefined;
-  const result = await readPublicCollectionPage('en', 'opaque+/=', async (request) => {
+  const address = {
+    presentationKind: 'mixed',
+    curator: '00000001-0000-7000-8000-000000000001',
+    subject: '00000002-0000-7000-8000-000000000002',
+    order: 'popular' as const,
+    cursor: 'opaque+/=',
+  };
+  const result = await readPublicCollectionPage('en', address, async (request) => {
     sent = request;
     return {
       status: 200,
@@ -219,7 +229,12 @@ test('uses Search collection kind paging and keeps only native public summaries 
     limit: 24,
     cursor: 'opaque+/=',
     filter: { and: [{ kind: { in: ['collection'] } }] },
-    kindPage: { limit: 8 },
+    collectionDirectory: {
+      presentationKind: 'mixed',
+      curator: '00000001-0000-7000-8000-000000000001',
+      subject: '00000002-0000-7000-8000-000000000002',
+      order: 'popular',
+    },
   });
   expect(sent?.kindCountLeaf).toBeUndefined();
   expect(sent?.text).toBeUndefined();
@@ -235,7 +250,7 @@ test('uses Search collection kind paging and keeps only native public summaries 
 });
 
 test('rejects a native next cursor that cannot be admitted by the directory route', async () => {
-  const result = await readPublicCollectionPage('en', undefined, async () => ({
+  const result = await readPublicCollectionPage('en', {}, async () => ({
     status: 200,
     data: {
       hits: [],
@@ -249,16 +264,31 @@ test('rejects a native next cursor that cannot be admitted by the directory rout
 });
 
 test('an empty native continuation stays open and offers its exact next cursor', () => {
+  const selection = {
+    presentationKind: 'mixed',
+    curator: '00000001-0000-7000-8000-000000000001',
+    subject: '00000002-0000-7000-8000-000000000002',
+    order: 'popular' as const,
+  };
   const markup = renderToStaticMarkup(
     createElement(PublicCollectionDiscoveryPage, {
       state: { status: 'ready', collections: [], next: 'next+/=', asOf: 'native-checkpoint' },
       locale: 'en',
+      selection,
+      onSelect: () => undefined,
       onRetry: () => undefined,
     }),
   );
 
   expect(markup).toContain('There are no Collections on this page');
-  expect(markup).toContain('href="/en/collections?cursor=next%2B%2F%3D"');
+  expect(markup).toContain(
+    `href="/en/collections?presentationKind=mixed&curator=${selection.curator}&subject=${selection.subject}&order=popular&cursor=next%2B%2F%3D"`,
+  );
+  expect(markup).toContain('name="presentationKind"');
+  expect(markup).toContain('value="mixed"');
+  expect(markup).toContain('name="curator"');
+  expect(markup).toContain('name="subject"');
+  expect(markup).toContain('name="order"');
   expect(markup).toContain('More Collections');
   expect(markup).not.toContain('No public Collections are available yet');
 });
@@ -269,6 +299,7 @@ test('a refused continuation has a localized first-page recovery link', () => {
       state: { status: 'denied' },
       locale: 'en',
       cursor: 'refused-cursor',
+      onSelect: () => undefined,
       onRetry: () => undefined,
     }),
   );
@@ -384,6 +415,46 @@ test('the localized route pages backward, retries its exact cursor, and retires 
     await act(async () => settle());
     expect(view.host.textContent).toContain('Direct later');
     expect(view.host.querySelector('[data-slot="previous"]')).toBeNull();
+  } finally {
+    await view.close();
+  }
+});
+
+test('committing directory filters replaces the cursor and sends the complete selection', async () => {
+  await setLocale('en', { reload: false });
+  readCalls.length = 0;
+  readRequests.length = 0;
+  readWindow = async () => ready('Filtered collection', null, 'directory-current');
+  const view = await mount(
+    '/en/collections?presentationKind=mixed&curator=00000001-0000-7000-8000-000000000001&subject=00000002-0000-7000-8000-000000000002&order=popular&cursor=old-window',
+  );
+  try {
+    expect(readRequests[0]?.collectionDirectory).toEqual({
+      presentationKind: 'mixed',
+      curator: '00000001-0000-7000-8000-000000000001',
+      subject: '00000002-0000-7000-8000-000000000002',
+      order: 'popular',
+    });
+    const form = view.host.querySelector<HTMLFormElement>('[data-slot="public-collection-discovery-filters"]')!;
+    (form.elements.namedItem('presentationKind') as HTMLInputElement).value = 'schema:Book';
+    (form.elements.namedItem('curator') as HTMLInputElement).value = '00000003-0000-7000-8000-000000000003';
+    (form.elements.namedItem('subject') as HTMLInputElement).value = '00000004-0000-7000-8000-000000000004';
+    (form.elements.namedItem('order') as HTMLSelectElement).value = 'recent';
+    await act(async () => {
+      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+      await settle();
+    });
+    expect(view.router.history.location.href).toBe(
+      '/en/collections?presentationKind=schema%3ABook&curator=00000003-0000-7000-8000-000000000003&subject=00000004-0000-7000-8000-000000000004&order=recent',
+    );
+    expect(readCalls).toEqual(['old-window', null]);
+    expect(readRequests.at(-1)?.collectionDirectory).toEqual({
+      presentationKind: 'schema:Book',
+      curator: '00000003-0000-7000-8000-000000000003',
+      subject: '00000004-0000-7000-8000-000000000004',
+      order: 'recent',
+    });
+    expect(view.host.textContent).toContain('Filtered collection');
   } finally {
     await view.close();
   }

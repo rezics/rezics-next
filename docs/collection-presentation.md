@@ -70,6 +70,9 @@ currentness. No dominant Type is inferred from member counts, previews or comple
 and member disclosure and authorization, explicit Type/catalogue publication and independent cover readiness retain
 their existing contracts.
 
+The public directory matches this accepted explicit kind directly. Its `mixed` choice means an unset
+`presentationKind`; it is distinct from omitting the kind filter, and neither value is derived from membership.
+
 Private [Collection archive recovery](library-archive-collection-recovery.md) now exposes an explicit receiving
 choice through the native create command. Mixed stays the default; archived or alternative Type IDs require current
 admission and deliberate review. Recovery binds the chosen current release digest and original canonical create

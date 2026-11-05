@@ -8,8 +8,8 @@ import {
 
 const selection = {
   presentationKind: 'mixed',
-  curator: '00000001-0000-4000-8000-000000000001',
-  subject: '00000002-0000-4000-8000-000000000002',
+  curator: '00000001-0000-7000-8000-000000000001',
+  subject: '00000002-0000-7000-8000-000000000002',
   order: 'popular' as const,
 };
 
@@ -36,6 +36,7 @@ test('unset kind stays distinct from explicit mixed and explicit presentation ty
 test('external addresses reject mutable curator names, nonidentities, unknown orders and broken cursors', () => {
   for (const [field, value] of [
     ['curator', '@mutable-name'],
+    ['curator', '00000001-0000-4000-8000-000000000001'],
     ['subject', 'some title'],
     ['order', 'rating'],
     ['cursor', ''],

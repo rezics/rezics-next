@@ -50,6 +50,15 @@ routed identities and the closed metadata envelope. Neither that port nor common
 owner information, saved predicates, member sets or working output. Canonical destinations remain on the native
 card as `/collections/<id>`; the installed common metadata codec owns its smaller envelope.
 
+## Directory selection
+
+The existing mixed Search request accepts `collectionDirectory` only with the sole `collection` kind filter.
+It carries an explicit presentation Type ID or `mixed`, canonical curator and Subject IDs, and `recent` or
+`popular` order; all values enter the cursor binding. Search runs the directory only when the Collection owner
+registry advertises `collectionDirectory`. Without that native capability it returns `index_not_ready` before
+enumeration. The identity-ordered `source.page` remains the indexing frontier and never becomes a result-ordering
+authority.
+
 ## Cost Touches / Bound / Growth check
 
 - Source reads touch one native owner snapshot and at most 100 full keys. Pages retain the producer's indexed

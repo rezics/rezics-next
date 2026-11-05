@@ -12,6 +12,7 @@ import {
 } from '../../search/discovery';
 import { locales } from '../../paraglide/runtime.js';
 import { publicCollectionDiscoveryRequest, publicCollectionKind } from './request';
+import type { PublicCollectionDirectoryAddress } from './address';
 
 type DiscoveryFailure = Exclude<DiscoveryState, { status: 'ready' }>;
 
@@ -26,7 +27,7 @@ export type PublicCollectionSummary = Readonly<{
 
 export type PublicCollectionDiscoveryState =
   | { status: 'ready'; collections: PublicCollectionSummary[]; next: string | null; asOf: string }
-  | { status: DiscoveryFailure['status'] };
+  | { status: DiscoveryFailure['status'] | 'invalid-selection' };
 
 export type PublicCollectionDiscoverySender = Parameters<typeof readDiscovery>[1];
 
@@ -37,10 +38,10 @@ function isCollectionHit(hit: DiscoveryHit) {
 /** Admit the complete native page before projecting the disclosed Collection summaries. */
 export async function readPublicCollectionPage(
   locale: string,
-  cursor: string | undefined,
+  address: PublicCollectionDirectoryAddress,
   send: PublicCollectionDiscoverySender,
 ): Promise<PublicCollectionDiscoveryState> {
-  const { discovery } = await readDiscovery(publicCollectionDiscoveryRequest(locale, cursor), send);
+  const { discovery } = await readDiscovery(publicCollectionDiscoveryRequest(locale, address), send);
   if (discovery.status !== 'ready') return { status: discovery.status };
   if (discovery.page.next !== null && (!discovery.page.next.length || discovery.page.next.length > 4864))
     return { status: 'unavailable' };
@@ -84,13 +85,17 @@ const inputSchema = v.object({
     v.string(),
     v.check((value) => locales.some((locale) => locale === value)),
   ),
+  presentationKind: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256))),
+  curator: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/))),
+  subject: v.optional(v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/))),
+  order: v.optional(v.picklist(['recent', 'popular'])),
   cursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(4864))),
 });
 
 const readPublicCollectionDiscoveryWithLocale = createServerFn({ method: 'GET' })
   .validator((input: unknown) => v.parse(inputSchema, input))
   .handler(async ({ data }) =>
-    readPublicCollectionPage(data.locale, data.cursor, async (request) =>
+    readPublicCollectionPage(data.locale, data, async (request) =>
       kernelClient(data.locale).subjects.$search.post(request, { fetch: { signal: getRequest().signal } }),
     ),
   );
@@ -99,7 +104,7 @@ export function readPublicCollectionDiscovery({
   data,
   signal,
 }: {
-  data: { locale: string; cursor?: string };
+  data: { locale: string } & PublicCollectionDirectoryAddress;
   signal?: AbortSignal;
 }) {
   return readPublicCollectionDiscoveryWithLocale({ data, ...(signal ? { signal } : {}) });

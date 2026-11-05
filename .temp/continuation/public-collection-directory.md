@@ -1,39 +1,33 @@
 # Public Collection directory continuation
 
-goal: search
-manager: search
+- Goal: `search`
+- Manager: `search`
 
-Completed: browser address foundation for combined presentationKind/curator/subject/order selection, opaque native
-cursor round trips, first-page selection changes and selection-preserving restarts. Mounted existing cursor parser
-and links share the helper. Full selection parser is deliberately not yet mounted: the installed native query
-still supports only id/name/relevance and the Collection source lacks the required operands.
+## Delivered in this attempt
 
-Continue from apps/web/src/library/public-collection-discovery.md and services/kernel/src/search/collection-discovery.md;
-owner rules are docs/search-conditions.md and docs/collection-presentation.md. Sources inspected: those four documents,
-the named page/read/query/request and route modules, collection-discovery.ts, library/collection-discovery-source.ts,
-library/collection-discovery-summaries.ts, discovery request/query/native-query/filter/current/API/document modules.
-No outside checkout or undeclared risk files were opened. Commerce was sent the required native extension via inbox.
+Search now admits a typed Collection directory selection (`presentationKind`, canonical curator and Subject IDs,
+and `recent` or `popular` order), includes it in native cursor binding, and only dispatches it when the Collection
+owner advertises the `collectionDirectory` capability. The mounted `/collections` page carries the complete
+selection through its address, query key, request, continuation/restart links and filter form. Without the native
+capability it reports preparation and does not return unfiltered or stale index candidates.
 
-1. Agree exact native recency tuple units/nullability with Commerce; consume its installed source operands and typed
-   query/currentness observations. Do not implement native producer changes twice. Preserve batch100 partition-local
-   source read/page and ascending (route,id) indexing frontier; census unavailable is not bounded paging failure.
-2. Extend explicit adapter copies and the one projection codec with native kind/mixed, canonical nullable curator,
-   disclosed curated/last-complete dynamic subject membership, native nullable recency and follow-count popularity.
-3. Admit indexed directory query/sorts with deterministic full identity ties, authenticated complete selection/cursor
-   binding, and whole-query monotonic currentness including membership/output/follows, not only Collection revision.
-   Charge actual skipped candidates, terminal seeks and partition/current/final validation; finite prep if necessary.
-4. Mount selection parser, controls and complete query keys/server inputs/request operands; preserve selection in
-   pagination/restart and browser return. Localize controls. Add focused native/consumer tests, run changed test files
-   once after final edit with brief's landing commands, and typecheck changed workspaces after committing.
-5. Verifier owns seeded native and rendered acceptance at 390/1440 light/dark, two curators, overlap/ties/multipage,
-   canonical destination return and ordinary membership/privacy publication changes on retained stack.
+## Remaining work
 
-This is unfinished product work, not a blocker or completed Path 13 acceptance.
+Commerce58 has not delivered the native Collection directory operands in this base. Extend the existing Commerce
+Collection discovery producer and receiving adapter contract with explicit presentation kind (including unset
+`mixed`), curator identity/display context, current disclosed curated or selected last-complete public dynamic
+membership, native popularity/follow count, and exact nullable public update time. Keep native collection source
+reads partition-local and at most 100 keys; preserve missing values. Carry those fields through explicit adapter
+copies and the one projection codec.
 
-Worker validation: `bun run --cwd apps/web typecheck` exited 1 with 466 TypeScript diagnostic lines. The same
-command on the clean aff08a643851773ed9d1e8c61965c895afb6db5e snapshot under .temp/collection-directory-base also
-exited 1 with the identical 466 diagnostics after normalizing remote run-directory paths (zero added/removed).
-Examples: community/realm-bans.ts BanReviewEndpoints call signatures; generated Kernel SQL module declarations.
-No changed file has a diagnostic. Full local logs: .temp/collection-directory-{base-,}typecheck.log.
-The focused address file passed all three tests; the existing directory test could not import cloudflare:workers
-from src/kernel/client.ts before assertions. Broader native/browser/root acceptance is deferred to integration.
+Implement the admitted indexed directory query over owner field/member seeks, with native recent/popular order,
+stable full-identity ties, selection-bound cursors and query-wide native currentness. Hydrate current disclosure and
+the selected predicate/order observations through the existing batch reader/context; account for newly eligible
+candidates outside the earlier page. Bound skipped candidates, selected-output checks, partition batches,
+disclosure and final validation using actual Search/Commerce limits. Do not add a parallel listing authority or
+per-result full Collection reads.
+
+Then add focused native/browser coverage and run the retained seeded current-dev journey: explicit kinds and mixed,
+two curators, overlapping Subjects, order ties, more than one page, canonical open/return, each filter and sort,
+and publication-driven membership/privacy currentness. Render the directory at 390/1440 in light/dark and capture
+controller evidence. Acceptance, native and browser verification are deferred to integration per the task contract.
