@@ -296,6 +296,8 @@ test('current endpoints and facts fences gate relation writes and exact retireme
     },
   };
   const sent: BatchCommand[][] = [];
+  const currentReads: string[] = [];
+  const fenceReads: string[] = [];
   const journal = {
     prepare(command: BatchCommand) {
       return { bytes: JSON.stringify({ commands: [command] }) };
@@ -306,14 +308,23 @@ test('current endpoints and facts fences gate relation writes and exact retireme
     snapshot: { currentKeys: string[]; scope: string[]; digest: string; complete: boolean };
     fenced?: string;
     staleEndpoint?: string;
+    changedBinding?: string;
     batch?: (request: { commands: BatchCommand[] }) => Promise<BatchWriteResult>;
   }) =>
     graph.deliver({
-      claim: ({ external_id }) => ({ state: 'bound', subject: uuid(Number(external_id)) }),
+      claim: ({ external_id }) => ({
+        state: 'bound',
+        subject: uuid(external_id === options.changedBinding ? 99 : Number(external_id)),
+      }),
       nativeType: () => 'schema:TVSeries',
-      currentRelationEndpoint: async (externalId) =>
-        externalId === options.staleEndpoint ? 'identity_mismatch' : 'current',
-      fence: async ({ externalId }) => ({ fenced: externalId === options.fenced, securityRevision: null }),
+      currentRelationEndpoint: async (externalId) => {
+        currentReads.push(externalId);
+        return externalId === options.staleEndpoint ? 'identity_mismatch' : 'current';
+      },
+      fence: async ({ externalId }) => {
+        fenceReads.push(externalId);
+        return { fenced: externalId === options.fenced, securityRevision: null };
+      },
       batch: async (request) => {
         sent.push(request.commands);
         return options.batch
@@ -334,11 +345,17 @@ test('current endpoints and facts fences gate relation writes and exact retireme
     const active = { currentKeys: [graphEdgeKey(draft)], scope: ['10', '11'], digest: 'c'.repeat(64), complete: true };
     const stale = await run({ snapshot: active, staleEndpoint: '11' });
     expect(stale.unresolved.map(({ reason }) => reason)).toEqual(['current_relation_endpoint_identity_mismatch:11']);
+    expect(currentReads).toEqual(['10', '11']);
+    expect(fenceReads).toEqual(['10', '11']);
     expect(sent).toHaveLength(0);
 
     const proposed = await run({ snapshot: active });
     expect(proposed.proposed).toHaveLength(1);
     const withdrawn = { currentKeys: [], scope: ['10'], digest: 'd'.repeat(64), complete: true };
+    const rebound = await run({ snapshot: withdrawn, changedBinding: '11' });
+    expect(rebound.unresolved.map(({ reason }) => reason)).toEqual(['journaled_native_identity_changed']);
+    expect(sent).toHaveLength(1);
+
     const fenced = await run({ snapshot: withdrawn, fenced: '11' });
     expect(fenced.unresolved.map(({ reason }) => reason)).toEqual(['fenced_relation_holder']);
     expect(sent).toHaveLength(1);
