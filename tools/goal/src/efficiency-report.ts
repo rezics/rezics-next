@@ -209,9 +209,10 @@ function aggregateBucket(
   const taskJoin = tasksAvailable
     ? 'LEFT JOIN worker_tasks AS t ON t.id=e.task_id'
     : 'LEFT JOIN (SELECT NULL AS id, NULL AS body) AS t ON t.id=e.task_id';
-  const landingJoin = tasksAvailable && hasTable(db, 'landing_queue')
-    ? 'LEFT JOIN landing_queue AS l ON l.task=e.task_id AND l.attempt=e.attempt'
-    : 'LEFT JOIN (SELECT NULL AS task, NULL AS attempt, NULL AS request) AS l ON l.task=e.task_id AND l.attempt=e.attempt';
+  const landingJoin =
+    tasksAvailable && hasTable(db, 'landing_queue')
+      ? 'LEFT JOIN landing_queue AS l ON l.task=e.task_id AND l.attempt=e.attempt'
+      : 'LEFT JOIN (SELECT NULL AS task, NULL AS attempt, NULL AS request) AS l ON l.task=e.task_id AND l.attempt=e.attempt';
   const rows = db
     .query(
       `SELECT e.task_id, e.attempt, e.stage, e.action, e.at, e.detail,
