@@ -67,7 +67,7 @@ A trusted caller supplies already traversed normalized rows and exact released i
 
 A request accepts at most 128 source rows, bounded Schemes and Concepts, and only the remaining slots in the existing 100-command batch. Unknown subtrees are not inspected. Bangumi reciprocal relations coalesce by canonical direction and stable source-path order. VNDB tags retain exact tag code and category and map to cited schema:genre only through supplied exact released Scheme and Concept bindings. Producer parent and subsidiary rows keep source direction; no reciprocal association or Person-to-Organization claim is invented.
 
-Reviewed resolvedReferences keys use v1 plus compact UTF-8 JSON for the exact ordered tuple, with no normalization, hashing or truncation; the complete key retains its 255-byte cap. Platform-seed v1 identities are a separate namespace: unpadded base64url of the UTF-8 tuple JSON. Their external ID and complete public command key are each checked against the 255-byte cap before effects, and native receipts retain the exact owner and command. Neither representation rewrites provider identity.
+Reviewed resolvedReferences keys use v1 plus compact UTF-8 JSON for the exact ordered tuple, with no normalization, hashing or truncation; the key retains its 255-byte cap. Platform-seed v1 identities are a separate namespace: unpadded base64url of the UTF-8 tuple JSON. Their external ID and complete public command key are each checked against the 255-byte cap before effects, and native receipts retain the exact owner and command. Neither representation rewrites provider identity.
 
 ## Exact-quantity handoff
 
