@@ -14,6 +14,7 @@ import type { PromotionGateResult, PromotionRun, Task } from './types.ts';
 import type { WorkerJob } from './job.ts';
 import type { Settings } from './types.ts';
 import { recordFlow } from './flow.ts';
+import { isPromotionInfrastructureText } from './check-failure.ts';
 import {
   beginPromotionGroupWindow,
   beginPromotionParentWindow,
@@ -562,14 +563,6 @@ function blockStabilize(
   );
 }
 
-function infrastructureText(text: string): boolean {
-  // Bun reports a test that exceeds its own timeout as "this test timed out after Nms": that is a test failure.
-  text = text.replace(/^.*\btest\b.*\btimed out after\b.*$/gim, '');
-  return /ETIMEDOUT|timed out|timeout while (?:starting|creating|setting up).*docker|docker\s+(?:run\b|:).*?(?:failed|failure|error|exit(?:ed)?(?: with code)? [1-9])|(?:ssh|rsync).*?(?:exit(?:ed)? 255|code 255|status 255)/i.test(
-    text,
-  );
-}
-
 function infrastructureFailure(
   options: PromotionOptions,
   run: PromotionRun,
@@ -579,7 +572,7 @@ function infrastructureFailure(
   if (result.timedOut) return true;
   const path = join(options.settings.stateDirectory, `promotion-${run.id}-head-${index}.log`);
   const text = `${result.firstFailure?.assertion ?? ''}\n${existsSync(path) ? readFileSync(path, 'utf8') : ''}`;
-  return infrastructureText(text);
+  return isPromotionInfrastructureText(text);
 }
 
 function stabilizeRetryCommands(
@@ -644,7 +637,7 @@ async function rerunStabilizeInfrastructure(
     if (!failed) break;
     current = failed;
     pending = pending.slice(reruns.indexOf(failed));
-    if (!failed.timedOut && !infrastructureText(failed.firstFailure?.assertion ?? '')) break;
+    if (!failed.timedOut && !isPromotionInfrastructureText(failed.firstFailure?.assertion ?? '')) break;
   }
   return [...result.slice(0, failedIndex), ...passed, current];
 }

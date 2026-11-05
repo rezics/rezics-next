@@ -55,6 +55,7 @@ export type LaunchOptions = {
   pool: Pool;
   worktree: string;
   prompt: string;
+  promptViaStdin?: boolean;
   logPath?: string;
   readOnly?: boolean;
   research?: boolean;

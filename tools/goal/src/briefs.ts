@@ -2,6 +2,7 @@ import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, win32 } from 'node:path';
 import type { AcceptancePlacement, AcceptanceRequirement, Brief, BriefContinuation, TaskKind } from './types.ts';
+import { parseBunTestCommand, parseEnvironmentPrefix } from './command-shape.ts';
 import { parseProofMetadata } from './verification.ts';
 
 export type RiskOwnership = { version: number; areas: Record<string, string[]> };
@@ -225,15 +226,15 @@ function localTestFile(path: string): boolean {
   );
 }
 function localBunTests(argv: readonly string[], appRelative: boolean): boolean {
-  if (argv[0] !== 'bun' || argv[1] !== 'test') return false;
+  const parsed = parseBunTestCommand(argv);
+  if (!parsed || parsed.prefix.length !== 2) return false;
   let files = 0;
-  for (let index = 2; index < argv.length; index += 1) {
-    const value = argv[index]!;
-    if (value === '-t' || value === '--test-name-pattern') {
-      if (!argv[index + 1] || argv[index + 1]!.startsWith('-')) return false;
-      index += 1;
+  for (const argument of parsed.arguments) {
+    if (argument.kind === 'option') {
+      if (argument.flag !== '-t' && argument.flag !== '--test-name-pattern') return false;
       continue;
     }
+    const value = argument.value;
     if (appRelative) {
       if (!value.startsWith('tests/') || !localTestFile(`apps/web/${value}`)) return false;
     } else if (!localTestFile(value)) return false;
@@ -254,28 +255,25 @@ function focusedWebCommand(argv: readonly string[]): boolean {
 /** Only the two audited Web environment changes may prefix the focused runner. */
 function localEnvironmentCommand(argv: readonly string[]): readonly string[] | undefined {
   if (argv[0] !== 'env') return argv;
-  let index = 1;
   let changed = false;
   const seen = new Set<string>();
-  while (index < argv.length) {
-    if (argv[index] === '-u') {
-      const name = argv[index + 1];
-      if (name !== 'KERNEL_ORIGIN' || seen.has('KERNEL_ORIGIN')) return undefined;
-      seen.add('KERNEL_ORIGIN');
+  const parsed = parseEnvironmentPrefix(argv);
+  for (const operation of parsed.operations) {
+    if (operation.kind === 'unset') {
+      if (operation.name !== 'KERNEL_ORIGIN' || seen.has('KERNEL_ORIGIN')) return undefined;
+      seen.add(operation.name);
       changed = true;
-      index += 2;
       continue;
     }
-    if (argv[index] === 'PUBLIC_ORIGIN=http://127.0.0.1:3000') {
-      if (seen.has('PUBLIC_ORIGIN')) return undefined;
-      seen.add('PUBLIC_ORIGIN');
+    if (operation.name === 'PUBLIC_ORIGIN' && operation.value === 'http://127.0.0.1:3000') {
+      if (seen.has(operation.name)) return undefined;
+      seen.add(operation.name);
       changed = true;
-      index += 1;
       continue;
     }
-    break;
+    return undefined;
   }
-  return changed && index < argv.length ? argv.slice(index) : undefined;
+  return changed && parsed.command.length ? parsed.command : undefined;
 }
 function localBunCommand(rawArgv: readonly string[]): boolean {
   if (rawArgv[0] === 'env') {

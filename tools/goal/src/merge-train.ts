@@ -3,6 +3,7 @@ import { closeSync, constants, fchmodSync, fstatSync, lstatSync, openSync, readd
 import { basename } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { TrainResolver, TrainResolverInfrastructureError, type TrainConflict } from './train-resolver.ts';
+import { policyOwnerConflictGit } from './owner-conflict.ts';
 import { groupMembers, processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -69,6 +70,13 @@ import { CHECK_HOST_TRANSPORT } from './records.ts';
 import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
 import { installShared } from './shared-dependencies.ts';
 import {
+  classifyCandidateDelta,
+  derivedForPath,
+  planCandidateConflicts,
+  resolveCandidateTextConflict,
+  type DerivedFile,
+} from './candidate.ts';
+import {
   assertControlPlaneMember,
   controlPlaneBatchId,
   controlPlaneScopeApproval,
@@ -76,15 +84,8 @@ import {
   parseControlPlaneBatchRefContinuation,
 } from './control-plane-batch.ts';
 
-export type DerivedFile = {
-  path: string;
-  stage: 'integration' | 'promotion';
-  command: string[];
-  /** Source paths whose changes should refresh this output when a dev landing is assembled. */
-  inputs?: string[];
-};
+export type { DerivedFile } from './candidate.ts';
 export type IntegrationCheck = { paths: string[]; command: string[] };
-import { resolveImportConflicts } from './import-conflicts.ts';
 const defaultDerivedFiles = defaults.derivedFiles as DerivedFile[];
 const defaultJsonMessageConflicts = defaults.jsonMessageConflicts as string[];
 
@@ -589,10 +590,6 @@ export function newErrorLines(output: string, baseline: string): string[] {
   return added;
 }
 
-function derivedForPath(path: string, files: readonly DerivedFile[], policy = defaultPolicy.brief): DerivedFile[] {
-  return files.filter((file) => matchesPath(path, [file.path], policy));
-}
-
 function markdownUnionFiles(logPath: string): string[] {
   if (!existsSync(logPath)) return [];
   return [
@@ -1043,6 +1040,21 @@ function treeDiffIsEmpty(cwd: string, base: string, candidate: string, policy = 
   return result.status === 0;
 }
 
+function candidateDeltaOnTarget(
+  cwd: string,
+  target: string,
+  taskTip: string,
+  candidate: string,
+  taskPaths: readonly string[],
+  policy = defaultPolicy.merge,
+) {
+  return classifyCandidateDelta(
+    taskPaths,
+    changedPathsBetween(cwd, target, taskTip, policy),
+    changedPathsBetween(cwd, target, candidate, policy),
+  );
+}
+
 class WorkerConflictError extends Error {
   constructor(
     readonly path: string,
@@ -1152,10 +1164,26 @@ function frozenFilesModifiedAtCommit(
 }
 
 /**
- * Resolve import-only hunks in code and union Markdown conflicts for review after the ordinary landing checks.
+ * Resolve import-only code hunks, flat JSON catalogs and Markdown conflicts after ordinary landing checks.
  * Returns false, leaving every file for a person, when any file holds another kind of conflict.
  */
-export function resolveMechanicalConflicts(
+type MechanicalConflictResult = { ok: true; markdownUnion: string[] } | { ok: false; error?: Error };
+
+function readConflictStages(
+  cwd: string,
+  file: string,
+  missingBase: string,
+  mergePolicy = defaultPolicy.merge,
+): [string, string, string] {
+  return ([1, 2, 3] as const).map((stage) => {
+    const result = mergeGit(cwd, ['show', `:${stage}:${file}`], mergePolicy);
+    if (stage === 1 && result.status !== 0) return missingBase;
+    if (result.status !== 0) throw new Error(`Cannot read conflict stage ${stage} for ${file}`);
+    return result.stdout;
+  }) as [string, string, string];
+}
+
+function resolveMechanicalConflictsDetailed(
   cwd: string,
   paths: readonly string[],
   formatCommand?: readonly string[],
@@ -1164,20 +1192,15 @@ export function resolveMechanicalConflicts(
   taskStage: 2 | 3 = 2,
   policy = defaultPolicy.brief,
   mergePolicy = defaultPolicy.merge,
-): string[] | false {
+): MechanicalConflictResult {
   const resolved = new Map<string, string>();
   const unionResolved: string[] = [];
   for (const file of paths) {
     const path = join(cwd, file);
-    if (!existsSync(path)) return false;
+    if (!existsSync(path)) return { ok: false };
     let text: string | undefined;
     if (file.endsWith('.md')) {
-      const stages = ([1, 2, 3] as const).map((stage) => {
-        const result = mergeGit(cwd, ['show', `:${stage}:${file}`], mergePolicy);
-        if (stage === 1 && result.status !== 0) return '';
-        if (result.status !== 0) throw new Error(`Cannot read conflict stage ${stage} for ${file}`);
-        return result.stdout;
-      });
+      const stages = readConflictStages(cwd, file, '', mergePolicy);
       mkdirSync(join(cwd, '.temp'), { recursive: true });
       const scratch = mkdtempSync(join(cwd, '.temp', 'markdown-union-'));
       try {
@@ -1201,12 +1224,12 @@ export function resolveMechanicalConflicts(
             bases.length !== conflicts ||
             bases.some((match) => match[1]!.trim().length > 0)
           )
-            return false;
+            return { ok: false };
         }
         const merged = mergeGit(cwd, ['merge-file', '--union', '-p', oursPath, basePath, theirsPath], mergePolicy);
         // `--union` writes both sides' conflicting lines but still exits 1 to report that the inputs overlapped.
         // Treat that expected conflict status as a successful resolution; higher statuses indicate a tool error.
-        if (merged.status === null || merged.status > 1) return false;
+        if (merged.status === null || merged.status > 1) return { ok: false };
         // Preserve Markdown heading separators until the landing's ordinary formatter runs.
         text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
         if (markdown === 'union')
@@ -1218,99 +1241,105 @@ export function resolveMechanicalConflicts(
         rmSync(scratch, { recursive: true, force: true });
       }
     } else if (matchesPath(file, defaultJsonMessageConflicts, policy)) {
-      const stages = ([1, 2, 3] as const).map((stage) => {
-        const result = mergeGit(cwd, ['show', `:${stage}:${file}`], mergePolicy);
-        if (stage === 1 && result.status !== 0) return '{}';
-        if (result.status !== 0) throw new Error(`Cannot read conflict stage ${stage} for ${file}`);
-        return result.stdout;
-      });
-      const merged = mergeFlatJsonMessage(stages[0]!, stages[1]!, stages[2]!);
-      if (!merged.ok) return false;
-      const ours = parseFlatJsonObject(stages[1]!);
-      const theirs = parseFlatJsonObject(stages[2]!);
-      const base = parseFlatJsonObject(stages[0]!);
-      text = `${JSON.stringify(merged.value, null, 2)}\n`;
+      const stages = readConflictStages(cwd, file, '{}', mergePolicy);
+      const result = resolveCandidateTextConflict(file, '', stages, true);
+      if (!result || !result.ok) return { ok: false, ...(result?.reason ? { error: new Error(result.reason) } : {}) };
+      text = result.text;
       assertTaskDeletionsAbsent(cwd, file, stages[0]!, stages[taskStage - 1]!, text, mergePolicy);
-      if (
-        ours &&
-        theirs &&
-        base &&
-        comparableJson(merged.value) === comparableJson(ours) &&
-        comparableJson(theirs) !== comparableJson(ours) &&
-        comparableJson(theirs) !== comparableJson(base)
-      )
-        throw new WorkerConflictError(file);
-    } else if (/\.[cm]?[jt]sx?$/.test(file)) text = resolveImportConflicts(readFileSync(path, 'utf8'));
-    if (text === undefined) return false;
+      if (result.taskChangeDropped) throw new WorkerConflictError(file);
+    } else {
+      const result = resolveCandidateTextConflict(file, readFileSync(path, 'utf8'), undefined, false);
+      if (result?.ok) text = result.text;
+    }
+    if (text === undefined) return { ok: false };
     resolved.set(path, text);
   }
   for (const [path, text] of resolved) writeFileSync(path, text);
   const format = formatCommand ?? [join(cwd, 'node_modules/.bin/oxfmt'), ...FORMAT_FLAGS];
   if (!format[0]!.endsWith('/node_modules/.bin/oxfmt') || existsSync(format[0]!))
     spawnSync(format[0]!, [...format.slice(1), ...paths], { cwd, encoding: 'utf8' });
-  return unionResolved;
+  return { ok: true, markdownUnion: unionResolved };
 }
 
-type JsonObject = Record<string, unknown>;
-type JsonMergeResult = { ok: true; value: JsonObject } | { ok: false; key: string };
-
-function parseFlatJsonObject(text: string): JsonObject | undefined {
-  try {
-    const value: unknown = JSON.parse(text);
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-    return value as JsonObject;
-  } catch {
-    return undefined;
-  }
-}
-
-function comparableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(comparableJson).join(',')}]`;
-  if (value && typeof value === 'object')
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${comparableJson((value as JsonObject)[key])}`)
-      .join(',')}}`;
-  return JSON.stringify(value);
-}
-
-/** Three-way merge flat message catalogs, retaining ours' catalog order and appending theirs' new keys. */
-function mergeFlatJsonMessage(baseText: string, oursText: string, theirsText: string): JsonMergeResult {
-  const base = parseFlatJsonObject(baseText);
-  const ours = parseFlatJsonObject(oursText);
-  const theirs = parseFlatJsonObject(theirsText);
-  if (!base || !ours || !theirs) return { ok: false, key: '<invalid JSON catalog>' };
-  const absent = Symbol('absent');
-  const equal = (left: unknown | typeof absent, right: unknown | typeof absent) =>
-    left === absent || right === absent ? left === right : comparableJson(left) === comparableJson(right);
-  const keys = [...Object.keys(ours), ...Object.keys(theirs).filter((key) => !(key in ours))];
-  const value: JsonObject = {};
-  for (const key of keys) {
-    const b = Object.hasOwn(base, key) ? base[key] : absent;
-    const o = Object.hasOwn(ours, key) ? ours[key] : absent;
-    const t = Object.hasOwn(theirs, key) ? theirs[key] : absent;
-    const chosen = equal(o, t) ? o : equal(o, b) ? t : equal(t, b) ? o : undefined;
-    if (chosen === undefined && !equal(o, b) && !equal(t, b)) return { ok: false, key };
-    if (chosen !== absent && chosen !== undefined) value[key] = chosen;
-  }
-  return { ok: true, value };
-}
-
-function jsonMessageConflictError(
+export function resolveMechanicalConflicts(
   cwd: string,
   paths: readonly string[],
+  formatCommand?: readonly string[],
+  markdown: 'insertions' | 'union' = 'insertions',
+  taskStage: 2 | 3 = 2,
   policy = defaultPolicy.brief,
   mergePolicy = defaultPolicy.merge,
-): Error | undefined {
-  for (const file of paths.filter((path) => matchesPath(path, defaultJsonMessageConflicts, policy))) {
-    const stages = ([1, 2, 3] as const).map((stage) => {
-      const result = mergeGit(cwd, ['show', `:${stage}:${file}`], mergePolicy);
-      return result.status === 0 ? result.stdout : '{}';
-    });
-    const result = mergeFlatJsonMessage(stages[0]!, stages[1]!, stages[2]!);
-    if (!result.ok) return new Error(`JSON message conflict in ${file}: key ${result.key}`);
+): string[] | false {
+  const result = resolveMechanicalConflictsDetailed(
+    cwd,
+    paths,
+    formatCommand,
+    markdown,
+    taskStage,
+    policy,
+    mergePolicy,
+  );
+  return result.ok ? result.markdownUnion : false;
+}
+
+type CandidateConflictResolution =
+  | { ok: true; mechanicalPaths: string[]; derivedPaths: string[]; markdownUnion: string[] }
+  | { ok: false; error?: Error };
+
+function resolveCandidateConflictSet(
+  cwd: string,
+  paths: readonly string[],
+  files: readonly DerivedFile[],
+  logPath: string,
+  formatCommand?: readonly string[],
+  markdown: 'insertions' | 'union' = 'insertions',
+  taskStage: 2 | 3 = 2,
+  policy = defaultPolicy.brief,
+  mergePolicy = defaultPolicy.merge,
+): CandidateConflictResolution {
+  const plan = planCandidateConflicts(paths, files, policy);
+  let markdownUnion: string[] = [];
+  if (plan.mechanicalPaths.length) {
+    const mechanical = resolveMechanicalConflictsDetailed(
+      cwd,
+      plan.mechanicalPaths,
+      formatCommand,
+      markdown,
+      taskStage,
+      policy,
+      mergePolicy,
+    );
+    if (!mechanical.ok) return mechanical;
+    markdownUnion = mechanical.markdownUnion;
   }
-  return undefined;
+
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, mergePolicy);
+  for (const path of plan.derivedPaths) git(cwd, 'checkout', '--ours', '--', path);
+  if (plan.commands.length) {
+    try {
+      ensureDerivedDependencies(cwd, logPath, plan.commands);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
+    }
+    for (const command of plan.commands) {
+      const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
+      const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+      appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n${output}`);
+      if (result.status !== 0)
+        return {
+          ok: false,
+          error: new Error(
+            `Failed to regenerate derived files: ${output || result.error?.message || 'command failed'}`,
+          ),
+        };
+    }
+  }
+
+  const regenerated = planCandidateConflicts(changedWorkingFiles(cwd, mergePolicy), files, policy);
+  const derivedPaths = [...new Set([...plan.derivedPaths, ...regenerated.derivedPaths])];
+  const stageFiles = new Set([...plan.mechanicalPaths, ...derivedPaths]);
+  if (stageFiles.size) stagePaths(cwd, stageFiles, mergePolicy);
+  return { ok: true, mechanicalPaths: plan.mechanicalPaths, derivedPaths, markdownUnion };
 }
 
 function rebaseWithDerivedFiles(
@@ -1331,46 +1360,28 @@ function rebaseWithDerivedFiles(
     for (;;) {
       const conflicts = unmergedFiles(cwd, mergePolicy);
       if (!conflicts.length) throw rebaseError;
-      // bun.lock is an integration-stage derived file: keep the integration lockfile, regenerate from the
-      // merged manifests, and commit that result as part of the rebased landing.
-      const derivedConflicts = conflicts.filter((path) => derivedForPath(path, files, policy).length > 0);
-      const textConflicts = conflicts.filter((path) => !derivedForPath(path, files, policy).length);
-      // Validate all ordinary conflicts before choosing a generated side or running a generator.
-      if (textConflicts.length) {
-        const unionResolved = resolveMechanicalConflicts(
-          cwd,
-          textConflicts,
-          undefined,
-          'union',
-          3,
-          policy,
-          mergePolicy,
+      const resolution = resolveCandidateConflictSet(
+        cwd,
+        conflicts,
+        files,
+        logPath,
+        undefined,
+        'union',
+        3,
+        policy,
+        mergePolicy,
+      );
+      if (!resolution.ok) return resolution.error ?? rebaseError;
+      if (resolution.mechanicalPaths.length) {
+        const markdownUnion = resolution.markdownUnion.length
+          ? `; Markdown union: ${resolution.markdownUnion.join(', ')}`
+          : '';
+        appendFileSync(
+          logPath,
+          `Rebase resolved mechanical conflicts: ${resolution.mechanicalPaths.join(', ')}${markdownUnion}\n`,
         );
-        if (!unionResolved) return jsonMessageConflictError(cwd, textConflicts, policy, mergePolicy) ?? rebaseError;
-        const markdownUnion = unionResolved.length ? `; Markdown union: ${unionResolved.join(', ')}` : '';
-        appendFileSync(logPath, `Rebase resolved mechanical conflicts: ${textConflicts.join(', ')}${markdownUnion}\n`);
-        stagePaths(cwd, new Set(textConflicts), mergePolicy);
       }
-
-      for (const path of derivedConflicts) git(cwd, 'checkout', '--ours', '--', path);
-      const integrationCommands = new Map<string, string[]>();
-      for (const path of derivedConflicts)
-        for (const file of derivedForPath(path, files, policy)) {
-          integrationCommands.set(JSON.stringify(file.command), file.command);
-        }
-      if (integrationCommands.size) ensureDerivedDependencies(cwd, logPath, integrationCommands.values());
-      for (const command of integrationCommands.values()) {
-        const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
-        const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-        appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n${output}`);
-        if (result.status !== 0)
-          throw new Error(`Failed to regenerate derived files: ${output || result.error?.message || 'command failed'}`);
-      }
-      const regeneratedLockfile = derivedConflicts.includes('bun.lock');
-      const stageFiles = new Set(derivedConflicts);
-      for (const path of changedWorkingFiles(cwd, mergePolicy))
-        if (derivedForPath(path, files, policy).length) stageFiles.add(path);
-      stagePaths(cwd, stageFiles, mergePolicy);
+      const regeneratedLockfile = resolution.derivedPaths.includes('bun.lock');
       try {
         git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
         return regeneratedLockfile;
@@ -2533,22 +2544,16 @@ export class MergeTrain {
 
           const candidate = this.git(trainTree, 'rev-parse', 'HEAD');
           const taskPaths = changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge);
-          if (treeDiffIsEmpty(trainTree, previous, candidate, this.options.policy?.merge)) {
-            acceptAlreadyPresent(result, previous, taskPaths, logPath);
-            localOutcomes.set(entry.id, result);
-            resetTo(trainTree, previous);
-            continue;
-          }
-          const noEffect = pathsChangedByTaskButUnchangedOnDev(
+          const delta = candidateDeltaOnTarget(
             trainTree,
             previous,
-            candidate,
             tip,
+            candidate,
             taskPaths,
             this.options.policy?.merge,
           );
-          if (noEffect.length) {
-            acceptAlreadyPresent(result, previous, noEffect, logPath);
+          if (delta.kind !== 'effective') {
+            acceptAlreadyPresent(result, previous, delta.paths, logPath);
             localOutcomes.set(entry.id, result);
             resetTo(trainTree, previous);
             continue;
@@ -2760,6 +2765,15 @@ export class MergeTrain {
           continue;
         }
         committed = true;
+        for (const member of prepared) {
+          const request = member.entry.request;
+          if (request.devResolution && o.trainResolver)
+            o.trainResolver.devConflictLanded(
+              request,
+              request.workerCommit ?? this.git(o.mainCheckout, 'rev-parse', `${request.branch}^{commit}`),
+              head,
+            );
+        }
         pushDevInBackground(
           o.mainCheckout,
           o.stateDirectory,
@@ -3104,6 +3118,13 @@ export class MergeTrain {
         this.git(this.options.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`),
       canonical,
     );
+    this.options.trainResolver?.devConflictStarted(
+      entry.request,
+      entry.request.workerCommit ??
+        this.git(this.options.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`),
+      targetHead,
+      canonical,
+    );
     if (conflict) outcome.rebaseConflict = conflict;
     outcome.firstFailure ??= firstFailure(
       `Rebase conflicts with dev: ${canonical.join(', ')}`,
@@ -3188,22 +3209,67 @@ export class MergeTrain {
           failure = String(error);
           tokens = addTokens(tokens, newResolverTokens());
           attempts++;
-          if (this.git(o.mainCheckout, 'rev-parse', targetRef) !== lastTarget) continue;
           break;
         }
         attempts++;
         tokens = addTokens(tokens, conflict?.tokens ?? newResolverTokens());
         if (conflict?.conflictFiles.length) paths = canonicalConflictPaths(conflict.conflictFiles);
-        const currentTarget = this.git(o.mainCheckout, 'rev-parse', targetRef);
-        if (currentTarget !== lastTarget) {
-          failure = `dev moved from ${lastTarget} to ${currentTarget} during resolution`;
-          continue;
-        }
         if (conflict && !conflict.resolvedCommit) {
           failure = conflict.detail ?? 'Train resolver did not produce a resolved commit';
           break;
         }
-        const resolved = conflict?.resolvedCommit ?? this.git(tree, 'rev-parse', 'HEAD');
+        let resolved = conflict?.resolvedCommit ?? this.git(tree, 'rev-parse', 'HEAD');
+        const currentTarget = this.git(o.mainCheckout, 'rev-parse', targetRef);
+        if (currentTarget !== lastTarget) {
+          failure = `dev moved from ${lastTarget} to ${currentTarget} during resolution`;
+          if (isAncestor(o.mainCheckout, sourceCommit, currentTarget, o.policy?.merge)) {
+            candidate = currentTarget;
+            lastTarget = currentTarget;
+            alreadyRepresented = true;
+            method = conflict?.method ?? method;
+            break;
+          }
+          this.git(tree, 'reset', '--hard', currentTarget);
+          const replay = policyOwnerConflictGit(
+            tree,
+            ['cherry-pick', '--no-commit', '-m', '1', resolved],
+            o.policy?.merge,
+          );
+          if (replay.status !== 0) {
+            const replayConflicts = unmergedFiles(tree, o.policy?.merge);
+            if (!replayConflicts.length)
+              throw new TrainResolverInfrastructureError(
+                replay.stderr.trim() || replay.error?.message || 'Cannot reapply train resolution onto moved dev',
+              );
+            paths = canonicalConflictPaths(replayConflicts);
+            failure = `reapplying the resolved commit onto moved dev conflicts in ${paths.join(', ')}`;
+            appendFileSync(outcome.logPath, `Train resolution replay conflicts: ${paths.join(', ')}\n`);
+            continue;
+          }
+          const replayTree = this.git(tree, 'write-tree');
+          this.git(tree, 'cherry-pick', '--quit');
+          const replayTarget = this.git(o.mainCheckout, 'rev-parse', targetRef);
+          if (replayTarget !== currentTarget) {
+            failure = `dev moved from ${currentTarget} to ${replayTarget} while reapplying the resolved commit`;
+            continue;
+          }
+          resolved = this.git(
+            tree,
+            'commit-tree',
+            replayTree,
+            '-p',
+            currentTarget,
+            '-p',
+            sourceCommit,
+            '-m',
+            'Resolve dev landing conflict',
+          );
+          lastTarget = currentTarget;
+          appendFileSync(
+            outcome.logPath,
+            `Train resolution replayed cleanly from ${failure.slice('dev moved from '.length)}; commit=${resolved}\n`,
+          );
+        }
         if (resolved === lastTarget && isAncestor(o.mainCheckout, sourceCommit, lastTarget, o.policy?.merge)) {
           candidate = lastTarget;
           alreadyRepresented = true;
@@ -3292,6 +3358,7 @@ export class MergeTrain {
       o.queue.acknowledge(entry.id);
       return;
     }
+    resolver?.devConflictReturned(request, sourceCommit, lastTarget, paths, failure, attempts);
     o.queue.finish(entry.id, outcome);
   }
 
@@ -3950,22 +4017,17 @@ export class MergeTrain {
         const taskPaths = workspace
           ? taskChangedPaths(sharedStore!.task(request.taskId), sourceTip, this.options.policy?.merge)
           : changedPathsBetween(o.mainCheckout, originalBase, sourceTip, this.options.policy?.merge);
-        if (treeDiffIsEmpty(trainTree, base, candidate, this.options.policy?.merge)) {
-          if (integratesIntoDev && !stabilize) acceptAlreadyPresent(result, base, taskPaths, logPath);
-          else refuseNoEffect(result, taskPaths, logPath);
-          return finish();
-        }
-        const noEffect = pathsChangedByTaskButUnchangedOnDev(
+        const delta = candidateDeltaOnTarget(
           trainTree,
           base,
-          candidate,
           sourceTip,
+          candidate,
           taskPaths,
           this.options.policy?.merge,
         );
-        if (noEffect.length) {
-          if (integratesIntoDev && !stabilize) acceptAlreadyPresent(result, base, noEffect, logPath);
-          else refuseNoEffect(result, noEffect, logPath);
+        if (delta.kind !== 'effective') {
+          if (integratesIntoDev && !stabilize) acceptAlreadyPresent(result, base, delta.paths, logPath);
+          else refuseNoEffect(result, delta.paths, logPath);
           return finish();
         }
         const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
@@ -4490,6 +4552,8 @@ export class MergeTrain {
           if (controlPlane) retryMovedControlPlaneRefs();
           continue;
         }
+        if (integratesIntoDev && request.devResolution && o.trainResolver)
+          o.trainResolver.devConflictLanded(request, workerCommit, candidate);
         if (targetBranch === (o.integrationBranch ?? 'dev'))
           pushDevInBackground(o.mainCheckout, o.stateDirectory, targetBranch, logPath, this.options.policy?.merge);
         if (workspace) {
@@ -4891,16 +4955,35 @@ export class MergeTrain {
           this.git(trainTree, 'merge', '--no-ff', '--no-edit', candidate);
         } catch (error) {
           const files = unmergedFiles(trainTree, this.options.policy?.merge);
-          if (files.length && this.resolveGeneratedConflicts(trainTree, files, logPath)) {
-            appendFileSync(
-              logPath,
-              `Stabilize ${candidate} merged into ${devBranch} regenerating generated conflicts: ${files.join(', ')}\n`,
-            );
-          } else if (files.length && this.resolveImportConflicts(trainTree, files)) {
-            appendFileSync(
-              logPath,
-              `Stabilize ${candidate} merged into ${devBranch} resolving import-only and insert-only conflicts: ${files.join(', ')}\n`,
-            );
+          const policy = this.options.policy ?? defaultPolicy;
+          const formatCommand = this.options.formatCommand ?? [
+            resolve(this.options.mainCheckout, 'node_modules/.bin/oxfmt'),
+            ...FORMAT_FLAGS,
+          ];
+          const resolution = files.length
+            ? resolveCandidateConflictSet(
+                trainTree,
+                files,
+                this.options.derivedFiles ?? defaultDerivedFiles,
+                logPath,
+                formatCommand,
+                'insertions',
+                3,
+                policy.brief,
+                this.options.policy?.merge,
+              )
+            : undefined;
+          if (resolution?.ok) {
+            const actions = [
+              ...(resolution.mechanicalPaths.length
+                ? [`resolving mechanical conflicts: ${resolution.mechanicalPaths.join(', ')}`]
+                : []),
+              ...(resolution.derivedPaths.length
+                ? [`regenerating derived conflicts: ${resolution.derivedPaths.join(', ')}`]
+                : []),
+            ];
+            appendFileSync(logPath, `Stabilize ${candidate} merged into ${devBranch} ${actions.join('; ')}\n`);
+            this.git(trainTree, '-c', 'core.editor=true', 'commit', '--no-edit');
           } else {
             try {
               this.git(trainTree, 'merge', '--abort');
@@ -5001,63 +5084,6 @@ export class MergeTrain {
       }
       return main;
     }
-  }
-
-  /** Finish a merge whose every conflict is two sides adding imports; false leaves the merge for a person. */
-  private resolveImportConflicts(tree: string, files: readonly string[]): boolean {
-    const formatCommand = this.options.formatCommand ?? [
-      resolve(this.options.mainCheckout, 'node_modules/.bin/oxfmt'),
-      ...FORMAT_FLAGS,
-    ];
-    if (
-      !resolveMechanicalConflicts(
-        tree,
-        files,
-        formatCommand,
-        'insertions',
-        3,
-        (this.options.policy ?? defaultPolicy).brief,
-        this.options.policy?.merge,
-      )
-    )
-      return false;
-    this.git(tree, 'add', '--', ...files);
-    this.git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
-    return true;
-  }
-
-  /** Resolve a generated-only merge by keeping the target side and regenerating every declared output. */
-  private resolveGeneratedConflicts(tree: string, conflicts: readonly string[], logPath: string): boolean {
-    const files = this.options.derivedFiles ?? defaultDerivedFiles;
-    if (
-      !conflicts.length ||
-      conflicts.some((path) => !derivedForPath(path, files, (this.options.policy ?? defaultPolicy).brief).length)
-    )
-      return false;
-
-    const commands = new Map<string, string[]>();
-    for (const path of conflicts) {
-      this.git(tree, 'checkout', '--ours', '--', path);
-      for (const file of derivedForPath(path, files, (this.options.policy ?? defaultPolicy).brief))
-        commands.set(JSON.stringify(file.command), file.command);
-    }
-    try {
-      ensureDerivedDependencies(tree, logPath, commands.values());
-    } catch {
-      return false;
-    }
-    for (const command of commands.values()) {
-      const result = spawnSync(command[0]!, command.slice(1), { cwd: tree, encoding: 'utf8' });
-      const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-      appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${tree})\n${output}`);
-      if (result.status !== 0) return false;
-    }
-    const changedGenerated = changedWorkingFiles(tree, this.options.policy?.merge).filter(
-      (path) => derivedForPath(path, files, (this.options.policy ?? defaultPolicy).brief).length > 0,
-    );
-    stagePaths(tree, new Set([...conflicts, ...changedGenerated]), this.options.policy?.merge);
-    this.git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
-    return true;
   }
 
   /** Combined main cohorts need separate exact-source owner authority for every additional file. */

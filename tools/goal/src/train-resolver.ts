@@ -248,14 +248,6 @@ function snapshot(tree: string, allowed: readonly string[], policy = defaultPoli
     ),
   );
 }
-function refs(tree: string, except?: string, policy = defaultPolicy.merge): string {
-  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
-  return git(tree, 'for-each-ref', '--format=%(refname) %(objectname)')
-    .split('\n')
-    .filter((line) => !except || !line.startsWith(`${except} `))
-    .join('\n');
-}
-
 type Pass = {
   head?: string;
   inputHash?: string;
@@ -583,7 +575,6 @@ export class TrainResolver {
     const contract = task.brief.markdown;
     const modes = new Map(paths.map((path) => [path, lstatSync(join(tree, path)).mode]));
     const before = snapshot(tree, paths, this.store.policy.merge),
-      beforeRefs = refs(tree, conflict.targetRef, this.store.policy.merge),
       head = this.git(tree, 'rev-parse', 'HEAD');
     const index = this.git(tree, 'ls-files', '--stage', '-z');
     if (prior) {
@@ -649,6 +640,7 @@ export class TrainResolver {
       pool,
       worktree: tree,
       prompt,
+      promptViaStdin: true,
       consultation: true,
       resolver: true,
       codex: this.tasks.settings.codex,
@@ -676,9 +668,13 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
         child = spawn('python3', ['-c', wrapper, identityPath, command, ...args], {
           cwd: tree,
           detached: true,
-          stdio: ['ignore', 'pipe', 'pipe'],
+          stdio: ['pipe', 'pipe', 'pipe'],
           env: workerEnvironment(pool),
         });
+        child.stdin!.on('error', (error) => {
+          failure ??= `Train resolver prompt input failed: ${error.message}`;
+        });
+        child.stdin!.end(prompt);
         identity = child.pid ? processIdentity(child.pid) : null;
         this.event(request, 'train-resolver-process', { ...run, process: identity });
       });
@@ -729,12 +725,8 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
       if (observed.usageLimitRefusal || observed.failureKind === 'pool-exhausted')
         throw new TrainResolverInfrastructureError('Train resolver provider allowance refused the bounded session');
       if (code !== 0 || failure) throw new Error(failure ?? `Train resolver exited with ${code}`);
-      if (
-        this.git(tree, 'rev-parse', 'HEAD') !== head ||
-        refs(tree, conflict.targetRef, this.store.policy.merge) !== beforeRefs ||
-        this.git(tree, 'ls-files', '--stage', '-z') !== index
-      )
-        throw new Error('Train resolver changed Git source, refs or index');
+      if (this.git(tree, 'rev-parse', 'HEAD') !== head || this.git(tree, 'ls-files', '--stage', '-z') !== index)
+        throw new Error('Train resolver changed Git source or index');
       if (snapshot(tree, paths, this.store.policy.merge) !== before)
         throw new Error('Train resolver edited outside conflicted files or frozen inputs');
       for (const path of paths) {
@@ -857,6 +849,87 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
         action: 'conflict-landed',
         at,
         detail: JSON.stringify(detail),
+      });
+    });
+  }
+
+  devConflictStarted(
+    request: LandingRequest,
+    sourceCommit: string,
+    targetHead: string,
+    paths: readonly string[],
+  ): void {
+    this.store.write(request, () => {
+      if (
+        this.store
+          .events(request.taskId, request.attempt)
+          .some(
+            (event) => event.kind === 'dev-conflict-started' && JSON.parse(event.body).sourceCommit === sourceCommit,
+          )
+      )
+        return;
+      const at = new Date().toISOString();
+      const detail = { sourceCommit, targetHead, paths, startedAt: at };
+      this.event(request, 'dev-conflict-started', detail);
+      recordFlow(this.store.db, {
+        ...request,
+        stage: 'landing',
+        action: 'dev-conflict',
+        at,
+        detail: JSON.stringify(detail),
+      });
+    });
+  }
+
+  devConflictReturned(
+    request: LandingRequest,
+    sourceCommit: string,
+    targetHead: string,
+    paths: readonly string[],
+    reason: string,
+    attempts: number,
+  ): void {
+    this.devConflictOutcome(request, sourceCommit, 'dev-conflict-returned', {
+      targetHead,
+      paths,
+      reason,
+      attempts,
+    });
+  }
+
+  devConflictLanded(request: LandingRequest, sourceCommit: string, commit: string): void {
+    this.devConflictOutcome(request, sourceCommit, 'dev-conflict-landed', { commit });
+  }
+
+  private devConflictOutcome(
+    request: LandingRequest,
+    sourceCommit: string,
+    action: 'dev-conflict-returned' | 'dev-conflict-landed',
+    detail: Record<string, unknown>,
+  ): void {
+    this.store.write(request, () => {
+      const events = this.store.events(request.taskId, request.attempt);
+      const started = events.some(
+        (event) => event.kind === 'dev-conflict-started' && JSON.parse(event.body).sourceCommit === sourceCommit,
+      );
+      if (!started) return;
+      if (
+        events.some(
+          (event) =>
+            (event.kind === 'dev-conflict-landed' || event.kind === 'dev-conflict-returned') &&
+            JSON.parse(event.body).sourceCommit === sourceCommit,
+        )
+      )
+        return;
+      const at = new Date().toISOString();
+      const body = { sourceCommit, ...detail, endedAt: at };
+      this.event(request, action, body);
+      recordFlow(this.store.db, {
+        ...request,
+        stage: 'landing',
+        action,
+        at,
+        detail: JSON.stringify(body),
       });
     });
   }

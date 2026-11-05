@@ -37,6 +37,7 @@ import {
   type Check,
 } from '../scripts/cp-sync.ts';
 import { CONTROL_PLANE_CHECKS } from './merge-train.ts';
+import { publishCpSyncRefs, type CpSyncRefTransactionContext } from './cp-sync-ref-transaction.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 const closers: Array<() => void> = [];
@@ -294,6 +295,84 @@ process.exit(r.stdout.trim() === ${JSON.stringify(sourceGoal)} && r.status === 0
   expect(existsSync(f.options.worktreeRoot) && git(f.repo, 'worktree', 'list').includes('cp-sync-')).toBe(false);
   expect(await sync(f.options)).toBe(0);
   expect(git(f.repo, 'rev-parse', 'main')).toBe(main);
+});
+
+test('cp-sync replans after dev advances during the ref compare and preserves the unrelated advance', () => {
+  const f = fixture();
+  write(f.dev, 'README.md', 'unrelated dev advance\n');
+  git(f.dev, 'add', 'README.md');
+  git(f.dev, 'commit', '-qm', 'Unrelated dev advance');
+  const advanced = git(f.repo, 'rev-parse', 'dev');
+  git(f.dev, 'switch', '--detach', advanced);
+  git(f.repo, 'update-ref', 'refs/heads/dev', f.source, advanced);
+  const candidate = git(
+    f.repo,
+    'commit-tree',
+    git(f.repo, 'rev-parse', `${f.main}^{tree}`),
+    '-p',
+    f.main,
+    '-m',
+    'Candidate',
+  );
+  const transactions: string[] = [];
+  const run: CpSyncRefTransactionContext['run'] = (args, options) => {
+    if (args[0] === 'update-ref') {
+      transactions.push(options?.input ?? '');
+      if (transactions.length === 1) {
+        const moved = spawnSync('git', ['update-ref', 'refs/heads/dev', advanced, f.source], {
+          cwd: f.repo,
+          encoding: 'utf8',
+        });
+        if (moved.status !== 0) throw new Error(moved.stderr);
+      }
+    }
+    const result = spawnSync('git', [...args], {
+      cwd: f.repo,
+      encoding: 'utf8',
+      ...(options?.input === undefined ? {} : { input: options.input }),
+    });
+    return {
+      status: result.status ?? 1,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr || result.error?.message || '',
+    };
+  };
+  const context: CpSyncRefTransactionContext = {
+    checkout: f.repo,
+    main: 'main',
+    dev: 'dev',
+    conflictPathLimit: 4,
+    git: (...args) => git(f.repo, ...args),
+    run,
+    head: (branch) => {
+      const result = run(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`]);
+      return result.status === 0 ? result.stdout.trim() : undefined;
+    },
+    isAncestor: (ancestor, descendant) => run(['merge-base', '--is-ancestor', ancestor, descendant]).status === 0,
+    changedPaths: (from, to, paths) =>
+      git(f.repo, 'diff', '--name-only', '-z', from, to, '--', ...paths)
+        .split('\0')
+        .filter(Boolean),
+    replacePaths: () => {
+      throw new Error('unexpected path replacement without stabilize');
+    },
+    commitTree: (tree, parents, message) =>
+      git(f.repo, 'commit-tree', tree, ...parents.flatMap((parent) => ['-p', parent]), '-m', message),
+    assertCheckoutReady: () => {},
+    refuse: (message) => {
+      throw new Refusal(message);
+    },
+    short: (revision) => revision.slice(0, 10),
+    redact: (text) => text,
+  };
+
+  const published = publishCpSyncRefs(context, 'sync', f.main, candidate, ['tools/goal'], f.source, () => {});
+  expect(transactions).toHaveLength(2);
+  expect(transactions[0]).toContain(` ${f.source}\n`);
+  expect(transactions[1]).toContain(` ${advanced}\n`);
+  expect(git(f.repo, 'merge-base', '--is-ancestor', advanced, 'dev')).toBe('');
+  expect(git(f.repo, 'show', 'dev:README.md')).toBe('unrelated dev advance');
+  expect(published.updates.find((update) => update.ref === 'refs/heads/main')?.next).toBe(candidate);
 });
 
 test('a failed check, a dry run and a dirty checkout leave every ref and the checkout alone', async () => {

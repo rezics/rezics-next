@@ -11,6 +11,7 @@ export type AgentLaunchOptions = {
   pool: Pool;
   worktree: string;
   prompt: string;
+  promptViaStdin?: boolean;
   readOnly?: boolean;
   research?: boolean;
   consultation?: boolean;

@@ -701,7 +701,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.width.sweepYieldItems`                        | `8`                                  | Goal snapshots processed before yielding the width sweep.                                                                                                                                   |
 | `policy.flow.alertEveryMs`                            | `3600000`                            | Minimum interval between alarms for the same flow threshold (ms).                                                                                                                           |
 | `policy.flow.waitingTaskExamples`                     | `3`                                  | Maximum waiting-task examples included in a flow alarm.                                                                                                                                     |
-| `policy.lifecycle.conflictWindowRows`                 | `1000`                               | Maximum rebase outcomes and attempts examined per trailing-hour conflict cohort.                                                                                                            |
+| `policy.lifecycle.conflictWindowRows`                 | `1000`                               | Maximum rebase outcomes and attempts examined per trailing-hour conflict cohort; both cohorts use one indexed bounded projection.                                                           |
 | `policy.provider.claudeRefreshMs`                     | `120000`                             | Minimum age before refreshing a Claude usage observation (ms).                                                                                                                              |
 | `policy.provider.claudeStaleMs`                       | `1200000`                            | Maximum reusable Claude observation age after a failed refresh (ms).                                                                                                                        |
 | `policy.provider.claudeRequestTimeoutSeconds`         | `10`                                 | Deadline for the native Claude OAuth usage request (seconds).                                                                                                                               |
@@ -946,6 +946,12 @@ owner/rerere/replay resolution. Owner-landing capability is therefore `unavailab
 conflict-to-landed duration, total open conflicts and their age, and resolution-method counters remain unknown.
 An empty recorded window does not establish zero conflicts or zero conflict-created attempts.
 
+Decision: Resolver prompts use stdin; each dev conflict is counted once per accepted attempt as landed, returned to the worker with a reason, or still in progress in the trailing-hour flow report.
+
+A clean replay of the resolution onto a moved dev head lands without another resolver session; a replay conflict starts
+another bounded resolver attempt. These source-level outcomes do not change the broader conflict totals or make
+historical snapshots complete. Returned reasons are one-line excerpts capped at 160 characters.
+
 `conflicts.recordedOutcomes` counts complete Git contexts from failed `gate-outcome` rebase events in the trailing
 hour. A task/attempt contributes once, using the first persisted rebase outcome; replay cannot add a count or move it
 into a later hour. Legacy outcomes without a complete context remain unclassified. Its observation-to-landed
@@ -1002,26 +1008,29 @@ reported as unknown rather than inferred.
 
 ### Host-capacity admission
 
-Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count running
-attempts through the `worker_attempts_state` expression index. An admitted start keeps its queue ticket in an admitted
-state while it prepares its worktree and launches; that ticket occupies one worker slot until the attempt is recorded
-running or ends. Tickets are tied to the admitting process and are discarded when that process dies. Waiting check-wake
-attempts do not count. The existing 15-second waiting interval, oldest-ticket-first order and critical-path half-hour
-head start are unchanged. Replacing, updating or removing `capacity.json` wakes queued starts immediately, without
-waiting for the periodic worker/memory poll.
+Decision: Host admission and width observations share the indexed, trigger-maintained `worker_current_attempts`
+projection; admission counts only each task's current attempt, while width retains its process-identity classification.
+
+Ordinary starts that wait for host capacity and checks that decide whether an ordinary start can begin count current
+running attempts through the `worker_current_attempts_state` index. An admitted start keeps its queue ticket in an
+admitted state while it prepares its worktree and launches; that ticket occupies one worker slot until the attempt is
+recorded running or ends. Tickets are tied to the admitting process and are discarded when that process dies. Waiting
+check-wake attempts do not count. The existing 15-second waiting interval, oldest-ticket-first order and critical-path
+half-hour head start are unchanged. Replacing, updating or removing `capacity.json` wakes queued starts immediately,
+without waiting for the periodic worker/memory poll.
 
 #### Cost: running-attempt count
 
-- **Touches:** One SQLite statement and the state-index entries for running attempts; no attempt bodies are returned.
-- **Bound:** One indexed count per capacity check, with work proportional to the number of running entries and no scan
-  of non-running attempt history.
-- **Growth check:** `capacity-wait.test.ts`, `a start waiting for host capacity counts running attempts with one
-  indexed query, without reading every attempt body`, holds running entries at 0/1/10/100 while independently
-  crossing settled histories of 10/100/1,000 entries with 128/1,024/8,192-byte payloads. It captures the store's
-  actual statement execution and aggregate result, checks zero body decoding and the nonpartial state-index schema
-  and query plan, and replays that captured SQL with native `sqlite3` against the same fixture. Each replay executes
-  once with zero fullscan steps and at most `5 * running entries + 20` VM steps, identical across history/payload
-  scales for each running set. Zero running entries also leave host capacity available.
+- **Touches:** One SQLite statement and the current live-state index entries; no attempt bodies are returned.
+- **Bound:** One indexed count per capacity check, with work proportional to current running entries and no scan of
+  settled or superseded attempt history.
+- **Growth check:** `capacity-wait.test.ts`, `a start waiting for host capacity counts current running attempts with
+  one indexed query, without reading every attempt body`, holds current running entries at 0/1/10/100 while
+  independently crossing settled and superseded histories of 10/100/1,000 entries with 128/1,024/8,192-byte
+  payloads. It captures the store's actual statement execution and aggregate result, checks zero body decoding and the
+  partial live-state index schema and query plan, and replays that captured SQL with native `sqlite3` against the same
+  fixture. Each replay executes once with zero fullscan steps and at most `5 * running entries + 20` VM steps,
+  identical across history/payload scales for each running set. Zero running entries also leave host capacity available.
 - **Measurement decision:** Use required native `sqlite3` statement statistics for the captured-SQL replay because
   Bun exposes no statement-status counters. VM steps measure executed opcodes; fullscan steps exclude indexed visits.
   Indexed rows examined and physical page/byte work remain unavailable; the returned aggregate is not examined work.
@@ -1181,6 +1190,9 @@ and only the audited `timeout 590 sh -c ...` wrapper is recognized. Local Bun te
 wrappers, host/integration/database tests, native routes, shell expansion and unrecognized flags are rejected. The
 focused runner uses `apps/web` as its working directory and prepares its local test runtime; it does not enter the Web
 host or native check routes.
+
+Decision: brief admission and proof registration share environment-prefix and Bun/test argv syntax parsing; each keeps
+its own allowlist and proof policy, and both preserve raw argv order.
 
 ```yaml
 acceptance:
@@ -1547,7 +1559,10 @@ retry. Once cut, that candidate is frozen while its long gate runs, even as the 
 and does not bisect, because only fixes reach it. An
 infrastructure-only failure (process timeout, Docker setup/run failure, or SSH/rsync transport failure) reruns the
 failing workspace checks on the same candidate up to twice; each rerun is recorded in the promotion run. Assertion
-failures block immediately. A passing gate merges newer control-plane-only commits from main into the candidate,
+failures block immediately. Decision: verifier and promotion share transport/timeout recognition in
+`check-failure.ts`; promotion still excludes Bun per-test timeouts and treats Docker run failures as infrastructure,
+and the verifier still treats check-host transport, unavailable commands and truncated output as infrastructure.
+Retries and verdicts are unchanged. Shared classification fixtures pin those signatures through both callers. A passing gate merges newer control-plane-only commits from main into the candidate,
 then fast-forwards main when possible; other main history changes still need a fresh gate. The branch moves to the
 captured integration head, starting the next window. Deleting the branch starts a fresh preflight of the latest
 integration head.
@@ -2069,10 +2084,11 @@ release checks belong to the native controller after source integration; typing 
 
 #### Width governor
 
-The independent manager-host sweep checks worker width every minute and delivers at most one wakeable width event per
-Goal in each UTC 15-minute bucket when fewer than ten current attempts have live process identities and known ready,
-pending-start, held or stopped work exists. The event reports the current running and Codex counts, unknown process
-evidence, and known work counts. Ready, held, waiting and stale-identity attempts do not count as running. The manager
+The independent manager-host sweep checks worker width every minute from the same `worker_current_attempts` projection
+used by host admission and delivers at most one wakeable width event per Goal in each UTC 15-minute bucket when fewer
+than ten current attempts have live process identities and known ready, pending-start, held or stopped work exists. The
+event reports the current running and Codex counts, unknown process evidence, and known work counts. Ready, held, waiting
+and stale-identity attempts do not count as running. The manager
 is alerted based on confirmed live workers only; unknown process identities remain explicit evidence and do not
 suppress a low-width notice. Events retain their Goal metadata for shared inbox queries. The event tells the manager
 to recover, reshape or dispatch real work, to act on each stopped task within an hour (retry with a rewritten brief,
@@ -2405,6 +2421,8 @@ captured values: `main` to the sync commit, `stabilize` (when present) to a merg
 control-plane paths, and `dev` to a merge that keeps dev's tree. Main stays inside stabilize and dev, so promotion
 still fast-forwards and the next sync finds main inside dev. A failed transaction moves the files back.
 (`git merge --ff-only` cannot do this step: once the ref has moved, the checkout's HEAD already names the new commit.)
+Decision: Sync, forward rollback and resident-host recovery share the same ref planner and publisher; stale compares
+re-plan from current branch heads, and failed publication restores the main checkout's files.
 Running processes hand over on the new `main:tools/goal` as after any control-plane release. If
 `tools/goal/package.json` or its lockfile changed, cp-sync reinstalls in the main checkout. Each sync appends the
 previous and new main, stabilize and dev heads to `.temp/goal/cp-sync-history.log`.
@@ -2493,6 +2511,8 @@ cached and output tokens, before/after quota, outcome, first failure, escalation
 changed files, host gate time and the fixed classifier version. Step classes are decision, read, edit, wait, check and
 commit. Cumulative snapshots are differenced; repeated or older totals add no tokens. A resumed log requires its
 preceding token baseline, or a rollout containing the pre-window observation.
+
+Decision: retained session accounting uses one bounded file traversal, keeps both rollout interpretations as streaming aggregates, and selects after the scan so late rollout markers retain precedence without retaining event history.
 
 ```sh
 bun tools/goal/src/cli.ts import-attempt /absolute/path/to/<capture-directory>

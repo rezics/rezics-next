@@ -46,6 +46,11 @@ export const flowMigrations = [
     version: 4,
     sql: `CREATE INDEX flow_events_at_window ON flow_events(at, sequence);`,
   },
+  {
+    module: 'flow',
+    version: 5,
+    sql: `CREATE INDEX flow_events_wait_action ON flow_events(task_id, attempt, stage, action, at DESC, sequence DESC);`,
+  },
 ];
 export function ensureFlow(db: Database): void {
   migrate(db, flowMigrations);

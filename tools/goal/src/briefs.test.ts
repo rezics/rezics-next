@@ -49,11 +49,43 @@ test('acceptance placement is optional, typed, and restricts local checks to the
     ),
     markdown.replace(
       '  command: [bun, test]',
+      '  command: [bun, --cwd, apps/web, test, tests/shell-menus.test.ts]\n  placement: local',
+    ),
+    markdown.replace(
+      '  command: [bun, test]',
       '  command: [bun, test, tools/goal/src/briefs.test.ts]\n  placement: local',
     ),
   ]) {
     expect(() => parseBrief(invalid, ownership)).toThrow();
   }
+});
+
+test('local placement keeps the focused Web wrapper and its audited environment prefix', () => {
+  const command = [
+    'env',
+    '-u',
+    'KERNEL_ORIGIN',
+    'PUBLIC_ORIGIN=http://127.0.0.1:3000',
+    'bun',
+    'apps/web/scripts/focused.ts',
+    '--private-network',
+    '--',
+    'bun',
+    'test',
+    'tests/account-menu.test.ts',
+    '-t',
+    'signed-out action',
+  ];
+  const local = markdown.replace(
+    '  command: [bun, test]',
+    `  command: [${command.map((token) => JSON.stringify(token)).join(', ')}]\n  placement: local`,
+  );
+  const brief = parseBrief(local, { version: 1, areas: {} });
+  expect(brief.acceptance.command).toEqual(command);
+  expect(brief.acceptance.placement).toBe('local');
+
+  const unsupported = local.replace('PUBLIC_ORIGIN=http://127.0.0.1:3000', 'CI=1');
+  expect(() => parseBrief(unsupported, { version: 1, areas: {} })).toThrow();
 });
 
 test('ordinary dev outcome briefs keep their body and delegate validation when estimate and command are omitted', () => {
