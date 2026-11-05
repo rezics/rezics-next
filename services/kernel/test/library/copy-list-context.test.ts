@@ -175,9 +175,7 @@ test('FULL copies keep native row identity and private metadata with only disclo
       { id: 'digital', labels: { en: 'Digital' }, statuses: [{ id: 'owned', labels: { en: 'Owned' } }] },
     ];
     await f.publish(retired);
-    const retiredRow = (await responseBody(await f.page(f.ownerToken))).copies.find(
-      (copy) => copy.id === second.id,
-    );
+    const retiredRow = (await responseBody(await f.page(f.ownerToken))).copies.find((copy) => copy.id === second.id);
     if (!retiredRow) throw new Error('Retired copy row is missing');
     expect(retiredRow).toMatchObject({ kind: 'physical', status: 'disposed', context: { state: 'unsupported' } });
 

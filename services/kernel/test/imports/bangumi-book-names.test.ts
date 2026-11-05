@@ -34,10 +34,7 @@ async function planFor(source: ReturnType<typeof record>) {
   return plan;
 }
 
-type CandidateValue =
-  | { type: 'value'; content: unknown }
-  | { type: 'somevalue' }
-  | { type: 'novalue' };
+type CandidateValue = { type: 'value'; content: unknown } | { type: 'somevalue' } | { type: 'novalue' };
 
 function contentOf(statement: { value: CandidateValue }): unknown {
   return statement.value.type === 'value' ? statement.value.content : undefined;
@@ -61,7 +58,11 @@ function titleValues(statements: readonly { value: CandidateValue }[] | undefine
     .sort((left, right) => `${left.language}\u0000${left.text}`.localeCompare(`${right.language}\u0000${right.text}`));
 }
 
-function hasTitleCandidate(candidates: readonly { statement: { value: CandidateValue } }[], language: string, text: string) {
+function hasTitleCandidate(
+  candidates: readonly { statement: { value: CandidateValue } }[],
+  language: string,
+  text: string,
+) {
   return candidates.some(
     (candidate) =>
       candidate.statement.value.type === 'value' &&

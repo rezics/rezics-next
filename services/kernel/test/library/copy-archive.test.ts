@@ -141,8 +141,7 @@ function archiveExportPage(value: unknown): {
   if (manifest !== null && !isArchiveTestManifest(manifest))
     throw new Error('Library export page has an invalid manifest shape');
   const next = value.next;
-  if (next !== null && typeof next !== 'string')
-    throw new Error('Library export page has an invalid cursor');
+  if (next !== null && typeof next !== 'string') throw new Error('Library export page has an invalid cursor');
   return {
     manifest,
     records: records.filter(isArchiveTestRecord),
@@ -335,13 +334,15 @@ beforeAll(async () => {
   let cursor = status.first,
     manifest: ArchiveTestManifest | null = null;
   for (let n = 0; cursor && n < 100; n++) {
-    const page = archiveExportPage(await json(
-      await f.send(
-        owner.bearer,
-        'GET',
-        `/v1/libraryExports/${status.exportId}/pages?cursor=${encodeURIComponent(cursor)}`,
+    const page = archiveExportPage(
+      await json(
+        await f.send(
+          owner.bearer,
+          'GET',
+          `/v1/libraryExports/${status.exportId}/pages?cursor=${encodeURIComponent(cursor)}`,
+        ),
       ),
-    ));
+    );
     records.push(...page.records);
     cursor = page.next;
     manifest = page.manifest;
@@ -627,9 +628,7 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
     amount: '0',
     total: '999999999999.999999',
   });
-  expect(new Set(measures.map((measure) => measure.unit))).toEqual(
-    new Set(['chapter', ...additionalUnits]),
-  );
+  expect(new Set(measures.map((measure) => measure.unit))).toEqual(new Set(['chapter', ...additionalUnits]));
   expect(
     measures
       .filter((measure) => additionalUnits.includes(measure.unit))
