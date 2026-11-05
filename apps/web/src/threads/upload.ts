@@ -141,8 +141,7 @@ function siteFetch(
   credential?: string,
 ): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (credential !== undefined) headers.set('X-CSRF-Token', credential);
-  else if (init.method !== 'GET' && init.method !== 'HEAD') headers.set('X-CSRF-Token', csrfToken());
+  if (init.method !== 'GET' && init.method !== 'HEAD') headers.set('X-CSRF-Token', credential ?? csrfToken());
   return fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store', headers });
 }
 
