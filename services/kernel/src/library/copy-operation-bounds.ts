@@ -545,17 +545,20 @@ const COPY_ACCOUNT_ROW = {
 };
 const COPY_RESPONSE_BYTES = projectedBytes(COPY_STORE_ROW, 9) + Buffer.byteLength('{"copy":{}}');
 const COPY_PAGE_RESPONSE_BYTES = projectedBytes(COPY_PAGE_ROW, 3) + 2;
+// Profile labels contain at most 80 Unicode code points. Two UTF-16 units per
+// point, each maximally escaped by JSON, bound every admitted label.
+const PROFILE_LABEL = '\0'.repeat(80 * 2);
 const COPY_PRESENTATION_SHAPE = {
   meaning: 'known',
-  kindLabel: '\0'.repeat(RELEASE_LIMITS.bytes),
+  kindLabel: PROFILE_LABEL,
   kindLabelLanguage: '\0'.repeat(64),
-  statusLabel: '\0'.repeat(RELEASE_LIMITS.bytes),
+  statusLabel: PROFILE_LABEL,
   statusLabelLanguage: '\0'.repeat(64),
   statusEditing: {
     state: 'supported',
     statuses: Array.from({ length: MAX_COPY_FILTER_OPTIONS }, () => ({
       id: ID64,
-      label: '\0'.repeat(RELEASE_LIMITS.bytes),
+      label: PROFILE_LABEL,
       labelLanguage: '\0'.repeat(64),
     })),
   },
