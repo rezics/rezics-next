@@ -87,12 +87,14 @@ export async function resolveDiscoveryOwnerAdapters(
       Object.entries(classification.witnesses).filter(([kind]) => available.has(kind as DiscoveryMetadataKind)),
     ),
   ) as DiscoveryCapabilityWitnesses;
+  const unavailable = Object.freeze({ readiness: 'unavailable' as const });
+  const ownerAdapters: DiscoveryOwnerAdapterSlots = Object.freeze({
+    collection: available.has('collection') ? producers.ownerAdapters.collection : unavailable,
+    review: available.has('review') ? producers.ownerAdapters.review : unavailable,
+    space: available.has('space') ? producers.ownerAdapters.space : unavailable,
+  });
   return Object.freeze({
-    ownerAdapters: Object.freeze({
-      collection: available.has('collection') ? producers.ownerAdapters.collection : { readiness: 'unavailable' },
-      review: available.has('review') ? producers.ownerAdapters.review : { readiness: 'unavailable' },
-      space: available.has('space') ? producers.ownerAdapters.space : { readiness: 'unavailable' },
-    }),
+    ownerAdapters,
     metadataProducers,
     omittedKinds: Object.freeze(omittedKinds),
     capabilityWitnesses,
