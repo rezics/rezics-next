@@ -443,6 +443,14 @@ async function createNativeContentSystemWithOptions(
     };
     const governance = await person('governance');
     await bootstrapGovernance(pool, governance.actor.accountId);
+    // Bootstrap installs only the standing organization authority. A grantor never delegates an action it
+    // does not hold, so the fixture gives governance its own parent-creation holdings before delegating them.
+    for (const action of ['space:create', 'realm:create', 'subject:create'])
+      await pool.query(
+        `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+         VALUES ($1,$2,$3,$4,'(,)',$3)`,
+        [PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, governance.actor.accountId, action],
+      );
     const [author, other, moderator, suspended] = await Promise.all([
       person('author'),
       person('other'),

@@ -12,7 +12,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
@@ -22,6 +22,8 @@ let kernel: ReturnType<typeof createKernel>;
 beforeAll(async () => {
   scopes.push('account:read', 'account:update');
   db = await openGrowthDatabase();
+  // Native suspension runs the production command on the admin pool, which needs its own trusted ring.
+  configureTestReceiptKeys(db.admin);
   fixture = await nativeFixture(db.pool);
   kernel = createKernel({
     pool: db.pool,
@@ -88,7 +90,8 @@ test("a notifications patch merges per kind and null restores a kind's default",
     shelf: { gridSize: 'large' },
   });
   expect(merged.status).toBe(200);
-  expect(merged.value.notifications).toEqual(allOff);
+  // Merge patch sets only the named kinds; thread_watch and board_activity keep their defaults.
+  expect(merged.value.notifications).toEqual({ ...DEFAULT_NOTIFICATIONS, reply: false, mention: false });
   expect(merged.value.version).toBe(2);
   const restored = await call(person, { expectedVersion: 2, notifications: { reply: null } });
   expect(restored.status).toBe(200);
@@ -237,7 +240,7 @@ test('another account cannot read or set notification preferences', async () => 
   expect((await stored(owner.accountId)).rows).toHaveLength(0);
 });
 
-// Match the existing client contract check's budget for SQL typing and declaration emission.
+// Declaration emission runs a synchronous compiler; under shared check-host load it exceeds 180 seconds.
 test('the client declarations are regenerated', () => {
   expect([...committedDeclarations()]).toEqual([...clientDeclarations()]);
-}, 180000);
+}, 600000);
