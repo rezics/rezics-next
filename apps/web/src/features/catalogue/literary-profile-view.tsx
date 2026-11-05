@@ -907,11 +907,14 @@ function LiteraryProfileLive({
         const current =
           next.ok &&
           next.public.subject.id === id &&
-          (!visit ||
-            (next.public.subject.type === visit.type && next.public.subject.context === visit.context));
+          (!visit || (next.public.subject.type === visit.type && next.public.subject.context === visit.context));
         client.setQueryData<LiteraryRead>(
           queryKey,
-          current ? { ok: true, release: next.release, current: next } : next.ok ? { ok: false, reason: 'stale' } : next,
+          current
+            ? { ok: true, release: next.release, current: next }
+            : next.ok
+              ? { ok: false, reason: 'stale' }
+              : next,
         );
       }}
     />

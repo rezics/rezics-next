@@ -305,7 +305,9 @@ export function LiteraryCurrentAssertionInspection({
                       {reference.parts.map((part, partIndex) => (
                         <li key={partIndex}>
                           <span className="text-muted-foreground">
-                            {pageText(read.release.properties[part.property.id]?.labels, locale).text || part.property.id}:{' '}
+                            {pageText(read.release.properties[part.property.id]?.labels, locale).text ||
+                              part.property.id}
+                            :{' '}
                           </span>
                           <PartValue part={part} read={read} locale={locale} />
                         </li>

@@ -17,7 +17,11 @@ import type { CreateResult } from './create-subject';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const loadLiteraryProfile = createServerFn({ method: 'GET', strict: false })
   .validator((input?: string | { id: string; type?: string; context?: string; expectedReader?: string }) => {
-    if (input !== undefined && typeof input !== 'string' && (!input || typeof input !== 'object' || Array.isArray(input)))
+    if (
+      input !== undefined &&
+      typeof input !== 'string' &&
+      (!input || typeof input !== 'object' || Array.isArray(input))
+    )
       throw new Error('Invalid work admission');
     const id = typeof input === 'object' && input ? input.id : input;
     if (id !== undefined && (typeof id !== 'string' || !uuid.test(id))) throw new Error('Invalid work identity');

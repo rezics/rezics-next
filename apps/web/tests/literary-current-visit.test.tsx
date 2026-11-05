@@ -125,7 +125,9 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
   mock.module('../src/features/pages/showcase-work/tags-view', () => ({ WorkConceptTagsRoute: () => null }));
 
   const { literaryFixture, literaryWorkId } = await import('../src/kernel/fake/catalogue-literary-profile');
-  const { Window } = await import(createRequire(createRequire(import.meta.url).resolve('@puckeditor/core')).resolve('happy-dom'));
+  const { Window } = await import(
+    createRequire(createRequire(import.meta.url).resolve('@puckeditor/core')).resolve('happy-dom')
+  );
   const { SubjectPage, subjectPageTitle } = await import('../src/features/pages/subject');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const { m } = await import('../src/paraglide/messages.js');
@@ -133,8 +135,14 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
   const loaded = await fixture.transport.load();
   if (!loaded.ok || !loaded.current) throw new Error('Expected a current literary profile');
   const actions = {
-    subject: { state: 'available' as const, actions: [{ action: 'subject:read', operations: ['subject.list_candidates'] }] },
-    context: { state: 'available' as const, actions: [{ action: 'statement:propose', operations: ['subject.propose'] }] },
+    subject: {
+      state: 'available' as const,
+      actions: [{ action: 'subject:read', operations: ['subject.list_candidates'] }],
+    },
+    context: {
+      state: 'available' as const,
+      actions: [{ action: 'statement:propose', operations: ['subject.propose'] }],
+    },
   };
   const current = structuredClone(loaded.current);
   current.actions = actions;
@@ -159,13 +167,23 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
       status: 200,
       body: {
         ...structuredClone(current.public),
-        subject: { ...structuredClone(current.public.subject), labels: { ...current.public.subject.labels, en: title } },
+        subject: {
+          ...structuredClone(current.public.subject),
+          labels: { ...current.public.subject.labels, en: title },
+        },
         summary: null,
       },
     };
     return page;
   };
-  const publicMessages = { unknown: 'Unknown', none: 'None', unlabelled: 'Unlabelled', sources: 'Sources', aliases: 'Aliases', search: 'Search' };
+  const publicMessages = {
+    unknown: 'Unknown',
+    none: 'None',
+    unlabelled: 'Unlabelled',
+    sources: 'Sources',
+    aliases: 'Aliases',
+    search: 'Search',
+  };
   const globalContext = { id: candidateContext, population: { kind: 'global' as const } };
   const sourceA = literaryAddress({
     id: literaryWorkId,
@@ -239,7 +257,12 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     context: { id: realmContext, population: { kind: 'realm', id: realm, title: 'A shelf' } },
   });
   const globalAddress = literaryCurrentVisitSearch({ context: candidateContext, type: 'schema:Book', source: sourceA });
-  const realmAddress = literaryCurrentVisitSearch({ context: realmContext, realm, type: 'schema:Book', source: sourceB });
+  const realmAddress = literaryCurrentVisitSearch({
+    context: realmContext,
+    realm,
+    type: 'schema:Book',
+    source: sourceB,
+  });
   const globalVisit = parseLiteraryCurrentVisit(globalAddress, literaryWorkId, 'en');
   const realmVisit = parseLiteraryCurrentVisit(realmAddress, literaryWorkId, 'en');
   expect(globalVisit.kind).toBe('visit');
@@ -263,7 +286,8 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     'getComputedStyle',
     'requestAnimationFrame',
     'cancelAnimationFrame',
-  ]) globals[key] = Reflect.get(window, key);
+  ])
+    globals[key] = Reflect.get(window, key);
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -345,7 +369,9 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     removed.public.subject.statements['schema:wordCount'] = statements.filter((item) => item.id !== duplicate.id);
     freshAnswer = removed;
     await inspect();
-    await until(() => expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })));
+    await until(() =>
+      expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })),
+    );
     expect(inspection().querySelector('article')).toBeNull();
     expect(host.textContent).toContain('An original literary work');
 
@@ -353,7 +379,9 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     delete lostDescriptor.release.properties['schema:wordCount'];
     freshAnswer = lostDescriptor;
     await inspect();
-    await until(() => expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })));
+    await until(() =>
+      expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })),
+    );
     expect(inspection().querySelector('article')).toBeNull();
 
     freshAnswer = {
@@ -361,7 +389,9 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
       actions: { ...actions, subject: { state: 'available', actions: [] } },
     };
     await inspect();
-    await until(() => expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })));
+    await until(() =>
+      expect(inspection().textContent).toContain(m.literary_visit_currentness({}, { locale: 'en' as never })),
+    );
     expect(inspection().querySelector('article')).toBeNull();
 
     freshAnswer = structuredClone(current);
@@ -445,7 +475,12 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
     await act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <SubjectPage page={publicPage('Fresh public title after return')} locale="en" messages={publicMessages} renderJsonLd={false} />
+          <SubjectPage
+            page={publicPage('Fresh public title after return')}
+            locale="en"
+            messages={publicMessages}
+            renderJsonLd={false}
+          />
         </QueryClientProvider>,
       ),
     );
