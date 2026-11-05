@@ -13,6 +13,7 @@ import {
   workbenchCaseQueueHref,
 } from '../src/moderation/workbench-case/read-model';
 import { WorkbenchCaseDetail } from '../src/moderation/workbench-case';
+import { WorkbenchQueueWindowHistory, workbenchReaderFence } from '../src/moderation/workbench-queue/window-history';
 import type { WorkbenchNativeSource } from '../src/moderation/workbench-queue/read';
 import { m } from '../src/paraglide/messages.js';
 
@@ -71,6 +72,9 @@ test('selected report references keep the native ID and return to the captured w
   const search = parseWorkbenchCaseSearch({
     boardId,
     realm: 'realm-1',
+    directory: true,
+    directoryCursor: 'directory-frontier',
+    directoryRealm: 'directory-realm',
     cursor: 'cursor one',
     status: 'pending',
     targetKind: 'post',
@@ -86,10 +90,133 @@ test('selected report references keep the native ID and return to the captured w
   expect(href).toContain('order=oldest');
   expect(href).toContain('queue=reports');
   expect(href).toContain('realm=realm-1');
+  expect(href).toContain('directory=true');
+  expect(href).toContain('directoryCursor=directory-frontier');
+  expect(href).toContain('directoryRealm=directory-realm');
   expect(workbenchCaseQueueHref(search!)).toBe(
-    '/moderation/workbench?queue=reports&board=board%2Fone&targetKind=post&order=oldest&realm=realm-1&cursor=cursor+one',
+    '/moderation/workbench?queue=reports&board=board%2Fone&targetKind=post&order=oldest&realm=realm-1&directory=true&directoryCursor=directory-frontier&directoryRealm=directory-realm&cursor=cursor+one',
   );
   expect(workbenchCaseInput(search!).boardId).toBe(boardId);
+});
+
+test('same-session exact case return rereads the captured queue and restores its private predecessor independently of directory', () => {
+  const history = new WorkbenchQueueWindowHistory();
+  const privatePage = {
+    readerBinding: {
+      id: 'binding-case-window',
+      source: 'reader-case-window',
+      revision: 9,
+      key: 'queue-case-window',
+      placement: 'browser' as const,
+      expected: null,
+      retired: false,
+    },
+    readerOrigin: { subject: 'moderator', csrfFingerprint: 'private' },
+  };
+  const first = workbenchSearch({
+    board: boardId,
+    realm: 'realm-1',
+    queue: 'reports',
+    targetKind: 'post',
+    order: 'oldest',
+    directory: true,
+    directoryCursor: 'directory-frontier',
+    directoryRealm: 'directory-realm',
+  });
+  const firstPage = { ...privatePage, state: 'ready' as const, next: 'queue-cursor-2' };
+  history.admitQueue({ visitId: 'queue-visit-1', page: firstPage, search: first, locale: 'en', admitted: true });
+
+  const current = workbenchSearch({ ...first, cursor: firstPage.next ?? undefined });
+  const currentPage = { ...privatePage, state: 'ready' as const, next: 'queue-cursor-3' };
+  expect(
+    history.beginMove({
+      visitId: 'queue-visit-1',
+      search: first,
+      fence: workbenchReaderFence(firstPage, 'en'),
+      move: 'next',
+      keyboard: false,
+    }),
+  ).toBe(true);
+  expect(
+    history.navigate(
+      'queue-visit-1',
+      { pathname: '/moderation/workbench', search: current as unknown as Record<string, unknown> },
+      first,
+      firstPage,
+    ),
+  ).toBe(true);
+  history.admitQueue({ visitId: 'queue-visit-2', page: currentPage, search: current, locale: 'en', admitted: true });
+
+  const captured = parseWorkbenchCaseSearch({
+    boardId,
+    realm: 'realm-1',
+    queue: 'reports',
+    status: 'pending',
+    targetKind: 'post',
+    order: 'oldest',
+    cursor: 'queue-cursor-2',
+    directory: true,
+    directoryCursor: 'directory-frontier',
+    directoryRealm: 'directory-realm',
+  })!;
+  const caseHref = workbenchCaseHref(report.id, captured);
+  const caseUrl = new URL(caseHref, 'https://workbench.test');
+  expect(
+    history.beginCaseDeparture({
+      visitId: 'queue-visit-2',
+      search: current,
+      fence: workbenchReaderFence(currentPage, 'en'),
+      reportId: report.id,
+    }),
+  ).toBe(true);
+  expect(
+    history.navigate(
+      'queue-visit-2',
+      { pathname: caseUrl.pathname, search: Object.fromEntries(caseUrl.searchParams) },
+      current,
+      currentPage,
+    ),
+  ).toBe(true);
+  expect(
+    history.admitCase({
+      visitId: 'case-visit',
+      page: privatePage,
+      search: captured,
+      reportId: report.id,
+      locale: 'en',
+    }),
+  ).toBe(true);
+
+  const returnHref = workbenchCaseQueueHref(captured);
+  const returnUrl = new URL(returnHref, 'https://workbench.test');
+  expect(returnUrl.searchParams.get('cursor')).toBe('queue-cursor-2');
+  expect(returnUrl.searchParams.get('directoryCursor')).toBe('directory-frontier');
+  expect(returnUrl.searchParams.get('directoryRealm')).toBe('directory-realm');
+  expect(
+    history.beginCaseReturn({
+      visitId: 'case-visit',
+      page: privatePage,
+      search: captured,
+      reportId: report.id,
+      locale: 'en',
+    }),
+  ).toBe(true);
+  const returned = workbenchSearch(Object.fromEntries(returnUrl.searchParams));
+  expect(
+    history.navigate(
+      'case-visit',
+      { pathname: returnUrl.pathname, search: Object.fromEntries(returnUrl.searchParams) },
+      captured,
+      privatePage,
+    ),
+  ).toBe(true);
+  const admittedReturn = { ...privatePage, state: 'ready' as const, next: 'queue-cursor-3' };
+  history.admitQueue({ visitId: 'queue-return-visit', page: admittedReturn, search: returned, locale: 'en', admitted: true });
+  expect(history.previousAddress('queue-return-visit', returned)).toBeNull();
+  expect(returned.cursor).toBe('queue-cursor-2');
+  expect(returned.directoryCursor).toBe('directory-frontier');
+  expect(returned.targetKind).toBe('post');
+  expect(returned.order).toBe('oldest');
 });
 
 test('workbench rows open the exact report or appeal and catalogue stays on catalogue', () => {

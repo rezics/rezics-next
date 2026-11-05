@@ -17,9 +17,15 @@ import { actionOnReport } from '../actions';
 import { createPrivateReaderLifetime, privateReaderSessionSource } from '../private-reader-lifetime';
 import type { ReportQueueAction } from '../reports-view-action';
 import { createWorkbenchSelection, WorkbenchSelectionBoundary } from '../workbench-selection';
-import { workbenchReadKey, workbenchWithoutContinuation, type WorkbenchSearch } from './scope';
-import { loadWorkbench, type WorkbenchRead, type WorkbenchReader } from './read';
+import { workbenchReadKey, workbenchSearch, workbenchWithoutContinuation, type WorkbenchSearch } from './scope';
+import { loadWorkbench, type WorkbenchCase, type WorkbenchRead, type WorkbenchReader } from './read';
 import { WorkbenchView } from './view';
+import {
+  isWorkbenchHistoryTransition,
+  workbenchQueueWindowHistory,
+  workbenchReaderFence,
+  type WorkbenchWindowMove,
+} from './window-history';
 
 const nativeReportAction: ReportQueueAction = (data) => actionOnReport({ data, headers: csrfHeaders() });
 
@@ -33,6 +39,7 @@ export function WorkbenchPage({
   onRetry,
   onRefresh,
   onAction,
+  onOpenCase,
   navigation,
   read = nativeWorkbenchRead,
 }: {
@@ -42,10 +49,21 @@ export function WorkbenchPage({
   onRetry?: () => void;
   onRefresh?: () => Promise<void>;
   onAction?: ReportQueueAction;
-  navigation?: { isCurrent: () => boolean; subscribe: (retire: () => void) => () => void };
+  onOpenCase?: (item: WorkbenchCase, href: string) => void;
+  navigation?: {
+    isCurrent: () => boolean;
+    subscribe: (retire: () => void) => () => void;
+    visitId?: string;
+  };
   read?: WorkbenchReader;
 }) {
   const client = useContext(QueryClientContext);
+  const windowHistory = useMemo(() => (client ? workbenchQueueWindowHistory(client) : undefined), [client]);
+  const windowRevision = useSyncExternalStore(
+    windowHistory?.subscribe ?? (() => () => {}),
+    windowHistory?.snapshot ?? (() => 0),
+    () => 0,
+  );
   const [replacement, setReplacement] = useState<{ original: WorkbenchRead; page: WorkbenchRead }>();
   const [reading, setReading] = useState(false);
   const readingRef = useRef(false);
@@ -122,14 +140,93 @@ export function WorkbenchPage({
     };
   }
   const controller = generation.current.controller;
+  const windowVisitId = owner?.available() && isCurrent() ? navigation?.visitId : undefined;
+  const windowFence = workbenchReaderFence(page, locale.current);
+  const queueWindow = useMemo(
+    () => (view.state === 'denied' ? undefined : windowHistory?.view(windowVisitId, search, view.state)),
+    [windowHistory, windowRevision, windowVisitId, search, view.state],
+  );
   // The child reports pending synchronously, before React renders another refresh control.
   function unresolvedChanged(value: boolean) {
     unresolved.current = value;
     setRefreshBlocked(value);
   }
   async function refresh() {
-    if (!isCurrent() || unresolved.current || readingRef.current) return;
+    if (
+      !isCurrent() ||
+      unresolved.current ||
+      readingRef.current ||
+      controller.unresolved() ||
+      controller.needsDecision()
+    )
+      return;
     await onRefresh?.();
+  }
+  function navigateSearch(next: WorkbenchSearch) {
+    if (!isCurrent()) return;
+    if (windowHistory) {
+      if (isWorkbenchHistoryTransition(search, next))
+        windowHistory.beginHistory(navigation?.visitId, search, next);
+      else windowHistory.clearForVisit(navigation?.visitId);
+    }
+    onSearch(next);
+  }
+  function windowMove(move: WorkbenchWindowMove, source?: HTMLButtonElement, keyboard = false) {
+    if (!isCurrent() || !windowHistory || !navigation?.visitId || !windowFence) return;
+    if (move === 'next' && (!page.next || page.next.length > 4096)) return;
+    if (move === 'previous' && windowHistory.previousAddress(navigation.visitId, search) === undefined) return;
+    if (
+      !windowHistory.beginMove({
+        visitId: navigation.visitId,
+        search,
+        fence: windowFence,
+        move,
+        source,
+        keyboard,
+      })
+    )
+      return;
+    if (move === 'refresh') {
+      void refresh();
+      return;
+    }
+    if (move === 'first') {
+      const first = workbenchWithoutContinuation(search);
+      if (search.cursor) onSearch(first);
+      else void refresh();
+      return;
+    }
+    if (move === 'next') {
+      onSearch(workbenchSearch({ ...search, cursor: page.next }));
+      return;
+    }
+    const cursor = windowHistory.previousAddress(navigation.visitId, search);
+    onSearch(workbenchSearch({ ...search, cursor: cursor ?? undefined }));
+  }
+  function retryWindow(source?: HTMLButtonElement, keyboard = false) {
+    if (!isCurrent() || !windowHistory || !navigation?.visitId || !windowFence) return;
+    if (
+      !windowHistory.beginRetry({
+        visitId: navigation.visitId,
+        search,
+        fence: windowFence,
+        source,
+        keyboard,
+      })
+    )
+      return;
+    onRetry?.();
+  }
+  function openCase(item: WorkbenchCase, href: string) {
+    if (!isCurrent()) return;
+    if (item.kind === 'report' && windowHistory && navigation?.visitId && windowFence)
+      windowHistory.beginCaseDeparture({
+        visitId: navigation.visitId,
+        search,
+        fence: windowFence,
+        reportId: item.id,
+      });
+    onOpenCase?.(item, href);
   }
   async function retryInspection(event?: MouseEvent<HTMLButtonElement>) {
     if (!isCurrent() || unresolved.current || readingRef.current) return;
@@ -209,9 +306,27 @@ export function WorkbenchPage({
     }
   }
   useLayoutEffect(() => {
-    if (isCurrent() && (document.activeElement === document.body || !document.activeElement?.isConnected))
-      boundary.current?.querySelector<HTMLElement>('article')?.focus();
-  }, [owner]);
+    if (owner && (!owner.available() || !isCurrent())) {
+      if (navigation?.isCurrent() !== false && !owner.healthy()) windowHistory?.clearForVisit(navigation?.visitId);
+      return;
+    }
+    const focus = windowHistory?.admitQueue({
+      visitId: navigation?.visitId,
+      page: data,
+      search,
+      locale: locale.current,
+      admitted: !owner || owner.available(),
+    });
+    if (focus) {
+      const returnTarget =
+        focus.kind === 'case-return' && focus.reportId
+          ? document.getElementById(`workbench-case-${encodeURIComponent(focus.reportId)}`)
+          : null;
+      const queueHeading = boundary.current?.querySelector<HTMLElement>('[data-workbench-current-queue]');
+      (returnTarget ?? queueHeading ?? boundary.current?.querySelector<HTMLElement>('article'))?.focus();
+    }
+    // A direct visit or pointer navigation has no focus ticket to restore.
+  }, [owner, data, search, navigation?.visitId, version]);
   useLayoutEffect(() => {
     const handoff = recovery.current;
     if (!handoff || reading || !isCurrent()) return;
@@ -260,12 +375,14 @@ export function WorkbenchPage({
         <WorkbenchView
           key={identity}
           page={view}
-          onSearch={(next) => {
-            if (isCurrent()) onSearch(next);
-          }}
+          onSearch={navigateSearch}
+          onOpenCase={openCase}
           selection={controller}
           onAction={submit}
           isCurrent={isCurrent}
+          {...(queueWindow ? { queueWindow } : {})}
+          {...(windowHistory && windowVisitId ? { onWindowMove: windowMove } : {})}
+          {...(queueWindow?.retry ? { retryWindow: queueWindow.retry, onRetryWindow: retryWindow } : {})}
           onUnresolvedAppealChange={unresolvedChanged}
           refreshBlocked={refreshBlocked}
           onRestart={() => onSearch(workbenchWithoutContinuation(search))}

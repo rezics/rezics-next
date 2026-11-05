@@ -1,5 +1,6 @@
 import { createFileRoute, notFound, useNavigate, useRouter } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useContext, useMemo } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { loadModerationReports, prepareModerationReportRead } from '../../moderation/reports-read';
 import type { ReportNavigation } from '../../moderation/reports-page';
@@ -14,6 +15,7 @@ import { m } from '../../paraglide/messages.js';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
+import { workbenchQueueWindowHistory } from '../../moderation/workbench-queue/window-history';
 
 export const Route = createFileRoute('/moderation/cases/$id')({
   beforeLoad: requireSignedIn,
@@ -51,12 +53,24 @@ function WorkbenchCaseRoute() {
   const search = Route.useSearch();
   const router = useRouter();
   const navigate = useNavigate({ from: '/moderation/cases/$id' });
-  const navigation = useMemo<ReportNavigation>(
+  const client = useContext(QueryClientContext);
+  const windowHistory = client ? workbenchQueueWindowHistory(client) : undefined;
+  const visitId = useMemo(() => crypto.randomUUID(), [page.navigationKey]);
+  const navigation = useMemo<ReportNavigation & { visitId: string }>(
     () => ({
+      visitId,
       isCurrent: () => (router.state.location.state.__TSR_key ?? router.state.location.href) === page.navigationKey,
       subscribe: (retire) => {
         const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
-          if ((toLocation.state.__TSR_key ?? toLocation.href) !== page.navigationKey) retire();
+          if ((toLocation.state.__TSR_key ?? toLocation.href) !== page.navigationKey) {
+            windowHistory?.navigate(
+              visitId,
+              { pathname: toLocation.pathname, search: toLocation.search as Record<string, unknown> },
+              search,
+              page,
+            );
+            retire();
+          }
         });
         const reload = router.subscribe('onBeforeLoad', retire);
         return () => {
@@ -65,7 +79,7 @@ function WorkbenchCaseRoute() {
         };
       },
     }),
-    [router, page.navigationKey, page.generation],
+    [router, page.navigationKey, page.generation, page, search, visitId, windowHistory],
   );
   const input = workbenchCaseInput(search, id);
   return (
@@ -76,6 +90,7 @@ function WorkbenchCaseRoute() {
       input={input}
       search={search}
       navigation={navigation}
+      onReturnQueue={(href) => void router.navigate({ to: href as never })}
       onRefresh={() => router.invalidate({ sync: true })}
       onRetry={() => void router.invalidate({ sync: true })}
       onRestart={() => {
