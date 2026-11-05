@@ -397,20 +397,9 @@ export function createExportJourney(input: {
     notice = null;
     emit();
     if (!live() || token !== generation || expireIfNeeded()) return snapshot();
+    let saved: boolean;
     try {
-      const saved = await deliver(file);
-      if (!live() || token !== generation) return snapshot();
-      if (expireIfNeeded()) return snapshot();
-      busy = false;
-      if (!saved) {
-        stage = 'save-failed';
-        retain();
-        return emit();
-      }
-      notice = { kind: 'saved' };
-      stage = manifest?.rows === 0 ? 'empty' : 'ready';
-      retain();
-      return emit();
+      saved = await deliver(file);
     } catch {
       if (!live() || token !== generation) return snapshot();
       if (expireIfNeeded()) return snapshot();
@@ -419,6 +408,18 @@ export function createExportJourney(input: {
       retain();
       return emit();
     }
+    if (!live() || token !== generation) return snapshot();
+    if (expireIfNeeded()) return snapshot();
+    busy = false;
+    if (!saved) {
+      stage = 'save-failed';
+      retain();
+      return emit();
+    }
+    notice = { kind: 'saved' };
+    stage = manifest?.rows === 0 ? 'empty' : 'ready';
+    retain();
+    return emit();
   }
 
   async function replay(retry = false): Promise<ExportJourneySnapshot> {
