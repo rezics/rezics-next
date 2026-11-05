@@ -3,7 +3,20 @@ import type { Pool } from 'pg';
 
 import type { ListingStamp } from './listing-freshness-contract.ts';
 
-export const CANONICAL_SOURCE_RAW_KEY_LIMIT = 100;
+import {
+  CANONICAL_SOURCE_RAW_KEY_LIMIT,
+  CANONICAL_SOURCE_STATEMENTS,
+  assertCanonicalSourceStatement,
+  canonicalSourceGroupStatement,
+  canonicalSourceMappingBound,
+  canonicalSourceOwnerFactBound,
+  canonicalSourceRawSplit,
+  canonicalSourceWorkDimensions,
+  identityScopeWorkReceipt,
+  type CanonicalSourceStatement,
+} from './canonical-source-bounds.ts';
+
+export { CANONICAL_SOURCE_RAW_KEY_LIMIT };
 
 /**
  * Reserved by the caller BEFORE dispatch; raw keys hard <=CANONICAL_SOURCE_RAW_KEY_LIMIT, shared Zone aggregate <=256 including final use.
@@ -198,7 +211,6 @@ import {
 } from './collection-source-native.ts';
 import type { WorkAllowance } from './collection-source.ts';
 import { readOwnerNativeFactPage, type OwnerNativeFactDriver } from './owner-index.ts';
-import ownerFacts from './collection-source-native-facts.sql';
 import { deadlineClient } from '../access/authenticate.ts';
 import { creationDeclares } from '../access/parent-creation.ts';
 import { shareAccount } from '../access/account-share.ts';
@@ -338,15 +350,19 @@ function ledger(input: CanonicalCall): CollectionSourceLedger {
     input.deadline,
   );
 }
-function work(l: CollectionSourceLedger): CanonicalWork {
+function work(
+  l: CollectionSourceLedger,
+  split?: ReturnType<typeof canonicalSourceRawSplit>,
+): CanonicalWork {
   const r = l.receipt();
   return {
     ...r.used,
     reservationId: r.reservationId,
-    aliasKeys: 0,
-    duplicateKeys: 0,
-    lookaheadKeys: 0,
-    internalDriverKeys: 0,
+    candidateKeys: split?.candidateKeys ?? r.used.candidateKeys,
+    aliasKeys: split?.aliasKeys ?? 0,
+    duplicateKeys: split?.duplicateKeys ?? 0,
+    lookaheadKeys: split?.lookaheadKeys ?? 0,
+    internalDriverKeys: split?.internalDriverKeys ?? 0,
   };
 }
 function notReady(l: CollectionSourceLedger, reason: CanonicalNotReady['reason']): CanonicalNotReady {
@@ -355,50 +371,37 @@ function notReady(l: CollectionSourceLedger, reason: CanonicalNotReady['reason']
 async function query<R extends QueryResultRow>(
   client: Client,
   l: CollectionSourceLedger,
-  sql: string,
+  declared: CanonicalSourceStatement,
   values: readonly unknown[],
-  rowBound = 16,
-  resultBytes = 8192,
-  rawBound = 0,
 ): Promise<R[]> {
+  const bound = assertCanonicalSourceStatement(declared, values);
+  const cost = canonicalSourceWorkDimensions(bound);
   return l.bounded(
-    {
-      nativeRows: rowBound,
-      nativePoints: 1,
-      statements: 1,
-      emptySeeks: 1,
-      candidateKeys: rawBound,
-      bytes: Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(values)) + resultBytes,
-    },
+    cost,
     async () => {
-      const config = { text: sql, values: [...values], query_timeout: Math.max(1, l.deadline - Date.now()) };
-      return (await client.query<R>(config)).rows;
+      const config = { text: declared.sql, values: [...values], query_timeout: Math.max(1, l.deadline - Date.now()) };
+      const rows = (await client.query<R>(config)).rows;
+      if (rows.length > declared.rows) throw new ProblemError('dependency_unavailable');
+      if (Buffer.byteLength(JSON.stringify(rows) ?? '') > declared.resultBytes)
+        throw new ProblemError('dependency_unavailable');
+      return rows;
     },
-    (rows) => ({ emptySeeks: rows.length === 0 ? 1 : 0, candidateKeys: rawBound ? rows.length : 0 }),
+    (rows) => ({
+      emptySeeks: rows.length === 0 ? cost.emptySeeks : 0,
+      candidateKeys: declared.raw ? rows.length : 0,
+    }),
   );
 }
-const scopeSQL = `SELECT identity,frontier,capture_id::text AS capture,committed_revision::text AS revision
-  FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 AND source_fence=$3`;
-const generationSQL = `SELECT generation::text,basis,driver,after_subject::text,after_fact::text,source_exhausted,state,version::text
-  FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 AND generation=$3`;
 function takeScopeWork(l: CollectionSourceLedger, used: IdentityScopeWork): void {
-  l.take({
-    reservationId: l.allowance().reservationId,
-    used: {
-      candidateKeys: 0,
-      witnessKeys: 0,
-      identityMetadataRows: 0,
-      emptySeeks: 0,
-      nativeRows: used.rows,
-      nativePoints: used.points,
-      statements: used.statements,
-      bytes: used.bytes,
-    },
-  });
+  l.take(identityScopeWorkReceipt(used, l.allowance().reservationId));
 }
 async function scope(pool: Pool, metadata: NativeCollectionMetadata, l: CollectionSourceLedger) {
   const [row] = await withConnection(pool, (client) =>
-    query<ScopeRow>(client, l, scopeSQL, [metadata.route, metadata.collectionId, nativeSourceFence(metadata)]),
+    query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS.scope, [
+      metadata.route,
+      metadata.collectionId,
+      nativeSourceFence(metadata),
+    ]),
   );
   if (!row || !row.capture || row.revision === null) return null;
   const expected: IdentityScopeObservation = {
@@ -473,7 +476,11 @@ async function readGeneration(pool: Pool, input: CanonicalSourceRef, generation:
   return withConnection(
     pool,
     async (client) =>
-      (await query<Generation>(client, l, generationSQL, [input.route, input.collectionId, generation]))[0] ?? null,
+      (await query<Generation>(client, l, CANONICAL_SOURCE_STATEMENTS.generation, [
+        input.route,
+        input.collectionId,
+        generation,
+      ]))[0] ?? null,
   );
 }
 function repair(row: Generation): CanonicalRepair {
@@ -509,20 +516,18 @@ async function mutate<T>(
       clock: context.clock,
     },
     async (tx) => {
-      const [row] = await query<{ generation: string }>(
-        tx,
-        l,
-        "SELECT source_generation::text AS generation FROM library.collection WHERE route=$1 AND collection_id=$2 AND state='active' AND curator_account_id=$3 AND collection_id::text || ':' || extract(epoch FROM created_at)::text=$4 FOR UPDATE",
-        [input.route, input.collectionId, metadata.curatorAccountId, metadata.incarnation],
-      );
+      const [row] = await query<{ generation: string }>(tx, l, CANONICAL_SOURCE_STATEMENTS.sourceLock, [
+        input.route,
+        input.collectionId,
+        metadata.curatorAccountId,
+        metadata.incarnation,
+      ]);
       if (!row || row.generation !== metadata.sourceGeneration) return null;
       if (metadata.authority === 'private_builtin') {
-        const [fact] = await query<{ generation: string }>(
-          tx,
-          l,
-          'SELECT generation::text FROM library.fact_source_head WHERE route=$1 AND account_id=$2 FOR SHARE',
-          [metadata.route, metadata.curatorAccountId],
-        );
+        const [fact] = await query<{ generation: string }>(tx, l, CANONICAL_SOURCE_STATEMENTS.factLock, [
+          metadata.route,
+          metadata.curatorAccountId,
+        ]);
         if (fact?.generation !== metadata.factFence) return null;
       }
       return body(tx);
@@ -547,12 +552,7 @@ export async function readCanonicalSourceState(pool: Pool, input: CanonicalCall)
     const observed = await observe(pool, input, l);
     if (!observed) return notReady(l, 'identity');
     const [head] = await withConnection(pool, (client) =>
-      query<{ generation: string }>(
-        client,
-        l,
-        'SELECT generation::text FROM library.canonical_source_head WHERE route=$1 AND collection_id=$2',
-        [input.route, input.collectionId],
-      ),
+      query<{ generation: string }>(client, l, CANONICAL_SOURCE_STATEMENTS.head, [input.route, input.collectionId]),
     );
     if (!head) return notReady(l, 'unbuilt');
     const row = await readGeneration(pool, input, head.generation, l);
@@ -577,24 +577,19 @@ export async function seekCanonicalSourceGroup(
     if (!generation || generation.state !== 'complete' || !same(generation.basis, input.basis))
       return notReady(l, 'unbuilt');
     const [row] = await withConnection(pool, (client) =>
-      query<{ subject: string }>(
-        client,
-        l,
-        `SELECT canonical_subject_id::text AS subject FROM library.canonical_source_reference
-     WHERE route=$1 AND collection_id=$2 AND generation=$3 AND canonical_subject_id>COALESCE($4::uuid,'00000000-0000-0000-0000-000000000000')
-     ORDER BY canonical_subject_id,stored_subject_id,driver,fact_id LIMIT 1`,
-        [input.route, input.collectionId, input.generation, input.afterSubjectId],
-        8,
-        128,
-        1,
-      ),
+      query<{ subject: string }>(client, l, CANONICAL_SOURCE_STATEMENTS.seek, [
+        input.route,
+        input.collectionId,
+        input.generation,
+        input.afterSubjectId,
+      ]),
     );
     return {
       state: 'ready',
       subjectId: row?.subject ?? null,
       coveredThrough: row?.subject ?? input.afterSubjectId,
       exhausted: !row,
-      work: work(l),
+      work: work(l, canonicalSourceRawSplit(row ? [{ driver: 'member', storedSubjectId: row.subject, factId: row.subject }] : [])),
     };
   } catch (error) {
     if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => l.receipt(), configurable: true });
@@ -616,27 +611,16 @@ export async function readCanonicalSourceGroup(
     const limit = Math.min(CANONICAL_SOURCE_RAW_KEY_LIMIT, l.allowance().remaining.candidateKeys);
     if (!limit) return notReady(l, 'allowance');
     const rows = await withConnection(pool, (client) =>
-      query<{ original: string; driver: number; fact: string }>(
-        client,
-        l,
-        `SELECT stored_subject_id::text AS original,driver,fact_id::text AS fact FROM library.canonical_source_reference
-     WHERE route=$1 AND collection_id=$2 AND generation=$3 AND canonical_subject_id=$4
-       AND (stored_subject_id,driver,fact_id)>(COALESCE($5::uuid,'00000000-0000-0000-0000-000000000000'),COALESCE($6::smallint,-1),COALESCE($7::uuid,'00000000-0000-0000-0000-000000000000'))
-     ORDER BY stored_subject_id,driver,fact_id LIMIT $8`,
-        [
-          input.route,
-          input.collectionId,
-          p.generation,
-          p.pendingSubjectId,
-          p.after?.storedSubjectId ?? null,
-          p.after ? drivers.indexOf(p.after.driver) : null,
-          p.after?.factId ?? null,
-          limit,
-        ],
-        8 * limit + 8,
-        256 * limit,
+      query<{ original: string; driver: number; fact: string }>(client, l, canonicalSourceGroupStatement(limit), [
+        input.route,
+        input.collectionId,
+        p.generation,
+        p.pendingSubjectId,
+        p.after?.storedSubjectId ?? null,
+        p.after ? drivers.indexOf(p.after.driver) : null,
+        p.after?.factId ?? null,
         limit,
-      ),
+      ]),
     );
     const derived: CanonicalDerivedRow[] = rows.map((row) => {
       const driver = drivers[row.driver];
@@ -653,7 +637,13 @@ export async function readCanonicalSourceGroup(
       examinedThrough: after,
       exhausted: rows.length < limit,
       progress: { ...p, after },
-      work: work(l),
+      work: work(
+        l,
+        canonicalSourceRawSplit(
+          derived.map((row) => row.key),
+          p.pendingSubjectId,
+        ),
+      ),
     };
   } catch (error) {
     if (error instanceof Error) Object.defineProperty(error, 'work', { get: () => l.receipt(), configurable: true });
@@ -666,36 +656,32 @@ export async function beginCanonicalSourceRepair(pool: Pool, input: CanonicalBou
     const observed = await current(pool, input, l);
     if (!observed) return notReady(l, 'stale');
     const result = await mutate(pool, input, l, observed.metadata, async (tx) => {
-      const [existing] = await query<Generation>(
-        tx,
-        l,
-        generationSQL.replace('AND generation=$3', "AND state='working' FOR UPDATE"),
-        [input.route, input.collectionId],
-      );
+      const [existing] = await query<Generation>(tx, l, CANONICAL_SOURCE_STATEMENTS.workingGeneration, [
+        input.route,
+        input.collectionId,
+      ]);
       if (existing && same(existing.basis, input.basis)) return repair(existing);
       if (existing)
-        await query(
-          tx,
-          l,
-          "UPDATE library.canonical_source_generation SET state='abandoned' WHERE route=$1 AND collection_id=$2 AND generation=$3",
-          [input.route, input.collectionId, existing.generation],
-        );
+        await query(tx, l, CANONICAL_SOURCE_STATEMENTS.abandon, [
+          input.route,
+          input.collectionId,
+          existing.generation,
+        ]);
       // Old public/reader custody is retained. Missing disposition consumes capacity, never a fake release.
-      const retained = await query(
-        tx,
-        l,
-        'SELECT generation FROM library.canonical_source_generation WHERE route=$1 AND collection_id=$2 ORDER BY generation LIMIT 2',
-        [input.route, input.collectionId],
-      );
+      const retained = await query(tx, l, CANONICAL_SOURCE_STATEMENTS.retainedGenerations, [
+        input.route,
+        input.collectionId,
+      ]);
       if (retained.length === 2) return null;
       const generation = randomUUID(),
         driver = observed.metadata.authority === 'curated' ? 'member' : 'entry';
-      await query(
-        tx,
-        l,
-        `INSERT INTO library.canonical_source_generation(route,collection_id,generation,basis,driver) VALUES($1,$2,$3,$4::jsonb,$5)`,
-        [input.route, input.collectionId, generation, JSON.stringify(input.basis), driver],
-      );
+      await query(tx, l, CANONICAL_SOURCE_STATEMENTS.insertGeneration, [
+        input.route,
+        input.collectionId,
+        generation,
+        JSON.stringify(input.basis),
+        driver,
+      ]);
       await enqueueIntent(tx, {
         queue: 'maintenance',
         workflowName: CANONICAL_SOURCE_WORKFLOW,
@@ -733,14 +719,7 @@ export async function repairCanonicalSourceStep(
     // or positive alias supplies permission/coverage here. Every range is a native indexed raw100 seek.
     const page = independentState
       ? await l.bounded(
-          {
-            candidateKeys: limit,
-            nativeRows: 8 * limit + 8,
-            nativePoints: 1,
-            statements: 1,
-            emptySeeks: 1,
-            bytes: Buffer.byteLength(ownerFacts.sql) + 1024 + 256 * limit,
-          },
+          canonicalSourceWorkDimensions(canonicalSourceOwnerFactBound(limit)),
           () =>
             withConnection(pool, (client) =>
               readOwnerNativeFactPage(
@@ -764,20 +743,16 @@ export async function repairCanonicalSourceStep(
         );
     const originals = [...new Set(page.rows.map((r) => r.key.storedSubjectId))];
     const mappings = await l.bounded(
-      {
-        nativeRows: 32 * originals.length,
-        nativePoints: 8 * originals.length,
-        statements: 8 * originals.length,
-        bytes: 16384 * originals.length,
-      },
+      canonicalSourceWorkDimensions(canonicalSourceMappingBound(originals.length)),
       () => identityEpochStore.readMappings(pool, originals),
     );
     // Mapping points supply identity for examined raw originals, never complete population evidence.
     if (mappings.some((mapping) => mapping.state !== 'mapped')) return notReady(l, 'identity');
     if (!(await current(pool, input, l)))
       return { state: 'basis_changed', repair: input.repair, examined: page.rows.map((r) => r.key), work: work(l) };
+    const examined = page.rows.map((r) => r.key);
     const result = await mutate(pool, input, l, observed.metadata, async (tx) => {
-      const [locked] = await query<Generation>(tx, l, generationSQL + ' FOR UPDATE', [
+      const [locked] = await query<Generation>(tx, l, CANONICAL_SOURCE_STATEMENTS.generationLock, [
         input.route,
         input.collectionId,
         row.generation,
@@ -786,21 +761,15 @@ export async function repairCanonicalSourceStep(
       for (const item of page.rows) {
         const mapping = mappings[originals.indexOf(item.key.storedSubjectId)];
         if (!mapping || mapping.state !== 'mapped') throw new ProblemError('dependency_unavailable');
-        await query(
-          tx,
-          l,
-          `INSERT INTO library.canonical_source_reference(route,collection_id,generation,canonical_subject_id,stored_subject_id,driver,fact_id)
-        VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
-          [
-            input.route,
-            input.collectionId,
-            row.generation,
-            mapping.terminal,
-            item.key.storedSubjectId,
-            drivers.indexOf(item.key.driver),
-            item.key.factId,
-          ],
-        );
+        await query(tx, l, CANONICAL_SOURCE_STATEMENTS.insertReference, [
+          input.route,
+          input.collectionId,
+          row.generation,
+          mapping.terminal,
+          item.key.storedSubjectId,
+          drivers.indexOf(item.key.driver),
+          item.key.factId,
+        ]);
       }
       const sequence: readonly CanonicalRawKey['driver'][] =
         observed.metadata.authority === 'curated' ? ['member'] : ['entry', 'label', 'session', 'copy'];
@@ -814,21 +783,15 @@ export async function repairCanonicalSourceStep(
         after_fact: page.exhausted ? null : (page.after?.factId ?? null),
         source_exhausted: nextDriver === 'done',
       };
-      await query(
-        tx,
-        l,
-        `UPDATE library.canonical_source_generation SET driver=$4,after_subject=$5,after_fact=$6,source_exhausted=$7,version=version+1
-      WHERE route=$1 AND collection_id=$2 AND generation=$3`,
-        [
-          input.route,
-          input.collectionId,
-          row.generation,
-          next.driver,
-          next.after_subject,
-          next.after_fact,
-          next.source_exhausted,
-        ],
-      );
+      await query(tx, l, CANONICAL_SOURCE_STATEMENTS.updateFrontier, [
+        input.route,
+        input.collectionId,
+        row.generation,
+        next.driver,
+        next.after_subject,
+        next.after_fact,
+        next.source_exhausted,
+      ]);
       await enqueueIntent(tx, {
         queue: 'maintenance',
         workflowName: CANONICAL_SOURCE_WORKFLOW,
@@ -841,8 +804,8 @@ export async function repairCanonicalSourceStep(
       ? {
           state: result.sourceExhausted ? 'complete' : 'working',
           repair: result,
-          examined: page.rows.map((r) => r.key),
-          work: work(l),
+          examined,
+          work: work(l, canonicalSourceRawSplit(examined)),
         }
       : notReady(l, 'stale');
   } catch (error) {
@@ -859,26 +822,23 @@ export async function publishCanonicalSourceRepair(
     const observed = await current(pool, input, l);
     if (!observed) return { state: 'basis_changed', work: work(l) };
     const result = await mutate(pool, input, l, observed.metadata, async (tx) => {
-      const [row] = await query<Generation>(tx, l, generationSQL + ' FOR UPDATE', [
+      const [row] = await query<Generation>(tx, l, CANONICAL_SOURCE_STATEMENTS.generationLock, [
         input.route,
         input.collectionId,
         input.repair.generation,
       ]);
       if (!row || !same(row.basis, input.basis)) return 'basis_changed' as const;
       if (!row.source_exhausted || row.state === 'abandoned') return 'incomplete' as const;
-      await query(
-        tx,
-        l,
-        "UPDATE library.canonical_source_generation SET state='complete' WHERE route=$1 AND collection_id=$2 AND generation=$3",
-        [input.route, input.collectionId, row.generation],
-      );
-      await query(
-        tx,
-        l,
-        `INSERT INTO library.canonical_source_head(route,collection_id,generation) VALUES($1,$2,$3)
-      ON CONFLICT(route,collection_id) DO UPDATE SET generation=EXCLUDED.generation`,
-        [input.route, input.collectionId, row.generation],
-      );
+      await query(tx, l, CANONICAL_SOURCE_STATEMENTS.completeGeneration, [
+        input.route,
+        input.collectionId,
+        row.generation,
+      ]);
+      await query(tx, l, CANONICAL_SOURCE_STATEMENTS.publishHead, [
+        input.route,
+        input.collectionId,
+        row.generation,
+      ]);
       return 'published' as const;
     });
     return result ? { state: result, work: work(l) } : notReady(l, 'source');
@@ -906,27 +866,25 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       return notReady(l, 'source');
     const fence = nativeSourceFence(metadata);
     let [row] = await withConnection(pool, (client) =>
-      query<ScopeRow>(client, l, scopeSQL, [input.route, input.collectionId, fence]),
+      query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS.scope, [input.route, input.collectionId, fence]),
     );
     if (!row) {
       const identity = nativeSourceIdentity(metadata);
       await mutate(pool, input, l, metadata, async (tx) => {
-        const retained = await query(
-          tx,
-          l,
-          'SELECT source_fence FROM library.canonical_source_scope WHERE route=$1 AND collection_id=$2 ORDER BY source_fence LIMIT 2',
-          [input.route, input.collectionId],
-        );
+        const retained = await query(tx, l, CANONICAL_SOURCE_STATEMENTS.retainedScopes, [
+          input.route,
+          input.collectionId,
+        ]);
         if (retained.length === 2) return; // Missing disposition retains custody and consumes capacity.
-        await query(
-          tx,
-          l,
-          `INSERT INTO library.canonical_source_scope(route,collection_id,source_fence,identity) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING`,
-          [input.route, input.collectionId, fence, JSON.stringify(identity)],
-        );
+        await query(tx, l, CANONICAL_SOURCE_STATEMENTS.insertScope, [
+          input.route,
+          input.collectionId,
+          fence,
+          JSON.stringify(identity),
+        ]);
       });
       [row] = await withConnection(pool, (client) =>
-        query<ScopeRow>(client, l, scopeSQL, [input.route, input.collectionId, fence]),
+        query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS.scope, [input.route, input.collectionId, fence]),
       );
     }
     if (!row) return notReady(l, 'source');
@@ -944,19 +902,13 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       );
       if (page.status !== 'pending') return notReady(l, 'identity');
       await mutate(pool, input, l, metadata, async (tx) => {
-        const changed = await query(
-          tx,
-          l,
-          `UPDATE library.canonical_source_scope SET frontier=$4::jsonb
-        WHERE route=$1 AND collection_id=$2 AND source_fence=$3 AND frontier IS NOT DISTINCT FROM $5::jsonb RETURNING collection_id`,
-          [
-            input.route,
-            input.collectionId,
-            fence,
-            JSON.stringify(page.frontier),
-            row!.frontier ? JSON.stringify(row!.frontier) : null,
-          ],
-        );
+        const changed = await query(tx, l, CANONICAL_SOURCE_STATEMENTS.updateScopeFrontier, [
+          input.route,
+          input.collectionId,
+          fence,
+          JSON.stringify(page.frontier),
+          row!.frontier ? JSON.stringify(row!.frontier) : null,
+        ]);
         if (changed.length)
           await enqueueIntent(tx, {
             queue: 'maintenance',
@@ -981,28 +933,16 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       return notReady(l, registered.status === 'pending' ? 'incomplete' : 'identity');
     const address = identityScopeAddress(registered.observation.key);
     await mutate(pool, input, l, metadata, async (tx) => {
-      await query(
-        tx,
-        l,
-        `UPDATE library.canonical_source_scope s
-        SET frontier=i.frontier,capture_id=i.capture_id,committed_revision=i.revision
-        FROM semantic.identity_scope_summary i
-        WHERE s.route=$1 AND s.collection_id=$2 AND s.source_fence=$3
-          AND i.partition_no=$6 AND i.source_key=$7 AND i.scope_id=$8
-          AND i.capture_id=$4 AND i.revision=$5 AND i.state='ready' AND i.active=0 AND i.scan_complete
-          AND i.source=jsonb_build_object('kind','library','identity',s.identity)
-          AND i.frontier->>'driver'='done' AND (i.frontier->>'captureId')::uuid=i.capture_id`,
-        [
-          input.route,
-          input.collectionId,
-          fence,
-          registered.observation.captureId,
-          registered.observation.committedRevision.toString(),
-          address.partition,
-          address.source,
-          address.scope,
-        ],
-      );
+      await query(tx, l, CANONICAL_SOURCE_STATEMENTS.commitScopeCapture, [
+        input.route,
+        input.collectionId,
+        fence,
+        registered.observation.captureId,
+        registered.observation.committedRevision.toString(),
+        address.partition,
+        address.source,
+        address.scope,
+      ]);
     });
     const observed = await observe(pool, input, l);
     return observed

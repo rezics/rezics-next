@@ -1,6 +1,6 @@
 # Library
 
-Decision: ordinary filtered Collection pages consume one immutable finite page plan; Library's native admission, SQL observation, receipts and refusal remain authoritative.
+Decision: ordinary filtered Collection pages consume one immutable finite page plan; Library's native admission, SQL observation, receipts and refusal remain authoritative. Canonical generation repair uses one closed 9-axis plan.
 
 The ordinary page formula is `c = min(600, 6L + 3)`: a fixed 64-row/16-point/16-witness/3-seek/12-statement/80-KiB term plus `c` repetitions of 16 rows, 8 points, 8 witnesses and 5,120 bytes. The fixed term includes initial/final Source preparation and currentness, identity and authority checks, and transaction controls; the per-candidate term includes canonical membership and negative/order work. The existing plan caps pages at three prefix rounds, 100 groups per prefix, 100 aliases per canonical group and six Source drivers. FULL adds at most 100 repetitions of its 32-row/2-identity-row/8-point/12-statement/64-KiB facts term. `engineRequests` is zero for this SQL-only Library plan; the adapter rejects a nonzero value rather than folding it into the older eight-axis SQL observer. `owner-filter-growth.test.ts` is the named growth oracle; this declaration does not claim native acceptance.
 
@@ -246,10 +246,10 @@ Current implementation evidence is narrower than the capability:
   the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.
 - `createCollectionSource` composes current native authorization, scoped observations and indexed canonical
-  generations. `canonical-source-store.ts` implements successor/group seeks, bounded native raw-driver repair,
-  checkpoints and complete publication CAS. The sole default Library WorkModule supplies its operational client
-  and maintenance queue. Missing Semantic scope/public capture remains retryable unavailability; the provisional
-  Semantic factory returns `source_unready`, never current/ready-empty. Native useful outcomes remain pending.
+  generations. `canonical-source-bounds.ts` is the closed nine-axis repair/publication/readback plan the store
+  dispatches, Work consumes for the step ceiling, and receiving getters reuse. Missing Semantic scope/public
+  capture remains retryable unavailability; the provisional Semantic factory returns `source_unready`, never
+  current/ready-empty. Native useful outcomes remain pending.
 - `collection-kind.ts` projects mixed defaults or stored explicit choices without member observations.
   Owner overrides bypass observation access. Metadata reads do not enqueue work; native mutation effects and the
   admitted repair boundary drive raw100/4096-byte steps, generation/version CAS, canonical unique votes, indexed
@@ -675,7 +675,7 @@ custody; it defines no replacement writer or completion interface.
 | Existing producer                                                                       | Native boundary still required                                                                                                                                                                                                                                                                                     |
 | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `collection-source-native.ts:readNativeCollectionRawPage`                               | Member, entry, label, session, copy and selected explicit COMPLETE output ranges exist. Missing/incomplete output remains unavailable; public capture and terminal freeze still need their authoritative producers.                                                                                                |
-| `canonical-source-store.ts` exported observation, repair and publication functions      | Indexed generation/reference/head storage supports bounded repair and publication under source fences and committed scoped observations. The default worker captures complete native dependencies; absent Semantic scope/public capture remains unavailable. Table absence or emptiness cannot establish coverage. |
+| `canonical-source-bounds.ts` closed plan consumed by store, Work and receiving getters | Indexed generation/reference/head storage supports bounded repair and publication under source fences and committed scoped observations. The default worker captures complete native dependencies; absent Semantic scope/public capture remains unavailable. Table absence or emptiness cannot establish coverage. |
 | `follow-store.ts:applyFollow`, `readFollow`, `pageFollows`                              | These operate on the owner-home raw follow row. The installed Library schema has no canonical follow pair/support/total, negative-apply, target-fence or released source/receiving receipt stores. The existing public Collection listing aggregate is a different source and cannot supply this custody.          |
 | `owner-fact-version.ts:readOwnerFactVersion` and native entry/copy/session/label stores | Raw facts and a mutation head exist; a complete structural inverse directory and native registration/birth/late-writer closure do not. Neither a head nor `canonical_source_fact` is a substitute membership authority.                                                                                            |
 
