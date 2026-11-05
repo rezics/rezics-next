@@ -246,7 +246,11 @@ test('native account context reads the exact published agent graph and withholds
       });
       expect(requested.status).toBe(200);
       const requestBody = (await requested.json()) as { verificationRequest: { id: string } };
-      const approved = await post(`/v1/verification-requests/${requestBody.verificationRequest.id}:approve`, staffBearer, {});
+      const approved = await post(
+        `/v1/verification-requests/${requestBody.verificationRequest.id}:approve`,
+        staffBearer,
+        {},
+      );
       expect(approved.status).toBe(200);
       const decision = await readAgentVerificationWorkflowRequest(pool, requestBody.verificationRequest.id);
       if (!decision?.decisionReceiptId) throw new Error('Approved verification has no native decision receipt');
@@ -281,11 +285,9 @@ test('native account context reads the exact published agent graph and withholds
         { accountId, clientId, scopes },
       );
       const read = (context: boolean) =>
-        readAccountDiscoverySummaries(
-          { pool, routeKey, access, actor, deadline: Date.now() + 30_000 },
-          [accountId],
-          { context },
-        );
+        readAccountDiscoverySummaries({ pool, routeKey, access, actor, deadline: Date.now() + 30_000 }, [accountId], {
+          context,
+        });
       const available = (await read(true)).get(accountId);
       expect(available?.verifiedAgent).toEqual({
         id: subject,
@@ -301,10 +303,10 @@ test('native account context reads the exact published agent graph and withholds
       expect((await read(false)).get(accountId)).not.toHaveProperty('context');
 
       const sourceEpoch = mappings[0].epoch;
-      await fixture.admin.query(
-        'UPDATE semantic.identity_epoch_mapping SET epoch=0 WHERE route=$1 AND original=$2',
-        [routeOf(original), original],
-      );
+      await fixture.admin.query('UPDATE semantic.identity_epoch_mapping SET epoch=0 WHERE route=$1 AND original=$2', [
+        routeOf(original),
+        original,
+      ]);
       try {
         expect((await read(true)).get(accountId)?.context?.followTarget).toEqual({ state: 'unavailable' });
       } finally {
