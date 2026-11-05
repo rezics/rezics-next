@@ -163,7 +163,7 @@ export function AuthStory({
         approvals++;
         if (mode === 'approval-pending') return new Promise<Response>(() => {});
         if (mode === 'unknown-then-refused' && approvals > 1)
-          return Response.json({ error: 'account_operation_denied' }, { status: 403 });
+          return Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 });
       }
       if (path === '/account-operations/execute') {
         executions++;
@@ -183,12 +183,12 @@ export function AuthStory({
               : 0;
       if (failure)
         return Response.json(
-          { error: mode === 'closed' ? 'platform_closed' : 'account_operation_denied' },
+          { error: mode === 'closed' ? 'platform_closed' : 'account_operation_denied', effect_status: 'not_applied' },
           { status: failure },
         );
       if (path === '/account-operations/approve')
         return Response.json({
-          reference: 'story-native-approval',
+          reference: 'story.' + 'a'.repeat(43),
           expiresAt: new Date(Date.now() + 60_000).toISOString(),
         });
       if (path === '/consent') {

@@ -56,6 +56,23 @@ for (const [key, value] of Object.entries(globals)) {
   previous.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
 }
+// Bun does not compile Start's server-function bridge. Keep the native session
+// parser/byte reader while supplying the test's local issuer transport.
+const nativeSession = await import('../src/account-session');
+const { readJsonBounded } = await import('../src/private-auth-json');
+const { securityResponseByteBudgets, securityScopeLimit } = await import('@rezics/auth-contract');
+mock.module('../src/account-session', () => ({
+  ...nativeSession,
+  requestAccountSession: async (signal: AbortSignal) => {
+    const response = await fetch('/session', { signal });
+    if (response.status === 401) return { kind: 'signed-out' };
+    if (response.status !== 200) return { kind: 'failure' };
+    return nativeSession.parseAccountSession(
+      await readJsonBounded(response, securityResponseByteBudgets(securityScopeLimit()).session, signal),
+      securityScopeLimit(),
+    );
+  },
+}));
 // Load DOM-aware UI modules only after installing the browser fixture.
 export const { fill, button, session } = await import('../src/stories/accounts-operations/story');
 const { createRoot } = await import('react-dom/client');

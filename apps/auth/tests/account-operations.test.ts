@@ -88,6 +88,13 @@ async function open(
       { name: 'auth_session', value: session, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax' },
     ]);
   const page = await context.newPage();
+  page.on('pageerror', (error) => console.error('Account-operation page error:', error));
+  page.on('console', (message) => {
+    if (message.type() === 'error') console.error('Account-operation console:', message.text());
+  });
+  page.on('requestfailed', (request) =>
+    console.error('Account-operation request failed:', request.url(), request.failure()),
+  );
   page.setDefaultTimeout(10_000);
   try {
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -178,8 +185,10 @@ test(
         ),
         submit.click(),
       ]);
-      expect(await page.getByRole('status').innerText()).toContain('Your account has been deleted');
-      expect(await page.getByRole('button').count()).toBe(0);
+      expect(
+        await page.getByRole('status').filter({ hasText: 'Your account has been deleted.' }).innerText(),
+      ).toContain('Your account has been deleted');
+      expect(await page.getByRole('button', { name: 'Delete account', exact: true }).count()).toBe(0);
       expect(await page.context().cookies(origin)).not.toContainEqual(
         expect.objectContaining({ name: 'auth_session', value: session }),
       );
@@ -192,7 +201,7 @@ test(
         {
           operationKey: postBodies('/account-operations/approve')[0]!.operationKey,
           operation: { kind: 'delete', accountId },
-          reference: 'approval-' + postBodies('/account-operations/approve')[0]!.operationKey,
+          reference: 'approval-' + postBodies('/account-operations/approve')[0]!.operationKey + '.' + 'a'.repeat(43),
         },
       ]);
     } finally {
@@ -280,7 +289,7 @@ test(
       await page.getByRole('button', { name: 'Verify your identity', exact: true }).click();
       await page.getByRole('alert').waitFor();
       expect(new URL(page.url()).pathname).toBe('/step-up');
-      expect(await page.getByRole('alert').innerText()).toContain('could not be completed');
+      expect(await page.getByRole('alert').innerText()).toContain('the required account session is no longer current');
       expect(state.sessionAccountId).toBe('different-account');
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
     } finally {
@@ -438,7 +447,9 @@ test(
         ),
         submit.click(),
       ]);
-      expect(await page.getByRole('status').innerText()).toContain('Your account has been deleted');
+      expect(
+        await page.getByRole('status').filter({ hasText: 'Your account has been deleted.' }).innerText(),
+      ).toContain('Your account has been deleted');
       const approve = postBodies('/account-operations/approve')[0]!;
       const executes = postBodies('/account-operations/execute');
       expect(executes).toHaveLength(2);
@@ -473,7 +484,7 @@ test(
         ),
         page.getByRole('button', { name: 'Create organization', exact: true }).click(),
       ]);
-      expect(await page.getByRole('status').innerText()).toContain('@team-alpha');
+      await page.getByText('The organization @team-alpha was created.', { exact: true }).waitFor();
       expect(await page.getByRole('link', { name: 'Account security', exact: true }).getAttribute('href')).toBe(
         '/security',
       );
@@ -485,7 +496,7 @@ test(
       expect(postBodies('/account-operations/execute')[0]).toEqual({
         operationKey: approve.operationKey,
         operation: { kind: 'organization', handle: 'team-alpha' },
-        reference: 'approval-' + approve.operationKey,
+        reference: 'approval-' + approve.operationKey + '.' + 'a'.repeat(43),
       });
     } finally {
       await page.context().close();
@@ -530,9 +541,9 @@ test(
       expect(state.sessionScopes).toEqual([...AUTH_PAGE_OPERATION_SCOPES.organization]);
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
       expect(await page.getByLabel('Handle', { exact: true }).inputValue()).toBe('team-alpha');
-      expect(await page.getByRole('button', { name: 'Create organization', exact: true }).isEnabled()).toBe(true);
+      expect(await page.getByRole('button', { name: 'Retry this creation', exact: true }).isEnabled()).toBe(true);
       const firstApproval = postBodies('/account-operations/approve')[0]!;
-      await page.getByRole('button', { name: 'Create organization', exact: true }).click();
+      await page.getByRole('button', { name: 'Retry this creation', exact: true }).click();
       await page.getByRole('status').filter({ hasText: 'The organization @team-alpha was created.' }).waitFor();
       const approvals = postBodies('/account-operations/approve');
       expect(approvals).toHaveLength(2);

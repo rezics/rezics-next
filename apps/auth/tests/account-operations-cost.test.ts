@@ -11,7 +11,14 @@ const timeout = 300_000;
 const session = 'account-operation-cost-session';
 const state = createFakeAuthState();
 const calls: FakeAuthRequest[] = [];
-const fake = startFakeAuth({ state, onRequest: (request) => calls.push(request) });
+let inventoryObserved: (() => void) | undefined;
+const fake = startFakeAuth({
+  state,
+  onRequest: (request) => {
+    calls.push(request);
+    inventoryObserved?.();
+  },
+});
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -69,6 +76,13 @@ async function open(path: string) {
     { name: 'auth_session', value: session, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax' },
   ]);
   const page = await context.newPage();
+  page.on('pageerror', (error) => console.error('Account-operation page error:', error));
+  page.on('console', (message) => {
+    if (message.type() === 'error') console.error('Account-operation console:', message.text());
+  });
+  page.on('requestfailed', (request) =>
+    console.error('Account-operation request failed:', request.url(), request.failure()),
+  );
   page.setDefaultTimeout(10_000);
   try {
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -113,22 +127,26 @@ afterAll(async () => {
     } catch {}
 });
 
-async function assertThreeRequests() {
-  expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
-    'GET /session',
-    'POST /account-operations/approve',
-    'POST /account-operations/execute',
-  ]);
-  expect(calls).toHaveLength(3);
+async function deletionInventories() {
+  await new Promise<void>((resolve) => {
+    inventoryObserved = () => {
+      if (['/clients', '/consents'].every((url) => calls.some((call) => call.url === url))) {
+        inventoryObserved = undefined;
+        resolve();
+      }
+    };
+    inventoryObserved();
+  });
 }
 
 test(
-  'deleting an account makes three Auth requests whatever the person holds',
+  'deleting an account retains its native page, two inventories and two commands whatever the person holds',
   async () => {
     for (const scale of [1, 10, 100]) {
       reset(scale, 'delete');
       const { page, context } = await open('/account/delete');
       try {
+        await deletionInventories();
         await page
           .getByRole('textbox', { name: 'Type “delete my account” to confirm.', exact: true })
           .fill('delete my account');
@@ -139,8 +157,14 @@ test(
           ),
           page.getByRole('button', { name: 'Delete account', exact: true }).click(),
         ]);
-        await page.getByRole('status').waitFor();
-        await assertThreeRequests();
+        await page.getByRole('status').filter({ hasText: 'Your account has been deleted.' }).waitFor();
+        expect(calls.map(({ method, url }) => `${method} ${url}`).sort()).toEqual([
+          'GET /clients',
+          'GET /consents',
+          'POST /account-management/deletion-page',
+          'POST /account-operations/approve',
+          'POST /account-operations/execute',
+        ]);
       } finally {
         await context.close();
       }
@@ -150,7 +174,7 @@ test(
 );
 
 test(
-  'creating an organization makes at most three Auth requests whatever the person holds',
+  'creating an organization makes five Auth requests whatever the person holds',
   async () => {
     for (const scale of [1, 10, 100]) {
       reset(scale, 'organization');
@@ -164,8 +188,14 @@ test(
           ),
           page.getByRole('button', { name: 'Create organization', exact: true }).click(),
         ]);
-        await page.getByRole('status').waitFor();
-        await assertThreeRequests();
+        await page.getByText(`The organization @scale-${scale} was created.`, { exact: true }).waitFor();
+        expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
+          'GET /session',
+          'GET /session',
+          'POST /account-operations/approve',
+          'POST /account-operations/execute',
+          'GET /session',
+        ]);
       } finally {
         await context.close();
       }

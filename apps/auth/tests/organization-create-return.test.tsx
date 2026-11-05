@@ -51,7 +51,11 @@ test('read Retry is separate from same-key command retry and a later refusal kee
   expect(page.calls[2]!.body.operationKey).toBe(original.operationKey);
   expect(page.calls[2]!.body.operation).toEqual(original.operation);
   await flush(() => page.calls[2]!.resolve(approval()));
-  await flush(() => page.calls[3]!.resolve(Response.json({ error: 'account_operation_denied' }, { status: 403 })));
+  await flush(() =>
+    page.calls[3]!.resolve(
+      Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 }),
+    ),
+  );
   expect(page.host.textContent).not.toContain('creation result is still unknown');
   expect(page.host.textContent).toContain('Creation was refused');
   expect(readPendingAccountOperationStepUp()?.operationKey).toBe(original.operationKey);

@@ -886,49 +886,52 @@ reveal private organization labels even when current advice is readable. No auto
 
 Protect nonblank handles and unresolved creation with Stay/Leave and an unload warning; current refusal or loss of session authority retires controls but preserves the earlier unknown attempt and its departure protection. Only a known first mounted refusal releases its continuation; restored hints are conservatively unresolved, regardless of their submitted marker.
 
-`/organizations/new` reads the current session and asks for one handle. An unavailable initial read offers a read-only Retry without discarding the saved draft. It applies the same claim rule and
-lowercase normalization as sign-up. Creation uses one operation key for the
-approve and execute requests. The `organizations` gate is checked by Auth; a closed gate keeps the handle and shows a
-localized message without exposing gate details. A 409 says the handle may be taken, leaves it in the field and focuses
-it. Handle format guidance appears before entry. Success names `@<handle>` and links to the created organization's
-membership page using the native result's account ID and the existing membership-ID validator. A result that cannot
-represent that destination keeps the Security fallback. Navigation grants no membership authority; the destination
-retains its own current-session and permission checks. Each explicit submission rechecks the initiating account, client
-and scopes before and after native work. The first visit reads `/session` once on entry. A command then reads
-`/session` once before native approval and once after native work, sends one `/account-operations/approve`, and sends
-one `/account-operations/execute`: four requests for the command and five for the initial journey. Approval retains
-its existing single same-body retry after an unavailable response, making six requests when that retry is used.
-Execution is never automatically retried; an uncertain result stays unknown until the person deliberately retries the
-exact admitted operation. A retained-document return and each explicit read Retry make one fresh `/session` read and
-zero command requests. They never allocate an operation key or rewrite the saved descriptor. Focus, locale changes and
-result acknowledgement make no requests. Return advice uses only the current session and exact pending marker; it
-performs no organization lookup, list scan or per-row authority read. Step-up keeps its existing exact-operation reads
-after authentication and after the native session observation.
+`/organizations/new` reads the current session and asks for one handle, using sign-up's lowercase 3–64 ASCII
+claim rule. Unavailable entry offers read-only Retry. Auth retains the organizations exposure gate, fresh-human
+proof, exact scope, approval resolution, preparation, uniqueness and native workflow/CAS authority. Success names
+`@<handle>` and links to membership only when the native opaque account ID passes the destination's existing
+validator; Security remains the fallback. Each deliberate submission preserves the original account/client/profile,
+normalized handle, operation key and exact pending descriptor, including the monotone submitted marker before
+execution. A refused persistence write sends no execution. Step-up returns for separate deliberate confirmation.
 
-The mounted organization page adopts a validated native creation acknowledgement while its exact original
-lifetime, descriptor and draft are still current, before awaiting the final independent session observation.
-Acknowledgement and checking current advice appear separately. The page stays busy, clears the handle form and
-ends this local send; approval alone never establishes creation. Only an unchanged exact account/client/scopes
-proof on both session reads admits the success handle and membership destination. A failed, signed-out or
-replacement final read synchronously removes private operands, input values, messages and navigation while
-preserving generic acknowledgement. Cleanup at adoption compares the owned marker, operation key and draft;
-a replacement during the final read remains untouched.
+Decision: reuse the installed shared Access approval contract, close organization execution to the actual native
+`{ accountId }` result, and retain deliberate execution recovery with generic acknowledgement separate from private
+current-read custody. Approval is `{ reference, expiresAt }`: reference is opaque sealed ASCII
+base64url body, dot and 43-character MAC, at most 4,096 units; expiry is canonical ISO, at most 27 ASCII units,
+and must still be usable before execution. Its producer JSON byte formula is `31 + 4096 + 27 = 4154`.
+Execution is exactly one nonempty accountId (at most 4,096 UTF-16 units); worst-case escaping gives
+`16 + 6 × 4096 = 24592` bytes, without inventing handle or operation-binding result fields.
+Each body is byte-counted by installed `readJsonBounded` before fatal UTF-8 decoding and JSON parsing, independently
+of absent or dishonest Content-Length. The closed native errors are `{ error, effect_status: "not_applied" }`:
+`step_up_required`/401, `platform_closed`/403, and `account_operation_denied`/400,401,403,409,413,415,503.
+The only other supported error is `{ error: "unavailable" }`/503; their maximum closed skeleton is 69 bytes.
+Unknown fields, malformed replies, overflow, invalid UTF-8 and lost/stalled replies cannot acknowledge work. After possible execution they preserve unknown history; later refusals cannot erase it.
 
-Deliberate current-advice Retry and cached restoration each use one bounded `loadAccountSession`/`privateAuthRead`
-with the existing deadline through body completion. They cannot restore lost created details, infer creation from
-a current organization or reopen approve/execute, even if a descriptor survives. Fresh documents assert no new
-historical acknowledgement and follow only the existing exact native continuation rules. A response retired
-before adoption remains unknown. Acknowledgement of the same exact unknown operation still settles that operation;
-a later refusal or ordinary session observation cannot. No created-account reread or persistent completion record
-is added. Entry, before/after reads and native approval/execute retain the whole-call costs above; dismissal,
-focus and language changes add zero I/O, with no polling, hidden prefetch or automatic command retry.
+Each POST keeps its own five-second headers-and-body lifetime, including cancellation-ignoring transports, with
+same-origin credentials, no-store and redirect refusal. Page lifetime cancellation reaches existing session reads
+and both command phases without an aggregate deadline or new probes. Entry reads session once; each deliberate
+command then performs session/approval/execution/final-session: four requests, five with entry. Only the supported
+unavailable approval permits one same-body retry (six with entry). Execution never automatically retries, reuses
+approval or renews it. Each deliberate same-command retry costs four requests, or five with approval retry.
+Read Retry/restoration cost one session read and zero commands; focus/dismissal/locale cost zero. There is no lookup
+or scan. Injected fixtures do not grant native/browser/growth acceptance.
 
-Decision: hiding generic history remains effective across current-advice Retry and cached return in the same
-mounted page; a newly adopted acknowledgement is shown as new evidence. Hiding explains that it cannot cancel,
-undo, confirm or authorize work. It never releases an unknown send exclusion, removes a pending marker or enables
-another creation. The acknowledgement itself closes its invocation; there is no create-another action here.
+The mounted page adopts only a valid current original execution acknowledgement before awaiting final session
+observation. It stays busy, clears the form and ends this send; approval alone proves no creation. An unchanged
+account/client/scopes proof on both reads admits the private success handle and membership destination, using the
+existing membership-ID validator or Security fallback. Failed, signed-out, changed-session or replaced-descriptor
+final reads remove private operands and navigation while preserving generic acknowledgement. Adoption cleanup
+compares the owned marker, key and draft, so final-read replacement storage survives.
 
-Both creation pages retire browser callbacks on departure, cached-page restoration and session replacement. Retry restores the exact saved operation and initiating account; organization review uses its saved handle and original key. Automated review keeps the exact selected operator. Leaving never clears an unresolved attempt or reverses native creation; uncertain results require explicit confirmation of the same command and never automatically repeat execution.
+Read Retry/restoration cannot restore private details, settle unknown execution or reopen acknowledged work.
+Fresh documents use exact continuations and assert no historical acknowledgement. A retired reply stays unknown, and only acknowledgement of that original operation settles it.
+No created-account lookup or persistent completion record is added. Generic history dismissal survives mounted
+read Retry/cached return; new acknowledgement reappears as new evidence. Dismissal cannot undo, confirm or authorize
+work, remove a marker or release unknown-send exclusion. There is no create-another action here.
+
+Both creation pages retire callbacks on departure/restoration/session replacement and retain original retry operands.
+Automated review keeps its exact selected operator. Leaving neither clears unknown work nor reverses creation;
+uncertain recovery always requires deliberate confirmation.
 
 ## Automated account creation
 

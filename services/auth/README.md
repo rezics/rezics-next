@@ -1139,24 +1139,27 @@ identity or reason; action loss may retain an admitted profile. Both require sam
 requires freshness. Cost: exact profile read, full-key current-account seek, bounded self action advice (one candidate,
 before/final snapshots, one Access formula), eight closed source entries/matches; no inventory or availability lookup.
 
-Decision: rename uses public `account-operation-response-bounds.ts`. Approval is exactly `{reference,expiresAt}`.
-Access `workflow-approvals.ts` seals base64url body + dot + SHA-256 MAC43; native unseal/execute cap it at 4096 ASCII
-characters. Expiry is canonical `Date.toISOString()` (maximum 27 ASCII bytes). The UTF-8 allowance is the closed
-empty-string JSON skeleton plus `4096 + 27`; references stay opaque. Invalid approval returns 503 unavailable. Workflow/replay return only `{accountId}`; its compatible opaque ID
-ceiling is 4096 UTF-16 units and allowance is the closed skeleton plus `6 * 4096`, covering escapes/lone surrogates.
-Mismatched/extra/expired/error completion returns `{error:'unavailable'}`/503 without invented not_applied. Other
-kinds' shapes and in-process workflows remain unchanged.
+Decision: rename and organization share `account-operation-response-bounds.ts`. Approval is
+`{ reference, expiresAt }`: opaque ASCII base64url body + dot + MAC43, capped at 4,096 units by native unseal/execute.
+Usable canonical ISO expiry is at most 27 ASCII units; JSON costs
+`31 + 4096 + 27 = 4154` bytes. Success/replay is exactly `{ accountId }`, nonempty and at most 4,096 UTF-16
+units: `16 + 6 × 4096 = 24592` bytes with worst-case escaping. Invalid output or mismatched rename
+ID returns `{ error: "unavailable" }`/503, never invented not-applied. Browser custody binds organization
+acknowledgement without new result fields.
 
-Error allowance is max serialized bytes of `{error:'account_operation_denied',effect_status:'not_applied'}` and
-`{error:'step_up_required',effect_status:'not_applied'}`. Denial supports 400/401/403/409/413/415/503; step-up only 401.
-Browser refusal handling requires the exact envelope/status/effect; bare 4xx cannot reset submitted work. Later
-refusal/current equality never settles prior unknown execution. Only original-account acknowledgement settles it,
-independently of failed/retired readback. Exact cleanup cannot consume replacement storage; mounted history is generic.
+Closed `{ error, effect_status: "not_applied" }` pairs: `account_operation_denied`/400,401,403,409,413,415,503;
+`step_up_required`/401; organization `platform_closed`/403. Plus `{ error: "unavailable" }`/503.
+Errors fit 69 bytes. Bytes are admitted before fatal UTF-8/JSON despite Content-Length.
+Malformed output cannot acknowledge; refusal/session equality cannot settle prior unknown.
 
-Each POST independently keeps five seconds through headers/body, releases abort-ignoring waits, and admits actual
-bytes before fatal decoding/parsing. Retirement before dispatch is unsent; later abort cannot undo native work.
-Key/descriptor, live-only reference/expiry, fresh proof, expectedHandle, profile, Access deadline/preparation and
-workflow CAS/replay remain. No native call, permission or automatic retry is added.
+Each POST keeps five seconds through body, even for abort-ignoring I/O. Retirement sends no later command;
+abort cannot undo effects. Native freshness, scope, gate, approval, preparation, uniqueness and CAS/replay stay
+authoritative. Organization retries supported unavailable approval once; execution never automatically retries or
+renews approval. Entry/session/approval/execution/final-session costs five calls, six with approval retry; deliberate
+same-command retry costs four or five. Read Retry/restoration: one session read, zero commands. Acknowledgement
+survives final-read failure; private results need current original caller/descriptor. Cleanup
+preserves replacements. Rename keeps live reference/expiry, expectedHandle and recovery below. Fixtures grant no
+native/browser/growth pass.
 Review costs session GET + rename-page POST: entry/return/read Retry cost two and send zero commands.
 Fresh acknowledged submit costs six; unknown four. Exact live-reference retry costs three while unknown or five
 with acknowledgement; expiry renewal adds one. Supported 409 uses the second pair as advice instead of readback.

@@ -1,6 +1,6 @@
 import { AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH } from './automated-page-response-bounds.ts';
 
-/** Browser projections of native account-operation approval and deletion/rename results.
+/** Browser projections of native account-operation approval and workflow results.
  * Access seals an ASCII base64url body and SHA-256 MAC; both native unseal and
  * execute's text input cap the reference at 4096 units. No UUID assumption.
  */
@@ -170,3 +170,29 @@ export const automatedAccountOperationResponseByteBudgets = Object.freeze({
 export const automatedAccountOperationRequestByteBudgets = Object.freeze({
   execute: automatedExecuteRequest,
 });
+
+// Organization and rename share the actual Access approval and accountId-only
+// workflow output. The reference is opaque to the browser, including its payload.
+export const ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES = RENAME_APPROVAL_MAX_RESPONSE_BYTES;
+export const ORGANIZATION_EXECUTION_MAX_RESPONSE_BYTES = RENAME_EXECUTION_MAX_RESPONSE_BYTES;
+export const parseOrganizationExecutionResponse = parseRenameExecutionResponse;
+export type OrganizationOperationError =
+  | RenameOperationRefusal
+  | Readonly<{ error: 'platform_closed'; effect_status: 'not_applied' }>
+  | Readonly<{ error: 'unavailable' }>;
+
+export function parseOrganizationOperationError(value: unknown, status: number): OrganizationOperationError | null {
+  const refusal = parseRenameOperationRefusal(value, status);
+  if (refusal) return refusal;
+  if (!object(value)) return null;
+  if (status === 503 && Object.keys(value).join(',') === 'error' && value.error === 'unavailable')
+    return { error: 'unavailable' };
+  if (
+    status === 403 &&
+    Object.keys(value).sort().join(',') === 'effect_status,error' &&
+    value.error === 'platform_closed' &&
+    value.effect_status === 'not_applied'
+  )
+    return { error: 'platform_closed', effect_status: 'not_applied' };
+  return null;
+}

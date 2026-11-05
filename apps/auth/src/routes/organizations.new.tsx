@@ -126,7 +126,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const [createdAccountId, setCreatedAccountId] = useState('');
   const [loadMessage, setLoadMessage] = useState('');
   const submitting = useRef(false);
-  const lifetime = useRef<object | null>(null);
+  const lifetime = useRef<AbortController | null>(null);
   const [reload, setReload] = useState(0);
   const handleInput = useRef<HTMLInputElement>(null);
   const alert = useRef<HTMLDivElement>(null);
@@ -150,6 +150,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   }, []);
   const retirePrivate = useCallback(
     (state: LoadState, event: OrganizationCreateReturnEvent, recovery = false, message = '') => {
+      lifetime.current?.abort();
       lifetime.current = null;
       authority.current = null;
       submitting.current = false;
@@ -203,7 +204,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   }, [shouldWarn]);
 
   useLayoutEffect(() => {
-    const current = {};
+    const current = new AbortController();
     lifetime.current = current;
     bypassDeparture.current = false;
     authority.current = null;
@@ -234,6 +235,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       );
     }
     const retire = () => {
+      lifetime.current?.abort();
       lifetime.current = null;
     };
     const leaveDocument = () => {
@@ -247,7 +249,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     };
     window.addEventListener('pagehide', leaveDocument);
     window.addEventListener('pageshow', restore);
-    void (initial && reload === 0 ? Promise.resolve(initial) : loadAccountSession()).then((result) => {
+    void (initial && reload === 0 ? Promise.resolve(initial) : loadAccountSession(current.signal)).then((result) => {
       if (lifetime.current !== current) return;
       if (result.kind === 'ready') {
         if (acknowledged.current) {
@@ -406,7 +408,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       retirePrivate('failure', { type: 'unresumable' }, true, m.auth_account_operation_failure());
       return false;
     };
-    const before = await loadAccountSession();
+    const before = await loadAccountSession(current.signal);
     if (!isCurrent()) return;
     if (
       before.kind !== 'ready' ||
@@ -451,8 +453,20 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     let executionDispatched = false;
     let result = await runAccountOperation(operationKey, operation, {
       isCurrent,
+      signal: current.signal,
       onExecutionDispatch: () => {
         if (!isCurrent()) return false;
+        if (
+          !storePendingAccountOperationStepUp({
+            kind: 'organization',
+            accountId,
+            operationKey,
+            operation,
+            submitted: true,
+          })
+        )
+          return false;
+        continuation = JSON.stringify(pendingAccountOperationStepUpState());
         executionDispatched = true;
         recordReturn({ type: 'execution' });
         return isCurrent();
@@ -478,7 +492,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
         setShowRetry(false);
       });
     }
-    const after = await loadAccountSession();
+    const after = await loadAccountSession(current.signal);
     if (!isCurrent()) return;
     if (
       after.kind !== 'ready' ||
@@ -510,7 +524,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
           accountId,
           operationKey,
           operation,
-          ...(submitted ? { submitted: true } : {}),
+          ...(submitted || executionDispatched ? { submitted: true } : {}),
         })
       ) {
         setMessage(m.auth_account_operation_failure());

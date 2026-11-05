@@ -1,15 +1,18 @@
 import {
+  ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES,
   ACCOUNT_OPERATION_MAX_ERROR_BYTES,
   DELETION_APPROVAL_MAX_RESPONSE_BYTES,
   DELETION_EXECUTION_MAX_RESPONSE_BYTES,
+  ORGANIZATION_EXECUTION_MAX_RESPONSE_BYTES,
   parseAccountOperationApprovalResponse,
   parseDeletionExecutionResponse,
   parseDeletionOperationRefusal,
+  parseOrganizationExecutionResponse,
+  parseOrganizationOperationError,
 } from '@rezics/auth-contract';
 import { readJsonBounded } from './private-auth-json';
-import { AUTH_POST_TIMEOUT_MS } from './api';
 import { privateAuthRead } from './private-auth-read';
-import { authPost, type AuthPostResult } from './api';
+import { AUTH_POST_TIMEOUT_MS, type AuthPostResult } from './api';
 import { requestAccountSession } from './account-session';
 import { m } from './paraglide/messages.js';
 import { normalizeSignupHandle } from './signup';
@@ -161,13 +164,6 @@ export async function loadAccountSession(signal?: AbortSignal): Promise<AccountS
   }
 }
 
-async function post<Body>(path: string, body: unknown, isCurrent?: () => boolean): Promise<AuthPostResult<Body>> {
-  const first = await authPost<Body>(path, body);
-  if (!first.ok && first.status === 503 && first.code === 'unavailable' && (!isCurrent || isCurrent()))
-    return authPost<Body>(path, body);
-  return first;
-}
-
 function failure(result: Exclude<AuthPostResult, { ok: true }>): AccountOperationResult {
   if (result.status === 401 && result.code === 'step_up_required') return { ok: false, reason: 'step-up' };
   if (result.status === 403 && result.code === 'platform_closed') return { ok: false, reason: 'platform-closed' };
@@ -269,6 +265,118 @@ async function runDeletion(
     : { ok: false, reason: 'unknown' };
 }
 
+type OrganizationReply<T> =
+  | { kind: 'received'; value: T }
+  | { kind: 'error'; reason: 'step-up' | 'platform-closed' | 'denied' | 'unavailable' }
+  | { kind: 'invalid' };
+
+/** One existing five-second lifetime per POST, including abort-ignoring I/O. */
+async function organizationPost<T>(
+  phase: 'approve' | 'execute',
+  body: unknown,
+  maxBytes: number,
+  parse: (value: unknown) => T | null,
+  dispatch: () => boolean,
+  caller?: AbortSignal,
+): Promise<OrganizationReply<T>> {
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  caller?.addEventListener('abort', cancel, { once: true });
+  if (caller?.aborted) cancel();
+  const timer = setTimeout(cancel, AUTH_POST_TIMEOUT_MS);
+  let onAbort = () => {};
+  try {
+    const cancelled = new Promise<OrganizationReply<T>>((resolve) => {
+      onAbort = () => resolve({ kind: 'invalid' });
+      controller.signal.addEventListener('abort', onAbort, { once: true });
+      if (controller.signal.aborted) onAbort();
+    });
+    const send = async (): Promise<OrganizationReply<T>> => {
+      if (controller.signal.aborted) return { kind: 'invalid' };
+      if (!dispatch()) return { kind: 'invalid' };
+      const payload = JSON.stringify(body);
+      let response: Response;
+      let value: unknown;
+      try {
+        response = await fetch(`/account-operations/${phase}`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          redirect: 'error',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          signal: controller.signal,
+        });
+        value = await readJsonBounded(
+          response,
+          response.status === 200 ? maxBytes : ACCOUNT_OPERATION_MAX_ERROR_BYTES,
+          controller.signal,
+        );
+      } catch {
+        return { kind: 'invalid' };
+      }
+      if (response.status === 200) {
+        const result = parse(value);
+        return result ? { kind: 'received', value: result } : { kind: 'invalid' };
+      }
+      const error = parseOrganizationOperationError(value, response.status);
+      if (!error) return { kind: 'invalid' };
+      const reason =
+        error.error === 'step_up_required'
+          ? 'step-up'
+          : error.error === 'platform_closed'
+            ? 'platform-closed'
+            : error.error === 'account_operation_denied'
+              ? 'denied'
+              : 'unavailable';
+      return { kind: 'error', reason };
+    };
+    return await Promise.race([cancelled, send()]);
+  } finally {
+    clearTimeout(timer);
+    caller?.removeEventListener('abort', cancel);
+    controller.signal.removeEventListener('abort', onAbort);
+  }
+}
+
+async function runOrganizationOperation(
+  operationKey: string,
+  operation: Extract<AccountOperation, { kind: 'organization' }>,
+  browser?: { isCurrent: () => boolean; signal?: AbortSignal; onExecutionDispatch?: () => boolean },
+): Promise<AccountOperationResult> {
+  const owns = () => !browser?.signal?.aborted && (!browser || browser.isCurrent());
+  const approve = () =>
+    organizationPost(
+      'approve',
+      { operationKey, operation },
+      ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES,
+      parseAccountOperationApprovalResponse,
+      owns,
+      browser?.signal,
+    );
+  let approved = await approve();
+  if (!owns()) return { ok: false, reason: 'failure' };
+  if (approved.kind === 'error' && approved.reason === 'unavailable') approved = await approve();
+  if (!owns()) return { ok: false, reason: 'failure' };
+  if (approved.kind !== 'received')
+    return { ok: false, reason: approved.kind === 'error' ? approved.reason : 'unavailable' };
+  if (Date.parse(approved.value.expiresAt) <= Date.now()) return { ok: false, reason: 'unavailable' };
+  const executed = await organizationPost(
+    'execute',
+    { operationKey, operation, reference: approved.value.reference },
+    ORGANIZATION_EXECUTION_MAX_RESPONSE_BYTES,
+    parseOrganizationExecutionResponse,
+    () => owns() && (!browser?.onExecutionDispatch || browser.onExecutionDispatch()) && owns(),
+    browser?.signal,
+  );
+  if (!owns()) return { ok: false, reason: 'failure' };
+  if (executed.kind === 'received') return { ok: true, accountId: executed.value.accountId };
+  return {
+    ok: false,
+    reason: executed.kind === 'error' && executed.reason !== 'unavailable' ? executed.reason : 'unknown',
+  };
+}
+
 export async function runAccountOperation(
   operationKey: string,
   operation: AccountOperation,
@@ -276,59 +384,11 @@ export async function runAccountOperation(
     isCurrent: () => boolean;
     retryUncertain?: boolean;
     onExecutionDispatch?: () => boolean;
+    signal?: AbortSignal;
   },
 ): Promise<AccountOperationResult> {
   if (operation.kind === 'delete') return runDeletion(operationKey, operation, browser);
-  if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
-  const approved = await post<{ reference?: unknown; expiresAt?: unknown }>(
-    '/account-operations/approve',
-    { operationKey, operation },
-    browser?.onExecutionDispatch ? browser.isCurrent : undefined,
-  );
-  if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
-  if (!approved.ok) return failure(approved);
-  if (
-    !approved.body ||
-    typeof approved.body.reference !== 'string' ||
-    !approved.body.reference ||
-    typeof approved.body.expiresAt !== 'string' ||
-    !Number.isFinite(Date.parse(approved.body.expiresAt))
-  )
-    return { ok: false, reason: 'unavailable' };
-
-  const executionBody = {
-    operationKey,
-    operation,
-    reference: approved.body.reference,
-  };
-  if (browser?.onExecutionDispatch && !browser.onExecutionDispatch()) return { ok: false, reason: 'failure' };
-  if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
-  // Keep the same reference/body/key for the existing unavailable retry. A timeout
-  // ends waiting with an unknown outcome; recovery must remain explicit.
-  let executed = await authPost<{ accountId?: unknown; expired?: unknown; error?: unknown }>(
-    '/account-operations/execute',
-    executionBody,
-  );
-  const uncertain = !executed.ok && executed.status === 503;
-  // Deletion retains its bounded same-body recovery for unavailable responses only
-  // while its review owns the command. Creation requires explicit review.
-  if (
-    (!browser || (browser.retryUncertain && browser.isCurrent())) &&
-    uncertain &&
-    !executed.ok &&
-    executed.code === 'unavailable'
-  )
-    executed = await authPost('/account-operations/execute', executionBody);
-  if (!executed.ok) return uncertain ? { ok: false, reason: 'unknown' } : failure(executed);
-  if (
-    !executed.body ||
-    executed.body.expired ||
-    executed.body.error ||
-    typeof executed.body.accountId !== 'string' ||
-    !executed.body.accountId
-  )
-    return { ok: false, reason: 'unknown' };
-  return { ok: true, accountId: executed.body.accountId };
+  return runOrganizationOperation(operationKey, operation, browser);
 }
 
 export function operationKeyFor(

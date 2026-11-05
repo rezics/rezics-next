@@ -18,6 +18,7 @@ test('initial read retries the saved draft; uncertain creation requires the same
   await flush(() => page.calls[0]!.resolve(approval()));
   await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
   const saved = readPendingAccountOperationStepUp()!;
+  expect(saved.submitted).toBe(true);
   storePendingOrganizationHandle('another-draft');
   await page.render(<NewOrganizationPage key="restored" initial={initial} />);
   expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('team-alpha');
@@ -41,7 +42,11 @@ test('a first current refusal remains known and releases its own continuation', 
   await flush(() => fill(page.host.querySelector('input')!, 'team-alpha'));
   await flush(() => send(page.host));
   await flush(() => page.calls[0]!.resolve(approval()));
-  await flush(() => page.calls[1]!.resolve(Response.json({ error: 'account_operation_denied' }, { status: 403 })));
+  await flush(() =>
+    page.calls[1]!.resolve(
+      Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 403 }),
+    ),
+  );
   expect(page.host.textContent).toContain('Creation was refused');
   expect(page.host.textContent).not.toContain('creation result is still unknown');
   expect(readPendingAccountOperationStepUp()).toBeNull();
@@ -58,7 +63,8 @@ for (const result of ['success', 'step-up', 'approval'] as const)
       storePendingOrganizationHandle('new-team');
       const operation = { kind: 'organization' as const, handle: 'new-team' };
       storePendingAccountOperationStepUp({
-        ...readPendingAccountOperationStepUp()!,
+        kind: 'organization',
+        operationKey: readPendingAccountOperationStepUp()!.operationKey,
         accountId: 'replacement',
         operation,
       });
@@ -69,7 +75,7 @@ for (const result of ['success', 'step-up', 'approval'] as const)
             ? approval()
             : result === 'success'
               ? Response.json({ accountId: 'old-created' })
-              : Response.json({ error: 'step_up_required' }, { status: 401 }),
+              : Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
         ),
       );
       expect(readPendingOrganizationHandle()).toBe('new-team');
@@ -80,3 +86,47 @@ for (const result of ['success', 'step-up', 'approval'] as const)
       assign.mockRestore();
     }
   });
+
+test('malformed execution preserves submitted original operands and requires a deliberate retry', async () => {
+  const page = await open(<NewOrganizationPage initial={initial} />, body);
+  await flush(() => fill(page.host.querySelector('input')!, 'Team-Alpha'));
+  await flush(() => send(page.host));
+  await flush(() => page.calls[0]!.resolve(approval()));
+  const original = readPendingAccountOperationStepUp()!;
+  expect(original.submitted).toBe(true);
+  await flush(() => page.calls[1]!.resolve(Response.json({ accountId: 'created', unexpected: true })));
+  expect(page.host.textContent).toContain('creation result is still unknown');
+  expect(readPendingAccountOperationStepUp()).toEqual(original);
+  expect(page.calls).toHaveLength(2);
+  await flush(() => button(page.host, 'Retry this creation')!.click());
+  expect(page.calls[2]!.body).toEqual({ operationKey: original.operationKey, operation: original.operation });
+});
+
+test('refusing the submitted marker preserves the original descriptor and sends no execution', async () => {
+  const page = await open(<NewOrganizationPage initial={initial} />, body);
+  await flush(() => fill(page.host.querySelector('input')!, 'team-alpha'));
+  await flush(() => send(page.host));
+  const original = readPendingAccountOperationStepUp()!;
+  const storage = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
+  Object.defineProperty(window, 'sessionStorage', {
+    configurable: true,
+    value: new Proxy(window.sessionStorage, {
+      get(target, key) {
+        if (key === 'setItem')
+          return () => {
+            throw new Error('storage refused');
+          };
+        return Reflect.get(target, key);
+      },
+    }),
+  });
+  try {
+    await flush(() => page.calls[0]!.resolve(approval()));
+    expect(page.calls).toHaveLength(1);
+    expect(readPendingAccountOperationStepUp()).toEqual(original);
+    expect(page.host.textContent).not.toContain('was created');
+  } finally {
+    if (storage) Object.defineProperty(window, 'sessionStorage', storage);
+    else Reflect.deleteProperty(window, 'sessionStorage');
+  }
+});

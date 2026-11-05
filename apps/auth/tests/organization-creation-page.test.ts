@@ -33,8 +33,23 @@ for (const [code, status] of [
       const original = readPendingAccountOperationStepUp();
       await flush(() => send(page.host));
       expect(page.calls[2]!.body.operationKey).toBe(original!.operationKey);
-      await flush(() => page.calls[2]!.resolve(Response.json({ error: code }, { status })));
-      if (status === 503) await flush(() => page.calls[3]!.resolve(Response.json({ error: code }, { status })));
+      await flush(() =>
+        page.calls[2]!.resolve(
+          Response.json(
+            { error: code, ...(code === 'unavailable' ? {} : { effect_status: 'not_applied' }) },
+            { status },
+          ),
+        ),
+      );
+      if (status === 503)
+        await flush(() =>
+          page.calls[3]!.resolve(
+            Response.json(
+              { error: code, ...(code === 'unavailable' ? {} : { effect_status: 'not_applied' }) },
+              { status },
+            ),
+          ),
+        );
       expect(readPendingAccountOperationStepUp()).toEqual(original);
       const input = page.host.querySelector<HTMLInputElement>('input')!;
       expect([input.value, input.readOnly]).toEqual(['team-alpha', true]);
@@ -44,7 +59,7 @@ for (const [code, status] of [
       } else expect(assign).toHaveBeenCalledTimes(1);
       if (status === 409 || status === 403) {
         expect(page.host.textContent).toContain(status === 409 ? 'Creation was refused' : 'not open yet');
-        expect(page.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+        expect(page.host.querySelector('button[type="submit"]')).toBeNull();
         await flush(() => send(page.host));
         expect(page.calls).toHaveLength(3);
       }
@@ -56,7 +71,11 @@ test('a known first refusal releases its hint; a restored unsent hint stays cons
   const page = await open(view(), body);
   await flush(() => fill(page.host.querySelector('input')!, 'team-alpha'));
   await flush(() => send(page.host));
-  await flush(() => page.calls[0]!.resolve(Response.json({ error: 'account_operation_denied' }, { status: 409 })));
+  await flush(() =>
+    page.calls[0]!.resolve(
+      Response.json({ error: 'account_operation_denied', effect_status: 'not_applied' }, { status: 409 }),
+    ),
+  );
   expect(readPendingAccountOperationStepUp()).toBeNull();
   expect(page.host.querySelector<HTMLInputElement>('input')!.readOnly).toBe(false);
   expect(page.host.textContent).not.toContain('creation result is still unknown');

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { createAuthHost, type AccountOperationAccess } from '../src/index.ts';
+import { parseAccountOperationApprovalResponse, parseOrganizationExecutionResponse } from '@rezics/auth-contract';
 import { accountOperationTransport } from '../src/account-operations-transport.ts';
 import { createBarrierProofVerifier } from '../src/barrier-proofs.ts';
 import { createNativeWorkflowProofPorts } from '../src/native-workflow-proofs.ts';
@@ -78,6 +79,7 @@ let creator: Person;
 let ordinary: Person;
 let grantAny: Person;
 let issueToken: (cookie: string) => Promise<string>;
+let installedAccess: AccountOperationAccess;
 let withheld: ReturnType<typeof accountOperationTransport>;
 let automatedSubject: (human: Person, key: string) => Promise<{ accountId: string }>;
 let grantGate: (granter: Person, recipient: Person, action: string) => Promise<void>;
@@ -253,6 +255,7 @@ beforeAll(async () => {
       }
     },
   };
+  installedAccess = accountOperations;
   const key = { ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)), kid: 'ops' };
   host = await createAuthHost({
     database: authPool,
@@ -603,8 +606,10 @@ test('a replay with the same operation key returns the same result without repea
   const handle = orgHandle();
   const operation = { kind: 'organization', handle };
   const approval = await ok(await approve(creator, 'replayed', operation));
+  expect(parseAccountOperationApprovalResponse(approval)).toEqual(approval);
   const body = { operationKey: 'replayed', operation, reference: approval.reference };
   const first = await done(await execute(creator, body));
+  expect(parseOrganizationExecutionResponse(first)).not.toBeNull();
   const mid = await counts();
   expect(await done(await execute(creator, body))).toEqual(first);
   expect(await counts()).toEqual(mid);
@@ -717,3 +722,48 @@ test('deletion is never gated', async () => {
   await execute(leaving, { operationKey: 'ungated-delete-self', operation: removal, reference: approval.reference });
   expect(await stateOf(leaving.accountId)).not.toBe('active');
 }, 120000);
+
+// These injections prove native transport output admission, not workflow effects.
+test('incompatible organization producer output never fabricates a not-applied guarantee', async () => {
+  const operation = { kind: 'organization', handle: orgHandle() };
+  const operationKey = 'output-admission';
+  const approval = await ok(await approve(creator, operationKey, operation));
+  for (const output of [
+    { accountId: 'created', expired: true },
+    { accountId: 'created', extra: true },
+    { expired: true },
+  ]) {
+    const handler = accountOperationTransport(
+      host.service,
+      {
+        ...host.workflows,
+        createOrganization: async () => output as never,
+      },
+      host.handler,
+      installedAccess,
+    );
+    const response = await handler(
+      new Request(`${issuer}/account-operations/execute`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json', cookie: creator.cookie },
+        body: JSON.stringify({ operationKey, operation, reference: approval.reference }),
+      }),
+    );
+    await refused(response, 503, { error: 'unavailable' });
+  }
+  const handler = accountOperationTransport(host.service, host.workflows, host.handler, {
+    ...installedAccess,
+    approve: async () => ({ reference: 'incompatible', expiresAt: approval.expiresAt }),
+  });
+  await refused(
+    await handler(
+      new Request(`${issuer}/account-operations/approve`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json', cookie: creator.cookie },
+        body: JSON.stringify({ operationKey, operation }),
+      }),
+    ),
+    503,
+    { error: 'unavailable' },
+  );
+});

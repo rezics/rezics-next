@@ -7,6 +7,7 @@ import {
   ACCOUNT_OPERATION_REFERENCE_MAX_LENGTH,
   automatedAccountOperationRequestByteBudgets,
   type AutomatedAccountExecutionUnresolved,
+  parseOrganizationExecutionResponse,
 } from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import type { AccountOperation, createAccountWorkflows } from './workflows.ts';
@@ -208,7 +209,10 @@ export function accountOperationTransport(
         });
         if (!approval) return response({ error: 'platform_closed', effect_status: 'not_applied' }, 403);
         const projected = { reference: approval.reference, expiresAt: approval.expiresAt };
-        if (['rename', 'delete'].includes(operation.kind) && !parseAccountOperationApprovalResponse(projected))
+        if (
+          ['rename', 'delete', 'organization'].includes(operation.kind) &&
+          !parseAccountOperationApprovalResponse(projected)
+        )
           return response({ error: 'unavailable' }, 503);
         if (operation.kind === 'membership' && !parseMembershipApprovalResponse(projected))
           return response({ error: 'unavailable' }, 503);
@@ -254,8 +258,14 @@ export function accountOperationTransport(
             ? response(result)
             : response({ error: 'account_operation_unresolved' } satisfies AutomatedAccountExecutionUnresolved, 503);
         }
-        case 'organization':
-          return response(await workflows.createOrganization({ ...input, handle: operation.handle as string }));
+        case 'organization': {
+          effectDispatched = true;
+          const result = parseOrganizationExecutionResponse(
+            await workflows.createOrganization({ ...input, handle: operation.handle as string }),
+          );
+          // An incomplete/incompatible workflow reply may follow native effects.
+          return result ? response(result) : response({ error: 'unavailable' }, 503);
+        }
         case 'rename': {
           const result = parseRenameExecutionResponse(
             await workflows.renameHandle({
@@ -309,7 +319,7 @@ export function accountOperationTransport(
           return response(await workflows.fenceOperator({ ...input, accountId: operation.accountId as string }));
       }
     } catch (error) {
-      // After invoking deletion or membership, an exception can follow a committed effect.
+      // After invoking deletion, membership or organization creation, an exception can follow a committed effect.
       if (effectDispatched) return response({ error: 'unavailable' }, 503);
       if (automatedExecutionMayHaveCompleted)
         return response({ error: 'account_operation_unresolved' } satisfies AutomatedAccountExecutionUnresolved, 503);
