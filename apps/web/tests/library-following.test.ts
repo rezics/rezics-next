@@ -433,7 +433,9 @@ test('Following management has a genuine discovery destination after the last un
     await act(async () => showPage(signedOut));
     expect(empty()).toBeNull();
     expect(requests).toHaveLength(beforeSignedOut);
-    for (const status of [403, 503]) {
+    listStatus = 403;
+    expect(await read()).toEqual({ signedIn: true, forbidden: true, follows: [], next: null });
+    for (const status of [503]) {
       listStatus = status;
       await expect(read()).rejects.toThrow();
     }
@@ -554,4 +556,42 @@ test('Following marks only a successful single stale-cursor fallback and never r
     ).rejects.toThrow();
     expect(calls).toBe(1);
   }
+});
+
+
+test('Following receives only ordinary native denial, including a denied stale-cursor fallback', async () => {
+  for (const stale of [false, true]) {
+    const calls: Request[] = [];
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: async (input, init) => {
+        const call = new Request(input, init);
+        calls.push(call);
+        return stale && calls.length === 1
+          ? Response.json({ code: 'stale_cursor' }, { status: 409 })
+          : Response.json({ code: 'forbidden' }, { status: 403 });
+      },
+    });
+    expect(await loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {
+      cursor: 'opaque/current+', kind: 'space',
+    })).toEqual({ signedIn: true, forbidden: true, follows: [], next: null });
+    expect(calls.map((call) => Object.fromEntries(new URL(call.url).searchParams))).toEqual([
+      { view: 'FULL', limit: '20', targetType: 'space', cursor: 'opaque/current+' },
+      ...(stale ? [{ view: 'FULL', limit: '20', targetType: 'space' }] : []),
+    ]);
+  }
+  for (const [status, body] of [
+    [403, { code: 'platform_closed' }], [401, { code: 'unauthorized' }],
+    [404, { code: 'not_found' }], [503, { code: 'unavailable' }], [200, {}],
+  ] as const) {
+    let calls = 0;
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: async () => { calls++; return Response.json(body, { status }); },
+    });
+    await expect(loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {})).rejects.toBeDefined();
+    expect(calls).toBe(1);
+  }
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: async () => { throw new TypeError('Transport lost'); },
+  });
+  await expect(loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {})).rejects.toThrow();
 });

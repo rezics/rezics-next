@@ -2,7 +2,7 @@ import { followingKind } from './following-kind-navigation/address';
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import { libraryListQuery, readLibraryResult, StaleCursorError, subjectOf, type LibrarySubject } from './reads';
+import { libraryListQuery, LibraryReadForbiddenError, readLibraryResult, StaleCursorError, subjectOf, type LibrarySubject } from './reads';
 import { PERSONAL_DIRECTORY_CURSOR_LIMITS, personalDirectoryAddress } from './personal-directory-address';
 
 type FollowRead = NonNullable<Awaited<ReturnType<KernelClient['follows']['get']>>['data']>;
@@ -24,6 +24,8 @@ export type MineFollowingPage = {
   follows: MineFollow[];
   next: string | null;
   addressInvalid?: true;
+  /** An ordinary native list denial, with no row or command authority. */
+  forbidden?: true;
   kindUnavailable?: true;
   /** A successful native stale-cursor fallback; the requested address remains unchanged. */
   cursorReset?: true;
@@ -66,9 +68,14 @@ export async function loadMineFollowingPage(
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
-    return readLibraryResult(result);
+    try {
+      return readLibraryResult(result);
+    } catch (error) {
+      if (error instanceof LibraryReadForbiddenError) return null;
+      throw error;
+    }
   };
-  let page: FollowRead;
+  let page: FollowRead | null;
   let cursorReset = false;
   try {
     page = await read(input.cursor);
@@ -77,6 +84,7 @@ export async function loadMineFollowingPage(
     page = await read();
     cursorReset = true;
   }
+  if (page === null) return { signedIn: true, forbidden: true, follows: [], next: null };
   return {
     signedIn: true,
     follows: page.follows.map(present),

@@ -161,6 +161,36 @@ test('the actual envelope names returned targets and carries the reader-prepared
   }
 });
 
+
+test('both actual Following exports receive denial with the prepared owner and original kind/address', async () => {
+  current.status = 'active';
+  current.subject = 'denied-owner';
+  actualRequest = request();
+  const calls: Request[] = [];
+  const transport = spyOn(kernel, 'kernelClient').mockReturnValue(createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      calls.push(new Request(input, init));
+      return Response.json({ code: 'forbidden' }, { status: 403 });
+    },
+  }));
+  const naming = spyOn(definitions, 'nameSubjectTypes');
+  try {
+    const data = { cursor: 'private/current+', kind: 'collection' as const };
+    const page = { signedIn: true, forbidden: true, follows: [], next: null };
+    expect(await actions.readMineFollowingForViewer({ data })).toEqual({
+      subject: 'denied-owner', cursor: data.cursor, kind: data.kind, locale: 'en', page,
+    });
+    expect(await actions.readMineFollowingPage({ data })).toEqual(page);
+    expect(calls).toHaveLength(2);
+    expect(calls.every((call) => call.headers.get('authorization') === `Bearer ${current.token}`)).toBe(true);
+    expect(naming).not.toHaveBeenCalled();
+    expect(responseHeaders.get('cache-control')).toBe('private, no-store');
+  } finally {
+    naming.mockRestore();
+    transport.mockRestore();
+  }
+});
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((yes) => {
@@ -407,6 +437,39 @@ test('the mounted default Following composition retires viewer, cursor and row l
     await settle(replacedRowRemoval, { ok: true, following: false });
     expect(host.textContent).toContain('B replacement row');
     expect(host.textContent).not.toContain(m.library_follow_removed());
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === m.following_reading_inspect())!.click();
+      await tick();
+    });
+    expect(host.querySelector('[data-slot="list-row"]')).not.toBeNull();
+    await remove();
+    const captured = writes.at(-1)!;
+    const originalInput = structuredClone(captured.input);
+    await refetch('current/cursor+');
+    const denied = { ...loaded('B', 'current/cursor+', 'Unused'),
+      page: { signedIn: true, forbidden: true as const, follows: [], next: null } };
+    await settle(reads.at(-1)!, denied);
+    expect(host.textContent).toContain(m.library_my_ratings_denied());
+    expect(host.textContent).not.toContain('B replacement row');
+    expect(host.querySelector('[data-slot="list-row"], [data-slot="follow-control"], [data-slot="empty"]')).toBeNull();
+    expect(host.querySelector('a[href*="B-canonical"]')).toBeNull();
+    expect(host.querySelector('a[href*="bounded-more"]')).toBeNull();
+    expect(router.state.location.search).toEqual({ cursor: 'current/cursor+' });
+    expect(captured.input).toEqual(originalInput);
+    const beforeDeniedRefresh = writes.length;
+    await settle(captured, { ok: false, reason: 'unavailable' });
+    expect(writes).toHaveLength(beforeDeniedRefresh);
+    expect(host.textContent).toContain(m.library_my_ratings_denied());
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === m.following_reading_refresh())!.click();
+      await tick();
+    });
+    await settle(reads.at(-1)!, loaded('B', 'current/cursor+', 'B replacement row', 'bounded-more'));
+    expect(host.textContent).not.toContain(m.library_my_ratings_denied());
+    expect(host.textContent).toContain('B replacement row');
+
 
     await act(async () => {
       const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
@@ -569,7 +632,8 @@ test('Following recovery stays page-local through terminal pages, last-row remov
   client.setQueryData(sessionQuery.queryKey, viewer('A'));
   client.setQueryData(exposureQuery.queryKey, ['personal_library']);
   const initial = loaded('A', 'terminal/page+', 'Last visible row', null);
-  const retainedLoader = spyOn(Route, 'useLoaderData').mockReturnValue(initial);
+  const initialDenied = { ...initial, page: { signedIn: true, forbidden: true as const, follows: [], next: null } };
+  const retainedLoader = spyOn(Route, 'useLoaderData').mockReturnValue(initialDenied);
   const rootRoute = createRootRoute();
   const route = createRoute({
     getParentRoute: () => rootRoute,
@@ -641,6 +705,8 @@ test('Following recovery stays page-local through terminal pages, last-row remov
       await tick();
     });
     expect(reads).toHaveLength(1);
+    expect(host.textContent).toContain(m.library_my_ratings_denied());
+    expect(host.querySelector('[data-slot="empty"], [data-slot="follow-control"]')).toBeNull();
     await settle(reads[0]!, initial);
     expect(host.textContent).toContain('Last visible row');
     expect(restart()).toBeDefined(); // Populated later pages also have a way back.
@@ -699,7 +765,8 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expect(router.state.location.search).toEqual({ cursor: 'expired/page+' });
     expect(reads).toHaveLength(beforeRetirement + 1);
     const bRead = reads.at(-1)!;
-    await settle(oldRead, reset);
+    await settle(oldRead, { ...reset, page: initialDenied.page });
+    expect(host.textContent).not.toContain(m.library_my_ratings_denied());
     await settle(oldRemoval, { ok: true, following: false });
     expectRetired();
     await settle(bRead, reset); // A reset is presentation metadata, never authority for another viewer.
