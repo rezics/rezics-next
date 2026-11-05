@@ -303,7 +303,7 @@ caller's work. A fixture that writes during warm-up, `prepare`, or a direct capt
 before the capture. Work captured inside `grow` is never settled. A fixture that measures outside `checkGrowth` calls
 the exported `settle` API instead of issuing a bare VACUUM: bare VACUUM neither waits for older snapshots nor verifies
 visibility
-([growth bare VACUUM sites](../docs/research/growth-bare-vacuum-sites.md)).
+([growth bare VACUUM sites](../../docs/research/growth-bare-vacuum-sites.md)).
 
 When a settle fails, moving table counters classify a concurrent writer, which the check must stop outside the
 operation under the background-statements decision; static counters with a newer `backend_xmin` classify a snapshot
