@@ -10300,7 +10300,7 @@
   "library_copy_compare_return_editor": "Zum geöffneten Editor zurückkehren",
   "library_copy_compare_reselect": "Einige ausgewählte Angaben passen nicht mehr zu dieser Seite. Wähle die aktuellen Zeilen bewusst erneut aus.",
   "library_copy_compare_changed": "Ein ausgewähltes Exemplar hat eine andere Revision. Seine bisherige Beobachtung wurde aus dem Vergleich entfernt.",
-  "library_copy_compare_missing": "Ein ausgewähltes Exemplar ist nicht mehr auf dieser empfangenen Seite. Es wurde aus dem Vergleich entfernt; spätere Seiten wurden nicht durchsucht.",
+  "library_copy_compare_missing": "Ein ausgewähltes Exemplar verließ die empfangene Seite und wurde aus dem Vergleich entfernt; spätere Seiten wurden nicht durchsucht.",
   "library_copy_compare_dismiss": "Auswahlhinweis schließen",
   "library_copy_compare_changed_position": "Der ausgewählte Datensatz steht jetzt in Zeile {position}. Wähle diese Zeile erneut aus, um die aktuelle Beobachtung zu vergleichen.",
   "library_copy_compare_missing_record": "Der ausgewählte Datensatz fehlt auf dieser Seite.",

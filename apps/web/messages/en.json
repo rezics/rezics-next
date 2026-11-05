@@ -10443,7 +10443,7 @@
   "library_copy_compare_return_editor": "Return to the open editor",
   "library_copy_compare_reselect": "Some selected observations no longer match this page. Select the current rows again deliberately.",
   "library_copy_compare_changed": "A selected copy has a different revision. Its previous observation was removed from comparison.",
-  "library_copy_compare_missing": "A selected copy is no longer on this received page. It was removed from comparison; later pages were not searched.",
+  "library_copy_compare_missing": "A selected copy left the received page and was removed from comparison; later pages were not searched.",
   "library_copy_compare_dismiss": "Dismiss selection notice",
   "library_copy_compare_changed_position": "The selected record is now at row {position}. Reselect that row to compare its current observation.",
   "library_copy_compare_missing_record": "The selected record is absent from this page.",

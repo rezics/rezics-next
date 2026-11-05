@@ -10307,7 +10307,7 @@
   "library_copy_compare_return_editor": "返回已打开的编辑器",
   "library_copy_compare_reselect": "部分选中的记录已与此页不符。请明确重新选择当前行。",
   "library_copy_compare_changed": "某个选中副本的修订号已改变，其原先的记录已从比较中移除。",
-  "library_copy_compare_missing": "某个选中副本已不在当前接收页面中，已从比较中移除；未查找后续页面。",
+  "library_copy_compare_missing": "某个选中副本曾离开已接收页面，已从比较中移除；未查找后续页面。",
   "library_copy_compare_dismiss": "关闭选择提示",
   "library_copy_compare_changed_position": "原先选中的记录现在位于第 {position} 行。请重新选择该行，以比较当前记录。",
   "library_copy_compare_missing_record": "原先选中的记录不在此页中。",

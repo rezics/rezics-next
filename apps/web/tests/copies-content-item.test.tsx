@@ -379,7 +379,7 @@ describe('Received comparison replacement and focus', () => {
       await h.show([current, second]);
       expect(region.querySelectorAll('article')).toHaveLength(0);
       expect(select(0).getAttribute('aria-pressed')).toBe('false');
-      await h.click(h.body.getByRole('button', { name: m.library_copy_compare_find_row() }));
+      await h.click(h.body.getAllByRole('button', { name: m.library_copy_compare_find_row() })[0]!);
       expect(window.document.activeElement).toBe(select(0));
       expect(region.querySelectorAll('article')).toHaveLength(0);
       await h.click(select(0));

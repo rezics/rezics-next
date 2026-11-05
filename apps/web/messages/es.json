@@ -10300,7 +10300,7 @@
   "library_copy_compare_return_editor": "Volver al editor abierto",
   "library_copy_compare_reselect": "Algunas observaciones seleccionadas ya no coinciden con esta página. Vuelve a seleccionar expresamente las filas actuales.",
   "library_copy_compare_changed": "Una copia seleccionada tiene otra revisión. Su observación anterior se ha quitado de la comparación.",
-  "library_copy_compare_missing": "Una copia seleccionada ya no está en esta página recibida. Se ha quitado de la comparación; no se buscaron páginas posteriores.",
+  "library_copy_compare_missing": "Una copia seleccionada dejó de estar en la página recibida y se quitó de la comparación; no se buscaron páginas posteriores.",
   "library_copy_compare_dismiss": "Cerrar aviso de selección",
   "library_copy_compare_changed_position": "El registro seleccionado está ahora en la fila {position}. Vuelve a seleccionarla para comparar su observación actual.",
   "library_copy_compare_missing_record": "El registro seleccionado no está en esta página.",

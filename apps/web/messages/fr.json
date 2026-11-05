@@ -10300,7 +10300,7 @@
   "library_copy_compare_return_editor": "Revenir à l’éditeur ouvert",
   "library_copy_compare_reselect": "Certaines observations sélectionnées ne correspondent plus à cette page. Sélectionnez à nouveau explicitement les lignes actuelles.",
   "library_copy_compare_changed": "Un exemplaire sélectionné a une révision différente. Son observation précédente a été retirée de la comparaison.",
-  "library_copy_compare_missing": "Un exemplaire sélectionné ne figure plus sur cette page reçue. Il a été retiré de la comparaison ; les pages suivantes n’ont pas été parcourues.",
+  "library_copy_compare_missing": "Un exemplaire sélectionné a quitté la page reçue et a été retiré de la comparaison ; les pages suivantes n’ont pas été parcourues.",
   "library_copy_compare_dismiss": "Fermer l’avis de sélection",
   "library_copy_compare_changed_position": "La fiche sélectionnée se trouve maintenant à la ligne {position}. Sélectionnez à nouveau cette ligne pour comparer son observation actuelle.",
   "library_copy_compare_missing_record": "La fiche sélectionnée est absente de cette page.",
