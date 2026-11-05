@@ -10922,5 +10922,19 @@
   "realm_question_window_first": "First window",
   "realm_question_window_sparse": "No entries in this window. Continue to the next window.",
   "realm_question_window_terminal": "End of these results. Return to an earlier window.",
-  "realm_question_history_empty": "No caption history is available yet."
+  "realm_question_history_empty": "No caption history is available yet.",
+  "person_review_title": "Review one Person across sources",
+  "person_review_help": "Compare the current original Bangumi and VNDB records and their cited identifiers. Names and shared credits help discovery; confirm identity only with independent cited evidence. Acceptance and publication are separate editorial actions.",
+  "person_review_original": "Original Person UUID",
+  "person_review_source_key": "Exact provider source key",
+  "person_review_compare": "Compare current records",
+  "person_review_unavailable": "Comparison remains available. Confirmation requires two current original Persons, coherent native identity evidence and current merge authority. Refresh the comparison when those are available.",
+  "person_review_citation": "Independent identity evidence URL",
+  "person_review_open_evidence": "Open independent evidence",
+  "person_review_consent": "I reviewed the independent evidence and confirm that these two original records represent the same human.",
+  "person_review_confirm": "Confirm reviewed identity",
+  "person_review_admitted": "Identity review admitted. Publication and the current combined credits still require independent verification.",
+  "person_review_uncertain": "The outcome is uncertain. Retry the exact original review before starting another identity decision.",
+  "person_identity_unconfirmed": "The current page does not establish both exact Bangumi and VNDB Person identifiers. Credit rows alone do not confirm cross-source identity.",
+  "person_identity_conflicting": "The current Person has conflicting provider identifiers. Its credit rows do not resolve that conflict."
 }

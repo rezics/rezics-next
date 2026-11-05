@@ -1,4 +1,13 @@
-import { createKernelClient, type KernelClient } from '@rezics/client';
+import {
+  createKernelClient,
+  reviewedPersonRequests,
+  isReviewedPersonEndpoint,
+  type ReviewedPersonRead,
+  type ReviewedPersonSource,
+  type ReviewedPersonMerge,
+  type ReviewedPersonAdmission,
+  type KernelClient,
+} from '@rezics/client';
 import {
   BATCH_LIMIT,
   FIELD_GROUPS,
@@ -654,6 +663,48 @@ export function createImportTransport(options: ImportTransportOptions) {
     const reply = await response(() => client.subjects({ id }).get(fetchOptions(signal)), 200, signal);
     return reply.body as ReviewedSubjectRead;
   }
+  async function readReviewedPersonIdentity(
+    id: string,
+    source: ReviewedPersonSource,
+    signal?: AbortSignal,
+  ): Promise<ReviewedPersonRead> {
+    const reply = await response(
+      () => reviewedPersonRequests(client).read(id, source, fetchOptions(signal)),
+      200,
+      signal,
+    );
+    const read = reply.body as ReviewedPersonRead;
+    if (read.reviewedIdentity !== undefined) {
+      const endpoint = read.reviewedIdentity;
+      ensure(
+        isReviewedPersonEndpoint(endpoint) &&
+          endpoint.subject === id &&
+          read.subject.id === id &&
+          read.subject.type === 'schema:Person' &&
+          endpoint.source === source.source &&
+          endpoint.externalId === source.externalId,
+      );
+    }
+    return read;
+  }
+  async function mergeReviewedPersons(
+    body: ReviewedPersonMerge,
+    key: string,
+    signal?: AbortSignal,
+  ): Promise<ReviewedPersonAdmission> {
+    const reply = await response(
+      () =>
+        reviewedPersonRequests(client).merge(body, {
+          headers: { 'idempotency-key': idempotencyKey(key) },
+          ...fetchOptions(signal),
+        }),
+      202,
+      signal,
+    );
+    const result = reply.body as ReviewedPersonAdmission;
+    ensure(typeof result?.operation?.id === 'string' && uuid.test(result.operation.id));
+    return result;
+  }
   async function reviewedCandidates(
     id: string,
     query: { property: string; target?: string; sameAs?: string; context: string; limit: number },
@@ -909,6 +960,8 @@ export function createImportTransport(options: ImportTransportOptions) {
   }
   return {
     readReviewedSubject,
+    readReviewedPersonIdentity,
+    mergeReviewedPersons,
     reviewedCandidates,
     acceptReviewedCandidate,
     adoptReviewedCandidates,

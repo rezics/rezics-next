@@ -99,3 +99,24 @@ export function personEvidenceFits(statement: PersonStatement): boolean {
     statement.references.every((reference) => reference.parts.length <= personBounds.parts)
   );
 }
+
+/** Current identifiers describe this read; retained inverse credits cannot supply a missing identifier. */
+export function personCrossSourceIdentity(read: SubjectRead): 'current' | 'unconfirmed' | 'conflicting' {
+  const providers = [
+    ['wdt:P6298', /^[1-9][0-9]*$(?![\s\S])/],
+    ['wdt:P3180', /^s[1-9][0-9]*$(?![\s\S])/],
+  ] as const;
+  let missing = read.subject.type !== 'schema:Person';
+  for (const [property, syntax] of providers) {
+    const values = new Set(
+      (read.subject.statements[property] ?? []).flatMap((statement) =>
+        statement.value.type === 'value' && typeof statement.value.content === 'string'
+          ? [statement.value.content]
+          : [],
+      ),
+    );
+    if (values.size > 1) return 'conflicting';
+    if (values.size === 0 || !syntax.test([...values][0]!)) missing = true;
+  }
+  return missing ? 'unconfirmed' : 'current';
+}
