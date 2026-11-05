@@ -172,10 +172,6 @@ function sourceEntryGuard(value: unknown): Pick<PersonalEntryGuard, 'incarnation
     : null;
 }
 
-function expectedSession(value: Record<string, unknown>, identity: SessionIdentity) {
-  return value.viewer === identity.viewer && value.csrfToken === identity.csrfToken;
-}
-
 export type PrivateEntryReadResult =
   | { kind: 'ready'; viewer: string; csrfToken: string; credential: string; entry: PersonalEntry }
   | { kind: 'signed-out' | 'unavailable' };
@@ -265,6 +261,10 @@ export const admitPrivateSourceForSubject = createServerFn({ method: 'POST' })
     const sourceCreated = timestampValue(item.sourceCreated);
     const sourceUpdated = timestampValue(item.sourceUpdated);
     const key = typeof item.key === 'string' && annotationKey(item.key) ? item.key : null;
+    const viewer = typeof item.viewer === 'string' ? item.viewer : null;
+    const csrfToken = typeof item.csrfToken === 'string' ? item.csrfToken : null;
+    const credential =
+      typeof item.credential === 'string' && /^[A-Za-z0-9_-]{1,6400}$/.test(item.credential) ? item.credential : null;
     if (
       !id ||
       !provider ||
@@ -273,6 +273,9 @@ export const admitPrivateSourceForSubject = createServerFn({ method: 'POST' })
       !sourceCreated ||
       !sourceUpdated ||
       !key ||
+      !viewer ||
+      !csrfToken ||
+      !credential ||
       item.confirmReviewed !== true
     )
       throw new Error('Invalid source admission');
@@ -284,18 +287,22 @@ export const admitPrivateSourceForSubject = createServerFn({ method: 'POST' })
       sourceCreated,
       sourceUpdated,
     };
-    return { subjectId: id, body, key };
+    return { subjectId: id, body, key, viewer, csrfToken, credential };
   })
   .handler(async ({ data }): Promise<SourceAdmissionCommandResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const identity = await currentIdentity();
-    if (!identity) return { kind: 'signed-out' };
+    const session = await readSubjectSlotSession(getRequest(), env as Partial<SessionEnv>);
+    if (session.state === 'unavailable') return { kind: 'uncertain' };
+    if (session.state !== 'signed-in' || !session.csrfToken) return { kind: 'signed-out' };
+    const identity = { viewer: session.subject, csrfToken: session.csrfToken, authorization: session.authorization };
+    const authorization = await originalAnnotationCredential(getRequest(), env as Partial<SessionEnv>, identity, data);
+    if (!authorization) return { kind: 'retired' };
     try {
       return await admitPrivateSourceObservation(kernelClient(), {
         subjectId: data.subjectId,
         body: data.body,
         key: data.key,
-        authorization: identity.authorization,
+        authorization,
       });
     } catch {
       return { kind: 'uncertain' };
@@ -381,7 +388,6 @@ export const savePrivateSourceCorrection = createServerFn({ method: 'POST' })
     if (session.state === 'unavailable') return { kind: 'unavailable' };
     if (session.state !== 'signed-in' || !session.csrfToken) return { kind: 'signed-out' };
     const identity = { viewer: session.subject, csrfToken: session.csrfToken, authorization: session.authorization };
-    if (!expectedSession(data, identity)) return { kind: 'signed-out' };
     const authorization = await originalAnnotationCredential(getRequest(), env as Partial<SessionEnv>, identity, data);
     if (!authorization) return { kind: 'retired' };
     try {

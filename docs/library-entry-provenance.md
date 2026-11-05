@@ -109,7 +109,10 @@ method after the existing import apply, only when the owner confirms source priv
 same confirmation flow. Record identities stay the provider's own: AniList list-entry `id` when present, otherwise the
 AniList media identifier; Bangumi `subject_id`; MAL `${kind}/${identifier.value}`. AniList unix `createdAt`/`updatedAt`
 values remain `unknown` and are never converted to dates. MAL created time is format-absent. Unsupported timestamp
-shapes are reported and not submitted. Admission is its own exact-retry command (raw UUID idempotency key); an
+shapes are reported and not submitted. Admission is its own exact-retry command (logical UUID idempotency key); an
 uncertain admission retains sender, credentials, key and operands and never replays an accepted import. Import cost
 ledgers do not count admission calls. VNDB remains unavailable until its generated `libraryImports.vndb` client family
 is delivered; no second parser or import route is introduced.
+
+Decision: Generated annotation and source-observation calls encode each unchanged logical UUID key as a Structured
+Field string at the native HTTP boundary.

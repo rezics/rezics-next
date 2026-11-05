@@ -22,8 +22,15 @@ const productionPort: BangumiImportPort = {
     return applyBangumiImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
   },
   async admitSource(command) {
-    const { admitPrivateSourceForSubject } = await import('../rich-private-entry/server');
+    const { admitPrivateSourceForSubject, readPrivateEntryForSubject } = await import('../rich-private-entry/server');
     const { mapSourceAdmissionPort } = await import('../rich-private-entry/admission');
+    let custody = command.custody;
+    if (!custody) {
+      const read = await readPrivateEntryForSubject({ data: { subjectId: command.subjectId } });
+      if (read.kind !== 'ready') return mapSourceAdmissionPort(read, command);
+      custody = { viewer: read.viewer, csrfToken: read.csrfToken, credential: read.credential };
+    }
+    const retryCommand = { ...command, custody };
     const result = await admitPrivateSourceForSubject({
       data: {
         subjectId: command.subjectId,
@@ -34,10 +41,13 @@ const productionPort: BangumiImportPort = {
         privacy: command.body.privacy,
         sourceCreated: command.body.sourceCreated,
         sourceUpdated: command.body.sourceUpdated,
+        viewer: custody.viewer,
+        csrfToken: custody.csrfToken,
+        credential: custody.credential,
       },
       headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' },
     });
-    return mapSourceAdmissionPort(result, command);
+    return mapSourceAdmissionPort(result, retryCommand);
   },
   async cancel(command) {
     const { cancelBangumiImport } = await import('./server');

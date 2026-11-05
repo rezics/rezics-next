@@ -11,6 +11,7 @@ export const SOURCE_TIMESTAMP_BYTES = 64;
 
 export type SourceAdmissionStatus = 'admitted' | 'unsupported' | 'conflict' | 'failed';
 export type SourceAdmissionOutcome = { status: SourceAdmissionStatus; reason?: string };
+export type SourceAdmissionCustody = Readonly<{ viewer: string; csrfToken: string; credential: string }>;
 
 export type ReadyPrivacy = { kind: 'ready'; value: PersonalEntryPrivacyValue };
 export type ReadyTimestamp = { kind: 'ready'; value: PersonalEntryTimestampInput };

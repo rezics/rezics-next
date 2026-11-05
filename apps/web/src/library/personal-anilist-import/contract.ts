@@ -1,4 +1,5 @@
 import type { PersonalEntrySourceAdmission } from '@rezics/client';
+import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
 
 /** Native AniList personal-list caps, verified at Commerce delivery. */
@@ -159,6 +160,7 @@ export type AniListCommand =
       subjectId: string;
       ordinal: number;
       body: PersonalEntrySourceAdmission;
+      custody?: SourceAdmissionCustody;
     }
   | { kind: 'cancel'; key: string; importId: string; remove: boolean };
 

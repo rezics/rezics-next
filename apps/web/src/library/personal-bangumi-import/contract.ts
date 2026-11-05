@@ -1,4 +1,5 @@
 import type { PersonalEntrySourceAdmission } from '@rezics/client';
+import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
 
 /** Native Bangumi personal-list caps, verified at Commerce delivery. */
@@ -127,6 +128,7 @@ export type BangumiCommand =
       subjectId: string;
       ordinal: number;
       body: PersonalEntrySourceAdmission;
+      custody?: SourceAdmissionCustody;
     }
   | { kind: 'cancel'; key: string; uploadId: string }
   | { kind: 'delete'; key: string; uploadId: string };
