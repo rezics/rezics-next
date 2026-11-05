@@ -32,6 +32,8 @@ test('an ordinary edit inherits a non-default licence and preserves document/blo
   let stale = false;
   let licence = 'CC-BY-SA-4.0';
   const kernel = client(async (call) => {
+    // A protected post is readable by this author, never by an anonymous recovery read.
+    expect(call.headers.get('authorization')).toBe('Bearer author');
     if (call.method === 'GET') return Response.json({ post: { body, licence } }, { headers: { etag: `"${id(8)}"` } });
     const payload = await call.json();
     sent.push({ body: payload, headers: call.headers });

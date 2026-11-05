@@ -155,7 +155,7 @@ export async function revisePostRequest(
     );
     if (result.error) {
       if (result.status === 412) {
-        const current = await client.posts({ id: input.postId }).get();
+        const current = await client.posts({ id: input.postId }).get({ headers: { authorization } });
         if (!current.error && current.data) {
           const etag = new Headers(current.headers).get('etag')?.replace(/^"|"$/g, '');
           return {

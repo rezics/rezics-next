@@ -37,6 +37,9 @@ success. Board, row availability, destination replacement and unmount retire pri
 
 ## Authoring departure and caller lifetime
 
+Decision: stale-edit recovery reads the current post with the same author credential as the rejected revision;
+the new-thread Back to board link preserves the admitted original Subject/work return, as successful creation does.
+
 The default new-thread, reply and inline-edit composers compare their current local work with the mounted editor's
 baseline. Changed titles, structured bodies, review or discussion selections, uploads, active submissions and
 unresolved outcomes register with the page's authoring-departure owner. The owner shows one accessible Stay/Leave
