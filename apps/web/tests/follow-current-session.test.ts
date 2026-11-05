@@ -127,7 +127,7 @@ test('healthy Following preserves current authorization, restrictive bounded rea
         });
       }
       if (url.pathname === `/v1/follows/${targetId}`)
-        return Response.json({ follow: { state: call.method === 'DELETE' ? 'unfollowed' : 'following' } });
+        return Response.json({ follow: { targetId, state: call.method === 'DELETE' ? 'unfollowed' : 'following' } });
       throw new Error(`Unexpected child request: ${call.method} ${url}`);
     },
   });
@@ -183,9 +183,9 @@ test('healthy Following preserves current authorization, restrictive bounded rea
         call.headers.get('authorization'),
       ]),
   ).toEqual([
-    ['DELETE', `/v1/follows/${targetId}`, input.idempotencyKey, 'Bearer current-delete-viewer'],
-    ['DELETE', `/v1/follows/${targetId}`, input.idempotencyKey, 'Bearer explicit-viewer'],
-    ['DELETE', `/v1/follows/${targetId}`, input.idempotencyKey, 'Bearer explicit-viewer'],
+    ['DELETE', `/v1/follows/${targetId}`, JSON.stringify(input.idempotencyKey), 'Bearer current-delete-viewer'],
+    ['DELETE', `/v1/follows/${targetId}`, JSON.stringify(input.idempotencyKey), 'Bearer explicit-viewer'],
+    ['DELETE', `/v1/follows/${targetId}`, JSON.stringify(input.idempotencyKey), 'Bearer explicit-viewer'],
   ]);
   expect(current.calls).toBe(preparations + 1);
   expect(calls).toHaveLength(6);

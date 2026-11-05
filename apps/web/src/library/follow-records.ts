@@ -1,53 +1,22 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import { MediaProblem } from '../media/kernel';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import {
+  readFollowRecord,
+  sendFollowRecord,
+  validFollowInput,
+  type FollowState,
+  type FollowWriteInput,
+  type FollowWriteResult,
+} from './follow-transport';
 
-type NativeFollow = NonNullable<Awaited<ReturnType<KernelClient['follows']['get']>>['data']>['follows'][number];
-export type FollowTargetType = NativeFollow['targetType'];
-export type FollowState =
-  | { state: 'ready'; following: boolean }
-  | { state: 'pending' | 'unavailable' | 'forbidden' | 'signed-out' | 'closed' };
+export { readFollowRecord, validFollowInput } from './follow-transport';
+export type { FollowState, FollowTargetType, FollowWriteInput, FollowWriteResult } from './follow-transport';
+
 /** Provenance comes from actual server preparation, never an expected browser subject. */
 export type CurrentFollowState = { subject: string | null; targetId: string; edge: FollowState };
-export type FollowWriteInput = { targetId: string; following: boolean; idempotencyKey: string };
-export type FollowWriteResult =
-  | { ok: true; following: boolean }
-  | { ok: false; reason: 'unauthorized' | 'forbidden' | 'closed' | 'conflict' | 'invalid' | 'unavailable' };
-
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export function validFollowInput(input: FollowWriteInput): boolean {
-  return input.targetId.length > 0 && input.targetId.length <= 128 && uuid.test(input.idempotencyKey);
-}
-
-/** BASIC reads only the caller's edge, without hydrating a potentially hidden target. */
-export async function readFollowRecord(
-  client: KernelClient,
-  targetId: string,
-  authorization: string,
-): Promise<FollowState> {
-  try {
-    const result = await client.follows({ targetId }).get({
-      query: { view: 'BASIC' },
-      headers: { authorization },
-      fetch: { cache: 'no-store', redirect: 'manual' },
-    });
-    if (isPlatformClosedProblem(result.status, result.error?.value)) return { state: 'closed' };
-    if (result.status === 404) return { state: 'ready', following: false };
-    if (result.status === 401 || result.status === 403) return { state: 'forbidden' };
-    if (
-      result.error ||
-      !result.data?.follow ||
-      (result.data.follow.targetId !== undefined && result.data.follow.targetId !== targetId) ||
-      !['following', 'unfollowed'].includes(result.data.follow.state)
-    )
-      return { state: 'unavailable' };
-    return { state: 'ready', following: result.data.follow.state === 'following' };
-  } catch (error) {
-    return { state: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
-  }
-}
 
 /** One fresh preparation and one BASIC own-edge read, including provenance for an absent edge. */
 export async function loadCurrentFollowState(
@@ -97,25 +66,7 @@ export async function writeFollowRecord(
     const stale = await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     if (stale || !authorization) return { ok: false, reason: 'unauthorized' };
-    const headers = { authorization, 'idempotency-key': input.idempotencyKey };
-    const target = client.follows({ targetId: input.targetId });
-    const result = input.following ? await target.put(null, { headers }) : await target.delete(undefined, { headers });
-    const body = result.error?.value;
-    if (isPlatformClosedProblem(result.status, body)) return { ok: false, reason: 'closed' };
-    if (result.status === 409 || (body && 'code' in body && body.code === 'idempotency_conflict'))
-      return { ok: false, reason: 'conflict' };
-    if (result.status === 401) return { ok: false, reason: 'unauthorized' };
-    if (result.status === 403) return { ok: false, reason: 'forbidden' };
-    if (result.status === 400 || result.status === 404 || result.status === 422)
-      return { ok: false, reason: 'invalid' };
-    if (
-      result.error ||
-      result.status !== 200 ||
-      !result.data?.follow ||
-      !['following', 'unfollowed'].includes(result.data.follow.state)
-    )
-      return { ok: false, reason: 'unavailable' };
-    return { ok: true, following: result.data.follow.state === 'following' };
+    return await sendFollowRecord(client, authorization, input);
   } catch (error) {
     if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
     if (error instanceof MediaProblem && error.problem.status === 403) return { ok: false, reason: 'forbidden' };

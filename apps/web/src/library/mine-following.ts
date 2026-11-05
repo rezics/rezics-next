@@ -1,3 +1,4 @@
+import { sendFollowRecord } from './follow-transport';
 import { followingKind } from './following-kind-navigation/address';
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
@@ -110,8 +111,6 @@ export async function unfollowFollow(
   if (await prepareSession(request, sessionEnv)) return false;
   const authorization = viewerCredential(request);
   if (!authorization) return false;
-  const result = await client.follows({ targetId: input.targetId }).delete(undefined, {
-    headers: { authorization, 'idempotency-key': input.idempotencyKey } as { 'idempotency-key': string },
-  });
-  return !result.error;
+  const result = await sendFollowRecord(client, authorization, { ...input, following: false });
+  return result.ok;
 }
