@@ -172,6 +172,19 @@ test('keys retain property, facet, range bounds, unit and conjunctive qualifier 
   expect(currentClauseKey({ facet: 'statement', property: 'item:year', range: { gte: 1900, lte: 2000 } })).toBe(
     currentClauseKey({ facet: 'statement', property: 'item:year', range: { lte: 2000, gte: 1900 } }),
   );
+  const firstQualifierRange: FactClause = {
+    facet: 'statement',
+    property: 'item:author',
+    values: ['person:alice'],
+    qualifiers: [{ property: 'item:weight', range: { gte: 2, lte: 3, unit: 'unit:one' } }],
+  };
+  const reorderedQualifierRange: FactClause = {
+    facet: 'statement',
+    property: 'item:author',
+    values: ['person:alice'],
+    qualifiers: [{ property: 'item:weight', range: { unit: 'unit:one', lte: 3, gte: 2 } }],
+  };
+  expect(currentClauseKey(firstQualifierRange)).toBe(currentClauseKey(reorderedQualifierRange));
 });
 
 test('compiling, keying and evaluating never mutate frozen inputs or aligned results', () => {

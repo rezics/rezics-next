@@ -10,10 +10,16 @@ import type { SpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeDiscoveryCursor, decodeSearchCursor, encodeDiscoveryCursor, encodeSearchCursor } from './cursor.ts';
 import { currentDiscoveryCandidates, currentDiscoveryPrimaryCandidates } from './discovery-current.ts';
+import type { ConceptFilterExecution } from './concept-browse-statements.ts';
 import { admitDiscoveryPage } from './discovery-http.ts';
 import { compileDiscoveryCapture } from './discovery-filter.ts';
 import { discoveryFilterApplicability, discoveryKindDirectory } from './discovery-registry.ts';
-import { admitDiscoveryRequest, ownDiscoveryRequest, type MixedDiscoveryRequest } from './discovery-request.ts';
+import {
+  admitDiscoveryRequest,
+  discoveryCandidateScanBound,
+  ownDiscoveryRequest,
+  type MixedDiscoveryRequest,
+} from './discovery-request.ts';
 import type {
   DiscoveryPage,
   DiscoveryReadContext,
@@ -79,7 +85,10 @@ function selectedKindsForApplicability(filter: unknown): readonly string[] | nul
   return selected;
 }
 
-type DiscoveryContextWithSpace = DiscoveryReadContext & { spacePopulation?: SpaceSubjectPopulation };
+type DiscoveryContextWithSpace = DiscoveryReadContext & {
+  spacePopulation?: SpaceSubjectPopulation;
+  conceptFilter?: ConceptFilterExecution;
+};
 type Principal = 'anonymous' | `account:${string}`;
 export type { DiscoverySearch } from './discovery-api.ts';
 
@@ -107,6 +116,13 @@ type DiscoveryConfiguration = {
   }>;
   now(): number;
   asOf(queried: PublicFilterQueriedObservation): Promise<string | import('./search-context.ts').SearchObservation>;
+  prepareConceptFilter?(input: Readonly<{
+    principal: string;
+    request: unknown;
+    filter: import('@rezics/filter').DiscoveryFilterDocument;
+    limit: number;
+    countCandidateLimit: number;
+  }>): Promise<ConceptFilterExecution | undefined>;
   prepare?(job: PublicFilterConsumerJob): Promise<void>;
 };
 
@@ -299,6 +315,7 @@ function executeDiscoverySearch(
       (spacePopulation && spacePopulation.observation.spaceId !== request.spaceId)
     )
       throw new ProblemError('dependency_unavailable');
+    let currentContext: DiscoveryContextWithSpace = { ...context };
     const kindDirectory = discoveryKindDirectory(registry);
     const registryDigest = createHash('sha256')
       .update(
@@ -353,7 +370,25 @@ function executeDiscoverySearch(
         queried = token.state.queried;
         repair = token.state.repair;
         refill = { ...token.state.retained, size: Math.min(200, 2 * admitted.limit + 1) };
-      } else {
+      }
+      const conceptFilter =
+        admitted.filter === undefined || !config.prepareConceptFilter
+          ? undefined
+          : await config.prepareConceptFilter({
+              principal,
+              request: admitted.bindingRequest,
+              filter: admitted.filter,
+              limit: admitted.limit,
+              countCandidateLimit:
+                admitted.kindCountLeaf === undefined
+                  ? 0
+                  : Math.min(200, discoveryCandidateScanBound(admitted.limit)),
+            });
+      currentContext = {
+        ...context,
+        ...(conceptFilter ? { conceptFilter } : {}),
+      };
+      if (!request.cursor) {
         const plan = compileDiscoveryCapture(
           {
             representation: 'discovery-v1',
@@ -423,7 +458,7 @@ function executeDiscoverySearch(
           )
             throw ready();
           examined += window.examined;
-          if (examined > Math.min(600, 6 * admitted.limit + 3)) throw ready();
+          if (examined > discoveryCandidateScanBound(admitted.limit)) throw ready();
           const inSpace = new Set<string>();
           if (spacePopulation) {
             const subjects = result.hits.filter((candidate) => candidate.key.owner === 'semantic');
@@ -442,7 +477,7 @@ function executeDiscoverySearch(
               )
             : result.hits;
           const current = await currentDiscoveryCandidates(registry, selectedCandidates, admitted.filter, release, {
-            ...context,
+            ...currentContext,
             ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
           });
           consumed = window.examined;
@@ -463,7 +498,7 @@ function executeDiscoverySearch(
           await coverage.consume(batch.execution, consumed);
           exhausted = consumed === window.examined && window.exhausted;
           if (exhausted || hits.length === admitted.limit) break;
-          const remaining = Math.min(600, 6 * admitted.limit + 3) - examined;
+          const remaining = discoveryCandidateScanBound(admitted.limit) - examined;
           if (remaining < 1) break;
           refill = {
             execution: batch.execution,
@@ -480,6 +515,116 @@ function executeDiscoverySearch(
           }
           throw ready();
         }
+        if (admitted.kindCountLeaf !== undefined) {
+          // Kind chips use a separate bounded pass over the exact disjunctive population.
+          // Only current, distinct canonical rows become positive lower-bound evidence.
+          witnesses.clear();
+          const countCoverage = openPublicFilterCoveragePage(config.consumer, nativeContext);
+          let countQueried: PublicFilterQueriedObservation | undefined;
+          let countFailed = false;
+          try {
+            const countSize = Math.min(200, discoveryCandidateScanBound(admitted.limit));
+            const countSort = admitted.text ? 'relevance' : 'name';
+            const countPlan = compileDiscoveryCapture(
+              {
+                representation: 'discovery-v1',
+                comparator: 'mixed-public-v1',
+                filterDocument: admitted.countFilter,
+                text: admitted.text,
+                sort: countSort,
+                size: countSize,
+                pageSize: admitted.limit,
+                ...(request.text === undefined ? {} : { boost: request.text }),
+              },
+              registry,
+              release,
+            );
+            const captured = await countCoverage.capture(countPlan, 'pit');
+            if (captured.status === 'preparing') {
+              await config.prepare?.(captured.repair);
+              await config.consumer.repairStep(captured.repair, nativeContext);
+              throw ready();
+            }
+            if (captured.status !== 'captured') throw ready();
+            countQueried = captured.queried;
+            const countBatch = await countCoverage.queryDiscovery(countQueried);
+            if (countBatch.status !== 'queried') {
+              if (countBatch.status === 'preparing') {
+                await config.prepare?.(captured.repair);
+                await config.consumer.repairStep(captured.repair, nativeContext);
+              }
+              throw ready();
+            }
+            countQueried = countBatch.queried;
+            const { window, result } = countBatch;
+            if (
+              !Number.isSafeInteger(window.examined) ||
+              window.examined < 0 ||
+              window.examined > countSize ||
+              typeof window.exhausted !== 'boolean' ||
+              window.positions.length !== result.hits.length ||
+              window.positions.some(
+                (position, index) =>
+                  !Number.isSafeInteger(position) ||
+                  position < 0 ||
+                  position >= window.examined ||
+                  (index > 0 && position <= window.positions[index - 1]!),
+              )
+            )
+              throw ready();
+
+            const inSpace = new Set<string>();
+            if (spacePopulation) {
+              const subjects = result.hits.filter((candidate) => candidate.key.owner === 'semantic');
+              for (let offset = 0; offset < subjects.length; offset += 160) {
+                const batch = subjects.slice(offset, offset + 160);
+                const members = await spacePopulation.contains(batch.map((candidate) => candidate.key.id));
+                for (let index = 0; index < batch.length; index++) {
+                  const candidate = batch[index]!;
+                  if (members[index]) inSpace.add(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`);
+                }
+              }
+            }
+            const selected = spacePopulation
+              ? result.hits.filter((candidate) =>
+                  inSpace.has(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`),
+                )
+              : result.hits;
+            const current = await currentDiscoveryCandidates(
+              registry,
+              selected,
+              admitted.countFilter,
+              release,
+              {
+                ...currentContext,
+                ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
+              },
+            );
+            const distinct = new Map<string, Set<string>>();
+            for (const candidate of selected) {
+              const hit = current.get(candidate);
+              if (!hit) continue;
+              const ids = distinct.get(hit.key.kind) ?? new Set<string>();
+              ids.add(hit.key.id);
+              distinct.set(hit.key.kind, ids);
+            }
+            for (const [kind, ids] of distinct) if (ids.size) witnesses.set(kind, ids.size);
+            await countCoverage.consume(countBatch.execution, window.examined);
+            await countCoverage.finish();
+          } catch (error) {
+            countFailed = true;
+            throw error;
+          } finally {
+            await countCoverage.dispose();
+            if (countQueried) {
+              try {
+                await config.consumer.closeObservation(countQueried, nativeContext);
+              } catch (error) {
+                if (!countFailed) throw error;
+              }
+            }
+          }
+        }
         const execution = last;
         const page = await finishDiscoveryDisclosure(coverage, async () => {
           await spacePopulation?.finish();
@@ -487,13 +632,12 @@ function executeDiscoverySearch(
           if (kindAfter && !entries.some((entry) => entry.kind === kindAfter)) throw invalid('/kindPage/cursor');
           const remaining = entries.filter((entry) => entry.kind > kindAfter);
           const selected = remaining.slice(0, admitted.kindLimit);
-          // Only positive bounded current witnesses on the initial hit/metadata page. Census is never queried.
+          // Current page rows are positive witnesses for the wider population after removing only
+          // the designated top-level kind conjunct. A positive lower bound survives hit and kind
+          // continuations; neither page length nor the engine's candidate total is a count.
           const values = selected.map((entry) => ({
             ...entry.metadata,
-            ...(request.cursor ||
-            request.kindPage?.cursor ||
-            admitted.countFilter !== admitted.filter ||
-            !witnesses.get(entry.kind)
+            ...(!witnesses.get(entry.kind)
               ? { count: { kind: entry.kind, unavailable: true as const } }
               : { count: { kind: entry.kind, value: witnesses.get(entry.kind)!, exact: false as const } }),
           }));
@@ -545,7 +689,7 @@ function executeDiscoverySearch(
                 );
           admitDiscoveryPage(projected);
           await retain(projected, (keys) =>
-            currentDiscoveryPrimaryCandidates(registry, keys, admitted.filter, release, context),
+            currentDiscoveryPrimaryCandidates(registry, keys, admitted.filter, release, currentContext),
           );
           return projected;
         });

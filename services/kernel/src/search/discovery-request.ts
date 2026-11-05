@@ -35,6 +35,11 @@ const OWNED_FIELDS = [
   'spaceId',
 ] as const satisfies readonly (keyof MixedDiscoveryRequest)[];
 
+/** Maximum engine rows admitted across one mixed Search page and its useful-page refills. */
+export function discoveryCandidateScanBound(limit: number): number {
+  return Math.min(600, 6 * limit + 3);
+}
+
 function invalid(pointer: string): never {
   throw new ProblemError('invalid_request', { errors: [{ pointer, code: 'invalid_format' }] });
 }

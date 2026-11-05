@@ -127,10 +127,12 @@ fully checked enumeration is exact only on complete exhaustion. Unchecked bucket
 page lengths and full-match direct aggregates are not evidence.
 
 Kind metadata is a fixed bounded page in configured order, with data ID/localized label/icon and one More kinds
-control for continuation. Counts are attempted once on the initial query and retained across hit continuations;
-changed conditions start a new query. Later metadata pages may mark counts unavailable. The research values
-Smax=2/C=2/K_page=8 remain proposals pending first native measurement, not frozen output or engine bounds.
-Metadata continuation does not exclude unshown kinds from hits or authorize another hit/count enumeration.
+control for continuation. A designated kind leaf uses a separate bounded disjunctive query; revalidate its current
+disclosure and distinct canonical positive witnesses on each hit or metadata continuation. It may return certified
+positive lower bounds or unavailable evidence, never zero from missing witnesses. Changed conditions start a new
+query. The research values Smax=2/C=2/K_page=8 remain proposals pending first native measurement, not frozen
+output or engine bounds. Metadata continuation does not exclude unshown kinds from hits; each page's bounded
+count pass is independently authorized, charged and revalidated.
 
 ## Implementation status and native acceptance prerequisites
 

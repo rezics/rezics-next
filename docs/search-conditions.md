@@ -370,8 +370,11 @@ unchecked engine buckets, page length or estimates. Fixed maintained counters mu
 and change atomically with membership/privacy; checked enumeration is exact only on complete exhaustion.
 
 Metadata is a fixed bounded PAGE in configured order, never count order: data kind ID, localized label and icon.
-One More types control uses metadata continuation without excluding unshown kinds from hit search. Counts are
-attempted once on the initial query and retained across hit continuation; changed conditions start a new query.
+One More types control uses metadata continuation without excluding unshown kinds from hit search. For a
+designated kind leaf, recompute counts from the bounded disjunctive query on each hit or metadata continuation,
+and revalidate its current disclosure before presenting them. Only distinct current canonical rows are positive
+lower-bound evidence; unavailable evidence stays unavailable and zero is never inferred. Changed conditions
+retire the prior cursor and count work.
 Later metadata can have unavailable counts. K_page=8 is a research proposal pending first native measurement,
 not a frozen output/engine allowance. Existing property/value facets and public totals remain count-free. Facet traversal belongs to the current refinement query; a repeated opaque cursor preserves accepted values, stops further paging and offers the existing restart action. Failed reads remain retryable.
 Result Type browsing keeps the initial eight options and one replaceable eight-option continuation window;

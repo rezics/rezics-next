@@ -19,6 +19,7 @@ import {
 import type { DiscoveryCandidate } from './discovery-query.ts';
 import { hydrateOwnerDiscoveryHits, type DiscoveryOwnerCandidate } from './discovery-hydration.ts';
 import { currentDiscoveryFilter } from './discovery-filter.ts';
+import type { ConceptFilterExecution } from './concept-browse-statements.ts';
 import { checkHits } from './disclosure/check.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
@@ -98,7 +99,7 @@ export async function currentDiscoveryPrimaryCandidates(
   keys: readonly DiscoveryKey[],
   filter: DiscoveryFilterDocument | undefined,
   release: FilterRelease,
-  context: DiscoveryReadContext,
+  context: DiscoveryReadContext & { conceptFilter?: ConceptFilterExecution },
 ): Promise<readonly boolean[]> {
   if (!Array.isArray(keys) || keys.length > 160) unavailable();
   const saved = keys.map((key) => registry.key({ ...key }));
@@ -234,7 +235,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   candidates: readonly Candidate[],
   filter: DiscoveryFilterDocument | undefined,
   release: FilterRelease,
-  context: DiscoveryReadContext,
+  context: DiscoveryReadContext & { conceptFilter?: ConceptFilterExecution },
 ): Promise<Map<Candidate, DiscoveryUnionHit>> {
   if (candidates.length > 200) unavailable();
   const languages = context.languages ?? ['en'];
@@ -319,7 +320,9 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
         ...(context.observeRelationRelease === undefined
           ? {}
           : { observeRelationRelease: context.observeRelationRelease }),
+        ...(context.conceptFilter ? { conceptFilter: context.conceptFilter } : {}),
       });
+      if (checked.relationRejected) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
       for (const { subject } of checked.passed)
         if (subject.type === entry.kind) checkedSubjects.set(subject.id, subject);
       const accepted = new Set(checkedSubjects.keys());

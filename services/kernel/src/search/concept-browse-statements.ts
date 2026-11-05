@@ -316,6 +316,12 @@ export type ConceptStatementCut = Readonly<{
   state: ConceptBrowseState;
 }>;
 
+/** Request-scoped current execution shared by Universal Search and the native matcher. */
+export type ConceptFilterExecution = Readonly<{
+  reader: ConceptStatementReader;
+  resolveCut(request: ConceptStatementRequest): ConceptStatementCut | null;
+}>;
+
 function ownConceptStatementCut(cut: ConceptStatementCut): ConceptStatementCut {
   return { source: cut.source, store: cut.store, state: structuredClone(cut.state) };
 }
