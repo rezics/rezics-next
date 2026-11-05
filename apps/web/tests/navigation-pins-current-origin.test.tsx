@@ -289,10 +289,11 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await settle(2, response('C'));
     await act(async () => select(m.library_pin_pin())());
     expect(writes).toHaveLength(2);
-    await act(async () => writes[0]!.work.resolve({ ok: true, revision: 8 }));
+    await act(async () => writes[0]!.work.resolve({ ok: false, reason: 'denied' }));
     expect(invalidate).not.toHaveBeenCalled();
     expect(cache).not.toHaveBeenCalled();
     expect(control.pending).toBe(true);
+    expect(control.notice).toBe('');
     await act(async () => writes[1]!.work.resolve({ ok: false, reason: 'full' }));
     expect(control.notice).toBe(m.library_pin_limit());
 

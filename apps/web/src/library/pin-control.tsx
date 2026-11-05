@@ -40,6 +40,7 @@ type PinAttempt = {
   headers: ReturnType<typeof csrfHeaders>;
   sender: PinSender;
   pending: boolean;
+  uncertain: boolean;
 };
 
 function pinLifetime(
@@ -219,6 +220,7 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
         headers: actual?.csrfToken ? { 'X-CSRF-Token': actual.csrfToken } : csrfHeaders(),
         sender: action === 'unpin' ? unpinCollection : pinCollection,
         pending: false,
+        uncertain: false,
       };
       attempt.current = current;
     }
@@ -246,16 +248,35 @@ export function usePinControlActions({ collectionId, pins, mode, origin }: PinCo
       if (!isCurrentAttempt()) return;
       const result = await captured.sender({ data: captured.data, headers: captured.headers });
       if (!isCurrentAttempt()) return;
-      retain = !result.ok && result.reason === 'unavailable';
       if (result.ok) {
         await Promise.all(refresh());
       } else if (result.reason === 'conflict') {
+        retain = false;
         update({ notice: m.library_pin_conflict() });
         await Promise.allSettled(refresh());
-      } else if (result.reason === 'full') update({ notice: m.library_pin_limit() });
-      else update({ notice: m.error_message() });
+      } else if (result.reason === 'full') {
+        retain = false;
+        update({ notice: m.library_pin_limit() });
+      } else if (result.reason === 'unavailable') {
+        captured.uncertain = true;
+        retain = true;
+        update({ notice: m.error_message() });
+      } else {
+        retain = captured.uncertain;
+        update({
+          notice:
+            result.reason === 'closed'
+              ? m.platform_closed_message()
+              : result.reason === 'denied'
+                ? m.library_follow_forbidden()
+                : m.library_sign_in(),
+        });
+      }
     } catch {
-      if (isCurrentAttempt()) update({ notice: m.error_message() });
+      if (isCurrentAttempt()) {
+        captured.uncertain = true;
+        update({ notice: m.error_message() });
+      }
     } finally {
       if (isCurrentAttempt()) {
         captured.pending = false;

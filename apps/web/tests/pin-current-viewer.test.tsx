@@ -75,7 +75,7 @@ const invoke = async (callback: () => void) => {
 };
 async function complete(
   call: (typeof calls)[number],
-  outcome: 'success' | 'conflict' | 'full' | 'unavailable' | 'reject',
+  outcome: 'success' | 'conflict' | 'full' | 'unavailable' | 'signed-out' | 'denied' | 'closed' | 'reject',
 ) {
   await act(async () => {
     if (outcome === 'reject') call.reject(new Error('Response lost'));
@@ -206,7 +206,7 @@ async function mount(initial: Props = { collectionId: 'b', pins: loaded(), mode:
 describe('Pin mutation completions cannot cross the originating viewer or Collection lifetime', () => {
   test('viewer and Collection replacement leave new controls usable and suppress every late result and retained callback', async () => {
     for (const boundary of ['viewer', 'collection'] as const)
-      for (const outcome of ['success', 'conflict', 'full', 'unavailable', 'reject'] as const) {
+      for (const outcome of ['success', 'conflict', 'full', 'unavailable', 'denied', 'reject'] as const) {
         const h = await mount();
         try {
           const oldSelect = h.select('pin').onSelect!;
@@ -250,7 +250,7 @@ describe('Pin mutation completions cannot cross the originating viewer or Collec
       'capability',
       'unmount',
     ] as const)
-      for (const outcome of ['success', 'conflict', 'reject'] as const) {
+      for (const outcome of ['success', 'conflict', 'denied', 'reject'] as const) {
         const removing = boundary === 'delete';
         const h = await mount({ collectionId: 'b', pins: loaded(removing ? ['b'] : []), mode: 'collection' });
         try {
@@ -384,6 +384,39 @@ describe('Pin mutation completions cannot cross the originating viewer or Collec
       expect(calls[4]!.data).toEqual(removal.data);
       expect(calls[4]!.headers).toEqual(removal.headers);
       await complete(calls[4]!, 'success');
+    } finally {
+      await h.close();
+    }
+  });
+
+  test('fresh refusals use permission feedback while a refusal of an uncertain replay retains its exact command', async () => {
+    const h = await mount();
+    try {
+      await h.click('pin');
+      const refused = calls[0]!;
+      await complete(refused, 'denied');
+      expect(h.control.notice).toBe(m.library_follow_forbidden());
+      expect(h.control.pending).toBe(false);
+
+      await h.click('pin');
+      const unresolved = calls[1]!;
+      expect(unresolved.data.idempotencyKey).not.toBe(refused.data.idempotencyKey);
+      await complete(unresolved, 'unavailable');
+      expect(h.control.notice).toBe(m.error_message());
+      await h.click('pin');
+      expect(calls[2]!.data).toEqual(unresolved.data);
+      expect(calls[2]!.headers).toEqual(unresolved.headers);
+      expect(calls[2]!.operation).toBe(unresolved.operation);
+
+      await complete(calls[2]!, 'closed');
+      expect(h.control.notice).toBe(m.platform_closed_message());
+      expect(h.control.pending).toBe(false);
+      expect(h.groups[0]!.navigation).not.toHaveBeenCalled();
+      expect(h.groups[0]!.cache).not.toHaveBeenCalled();
+      await h.click('pin');
+      expect(calls[3]!.data).toEqual(unresolved.data);
+      expect(calls[3]!.headers).toEqual(unresolved.headers);
+      await complete(calls[3]!, 'success');
     } finally {
       await h.close();
     }

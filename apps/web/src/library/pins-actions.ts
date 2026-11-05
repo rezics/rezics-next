@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 
@@ -14,7 +15,7 @@ type WriteResult = {
 
 export type PinMutation =
   | { ok: true; revision: number }
-  | { ok: false; reason: 'conflict' | 'full' | 'closed' | 'unavailable' | 'signed-out' };
+  | { ok: false; reason: 'conflict' | 'full' | 'closed' | 'denied' | 'unavailable' | 'signed-out' };
 
 function statusOf(result: WriteResult): number | undefined {
   return result.status ?? result.error?.status;
@@ -24,6 +25,14 @@ function codeOf(error: WriteResult['error']): string | undefined {
   const value = error?.value;
   if (!value || typeof value !== 'object' || !('code' in value) || typeof value.code !== 'string') return undefined;
   return value.code;
+}
+
+function refusalOf(result: WriteResult): PinMutation | null {
+  const status = statusOf(result);
+  if (isPlatformClosedProblem(status, result.error?.value)) return { ok: false, reason: 'closed' };
+  if (status === 401) return { ok: false, reason: 'signed-out' };
+  if (status === 403) return { ok: false, reason: 'denied' };
+  return null;
 }
 
 function headers(authorization: string, idempotencyKey: string) {
@@ -48,11 +57,15 @@ export async function putLibraryPin(
       );
     const status = statusOf(result);
     if (status === 409) return { ok: false, reason: codeOf(result.error) === 'collection_full' ? 'full' : 'conflict' };
+    const refusal = refusalOf(result);
+    if (refusal) return refusal;
     if (result.error || (status !== undefined && status >= 400) || !result.data)
       return { ok: false, reason: 'unavailable' };
     return { ok: true, revision: result.data.revision };
-  } catch {
-    return { ok: false, reason: 'unavailable' };
+  } catch (error) {
+    return isPlatformClosedError(error)
+      ? { ok: false, reason: 'closed' }
+      : { ok: false, reason: 'unavailable' };
   }
 }
 
@@ -72,11 +85,15 @@ export async function deleteLibraryPin(
     });
     const status = statusOf(result);
     if (status === 409) return { ok: false, reason: 'conflict' };
+    const refusal = refusalOf(result);
+    if (refusal) return refusal;
     if (result.error || (status !== undefined && status >= 400) || !result.data)
       return { ok: false, reason: 'unavailable' };
     return { ok: true, revision: result.data.revision };
-  } catch {
-    return { ok: false, reason: 'unavailable' };
+  } catch (error) {
+    return isPlatformClosedError(error)
+      ? { ok: false, reason: 'closed' }
+      : { ok: false, reason: 'unavailable' };
   }
 }
 

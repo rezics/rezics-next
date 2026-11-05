@@ -7,6 +7,7 @@ import { builtinCollectionDestinations } from '../src/library/builtin-collection
 import { LibraryNavigation } from '../src/library/library-nav';
 import { libraryPinsListExposed, loadLibraryNavigation, readLibraryPins } from '../src/library/pins-read';
 import { deleteLibraryPin, putLibraryPin } from '../src/library/pins-actions';
+import { PlatformClosedError } from '../src/kernel/platform-closed';
 import { operationIsAdmitted } from '../src/kernel/exposure';
 
 const collection = (id: string, title: string, builtinKind?: 'everything' | 'liked' | 'state') => ({
@@ -197,6 +198,62 @@ test('pin writes carry the last list revision and place a move after its anchor'
     { method: 'PUT', id: 'first', revision: 9, after: null },
     { method: 'DELETE', id: 'removed', revision: 10 },
   ]);
+});
+
+test('native pin refusals stay distinct from transport uncertainty and preserve revision, placement and key', async () => {
+  const key = '123e4567-e89b-42d3-a456-426614174000';
+  const scenarios = [
+    { value: { status: 401, error: { status: 401 } }, put: 'signed-out', delete: 'signed-out' },
+    { value: { status: 403, error: { status: 403 } }, put: 'denied', delete: 'denied' },
+    {
+      value: { status: 403, error: { status: 403, value: { code: 'platform_closed' } } },
+      put: 'closed',
+      delete: 'closed',
+    },
+    { value: { status: 409, error: { status: 409, value: { code: 'conflict' } } }, put: 'conflict', delete: 'conflict' },
+    {
+      value: { status: 409, error: { status: 409, value: { code: 'collection_full' } } },
+      put: 'full',
+      delete: 'conflict',
+    },
+    { value: new PlatformClosedError(403, { code: 'platform_closed' }), put: 'closed', delete: 'closed' },
+    { value: { status: 503, error: { status: 503 } }, put: 'unavailable', delete: 'unavailable' },
+    { value: new Error('response lost'), put: 'unavailable', delete: 'unavailable' },
+  ] as const;
+
+  for (const operation of ['put', 'delete'] as const) {
+    for (const scenario of scenarios) {
+      const requests: Array<{ collectionId: string; body: unknown; options: unknown }> = [];
+      const client = {
+        libraryPins: ({ collectionId }: { collectionId: string }) => ({
+          put: async (body: unknown, options: unknown) => {
+            requests.push({ collectionId, body, options });
+            if (scenario.value instanceof Error) throw scenario.value;
+            return scenario.value;
+          },
+          delete: async (body: unknown, options: unknown) => {
+            requests.push({ collectionId, body, options });
+            if (scenario.value instanceof Error) throw scenario.value;
+            return scenario.value;
+          },
+        }),
+      };
+      const result =
+        operation === 'put'
+          ? await putLibraryPin(client as never, 'Bearer viewer', 'collection', 23, 'anchor', key)
+          : await deleteLibraryPin(client as never, 'Bearer viewer', 'collection', 23, key);
+      expect(result).toEqual({ ok: false, reason: scenario[operation] });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]!.collectionId).toBe('collection');
+      if (operation === 'put') expect(requests[0]!.body).toEqual({ revision: 23, after: 'anchor' });
+      else expect(requests[0]!.body).toBeUndefined();
+      expect(requests[0]!.options).toMatchObject({
+        headers: { authorization: 'Bearer viewer', 'idempotency-key': JSON.stringify(key) },
+        ...(operation === 'delete' ? { query: { revision: 23 } } : {}),
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      });
+    }
+  }
 });
 
 test('the first-page pins read remains one request for 0, 8, and 100 pins', async () => {
