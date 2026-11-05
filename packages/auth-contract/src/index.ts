@@ -3,6 +3,7 @@ export * from './operator-page-response-bounds';
 export * from './rename-response-bounds';
 export * from './organization-deletion-response-bounds';
 export * from './consent-response-bounds';
+export * from './recovery-response-bounds';
 export type * from './auth-erasure-live.ts';
 export * from './kind-consent.ts';
 export type * from './auth-receiving-closure.ts';
