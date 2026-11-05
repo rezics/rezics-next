@@ -253,9 +253,7 @@ function CatalogueFileProfileLive({
           </a>
         </p>
       ) : null}
-      {acknowledgedRefresh && !readable && (
-        <p role="status">{m.catalogue_file_correction_refresh_failed({}, o)}</p>
-      )}
+      {acknowledgedRefresh && !readable && <p role="status">{m.catalogue_file_correction_refresh_failed({}, o)}</p>}
       {(originInvalid || restartWithoutOrigin || expiredOrigin) && (
         <p role="status" data-slot="catalogue-file-correction-restart">
           {originInvalid

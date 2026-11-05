@@ -142,7 +142,9 @@ function FileRoute() {
       restartWithoutOrigin={origin.kind === 'absent'}
       returnHref={(origin.kind === 'valid' ? origin.origin.returnHref : undefined) ?? via}
       returnSourceId={fileSource}
-      initialReview={origin.kind === 'absent' && reviewProperty && candidate ? { property: reviewProperty, candidate } : undefined}
+      initialReview={
+        origin.kind === 'absent' && reviewProperty && candidate ? { property: reviewProperty, candidate } : undefined
+      }
     />
   );
 }

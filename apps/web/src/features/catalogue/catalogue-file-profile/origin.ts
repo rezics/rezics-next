@@ -276,12 +276,7 @@ export function catalogueFileCorrectionOriginExpired(
 }
 
 /** Start a clean Global visit while preserving at most the immediate public return and source-id seam. */
-export function catalogueFileGlobalHref(
-  id: string,
-  locale: string,
-  sourceId?: string,
-  returnHref?: string,
-): string {
+export function catalogueFileGlobalHref(id: string, locale: string, sourceId?: string, returnHref?: string): string {
   const href = `${subjectHref({ id, label: '' }, locale).href}/file`;
   const search = new URLSearchParams();
   const source = catalogueFileSourceId(sourceId);

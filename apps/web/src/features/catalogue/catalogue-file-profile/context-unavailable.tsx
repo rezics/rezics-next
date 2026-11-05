@@ -18,7 +18,10 @@ export function CatalogueFileProfileContextUnavailable({
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus(), []);
   return (
-    <section className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-4 sm:p-6" data-slot="catalogue-file-context-unsupported">
+    <section
+      className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-4 sm:p-6"
+      data-slot="catalogue-file-context-unsupported"
+    >
       <h1 ref={heading} className="font-sans text-2xl font-semibold" tabIndex={-1}>
         {m.catalogue_file_title({}, o)}
       </h1>

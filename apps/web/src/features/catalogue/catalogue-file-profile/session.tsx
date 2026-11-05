@@ -14,10 +14,7 @@ import { readSubjectCandidates, confirmSubjectCandidate } from '../../pages/cura
 import { readSubjectCatalogueFile } from './actions';
 import { CatalogueFileProfilePage } from './view';
 import { catalogueFileSourceReturnHref } from '../catalogue-file-reader/navigation';
-import {
-  catalogueFileGlobalHref,
-  type CatalogueFileCorrectionOrigin,
-} from './origin';
+import { catalogueFileGlobalHref, type CatalogueFileCorrectionOrigin } from './origin';
 import { CatalogueFileProfileContextUnavailable } from './context-unavailable';
 
 export const CatalogueFileProfileSession = candidateSession(CatalogueFileProfileSessionLive);
