@@ -2224,6 +2224,9 @@ page reads an Imports manifest, invents a featured seed card, or performs a per-
 Imports cross-media producer supplies selected identities and statements; a proposed statement is not a public
 relation. Its `gaps[].fields`, `gaps[].record` and `unresolved[].{holder,target,property}` remain producer-owned.
 
+Decision: the selected Home Type summary retains the released description's resolved language separately from the
+selected label and page locale; removing the chip keeps its exact Type selection.
+
 The mounted Subject overview adds **Connections across works** under the native page composition. It admits its
 forward and incoming stream choices from the current definitions release's effective type properties, targets,
 inverse labels and relation groups. Work relations include cross-media counterparts, adaptations, sequels and
@@ -2453,8 +2456,10 @@ bounded exploration address.
 Decision: Music-context relation and correction returns preserve only the selected public stream and its bounded
 native cursor; the reader keeps at most eight page addresses and returns without rows or session tokens.
 
-Decision: unreleased `schema:Quotation` and place/event/area/instrument types stay named unavailable until Semantic
-admits them; unknown source roles stay retained evidence.
+Decision: keep creatable `schema:Place` and `schema:Event` as distinct broad identities; `schema:MusicVenue` and
+`schema:MusicEvent` specialize them, `schema:AdministrativeArea` is a Place, and `wd:Q34379` is the exact instrument
+identity. `schema:Quotation` stays named unavailable until Semantic admits it; unknown source roles stay retained
+evidence.
 
 ### Cost
 

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act } from 'react';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { HomeFeedConsumer } from '../src/features/pages/home-feed';
 import { HomeFeedKindControl } from '../src/features/pages/home-feed-kind-control';
 import { HomeFeedQuestionControl } from '../src/features/pages/home-feed-question-control';
@@ -28,11 +29,17 @@ const { Window } = await import(
 );
 const question = homeQuestionStoryPage().ratingQuestions[0]!;
 const kind = homeKindStoryPage().values[0]!;
+const bookDescriptions = bundledRelease.types[kind.id]?.descriptions as Record<string, string> | undefined;
 const result: HomeFeedResult = {
   state: 'ready',
   page: { ...homeFeedStoryPage('en', false, 'empty'), next: 'prepared-next' },
 };
-async function surface(locale: Locale, phone = false, size = 1) {
+async function surface(locale: Locale, phone = false, size = 1, fallbackDescription = false) {
+  const localeDescription = bookDescriptions?.[locale];
+  if (fallbackDescription) {
+    if (!bookDescriptions || localeDescription === undefined) throw new Error('Type guidance cannot exercise fallback');
+    delete bookDescriptions[locale];
+  }
   const browser = new Window({ url: `https://rezics.example/${locale}/`, width: phone ? 390 : 1280 });
   const globals = {
     window: browser,
@@ -83,7 +90,10 @@ async function surface(locale: Locale, phone = false, size = 1) {
       metadata++;
       return {
         status: 'ready' as const,
-        kinds: { values: Array.from({ length: size }, (_, i) => ({ ...kind, id: `schema:Prepared${i}` })), next: null },
+        kinds: {
+          values: Array.from({ length: size }, (_, i) => ({ ...kind, id: i === 0 ? kind.id : `schema:Prepared${i}` })),
+          next: null,
+        },
       };
     },
     readSpace: async () => {
@@ -153,7 +163,7 @@ async function surface(locale: Locale, phone = false, size = 1) {
     },
     async chooseAll() {
       await click(m.home_kinds_load({}, options));
-      await select(m.home_kind_label({}, options), 'schema:Prepared0');
+      await select(m.home_kind_label({}, options), kind.id);
       await act(async () => user.type(panel().querySelector('input')!, homeStorySpace.address));
       // Submit the admitted address; React owns the input, lookup and subsequent explicit selection.
       await act(async () =>
@@ -188,6 +198,8 @@ async function surface(locale: Locale, phone = false, size = 1) {
     },
     async close() {
       await act(async () => root.unmount());
+      if (fallbackDescription && bookDescriptions && localeDescription !== undefined)
+        bookDescriptions[locale] = localeDescription;
       await browser.happyDOM.close();
       for (const [key, descriptor] of previous) {
         if (descriptor) Object.defineProperty(globalThis, key, descriptor);
@@ -200,7 +212,7 @@ async function surface(locale: Locale, phone = false, size = 1) {
 test('phone and desktop retain immediate meaning, keyboard focus and independent removal in eight locales', async () => {
   for (const locale of locales)
     for (const phone of [false, true]) {
-      const view = await surface(locale, phone);
+      const view = await surface(locale, phone, 1, locale === 'fr');
       const o = view.options;
       try {
         const before = [view.calls.length, view.metadata()];
@@ -212,10 +224,18 @@ test('phone and desktop retain immediate meaning, keyboard focus and independent
         await view.chooseAll();
         expect(view.calls.at(-1)).toEqual({
           stream: 'home',
-          kind: 'schema:Prepared0',
+          kind: kind.id,
           spaceId: homeStorySpace.spaceId,
           ratingQuestionId: question.id,
         });
+        if (locale === 'fr') {
+          const chip = view.host.querySelector<HTMLButtonElement>('[data-home-filter-remove="kind"]');
+          const description = [...(chip?.querySelectorAll('span') ?? [])].find(
+            (node) => node.textContent === bookDescriptions.en,
+          );
+          expect(description?.getAttribute('lang')).toBe('en');
+          expect(view.panel().querySelector<HTMLSelectElement>('select')?.value).toBe(kind.id);
+        }
         const footer = view.panel().lastElementChild!;
         expect(footer.textContent).toContain(homeStorySpace.title);
         expect(footer.textContent).toContain(m.home_question_work({}, o));
@@ -228,7 +248,7 @@ test('phone and desktop retain immediate meaning, keyboard focus and independent
         remove.focus();
         await act(async () => remove.click());
         expect(view.calls.length).toBe(selectedRead + 1);
-        expect(view.calls.at(-1)).toEqual({ stream: 'home', kind: 'schema:Prepared0', ratingQuestionId: question.id });
+        expect(view.calls.at(-1)).toEqual({ stream: 'home', kind: kind.id, ratingQuestionId: question.id });
         expect(view.browser.document.activeElement?.getAttribute('data-home-filter-remove')).toBe('question');
         const first = view.panel().querySelector<HTMLButtonElement>('button')!;
         first.focus();

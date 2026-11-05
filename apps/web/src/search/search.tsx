@@ -997,7 +997,7 @@ export function SearchPage({
       { kind },
       kindLabel?.lang,
       description.text,
-      description.lang,
+      description.lang ?? undefined,
     );
   }
   for (const [property, values] of Object.entries(selectedFacets))
