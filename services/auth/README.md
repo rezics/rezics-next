@@ -3172,26 +3172,26 @@ The human supplies the target. Ordinary sessions get authentication-required/ses
 Step-up requires fresh review/confirmation. Only dispatch marks submitted; missing older markers imply submission,
 never authority.
 
-`createNativeAccountBindings` installs `readAccountDeletionAdvice` under the exact deletion management profile:
+`createNativeAccountBindings` installs `readAccountDeletionAdvice` under the deletion profile:
 `managedAuthWorkflowDescriptor('delete', human.account_id)` and installed `account:delete` preparation/formula,
 independent of the action directory. Live human, lifecycle/fence/floor, actor/client/scopes, session, home and deadline
 surround released preparation. Read transactions release connections during preparation, with no approval/command.
 Authority changes retire controls; dependency failure allows review. Admitted profiles alone read exact-self email
-with currentness checks.
+with currentness.
 
-The full-call ceiling is one `withFreshHuman`, five `accessTokenForProof` (three transport/two native), one native
+Full-call ceiling: one `withFreshHuman`, five `accessTokenForProof` (three transport/two native), one native
 `authenticate`, one read-time query, two two-account/home snapshots (four points), one Access preparation/formula
 and one Auth user primary-key read. Finite operand caps bound fixed calls; no population scan/runtime price. Failures short-circuit. Native I/O/disclosure
 share three seconds; browser reads five, without retry. Security inventories stay separate.
 
-Decision: deletion reuses rename's sealed-reference approval contract: exact `{reference,expiresAt}`, nonempty
+Decision: deletion reuses rename's approval contract: exact `{reference,expiresAt}`, nonempty
 sealed ASCII reference ≤4096 units and canonical ISO expiry ≤27 bytes. Validate before emission; browser requires
 unexpired approval. Allowance: empty JSON skeleton plus `6×4096 + 27` bytes (legal reference escaping). Workflow
 success/replay is exactly original `{accountId}`, nonempty opaque id ≤4096 units: empty skeleton plus `6×4096` bytes.
 Organization deletion retains this projection. Invalid results or post-dispatch exceptions emit `{error:unavailable}`/503, never false `not_applied`. Native resolution, freshness, preparations,
 responsibilities, CAS, fences and erasure remain authoritative.
 
-Error allowance is the larger serialized closed refusal: `{error:account_operation_denied,effect_status:not_applied}`
+Error bound is the larger closed JSON refusal: `{error:account_operation_denied,effect_status:not_applied}`
 at 400,401,403,409,413,415,503 or `{error:step_up_required,effect_status:not_applied}`/401 (JSON string values).
 Exact `{error:unavailable}`/503 fits too. Each POST has five seconds through headers/body; approval and explicit
 execution recovery each retry unavailable once. Two POSTs normally, four maximum; identical execution body/key/reference. Timeout, transport loss and malformed
@@ -3199,7 +3199,7 @@ output never retry. Zero added native calls.
 
 Advice/absence/sign-out cannot acknowledge execution. Uncertainty survives later refusal and
 replacement; only original success resolves it, retaining generic completed history after private retirement.
-Exact-owned cleanup preserves replacement custody. Commit means tombstone committed; cleanup, adopted retention,
+Owned cleanup preserves replacements. Commit means tombstone committed; cleanup, adopted retention,
 backups and external copies remain pending. Fixtures do not qualify native replay or browser acceptance.
 
 ## Organization deletion review
