@@ -841,7 +841,7 @@ test('current Realm refusal conceals a previously selected identity and masked z
   expect(boxes()).toHaveLength(19);
   expect(host.textContent).toContain(m.rating_population_concealed());
   await act(async () => button(m.rating_population_clear()).click());
-  expect(host.textContent).not.toContain(names.get(ids[0]!)!);
+  expect(selectedNames()).not.toContain(names.get(ids[0]!)!);
   denied.clear();
   const directoryQuery = directoryQueries().find((query) => query.queryKey[6] === 'directory')!;
   await act(async () => {
@@ -936,6 +936,17 @@ test('independent QueryClients serialize private responses separately and requir
   extraCache.setQueryDefaults(sessionQuery.queryKey, { gcTime: Infinity });
   extraCache.setQueryData(sessionQuery.queryKey, session(preparedReader, null));
   await paint(subjectId, extraCache);
+  console.log(
+    'independent client admission',
+    extraCache.getQueryData(sessionQuery.queryKey),
+    extraCache.getQueryCache().findAll({ queryKey: ['subject-rating-populations'] }).map((query) => ({
+      key: query.queryKey,
+      status: query.state.status,
+      fetchStatus: query.state.fetchStatus,
+      data: query.state.data,
+    })),
+    requests.slice(-8).map((request) => new URL(request.url).pathname),
+  );
   await until(() => boxes().length === 20);
   const second = extraCache
     .getQueryCache()

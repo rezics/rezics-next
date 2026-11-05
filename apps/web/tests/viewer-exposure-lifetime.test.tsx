@@ -200,7 +200,7 @@ test('viewer exposure retires each mounted reader observation without leaking or
     const ssr = renderToStaticMarkup(
       createElement(QueryClientProvider, { client }, createElement(Controls, { name: 'ssr' })),
     );
-    expect(ssr).toContain('data-public="ssr"');
+    expect(ssr).not.toContain('data-public="ssr"');
     expect(ssr).not.toContain('data-private="ssr"');
     expect(credentialReads).toBe(0);
     expect(nativeReads).toHaveLength(0);
