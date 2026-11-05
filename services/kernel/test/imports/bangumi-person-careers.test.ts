@@ -90,7 +90,7 @@ function capturedCommands(runtime: Awaited<ReturnType<typeof openApiRuntime>>, f
   });
 }
 
-test('Bangumi Person careers use default current vocabulary, ordinary proposals and independent current reads', async () => {
+test('Bangumi career proposals require exact current bindings, with separate showcase review and public reads', async () => {
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65_536 });
   const directory = await mkdtemp(join(tmpdir(), 'bangumi-person-careers-native-'));
   const importPath = join(directory, 'import.sqlite');
