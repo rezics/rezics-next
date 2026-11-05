@@ -12,16 +12,17 @@ export const SCHEMA_MIGRATION_PATHS = ['services/kernel/db/**/migrations/*.sql']
 export const SCHEMA_DUMP_PATHS = ['services/kernel/db/**/schema.sql'];
 const SCHEMA_DUMP_ARGS = ['run', '--cwd', 'services/kernel', 'derived', 'schema'];
 
-export type LandingSchemaResult = {
-  outcome: 'skipped' | 'unchanged' | 'committed' | 'diagnostic';
+type LandingSchemaCommon = {
   /** HEAD after regeneration: the input candidate unless a dump commit was added. */
   candidate: string;
-  /** Null when no regeneration ran. */
-  elapsedMs: number | null;
   logPath: string;
-  /** The first error line of a failed regeneration, reported like a compiler diagnostic. */
-  message: string | null;
 };
+
+export type LandingSchemaResult =
+  | (LandingSchemaCommon & { outcome: 'skipped'; elapsedMs: null })
+  | (LandingSchemaCommon & { outcome: 'unchanged' | 'committed'; elapsedMs: number })
+  /** The first error line of the failed regeneration, reported like a compiler diagnostic. */
+  | (LandingSchemaCommon & { outcome: 'diagnostic'; elapsedMs: number; message: string });
 
 function firstError(output: string, status: number | null, error: Error | undefined): string {
   const lines = output
@@ -58,7 +59,7 @@ export async function regenerateLandingSchema(input: {
   const policy = input.policy ?? defaultPolicy.merge;
   const head = () => policyGit(cwd, ['rev-parse', 'HEAD'], policy);
   if (!input.changedFiles.some((path) => matchesPath(path, SCHEMA_MIGRATION_PATHS)))
-    return { outcome: 'skipped', candidate: head(), elapsedMs: null, logPath, message: null };
+    return { outcome: 'skipped', candidate: head(), elapsedMs: null, logPath };
 
   ensureDerivedDependencies(cwd, logPath, [['bun', ...SCHEMA_DUMP_ARGS]]);
   appendFileSync(logPath, `$ bun ${SCHEMA_DUMP_ARGS.join(' ')} (cwd: ${cwd})\n`);
@@ -78,12 +79,12 @@ export async function regenerateLandingSchema(input: {
   if (outside.length) throw new Error(`Schema regeneration changed non-dump files: ${outside.join(', ')}`);
   if (!dumps.length) {
     appendFileSync(logPath, `Schema dumps already match the migrations; regenerated in ${elapsedMs}ms, no commit\n`);
-    return { outcome: 'unchanged', candidate: head(), elapsedMs, logPath, message: null };
+    return { outcome: 'unchanged', candidate: head(), elapsedMs, logPath };
   }
 
   const before = head();
   policyGit(cwd, ['add', '--', ...dumps], policy);
   policyGit(cwd, ['commit', '-m', `chore(kernel): regenerate schema dumps for ${input.taskId}`], policy);
   appendFileSync(logPath, `Regenerated ${dumps.join(', ')} in ${elapsedMs}ms; committed onto ${before}\n`);
-  return { outcome: 'committed', candidate: head(), elapsedMs, logPath, message: null };
+  return { outcome: 'committed', candidate: head(), elapsedMs, logPath };
 }

@@ -261,9 +261,13 @@ export type GateOutcome = AttemptRef & {
   mergedCommit?: string;
 };
 
-/** Compiler diagnostics return to the source owner as a nonterminal same-session repair. */
+/**
+ * A dev landing repair returns to the source owner as a nonterminal same-session repair: a compiler diagnostic
+ * (`dev-landing-transpile`) or the first error of a failed schema-dump regeneration (`dev-landing-schema`).
+ */
 export type DevLandingTranspileHandoff = AttemptRef & {
   kind: 'dev-landing-transpile';
+  guard: 'dev-landing-transpile' | 'dev-landing-schema';
   entryId: number;
   request: LandingRequest;
   sourceCommit: string;

@@ -73,7 +73,7 @@ test('a candidate that changes a migration regenerates its schema dumps and comm
 
     const result = await regenerate(root, git(root, 'diff', '--name-only', base, candidate).split('\n'));
 
-    expect(result).toMatchObject({ outcome: 'committed', message: null });
+    expect(result).toMatchObject({ outcome: 'committed' });
     expect(result.candidate).toBe(git(root, 'rev-parse', 'HEAD'));
     expect(git(root, 'rev-parse', 'HEAD^')).toBe(candidate);
     expect(git(root, 'log', '-1', '--format=%s')).toBe('chore(kernel): regenerate schema dumps for task-1');
@@ -104,7 +104,6 @@ test('a candidate that changes no migration runs no regeneration', async () => {
       candidate,
       elapsedMs: null,
       logPath: join(root, '.temp', 'landing.log'),
-      message: null,
     });
     expect(existsSync(join(root, '.temp', 'derived-runs.log'))).toBe(false);
   } finally {
@@ -145,7 +144,7 @@ test('dumps that the migrations already reproduce add no commit', async () => {
 
     const result = await regenerate(root, git(root, 'diff', '--name-only', base, candidate).split('\n'));
 
-    expect(result).toMatchObject({ outcome: 'unchanged', candidate, message: null });
+    expect(result).toMatchObject({ outcome: 'unchanged', candidate });
     expect(git(root, 'rev-parse', 'HEAD')).toBe(candidate);
   } finally {
     fixture.close();

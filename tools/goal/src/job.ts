@@ -38,7 +38,7 @@ import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure, estimateOverrun } from './failures.ts';
-import { ensureGateOutcomeRefusal, guardIdsForFailure, type GuardId } from './guards.ts';
+import { ensureGateOutcomeRefusal, guardIdsForFailure, isDevLandingRepairGuard, type GuardId } from './guards.ts';
 import { controlPlaneReleaseBrief, devProductBrief, matchesPath } from './briefs.ts';
 import { blockerFingerprint, noProgressTwice, toolRetryDelay } from './attempt-progress.ts';
 import { checkHostsInOutage } from './watchdog.ts';
@@ -1804,25 +1804,33 @@ export class WorkerJob implements GateOutcomeSink {
     const task = store.task(ref.taskId);
     const record = store.record(ref);
     if (!record) throw new Error('dev landing compiler handback requires a settled worker record');
+    const schemaRepair = handoff.guard === 'dev-landing-schema';
     const diagnostic = [
-      `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
+      schemaRepair
+        ? `Schema dump regeneration rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
+        : `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
       `Original source commit: ${handoff.sourceCommit}. Task ${handoff.taskId} attempt ${handoff.attempt}.`,
-      `Compiler error: ${handoff.diagnostic.file ?? handoff.typescriptFiles[0]}${handoff.diagnostic.line ? `:${handoff.diagnostic.line}` : ''}${handoff.diagnostic.column ? `:${handoff.diagnostic.column}` : ''}: ${handoff.diagnostic.message}`,
-      `Retained compiler log: ${handoff.logPath}`,
-      `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
-      'Repair this source in place, then return through normal landing preparation in this same task session.',
+      schemaRepair
+        ? `Regeneration error: ${handoff.diagnostic.message}`
+        : `Compiler error: ${handoff.diagnostic.file ?? handoff.typescriptFiles[0]}${handoff.diagnostic.line ? `:${handoff.diagnostic.line}` : ''}${handoff.diagnostic.column ? `:${handoff.diagnostic.column}` : ''}: ${handoff.diagnostic.message}`,
+      `${schemaRepair ? 'Retained regeneration log' : 'Retained compiler log'}: ${handoff.logPath}`,
+      schemaRepair
+        ? `Changed files: ${handoff.changedFiles.join(', ')}`
+        : `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
+      `Repair ${schemaRepair ? 'the migration' : 'this source'} in place, then return through normal landing preparation in this same task session.`,
     ].join('\n');
     let schedule = false;
     store.write(ref, () => {
       if (store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'dev-landing-transpile-returned'))
         return;
-      record.guardIds = [...new Set<GuardId>([...(record.guardIds ?? []), 'dev-landing-transpile'])];
+      record.guardIds = [...new Set<GuardId>([...(record.guardIds ?? []), handoff.guard])];
       store.putRecord(record);
       store.event(ref, 'dev-landing-transpile-returned', {
         entryId: handoff.entryId,
         sourceCommit: handoff.sourceCommit,
         candidate: handoff.candidate,
         base: handoff.base,
+        guard: handoff.guard,
         diagnostic,
         compilerDiagnostic: handoff.diagnostic,
         logPath: handoff.logPath,
@@ -1916,7 +1924,7 @@ export class WorkerJob implements GateOutcomeSink {
       record.firstFailure = outcome.firstFailure?.fingerprint ?? null;
       record.outcome = outcome.passed ? 'passed' : 'gate-failed';
       if (outcome.passed) {
-        if (!record.guardIds?.includes('dev-landing-transpile')) delete record.guardIds;
+        if (!record.guardIds?.some(isDevLandingRepairGuard)) delete record.guardIds;
         if (outcome.mergedCommit) {
           const plan = store.integrationPlan(outcome);
           let alreadyOnMain = false;
@@ -2147,7 +2155,7 @@ export class WorkerJob implements GateOutcomeSink {
       record.guardIds = [
         ...new Set([
           ...guardIdsForFailure(failureClass, outcome.refusal),
-          ...(record.guardIds?.includes('dev-landing-transpile') ? ['dev-landing-transpile' as const] : []),
+          ...(record.guardIds ?? []).filter(isDevLandingRepairGuard),
         ]),
       ];
       record.escalation = failureClass;

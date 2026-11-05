@@ -48,6 +48,7 @@ import {
   transpileLandingCandidate,
   type LandingTranspileResult,
 } from './landing-transpile.ts';
+import { regenerateLandingSchema, SCHEMA_MIGRATION_PATHS, type LandingSchemaResult } from './landing-schema.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
@@ -1377,6 +1378,7 @@ function transpileHandoff(
   }
   return {
     kind: 'dev-landing-transpile',
+    guard: 'dev-landing-transpile',
     taskId: entry.request.taskId,
     attempt: entry.request.attempt,
     entryId: entry.id,
@@ -1390,6 +1392,40 @@ function transpileHandoff(
     logPath: result.logPath,
     diagnostic,
   };
+}
+
+/** A failed schema regeneration returns through the transpile handback; its diagnostic is the first error line. */
+function schemaHandoff(
+  entry: Pick<LandingEntry, 'id' | 'request'>,
+  sourceCommit: string,
+  base: string,
+  changedFiles: readonly string[],
+  result: Extract<LandingSchemaResult, { outcome: 'diagnostic' }>,
+): DevLandingTranspileHandoff {
+  return {
+    kind: 'dev-landing-transpile',
+    guard: 'dev-landing-schema',
+    taskId: entry.request.taskId,
+    attempt: entry.request.attempt,
+    entryId: entry.id,
+    request: entry.request,
+    sourceCommit,
+    base,
+    candidate: result.candidate,
+    changedFiles: [...changedFiles],
+    typescriptFiles: [],
+    elapsedMs: result.elapsedMs,
+    logPath: result.logPath,
+    diagnostic: { file: null, line: null, column: null, message: result.message },
+  };
+}
+
+/** Recount a candidate once a commit was added to it, so its outcome describes the commit that publishes. */
+function recountCandidate(result: GateOutcome, cwd: string, base: string, policy: ControlPolicy['merge'] | undefined) {
+  result.changedFiles = changedFiles(cwd, base, policy);
+  result.diffLines = diffLineCount(cwd, base, undefined, policy);
+  result.nonGeneratedChangedFiles = nonGeneratedFiles(cwd, result.changedFiles, policy);
+  result.nonGeneratedDiffLines = diffLineCount(cwd, base, result.nonGeneratedChangedFiles, policy);
 }
 
 class ControlPlaneProofInterrupted extends Error {}
@@ -2282,11 +2318,48 @@ export class MergeTrain {
         // The final rebased tree includes conflict resolution and formatting. It receives the configured
         // prelanding typecheck, then the policy boot check when changed paths match; other verification
         // runs after integration in the independent verifier.
-        const finalCandidate = prepared[prepared.length - 1]!.candidate;
+        let finalCandidate = prepared[prepared.length - 1]!.candidate;
         const batchLog = logPaths.get(prepared[0]!.entry.id)!;
         this.git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
         if (lane === 'dev') {
-          const finalChangedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
+          // Returns a repair to its source owner and defers the other members of the batch.
+          const returnRepair = (owner: PreparedLanding, handoff: DevLandingTranspileHandoff) => {
+            for (const member of prepared) if (member.entry.id !== owner.entry.id) deferred.add(member.entry.id);
+            for (const [id, outcome] of localOutcomes) outcomes.set(id, outcome);
+            appendFileSync(
+              owner.result.logPath,
+              `Candidate ${finalCandidate} was not published; returning its ${handoff.guard} repair to task ${owner.entry.request.taskId} attempt ${owner.entry.request.attempt}.\n`,
+            );
+            return {
+              outcomes: orderedOutcomes(),
+              deferredIds: [...deferred],
+              skippedIds: [...skipped],
+              transpileHandoff: handoff,
+            };
+          };
+          let finalChangedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
+          // The dumps are composed into the final candidate before the compiler check, so the check sees what publishes.
+          const schemaOwner =
+            prepared.find((member) =>
+              member.result.changedFiles.some((path) => matchesPath(path, SCHEMA_MIGRATION_PATHS)),
+            ) ?? prepared[0]!;
+          const schema = await regenerateLandingSchema({
+            cwd: trainTree,
+            changedFiles: finalChangedFiles,
+            taskId: schemaOwner.entry.request.taskId,
+            logPath: batchLog,
+            policy: this.options.policy?.merge,
+          });
+          if (schema.outcome === 'committed') {
+            finalCandidate = schema.candidate;
+            const last = prepared[prepared.length - 1]!;
+            last.candidate = finalCandidate;
+            last.commits = this.git(trainTree, 'rev-list', '--reverse', `${last.base}..${finalCandidate}`)
+              .split('\n')
+              .filter(Boolean);
+            recountCandidate(last.result, trainTree, last.base, this.options.policy?.merge);
+            finalChangedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
+          }
           const transpiled = await transpileLandingCandidate({
             cwd: trainTree,
             base,
@@ -2314,6 +2387,17 @@ export class MergeTrain {
             retry = true;
             continue;
           }
+          if (schema.outcome === 'diagnostic')
+            return returnRepair(
+              schemaOwner,
+              schemaHandoff(
+                schemaOwner.entry,
+                schemaOwner.entry.request.workerCommit ?? finalCandidate,
+                base,
+                finalChangedFiles,
+                schema,
+              ),
+            );
           if (transpiled.outcome === 'diagnostic') {
             const location = transpiled.diagnostic?.file;
             const owner =
@@ -2322,23 +2406,15 @@ export class MergeTrain {
                     member.result.changedFiles.some((path) => resolve(trainTree, path) === resolve(location)),
                   )
                 : undefined) ?? prepared[0]!;
-            for (const member of prepared) if (member.entry.id !== owner.entry.id) deferred.add(member.entry.id);
-            for (const [id, outcome] of localOutcomes) outcomes.set(id, outcome);
-            appendFileSync(
-              owner.result.logPath,
-              `Candidate ${finalCandidate} was not published; returning its Bun diagnostic to task ${owner.entry.request.taskId} attempt ${owner.entry.request.attempt}.\n`,
-            );
-            return {
-              outcomes: orderedOutcomes(),
-              deferredIds: [...deferred],
-              skippedIds: [...skipped],
-              transpileHandoff: transpileHandoff(
+            return returnRepair(
+              owner,
+              transpileHandoff(
                 owner.entry,
                 owner.entry.request.workerCommit ?? finalCandidate,
                 finalChangedFiles,
                 transpiled,
               ),
-            };
+            );
           }
           if (transpiled.outcome === 'unavailable') {
             this.recordUnavailableDevTranspile(prepared[0]!.entry.request, transpiled);
@@ -3740,7 +3816,7 @@ export class MergeTrain {
             if (!workspace) this.checkScope(formattedScopeCheckedFiles, request, logPath);
           }
         }
-        const candidate = this.git(trainTree, 'rev-parse', 'HEAD');
+        let candidate = this.git(trainTree, 'rev-parse', 'HEAD');
         const taskPaths = workspace
           ? taskChangedPaths(sharedStore!.task(request.taskId), sourceTip, this.options.policy?.merge)
           : changedPathsBetween(o.mainCheckout, originalBase, sourceTip, this.options.policy?.merge);
@@ -3762,6 +3838,17 @@ export class MergeTrain {
         // Direct dev landings honor the configurable root compiler guard and the policy boot check when paths match.
         const skipDevChecks = directDevLanding;
         if (directDevLanding) {
+          const schema = await regenerateLandingSchema({
+            cwd: trainTree,
+            changedFiles: result.changedFiles,
+            taskId: request.taskId,
+            logPath,
+            policy: this.options.policy?.merge,
+          });
+          if (schema.outcome === 'committed') {
+            candidate = schema.candidate;
+            recountCandidate(result, trainTree, base, this.options.policy?.merge);
+          }
           const transpiled = await transpileLandingCandidate({
             cwd: trainTree,
             base,
@@ -3771,6 +3858,19 @@ export class MergeTrain {
           });
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
+          if (schema.outcome === 'diagnostic') {
+            appendFileSync(
+              logPath,
+              `Candidate ${candidate} was not published; returning its schema regeneration error to task ${request.taskId} attempt ${request.attempt}.\n`,
+            );
+            return schemaHandoff(
+              entry,
+              workerCommit ?? request.workerCommit ?? candidate,
+              base,
+              result.changedFiles,
+              schema,
+            );
+          }
           if (transpiled.outcome === 'diagnostic') {
             appendFileSync(
               logPath,
@@ -7100,9 +7200,23 @@ export class MergeTrain {
         appendFileSync(logPath, `${message}\n`);
         return conflicts.length ? { conflicts, cause: cause || message } : { cause: message };
       }
-      const commit = this.git(tree, 'rev-parse', 'HEAD');
+      let commit = this.git(tree, 'rev-parse', 'HEAD');
       if (devLanding && targetBranch === devLanding.snapshot.devBranch) {
-        const changed = changedPathsBetween(tree, targetHead, commit, this.options.policy?.merge);
+        let changed = changedPathsBetween(tree, targetHead, commit, this.options.policy?.merge);
+        const schemaOwner =
+          devLanding.owners.find((owner) => owner.changedFiles.some((path) => matchesPath(path, SCHEMA_MIGRATION_PATHS))) ??
+          devLanding.owners[0]!;
+        const schema = await regenerateLandingSchema({
+          cwd: tree,
+          changedFiles: changed,
+          taskId: schemaOwner.entry.request.taskId,
+          logPath,
+          policy: this.options.policy?.merge,
+        });
+        if (schema.outcome === 'committed') {
+          commit = schema.candidate;
+          changed = changedPathsBetween(tree, targetHead, commit, this.options.policy?.merge);
+        }
         const transpiled = await transpileLandingCandidate({
           cwd: tree,
           base: targetHead,
@@ -7112,6 +7226,16 @@ export class MergeTrain {
         });
         for (const owner of devLanding.owners) this.options.fence.assertCurrent(owner.entry.request);
         if (!this.controlPlaneSnapshotMatches(devLanding.snapshot)) return { moved: true };
+        if (schema.outcome === 'diagnostic')
+          return {
+            transpileHandoff: schemaHandoff(
+              schemaOwner.entry,
+              schemaOwner.sourceCommit,
+              targetHead,
+              changed,
+              schema,
+            ),
+          };
         if (transpiled.outcome === 'diagnostic') {
           const location = transpiled.diagnostic?.file;
           const owner =
