@@ -150,7 +150,7 @@ function rule(subject = 'alice', collectionId: string | null = 'alpha', revision
   };
   common.choices.labels = {
     state: 'ready',
-    values: [{ id: 'private-label', name: `${subject} private label` }],
+    values: [{ id: 'e2222222-2222-4222-8222-222222222222', name: `${subject} private label` }],
     next: 'label-next',
   };
   return collectionId === null
@@ -161,7 +161,7 @@ function rule(subject = 'alice', collectionId: string | null = 'alpha', revision
         id: collectionId,
         title: `${subject} private title`,
         rule: {
-          filter: { owner: { label: { id: 'private-label' } } },
+          filter: { owner: { label: { id: 'e2222222-2222-4222-8222-222222222222' } } },
           sort: 'id',
           revision,
           collectionRevision: revision,

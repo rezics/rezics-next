@@ -532,20 +532,17 @@ function RuleForm({
   async function submit(event: FormEvent) {
     event.preventDefault();
     const csrf = currentCsrf ? currentCsrf() : csrfToken;
-    console.log('rule submit gate', { current: isCurrent(), csrf: !!csrf, conflict, filter: !!filter, savedId: !!savedId });
     if (!isCurrent() || !csrf || conflict || !filter || savedId) return;
     if (!captured.current && base.state === 'new') {
       setTextSubmitted(true);
       if (collectionTextIssue('title', title) || collectionTextIssue('description', description)) return;
     }
     const operation = start(isOwnerCurrent ?? isCurrent);
-    console.log('rule submit operation', !!operation);
     if (!operation) return;
     let parsed: FilterDocument;
     try {
       parsed = parseFilter(filter);
     } catch {
-      console.log('rule submit parse failed');
       setFeedback(m.condition_invalid());
       operation.finish();
       return;
@@ -561,7 +558,6 @@ function RuleForm({
     };
     const send = request.current?.send ?? (captureSave ? captureSave() : save);
     if (!send) {
-      console.log('rule submit sender unavailable');
       operation.finish();
       return;
     }
@@ -572,7 +568,6 @@ function RuleForm({
     setIntent(input);
     setFeedback('');
     try {
-      console.log('rule submit before send', { current: isCurrent(), operation: operation.current() });
       if (!isCurrent() || !operation.current()) return;
       const result = await original.send(input, original.csrf);
       if (!operation.current()) return;
