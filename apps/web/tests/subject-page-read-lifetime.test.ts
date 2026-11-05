@@ -71,7 +71,10 @@ mock.module('../src/session/request', () => ({
   viewerCredential: () => null,
   sessionSubject: () => null,
 }));
-mock.module('../src/kernel/client', () => ({ kernelClient: () => activeClient as never }));
+mock.module('../src/kernel/client', () => ({
+  kernelClient: () => activeClient as never,
+  requestLocale: () => undefined,
+}));
 
 const { subjectPageQuery, subjectViewPagesQuery } = await import('../src/features/pages/subject-queries');
 const { readPageAuthors } = await import('../src/identity/read');
