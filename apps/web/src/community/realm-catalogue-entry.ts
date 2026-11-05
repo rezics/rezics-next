@@ -1,5 +1,6 @@
-import { parse, safeParse } from 'valibot';
+import { parse } from 'valibot';
 import { isSearchResourceScope, searchResourceScopeAction } from '../search/advanced-scope';
+import { isWithinGlobalSearchQueryLimit } from '../search/query-text-limit';
 import { searchParams } from '../search/search-params';
 import { realmReadingSearch } from './realm-reading-return';
 
@@ -37,7 +38,7 @@ export function realmCatalogueEntry(realmId: string | null | undefined, locale: 
 
 /** Search is the authority for the UTF-8 limit. The early guard bounds work on pasted input too. */
 export function realmCatalogueQueryAdmitted(query: string): boolean {
-  return query.length <= 512 && safeParse(searchParams, { q: query }).success;
+  return query.length <= 512 && isWithinGlobalSearchQueryLimit(query);
 }
 
 /** Preserve accepted bytes, including leading/trailing spaces; the Search owner normalizes its own defaults. */

@@ -83,10 +83,14 @@ so a late event is refused even before the replacement render commits. A success
 a fresh entry source from the newly admitted state rather than reviving the previous draft.
 
 There is one accepted query draft of at most 512 UTF-8 bytes and fixed navigation choices. Validation
-uses the installed Search schema; a length guard rejects unbounded programmatic input before
+uses Search's shared UTF-8 byte limit; a length guard rejects unbounded programmatic input before
 encoding. An overflowing edit is refused in full, the previous bounded draft is retained, and submit
 is unavailable until correction or clear. No silent clipping or Global fallback occurs. Form submit
 also validates the actual field value, including a restored or autofilled value.
+
+Decision: the Realm query entry enforces the shared byte limit independently of tolerant route parsing.
+Direct Search URLs retain oversized operands for local correction, following the Search owner contract;
+that preservation does not admit an oversized Realm draft or enable its submit action.
 
 Encoding and validation are O(Q), with Q at most 512 UTF-8 bytes, and source identity is O(1).
 The navigation retains no result page and makes no page, row, background, population or command request.

@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test';
-import { parse, safeParse } from 'valibot';
+import { parse } from 'valibot';
 import {
   realmCatalogueEntry,
   realmCatalogueQueryAdmitted,
   realmCatalogueQueryHref,
 } from '../src/community/realm-catalogue-entry';
-import { searchLoaderDeps, searchParams } from '../src/search/search-params';
+import { searchLoaderDeps, searchParams, searchUrlIntake } from '../src/search/search-params';
 import { parseSearchResourceScope } from '../src/search/advanced-scope';
 
 const realm = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
@@ -39,7 +39,12 @@ test('1/128/512 UTF-8 bytes, spaces and URL syntax round trip through the instal
   }
   expect(admitted(realmCatalogueQueryHref(entry, '')!).query).toBe('');
   for (const query of ['x'.repeat(513), '界'.repeat(171), '😀'.repeat(129)]) {
-    expect(safeParse(searchParams, { q: query }).success).toBe(false);
+    const raw = parse(searchParams, { q: query });
+    expect(raw.q).toBe(query);
+    expect(searchUrlIntake(raw)).toMatchObject({
+      kind: 'invalid',
+      issues: [{ key: 'q', value: query, reason: 'invalid-query' }],
+    });
     expect(realmCatalogueQueryAdmitted(query)).toBe(false);
     expect(realmCatalogueQueryHref(entry, query)).toBeNull();
   }
@@ -69,6 +74,9 @@ test('Search admits rating population and membership independently without chang
   expect(searchLoaderDeps(parse(searchParams, { ...search, ratingPopulation: 'bad' })).invalidInput?.key).toBe(
     'ratingPopulation',
   );
-  expect(safeParse(searchParams, { filter: 'x'.repeat(16385) }).success).toBe(false);
-  expect(safeParse(searchParams, { condition: 'x'.repeat(32769) }).success).toBe(false);
+  for (const [key, value] of [['filter', 'x'.repeat(16385)], ['condition', 'x'.repeat(32769)]] as const) {
+    const raw = parse(searchParams, { [key]: value });
+    expect(raw[key]).toBe(value);
+    expect(searchLoaderDeps(raw).invalidInput).toMatchObject({ key, value });
+  }
 });
