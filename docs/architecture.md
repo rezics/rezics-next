@@ -73,6 +73,17 @@ capabilities it registers. The kinds are:
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
 
+**Kernel domains.** The Kernel's domain directories are `library`, `semantic`, `access`, `search`, `content`,
+`community`, `rating`, `zones` and `commerce`. A domain imports only core modules, leaf contract modules and other
+domains' interface modules. A runtime import cycle may not span two domain directories. A value that a cycle needs
+lives in a leaf module with no domain imports. A domain calls another through that domain's interface module, or
+through a port that the composition root supplies. Type-only imports are written `import type` and do not count
+toward a cycle. `bun scripts/import-cycles.ts services/kernel/src --baseline <count>` lists the modules in runtime
+import cycles and fails when their count exceeds the baseline.
+
+Decision: Kernel domains break cross-domain cycles with leaf modules and composition-time ports, and the cycle scan's
+baseline may only shrink.
+
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
