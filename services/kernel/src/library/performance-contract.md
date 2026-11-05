@@ -1,155 +1,4 @@
-# Private physical-copy loans
-
-Decision: retain the existing loan journey and owner, consume immutable local SQL plans through the existing
-command work association, and preserve one absolute preparation deadline; extend the mounted journey suite.
-
-`loan-operation-bounds.ts` owns the literal copy/loan lock, copy locator, unique open-loan probe, generation
-read/advance and loan insert/update declarations. Each plan freezes its positional scalar binds before dispatch
-and uses public nine-axis arithmetic. `loan-commands.ts` executes those same operands on its original client.
-An existing command association consumes each declaration before SQL and retains its dispatched charge on
-failure. Ordinary calls keep their native runner and connection ownership. No plan supplies authorization,
-receipt evidence, an additional allowance or an independent transaction.
-
-Point projections use UUID text and int32 generation widths. Input bytes include the original escaped private
-name and original dates, revision, command time and transaction ID. The open-copy partial unique index proves
-at most one row independently of LIMIT; its point and LIMIT node are both counted. Local write bounds include
-heap and index work: fresh loans reach primary/open-copy/due/owner indexes, extension retains those indexes,
-and return replaces open-copy/due with history. Generation upsert includes its conflicting old tuple and new
-tuple. These tables have no foreign keys, deferred constraints or mutation triggers. Misses, negative probes
-and failed CAS retain their declarations. These SQL leaves construct no identity witness or Search request;
-their ninth axis is explicitly zero when translated into the existing eight-axis command accounting port.
-
-These local leaves are **not complete enclosing operation plans**. Account/action/group admission, original
-and current source/profile evidence, both Person mapping reads and summary/disclosure, copy/loan projections,
-command receipt/replay, partition/floor/epoch, shelf effects, History/outbox and worker controls, transaction
-controls/retries/cleanup and mounted response serialization still need composition at their existing owners.
-Person coalescing does not reduce raw loan/copy projection work. In particular, the current open-page
-`COALESCE(due_on, …)` continuation filter cannot derive examined rows from LIMIT, and joined copy vocabulary
-columns do not have schema width limits. A finite result page alone does not settle either derivation.
-
-The retained limits are open 100/history 50/presentation 100, generation 2147483647 and a generation-bound
-15-minute cursor. Listing captures the original cursor before its first await, reads generation before decoding,
-and rejects changed generations. Due dates remain ascending/nulls last for open loans and return dates descending
-for history, with loan ID breaking ties. Command preparation, including retries, shares the original native
-deadline. Current authorization still precedes receipt replay; a replayed return receipt differs from a fresh
-return against an already returned loan. Copy-before-loan locking, private-name fidelity, exact revision CAS,
-open uniqueness, disposal conflicts and retained history remain with the existing command owner.
-
-# Native Entry operation bounds
-
-Decision: this attempt delivers immutable direct SQL plans for Entry point reads, lists, history pages and reviews;
-the Entry mutation lifecycle composition continues separately. Keep SQL plans on the existing native association and
-preserve authorization, exact receipts, source fences, deadlines and transaction custody.
-
-## Read operations
-
-`entry-operation-bounds.ts` declares the direct Entry SQL work for point reads, lists, state-history pages and
-reviews. `entries.ts` reserves each declaration before its existing snapshot dispatch. Point reads include both
-possible Entry lookups and the legacy profile-migration phase probes. Lists include their actual page branches,
-partition epoch lookup and legacy phase probe. Cursor limits include the sentinel; a cursor can dispatch both Entry
-page branches. The state-history caller validates the public 1–50 limit and adds one sentinel before constructing
-the plan. Its frozen operands are the same operands dispatched by `pageEntryStateChanges` on the authorized snapshot
-client. Review includes the current Entry point and selected transition projection.
-
-History page work can examine all 64 retained transitions, including discarded revisions and other incarnations;
-the requested result limit does not bound those rows. Its direct SQL declaration charges the sentinel and all
-projected rows. States use the existing 64-character vocabulary limit, command kind uses the longest native writer
-name, JSON escaping uses six bytes per character, and timestamp projection reserves 64 characters for the
-PostgreSQL range and timezone representation. The Entry cursor routes now select only the integer partition epoch
-they consume. The pre-profile read gate selects only its checked migration phase, avoiding the unbounded cursor and
-digest columns. No profile-pin JSON is selected by the history page.
-
-The plan's zero identity metadata, witnesses and engine requests apply to these local SQL statements only. It is not
-the complete Entry command journey or a native grant. Mutation preparation/currentness, action/group admission,
-command receipts and retries, transaction controls, history append/prune/coverage, Shelf work, events/outbox,
-rollback and response serialization still need composition at their existing owners. The command runner continues
-to own execution and replay. Read-only history cannot repair an Entry; no-op and exact receipt replay cannot append a
-transition. Retention and the public history/page limits are unchanged.
-
-## Copy SQL leaves
-
-Decision: Commerce keeps the copy journey in its existing command and inventory owners; immutable operation declarations derive complete finite nine-axis costs from actual SQL, serialized binds, schema widths and current ceilings, then bind through existing native roots.
-
-`copy-operation-bounds.ts` binds exact compiled statements to their original operands at the existing EntryStore and
-copy-inventory execution owners. The declaration keeps SQL text, serialized bind bytes and projected result bytes
-separate, with a fixed zero for engine requests on these SQL-only leaves. Profile pin Type/Profile IDs use the
-immutable Definitions release byte ceiling and JSON's six-byte escape maximum; copy text fields use the existing
-HTTP and database limits. No result row count reprices a dispatched statement.
-
-Each filtered page plan selects the same one of nine SQL statements used by `pageCopies`. Its route/account,
-optional subject/kind/status predicates and `(created_at, copy_id)` frontier match the existing full-key indexes.
-The maximum page remains 100. Because the page helper clamps its own limit to 100, the maximum list branch retains
-the separate one-row sentinel query; its candidate and output work is charged as its own plan. Inventory options
-use the actual recursive kind/status query and its 65-value limit per dimension. The 65th raw value still makes an
-oversized facet unavailable. Both page observations, each raw option and the sentinel are physical work even when
-their visible result is filtered, suppressed or unchanged.
-
-The same leaf plans bind copy insert/read/update/delete, detail presentation reads, and the retained source/read,
-locked retention read and exact restore CAS. Restore preparation now requires the currently resolved subject to
-remain the retained row's original subject; a redirect cannot restore that exact row under a replacement source.
-The existing revision, deletion ID, expiry, profile pin, account route, owner authorization, command receipt,
-Shelf, History, loan/archive, and retention-worker owners keep their current semantics.
-
-These declarations cover the actual Library SQL leaves and their output projections. The enclosing command and
-observation composition still needs to sum account/action/group admission, original/current Source and profile
-reads, partition/floor/epoch checks, transaction and receipt paths, triggers, Shelf/History effects, and response
-serialization from their current owners. That completion is tracked in
-[the continuation brief](../../../../.temp/continuation/copy-operation-composition.md); this leaf set does not claim
-a complete end-to-end copy operation bound.
-
-# Progress session operations
-
-The existing Progress and Continue descriptors retain their native session commands and response contracts.
-An operation declaration describes work; it supplies neither owner authority nor evidence of execution.
-Native owner admission still precedes receipt lookup. A completed mutation receipt and its current presentation
-are independent: failure to present current source evidence cannot erase or acknowledge a mutation.
-
-## Journal command identity
-
-`patchSessionJournal` retains the principal, command kind, request key, session ID and normalized patch, including
-the expected journal revision. Its receipt input retains the public `admission: null` member. Private import
-admission identity never enters that digest. Consequently changing an import review cannot change the identity
-of an already acknowledged journal command. A different patch with the same key remains a conflict.
-
-Private admission runs inside the fresh mutation transaction after the session lock and owner check. Failure
-rolls back the mutation and creates no successful receipt. Replay returns the original result under current
-owner authorization without reasserting an obsolete import review or overwriting later journal edits. Private
-admission does not grant public command authority.
-
-Decision: retain the public journal digest shape and exclude private admission identity; two causal additions to
-the existing native session suite cover replay after a later clear and rollback followed by retry.
-
-## Operation derivation boundary
-
-Closed session plans must compose preparation, original and current profile reads, owner/partition fences,
-receipt replay, shelf head/activity, mutation, triggers, History and terminal presentation work through the
-existing native ports. Keep logical results, examined rows, points, serialized bytes and engine requests as
-separate axes. SQL-only terms can declare zero engine requests; nested native calls need their own declarations.
-The ordinary session/unit/change limits remain default 20 and maximum 100; owner discovery remains maximum 50.
-Raw sentinels and discarded candidates consume work and retain their original keyset frontier. No declaration
-permits refill, account-history scans, cap increases or a second native admission.
-
-# Shelf rebuild invocation custody
-
-Decision: snapshot the rebuild request before authorization and retain one absolute page deadline through
-preparation and the existing conflict reconciliation. Extend the native journey rather than add a plan-only suite.
-
-`shelf-maintenance-runtime.ts` retains the original owner, kind and request key for both the receipt digest and
-the native body. Reusing a caller's request container during authorization cannot change the requested generation
-kind. Request authorization and command execution share the same absolute deadline. A page captures its locator
-once; its one idempotency-conflict retry reloads the winner's header within the original five-second budget.
-Already advanced pages still reach ordinary Core replay without another source preparation. Current authorization,
-the original Pool, native account/gate/run locks and transaction cleanup remain with their existing owners.
-
-This custody boundary does not supply complete nine-axis rebuild operation plans. Those plans must include released
-source/type preparation, account/action/group checks, command and receipt work, phase SQL and repeated native points,
-validation, publication, bounded old-generation retirement, response serialization and successor/ack controls.
-Page and segment limits bound finite invocations; they do not bound the number of future durable pages. A completed
-phase or count cannot establish completed publication and retirement.
-
 # Library performance contract
-
-Decision: preserve the existing private editor and history journey while landing immutable schema-bounded metadata-journal SQL plans at their current DAO owner. The full create/edit/reopen/HTTP operation composition remains a continuation; the journal plans do not claim parent-command admission or execution evidence.
 
 This leaf owns Collection operation bounds and custody across Library consumers. The detailed SQL derivations and
 operation-specific growth suites remain in the [Library Cost sections](README.md#cost); this contract does not claim
@@ -338,28 +187,6 @@ Source/History and Library, and transfer-control terms before first I/O. It pres
 position, Pool, WorkClient, SDK, registry, deadline and live callback. If any reached term is unavailable, refuse
 before child I/O; never substitute zero or a replacement foreign producer.
 
-## Published snapshot reads and exact retention locators
-
-Decision: bind immutable SQL read declarations to the existing Published Log store and retention discovery,
-counting both public keyset streams before the outer limit; retain native command ownership and exact deletion
-identity. A causal addition to the existing native retention journey covers a stale scheduled episode after Undo.
-
-`published-log-bounds.ts` retains original serialized binds and compiled SQL for point, locked point, first/next
-public page and due discovery reads. Execution uses the caller's original client. The public partial index excludes
-deleted rows. A next page has two independently limited ranges; discarded candidates, the sentinel and repeated
-candidate/final projections count before response filtering. The due partial index excludes non-deletions and
-minimization tombstones; cutoff and the three-column locator bound its range. Empty probes count even when no
-row is returned. Schema widths determine escaped projections, including the 1000-character note, UUIDs, literal
-session states, int32 revision and timestamp text. These SQL leaves have no identity admission, witnesses or Search
-engine calls. Their declarations supply no authority or successful execution evidence.
-
-These read leaves do not yet constitute complete operation plans. Enclosing plans must add account/action/group
-preparation, source/version and currentness reads, command receipts, mutation triggers, History, transaction and
-connection controls, response serialization, retries and DBOS/outbox controls before native admission. Retention
-must price one bounded page/segment, retain the original cutoff and exact deletion locator through continuation,
-and include negative/racing candidates and cleanup. PAGE_BOUND and SEGMENT_BOUND remain 100; neither bounds future
-scheduled invocations. Undo never reads the private session or renews the original deletion's eligibility.
-
 ## Subject Collection pair seek
 
 Decision: bind Subject continuation to its exact BASIC/FULL view and public page limit at the HTTP/service
@@ -376,3 +203,188 @@ This is a leaf, not the complete reverse-discovery operation or a native grant. 
 count, partition/currentness, repeated curator checks, connection controls and FULL disclosure still belong to the
 enclosing immutable operation. Count and pair observations remain independent; no atomic snapshot, refill or
 count recomputation is introduced. Directory/preview composition retains its existing callers and limits.
+## Private physical-copy loans
+
+Decision: retain the existing loan journey and owner, consume immutable local SQL plans through the existing
+command work association, and preserve one absolute preparation deadline; extend the mounted journey suite.
+
+`loan-operation-bounds.ts` owns the literal copy/loan lock, copy locator, unique open-loan probe, generation
+read/advance and loan insert/update declarations. Each plan freezes its positional scalar binds before dispatch
+and uses public nine-axis arithmetic. `loan-commands.ts` executes those same operands on its original client.
+An existing command association consumes each declaration before SQL and retains its dispatched charge on
+failure. Ordinary calls keep their native runner and connection ownership. No plan supplies authorization,
+receipt evidence, an additional allowance or an independent transaction.
+
+Point projections use UUID text and int32 generation widths. Input bytes include the original escaped private
+name and original dates, revision, command time and transaction ID. The open-copy partial unique index proves
+at most one row independently of LIMIT; its point and LIMIT node are both counted. Local write bounds include
+heap and index work: fresh loans reach primary/open-copy/due/owner indexes, extension retains those indexes,
+and return replaces open-copy/due with history. Generation upsert includes its conflicting old tuple and new
+tuple. These tables have no foreign keys, deferred constraints or mutation triggers. Misses, negative probes
+and failed CAS retain their declarations. These SQL leaves construct no identity witness or Search request;
+their ninth axis is explicitly zero when translated into the existing eight-axis command accounting port.
+
+These local leaves are **not complete enclosing operation plans**. Account/action/group admission, original
+and current source/profile evidence, both Person mapping reads and summary/disclosure, copy/loan projections,
+command receipt/replay, partition/floor/epoch, shelf effects, History/outbox and worker controls, transaction
+controls/retries/cleanup and mounted response serialization still need composition at their existing owners.
+Person coalescing does not reduce raw loan/copy projection work. In particular, the current open-page
+`COALESCE(due_on, …)` continuation filter cannot derive examined rows from LIMIT, and joined copy vocabulary
+columns do not have schema width limits. A finite result page alone does not settle either derivation.
+
+The retained limits are open 100/history 50/presentation 100, generation 2147483647 and a generation-bound
+15-minute cursor. Listing captures the original cursor before its first await, reads generation before decoding,
+and rejects changed generations. Due dates remain ascending/nulls last for open loans and return dates descending
+for history, with loan ID breaking ties. Command preparation, including retries, shares the original native
+deadline. Current authorization still precedes receipt replay; a replayed return receipt differs from a fresh
+return against an already returned loan. Copy-before-loan locking, private-name fidelity, exact revision CAS,
+open uniqueness, disposal conflicts and retained history remain with the existing command owner.
+
+## Native Entry operation bounds
+
+Decision: this attempt delivers immutable direct SQL plans for Entry point reads, lists, history pages and reviews;
+the Entry mutation lifecycle composition continues separately. Keep SQL plans on the existing native association and
+preserve authorization, exact receipts, source fences, deadlines and transaction custody.
+
+### Read operations
+
+`entry-operation-bounds.ts` declares the direct Entry SQL work for point reads, lists, state-history pages and
+reviews. `entries.ts` reserves each declaration before its existing snapshot dispatch. Point reads include both
+possible Entry lookups and the legacy profile-migration phase probes. Lists include their actual page branches,
+partition epoch lookup and legacy phase probe. Cursor limits include the sentinel; a cursor can dispatch both Entry
+page branches. The state-history caller validates the public 1–50 limit and adds one sentinel before constructing
+the plan. Its frozen operands are the same operands dispatched by `pageEntryStateChanges` on the authorized snapshot
+client. Review includes the current Entry point and selected transition projection.
+
+### State-history page
+
+History page work can examine all 64 retained transitions, including discarded revisions and other incarnations;
+the requested result limit does not bound those rows. Its direct SQL declaration charges the sentinel and all
+projected rows. States use the existing 64-character vocabulary limit, command kind uses the longest native writer
+name, JSON escaping uses six bytes per character, and timestamp projection reserves 64 characters for the
+PostgreSQL range and timezone representation. The Entry cursor routes now select only the integer partition epoch
+they consume. The pre-profile read gate selects only its checked migration phase, avoiding the unbounded cursor and
+digest columns. No profile-pin JSON is selected by the history page.
+
+The plan's zero identity metadata, witnesses and engine requests apply to these local SQL statements only. It is not
+the complete Entry command journey or a native grant. Mutation preparation/currentness, action/group admission,
+command receipts and retries, transaction controls, history append/prune/coverage, Shelf work, events/outbox,
+rollback and response serialization still need composition at their existing owners. The command runner continues
+to own execution and replay. Read-only history cannot repair an Entry; no-op and exact receipt replay cannot append a
+transition. Retention and the public history/page limits are unchanged.
+
+### Copy SQL leaves
+
+Decision: Commerce keeps the copy journey in its existing command and inventory owners; immutable operation declarations derive complete finite nine-axis costs from actual SQL, serialized binds, schema widths and current ceilings, then bind through existing native roots.
+
+`copy-operation-bounds.ts` binds exact compiled statements to their original operands at the existing EntryStore and
+copy-inventory execution owners. The declaration keeps SQL text, serialized bind bytes and projected result bytes
+separate, with a fixed zero for engine requests on these SQL-only leaves. Profile pin Type/Profile IDs use the
+immutable Definitions release byte ceiling and JSON's six-byte escape maximum; copy text fields use the existing
+HTTP and database limits. No result row count reprices a dispatched statement.
+
+Each filtered page plan selects the same one of nine SQL statements used by `pageCopies`. Its route/account,
+optional subject/kind/status predicates and `(created_at, copy_id)` frontier match the existing full-key indexes.
+The maximum page remains 100. Because the page helper clamps its own limit to 100, the maximum list branch retains
+the separate one-row sentinel query; its candidate and output work is charged as its own plan. Inventory options
+use the actual recursive kind/status query and its 65-value limit per dimension. The 65th raw value still makes an
+oversized facet unavailable. Both page observations, each raw option and the sentinel are physical work even when
+their visible result is filtered, suppressed or unchanged.
+
+The same leaf plans bind copy insert/read/update/delete, detail presentation reads, and the retained source/read,
+locked retention read and exact restore CAS. Restore preparation now requires the currently resolved subject to
+remain the retained row's original subject; a redirect cannot restore that exact row under a replacement source.
+The existing revision, deletion ID, expiry, profile pin, account route, owner authorization, command receipt,
+Shelf, History, loan/archive, and retention-worker owners keep their current semantics.
+
+These declarations cover the actual Library SQL leaves and their output projections. The enclosing command and
+observation composition still needs to sum account/action/group admission, original/current Source and profile
+reads, partition/floor/epoch checks, transaction and receipt paths, triggers, Shelf/History effects, and response
+serialization from their current owners. That completion is tracked in
+[the continuation brief](../../../../.temp/continuation/copy-operation-composition.md); this leaf set does not claim
+a complete end-to-end copy operation bound.
+
+## Progress session operations
+
+The existing Progress and Continue descriptors retain their native session commands and response contracts.
+An operation declaration describes work; it supplies neither owner authority nor evidence of execution.
+Native owner admission still precedes receipt lookup. A completed mutation receipt and its current presentation
+are independent: failure to present current source evidence cannot erase or acknowledge a mutation.
+
+### Journal command identity
+
+`patchSessionJournal` retains the principal, command kind, request key, session ID and normalized patch, including
+the expected journal revision. Its receipt input retains the public `admission: null` member. Private import
+admission identity never enters that digest. Consequently changing an import review cannot change the identity
+of an already acknowledged journal command. A different patch with the same key remains a conflict.
+
+Private admission runs inside the fresh mutation transaction after the session lock and owner check. Failure
+rolls back the mutation and creates no successful receipt. Replay returns the original result under current
+owner authorization without reasserting an obsolete import review or overwriting later journal edits. Private
+admission does not grant public command authority.
+
+Decision: retain the public journal digest shape and exclude private admission identity; two causal additions to
+the existing native session suite cover replay after a later clear and rollback followed by retry.
+
+### Operation derivation boundary
+
+Closed session plans must compose preparation, original and current profile reads, owner/partition fences,
+receipt replay, shelf head/activity, mutation, triggers, History and terminal presentation work through the
+existing native ports. Keep logical results, examined rows, points, serialized bytes and engine requests as
+separate axes. SQL-only terms can declare zero engine requests; nested native calls need their own declarations.
+The ordinary session/unit/change limits remain default 20 and maximum 100; owner discovery remains maximum 50.
+Raw sentinels and discarded candidates consume work and retain their original keyset frontier. No declaration
+permits refill, account-history scans, cap increases or a second native admission.
+
+## Shelf rebuild invocation custody
+
+Decision: snapshot the rebuild request before authorization and retain one absolute page deadline through
+preparation and the existing conflict reconciliation. Extend the native journey rather than add a plan-only suite.
+
+`shelf-maintenance-runtime.ts` retains the original owner, kind and request key for both the receipt digest and
+the native body. Reusing a caller's request container during authorization cannot change the requested generation
+kind. Request authorization and command execution share the same absolute deadline. A page captures its locator
+once; its one idempotency-conflict retry reloads the winner's header within the original five-second budget.
+Already advanced pages still reach ordinary Core replay without another source preparation. Current authorization,
+the original Pool, native account/gate/run locks and transaction cleanup remain with their existing owners.
+
+This custody boundary does not supply complete nine-axis rebuild operation plans. Those plans must include released
+source/type preparation, account/action/group checks, command and receipt work, phase SQL and repeated native points,
+validation, publication, bounded old-generation retirement, response serialization and successor/ack controls.
+Page and segment limits bound finite invocations; they do not bound the number of future durable pages. A completed
+phase or count cannot establish completed publication and retirement.
+
+## Published snapshot reads and exact retention locators
+
+Decision: Keep complete Published Log costs at the existing command, public-read and retention owners; compose
+nine-axis plans from current SQL leaves and schema limits, preserve current authorization, replay and retry behavior,
+and persist the exact retention cutoff and locator through bounded page and segment continuations.
+
+`published-log-bounds.ts` now retains exact compiled SQL and detached serialized binds for point/locked reads,
+first/next public pages, due discovery, and insert/delete/restore/purge mutations. Public-next charges both
+independently limited index streams before outer sorting and limit, including discarded candidates and each repeated
+projection. The page sentinel and all shown row projections are charged. The due SQL leaf charges every positive
+or negative candidate and its indexed EOF slot; enclosing retention bounds still own partition probes. Mutation
+terms use the published-log heap/index shape and the native-source/fact-source trigger chain, including the
+fact-head trigger's own owner-fence update.
+Schema maxima cover note escaping, IDs, state, revisions and timestamp text. The SQL executors bind each immutable
+leaf to the caller's current accounting association through `runLibraryBoundedStep`; nine-axis declarations retain
+`engineRequests`, and the eight-axis translation grants neither authority nor native execution evidence.
+
+The existing `published-logs.ts` owners retain current account authorization before replay, original receipt bodies
+(including receipts predating CAS metadata), session/source/currentness preparation, exact owner locks and mutation
+SQL. Published contents remain independent from their source session. Public point results keep tombstones, lists
+keep partition-epoch cursors and no-refill disclosure filtering, and restore preserves the original deletion
+eligibility without reading private session values. Existing causal HTTP/native/growth suites cover the requested
+public detail/list, replay, Undo and exact expiry cases; the changed HTTP and native journeys add lost-publish-ack
+replay and both sides of the restore deadline.
+
+Complete enclosing command, public-read and retention operation plans still need their shared account/action/group,
+receipt/History/outbox, partition/floor/epoch, transaction/retry/cleanup and repeated Semantic disclosure terms bound
+at their existing operation owners. The existing command runner uses deadline-bounded contention retries; the DBOS
+page and continuation steps keep their fixed retry count. Retention keeps PAGE_BOUND=100 and SEGMENT_BOUND=100,
+retains the same cutoff and `{partition, after: {restoreUntil, route, logId}}` across its durable next locator, and
+keeps `{deletionId, revision, restoreUntil}` identical across exact locks and CAS. A segment can enqueue another
+segment, and later schedule invocations remain unbounded. Accounts keep their payload until the account erasure
+boundary. This remaining operation-level composition and its native receiving are in
+`.temp/continuation/published-log-operation-composition.md`; source declarations are not native evidence.

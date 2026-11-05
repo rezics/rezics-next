@@ -16,8 +16,12 @@ import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { requireRoute, workStepDeadline } from './command-support.ts';
 import { lockPublishedLog } from './published-log-store.ts';
-import { executePublishedLogDue, publishedLogDuePlan } from './published-log-bounds.ts';
-import purge from './published-log-purge.sql';
+import {
+  executePublishedLogDue,
+  executePublishedLogPurge,
+  publishedLogDuePlan,
+  publishedLogPurgePlan,
+} from './published-log-bounds.ts';
 
 export const PUBLISHED_LOG_RETENTION_SWEEP_WORKFLOW = 'library.publishedLogRetentionSweep';
 export const PUBLISHED_LOG_RETENTION_SCHEDULE = 'library.publishedLogRetention.every-10-minutes';
@@ -85,14 +89,17 @@ export async function purgeExpiredPublishedLog(
     },
     async (tx, command) => {
       if (!matches) return noEffect({ purged: false });
-      const result = await purge.run(tx, {
-        route: key.route,
-        log_id: key.logId,
-        deletion_id: key.deletionId,
-        revision: key.revision,
-        restore_until: key.restoreUntil,
-        time: authoritativeTimeValue(command.time),
-      });
+      const result = await executePublishedLogPurge(
+        tx,
+        publishedLogPurgePlan({
+          route: key.route,
+          log_id: key.logId,
+          deletion_id: key.deletionId,
+          revision: key.revision,
+          restore_until: key.restoreUntil,
+          time: authoritativeTimeValue(command.time),
+        }),
+      );
       if (!result?.purged) throw new Error('Locked published log deletion failed its exact native CAS');
       return {
         value: { purged: true },
