@@ -81,7 +81,10 @@ async function waitForText(host: Document, text: string) {
 }
 
 function transition(type: 'pagehide' | 'pageshow') {
-  window.dispatchEvent(new dom.PageTransitionEvent(type, { persisted: true }) as unknown as Event);
+  // Happy DOM aliases PageTransitionEvent to Event and drops persisted.
+  const event = new dom.Event(type);
+  Object.defineProperty(event, 'persisted', { value: true });
+  window.dispatchEvent(event as unknown as Event);
 }
 
 // Hold the installed invalidation's completion separately from its real read.
@@ -176,13 +179,13 @@ test('cached return retires the pending read; a late completion cannot reset or 
     enabled();
     await act(async () => transition('pageshow'));
     expect(document.documentElement.textContent).toContain(m.auth_route_failure_interrupted());
-    expect(document.activeElement).toBe(document.querySelector('h1'));
+    expect(document.activeElement === document.querySelector('h1')).toBe(true);
     expect(f.completions).toHaveLength(1);
     const exit = document.querySelector<HTMLAnchorElement>('a[href="/security"]')!;
     exit.focus();
     f.repair();
     await act(async () => f.completions[0]!.resolve());
-    expect(document.activeElement).toBe(exit);
+    expect(document.activeElement === exit).toBe(true);
     expect(document.documentElement.textContent).not.toContain('Current page');
     enabled();
     await act(async () => retry());
@@ -191,7 +194,7 @@ test('cached return retires the pending read; a late completion cannot reset or 
     await act(async () => waitForText(page.host, 'Current page'));
     expect(document.querySelectorAll('h1')).toHaveLength(1);
     expect(document.querySelector('.auth-route-failure')).toBeNull();
-    expect(document.activeElement).toBe(document.querySelector('input'));
+    expect(document.activeElement === document.querySelector('input')).toBe(true);
     expect(f.reads()).toBe(3);
     expect(f.commands()).toBe(0);
   } finally {
