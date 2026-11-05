@@ -152,6 +152,9 @@ verification state alone do not establish the final public-page outcome.
 
 Decision: Web admits only explicit native public-view flags and sends bodyless follow commands with structured-field
 idempotency keys; exact edge identities bind acknowledgements, and fresh reads supply persisted relationship state.
+Private profile-page context hydrates the current handle from immutable account attribution and confirms that
+identity in the full profile. Its incoming-count destination requires a successful native target-count read;
+profile-edit advice on a software operator never substitutes for count authority on the actual account.
 
 ### Managed-account detail presentation
 

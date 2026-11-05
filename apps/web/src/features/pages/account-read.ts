@@ -1,4 +1,5 @@
 import type { CoverSummary } from '@rezics/ui/cover';
+import type { KernelClient } from '@rezics/client';
 import { isRecord } from './shared';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -15,6 +16,7 @@ export type AccountPageContext =
       viewerState: 'signed-in' | 'signed-out';
       actions: { action: string; operations: string[] }[];
       securityHref: string | null;
+      followCountsTarget: { targetType: 'subject'; targetId: string } | null;
     }
   | { state: 'unavailable' };
 
@@ -36,7 +38,69 @@ export function accountPageContextFromReads(
     viewerState: viewer ? 'signed-in' : 'signed-out',
     actions: viewer?.state === 'ready' ? viewer.actions : [],
     securityHref: viewer?.state === 'ready' ? viewer.securityHref : null,
+    followCountsTarget: null,
   };
+}
+
+/** Bind a full profile and private destinations to the immutable displayed Account, never its old spelling. */
+export async function loadAccountPageContext(
+  client: KernelClient,
+  id: string,
+  authorization: string | null,
+  securityHref: string | null,
+): Promise<AccountPageContext> {
+  const options = { fetch: { cache: 'no-store' as const, redirect: 'manual' as const } };
+  const profileRead = async () => {
+    const identities = await client.accounts.get({ ...options, query: { ids: id } });
+    if (identities.error || identities.status !== 200) return null;
+    const identity = accountOf(identities.data);
+    if (identity?.id !== id || !identity.handle) return null;
+    const profile = await client.accounts.get({ ...options, query: { handle: identity.handle } });
+    return profile.status === 200 && !profile.error ? profile.data : null;
+  };
+  const [publicBody, advice] = await Promise.all([
+    profileRead(),
+    authorization
+      ? client.viewerActions.post(
+          { resources: [{ type: 'access.account', id }] },
+          { ...options, headers: { authorization } },
+        )
+      : null,
+  ]);
+  let viewer: AccountViewerActions | undefined;
+  if (advice) {
+    if (advice.error || advice.status !== 200) return { state: 'unavailable' };
+    const resource = advice.data?.resources.find((item) => item.type === 'access.account' && item.id === id);
+    if (!resource || !('viewerActions' in resource)) return { state: 'unavailable' };
+    viewer = { state: 'ready', actions: resource.viewerActions, securityHref };
+  }
+  const context = accountPageContextFromReads(id, publicBody, viewer);
+  if (context.state !== 'ready' || !authorization || !context.profile.subject) return context;
+  const target = { targetType: 'subject' as const, targetId: context.profile.subject.id };
+  // Count authority deliberately differs from profile-edit authority for operated actors.
+  // The native count read checks the actual Account, its self exception, scopes and gates.
+  const count = await client
+    .followCounts({ targetType: target.targetType })({ targetId: target.targetId })
+    .get({
+      ...options,
+      headers: { authorization },
+    });
+  if (
+    !count.error &&
+    count.status === 200 &&
+    count.data?.targetType === target.targetType &&
+    count.data.targetId === target.targetId &&
+    Number.isSafeInteger(count.data.followerCount) &&
+    count.data.followerCount >= 0
+  )
+    return { ...context, followCountsTarget: target };
+  return context;
+}
+
+export function accountFollowCountsHref(context: AccountPageContext | undefined, locale: string): string | null {
+  if (context?.state !== 'ready' || !context.followCountsTarget) return null;
+  const query = new URLSearchParams(context.followCountsTarget);
+  return `/${encodeURIComponent(locale)}/library/follow-counts?${query}`;
 }
 
 /** Personal BFF read: the browser supplies only the displayed Account key. */
@@ -58,23 +122,13 @@ export const readAccountViewerActions = createServerFn({ method: 'GET' })
     const { securityHrefFromIssuer } = await import('../../settings/account-safety-links');
     try {
       const request = getRequest();
-      await prepareSession(request, sessionEnv);
-      const publicResult = await kernelClient().accounts.get({ query: { ids: data } });
-      if (publicResult.error || publicResult.status !== 200 || !publicResult.data) return { state: 'unavailable' };
-      const authorization = viewerCredential(request);
-      if (!authorization) return accountPageContextFromReads(data, publicResult.data, undefined);
-      const result = await kernelClient().viewerActions.post(
-        { resources: [{ type: 'access.account', id: data }] },
-        { headers: { authorization } },
+      const stale = await prepareSession(request, sessionEnv);
+      return await loadAccountPageContext(
+        kernelClient(),
+        data,
+        stale ? null : (viewerCredential(request) ?? null),
+        securityHrefFromIssuer(sessionEnv.AUTH_ISSUER),
       );
-      if (result.error || result.status !== 200) return { state: 'unavailable' };
-      const resource = result.data?.resources.find((item) => item.type === 'access.account' && item.id === data);
-      if (!resource || !('viewerActions' in resource)) return { state: 'unavailable' };
-      return accountPageContextFromReads(data, publicResult.data, {
-        state: 'ready',
-        actions: resource.viewerActions,
-        securityHref: securityHrefFromIssuer(sessionEnv.AUTH_ISSUER),
-      });
     } catch {
       return { state: 'unavailable' };
     }
