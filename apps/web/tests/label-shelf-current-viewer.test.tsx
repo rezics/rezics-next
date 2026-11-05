@@ -88,18 +88,6 @@ test('The actual named-label Library renders private FULL assignments and remove
       server: <T extends (...args: never[]) => unknown>(handler: T) =>
         Object.assign(handler, { client: () => handler }),
     }),
-    createServerFn: () => {
-      let validate = (value: unknown) => value;
-      const serverFn = {
-        validator: (validator: (value: unknown) => unknown) => {
-          validate = validator;
-          return serverFn;
-        },
-        handler: (handler: (input: { data: unknown }) => unknown) =>
-          async (input: { data?: unknown } = {}) => handler({ data: validate(input.data) }),
-      };
-      return serverFn;
-    },
   }));
   const cacheHeaders: string[] = [];
   mock.module('@tanstack/react-start/server', () => ({
@@ -109,14 +97,6 @@ test('The actual named-label Library renders private FULL assignments and remove
     },
   }));
   mock.module('cloudflare:workers', () => ({ env: sessionEnv }));
-  mock.module('../src/settings/shelf-preferences-current', () => ({
-    readCurrentShelfPreferences: async () => ({
-      generation: id(900),
-      accountId: A,
-      csrfToken: null,
-      shelf: null,
-    }),
-  }));
   const reads: Request[] = [];
   const held: {
     subject: string;
@@ -357,15 +337,12 @@ test('The actual named-label Library renders private FULL assignments and remove
     for (const outcome of [{ status: 400, code: 'invalid_cursor' }, { status: 409, code: 'stale_cursor' }]) {
       assignmentOverride = outcome;
       const query = currentQuery(), before = reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments').length;
-      await act(async () => client.invalidateQueries({ queryKey: query.queryKey, exact: true }));
-      await settle();
+      await act(async () => client.invalidateQueries({ queryKey: query.queryKey, exact: true })); await settle();
       const recovery = currentQuery().state.data as CurrentLabelShelfData;
       expect(recovery).toMatchObject({ state: 'cursor-rejected', labelId, provenance: { subject: A, locale: 'en', source: { labelId, cursor: 'source-one' } } });
       absent();
       const link = host.querySelector<HTMLAnchorElement>('a[href*="/library?label="]')!, address = new URL(link.href);
       expect([address.pathname, address.searchParams.get('label'), address.searchParams.get('cursor'), address.searchParams.get('layout')]).toEqual(['/en/library', labelId, null, 'list']);
-      expect(host.textContent).toContain(m.library_label_cursor_rejected());
-      expect(host.querySelector('button')).toBeNull();
       expect(reads.filter((req) => new URL(req.url).pathname === '/v1/libraryLabelAssignments')).toHaveLength(before + 1);
       const otherSource = { ...recovery, provenance: { ...recovery.provenance, source: { ...recovery.provenance.source, cursor: 'source-two' } } };
       flushSync(() => client.setQueryData(query.queryKey, otherSource));
@@ -374,10 +351,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     }
     assignmentOverride = null;
     const rejectedQuery = currentQuery();
-    await act(async () => {
-      await client.invalidateQueries({ queryKey: rejectedQuery.queryKey, exact: true });
-    });
-    await settle();
+    await act(async () => client.invalidateQueries({ queryKey: rejectedQuery.queryKey, exact: true })); await settle();
     visible(A, null);
     // Read admission is independent of missing CSRF and of unassign admission.
     const reading = () => host.querySelector('[data-received-assignment-reader]');

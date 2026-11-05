@@ -190,22 +190,10 @@ test('rejected native Label cursors offer a deliberate same-Label first page wit
       const page = await loadLabelShelfPage(client() as never, request(), env, input);
       expect(page).toEqual({ state: 'cursor-rejected', labelId });
       const currentPage = await loadCurrentLabelShelfPage(client() as never, request(), env, input);
-      expect(currentPage).toMatchObject({
-        state: 'cursor-rejected',
-        labelId,
-        provenance: {
-          subject: '0192f3a0-6c1e-7b2a-9d4e-000000000111',
-          locale: 'en',
-          source: { labelId, cursor: 'opaque-page-token' },
-        },
-      });
+      expect(currentPage).toMatchObject({ state: 'cursor-rejected', labelId, provenance: { subject: '0192f3a0-6c1e-7b2a-9d4e-000000000111', locale: 'en', source: { labelId, cursor: 'opaque-page-token' } } });
       expect(currentPage).not.toHaveProperty('entries');
-      const html = renderToStaticMarkup(createElement(LabelShelfPage, { page, locale: 'ja', display: {
-        layout: 'table', size: 'l', columns: 'title', layoutExplicit: true, sizeExplicit: true, columnsExplicit: true,
-      } }));
-      expect(html).toContain('This Label continuation could not be loaded.');
-      expect(html).toContain(`/ja/library?label=${labelId}&amp;layout=table&amp;size=l&amp;columns=title`);
-      expect(html).not.toMatch(/opaque-page-token|Reading list|<form/);
+      const html = renderToStaticMarkup(createElement(LabelShelfPage, { page, locale: 'ja', display: { layout: 'table', size: 'l', columns: 'title', layoutExplicit: true, sizeExplicit: true, columnsExplicit: true } }));
+      expect(html).toContain('This Label continuation could not be loaded.'); expect(html).toContain(`/ja/library?label=${labelId}&amp;layout=table&amp;size=l&amp;columns=title`); expect(html).not.toMatch(/opaque-page-token|Reading list|<form/);
       expect(requests.filter((entry) => entry.path === '/v1/libraryLabelAssignments')).toHaveLength(2);
     }
     for (const [status, code, cursor] of [[409, 'invalid_cursor', true], [400, 'stale_cursor', true], [400, 'invalid_cursor', false]] as const) {
