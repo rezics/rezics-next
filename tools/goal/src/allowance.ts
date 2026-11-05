@@ -185,20 +185,15 @@ export function choosePool(
   return selected;
 }
 
-/**
- * The routed profile's pool, or the first fallback profile that has one when the routed CLI has no quota. With a pacing
- * measure, a new task instead goes to the allowed profile whose allowance most needs spending before it resets; a
- * retry keeps its engine while that has quota. A pool over its burn ceiling is skipped; with no allowed fallback the
- * task waits. Running attempts are not stopped.
- */
-export function choosePoolWithFallback(
+/** The routed profile's pool, or the first fallback that has one; `undefined` when every candidate is refused. */
+export function findAllowedPool(
   profile: Profile,
   fallbacks: readonly Profile[],
   pools: readonly Pool[],
   readings: readonly PoolReading[],
   options: PoolSelectionOptions = {},
   urgency?: (pool: Pool) => number | undefined,
-): { profile: Profile; pool: Pool } {
+): { profile: Profile; pool: Pool } | undefined {
   const now = options.now ?? Date.now();
   const spanMs = options.spanMs ?? defaultPolicy.pacing.burnSpanMs;
   const selection = { ...options, now, spanMs };
@@ -219,5 +214,48 @@ export function choosePoolWithFallback(
     const pool = selectPool(candidate, pools, indexedReadings, fallbackOptions, now, spanMs, allowanceByPool);
     if (pool) return { profile: candidate, pool };
   }
-  throw noAllowedPool(profile);
+  return undefined;
+}
+
+/**
+ * The routed profile's pool, or the first fallback profile that has one when the routed CLI has no quota. With a pacing
+ * measure, a new task instead goes to the allowed profile whose allowance most needs spending before it resets; a
+ * retry keeps its engine while that has quota. A pool over its burn ceiling is skipped; with no allowed fallback the
+ * task waits. Running attempts are not stopped.
+ */
+export function choosePoolWithFallback(
+  profile: Profile,
+  fallbacks: readonly Profile[],
+  pools: readonly Pool[],
+  readings: readonly PoolReading[],
+  options: PoolSelectionOptions = {},
+  urgency?: (pool: Pool) => number | undefined,
+): { profile: Profile; pool: Pool } {
+  const selected = findAllowedPool(profile, fallbacks, pools, readings, options, urgency);
+  if (!selected) throw noAllowedPool(profile);
+  return selected;
+}
+
+/** The first configured pool the routed profile would use; ready tasks wait on this pool when none are allowed. */
+export function waitingPoolName(profile: Profile, pools: readonly Pool[]): string | undefined {
+  return [...pools]
+    .filter((pool) => pool.cli === profile.cli && pool.classes.includes(profile.poolClass))
+    .sort((a, b) => a.name.localeCompare(b.name))[0]?.name;
+}
+
+/** Ready tasks whose route has no allowed pool, counted on the pool their first profile would use. */
+export function countAllowanceWaiting(
+  items: readonly { first: Profile; fallbacks: readonly Profile[] }[],
+  pools: readonly Pool[],
+  readings: readonly PoolReading[],
+  options: PoolSelectionOptions = {},
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    if (findAllowedPool(item.first, item.fallbacks, pools, readings, options)) continue;
+    const name = waitingPoolName(item.first, pools);
+    if (!name) continue;
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+  return counts;
 }

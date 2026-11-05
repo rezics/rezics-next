@@ -278,3 +278,19 @@ export function alertUnspentAllowances(
   retainPoolReadings(stateDirectory, [...observed.values()], now, policy.burnSpanMs);
   return count;
 }
+
+/**
+ * Remaining new starts this sweep on a pool whose measured burn is within `nearCeilingPercent` of its ceiling.
+ * `undefined` means the rate is not in that band, so the sweep does not add a start limit.
+ */
+export function nearCeilingSweepAdmissions(
+  burnPerHour: number,
+  maxBurnPerHour: number,
+  started = 0,
+  policy: { nearCeilingPercent: number; nearCeilingStarts: number } = defaultPolicy.pacing,
+): number | undefined {
+  if (burnPerHour > maxBurnPerHour) return 0;
+  const floor = maxBurnPerHour * (1 - policy.nearCeilingPercent / 100);
+  if (burnPerHour < floor) return undefined;
+  return Math.max(0, policy.nearCeilingStarts - started);
+}

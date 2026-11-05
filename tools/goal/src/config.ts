@@ -42,6 +42,7 @@ import { SharedInboxQueries } from './inbox-shared.ts';
 import { deliverDueReminders } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { watch, sshProbe } from './watchdog.ts';
+import { readRiskOwnership } from './briefs.ts';
 import { readRouting } from './routing.ts';
 import { MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote } from './promotion.ts';
@@ -435,6 +436,11 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           tasks.queueBacklogContinuation(task.id, goal, continuation.expectedAttempt, briefFile, actor);
         },
         cancel: (taskId) => tasks.cancel(taskId),
+        routing: {
+          table: readRouting(settings.routingFile, settings.policy?.routing),
+          ownership: readRiskOwnership(settings.riskAreasFile, settings.policy?.brief),
+          pools: settings.pools,
+        },
       }),
     promote: () => promoteNow(),
     verify: () =>

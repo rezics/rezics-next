@@ -35,13 +35,13 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   const prompt = workerPrompt(promptTask('web'), undefined, undefined, [], '/repo/main');
   expect(prompt).toContain('Check premises against your base first.');
   expect(prompt).toContain('Write missing acceptance tests the contract names or implies');
-  expect(prompt).toContain('Decide ambiguity and product choices reversibly per owner docs');
+  expect(prompt).toContain('Decide ambiguity and product choices reversibly, following the owner documents');
   expect(prompt).toContain(
     'Record this choice in one summary line and the owner doc, send `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.',
   );
   expect(prompt).toContain('Code another Goal has not delivered is not a blocker');
   expect(prompt).toContain(
-    'When two requirements conflict, take the reading most consistent with the owner documents and the delivered code',
+    'When two requirements conflict, follow the owner documents and the delivered code',
   );
   expect(prompt).toContain('A blocker is only a conflict where every choice breaks an owner-document rule');
   expect(prompt).not.toContain('receipt');
@@ -49,7 +49,7 @@ test('a dev product worker verifies premises, decides and informs its manager, a
   expect(prompt).toContain('Large surveys are `spec-conflict` blockers starting "Research needed:"');
   expect(prompt).toContain('.temp/continuation/<short-name>.md');
   expect(prompt).toContain('goal web, manager web');
-  expect(prompt).toContain('open only linked workflow, docs/development and architecture/scope sections');
+  expect(prompt).toContain('The brief and the documents it links are your orientation');
   expect(prompt).toContain('Summary at most 120 words');
   expect(prompt).toContain('Blocker detail at most 80 words');
   expect(prompt).not.toContain('goal status');

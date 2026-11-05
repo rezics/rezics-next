@@ -79,6 +79,7 @@ export function readControlPolicy(value: unknown = {}): ControlPolicy {
   for (const [label, percent] of [
     ['manager.continuationBudgetPercent', policy.manager.continuationBudgetPercent],
     ['pacing.alertUnusedPercent', policy.pacing.alertUnusedPercent],
+    ['pacing.nearCeilingPercent', policy.pacing.nearCeilingPercent],
   ] as const)
     if (percent > 100) throw new Error(`invalid policy.${label}`);
   if (policy.inbox.defaultPageSize > policy.inbox.maxPageSize)
