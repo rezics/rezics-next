@@ -45,3 +45,15 @@ until both are checked. MAL privacy tokens `1`/`true`/`private` are private; `0`
 Bounds follow the native page `limits` and [personal MAL import](../../../docs/library-import-mal.md): 2 MiB XML,
 4 MiB JSON wire, 500 rows, depth 16, 20-row pages and apply batches, 64 fields, three retained uploads, seven-day
 lifetime. Native provider catalogue ingestion remains Imports-owned.
+
+## Retained tag adoption
+
+The existing review accepts optional `labels` with exact native source indices and owned ID/revision or proposed
+name targets. Web consumes `tagEvidence`, never tokenizes rendered tags, and shows native selection states before
+confirmation. Apply includes `tags` for an explicitly reviewed selection and preserves omission for status-only
+work. The result shows native per-value outcomes, assignment identities and remaining source indices. A separate
+exact canonical Subject assignment read reports current facts after acknowledgement and does not settle an
+uncertain dispatch. Encrypted original sender custody is captured before apply; native receipts own replay.
+Native limits, reservations, expiry, authorization and cancellation remain authoritative; see the
+[tag adoption owner](../../../docs/library-import-mal-labels.md). The generated mounted snapshot's missing label
+operands remain Content's serial-publication continuation; unavailable snapshots are not successful acceptance.

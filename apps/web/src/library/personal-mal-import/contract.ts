@@ -1,3 +1,10 @@
+import type {
+  MalTagEvidence,
+  MalLabelSelection,
+  MalLabelReview,
+  MalLabelOutcome,
+} from '../../../../../packages/client/src/kernel/library/list-import-mal-tags';
+export type { MalTagEvidence, MalLabelSelection, MalLabelReview, MalLabelOutcome };
 import type { PersonalEntrySourceAdmission } from '@rezics/client';
 import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
@@ -22,6 +29,7 @@ export type MalMatch = 'matched' | 'already-matched' | 'unmatched' | 'unavailabl
 export type MalOutcomeStatus = 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
 
 export type MalReview = {
+  labels?: MalLabelReview;
   version: string;
   target: string | null;
   skip: boolean;
@@ -35,6 +43,8 @@ export type MalReview = {
 };
 
 export type MalOutcome = {
+  labels?: MalLabelOutcome[];
+  remainingLabels?: number[];
   row: number;
   status: MalOutcomeStatus;
   applied: string[];
@@ -54,6 +64,7 @@ export type MalPreviewRow = {
   dates: Record<string, MalValue>;
   notes: MalValue;
   tags: MalValue;
+  tagEvidence?: MalTagEvidence;
   repeats: MalValue;
   privacy: MalValue;
   timestamps: Record<string, MalValue>;
@@ -102,13 +113,19 @@ export type MalApplyPage = {
   stopped: boolean;
 };
 
-export type MalReviewInput = { row: number; target: string | null; skip: boolean; replace: boolean };
+export type MalReviewInput = {
+  row: number;
+  target: string | null;
+  skip: boolean;
+  replace: boolean;
+  labels?: MalLabelSelection[];
+};
 
 export type MalCommand =
   | { kind: 'preview'; key: string; xml: string }
   | { kind: 'page'; id: string; after: number }
   | { kind: 'review'; key: string; id: string; input: MalReviewInput }
-  | { kind: 'apply'; id: string; body: MalApplyBody }
+  | { kind: 'apply'; id: string; body: MalApplyBody; custody?: { sender: string; csrf: string; credential: string } }
   | {
       kind: 'admit-source';
       key: string;
@@ -140,7 +157,12 @@ export type MalApplyResult = { kind: 'applied'; result: MalApplyPage } | MalFail
 export type MalMutateResult = { kind: 'done'; id: string } | MalFailure | MalUnknown;
 export type MalAdmitResult = { kind: 'admitted' } | { kind: 'conflict' } | MalFailure | MalUnknown;
 
+export type MalAssignment = { id: string; labelId: string; subjectId: string; revision: number };
 export type MalImportPort = {
+  captureApply?(
+    command: Extract<MalCommand, { kind: 'apply' }>,
+  ): Promise<Extract<MalCommand, { kind: 'apply' }> | MalFailure>;
+  assignments?(subjectId: string): Promise<{ kind: 'assignments'; assignments: MalAssignment[] } | MalFailure>;
   preview(command: Extract<MalCommand, { kind: 'preview' }>): Promise<MalPreviewResult>;
   page(command: Extract<MalCommand, { kind: 'page' }>): Promise<MalPageResult>;
   review(command: Extract<MalCommand, { kind: 'review' }>): Promise<MalReviewResult>;

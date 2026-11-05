@@ -11,6 +11,7 @@ import {
   malScoreLabel,
   malValueLabel,
 } from './meaning';
+import { MalLabelsReview } from './labels';
 import { MalTargetSearch } from './target';
 
 export type RowDraft = MalReviewInput & { fields: string[] };
@@ -18,6 +19,9 @@ export type RowDraft = MalReviewInput & { fields: string[] };
 export function draftFromRow(row: MalPreviewRow): RowDraft {
   const review = row.review;
   return {
+    ...(review?.labels
+      ? { labels: review.labels.selections.flatMap((s) => (s.target ? [{ value: s.value, target: s.target }] : [])) }
+      : {}),
     row: row.index,
     target: review?.target ?? row.target,
     skip: review?.skip ?? false,
@@ -134,6 +138,12 @@ export function MalRowReview({
           onToggle={(on) => setDraft({ ...draft, fields: on ? ['status'] : [] })}
         />
       ) : null}
+      <MalLabelsReview
+        row={row}
+        disabled={busy || draft.skip}
+        labels={draft.labels}
+        onChange={(labels) => setDraft({ ...draft, labels })}
+      />
       <MalAction type="button" disabled={busy} onClick={() => onSave(draft)}>
         {m.library_mal_save_review()}
       </MalAction>

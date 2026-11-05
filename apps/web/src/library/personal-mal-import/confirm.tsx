@@ -3,6 +3,7 @@ import { ImportSourceChecks, ImportSourceEvidence } from '../rich-private-entry/
 import type { MalPreviewRow } from './contract';
 import { MalAction } from './controls';
 import { admittedFields, malKindLabel, malMatchLabel } from './meaning';
+import { MalReviewedLabels } from './labels';
 import { malSourcePreview } from './source';
 
 export function MalConfirmPage({
@@ -45,6 +46,8 @@ export function MalConfirmPage({
                 })}
               </p>
               {review.target ? <p className="text-sm [overflow-wrap:anywhere]">{review.target}</p> : null}
+              <p className="break-all">{review.version}</p>
+              <MalReviewedLabels review={review.labels} />
               <ImportSourceEvidence preview={row.sourcePreview ?? malSourcePreview(row)} />
             </li>
           );
