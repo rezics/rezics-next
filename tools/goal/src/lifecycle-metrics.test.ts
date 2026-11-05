@@ -244,9 +244,7 @@ test('pending queue waits stay identical as settled event history grows', () => 
   const at = (offsetMs: number) => stamp(now, offsetMs);
   insertTask(db, 'pending', 1, 'running');
 
-  const insertEvent = db.query(
-    'INSERT INTO flow_events(task_id, attempt, stage, action, at) VALUES (?, ?, ?, ?, ?)',
-  );
+  const insertEvent = db.query('INSERT INTO flow_events(task_id, attempt, stage, action, at) VALUES (?, ?, ?, ?, ?)');
   // Insertion order differs from event time; the latest transition is the five-minute-old request.
   insertEvent.run('pending', 1, 'check', 'requested', at(-5 * 60_000));
   insertEvent.run('pending', 1, 'check', 'acquired', at(-15 * 60_000));
