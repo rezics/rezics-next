@@ -24,6 +24,7 @@ import { discoveryFailure, parseDiscoveryPage, type DiscoveryState } from '../sr
 const work = '018f0000-0000-7000-8000-00a000000001';
 const secondWork = '018f0000-0000-7000-8000-00a000000002';
 const role = '018f0000-0000-7000-8000-00a000000003';
+const person = '018f0000-0000-7000-8000-00a000000005';
 
 test('the character and person journey preserves applied URL state and builds same-statement inverse filters', () => {
   const parsed = parseCharacterPersonSearch(
@@ -238,11 +239,11 @@ test('a released work and labelled role become exact operands and a current type
     ],
   });
   const hit = {
-    key: { owner: 'semantic', kind: 'schema:Person', route: 160, id: role },
+    key: { owner: 'semantic', kind: 'schema:Person', route: 160, id: person },
     summary: {
       kind: 'subject',
       value: {
-        id: role,
+        id: person,
         type: 'schema:Person',
         types: ['schema:Person'],
         label: { value: '声優', language: 'ja' },
@@ -263,8 +264,12 @@ test('a released work and labelled role become exact operands and a current type
     createElement(DiscoveryResults, { locale: 'ja', state: { status: 'ready', page } }),
   );
   expect(html).toContain('声優');
-  expect(html).toContain(role);
+  expect(html).toContain(person);
   expect(html).toContain('href=');
+  const matchedName = 'Matched source name';
+  const nameSearch = parseCharacterPersonSearch({ mode: 'people', name: matchedName }, 'ja');
+  expect(characterPersonRequest(nameSearch.search).text).toBe(matchedName);
+  expect(html).not.toContain(matchedName);
   expect(editCharacterPersonSelection(selection, { kind: 'remove-work', index: 0 })).toEqual({ works: [], role: '' });
   expect(editCharacterPersonSelection(selection, { kind: 'work', id: work }).role).toBe('');
 });
