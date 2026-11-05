@@ -126,7 +126,6 @@ export function useDiscoveryPersonalResults(input: {
   if (!episodeRef.current || episodeRef.current.signature !== signature || episodeRef.current.source !== input.source) {
     if (episodeRef.current) {
       pendingFocus.current = null;
-      episodeRef.current.abort.abort();
       episodeRef.current.active = false;
       episodeRef.current.retired = true;
     }

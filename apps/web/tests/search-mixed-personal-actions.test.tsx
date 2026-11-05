@@ -2,13 +2,10 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-
 import type { DiscoveryState } from '../src/search/discovery';
 import type { DiscoveryPersonalObservation } from '../src/search/discovery-personal-state';
 import type { DiscoveryEntryCapability } from '../src/search/discovery-personal-actions';
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-
 import type { DiscoveryBoundPage } from '../src/search/discovery-personal-server';
 
 // Bun supplies the runtime binding; native transport assertions below use explicit ports.
@@ -88,7 +85,7 @@ test('private page final admission is terminal, bounded and retains ordinary pub
     prepareCapabilities: async () => () => null,
     read: async () => {
       reads++;
-      return;
+      return empty;
     },
   };
   expect(await readBoundDiscoveryPage(input, ports)).toEqual({ state: empty, capabilities: null });
@@ -245,10 +242,12 @@ const capability: DiscoveryEntryCapability = {
 };
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 function fixture(registry = createDiscoveryCommandRegistry()) {
   const observation: DiscoveryPersonalObservation = {
@@ -784,9 +783,7 @@ test.each(['restart', 'throw', 'unavailable', 'empty', 'denied'] as const)(
           : { state: { status: outcome === 'denied' ? 'denied' : 'restart' }, capabilities: null };
       await act(async () => refresh.resolve(settlement));
       expect(window.document.activeElement).toBe(
-        outcome === 'empty' || outcome === 'denied'
-          ? host.querySelector('section')
-          : host.querySelector('[data-discovery-restart]'),
+        outcome === 'empty' ? host.querySelector('section') : host.querySelector('[data-discovery-restart]'),
       );
       expect(window.scrollY).toBe(210);
       expect(window.location.search).toBe('?q=title&sort=name&kind=book');
@@ -810,7 +807,10 @@ test.each(['restart', 'throw', 'unavailable', 'empty', 'denied'] as const)(
         client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null }),
       );
       expect(signals[beforeCancel]!.aborted).toBe(true);
-      await act(async () => refresh.resolve(bound));
+      await act(async () => {
+        if (outcome === 'throw') refresh.reject(new TypeError('retired aggregate failure'));
+        else refresh.resolve(bound);
+      });
       expect(host.querySelectorAll('select')).toHaveLength(0);
       expect(window.document.activeElement).not.toBe(cancelling);
       expect(window.scrollY).toBe(210);
