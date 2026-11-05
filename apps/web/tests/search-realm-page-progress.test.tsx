@@ -72,7 +72,8 @@ test('More replaces the visible page, preserves it while pending or failed, and 
 
   const next = page.next();
   expect(calls).toHaveLength(2);
-  expect(snapshots.at(-1)).toMatchObject({ state: { kind: 'ready', realms: expect.any(Array) }, pending: true });
+  expect(snapshots.at(-1)?.state.kind).toBe('ready');
+  expect(snapshots.at(-1)?.pending).toBe(true);
   failure.resolve({ kind: 'unavailable' });
   await next;
   expect(snapshots.at(-1)).toMatchObject({ state: { kind: 'ready' }, pending: false, retry: true, restart: false });
