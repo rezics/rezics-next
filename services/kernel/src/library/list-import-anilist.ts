@@ -49,7 +49,7 @@ import {
   STANDARD_QUESTION_ID,
   type RatingQuestion,
   type VoteReviewGuard,
-  type Vote,
+  type VoteReviewCurrentVote,
   VoteReviewStaleError,
   VoteReviewUnavailableError,
 } from '../rating/votes.ts';
@@ -144,7 +144,7 @@ export type AniListScoreReview = {
     guard?: VoteReviewGuard;
     question: AniListNativeQuestion;
     target: { subjectId: string; identityEpoch: string; matchFingerprint: string };
-    currentVote: { status: 'current'; vote: Vote | null } | { status: 'unavailable'; reason: string };
+    currentVote: { status: 'current'; vote: VoteReviewCurrentVote } | { status: 'unavailable'; reason: string };
     commandKey: string;
     consentKey: string;
     consented: boolean;
@@ -1250,8 +1250,7 @@ export function createAniListImport(deps: Dependencies) {
         } else if (
           reviewed.score.action === 'vote' &&
           reviewed.score.native.currentVote.status === 'current' &&
-          reviewed.score.native.currentVote.vote?.units !== null &&
-          reviewed.score.native.currentVote.vote !== null &&
+          reviewed.score.native.currentVote.vote.state === 'counted' &&
           !reviewed.input.replace
         ) {
           scoreOutcome = {

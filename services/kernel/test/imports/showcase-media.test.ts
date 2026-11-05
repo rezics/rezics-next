@@ -1,3 +1,4 @@
+import { fixtureFetch, adoptedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -175,7 +176,7 @@ test('synthetic selected Person and Organization images use the common authorize
       sourceUrl: organizationImageUrl,
       mediaId: requireMediaId('person:27'),
     });
-    for (const [key, outcome] of outcomes) expect(outcome.containerId).toBe(initialSubjects.get(key));
+    for (const [key, outcome] of outcomes) expect(outcome.containerId).toBe(initialSubjects.get(key)!);
     expect(mediaRequests).toBe(3);
     expect(statusReads).toBe(3);
     const subjects = new Map([...outcomes].map(([key, outcome]) => [key, outcome.containerId!]));

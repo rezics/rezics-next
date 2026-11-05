@@ -149,7 +149,9 @@ export interface MembersPreparation {
     actor: Actor,
     collectionId: string,
     definitions: readonly PreparationDefinition[],
-    options?: { deadline?: number; history?: WorkExecutionOriginal; runtime?: boolean },
+    options?:
+      | { deadline?: number; history?: never; runtime?: boolean }
+      | { deadline: number; history: WorkExecutionOriginal; runtime?: boolean },
   ): Promise<
     Readonly<{
       episodes: readonly PreparingEpisode[];
@@ -399,10 +401,11 @@ export function createMembersPreparation(config: {
         return key;
       });
 
-      const deadline = options.deadline ?? options.history?.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+      const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
       if (options.runtime && !options.history) {
         options = {
           ...options,
+          deadline,
           history: openWorkExecutionOriginal(config.pool, deadline, config.workClient),
         };
       }
@@ -836,10 +839,10 @@ export function createMembersPreparation(config: {
         !identity ||
         identity.route !== locator.route ||
         identity.collectionId !== locator.collectionId ||
+        identity.scope !== 'curated' ||
         identity.accountId !== locator.ownerAccountId ||
         identity.incarnation !== state.incarnation ||
         identity.generation !== state.generation ||
-        identity.scope !== 'curated' ||
         identity.ownerEpoch !== current.source.stamp.epoch ||
         !identity.receivingEpoch ||
         !identity.effectKey

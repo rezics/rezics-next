@@ -53,6 +53,8 @@ test('empty Inbox has no next cursor', async () => {
   expect(await native.call(account, 'GET', `/v1/accounts/${account}/notifications`)).toMatchObject({
     status: 200,
     value: { items: [], next: null },
+    headers: expect.any(Headers),
+    responseBytes: Buffer.byteLength(JSON.stringify({ items: [], next: null })),
   });
 });
 

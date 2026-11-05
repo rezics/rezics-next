@@ -35,6 +35,17 @@ referenced by the public client entrypoint as well as mounted routes.
 Decision: publish the complete mounted and public-root declaration closure for every admitted Kernel input
 independently of future source candidates or unfinished consumers.
 
+Decision: public client aliases retain their names while referencing native modules; provisional transports are removed
+when complete mounted declarations provide their callables. Reviewed Person transport stays unchanged until its
+native Semantic operands are admitted. The admitted producer now declares the guarded read/merge operands and a
+200 merge receipt (`survivor`, `redirected`, `revision`); callers bind that receipt when the complete output lands.
+Grouped release match evidence is optional because the native grouped reader omits it; ordinary catalogue evidence
+retains its explicit state. Focused publication tests exercise installed public-root callables and retained operational
+engine-request accounting; broader native/browser/root acceptance remains with integration.
+Publication fixture assertions use native retained-candidate discriminants and current candidate ranks for adoption,
+complete native references, and fetch callables with their connection API. The command-capture adapter preserves
+the supplied port type so review commands remain available to the existing native journeys.
+
 Decision: Account client exports project mounted route types and add no parallel producer for account profile, avatar,
 managed-account navigation or unread data.
 

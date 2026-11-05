@@ -1,3 +1,4 @@
+import { fixtureFetch, retainedCandidates, adoptedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -136,7 +137,7 @@ test('selected Game player-count range is independently adopted and current, and
     expect(candidate.statement.value).toEqual({ type: 'value', content: { amount: '+4', unit: '1' } });
     expect(candidate.statement.qualifiers).toEqual([
       {
-        property: { id: 'schema:minValue' },
+        property: { id: 'schema:minValue', data_type: 'quantity' },
         value: { type: 'value', content: { amount: '+1', unit: '1' } },
       },
     ]);

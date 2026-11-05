@@ -1,8 +1,9 @@
+import { fixtureFetch } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SourceVocabularyBindings } from '@rezics/conversion';
+import type { SourceVocabularyBindings } from '../../../../packages/conversion/src/index.ts';
 import {
   crossMediaAliases,
   planCrossMediaSeed,

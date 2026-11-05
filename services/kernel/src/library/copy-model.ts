@@ -1,10 +1,10 @@
-import type { CopyConditionDisplay } from './copy-condition.ts';
+import type { CopyConditionDisplay, CopyConditionValue } from './copy-condition.ts';
 
 export type CopyConditionEditing = Readonly<
   | {
       state: 'supported';
       currentness: 'current';
-      choices: readonly Readonly<{ id: string; label: string; description: string }>[];
+      choices: readonly Readonly<{ id: CopyConditionValue; label: string; description: string }>[];
     }
   | {
       state: 'unavailable';

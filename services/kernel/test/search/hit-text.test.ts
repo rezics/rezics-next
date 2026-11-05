@@ -164,21 +164,21 @@ test('search hits carry their descriptions only on request', async () => {
   const answer = await service.search('anonymous', { filter: people, sort: 'name', descriptions: true });
   expect(answer.subjects).toEqual([
     {
-      figure: missingFigure,
+      figure: missingFigure, matchEvidence: { state: 'absent' },
       id: id(1),
       type: 'schema:Book',
       labels: { en: 'The Dispossessed', ja: '所有せざる人々' },
       descriptions: { en: utopiaCut, ja: 'アナレスとウラスの物語。' },
     },
     {
-      figure: missingFigure,
+      figure: missingFigure, matchEvidence: { state: 'absent' },
       id: id(2),
       type: 'schema:Book',
       labels: { en: 'The Dispossessed' },
       descriptions: { en: 'A study edition with notes.' },
     },
     {
-      figure: missingFigure,
+      figure: missingFigure, matchEvidence: { state: 'absent' },
       id: id(3),
       type: 'schema:Person',
       labels: { en: 'Ursula K. Le Guin', ja: 'アーシュラ・K・ル＝グウィン' },
@@ -189,10 +189,10 @@ test('search hits carry their descriptions only on request', async () => {
 
   const plain = await service.search('anonymous', { filter: people, sort: 'name' });
   expect(plain.subjects).toEqual([
-    { figure: missingFigure, id: id(1), type: 'schema:Book', labels: { en: 'The Dispossessed', ja: '所有せざる人々' } },
-    { figure: missingFigure, id: id(2), type: 'schema:Book', labels: { en: 'The Dispossessed' } },
+    { figure: missingFigure, matchEvidence: { state: 'absent' }, id: id(1), type: 'schema:Book', labels: { en: 'The Dispossessed', ja: '所有せざる人々' } },
+    { figure: missingFigure, matchEvidence: { state: 'absent' }, id: id(2), type: 'schema:Book', labels: { en: 'The Dispossessed' } },
     {
-      figure: missingFigure,
+      figure: missingFigure, matchEvidence: { state: 'absent' },
       id: id(3),
       type: 'schema:Person',
       labels: { en: 'Ursula K. Le Guin', ja: 'アーシュラ・K・ル＝グウィン' },
@@ -227,7 +227,7 @@ test('a language chain chooses one label and one description per hit', async () 
     const language = languages[0] === 'en' ? 'en' : 'zh-Hant';
     expect(answer.subjects).toEqual([
       {
-        figure: missingFigure,
+        figure: missingFigure, matchEvidence: { state: 'absent' },
         id: id(40),
         type: 'schema:Article',
         labels: { [language]: language === 'en' ? 'English label' : '繁體標籤' },
@@ -317,7 +317,7 @@ test('languages and descriptions are validated', async () => {
 test('a subject without descriptions carries an empty map, and descriptions need no active release', async () => {
   const unlisted = await service.search('anonymous', { text: 'Unlisted', descriptions: true });
   expect(unlisted.subjects).toEqual([
-    { figure: missingFigure, id: id(30), type: 'schema:Unlisted', labels: { en: 'Unlisted thing' }, descriptions: {} },
+    { figure: missingFigure, matchEvidence: expect.objectContaining({ state: 'current' }), id: id(30), type: 'schema:Unlisted', labels: { en: 'Unlisted thing' }, descriptions: {} },
   ]);
 
   const bare = createSearchService({ pool, client, prefix, source, cursors, release: async () => null });

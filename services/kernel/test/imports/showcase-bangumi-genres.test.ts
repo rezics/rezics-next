@@ -1,3 +1,5 @@
+import { valueContent } from './native-observations.ts';
+import { fixtureFetch } from './native-observations.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -130,7 +132,7 @@ test('default seed publishes the reviewed source Concept publicly and retracts o
         (assertion) =>
           assertion.property === 'schema:keywords' &&
           assertion.statement.value.type === 'value' &&
-          assertion.statement.value.content === sourceConcept,
+          valueContent(assertion.statement.value) === sourceConcept,
       ),
   ).toBe(false);
   const after = (await publicClient.readSubject(workId)).subject as { statements: Record<string, BatchStatement[]> };

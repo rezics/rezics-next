@@ -1,3 +1,4 @@
+import { fixtureFetch } from './native-observations.ts';
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';

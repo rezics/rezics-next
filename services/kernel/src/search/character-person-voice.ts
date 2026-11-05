@@ -223,7 +223,7 @@ export type CharacterPersonSourceCut = Readonly<{
 export async function prepareCharacterPersonPage(
   input: readonly RelationFacetProbe[],
   prepareMatch: (partition: number, probes: readonly RelationFacetProbe[]) => Promise<CharacterPersonSourceCut | null>,
-): Promise<RetainedRelationFacetPage> {
+): Promise<Omit<RetainedRelationFacetPage, 'bounds'> & { bounds: readonly CharacterPersonWitnessPoolBound[] }> {
   // Own the input: caller mutation must not enlarge an already authorized page.
   const probes = structuredClone(input);
   const groups = new Map<number, Map<string, RelationFacetProbe[]>>();

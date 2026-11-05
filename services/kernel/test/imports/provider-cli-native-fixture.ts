@@ -351,7 +351,7 @@ export async function openProviderCli(source: Exclude<SourceId, 'vndb'>, convert
           id: string;
           type: string;
           labels: Record<string, string>;
-          statements: Record<string, { id: string }[]>;
+          statements: Record<string, import('../../src/semantic/item.ts').Statement[]>;
         };
       }>;
     }

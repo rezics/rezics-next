@@ -558,7 +558,7 @@ const typed = [
   'PUT /v1/libraryYearlyCompletionGoal',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
-const complete: [Missing] extends [never] ? true : Missing = true;
+const complete: [Missing] extends [never] ? true : `Unlisted route: ${Missing}` = true;
 type Loose = LooseRoutes<Kernel['~Routes']>;
 const precise: [Loose] extends [never] ? true : Loose = true;
 

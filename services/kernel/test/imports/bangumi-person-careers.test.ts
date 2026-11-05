@@ -1,10 +1,12 @@
+import { valueContent } from './native-observations.ts';
+import { fixtureFetch, retainedCandidates } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import type { SourceVocabularyBindings } from '@rezics/conversion';
+import type { SourceVocabularyBindings } from '../../../../packages/conversion/src/index.ts';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import {
   crossMediaAliases,
@@ -349,13 +351,13 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
       vocabularyRequirements: concepts.requirements,
     });
 
-    const stableCandidates = (
+    const stableCandidates = retainedCandidates((
       await runtime.importTransport.reviewedCandidates(personId, {
         property: 'wdt:P106',
         context: GLOBAL_CONTEXT,
         limit: 100,
       })
-    ).candidates;
+    ).candidates);
     const restarted = await seedCrossMedia(
       plan,
       importPath,
@@ -365,13 +367,13 @@ test('Bangumi Person careers use default current vocabulary, ordinary proposals 
     );
     expect(idOf(restarted, 'person:8101')).toBe(personId);
     expect(
-      (
+      retainedCandidates((
         await runtime.importTransport.reviewedCandidates(personId, {
           property: 'wdt:P106',
           context: GLOBAL_CONTEXT,
           limit: 100,
         })
-      ).candidates.map(({ id }) => id),
+      ).candidates).map(({ id }) => id),
     ).toEqual(stableCandidates.map(({ id }) => id));
 
     const changedBytes = JSON.stringify({ id: 8101, type: 1, career: ['actor'] });

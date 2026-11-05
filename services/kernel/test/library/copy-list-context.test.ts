@@ -39,7 +39,10 @@ test('FULL copies keep native row identity and private metadata with only disclo
     expect(JSON.stringify(await basic.json())).not.toContain('context');
     const response = await f.page(f.ownerToken);
     expect(response.status).toBe(200);
-    const result = (await response.json()) as { copies: Array<Record<string, any>>; next: string | null };
+    const result = (await response.json()) as {
+      copies: Array<Record<string, any> & { subjectId: string }>;
+      next: string | null;
+    };
     expect(result.next).toBeNull();
     expect(result.copies.map((copy) => copy.id).sort()).toEqual([first.id, second.id, sibling.id, hidden.id].sort());
     expect(result.copies.find((copy) => copy.id === first.id)).toMatchObject({
@@ -123,11 +126,13 @@ test('FULL copies keep native row identity and private metadata with only disclo
     expect(disposed.status).toBe(200);
     const disposedCopy = (await disposed.json()).copy as { revision: number };
     const retired = structuredClone(bundledRelease);
-    retired.libraryProfiles!['book.reading']!.copies.kinds = [{ id: 'digital', statuses: [{ id: 'owned' }] }];
+    retired.libraryProfiles!['book.reading']!.copies!.kinds = [
+      { id: 'digital', statuses: [{ id: 'owned', labels: { en: 'Owned' } }], labels: { en: 'Digital' } },
+    ];
     await f.publish(retired);
-    const retiredRow = ((await (await f.page(f.ownerToken)).json()).copies as Array<Record<string, any>>).find(
-      (copy) => copy.id === second.id,
-    );
+    const retiredRow = (
+      (await (await f.page(f.ownerToken)).json()).copies as Array<Record<string, any> & { subjectId: string }>
+    ).find((copy) => copy.id === second.id);
     expect(retiredRow).toMatchObject({ kind: 'physical', status: 'disposed', context: { state: 'unsupported' } });
 
     await f.checked('POST', '/v1/platform/exposure/subject_identity:open', {}, 'operator');

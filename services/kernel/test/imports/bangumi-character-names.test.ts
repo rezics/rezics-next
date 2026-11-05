@@ -1,3 +1,4 @@
+import { fixtureFetch } from './native-observations.ts';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';

@@ -1,3 +1,4 @@
+import { routeOf } from '../../src/route/route.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { routeOf } from '../../src/route/route.ts';

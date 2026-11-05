@@ -58,7 +58,7 @@ export async function settingsPageGrowthFixture() {
         throw new Error('Expected the native post read to return its selected post');
       const authored = await f.call('POST', `/v1/posts/${parentId}/revisions`, {
         body: { body: rulesBody() },
-        headers: { 'if-match': JSON.stringify(source.value.post.revisionId) },
+        headers: { 'if-match': JSON.stringify(source.value!.post.revisionId) },
       });
       expect(authored.response.status, authored.text).toBe(200);
       const pin = { postId: parentId, revisionId: authored.value.post.revisionId as string };

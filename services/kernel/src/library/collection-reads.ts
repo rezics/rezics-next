@@ -126,8 +126,11 @@ export type CollectionResourceView =
 /** Check the required wire fields without expanding the older curated caller guarantee. */
 export function collectionReadView(
   value: CollectionResourceView,
-): CuratedCollectionView | SavedDynamicCollectionView | BuiltinCollectionView {
-  if ('membershipKind' in value && value.membershipKind === 'dynamic') return value;
+) {
+  if ('membershipKind' in value && value.membershipKind === 'dynamic') {
+    const { allowedVisibilityActions, ...view } = value;
+    return { ...view, ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }) };
+  }
   if (
     value.membershipKind !== 'curated' ||
     typeof value.orderEpoch !== 'number' ||
@@ -135,7 +138,8 @@ export function collectionReadView(
     value.orderEpoch < 0
   )
     throw new ProblemError('dependency_unavailable');
-  return { ...value, membershipKind: 'curated', orderEpoch: value.orderEpoch };
+  const { allowedVisibilityActions, ...view } = value;
+  return { ...view, ...(allowedVisibilityActions === undefined ? {} : { allowedVisibilityActions: [...allowedVisibilityActions] }), membershipKind: 'curated' as const, orderEpoch: value.orderEpoch };
 }
 
 export type MemberView = {
@@ -1094,6 +1098,7 @@ export function createCollectionReads(
           rows.length !== result.members.length
             ? { state: 'unavailable', reason: 'identity', retryable: true }
             : await dependencies.viewerPersonalActions(viewer, rows, STANDARD_QUESTION_ID, deadline);
+        if (!(await subjects.current())) facts = { state: 'unavailable', reason: 'currentness', retryable: true };
       }
       if (subjectsCurrent && !(await subjectsCurrent()))
         facts = { state: 'unavailable', reason: 'currentness', retryable: true };

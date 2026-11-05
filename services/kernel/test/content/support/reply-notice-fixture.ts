@@ -77,13 +77,13 @@ export async function replyNoticeFixture() {
         ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
       }),
     );
-    const body = response.status === 204 ? null : await response.text();
-    const value = body === null ? null : JSON.parse(body);
+    const responseBody = response.status === 204 ? null : await response.text();
+    const value = responseBody === null ? null : JSON.parse(responseBody);
     return {
       status: response.status,
       value,
       headers: response.headers,
-      responseBytes: body === null ? 0 : Buffer.byteLength(body, 'utf8'),
+      responseBytes: responseBody === null ? 0 : Buffer.byteLength(responseBody, 'utf8'),
     };
   }
   async function thread(author = accounts.recipient, visibility: 'published' | 'draft' = 'published', board = boardId) {

@@ -110,3 +110,26 @@ test('a current Person page reflects withdrawn and conflicting identifiers even 
   ] as ReviewedPersonRead['subject']['statements'][string];
   expect(personCrossSourceIdentity(read)).toBe('conflicting');
 });
+
+
+test('the mounted Person merge returns the native receipt and an absent identity stays readable', async () => {
+  const native = reads();
+  const sent: Request[] = [];
+  const receipt = { survivor: originals[0].subject, redirected: originals[1].subject, revision: 10 };
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      sent.push(request);
+      if (request.method === 'POST') return Response.json(receipt);
+      const index = new URL(request.url).searchParams.get('reviewIdentitySource') === 'bangumi' ? 0 : 1;
+      return Response.json({ ...native[index], reviewedIdentity: null });
+    }) as typeof fetch,
+  });
+  const comparison = personComparison(originals, native);
+  if (!comparison.ok || !comparison.merge) throw new Error('Missing native comparison');
+  const command = { body: comparison.merge, key: uuid(99) };
+  expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({ ok: true, admission: receipt });
+  expect(await sent[0]!.json()).toEqual(command.body);
+  expect(sent[0]!.headers.get('idempotency-key')).toBe(JSON.stringify(command.key));
+  expect(await readPersonComparison(client, 'Bearer reviewer', originals)).toMatchObject({ ok: true, merge: null });
+});
