@@ -129,7 +129,7 @@ test('a mandatory or unknown kind in a patch is refused with 400 and changes not
       shelf: {},
       notifications: DEFAULT_NOTIFICATIONS,
       version: 0,
-    }),
+    }, { writable: true }),
   );
   await call(person, { expectedVersion: 0, notifications: allOff });
   const before = (await stored(person.accountId)).rows;

@@ -1,6 +1,7 @@
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { AccountWorkflowOptions } from '@rezics/auth';
 import type { AutomatedOperatorAccess } from '../../src/access/automated-operator-source.ts';
+import type { OperatorTransferPageAccess } from '../../src/access/operator-transfer-page-source.ts';
 import type {
   AccountWorkflowPorts,
   AuthSessionPort,
@@ -55,7 +56,7 @@ test('ordinary durable composition requires actual native factories and Auth-hos
     proofs: NativeAccountBindingProofs;
   }>();
   expectTypeOf<NativeAccountBindings>().toEqualTypeOf<{
-    trustedAccess: TrustedAccessPorts & AutomatedOperatorAccess;
+    trustedAccess: TrustedAccessPorts & AutomatedOperatorAccess & OperatorTransferPageAccess;
     workflowPorts: AccountWorkflowPorts<LifecycleRequest>;
     continuations: CommittedContinuations;
     lifecycle: ReturnType<typeof createLifecycleCommands>;
