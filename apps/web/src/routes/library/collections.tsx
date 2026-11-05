@@ -29,7 +29,7 @@ export const Route = createFileRoute('/library/collections')({
       <MineCollectionsCurrentViewer
         initial={initial}
         windows={windows.current}
-        locationKey={location.key}
+        locationKey={location.href}
         layout={search.layout}
         {...(search.addressError ? { addressError: search.addressError } : {})}
         {...(search.cursor ? { cursor: search.cursor } : {})}
