@@ -82,78 +82,82 @@ export function releaseVisitExample(context = selectedContext, type = 'wd:Q20631
     concealed = false,
     unavailable = false,
     streamFailure = 0;
-  const client = createKernelClient('https://release.test', {
-    fetch: (async (input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
-      const url = new URL(request.url);
-      calls.push({
-        path: url.pathname,
-        cursor: url.searchParams.get('cursor'),
-        session: request.headers.get('rezics-session-token'),
-        context: url.searchParams.get('context'),
-      });
-      if (url.pathname.includes('/definitions/releases/')) return Response.json(definitions);
-      const labels = { en: 'Companion release 文庫' };
-      const related = {
-        [target]: { type, labels: concealed ? {} : labels },
-        [work]: { type: type === 'bf:Instance' ? 'schema:Book' : 'wd:Q689445', labels: { en: 'Original work 原作' } },
-      };
-      if (url.pathname.endsWith('/relations') || url.pathname.endsWith('/links')) {
-        if (streamFailure) return Response.json({}, { status: streamFailure });
-        const property = url.searchParams.get('property')!;
-        const later = url.searchParams.get('cursor') === 'later';
-        const rows = Array.from({ length: removed ? 0 : later ? 2 : 20 }, (_, index) => ({
-          statement: statement((later ? 200 : 100) + index, property, { type: 'value', content: target }),
-          summary: {
-            id: target,
-            type: property === 'schema:associatedMedia' ? 'schema:MediaObject' : type,
-            types: [type],
-            label: concealed ? undefined : { value: labels.en, language: 'en' },
-            creativeWork: true,
-            cover: null,
-          },
-          related: { [target]: { type, label: concealed ? undefined : { value: labels.en, language: 'en' } } },
-        }));
-        return Response.json(
-          {
-            relations: rows,
-            links: rows.map((row) => ({
-              ...row,
-              subject: target,
-              assertion: row.statement,
-              statement: row.statement.id,
-            })),
-            next: later || removed ? null : 'later',
-          },
-          { headers: { 'rezics-session-token': 'native-current-session' } },
-        );
-      }
-      if (!url.pathname.endsWith(source) && unavailable) return Response.json({}, { status: 503 });
-      const detail = url.pathname.endsWith(target);
-      return Response.json({
-        subject: detail
-          ? {
-              ...subject,
+  let reads = 0;
+  const client = () => {
+    const nativeSession = `native-current-session-${++reads}`;
+    return createKernelClient('https://release.test', {
+      fetch: (async (input, init) => {
+        const request = input instanceof Request ? input : new Request(String(input), init);
+        const url = new URL(request.url);
+        calls.push({
+          path: url.pathname,
+          cursor: url.searchParams.get('cursor'),
+          session: request.headers.get('rezics-session-token'),
+          context: url.searchParams.get('context'),
+        });
+        if (url.pathname.includes('/definitions/releases/')) return Response.json(definitions);
+        const labels = { en: 'Companion release 文庫' };
+        const related = {
+          [target]: { type, labels: concealed ? {} : labels },
+          [work]: { type: type === 'bf:Instance' ? 'schema:Book' : 'wd:Q689445', labels: { en: 'Original work 原作' } },
+        };
+        if (url.pathname.endsWith('/relations') || url.pathname.endsWith('/links')) {
+          if (streamFailure) return Response.json({}, { status: streamFailure });
+          const property = url.searchParams.get('property')!;
+          const later = url.searchParams.get('cursor') === 'later';
+          const rows = Array.from({ length: removed ? 0 : later ? 2 : 20 }, (_, index) => ({
+            statement: statement((later ? 200 : 100) + index, property, { type: 'value', content: target }),
+            summary: {
               id: target,
-              labels,
-              statements: {
-                'schema:datePublished': [
-                  {
-                    ...statement(12, 'schema:datePublished', { type: 'somevalue' }),
-                    property: { id: 'schema:datePublished', data_type: 'time' },
-                  },
-                ],
-              },
-            }
-          : subject,
-        related,
-        account: null,
-        summary: null,
-      });
-    }) as typeof fetch,
-  });
+              type: property === 'schema:associatedMedia' ? 'schema:MediaObject' : type,
+              types: [type],
+              label: concealed ? undefined : { value: labels.en, language: 'en' },
+              creativeWork: true,
+              cover: null,
+            },
+            related: { [target]: { type, label: concealed ? undefined : { value: labels.en, language: 'en' } } },
+          }));
+          return Response.json(
+            {
+              relations: rows,
+              links: rows.map((row) => ({
+                ...row,
+                subject: target,
+                assertion: row.statement,
+                statement: row.statement.id,
+              })),
+              next: later || removed ? null : 'later',
+            },
+            { headers: { 'rezics-session-token': nativeSession } },
+          );
+        }
+        if (!url.pathname.endsWith(source) && unavailable) return Response.json({}, { status: 503 });
+        const detail = url.pathname.endsWith(target);
+        return Response.json({
+          subject: detail
+            ? {
+                ...subject,
+                id: target,
+                labels,
+                statements: {
+                  'schema:datePublished': [
+                    {
+                      ...statement(12, 'schema:datePublished', { type: 'somevalue' }),
+                      property: { id: 'schema:datePublished', data_type: 'time' },
+                    },
+                  ],
+                },
+              }
+            : subject,
+          related,
+          account: null,
+          summary: null,
+        });
+      }) as typeof fetch,
+    });
+  };
   const read: ReleaseFidelityTransport['read'] = (stream, cursor, detail, session, returning) =>
-    readReleaseFidelity(client, 'Bearer reader', {
+    readReleaseFidelity(client(), 'Bearer reader', {
       id: source,
       context,
       locale,
