@@ -7,7 +7,9 @@ export type {
   SpaceDiscoverySnapshot,
   SpaceDiscoverySource,
   SpaceDiscoverySummary,
+  SpaceDiscoveryTupleWitness,
+  SpaceDiscoveryTupleWitnessInput,
   SpaceDiscoveryTupleSource,
 } from './space-discovery.ts';
 export type { SpaceDiscoveryDependencyReadiness } from './space-discovery-dependencies.ts';
-export type { SpaceEntryPage } from './space-discovery-entry-contract.ts';
+export type { SpaceEntryPage, SpaceEntryPresentation } from './space-discovery-entry-contract.ts';

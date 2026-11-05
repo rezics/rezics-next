@@ -10,8 +10,8 @@ import {
   DiscoveryPopulationCutChangedError,
   advanceDiscovery,
   DISCOVERY_LIVE_GENERATIONS_SQL,
-  type DiscoveryMetadataProducer,
 } from '../../src/search/generations.ts';
+import type { DiscoveryMetadataProducer } from '../../src/search/discovery-api.ts';
 import type { DiscoveryRegistry } from '../../src/search/discovery.ts';
 import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';

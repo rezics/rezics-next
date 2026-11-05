@@ -342,16 +342,11 @@ export function startDiscoveryIndexing(options: {
   const step = async () => {
     if (stopped || paused) return;
     const producers = options.producers;
-    const ownerAdapters = producers?.ownerAdapters;
     const registry = await nativeDiscoveryRegistry(
       options.pool,
       options.routeKey,
       options.source,
-      producers
-        ? { ownerAdapters, accounts: producers.accounts }
-        : ownerAdapters
-          ? { ownerAdapters }
-          : undefined,
+      producers ? { ownerAdapters: producers.ownerAdapters, accounts: producers.accounts } : undefined,
     );
     const metadataProducers = producers?.metadataProducers;
     const reviewSource = producers?.reviewSource ?? options.reviewSource;

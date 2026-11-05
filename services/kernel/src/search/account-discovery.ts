@@ -40,9 +40,8 @@ import { reviewDiscoveryDocument } from './review-discovery.ts';
 import {
   assertDiscoveryCapabilityBinding,
   DiscoveryProducerCoverageError,
-  type DiscoveryMetadataKind,
-  type DiscoveryMetadataProducers,
 } from './generations.ts';
+import type { DiscoveryMetadataKind, DiscoveryMetadataProducers } from './discovery-api.ts';
 import type { ReviewDiscoveryRefresh } from '../content/review-discovery-changes.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { accountDocumentActions } from './document.ts';

@@ -5,7 +5,11 @@ export type SerializableContinuation =
   | number
   | string
   | readonly SerializableContinuation[]
-  | Readonly<Record<string, SerializableContinuation>>;
+  | SerializableContinuationObject;
+
+export interface SerializableContinuationObject {
+  readonly [key: string]: SerializableContinuation;
+}
 
 /** A source's page keeps output, resumability, coverage and freshness as separate observations. */
 export type SourcePage<Item, Continuation extends SerializableContinuation, Coverage, Freshness> = Readonly<{

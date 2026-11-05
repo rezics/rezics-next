@@ -9,6 +9,7 @@ import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts
 import { partitionOf, routeOf } from '../route/route.ts';
 import type {
   AccountDiscoverySource,
+  AccountDiscoverySummary,
   AccountSnapshot,
   DiscoveryKey,
   DiscoveryKindMetadata,
@@ -19,6 +20,7 @@ import type {
   DiscoveryOwnerRegistration,
   DiscoveryReadContext,
   DiscoveryUnionKey,
+  IndexedAccount,
 } from './discovery-api.ts';
 export type {
   AccountDiscoverySource,

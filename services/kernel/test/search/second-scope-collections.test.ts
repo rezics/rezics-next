@@ -8,6 +8,7 @@ import {
   type PublicCollectionDiscoverySource,
 } from '../../src/search/collection-discovery.ts';
 import type { CollectionDiscoveryItem } from '../../src/library/collection-discovery-source.ts';
+import { publicCollectionDiscoverySource } from '../../src/library/collection-source.ts';
 import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
 import { createNativeDiscoveryRegistry, hydrateOwnerDiscoveryHits } from '../../src/search/discovery-hydration.ts';
 import { mintReadTime, releaseOperationalTime, authoritativeTimeValue } from '../../src/command/command.ts';
@@ -136,7 +137,7 @@ describe('connected native Collection reader journey', () => {
     deadline: Date.now() + 120000,
   });
   function connected() {
-    const leaf = createNativeCollectionDiscoveryAdapter(deps(), {
+    const leaf = createNativeCollectionDiscoveryAdapter({ ...deps(), source: publicCollectionDiscoverySource({ pool: f.database.pool }) }, {
       id: 'collection',
       labels: { en: 'Collections' },
       icon: 'collection',

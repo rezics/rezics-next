@@ -4,7 +4,7 @@ import type { AvatarSummary, ReviewDiscoverySource } from '../content/index.ts';
 import type { FollowDiscovery, PublicCollectionDiscoverySummary as CollectionDiscoveryCard, ViewerFactsPage } from '../library/index.ts';
 import type { PublicFigureView } from '../rating/index.ts';
 import type { SummaryReaderDependencies, SubjectSummary } from '../semantic/index.ts';
-import type { SpaceDiscoveryDependencyReadiness, SpaceEntryPage } from '../community/index.ts';
+import type { SpaceDiscoveryDependencyReadiness, SpaceEntryPage, SpaceEntryPresentation } from '../community/index.ts';
 import type { Fact } from './hits.ts';
 import type { MatchEvidence, MatchEvidenceQuery } from './match-evidence.ts';
 import type { SearchRequest } from './service.ts';
@@ -108,7 +108,7 @@ export type PublicSpaceDiscoverySummary = Readonly<{
   address: string;
   summary?: string;
   realm?: Readonly<{ id: string; title: string | null }> | null;
-  presentation?: SpaceEntryPage['items'][number]['presentation'];
+  presentation?: SpaceEntryPresentation;
 }>;
 export type DiscoveryOwnerSummary =
   | { kind: 'collection'; value: PublicCollectionDiscoverySummary }
