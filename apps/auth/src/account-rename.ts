@@ -1,5 +1,11 @@
-import { managementOperationProfile } from '@rezics/auth-contract';
+import {
+  managementOperationProfile,
+  RENAME_PAGE_MAX_RESPONSE_BYTES,
+  RENAME_PAGE_MAX_ACTIONS,
+  RENAME_PAGE_MAX_ID_LENGTH,
+} from '@rezics/auth-contract';
 import { authPost } from './api';
+import { readJsonBounded } from './private-auth-json';
 import { privateAuthRead } from './private-auth-read';
 import { loadAccountSession } from './account-operations';
 import { createSignupKey, normalizeSignupHandle } from './signup';
@@ -68,7 +74,7 @@ async function readNativeRenamePage(_accountId: string, signal?: AbortSignal): P
       signal: readSignal,
     });
     if (response.status !== 200) throw new Error('Account profile unavailable');
-    return response.json();
+    return readJsonBounded(response, RENAME_PAGE_MAX_RESPONSE_BYTES, readSignal);
   }, signal);
 }
 
@@ -97,9 +103,13 @@ export function parseRenamePage(body: unknown, accountId: string): RenameRead {
   if (
     Object.keys(viewer).sort().join(',') !== 'accountId,amr,authTime,authnEpoch,clientId,kind,scopes' ||
     viewer.kind !== 'actor' ||
-    typeof viewer.clientId !== 'string' ||
+    typeof viewer.accountId !== 'string' ||
+    !viewer.accountId ||
+    viewer.accountId.length > RENAME_PAGE_MAX_ID_LENGTH ||
+    viewer.clientId !== RENAME_PROFILE.client_id ||
     !Array.isArray(viewer.scopes) ||
-    !viewer.scopes.every((scope) => typeof scope === 'string') ||
+    viewer.scopes.length !== 1 ||
+    viewer.scopes[0] !== RENAME_PROFILE.scope[0] ||
     !Number.isSafeInteger(viewer.authnEpoch) ||
     (viewer.authnEpoch as number) < 1 ||
     !Number.isSafeInteger(viewer.authTime) ||
@@ -132,7 +142,7 @@ export function parseRenamePage(body: unknown, accountId: string): RenameRead {
     !Array.isArray(actions.operations)
   )
     return { kind: 'unavailable' };
-  if (actions.operations.length > 1) return { kind: 'unavailable' };
+  if (actions.operations.length > RENAME_PAGE_MAX_ACTIONS) return { kind: 'unavailable' };
   let canRename = false;
   for (const operation of actions.operations) {
     if (
@@ -143,9 +153,8 @@ export function parseRenamePage(body: unknown, accountId: string): RenameRead {
       !record(operation.resource) ||
       Object.keys(operation.resource).sort().join(',') !== 'id,route' ||
       operation.resource.id !== accountId ||
-      !Number.isSafeInteger(operation.resource.route) ||
-      (operation.resource.route as number) < 0 ||
-      (operation.resource.route as number) > 65535
+      !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(operation.resource.id as string) ||
+      !Number.isSafeInteger(operation.resource.route)
     )
       return { kind: 'unavailable' };
     canRename = true;

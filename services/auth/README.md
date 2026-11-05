@@ -948,6 +948,20 @@ it revalidates that same proof after the source read. Every response is `private
 authority or malformed reads disclose no profile. The route remains the exact private profile port; its client, scope,
 authentication method, account equality and native `account:update` formula are unchanged.
 
+Decision: rename-page receiving uses `RENAME_PAGE_MAX_RESPONSE_BYTES` exported by
+`@rezics/auth-contract`, independent of mounted scope catalogues. Identity copies follow SessionProof's
+native `securityId` contract: nonempty opaque strings of at most 1,024 UTF-16 units, including historical
+escaped/Unicode identifiers; oversized projected identities return unavailable, without normalization or truncation.
+The finite allowance counts all closed keys/punctuation, two worst-case escaped identities, nullable ASCII
+handle64, exact management client/scope, safe-integer epoch/time, one pwd/pop method and up to eight retained
+rename/account:update descriptors with case-insensitive UUID36 resource IDs and signed safe-integer routes.
+Retained descriptors force both account copies to the same UUID36; the bound takes the larger compatible case.
+The browser counts bytes before fatal UTF-8 decoding and JSON parsing, within its existing five-second whole-call
+signal. Overflow, malformed bytes/JSON, stalls and retirement are unavailable and authorize no command.
+This costs one existing rename-page POST and no additional native read; the preceding `/session` receiving
+remains separately required and is not bounded by this rename-page allowance. Native proof revalidation and
+the three-second native deadline remain required.
+
 `POST /account-management/rename-page` accepts only `{}` and is the Auth rename page's bounded projection. A signed-in
 human without the exact rename management profile receives only `management-auth-required` and the fixed rename
 management-operation continuation; no profile or acting identity is included. This is the page's reversible
@@ -963,7 +977,7 @@ Both routes require same-issuer Origin, JSON, no query or bearer header and a cu
 the page route revalidates the same proof, floor and consent after native I/O. Every response is `private, no-store`.
 The page read is a finite sum: one existing exact profile read, one full-key current-account seek and the existing
 bounded self action observation (one rename candidate, before/final native snapshots and one installed Access
-formula). The Auth transport closes at most eight source action entries and returns at most the exact rename entry.
+formula). The Auth transport closes at most eight source action entries and retains all matching rename entries, up to eight.
 It adds no inventory, handle-availability lookup, approval, command or permission rule.
 Decision: profile review accepts a current, possibly stale rename-profile session; approval retains fresh authentication.
 
