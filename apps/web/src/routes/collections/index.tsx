@@ -66,7 +66,10 @@ export const Route = createFileRoute('/collections/')({
       ...(address.order === undefined ? {} : { order: address.order }),
     };
     const query = useQuery({
-      ...publicCollectionDiscoveryQueryOptions(locale, { ...selection, cursor: address.cursor }),
+      ...publicCollectionDiscoveryQueryOptions(locale, {
+        ...selection,
+        ...(address.cursor === undefined ? {} : { cursor: address.cursor }),
+      }),
       enabled: !invalidCursor && !invalidSelection,
     });
     const source = query.data;
