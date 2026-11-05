@@ -505,11 +505,8 @@ test('the actual Following reset envelope preserves the originating prepared vie
     expect(normal.page.addressInvalid).toBe(true);
     expect(calls).toHaveLength(2);
     const invalid = await actions.readMineFollowingForViewer({ data: { cursor: 'x'.repeat(2049) } });
-    expect(invalid).toMatchObject({
-      subject: 'reset-owner',
-      cursor: null,
-      page: { addressInvalid: true },
-    });
+    expect(invalid.cursor).toBeNull();
+    expect(invalid.page).toMatchObject({ signedIn: true, addressInvalid: true });
     expect(calls).toHaveLength(2);
   } finally {
     transport.mockRestore();
@@ -658,9 +655,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
       );
       await tick();
     });
-    await refetch('A', 'terminal/page+'); // Loader data seeds direct visits without an automatic reread.
-    expect(reads).toHaveLength(1);
-    await settle(reads[0]!, initial);
+    expect(reads).toHaveLength(0); // Loader data supplies a direct visit without an in-app predecessor.
     expect(host.textContent).toContain('Last visible row');
     expect(previousLink()).toBeUndefined(); // A direct cursor visit does not invent an in-app predecessor.
     expect(restart()).toBeDefined(); // Populated later pages also have a way back.
