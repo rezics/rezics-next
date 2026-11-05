@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { showcaseFranchiseAssertions } from './showcase-franchise.ts';
+import type { GraphEdgeEvidence } from './cross-media-bindings.ts';
 import { sameStatementProvenance } from './statement-provenance.ts';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
@@ -56,6 +58,8 @@ export type ShowcaseAssertion = Readonly<{
     sourceKey: string;
     subjectId: string;
     nativeType: string;
+    /** Work-row publication checks the current facts fence at both source endpoints. */
+    factsFence?: true;
   }>;
 }>;
 
@@ -494,6 +498,7 @@ export function buildShowcaseManifest(input: {
   tagWeightRefreshes?: readonly string[];
   tagAssociations?: readonly ShowcaseTagAssociation[];
   tagAssociationRefreshes?: readonly string[];
+  workRelations?: readonly GraphEdgeEvidence[];
 }): ShowcaseManifest {
   const { plan, readings, acknowledgements, aliases } = input;
   const selected = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
@@ -638,6 +643,15 @@ export function buildShowcaseManifest(input: {
     });
   }
 
+  const franchise = showcaseFranchiseAssertions({
+    plan,
+    readings,
+    acknowledgements,
+    evidence: input.workRelations ?? [],
+  });
+  omissions.push(...franchise.omissions);
+  for (const [key, target] of franchise.targets) graphTargetsByCommandKey.set(key, target);
+
   const records: ShowcaseRecord[] = [];
   let remainingCandidates: number = showcaseLimits.candidates;
   for (const row of selected) {
@@ -694,6 +708,8 @@ export function buildShowcaseManifest(input: {
       )
         continue;
       if (!assertion) continue;
+      // Work relations require the graph owner's current acknowledged result and both selected endpoints.
+      if (franchise.envelopes.has(envelopeKey(source)) && !franchise.targets.has(ack.command.key)) continue;
       if (provider === 'vndb' && !currentTagWeight(row, alias, assertion, tagWeightObservations)) continue;
       const ownerKey = appearanceOwners.get(envelopeKey(source));
       const graphTarget = graphTargetsByCommandKey.get(ack.command.key);

@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { sameStatementProvenance } from './statement-provenance.ts';
+import { showcaseFranchiseFence } from './showcase-franchise.ts';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { ReviewedSubjectRead } from './import-client.ts';
@@ -1264,6 +1265,7 @@ export async function publishShowcase(input: {
       acknowledgements,
       aliases: input.aliases,
       mediaOutcomes: outcomes,
+      ...(input.result.workRelations ? { workRelations: input.result.workRelations } : {}),
       ...(input.result.vndbCreditCandidateDigests
         ? { vndbCreditCandidateDigests: input.result.vndbCreditCandidateDigests }
         : {}),
@@ -1503,6 +1505,20 @@ export async function publishShowcase(input: {
       currentMembership = true;
     }
     if (assertion.graphTarget) {
+      if (assertion.graphTarget.factsFence) {
+        const state = await showcaseFranchiseFence(input.review, record.sourceAlias, [
+          record.sourceKey,
+          assertion.graphTarget.sourceKey,
+        ]);
+        if (state !== 'open') {
+          omissions.push({
+            provider: record.provider,
+            sourceKey: record.sourceKey,
+            code: state === 'fenced' ? 'graph-source-facts-fenced' : 'graph-source-facts-unavailable',
+          });
+          continue;
+        }
+      }
       const target = manifest.records.find(
         (candidate) =>
           candidate.provider === assertion.graphTarget!.provider &&
@@ -1983,6 +1999,21 @@ export async function publishShowcase(input: {
     }
     for (const assertion of graphAssertions) {
       const endpoint = assertion.graphTarget!;
+      if (endpoint.factsFence) {
+        const state = await showcaseFranchiseFence(input.review, record.sourceAlias, [
+          record.sourceKey,
+          endpoint.sourceKey,
+        ]);
+        if (state !== 'open') {
+          withheldGraphCandidates.add(assertion.candidateId);
+          omissions.push({
+            provider: record.provider,
+            sourceKey: record.sourceKey,
+            code: state === 'fenced' ? 'graph-source-facts-fenced' : 'graph-source-facts-unavailable',
+          });
+          continue;
+        }
+      }
       const target = manifest.records.find(
         (candidate) => candidate.provider === endpoint.provider && candidate.sourceKey === endpoint.sourceKey,
       );

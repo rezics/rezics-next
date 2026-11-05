@@ -1,6 +1,6 @@
 # Importer
 
-The importer owns source acquisition, run/record state, candidate journals and recovery. It writes through ordinary public APIs under caller authority; it has no privileged catalogue writer.
+Importer owns acquisition, run/record state, candidate journals and recovery through caller-authorized public APIs. [Work relations](showcase-franchise.md) define composition and costs.
 
 ## Sources, grain and rights
 
