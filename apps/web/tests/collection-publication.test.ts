@@ -4,20 +4,7 @@ import { createKernelClient } from '@rezics/client';
 import { act, createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import {
-  publicationCandidates,
-  publicationInput,
-  publicationResponse,
-  publicationSource,
-  publishSelectedNative,
-  publicationReadWithin,
-  collectionPublicationQuery,
-  loadCollectionPublication,
-  type PublicationInput,
-  type PublicationPage,
-  type PublicationResult,
-} from '../src/library/collection-publication';
-import { CollectionPublicationPageView } from '../src/library/collection-publication-page';
+import type { PublicationInput, PublicationPage, PublicationResult } from '../src/library/collection-publication';
 import { PublicationLink } from '../src/library/collection-publication-link';
 import { loadDynamicMembers, loadEditableCollectionPage } from '../src/library/collection-load';
 import type { SessionEnv } from '../src/session/client';
@@ -53,7 +40,8 @@ const sessionEnv: Partial<SessionEnv> = {
   } as unknown as DurableObjectNamespace<SessionStore>,
 };
 
-test('explicit empty and nonempty requests retain native revision and unique IDs, with a hard 100 selection limit', () => {
+test('explicit empty and nonempty requests retain native revision and unique IDs, with a hard 100 selection limit', async () => {
+  const { publicationInput } = await import('../src/library/collection-publication');
   expect(publicationInput(input)).toEqual(input);
   expect(publicationInput({ ...input, subjectIds: ['canonical-a'] }).subjectIds).toEqual(['canonical-a']);
   expect(
@@ -72,6 +60,9 @@ test('explicit empty and nonempty requests retain native revision and unique IDs
 });
 
 test('the current dynamic reader preserves header revision and original IDs; selection uses only disclosed canonical summaries from this page', async () => {
+  const { loadCollectionPublication, publicationCandidates, publicationSource } = await import(
+    '../src/library/collection-publication'
+  );
   const requests: Request[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: async (url, init) => {
@@ -157,6 +148,7 @@ test('the current dynamic reader preserves header revision and original IDs; sel
 });
 
 test('the installed generated operation sends the exact selected request; unknown retries preserve the request and key', async () => {
+  const { publishSelectedNative } = await import('../src/library/collection-publication');
   const calls: Request[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: async (url, init) => {
@@ -197,6 +189,7 @@ test('the installed generated operation sends the exact selected request; unknow
 });
 
 test('a local response deadline terminates without cancelling its operation', async () => {
+  const { publicationReadWithin } = await import('../src/library/collection-publication');
   let finished = false;
   const read = new Promise<string>((resolve) => {
     setTimeout(() => {
@@ -209,7 +202,8 @@ test('a local response deadline terminates without cancelling its operation', as
   expect(finished).toBe(true);
 });
 
-test('only the exact native complete response establishes publication; pending, denied, stale, malformed and sparse outcomes do not', () => {
+test('only the exact native complete response establishes publication; pending, denied, stale, malformed and sparse outcomes do not', async () => {
+  const { publicationResponse } = await import('../src/library/collection-publication');
   const complete = {
     collection: { id: input.collectionId, revision: 8 },
     publication: { generation: '42', state: 'complete', itemCount: 0 },
@@ -242,7 +236,8 @@ test('only the exact native complete response establishes publication; pending, 
     expect(publicationResponse(status, {}, input)).toEqual({ ok: false, reason });
 });
 
-test('empty intent is explicit and unavailable sources never render a zero selection, checkboxes or a successful publication', () => {
+test('empty intent is explicit and unavailable sources never render a zero selection, checkboxes or a successful publication', async () => {
+  const { CollectionPublicationPageView } = await import('../src/library/collection-publication-page');
   const submit = async () => ({ ok: false as const, reason: 'unavailable' as const });
   const empty: PublicationPage = {
     ...publicationExample,
@@ -270,6 +265,8 @@ test('empty intent is explicit and unavailable sources never render a zero selec
 });
 
 test('Selected Collection publication communicates zero one and many selected items consistently through confirmation and actual native result', async () => {
+  const { publicationCandidates, publicationResponse } = await import('../src/library/collection-publication');
+  const { CollectionPublicationPageView } = await import('../src/library/collection-publication-page');
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -393,7 +390,8 @@ test('Selected Collection publication communicates zero one and many selected it
   }
 });
 
-test('owner-menu link and personal query preserve route and identity boundaries without authority or background retries', () => {
+test('owner-menu link and personal query preserve route and identity boundaries without authority or background retries', async () => {
+  const { collectionPublicationQuery } = await import('../src/library/collection-publication');
   const html = renderToStaticMarkup(
     createElement(PublicationLink, { target: { id: input.collectionId, membershipKind: 'dynamic' } }),
   );
