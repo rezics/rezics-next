@@ -224,7 +224,8 @@ function CreatorRead({
     );
   else if (
     !data.selling &&
-    (('page' in data && data.page.kind === 'ready') || ('editor' in data && data.editor.kind === 'ready'))
+    (('page' in data && data.page.kind === 'ready') ||
+      ('editor' in data && (data.editor.kind === 'ready' || data.editor.kind === 'price-unavailable')))
   )
     content = <Notice kind="closed" address={address} locale={locale} />;
   else if ('page' in data)
@@ -249,7 +250,7 @@ function CreatorRead({
     );
   else
     content =
-      data.editor.kind === 'ready' ? (
+      data.editor.kind === 'ready' || data.editor.kind === 'price-unavailable' ? (
         <CreatorOfferEditor
           data={data}
           guard={guard}

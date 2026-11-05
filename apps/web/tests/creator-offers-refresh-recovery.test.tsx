@@ -473,6 +473,14 @@ describe('Creator offer editing recovery retains real drafts without extending p
       expect(p.input('price').value).toBe('8.00');
       expect(p.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
       await p.click(m.offer_review_terms());
+      const missingFacts = editor();
+      missingFacts.data.editor = { kind: 'price-unavailable', edition: latest.data.editor.edition };
+      await p.settle(p.editorReads.at(-1)!, missingFacts);
+      expect(p.input('price').value).toBe('8.00');
+      expect(p.input('title').value).toBe('My draft');
+      expect(p.host.textContent).toContain(m.creator_price_unavailable());
+      expect(p.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+      await p.click(m.offer_review_terms());
       await p.settle(p.editorReads.at(-1)!, latest);
       expect(p.host.textContent).toContain('b'.repeat(64));
       expect(p.input('price').value).toBe('8.00');

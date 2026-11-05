@@ -603,6 +603,11 @@ function CreatorOfferForm({
               <dd className="min-w-0 [overflow-wrap:anywhere]">{editor.edition.licence}</dd>
             </dl>
             <p className="text-sm leading-relaxed">{m.creator_current_rights()}</p>
+            {data.editor.kind === 'price-unavailable' && (
+              <p role="status" className="text-sm leading-relaxed">
+                {m.creator_price_unavailable()}
+              </p>
+            )}
           </section>
           <form onSubmit={submit} className="space-y-6 rounded-xl border bg-card p-5 text-card-foreground sm:p-6">
             <CreatorOfferDraftState
