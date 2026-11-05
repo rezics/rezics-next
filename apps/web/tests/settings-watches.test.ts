@@ -99,6 +99,77 @@ test('sparse continuation uses the exact opaque cursor, fixed request size and o
   expect(controller.snapshot().rows).toEqual([]);
 });
 
+test('bounded Previous rereads exact kind/cursor addresses and failed recovery never keeps the prior body', async () => {
+  const requests: { kind: string; cursor: string | null; limit: number }[] = [];
+  let failPrevious = true;
+  let expireBoardNext = true;
+  const { controller } = setup({
+    read: async ({ kind, cursor, limit }) => {
+      requests.push({ kind, cursor, limit });
+      if (kind === 'thread' && cursor === 'thread-9' && failPrevious) {
+        failPrevious = false;
+        throw new Error('previous read failed');
+      }
+      if (kind === 'board' && cursor === 'board-1' && expireBoardNext) {
+        expireBoardNext = false;
+        return { kind: 'invalid_cursor', problem: { status: 400, code: 'invalid_cursor' } };
+      }
+      const next =
+        kind === 'thread'
+          ? cursor === null
+            ? 'thread-1'
+            : Number(cursor.slice('thread-'.length)) < 10
+              ? `thread-${Number(cursor.slice('thread-'.length)) + 1}`
+              : null
+          : cursor === null
+            ? 'board-1'
+            : null;
+      return page(kind === 'thread' ? [readable] : [], next);
+    },
+    stop: async () => ({ kind: 'removed' }),
+  });
+
+  await controller.first();
+  for (let pageNumber = 1; pageNumber <= 10; pageNumber++) await controller.next();
+  expect(controller.snapshot()).toMatchObject({
+    kind: 'thread',
+    cursor: 'thread-10',
+    previous: [
+      { kind: 'thread', cursor: 'thread-2' },
+      { kind: 'thread', cursor: 'thread-3' },
+      { kind: 'thread', cursor: 'thread-4' },
+      { kind: 'thread', cursor: 'thread-5' },
+      { kind: 'thread', cursor: 'thread-6' },
+      { kind: 'thread', cursor: 'thread-7' },
+      { kind: 'thread', cursor: 'thread-8' },
+      { kind: 'thread', cursor: 'thread-9' },
+    ],
+  });
+
+  await controller.previous();
+  expect(controller.snapshot()).toMatchObject({ read: 'failed', kind: 'thread', cursor: 'thread-9', rows: [] });
+  expect(controller.snapshot().previous).toHaveLength(8);
+  await controller.refresh();
+  expect(controller.snapshot()).toMatchObject({ read: 'ready', kind: 'thread', cursor: 'thread-9' });
+  expect(controller.snapshot().previous).toHaveLength(7);
+  expect(requests.slice(-2)).toEqual([
+    { kind: 'thread', cursor: 'thread-9', limit: watchPageLimit },
+    { kind: 'thread', cursor: 'thread-9', limit: watchPageLimit },
+  ]);
+
+  await controller.selectKind('board');
+  expect(controller.snapshot()).toMatchObject({ kind: 'board', cursor: null, previous: [] });
+  await controller.next();
+  expect(controller.snapshot()).toMatchObject({ read: 'invalid_cursor', kind: 'board', cursor: 'board-1', rows: [] });
+  await controller.first();
+  expect(controller.snapshot()).toMatchObject({ read: 'ready', kind: 'board', cursor: null, previous: [] });
+  expect(requests.slice(-3)).toEqual([
+    { kind: 'board', cursor: null, limit: watchPageLimit },
+    { kind: 'board', cursor: 'board-1', limit: watchPageLimit },
+    { kind: 'board', cursor: null, limit: watchPageLimit },
+  ]);
+});
+
 test('failed refresh withdraws old rows and their write authority; oversized owner pages fail closed', async () => {
   let result = page([readable]);
   let fail = false;
@@ -275,9 +346,10 @@ test('viewer replacement or failed session refresh retires rows, pending command
     });
     await controller.first();
     const write = controller.stop(readable.subscriptionId);
-    if (transition === 'replacement')
+    if (transition === 'replacement') {
       client.setQueryData(sessionQuery.queryKey, { ...identity, subject: 'bob', csrfToken: 'bob-token' });
-    else client.getQueryCache().find({ queryKey: sessionQuery.queryKey })!.setState({ status: 'error' });
+      client.setQueryData(sessionQuery.queryKey, identity);
+    } else client.getQueryCache().find({ queryKey: sessionQuery.queryKey })!.setState({ status: 'error' });
     lateCommand.resolve({ kind: 'removed' });
     await write;
     await controller.retryOriginal();

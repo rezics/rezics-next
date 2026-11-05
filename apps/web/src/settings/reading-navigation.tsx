@@ -42,6 +42,7 @@ export class SettingsNavigationDrafts {
   private listeners = new Set<() => void>();
   private revision = 0;
   private resolve: ((stay: boolean) => void) | null = null;
+  private departureCommit: (() => void) | null = null;
   private active = true;
   snapshot = () => this.revision;
   subscribe = (listener: () => void) => {
@@ -82,11 +83,38 @@ export class SettingsNavigationDrafts {
       this.refresh();
     });
   };
-  private settle(stay: boolean) {
+  /** Commit same-tab navigation metadata only after this host accepts the departure. */
+  prepareDeparture = (currentPathname: string, nextPathname: string, commit: () => void): boolean => {
+    if (currentPathname === nextPathname) return true;
+    if (this.blocked) return false;
+    if (!this.active || !this.needsDecision()) {
+      try {
+        commit();
+      } catch {
+        // The route can still open safely without a return locator.
+      }
+      return true;
+    }
+    this.departureCommit = commit;
+    return true;
+  };
+  private settle(stay: boolean, commitDeparture = true) {
     const resolve = this.resolve;
+    const departure = this.departureCommit;
+    this.departureCommit = null;
     this.resolve = null;
     this.refresh();
-    resolve?.(stay);
+    try {
+      if (!stay && commitDeparture) {
+        try {
+          departure?.();
+        } catch {
+          // The route can still open safely without a return locator.
+        }
+      }
+    } finally {
+      resolve?.(stay);
+    }
   }
   stay = () => this.settle(true);
   leave = () => this.settle(false);
@@ -96,7 +124,7 @@ export class SettingsNavigationDrafts {
   };
   deactivate = () => {
     this.active = false;
-    this.leave();
+    this.settle(false, false);
   };
 }
 

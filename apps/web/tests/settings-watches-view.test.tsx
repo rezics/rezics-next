@@ -48,6 +48,7 @@ const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query
 const { sessionQuery } = await import('../src/session/query');
 const { SettingsSessionOwner, SettingsSessionContext } = await import('../src/settings/settings-session-owner');
 const { WatchesSection } = await import('../src/settings/watches');
+const { SettingsWatchesOwner } = await import('../src/settings/settings-page');
 const { SettingsNavigationProvider, useSettingsNavigationDraft } = await import('../src/settings/reading-navigation');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
   await import('@tanstack/react-router');
@@ -231,6 +232,153 @@ test('the mounted private view separates inaccessible targets, uncertain removal
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'bob' }),
     );
     expect(host.textContent).toBe('');
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    client.clear();
+  }
+});
+
+test('a disclosed later-page visit returns to its exact current window without scanning', async () => {
+  const client = new QueryClient();
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
+  const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  window.history.replaceState({}, '', '/en/settings#watches');
+  const requests: { kind: string; cursor: string | null }[] = [];
+  const attempted: Parameters<WatchManagementIO['stop']>[0][] = [];
+  const watch = (subscriptionId: string, revision: number, target: ManagedWatch['target']): ManagedWatch => ({
+    subscriptionId,
+    kind: 'thread',
+    revision,
+    createdAt: '2026-11-03T10:00:00.000Z',
+    command: { watchId: subscriptionId, kind: 'thread', expectedRevision: revision },
+    remove: 'available',
+    target,
+  });
+  const first = watch('first-window', 2, { title: 'First thread', href: '/threads/a/first' });
+  const visited = watch('visited-window', 7, { title: 'Later thread', href: '/threads/a/later' });
+  const concealedOnReturn = watch('concealed-on-return', 8, { title: 'Second target', href: '/threads/a/second' });
+  const absentOnReturn = watch('absent-on-return', 9, { title: 'Third target', href: '/threads/a/third' });
+  let laterRows: readonly ManagedWatch[] = [visited, concealedOnReturn, absentOnReturn];
+  const io: WatchManagementIO = {
+    read: async ({ kind, cursor }) => {
+      requests.push({ kind, cursor });
+      return {
+        kind: 'page',
+        page: {
+          viewer: { state: 'current', accountId: 'alice' },
+          actions: { remove: 'available' },
+          watches: cursor === null ? [first] : laterRows,
+          next: cursor === null ? 'later-window' : null,
+        },
+      };
+    },
+    stop: async (intent) => {
+      attempted.push(intent);
+      return attempted.length === 1
+        ? { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } }
+        : { kind: 'removed' };
+    },
+  };
+  const base = createRootRoute();
+  const settings = createRoute({
+    getParentRoute: () => base,
+    path: '/settings',
+    component: () => (
+      <SettingsNavigationProvider>
+        <SettingsWatchesOwner io={io} />
+      </SettingsNavigationProvider>
+    ),
+  });
+  const target = createRoute({
+    getParentRoute: () => base,
+    path: '/threads/$threadId/$slug',
+    component: () => <p>Thread target</p>,
+  });
+  const router = createRouter({
+    routeTree: base.addChildren([settings, target]),
+    history: createMemoryHistory({ initialEntries: ['/settings#watches'] }),
+  });
+  const root = createRoot(host as unknown as HTMLElement);
+  const link = (label: string) => {
+    const found = [...host.querySelectorAll('a')].find((item) => item.textContent === label);
+    expect(found).toBeDefined();
+    return found!;
+  };
+  const button = (label: string) => {
+    const found = [...host.querySelectorAll('button')].find((item) => item.textContent === label);
+    expect(found).toBeDefined();
+    return found!;
+  };
+  const visitAndReturn = async (label: string) => {
+    await act(async () => link(label).click());
+    expect(host.textContent).toContain('Thread target');
+    await act(async () => {
+      router.history.back();
+      await Promise.resolve();
+    });
+    expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
+  };
+  try {
+    await act(async () => {
+      await router.load();
+      root.render(
+        <QueryClientProvider client={client}>
+          <SettingsSessionContext.Provider value={owner}>
+            <RouterProvider router={router} />
+          </SettingsSessionContext.Provider>
+        </QueryClientProvider>,
+      );
+    });
+    await act(async () => button(m.settings_watches_next()).click());
+    expect(requests).toEqual([
+      { kind: 'thread', cursor: null },
+      { kind: 'thread', cursor: 'later-window' },
+    ]);
+    expect(link('Later thread').getAttribute('href')).toBe('/threads/a/later');
+
+    await act(async () => button(m.settings_watches_stop()).click());
+    expect(host.textContent).toContain(m.settings_watches_uncertain_text());
+    await act(async () => link('Later thread').click());
+    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain(m.settings_watches_leave_title());
+    await act(async () => button(m.settings_profile_stay()).click());
+    expect(router.state.location.pathname).toBe('/settings');
+    expect((window.history.state as Record<string, unknown>).__rezicsSettingsWatchReturn).toBeUndefined();
+    await act(async () => link('Later thread').click());
+    await act(async () => button(m.settings_profile_leave()).click());
+    expect(host.textContent).toContain('Thread target');
+    expect((window.history.state as Record<string, unknown>).__rezicsSettingsWatchReturn).toBeDefined();
+    await act(async () => {
+      router.history.back();
+      await Promise.resolve();
+    });
+    expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
+
+    expect(host.textContent).toContain(m.settings_watches_returned());
+    expect(requests.at(-1)).toEqual({ kind: 'thread', cursor: 'later-window' });
+    expect(button(m.settings_watches_previous())).toBeTruthy();
+    expect(link('Later thread')).toBeTruthy();
+    await act(async () => button(m.settings_watches_stop()).click());
+    expect(attempted[0]).toMatchObject({ watchId: 'visited-window', kind: 'thread', expectedRevision: 7 });
+    expect(attempted[1]).toMatchObject({ watchId: 'visited-window', kind: 'thread', expectedRevision: 7 });
+    expect(attempted[1]?.idempotencyKey).not.toBe(attempted[0]?.idempotencyKey);
+
+    laterRows = [watch('concealed-on-return', 8, null), absentOnReturn];
+    await visitAndReturn('Second target');
+    expect(host.textContent).toContain(m.settings_watches_return_missing());
+    expect(link('Third target')).toBeTruthy();
+    expect([...host.querySelectorAll('a')].some((item) => item.textContent === 'Second target')).toBe(false);
+
+    laterRows = [];
+    await visitAndReturn('Third target');
+    expect(host.textContent).toContain(m.settings_watches_return_missing());
+    expect(host.querySelectorAll('a')).toHaveLength(0);
+    expect(requests.slice(-2)).toEqual([
+      { kind: 'thread', cursor: 'later-window' },
+      { kind: 'thread', cursor: 'later-window' },
+    ]);
   } finally {
     await act(async () => root.unmount());
     host.remove();
