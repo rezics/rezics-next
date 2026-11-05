@@ -3,7 +3,7 @@ import { dependencyUnavailable, problem, problemResponse } from '../media/kernel
 import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
 import { authClient, configured, unreachable, type SessionEnv } from './client.ts';
 import { newCsrfToken } from './csrf.ts';
-import { websiteRequestedScopes } from './website-scopes';
+import { websiteRequestedScopes } from './website-scopes.ts';
 import {
   clearCookie,
   cookie,
