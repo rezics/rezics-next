@@ -4,7 +4,7 @@ import { createCollectionJob } from '../../src/content/collection-job.ts';
 import { createErasureJob } from '../../src/content/erasure-job.ts';
 import { createImageJob } from '../../src/content/image-job.ts';
 import { R2Storage } from '../../src/content/r2-storage.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 afterAll(() => pool.end());

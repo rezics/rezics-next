@@ -194,7 +194,14 @@
       "kind": "adapter",
       "owner": "accounts",
       "paths": ["services/kernel/src/access/**", "services/kernel/db/access/**"],
-      "publicEntries": ["services/kernel/src/access/index.ts"],
+      "publicEntries": [
+        "services/kernel/src/access/index.ts",
+        "services/kernel/src/access/account-discovery-source.ts",
+        "services/kernel/src/access/handle-policy.ts",
+        "services/kernel/src/access/authenticate.ts",
+        "services/kernel/src/access/write-rate.ts",
+        "services/kernel/src/access/write-rate-stage.ts"
+      ],
       "allowedDependencies": [
         "access-policy",
         "auth-contract",
@@ -215,7 +222,7 @@
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/commerce/**", "services/kernel/db/commerce/**"],
-      "publicEntries": [],
+      "publicEntries": ["services/kernel/src/commerce/config.ts"],
       "allowedDependencies": ["kernel-access", "kernel-content", "kernel-platform", "kernel-semantic"],
       "capabilities": ["commerce"],
       "postgresPaths": ["services/kernel/src/commerce/**"]
@@ -226,7 +233,7 @@
       "owner": "content",
       "paths": ["services/kernel/src/content/**", "services/kernel/db/content/**"],
       "excludes": ["services/kernel/src/content/community-projection/**"],
-      "publicEntries": ["services/kernel/src/content/realm-board-home.ts"],
+      "publicEntries": ["services/kernel/src/content/realm-board-home.ts", "services/kernel/src/content/index.ts", "services/kernel/src/content/review-discovery.ts"],
       "allowedDependencies": [
         "definitions",
         "document",
@@ -259,7 +266,7 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/community/**", "services/kernel/db/community/**"],
-      "publicEntries": [],
+      "publicEntries": ["services/kernel/src/community/index.ts"],
       "allowedDependencies": [
         "auth-contract",
         "document",
@@ -279,7 +286,7 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/rating/**", "services/kernel/db/rating/**"],
-      "publicEntries": [],
+      "publicEntries": ["services/kernel/src/rating/index.ts"],
       "allowedDependencies": [
         "kernel-access",
         "kernel-community",
@@ -298,7 +305,11 @@
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/library/**", "services/kernel/db/library/**"],
-      "publicEntries": [],
+      "publicEntries": [
+        "services/kernel/src/library/index.ts",
+        "services/kernel/src/library/collection-discovery-source.ts",
+        "services/kernel/src/library/collection-discovery-summaries.ts"
+      ],
       "allowedDependencies": [
         "access-policy",
         "auth-contract",
@@ -328,7 +339,14 @@
         "services/kernel/db/search/**",
         "services/kernel/db/presentation/**"
       ],
-      "publicEntries": [],
+      "publicEntries": [
+        "services/kernel/src/search/index.ts",
+        "services/kernel/src/search/composition.ts",
+        "services/kernel/src/search/rated-source.ts",
+        "services/kernel/src/search/space-discovery.ts",
+        "services/kernel/src/search/work.ts",
+        "services/kernel/src/search/discovery-filter.ts"
+      ],
       "allowedDependencies": [
         "bounds",
         "composition",
@@ -338,7 +356,6 @@
         "kernel-access",
         "kernel-commerce",
         "kernel-community",
-        "kernel-composition",
         "kernel-content",
         "kernel-library",
         "kernel-platform",
@@ -415,7 +432,13 @@
         "services/kernel/db/migrations/**",
         "services/kernel/db/schema.sql"
       ],
-      "publicEntries": [],
+      "publicEntries": [
+        "services/kernel/src/command/receipt-key.ts",
+        "services/kernel/src/clock.ts",
+        "services/kernel/src/request/access.ts",
+        "services/kernel/src/route/route.ts",
+        "services/kernel/src/tokens/seal.ts"
+      ],
       "allowedDependencies": [
         "bounds",
         "auth-contract",
@@ -458,6 +481,8 @@
         "kernel-access",
         "kernel-commerce",
         "kernel-content",
+        "kernel-community",
+        "kernel-library",
         "kernel-platform",
         "kernel-search",
         "kernel-semantic"

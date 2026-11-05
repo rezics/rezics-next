@@ -25,7 +25,7 @@ import { deadlineFor } from '../../src/request/deadline.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { PublicFilterCost } from '../../src/semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerOperations } from '../../src/search/public-filter-consumer-contract.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import {
   createReleasedLibraryPopulation,
   type EntryHandle,

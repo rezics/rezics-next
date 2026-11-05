@@ -4,7 +4,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { importsWorkModule } from '../../src/imports/erasure.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
 import { createPersonas, type Persona } from '../support/personas.ts';

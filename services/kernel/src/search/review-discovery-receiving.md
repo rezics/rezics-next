@@ -1,7 +1,7 @@
 # Public review journal receiving
 
 The installed caller is `searchWorkModule.register` → `startSearchIndexing` → `startDiscoveryIndexing`.
-The worker composes Content's authentic `createReviewDiscoverySource` with its existing Access, pool and token
+The worker composition root creates Content's authentic `createReviewDiscoverySource` with its Access, pool and token
 configuration. `search_review_discovery_receiving` consumes `com.rezics.content.review-discovery.changed.v1`
 as a wakeup. Each supervisor step calls `createReviewDiscoveryReceiving.next` once per writable mixed target.
 There is no additional executor, timer, population or Content producer. Missing Space/Collection producer

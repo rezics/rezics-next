@@ -16,7 +16,7 @@ import type {
 import { discoveryKindDirectory } from './discovery-registry.ts';
 import { compileText } from './text.ts';
 import { compileMatchEvidence, type MatchEvidenceQuery } from './match-evidence.ts';
-import { discoveryNativeQuery } from './discovery-query.ts';
+import { discoveryNativeQuery } from './discovery-native-query.ts';
 import { compileFilter } from './filter.ts';
 import type {
   PublicFilterDependencyKey,

@@ -7,7 +7,7 @@ import {
   ENTRY_INCARNATION_CUTOVER_SCHEDULE,
   ENTRY_INCARNATION_CUTOVER_SWEEP_WORKFLOW,
 } from '../../src/library/work-module.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { createWorkClient } from '../../src/work/client.ts';

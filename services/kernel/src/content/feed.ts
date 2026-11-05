@@ -3,7 +3,7 @@ import type { Access, Actor } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
-import type { DiscoverySearch } from '../search/discovery-service.ts';
+import type { DiscoverySearch } from '../search/index.ts';
 import type { SearchService } from '../search/service-scope.ts';
 import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';
 import { AuthenticationError } from '../request/access.ts';

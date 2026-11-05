@@ -183,10 +183,14 @@ describe('public review discovery adapter', () => {
     if (firstCard.status !== 'ready') return;
     expect(firstCard.value.get(fifthDocument.identity)?.text).toBe(initial[4]!.text);
     const authorSummary = await adapter.readCurrent([initial[4]!.id], context);
-    expect(authorSummary.get(initial[4]!.id)).toEqual({
+    expect(authorSummary.get(initial[4]!.id)).toMatchObject({
       id: initial[4]!.id,
       title: initial[4]!.title,
       summary: initial[4]!.text,
+      sourceVersion: nativeReview.sourceVersion,
+      sourcePosition: expect.any(String),
+      authorId: author.accountId,
+      subjectId: initial[4]!.subjectId,
     });
     await fixture.reader.query(
       "UPDATE content.board SET visibility='protected',security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",

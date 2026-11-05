@@ -13,7 +13,7 @@ import { anchorRoute, routeOf } from '../../src/route/route.ts';
 import { CREATE_SUBJECT } from '../../src/semantic/subject.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../src/work/client.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { composeWork, type WorkService } from '../../src/work/registry.ts';
 import { nativeFixture, cookies, password } from '../access/native-account-bindings-fixture.ts';
 import { testKernel, registerTestClient } from '../support/test-kernel.ts';

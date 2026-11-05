@@ -63,7 +63,8 @@ import type { CustodyDefinition, CustodyRetainedDefinition } from '../search/pub
 import { compileFilter } from '../search/filter.ts';
 import { compileText } from '../search/text.ts';
 import { validateSearchAfter } from '../search/query-payload.ts';
-import { compileDiscoveryConsumerCapture, type DiscoveryConsumerCaptureInput } from '../search/discovery.ts';
+import { compileDiscoveryConsumerCapture } from '../search/discovery-filter.ts';
+import type { DiscoveryConsumerCaptureInput } from '../search/index.ts';
 import { validatePublicSuggestionInput } from '../search/public-suggestion-input.ts';
 import {
   readPublicFilterConsumerCustody,

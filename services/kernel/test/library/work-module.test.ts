@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { libraryWorkModule } from '../../src/library/work-module.ts';
 import { createWorkClient } from '../../src/work/client.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { readWorkerConfig, startWorker } from '../../src/worker.ts';
 import { newId } from '../../src/route/route.ts';
 import { workerTestEnv } from '../support/worker-env.ts';

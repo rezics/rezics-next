@@ -8,12 +8,14 @@ import {
   type PublicCollectionDiscoverySource,
 } from '../../src/search/collection-discovery.ts';
 import type { CollectionDiscoveryItem } from '../../src/library/collection-discovery-source.ts';
+import { publicCollectionDiscoverySource } from '../../src/library/index.ts';
 import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
 import { createNativeDiscoveryRegistry, hydrateOwnerDiscoveryHits } from '../../src/search/discovery-hydration.ts';
 import { mintReadTime, releaseOperationalTime, authoritativeTimeValue } from '../../src/command/command.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { Access, Actor } from '../../src/request/access.ts';
+import { accountDiscoverySource } from '../../src/access/account-discovery-source.ts';
 import {
   createCollectionRulesFixture,
   type CollectionRulesFixture,
@@ -136,11 +138,14 @@ describe('connected native Collection reader journey', () => {
     deadline: Date.now() + 120000,
   });
   function connected() {
-    const leaf = createNativeCollectionDiscoveryAdapter(deps(), {
-      id: 'collection',
-      labels: { en: 'Collections' },
-      icon: 'collection',
-    });
+    const leaf = createNativeCollectionDiscoveryAdapter(
+      { ...deps(), source: publicCollectionDiscoverySource({ pool: f.database.pool }) },
+      {
+        id: 'collection',
+        labels: { en: 'Collections' },
+        icon: 'collection',
+      },
+    );
     const noRead = async (): Promise<never> => {
       throw new Error('Unrelated catalogue source was read');
     };
@@ -152,19 +157,41 @@ describe('connected native Collection reader journey', () => {
         source: { read: noRead, count: noRead },
         icons: Object.fromEntries(Object.keys(bundledRelease.types).map((kind) => [kind, 'catalogue'])),
       },
-      accounts: { labels: { en: 'Accounts' }, icon: 'account' },
+      accounts: { source: accountDiscoverySource(f.database.pool), labels: { en: 'Accounts' }, icon: 'account' },
       ownerAdapters: {
         collection: leaf.registration,
         review: { readiness: 'unavailable' },
         space: { readiness: 'unavailable' },
       },
     });
-    const current = (ids: string[], access: Access = f.runtime.identity.access) =>
-      hydrateOwnerDiscoveryHits(
+    const current = async (ids: string[], access: Access = f.runtime.identity.access) => {
+      const groups = new Map<number, ReturnType<typeof key>[]>();
+      for (const id of new Set(ids)) {
+        const candidateKey = key(id);
+        const partition = partitionOf(candidateKey.route);
+        const group = groups.get(partition) ?? [];
+        group.push(candidateKey);
+        groups.set(partition, group);
+      }
+      const candidates = new Map<string, Parameters<typeof hydrateOwnerDiscoveryHits>[1][number]>();
+      for (const [partition, keys] of groups) {
+        const snapshot = await leaf.source.read(partition, keys);
+        if (snapshot.status !== 'available') throw new Error('Collection source is unavailable in connected journey');
+        for (const item of snapshot.items) {
+          if (item.status !== 'indexable') continue;
+          candidates.set(item.key.id, {
+            key: { owner: 'commerce', kind: 'collection', ...item.key },
+            sourcePosition: snapshot.stamp.position,
+            revision: String(item.value.revision),
+          });
+        }
+      }
+      return hydrateOwnerDiscoveryHits(
         registry,
-        ids.map((id) => ({ owner: 'commerce' as const, kind: 'collection' as const, ...key(id) })),
+        ids.flatMap((id) => (candidates.has(id) ? [candidates.get(id)!] : [])),
         { access, actor: { kind: 'anonymous' }, deadline: Date.now() + 120000 },
       );
+    };
     return { leaf, current };
   }
   async function saved() {

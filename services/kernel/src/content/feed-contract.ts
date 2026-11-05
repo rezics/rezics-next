@@ -11,7 +11,7 @@ import type {
   PublicCollectionDiscoverySummary,
   PublicReviewDiscoverySummary,
   PublicSpaceDiscoverySummary,
-} from '../search/discovery.ts';
+} from '../search/index.ts';
 import type { CollectionResourceView } from '../library/collection-reads.ts';
 import { continuePageSchema } from '../library/transport-contract.ts';
 import { REACTION_KINDS } from './events.ts';

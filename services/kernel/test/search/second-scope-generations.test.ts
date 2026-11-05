@@ -11,14 +11,16 @@ import {
   DiscoveryPopulationCutChangedError,
   advanceDiscovery,
   DISCOVERY_LIVE_GENERATIONS_SQL,
-  type DiscoveryMetadataProducer,
 } from '../../src/search/generations.ts';
+import type { DiscoveryMetadataProducer } from '../../src/search/discovery-api.ts';
 import type { DiscoveryRegistry } from '../../src/search/discovery.ts';
 import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
-import { createDefaultDiscoveryOwnerAdapters } from '../../src/search/default-discovery.ts';
+import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
+import { resolveDiscoveryOwnerAdapters } from '../../src/search/composition.ts';
 import { createDiscoverySearch } from '../../src/search/discovery-service.ts';
 import { CollectionDiscoveryReadinessError } from '../../src/search/collection-discovery.ts';
 import type { OpenSearch } from '../../src/search/opensearch.ts';
+import type { DiscoveryProducerEntry } from '../../src/search/index.ts';
 
 test('a generation with missing public metadata producers is rejected before allocation', async () => {
   let connections = 0;
@@ -98,6 +100,37 @@ test('metadata producer absence and readiness omit only that kind from generatio
   ).not.toThrow();
 });
 
+test('query registration omits unavailable kinds and waits for the published generation', async () => {
+  const producer = (kind: 'collection' | 'review' | 'space', readiness: unknown) =>
+    ({ kind, owner: kind === 'collection' ? 'commerce' : 'content', readiness: async () => readiness }) as unknown as
+      DiscoveryMetadataProducer;
+  const entry = {
+    ownerAdapters: {
+      collection: { readiness: 'ready', adapter: {} },
+      review: { readiness: 'ready', adapter: {} },
+      space: { readiness: 'ready', adapter: {} },
+    },
+    metadataProducers: {
+      collection: producer('collection', 'ready'),
+      review: producer('review', 'unavailable'),
+      space: producer('space', {
+        state: 'ready',
+        generation: 'space-A',
+        cut: 'space-cut-A',
+        capabilities: { context: 'connected', media: 'connected', exposure: 'connected', 'source-fence': 'connected' },
+      }),
+    },
+  } as unknown as DiscoveryProducerEntry;
+  const resolved = await resolveDiscoveryOwnerAdapters(entry, ['collection']);
+
+  expect(Object.keys(resolved.metadataProducers)).toEqual(['collection']);
+  expect(resolved.omittedKinds).toMatchObject([
+    { id: 'review', state: 'unavailable' },
+    { id: 'space', state: 'preparing' },
+  ]);
+  expect(resolved.ownerAdapters.space).toEqual({ readiness: 'unavailable' });
+});
+
 test('default native owner readers register through the canonical slots without certifying population', async () => {
   let connections = 0;
   const pool = {
@@ -107,16 +140,16 @@ test('default native owner readers register through the canonical slots without 
     },
   } as unknown as Pool;
   const routeKey = new Uint8Array(32);
-  const ownerAdapters = createDefaultDiscoveryOwnerAdapters({
+  const producers = createDiscoveryProducerEntry({
     pool,
     routeKey,
     access: {} as never,
-    keys: {} as never,
     reviewSource: {} as never,
   });
-  const registry = await nativeDiscoveryRegistry(pool, routeKey, {} as never, {
+  const registry = await nativeDiscoveryRegistry(pool, routeKey, producers.subjects, {
     release: { types: {} } as never,
-    ownerAdapters,
+    ownerAdapters: producers.ownerAdapters,
+    accounts: producers.accounts,
   });
 
   expect(registry.getOwnerAdapter('collection').owner).toBe('commerce');
@@ -129,7 +162,7 @@ test('default native owner readers register through the canonical slots without 
 });
 
 test('default review population stays unready when the source has only the legacy key page', async () => {
-  const ownerAdapters = createDefaultDiscoveryOwnerAdapters({
+  const producers = createDiscoveryProducerEntry({
     pool: {
       connect: async () => {
         throw new Error('readiness must not open a connection');
@@ -140,7 +173,7 @@ test('default review population stays unready when the source has only the legac
     reviewSource: {} as never,
   });
 
-  expect(await ownerAdapters.metadataProducers.review?.readiness()).toBe('unavailable');
+  expect(await producers.metadataProducers.review?.readiness()).toBe('unavailable');
 });
 
 test('the installed Space capability survives JSON and cannot bind another physical target or producer epoch', async () => {
@@ -166,8 +199,13 @@ test('the installed Space capability survives JSON and cannot bind another physi
       release() {},
     }),
   } as unknown as Pool;
-  const adapters = createDefaultDiscoveryOwnerAdapters({ pool, routeKey: new Uint8Array(32), access: {} as never });
-  const producers = { space: adapters.metadataProducers.space! };
+  const entry = createDiscoveryProducerEntry({
+    pool,
+    routeKey: new Uint8Array(32),
+    access: {} as never,
+    reviewSource: {} as never,
+  });
+  const producers = { space: entry.metadataProducers.space! };
   const witnesses = await discoveryCapabilityWitnesses(producers);
   expect(witnesses.space).toMatchObject({ state: 'ready', capabilities: { 'source-fence': 'connected' } });
   const target = { prefix: 'search', generation: 1, uuid: 'physical-A', incarnation: 'allocation-A' };
@@ -192,7 +230,7 @@ test('the installed Space capability survives JSON and cannot bind another physi
 });
 
 test('a retired signed Review cut requests fresh population instead of retrying the opaque continuation', async () => {
-  const adapters = createDefaultDiscoveryOwnerAdapters({
+  const producers = createDiscoveryProducerEntry({
     pool: {} as Pool,
     routeKey: new Uint8Array(32),
     access: {} as never,
@@ -207,7 +245,7 @@ test('a retired signed Review cut requests fresh population instead of retrying 
       }),
     } as never,
   });
-  await expect(adapters.metadataProducers.review!.page(0, null, null, 100)).rejects.toBeInstanceOf(
+  await expect(producers.metadataProducers.review!.page(0, null, null, 100)).rejects.toBeInstanceOf(
     DiscoveryPopulationCutChangedError,
   );
 });

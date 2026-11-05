@@ -3,7 +3,7 @@ import { feedAuthor, feedExcerpt } from './feed-summary.ts';
 import { ContentNotFoundError, discloseThreads, readCitationDisclosure, readPost } from './reads.ts';
 import type { ContentReadDependencies, PostEntry, ThreadView } from './reads.ts';
 import type { AnchoredPosition, FeedParentAuthor, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';
-import type { AccountDiscoverySummary } from '../search/discovery.ts';
+import type { AccountDiscoverySummary } from '../search/index.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { readSubjectSummaries, readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { ProblemError } from '../http/problem.ts';
