@@ -6,10 +6,7 @@ test('environment prefixes retain ordered raw unsets and assignments', () => {
   const parsed = parseEnvironmentPrefix(argv);
   expect(parsed.raw).toEqual(argv.slice(0, 4));
   expect(parsed.command).toEqual(argv.slice(4));
-  expect(parsed.operations.map(({ raw }) => raw)).toEqual([
-    ['-u', 'KERNEL_CHECK_REMOTE'],
-    ['CI=1'],
-  ]);
+  expect(parsed.operations.map(({ raw }) => raw)).toEqual([['-u', 'KERNEL_CHECK_REMOTE'], ['CI=1']]);
 });
 
 test('Bun test syntax preserves focused wrappers, selectors, cwd, timeout and explicit file order', () => {
@@ -26,10 +23,7 @@ test('Bun test syntax preserves focused wrappers, selectors, cwd, timeout and ex
   ];
   const focusedTest = parseBunTestCommand(focused, 4)!;
   expect(focusedTest.prefix).toEqual(focused.slice(0, 6));
-  expect(focusedTest.arguments.map(({ raw }) => raw)).toEqual([
-    ['tests/account.test.ts'],
-    ['-t', 'signed-out action'],
-  ]);
+  expect(focusedTest.arguments.map(({ raw }) => raw)).toEqual([['tests/account.test.ts'], ['-t', 'signed-out action']]);
 
   const proof = [
     'env',

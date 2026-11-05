@@ -588,10 +588,7 @@ test('proof file unions keep explicit service files in source order under an ide
   const union = [...prefix, ...new Set([...first.slice(prefix.length), ...second.slice(prefix.length)])];
   expect(originalCommandMatches(union, [first, second])).toBe(true);
   expect(
-    originalCommandMatches(
-      [...prefix, ...second.slice(prefix.length), ...first.slice(prefix.length)],
-      [first, second],
-    ),
+    originalCommandMatches([...prefix, ...second.slice(prefix.length), ...first.slice(prefix.length)], [first, second]),
   ).toBe(false);
   const differentPrefix = ['env', 'CI=1', ...prefix.slice(3), ...second.slice(prefix.length)];
   expect(originalCommandMatches(union, [first, differentPrefix])).toBe(false);
