@@ -280,6 +280,21 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             spoilerLevel = level;
             continue;
           }
+          if (datatype === 'quantity') {
+            const content = qualifier.value.content;
+            if (
+              !object(content) ||
+              typeof content.amount !== 'string' ||
+              !Number.isFinite(Number(content.amount)) ||
+              typeof content.unit !== 'string' ||
+              !release.properties[qualifier.property]?.units?.includes(content.unit) ||
+              !runtime.release.properties[qualifier.property]?.units?.includes(content.unit)
+            ) {
+              complete = false;
+              break;
+            }
+            continue;
+          }
           if (datatype !== 'wikibase-item' && datatype !== 'string') {
             // IndexedStatement cannot represent this qualifier. Omitting it would turn
             // an incomplete association into apparently complete negative evidence.

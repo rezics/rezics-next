@@ -24,6 +24,7 @@ import {
   type ConceptWorksSelection,
 } from './index';
 import { readPublicConceptWorks } from './actions';
+import { ConceptWeightRange } from './weight';
 import type { DiscoveryRequest, DiscoveryState } from '../../../search/discovery';
 
 export type ConceptWorksRouteState = {
@@ -321,6 +322,21 @@ function ConceptWorksVisit({
         />
         {m.concept_tagged_works_descendants({}, options)}
       </label>
+
+      {read.works?.state === 'available' && (route.property ?? read.requestedRole) && (
+        <ConceptWeightRange
+          metadata={read.works.metadata}
+          property={(route.property ?? read.requestedRole)!}
+          qualifiers={requestQualifiers(route.tagQualifiersText)}
+          locale={locale}
+          onChange={(qualifiers) =>
+            onChange?.({
+              tagQualifiersText: qualifiers.length ? JSON.stringify(qualifiers) : undefined,
+              cursor: undefined,
+            })
+          }
+        />
+      )}
 
       {read.works?.state === 'available' && roleAvailableForRoute(read, route) && route.scheme && (
         <details className="rounded-lg border border-border/60 p-3" open={!!route.conditionText}>

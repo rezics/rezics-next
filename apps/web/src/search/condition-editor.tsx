@@ -501,6 +501,118 @@ function reconcileQualifierKeys(
   return { draftKey, values, keys };
 }
 
+function QualifierRangeFields({
+  qualifier,
+  context,
+  pointer,
+  onChange,
+}: {
+  qualifier: Extract<FilterQualifier, { range: unknown }>;
+  context: EditorContext;
+  pointer: string;
+  onChange(qualifier: FilterQualifier): void;
+}) {
+  const drafts = useRef({ gte: {}, lte: {} });
+  const [pendingUnit, setPendingUnit] = useState<{ qualifier: typeof qualifier; unit: string }>();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const dialogId = useId();
+  const currentUnitChange = pendingUnit?.qualifier === qualifier ? pendingUnit : undefined;
+  useEffect(() => {
+    if (currentUnitChange && dialog.current && !dialog.current.open) dialog.current.showModal();
+  }, [currentUnitChange]);
+  const replaceUnit = (unit: string) => onChange({ property: qualifier.property, range: { ...qualifier.range, unit } });
+  return (
+    <>
+      {(['gte', 'lte'] as const).map((bound) => {
+        const label =
+          bound === 'gte' ? m.refinement_lower({}, context.options) : m.refinement_upper({}, context.options);
+        return (
+          <EditorField key={bound} context={context} pointer={`${pointer}/range/${bound}`} label={label}>
+            {(props) => (
+              <ConditionRangeInput
+                {...props}
+                datatype="quantity"
+                draft={drafts.current[bound]}
+                locale={context.locale}
+                label={label}
+                value={qualifier.range[bound]}
+                onValue={(number) => {
+                  const range = { ...qualifier.range };
+                  if (number === undefined) delete range[bound];
+                  else range[bound] = number;
+                  onChange({ property: qualifier.property, range });
+                }}
+              />
+            )}
+          </EditorField>
+        );
+      })}
+      <EditorField context={context} pointer={`${pointer}/range/unit`} label={m.refinement_unit({}, context.options)}>
+        {(props) => (
+          <NativeSelect
+            {...props}
+            value={qualifier.range.unit ?? ''}
+            onChange={(event) =>
+              quantityUnitChangeNeedsConfirmation(
+                qualifier.range.unit,
+                event.currentTarget.value,
+                (['gte', 'lte'] as const).map((bound) => qualifier.range[bound]?.toString() ?? ''),
+              )
+                ? setPendingUnit({ qualifier, unit: event.currentTarget.value })
+                : replaceUnit(event.currentTarget.value)
+            }
+          >
+            <NativeSelectOption value="">{m.refinement_choose_property({}, context.options)}</NativeSelectOption>
+            {context.metadata.properties[qualifier.property]?.units?.map((unit) => (
+              <NativeSelectOption key={unit} value={unit}>
+                {unit}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        )}
+      </EditorField>
+      {currentUnitChange && (
+        <dialog
+          ref={dialog}
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={`${dialogId}-title`}
+          aria-describedby={`${dialogId}-description`}
+          className="max-w-lg rounded-lg border border-border bg-background p-4 text-foreground shadow-xl backdrop:bg-black/50"
+          onCancel={(event) => {
+            event.preventDefault();
+            setPendingUnit(undefined);
+          }}
+        >
+          <h2 id={`${dialogId}-title`} className="font-semibold">
+            {m.search_quantity_unit_change_title({}, context.options)}
+          </h2>
+          <p id={`${dialogId}-description`} className="mt-2 text-sm text-muted-foreground">
+            {m.search_quantity_unit_change_message(
+              { from: qualifier.range.unit ?? '', to: currentUnitChange.unit },
+              context.options,
+            )}
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="outline" autoFocus onClick={() => setPendingUnit(undefined)}>
+              {m.search_quantity_unit_change_cancel({}, context.options)}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                replaceUnit(currentUnitChange.unit);
+                setPendingUnit(undefined);
+              }}
+            >
+              {m.search_quantity_unit_change_confirm({}, context.options)}
+            </Button>
+          </div>
+        </dialog>
+      )}
+    </>
+  );
+}
+
 function NodeEditor({
   value,
   draft,
@@ -1136,29 +1248,43 @@ function NodeEditor({
                   </NativeSelect>
                 )}
               </EditorField>
-              <ValueFields
-                context={context}
-                pointer={`${pointer}/statement/qualifiers/${index}/in`}
-                values={qualifier.in}
-                choices={context.values[qualifier.property]}
-                entity={
-                  context.metadata.properties[qualifier.property]?.datatype === 'wikibase-item'
-                    ? {
-                        property: qualifier.property,
-                        targets: context.metadata.properties[qualifier.property]?.targets ?? [],
-                        occurrence: `${draft.key}:${qualifierDraft.keys[index]}`,
-                        nodeKey: draft.key,
-                      }
-                    : undefined
-                }
-                onChange={(selected) =>
-                  replaceStatement({
-                    qualifiers: value.statement.qualifiers!.map((entry, at) =>
-                      at === index ? { ...entry, in: selected } : entry,
-                    ),
-                  })
-                }
-              />
+              {'range' in qualifier ? (
+                <QualifierRangeFields
+                  key={qualifier.property}
+                  qualifier={qualifier}
+                  context={context}
+                  pointer={`${pointer}/statement/qualifiers/${index}`}
+                  onChange={(next) =>
+                    replaceStatement({
+                      qualifiers: value.statement.qualifiers!.map((entry, at) => (at === index ? next : entry)),
+                    })
+                  }
+                />
+              ) : (
+                <ValueFields
+                  context={context}
+                  pointer={`${pointer}/statement/qualifiers/${index}/in`}
+                  values={qualifier.in}
+                  choices={context.values[qualifier.property]}
+                  entity={
+                    context.metadata.properties[qualifier.property]?.datatype === 'wikibase-item'
+                      ? {
+                          property: qualifier.property,
+                          targets: context.metadata.properties[qualifier.property]?.targets ?? [],
+                          occurrence: `${draft.key}:${qualifierDraft.keys[index]}`,
+                          nodeKey: draft.key,
+                        }
+                      : undefined
+                  }
+                  onChange={(selected) =>
+                    replaceStatement({
+                      qualifiers: value.statement.qualifiers!.map((entry, at) =>
+                        at === index ? { property: entry.property, in: selected } : entry,
+                      ),
+                    })
+                  }
+                />
+              )}
               <Button
                 type="button"
                 variant="ghost"

@@ -208,7 +208,9 @@ export function PredicateDescription({
         {(previewNodes ? statement.qualifiers?.slice(0, 2) : statement.qualifiers)?.map((qualifier, i) => (
           <p key={i}>
             {m.condition_qualifier({}, options)}: {presentation.property(qualifier.property)} ={' '}
-            {terms(qualifier.in, (id) => presentation.value(qualifier.property, id))}
+            {'in' in qualifier
+              ? terms(qualifier.in, (id) => presentation.value(qualifier.property, id))
+              : rangeDescription(qualifier.range, locale, (unit) => unitText?.(qualifier.property, unit))}
           </p>
         ))}
         {previewNodes && (statement.qualifiers?.length ?? 0) > 2 && shortened}

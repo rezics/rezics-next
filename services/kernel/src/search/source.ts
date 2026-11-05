@@ -55,9 +55,9 @@ export type IndexedStatement = {
   language?: string;
   /** Present when the value's datatype can be a facet. */
   facet?: FacetValue;
-  /** Concrete adopted item (target subject id), string or canonical spoiler-level qualifiers on this statement.
+  /** Concrete adopted item, string, quantity or canonical spoiler-level qualifiers on this statement.
    * Unknown snaks are omitted; absence here is not complete negative evidence. */
-  qualifiers?: { property: string; value: string }[];
+  qualifiers?: { property: string; value: string; facet?: Extract<FacetValue, { kind: 'quantity' }> }[];
 };
 
 export type IndexedSubject = {

@@ -41,6 +41,22 @@ export function holdsCurrentStatements(
     let matches = true;
     for (const qualifier of clause.qualifiers ?? []) {
       const evidence = statement.qualifiers?.filter((value) => value.property === qualifier.property) ?? [];
+      if ('range' in qualifier) {
+        const { gte, lte, unit } = qualifier.range;
+        if (
+          !evidence.some(
+            ({ facet }) =>
+              facet !== undefined &&
+              facet.unit === unit &&
+              (gte === undefined || facet.amount >= gte) &&
+              (lte === undefined || facet.amount <= lte),
+          )
+        ) {
+          matches = false;
+          break;
+        }
+        continue;
+      }
       if (qualifier.property === 'rezics:spoilerLevel') {
         const levels = new Set(evidence.map((value) => value.value));
         if (levels.size > 1) {

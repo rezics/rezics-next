@@ -1,4 +1,5 @@
 import type { Release } from '@rezics/definitions';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -13,6 +14,7 @@ import {
   readConceptWorksPage,
 } from '../src/features/catalogue/concept-works';
 import type { DiscoveryState } from '../src/search/discovery';
+import { ConceptWeightRange } from '../src/features/catalogue/concept-works/weight';
 
 const conceptId = '00000000-0000-4000-8000-000000000041';
 const schemeId = '00000000-0000-4000-8000-000000000042';
@@ -21,6 +23,52 @@ const workId = '00000000-0000-4000-8000-000000000044';
 const released = recording.release as unknown as Release;
 const admission = conceptWorksAdmission(released, true);
 const schemes = [{ id: schemeId, label: 'Genre', lang: 'en', readable: true, conceptPage: true }];
+
+test('the mounted weight control and committed request preserve the fixed tag, metric, spoiler and sort', () => {
+  const current = conceptWorksAdmission(bundledRelease, true);
+  if (current.state !== 'available') throw new Error('Bundled release must admit classified works');
+  const qualifiers = [
+    { property: 'rezics:sourceTagWeight', range: { gte: 2, lte: 3, unit: '1' } },
+    { property: 'rezics:sourceTagWeightMetric', in: ['vndbTagsRating'] },
+    { property: 'rezics:spoilerLevel', in: ['0'] },
+  ];
+  const request = conceptWorksRequest(
+    {
+      conceptId,
+      property: 'schema:genre',
+      scheme: schemeId,
+      type: 'schema:Book',
+      includeChildren: true,
+      sort: 'rating',
+      qualifiers,
+      cursor: 'retained-page',
+    },
+    current,
+    schemes,
+    'en',
+  );
+  expect(request?.sort).toBe('rating');
+  expect(request?.cursor).toBe('retained-page');
+  expect(conceptLeaf(request!.filter as FilterDocument)?.statement).toEqual({
+    property: 'schema:genre',
+    in: [conceptId],
+    concept: { scheme: schemeId, includeChildren: true },
+    qualifiers,
+  });
+  const markup = renderToStaticMarkup(
+    createElement(ConceptWeightRange, {
+      metadata: current.metadata,
+      property: 'schema:genre',
+      qualifiers,
+      locale: 'en',
+      onChange() {},
+    }),
+  );
+  expect(markup).toContain('Source tag weight');
+  expect(markup).toContain('name="gte"');
+  expect(markup).toContain('value="2"');
+  expect(markup).toContain('value="3"');
+});
 
 function conceptLeaf(filter: FilterDocument): Extract<FilterDocument, { statement: unknown }> | undefined {
   if ('statement' in filter)

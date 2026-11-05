@@ -56,8 +56,11 @@ function allMatch(values: readonly RelationFacetMatch[]): RelationFacetMatch {
 
 function normalizedQualifiers(qualifiers: readonly FilterQualifier[] = []): FilterQualifier[] {
   const clauses = new Map<string, FilterQualifier>();
-  for (const { property, in: values } of qualifiers) {
-    const clause = { property, in: sortedValues(values) };
+  for (const qualifier of qualifiers) {
+    const clause =
+      'in' in qualifier
+        ? { property: qualifier.property, in: sortedValues(qualifier.in) }
+        : { property: qualifier.property, range: { ...qualifier.range } };
     clauses.set(JSON.stringify(clause), clause);
   }
   return [...clauses.keys()].sort().map((key) => clauses.get(key)!);

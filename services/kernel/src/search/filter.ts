@@ -32,7 +32,10 @@ export function compileFilter(
   // Inbound edges are absent from the index. Both polarities retain every candidate
   // for current native evidence, including beneath mixed Boolean expressions.
   relationOverflow ||= [...walkFilter(filter)].some(
-    (node) => 'statement' in node && 'in' in node.statement && node.statement.inverse === true,
+    (node) =>
+      'statement' in node &&
+      (('in' in node.statement && node.statement.inverse === true) ||
+        node.statement.qualifiers?.some((qualifier) => 'range' in qualifier)),
   );
 
   function statementQuery(exact: FilterClause, property: string, name: string, negated: boolean): FilterClause {
@@ -97,6 +100,9 @@ export function compileFilter(
       negated,
     });
     if ('in' in node.statement && node.statement.inverse) return { match_all: { _name: name } };
+    // Quantity qualifier ranges are native same-statement evidence. The current document
+    // format has no numeric qualifier fields; retain both polarities for native evaluation.
+    if (qualifiers?.some((qualifier) => 'range' in qualifier)) return { match_all: { _name: name } };
     // Name the broadened literal once, so marker-only matches retain the same lineage as exact matches.
     const named = relationOverflow ? {} : { _name: name };
     if ('values' in condition && !qualifiers?.length)
@@ -122,8 +128,10 @@ export function compileFilter(
       if (unit !== undefined) clauses.push({ term: { 'facts.unit': unit } });
       clauses.push({ range: { [unit === undefined ? 'facts.year' : 'facts.amount']: bounds } });
     }
-    for (const qualifier of qualifiers ?? [])
+    for (const qualifier of qualifiers ?? []) {
+      if (!('in' in qualifier)) continue;
       clauses.push({ terms: { 'facts.qualifiers': qualifier.in.map((value) => `${qualifier.property}=${value}`) } });
+    }
     return statementQuery(
       { nested: { path: 'facts', query: { bool: { filter: clauses } }, score_mode: 'none', ...named } },
       property,

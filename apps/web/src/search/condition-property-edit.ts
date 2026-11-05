@@ -118,7 +118,7 @@ export function changeStatementProperty(
       nextDefinition?.qualifiers?.includes(qualifier.property) === true &&
       properties[qualifier.property] !== undefined;
     if (compatible) return true;
-    if (hasValues(qualifier.in)) requiresConfirmation = true;
+    if ('in' in qualifier ? hasValues(qualifier.in) : hasRange(qualifier.range)) requiresConfirmation = true;
     return false;
   });
 
@@ -163,13 +163,24 @@ export function changeQualifierProperty(
 
   const compatible = sameValueDefinition(properties[qualifier.property], properties[nextProperty]);
   const qualifiers = value.statement.qualifiers!.map((entry, at) =>
-    at === index ? { property: nextProperty, in: compatible ? entry.in : [''] } : entry,
+    at === index
+      ? {
+          property: nextProperty,
+          ...(compatible
+            ? 'in' in entry
+              ? { in: entry.in }
+              : { range: entry.range }
+            : nextProperty === 'rezics:spoilerLevel'
+              ? { in: [''] }
+              : freshOperand(properties[nextProperty])),
+        }
+      : entry,
   );
   const next: FilterDocument = { statement: { ...value.statement, qualifiers } };
   return {
     original: value,
     next,
-    requiresConfirmation: !compatible && hasValues(qualifier.in),
+    requiresConfirmation: !compatible && ('in' in qualifier ? hasValues(qualifier.in) : hasRange(qualifier.range)),
   };
 }
 

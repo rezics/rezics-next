@@ -20,7 +20,9 @@ export type NumericFilterRange = {
 /** Explicit calendar endpoints never inherit the numeric range's year/quantity meaning. */
 export type TimeFilterRange = Readonly<CalendarRange> & { readonly type: 'time'; readonly unit?: never };
 export type FilterRange = NumericFilterRange | TimeFilterRange;
-export type FilterQualifier = { readonly property: string; readonly in: readonly string[] };
+export type FilterQualifier =
+  | { readonly property: string; readonly in: readonly string[] }
+  | { readonly property: string; readonly range: NumericFilterRange };
 export type ConceptSelection = Readonly<{ scheme: string; includeChildren?: boolean }>;
 
 /** Canonical equality operands for the released, dimensionless spoiler quantity. */
@@ -256,13 +258,21 @@ function parseQualifier(input: unknown, pointer: string): FilterQualifier {
   const fields = record(input, pointer);
   let property: string | undefined;
   let selected: string[] | undefined;
+  let range: FilterRange | undefined;
+  if (Object.hasOwn(fields, 'in') && Object.hasOwn(fields, 'range'))
+    fail(appendPointer(pointer, 'range'), 'unsupported');
   for (const key of Object.getOwnPropertyNames(fields)) {
     const fieldPointer = appendPointer(pointer, key);
     if (key === 'property') property = stringValue(ownValue(fields, key, fieldPointer), fieldPointer, true);
     else if (key === 'in') selected = values(ownValue(fields, key, fieldPointer), fieldPointer, false);
+    else if (key === 'range') range = parseRange(ownValue(fields, key, fieldPointer), fieldPointer);
     else fail(fieldPointer, 'unknown_field');
   }
   if (property === undefined) fail(appendPointer(pointer, 'property'), 'required');
+  if (range !== undefined) {
+    if (range.type === 'time') fail(appendPointer(pointer, 'range'), 'unsupported', 'unsupported_query');
+    return { property, range };
+  }
   if (selected === undefined) fail(appendPointer(pointer, 'in'), 'required');
   return { property, in: selected };
 }
@@ -956,6 +966,16 @@ function admitConstructed(
           reject(qualifierPropertyPointer, source, 'unsupported', 'unsupported_query');
         const inPointer = appendPointer(qualifierPointer, 'in');
         const datatype = dataField(qualifierDefinition, 'datatype');
+        if ('range' in qualifier) {
+          const rangePointer = appendPointer(qualifierPointer, 'range');
+          if (datatype !== 'quantity' || qualifier.property === 'rezics:spoilerLevel')
+            reject(rangePointer, source, 'unsupported', 'unsupported_query');
+          if (qualifier.range.unit === undefined)
+            reject(appendPointer(rangePointer, 'unit'), source, 'required', 'invalid_request');
+          if (!construction.units.get(qualifier.property)?.has(qualifier.range.unit!))
+            reject(appendPointer(rangePointer, 'unit'), source, 'unsupported', 'unsupported_query');
+          continue;
+        }
         if (datatype === 'wikibase-item') validateUuidValues(qualifier.in, inPointer, source);
         else if (
           datatype === 'quantity' &&
@@ -1108,7 +1128,22 @@ function admitConstructed(
       );
     if (statement.qualifiers) {
       for (let index = 0; index < statement.qualifiers.length; index++) {
-        const values = statement.qualifiers[index]!.in;
+        const qualifier = statement.qualifiers[index]!;
+        if ('range' in qualifier) {
+          const { gte, lte } = qualifier.range;
+          if ((gte === undefined && lte === undefined) || (gte !== undefined && lte !== undefined && gte > lte))
+            reject(
+              appendPointer(
+                appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index),
+                'range',
+              ),
+              source,
+              'out_of_range',
+              'invalid_request',
+            );
+          continue;
+        }
+        const values = qualifier.in;
         const valuesPointer = appendPointer(
           appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index),
           'in',
@@ -1137,7 +1172,9 @@ function admitConstructed(
       if (!spoilerIndices.length) qualifiers.push({ property: 'rezics:spoilerLevel', in: allowed });
       else {
         for (const index of spoilerIndices) {
-          const selected = qualifiers[index]!.in.filter((value) => allowed.includes(value as (typeof allowed)[number]));
+          // validateStatement admits spoiler qualifiers only as canonical equality sets.
+          const qualifier = qualifiers[index] as Extract<FilterQualifier, { in: readonly string[] }>;
+          const selected = qualifier.in.filter((value) => allowed.includes(value as (typeof allowed)[number]));
           if (!selected.length) {
             const qualifierPointer = appendPointer(
               appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index),
@@ -1145,7 +1182,7 @@ function admitConstructed(
             );
             reject(qualifierPointer, source, 'invalid_format', 'invalid_request');
           }
-          qualifiers[index] = { ...qualifiers[index]!, in: selected };
+          qualifiers[index] = { property: qualifier.property, in: selected };
         }
       }
       if (qualifiers.length > FILTER_LIMITS.qualifiers)
@@ -1181,7 +1218,7 @@ function admitConstructed(
                 ? {
                     qualifiers: admittedStatement.qualifiers.map((qualifier) => ({
                       property: qualifier.property,
-                      in: [...qualifier.in],
+                      ...('in' in qualifier ? { in: [...qualifier.in] } : { range: { ...qualifier.range } }),
                     })),
                   }
                 : {}),
@@ -1193,7 +1230,7 @@ function admitConstructed(
                 ? {
                     qualifiers: admittedStatement.qualifiers.map((qualifier) => ({
                       property: qualifier.property,
-                      in: [...qualifier.in],
+                      ...('in' in qualifier ? { in: [...qualifier.in] } : { range: { ...qualifier.range } }),
                     })),
                   }
                 : {}),
