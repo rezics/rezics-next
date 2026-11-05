@@ -198,7 +198,9 @@ beforeAll(async () => {
   grants = createGrantCommands({ pool, access: kernel.testAccess, managementAction: 'access:grant' });
   const seller = personas.orgOwner;
   await bootstrapLocalShowcaseBoardCreation(pool, personas.staff.accountId);
-  await seedGovernanceAuthority(pool, PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, seller.accountId, ['offer:create']);
+  await seedGovernanceAuthority(pool, PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, seller.accountId, [
+    'offer:create',
+  ]);
   await grant(seller, PLATFORM_RESOURCE, ['board:create', 'subject:create']);
   for (const group of ['purchases', 'selling'])
     await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
