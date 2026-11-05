@@ -383,12 +383,6 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
   const show = async (viewer: { state: string; subject?: string; csrfToken: string | null }, admitted = true) => {
     await act(async () => {
       client.setQueryData(['session'], viewer);
-      client.setQueryData(
-        ['exposure', 'viewer'],
-        admitted
-          ? ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign']
-          : [],
-      );
       client.setQueryData(['exposure', 'anonymous'], []);
       if (!root) {
         const html = renderToString(tree());
@@ -397,6 +391,16 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
         host.innerHTML = html;
         root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
       } else root.render(tree());
+      const { browserObservation } = await import('../src/session/observation');
+      const observation = browserObservation(client).getSnapshot();
+      if (observation.state === 'signed-in')
+        client.setQueryData(['exposure', 'viewer', observation.subject, observation.id], {
+          subject: observation.subject,
+          admitted: admitted
+            ? ['personal_library', 'reading_progress', 'collections', 'library_label.list', 'library_label.assign']
+            : [],
+          state: admitted ? 'ready' : 'denied',
+        });
     });
   };
   const tick = async () => {
