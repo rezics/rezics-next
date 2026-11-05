@@ -12,12 +12,14 @@ function CurrentVisit({
   state = 'current',
 }: {
   context?: 'selected' | 'global';
-  state?: 'current' | 'empty' | 'concealed' | 'destination-unavailable';
+  state?: 'current' | 'empty' | 'concealed' | 'withheld' | 'unavailable' | 'destination-unavailable';
 }) {
   const locale = getLocale();
   const selected = context === 'selected' ? visitContext : candidateContext;
   const router = useMemo(() => {
-    const example = releaseVisitExample(selected);
+    const example = releaseVisitExample(selected, 'wd:Q20631656', locale);
+    if (state === 'withheld') example.withhold();
+    if (state === 'unavailable') example.unavailable();
     if (state === 'empty') example.remove();
     if (state === 'concealed') example.conceal();
     if (state === 'destination-unavailable') example.failTarget();
@@ -70,3 +72,6 @@ export const GlobalDestinations: Story = { args: { context: 'global' } };
 export const EmptyStream: Story = { args: { state: 'empty' } };
 export const ConcealedTargets: Story = { args: { state: 'concealed' } };
 export const DestinationUnavailable: Story = { args: { state: 'destination-unavailable' } };
+
+export const WithheldStream: Story = { args: { state: 'withheld' } };
+export const UnavailableStream: Story = { args: { state: 'unavailable' } };

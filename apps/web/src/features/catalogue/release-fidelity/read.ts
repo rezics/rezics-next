@@ -229,7 +229,6 @@ export async function readReleaseFidelity(
     const sameVisit =
       !query.returning ||
       (query.returning.digest === digest && query.returning.revision === subject.data.subject.revision);
-    const cursor = sameVisit ? query.cursor : undefined;
     const bundle = await client.definitions.releases({ digest }).get({ headers });
     if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== digest) return candidateFailure(bundle.status);
     const release = bundle.data.release as Release;
@@ -262,6 +261,7 @@ export async function readReleaseFidelity(
     const stream =
       (query.stream ? streams.find((item) => item.key === query.stream) : streams[0]) ??
       (query.returning ? streams[0] : undefined);
+    const cursor = sameVisit && query.stream === stream?.key ? query.cursor : undefined;
     if (query.stream && !stream && !query.returning) return { ok: false, reason: 'invalid' };
     let rows: ReleaseRow[] = [];
     let next: string | null = null;
@@ -326,6 +326,7 @@ export async function readReleaseFidelity(
     const exactReturn =
       !query.returning ||
       (sameVisit &&
+        query.returning.stream === stream?.key &&
         (!returnedOccurrence ||
           rows.some(
             (row) =>
@@ -339,7 +340,7 @@ export async function readReleaseFidelity(
               (stream.direction === 'inverse' ? row.holder : row.statement && relatedTarget(row.statement)) ===
                 returnedOccurrence.target,
           )));
-    if (query.detail && exactReturn) {
+    if (query.detail && exactReturn && stream?.kind === 'release') {
       const listed = listedOnPage(rows, query.detail, query.id);
       if (!listed) return { ok: false, reason: 'invalid' };
       const selected = await client.subjects({ id: query.detail }).get({

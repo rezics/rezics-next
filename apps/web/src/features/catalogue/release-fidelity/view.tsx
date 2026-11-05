@@ -1,7 +1,7 @@
 import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from '../editor-lifetime';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { useId, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -129,8 +129,10 @@ function ReleaseFidelityLive({
   const [returnNotice, setReturnNotice] = useState(false);
   const restoredFocus = useRef<ReleaseVisit | undefined>(undefined);
   const outgoing = useRef<ReleaseVisit | undefined>(undefined);
+  const queryClient = useQueryClient();
+  const queryKey = ['release-fidelity', id, context, locale, lifetime.generation];
   const query = useQuery({
-    queryKey: [...['release-fidelity', id, context, locale], lifetime.generation],
+    queryKey,
     queryFn: () =>
       transport.read(returning?.stream, returning?.cursor, returning?.occurrence?.target, undefined, returning),
     retry: false,
@@ -215,6 +217,7 @@ function ReleaseFidelityLive({
   ) {
     if (!lifetime.active() || !slice.active() || draft) return;
     readFocus.cancel();
+    queryClient.setQueryData(queryKey, { ok: false, reason: 'stale' });
     const revision = ++sliceRevision.current;
     const sequence = ++readSequence.current;
     slice.retire();
@@ -502,7 +505,12 @@ function ReleaseFidelityLive({
     restoredFocus.current = undefined;
     const row = visit.occurrence && admitted && admittedRow(admitted, visit.occurrence);
     if (row?.readability === 'readable' && !returnNotice) {
-      const selected = document.querySelector<HTMLElement>('[data-selected-occurrence] button');
+      const current = [...document.querySelectorAll<HTMLElement>('[data-release-occurrence]')].find(
+        (element) => element.dataset.releaseOccurrence === visit.occurrence?.key,
+      );
+      const selected = current?.querySelector<HTMLElement>('button, summary, a');
+      const evidence = current?.querySelector('details');
+      if (evidence && visit.focus === 'inspection') evidence.open = true;
       if (selected) {
         selected.focus();
         return;
@@ -973,7 +981,11 @@ function ReleaseFidelityLive({
                           row={row}
                           locale={locale}
                         >
-                          <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
+                          <ContentItemFrame
+                            as="div"
+                            className="min-w-0 space-y-3 p-4"
+                            data-release-occurrence={row.readability === 'readable' ? occurrence?.key : undefined}
+                          >
                             <p className="break-words text-sm">
                               {read.stream?.label.text || read.stream?.property} ·{' '}
                               {read.stream?.direction === 'inverse' ? '←' : '→'}
@@ -998,6 +1010,16 @@ function ReleaseFidelityLive({
                                 link={ReleaseValueLink}
                               />
                             ) : null}
+                            {row.statement && row.readability === 'readable' && read.stream?.kind === 'file' && (
+                              <details className="min-w-0 space-y-3" data-slot="release-occurrence-evidence">
+                                <summary className={summaryClass}>{m.release_fidelity_select_detail({}, o)}</summary>
+                                <ReleaseStatementEvidence
+                                  statement={row.statement}
+                                  read={{ release: read.release, public: { related: row.related } }}
+                                  locale={locale}
+                                />
+                              </details>
+                            )}
                             {row.readability === 'readable' && !companion && (
                               <p>{m.release_fidelity_visit_unsupported({}, o)}</p>
                             )}
@@ -1010,7 +1032,7 @@ function ReleaseFidelityLive({
                             {row.readability === 'readable' && row.historical && (
                               <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
                             )}
-                            {occurrence && row.readability === 'readable' && (
+                            {occurrence && row.readability === 'readable' && read.stream?.kind === 'release' && (
                               <Button
                                 type="button"
                                 variant="outline"
@@ -1199,8 +1221,11 @@ function restoredReading(
   const selection = visit.occurrence;
   if (!selection || read.returned !== 'restored' || !admittedRow(page, selection))
     return { kind: 'page', admitted: page };
+  if (page.read.stream?.kind === 'file') return { kind: 'page', admitted: page };
   if (!read.detail || read.detail.subject.context !== visit.context || read.detail.subject.id !== selection.target)
     return { kind: 'selection-unavailable', admitted: page, selection };
+  if (!isReleaseType(read.release, read.detail.subject.type))
+    return { kind: 'selection-stale', admitted: page, selection };
   if (!Object.values(read.detail.subject.labels).some((label) => label.trim()))
     return { kind: 'selection-concealed', admitted: page, selection };
   return { kind: 'selected', admitted: page, selection, detail: read.detail };

@@ -14,7 +14,7 @@ const source = visitRelease,
   selectedContext = visitContext;
 
 /** Actual released definitions; only native response data is supplied by this bounded producer. */
-export function releaseVisitExample(context = selectedContext, type = 'wd:Q20631656') {
+export function releaseVisitExample(context = selectedContext, type = 'wd:Q20631656', locale = 'en') {
   const calls: { path: string; cursor: string | null; session: string | null; context: string | null }[] = [];
   const statement = (n: number, property: string, value: unknown) => ({
     id: id(n),
@@ -80,7 +80,8 @@ export function releaseVisitExample(context = selectedContext, type = 'wd:Q20631
   } as unknown as SubjectRead['subject'];
   let removed = false,
     concealed = false,
-    unavailable = false;
+    unavailable = false,
+    streamFailure = 0;
   const client = createKernelClient('https://release.test', {
     fetch: (async (input, init) => {
       const request = input instanceof Request ? input : new Request(String(input), init);
@@ -98,6 +99,7 @@ export function releaseVisitExample(context = selectedContext, type = 'wd:Q20631
         [work]: { type: type === 'bf:Instance' ? 'schema:Book' : 'wd:Q689445', labels: { en: 'Original work 原作' } },
       };
       if (url.pathname.endsWith('/relations') || url.pathname.endsWith('/links')) {
+        if (streamFailure) return Response.json({}, { status: streamFailure });
         const property = url.searchParams.get('property')!;
         const later = url.searchParams.get('cursor') === 'later';
         const rows = Array.from({ length: removed ? 0 : later ? 2 : 20 }, (_, index) => ({
@@ -154,7 +156,7 @@ export function releaseVisitExample(context = selectedContext, type = 'wd:Q20631
     readReleaseFidelity(client, 'Bearer reader', {
       id: source,
       context,
-      locale: 'en',
+      locale,
       stream,
       cursor,
       detail,
@@ -165,6 +167,12 @@ export function releaseVisitExample(context = selectedContext, type = 'wd:Q20631
     read,
     calls,
     subject,
+    withhold: () => {
+      streamFailure = 404;
+    },
+    unavailable: () => {
+      streamFailure = 503;
+    },
     remove: () => {
       removed = true;
     },
