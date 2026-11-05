@@ -89,27 +89,71 @@ test('coexisting page locales label and describe the retained Realm choice witho
   for (const catalogue of catalogues) for (const key of changedKeys) expect(catalogue[key]).toBeString();
 });
 
-
 test('mounted rating edits apply one visible GET pair and observation replacement retires the draft', async () => {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://search.test/en/search' });
-  const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement, Node: window.Node, IS_REACT_ACT_ENVIRONMENT: true };
-  const previous = new Map(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
   const { createRoot } = await import('react-dom/client');
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const population = 'c7a2a3f2-537c-4e72-b12d-8253fb240832';
-  const render = async (status: 'preparing' | 'unavailable' | 'refused' | 'generation-change', listed = true, locale = 'en', disabled = false) => {
-    await act(async () => root.render(createElement(SearchSort, {
-      ...props, locale, sort: 'rating', ratingPopulation: population, disabled,
-      ratingPopulations: listed ? [{ id: population, label: 'Native Realm' }] : [],
-      ratingReadiness: { status },
-    })));
+  const render = async (
+    status: 'preparing' | 'unavailable' | 'refused' | 'generation-change',
+    listed = true,
+    locale = 'en',
+    disabled = false,
+  ) => {
+    await act(async () =>
+      root.render(
+        createElement(SearchSort, {
+          ...props,
+          locale,
+          sort: 'rating',
+          ratingPopulation: population,
+          disabled,
+          ratingPopulations: listed ? [{ id: population, label: 'Native Realm' }] : [],
+          ratingReadiness: { status },
+        }),
+      ),
+    );
   };
-  const pair = () => [...new window.FormData(host.querySelector('form')!)].filter(([name]) => ['sort', 'ratingPopulation'].includes(name));
+  const pair = () =>
+    [...new window.FormData(host.querySelector('form')!)].filter(([name]) =>
+      ['sort', 'ratingPopulation'].includes(name),
+    );
   try {
+    await act(async () =>
+      root.render(
+        createElement(SearchSort, {
+          ...props,
+          sort: 'relevance',
+          ratingPopulations: [{ id: population, label: 'Native Realm' }],
+        }),
+      ),
+    );
+    host.querySelector('select[name="ratingPopulation"]')!.value = population;
+    host.querySelector('select[name="ratingPopulation"]')!.dispatchEvent(new window.Event('change', { bubbles: true }));
+    host.querySelector('select[name="sort"]')!.value = 'rating';
+    host.querySelector('select[name="sort"]')!.dispatchEvent(new window.Event('change', { bubbles: true }));
+    expect(pair()).toEqual([
+      ['sort', 'rating'],
+      ['ratingPopulation', population],
+    ]);
+    expect(host.querySelector('form')!.method).toBe('get');
+    expect(host.querySelector('input[name="cursor"]')).toBeNull();
     await render('preparing');
     const select = host.querySelector('select[name="ratingPopulation"]')!;
     select.value = '';
@@ -117,22 +161,36 @@ test('mounted rating edits apply one visible GET pair and observation replacemen
     const order = host.querySelector('select[name="sort"]')!;
     order.value = '';
     order.dispatchEvent(new window.Event('change', { bubbles: true }));
-    expect(pair()).toEqual([['sort', ''], ['ratingPopulation', '']]);
+    expect(pair()).toEqual([
+      ['sort', ''],
+      ['ratingPopulation', ''],
+    ]);
     expect(window.location.href).toBe('https://search.test/en/search');
     await render('unavailable', false);
-    expect(pair()).toEqual([['sort', 'rating'], ['ratingPopulation', population]]);
+    expect(pair()).toEqual([
+      ['sort', 'rating'],
+      ['ratingPopulation', population],
+    ]);
     const retry = new URL(host.querySelector('a')!.href);
     expect(retry.searchParams.get('ratingPopulation')).toBe(population);
     expect(retry.searchParams.get('cursor')).toBeNull();
     await render('refused', false, 'ja');
-    expect(host.querySelector('[role="alert"]')!.textContent).toContain(m.search_population_refused({}, { locale: 'ja' }));
+    expect(host.querySelector('[role="alert"]')!.textContent).toContain(
+      m.search_population_refused({}, { locale: 'ja' }),
+    );
     expect(host.querySelector('a')).toBeNull();
     await render('generation-change', false);
     expect(host.querySelector('a')!.textContent).toContain(m.search_population_restart({}, { locale: 'en' }));
     await render('preparing'); // A/B/A cannot restore the original edited DOM.
-    expect(pair()).toEqual([['sort', 'rating'], ['ratingPopulation', population]]);
+    expect(pair()).toEqual([
+      ['sort', 'rating'],
+      ['ratingPopulation', population],
+    ]);
     await render('preparing', true, 'en', true);
-    expect(pair()).toEqual([['ratingPopulation', population], ['sort', 'rating']]);
+    expect(pair()).toEqual([
+      ['ratingPopulation', population],
+      ['sort', 'rating'],
+    ]);
   } finally {
     await act(async () => root.unmount());
     await window.happyDOM.abort();
