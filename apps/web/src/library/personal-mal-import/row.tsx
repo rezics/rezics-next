@@ -135,14 +135,27 @@ export function MalRowReview({
           checked={draft.fields.includes('status')}
           disabled={busy}
           label={m.library_mal_select_status()}
-          onToggle={(on) => setDraft({ ...draft, fields: on ? ['status'] : [] })}
+          onToggle={(on) =>
+            setDraft({
+              ...draft,
+              fields: on
+                ? [...draft.fields.filter((field) => field !== 'status'), 'status']
+                : draft.fields.filter((field) => field !== 'status'),
+            })
+          }
         />
       ) : null}
       <MalLabelsReview
         row={row}
         disabled={busy || draft.skip}
         labels={draft.labels}
-        onChange={(labels) => setDraft({ ...draft, labels })}
+        onChange={(labels) =>
+          setDraft({
+            ...draft,
+            labels,
+            fields: [...draft.fields.filter((field) => field !== 'tags'), ...(labels.length ? ['tags'] : [])],
+          })
+        }
       />
       <MalAction type="button" disabled={busy} onClick={() => onSave(draft)}>
         {m.library_mal_save_review()}
