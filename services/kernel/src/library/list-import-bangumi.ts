@@ -179,6 +179,8 @@ function currentScoreVote(vote: VoteReviewCurrentVote): BangumiScoreCurrentVote 
   return { state: 'set', units: vote.units, revision: vote.revision, at: vote.changedAt };
 }
 
+function reviewView(review: StoredReview): BangumiReview;
+function reviewView(review: StoredReview | null): BangumiReview | null;
 function reviewView(review: StoredReview | null): BangumiReview | null {
   if (!review) return null;
   const {
@@ -425,12 +427,7 @@ export function createBangumiImport(deps: Dependencies) {
     if (!r) throw new LibraryNotFoundError();
     return r;
   }
-  async function recoveryRow(
-    tx: CommandTransaction,
-    a: AccountActor,
-    id: string,
-    ordinal: number,
-  ): Promise<StoredRow> {
+  async function recoveryRow(tx: CommandTransaction, a: AccountActor, id: string, ordinal: number): Promise<StoredRow> {
     const r = (
       await tx.query<StoredRow>(
         `SELECT r.ordinal,r.evidence,r.review,r.choice,r.outcome,r.labels FROM library.bangumi_upload_row r
@@ -1360,7 +1357,10 @@ export function createBangumiImport(deps: Dependencies) {
               target: r.review!.guard,
             };
             if (
-              !(scorePlan.action === 'set' && (scorePlan.sourceState === 'absent' || scorePlan.sourceState === 'unrated')) &&
+              !(
+                scorePlan.action === 'set' &&
+                (scorePlan.sourceState === 'absent' || scorePlan.sourceState === 'unrated')
+              ) &&
               scorePlan.target &&
               r.review!.scoreNativeGuard &&
               r.review!.scoreObservation
@@ -1456,7 +1456,12 @@ export function createBangumiImport(deps: Dependencies) {
       const plan = r.choice!.scorePlan;
       if (scoreChoice.action === 'preserve') {
         outcome.score = { action: 'preserve', status: 'skipped', reason: 'existing_native_vote_preserved' };
-      } else if (plan?.action === 'set' && (plan.sourceState === 'absent' || plan.sourceState === 'unrated')) {
+      } else if (
+        plan &&
+        !('receiptOnly' in plan) &&
+        plan.action === 'set' &&
+        (plan.sourceState === 'absent' || plan.sourceState === 'unrated')
+      ) {
         outcome.score = { action: 'set', status: 'unsupported', reason: `source_${plan.sourceState}` };
       } else if (!plan || 'receiptOnly' in plan || !plan.command || !plan.commandActor || !plan.target) {
         outcome.score = {
@@ -1539,10 +1544,11 @@ export function createBangumiImport(deps: Dependencies) {
         }
       }
       if (outcome.status !== 'failed') {
-        if (outcome.score.status === 'stale') outcome.status = 'stale';
-        else if (outcome.score.status === 'unavailable' || outcome.score.status === 'unsupported')
-          outcome.status = 'unsupported';
-        else if (outcome.score.status === 'applied' && outcome.status !== 'stale') outcome.status = 'applied';
+        // Every score path above sets outcome.score before the row status is derived.
+        const score = outcome.score!;
+        if (score.status === 'stale') outcome.status = 'stale';
+        else if (score.status === 'unavailable' || score.status === 'unsupported') outcome.status = 'unsupported';
+        else if (score.status === 'applied' && outcome.status !== 'stale') outcome.status = 'applied';
       }
       assertJsonBytes(outcome, BANGUMI_LIMITS.outcomeBytes);
       // An acknowledged row can be refreshed under a new token; an uncertain command keeps its original choice.
