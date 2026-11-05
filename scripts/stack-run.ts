@@ -29,7 +29,7 @@ import {
   validateEstimateMs,
 } from './remote-check.ts';
 import { hasOutputTreeReturn, outputTreeProfile, withKernelClientOutput } from './check-output-tree.ts';
-import { withStackSlot } from './stack-lease.ts';
+import { busy, withStackSlot } from './stack-lease.ts';
 import {
   captureArtifactReturns,
   clearDeclaredArtifacts,
@@ -137,11 +137,37 @@ export const LOCAL_CONTAINER_REFUSAL =
   'Hand the run to `bun run --cwd services/kernel check <files>`, ' +
   '`bun run --cwd services/auth check <files>`, or root `bun test`.';
 
+/** Whether this worker's brief lists a native or browser acceptance check, so it may run one walk stack. */
+export function walkStackRequired(env: Environment): boolean {
+  if (!isWorker(env)) return false;
+  return (env.GOAL_ACCEPTANCE_REQUIRES ?? '').split(',').some((item) => item === 'native' || item === 'browser');
+}
+
+/** The host-wide admission directory: the main checkout's `.temp`, shared by every worktree on this host. */
+export function walkStackDirectory(root: string, env: Environment): string {
+  if (env.REZICS_WALK_STACK_DIR) return env.REZICS_WALK_STACK_DIR;
+  const main = mainCheckout(root);
+  if (main === null) throw new Error(`walk stacks need a Git checkout to find the shared .temp directory: ${root}`);
+  return join(main, '.temp', 'walk-stacks');
+}
+
 /**
- * The error a worker must see instead of starting a local stack container outside an approved remote-check run.
+ * A walk stack is admitted while the slot lock its launch took is held. The environment names the slot; the name
+ * alone proves nothing.
+ */
+function walkStackAdmitted(env: Environment, root: string): boolean {
+  const slot = env.REZICS_WALK_STACK_SLOT;
+  if (slot === undefined || !/^[1-9]\d*$/.test(slot) || !walkStackRequired(env)) return false;
+  return busy(join(walkStackDirectory(root, env), `slot-${slot}.lock`));
+}
+
+/**
+ * The error a worker must see instead of starting a local stack container outside an approved remote-check run or an
+ * admitted walk stack.
  */
 export async function workerLocalContainerError(env: Environment, cwd: string): Promise<string | null> {
   if (!isWorker(env) || onCheckHost(cwd)) return null;
+  if (walkStackAdmitted(env, cwd)) return null;
   return LOCAL_CONTAINER_REFUSAL;
 }
 
