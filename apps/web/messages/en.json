@@ -8536,6 +8536,8 @@
   "realm_members_sparse": "No accounts are disclosed on this page. More pages are available.",
   "realm_members_empty": "No current members are disclosed.",
   "realm_members_more": "More",
+  "realm_members_previous": "Previous",
+  "realm_members_first": "First",
   "realm_members_refresh": "Refresh roster",
   "realm_members_denied": "You cannot enumerate members of this Realm.",
   "realm_members_preparing": "Member management is preparing. Try again explicitly.",

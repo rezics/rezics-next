@@ -2,8 +2,9 @@
 
 `/realms/:id/members` is a private management destination, linked from the existing Realm management region.
 It takes the Realm anchor, never the containing Space ID. Navigation admission grants no enumeration or command
-authority. The installed route uses `boundedRealmMemberPage`, an explicit unavailable adapter with no network calls.
-An ordinary member receives no roster or commands from this interface.
+authority. The installed route uses the session-scoped native source; `boundedRealmMemberPage` remains an explicit
+unavailable composition fixture with no network calls. An ordinary member receives no roster or commands from this
+interface.
 
 Decision: management discovery uses the existing exact-Realm `realm.update` permission or current appearance
 `canManage` observation, both owned by `realm:manage`; ban-list admission and Space-only grants do not qualify.
@@ -13,6 +14,10 @@ Decision: bind page authority directly to the producer's stable HMAC for the cur
 
 Decision: interval tokens are opaque within their exact Account selection; tokens need not be globally unique across
 different Accounts.
+
+Decision: each visit retains at most eight admitted predecessor cursor coordinates, plus its current coordinate and
+one staged target. More, Previous and First change accepted history only after a ready page matches the current Realm
+and page authority; a failed target retries exactly without popping history.
 
 ## Producer boundary
 
@@ -27,6 +32,13 @@ composition types, not a proposed wire schema. `pageBound` must come from that i
 fixtures use 20 only to exercise bounded composition.
 Cursor bytes pass through unchanged. Selected inspection never moves the page cursor. An empty page with `next`
 retains More. A failed page retries the exact original address. Denial is distinct from empty or unavailable.
+
+The fresh visit starts with a cursor-free read and no predecessor. More stages the admitted `next` cursor, Previous
+stages the exact most recent predecessor, and First stages the cursor-free read. Ready admission accepts the staged
+coordinate; it adds, pops or clears predecessor coordinates only then. Failed, unavailable or preparing reads keep
+the target staged for exact Retry. Denial clears only the staged target. A thrown, retired or stale-source read does
+not become an empty page or accepted coordinate. Disconnect and source, Realm or caller retirement clear all
+coordinates. Page movement remains in the roster; the selected-member Back action returns to the same coordinate.
 
 The visit indexes one admitted page and obtains one observation per deliberate selection. Selection captures the
 exact account, producer-owned membership interval when selected from a row, and authority revision; an entered
@@ -73,10 +85,12 @@ identity, advice or producer currentness retires the review before it can write.
 
 - Touches: one page request per explicit page operation, at most one selected request per deliberate selection,
   explicit retry or status check; no identity hydration, global scans, hidden refill, client sorting, accumulation or
-  polling.
-  The explicitly unavailable composition fixture makes zero native requests; the mounted source requires the admitted
-  browser session and viewer binding.
-- Bound: one page, one O(N) index and one active selection. Its last ready observation may stay in component memory
+  polling. Each roster move and page Retry issues one native GET; selection, exact lookup, selected retry or status
+  readback issues one exact-account GET. The unavailable fixture makes zero native requests; the installed route
+  requires the admitted browser session and viewer binding.
+- Bound: one native page of at most 20 rows, one O(N) disclosed-row index, one exact selection, at most eight
+  predecessor coordinates, one current coordinate and one staged target. Each retained cursor is at most 4,096
+  code units under native admission. Prior pages and identities are not retained. The selected observation may stay in component memory
   during an explicit same-address status read so accepted work remains pending after a failed read; it is never shown
   as a fallback identity. No guessed wire string, cursor or media caps; publication must provide them before
   production binding. Concealed rows carry no identity. The consumer rejects duplicate accounts,

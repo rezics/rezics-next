@@ -8451,6 +8451,8 @@
   "realm_members_sparse": "이 페이지에 공개된 계정이 없습니다. 다음 페이지가 있습니다.",
   "realm_members_empty": "공개된 현재 멤버가 없습니다.",
   "realm_members_more": "더 보기",
+  "realm_members_previous": "이전",
+  "realm_members_first": "첫 페이지",
   "realm_members_refresh": "목록 새로 고침",
   "realm_members_denied": "이 Realm의 멤버를 열거할 권한이 없습니다.",
   "realm_members_preparing": "멤버 관리를 준비 중입니다. 다시 시도하세요.",

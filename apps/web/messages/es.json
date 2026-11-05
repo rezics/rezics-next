@@ -8451,6 +8451,8 @@
   "realm_members_sparse": "No se muestran cuentas en esta página. Hay más páginas disponibles.",
   "realm_members_empty": "No se muestran miembros actuales.",
   "realm_members_more": "Más",
+  "realm_members_previous": "Anterior",
+  "realm_members_first": "Primera página",
   "realm_members_refresh": "Actualizar lista",
   "realm_members_denied": "No puedes enumerar los miembros de este Realm.",
   "realm_members_preparing": "La administración de miembros se está preparando. Vuelve a intentarlo.",

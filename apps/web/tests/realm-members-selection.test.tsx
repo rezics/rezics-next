@@ -16,6 +16,15 @@ function page(ids = ['a', 'b']): MemberPage {
     })),
   };
 }
+function windowPage(cursor: string | null, windows = 3): MemberPage {
+  const index = cursor === null ? 0 : Number(cursor.slice(1));
+  return {
+    realm: { id: 'realm', label: 'Realm' },
+    authority: 'grant',
+    rows: [],
+    next: index + 1 < windows ? `w${index + 1}` : null,
+  };
+}
 const settle = async () => {
   await Promise.resolve();
   await Promise.resolve();
@@ -310,4 +319,126 @@ test('selected episode changes retire stale inspection while explicit add readba
   await retry.retrySelected();
   expect(retry.snapshot()).toMatchObject({ read: { kind: 'unavailable' }, selection: null });
   stopRetry();
+});
+
+test('a fresh visit has no predecessor and a three-window terminal page returns through exact coordinates', async () => {
+  const addresses: { realmId: string; cursor: string | null }[] = [];
+  const visit = new RealmMembersVisit('realm', {
+    pageBound: 20,
+    readPage: async (address) => {
+      addresses.push(address);
+      return { kind: 'ready', page: windowPage(address.cursor) };
+    },
+    readSelected: async () => ({ kind: 'unavailable' }),
+  });
+  const stop = visit.connect();
+  await settle();
+  expect(visit.canPrevious()).toBe(false);
+  expect(await visit.previous()).toBe(false);
+  await visit.more();
+  await visit.more();
+  expect(visit.snapshot().read).toMatchObject({ kind: 'ready', page: { next: null } });
+  expect(visit.canPrevious()).toBe(true);
+  expect(visit.canFirst()).toBe(true);
+  await visit.previous();
+  await visit.previous();
+  expect(visit.snapshot().address).toEqual({ realmId: 'realm', cursor: null });
+  expect(visit.canPrevious()).toBe(false);
+  expect(addresses.map(({ cursor }) => cursor)).toEqual([null, 'w1', 'w2', 'w1', null]);
+  stop();
+});
+
+test('predecessor history is bounded and a forward move branches from the accepted window', async () => {
+  const addresses: (string | null)[] = [];
+  const visit = new RealmMembersVisit('realm', {
+    pageBound: 20,
+    readPage: async ({ cursor }) => {
+      addresses.push(cursor);
+      return { kind: 'ready', page: windowPage(cursor, 12) };
+    },
+    readSelected: async () => ({ kind: 'unavailable' }),
+  });
+  const stop = visit.connect();
+  await settle();
+  for (let index = 0; index < 11; index++) await visit.more();
+  for (let index = 10; index >= 3; index--) {
+    await visit.previous();
+    expect(visit.snapshot().address.cursor).toBe(`w${index}`);
+  }
+  expect(visit.canPrevious()).toBe(false);
+  await visit.more();
+  await visit.previous();
+  expect(visit.snapshot().address.cursor).toBe('w3');
+  await visit.first();
+  expect(visit.snapshot().address.cursor).toBe(null);
+  expect(visit.canPrevious()).toBe(false);
+  expect(addresses.slice(-3)).toEqual(['w4', 'w3', null]);
+  stop();
+});
+
+test('duplicate More reads once; failed Previous and First retry their staged cursor exactly', async () => {
+  const addresses: (string | null)[] = [];
+  const delayed = Promise.withResolvers<MemberPageRead>();
+  let deferNext = true;
+  let failPrevious = true;
+  let failFirst = true;
+  const visit = new RealmMembersVisit('realm', {
+    pageBound: 20,
+    readPage: async ({ cursor }) => {
+      addresses.push(cursor);
+      if (cursor === 'w1' && deferNext) {
+        deferNext = false;
+        return delayed.promise;
+      }
+      if (cursor === 'w1' && failPrevious) {
+        failPrevious = false;
+        return { kind: 'failed' };
+      }
+      if (cursor === null && failFirst) {
+        failFirst = false;
+        return { kind: 'unavailable' };
+      }
+      return { kind: 'ready', page: windowPage(cursor) };
+    },
+    readSelected: async () => ({ kind: 'unavailable' }),
+  });
+  const stop = visit.connect();
+  await settle();
+  const advancing = visit.more();
+  expect(await visit.more()).toBe(false);
+  expect(addresses).toEqual([null, 'w1']);
+  delayed.resolve({ kind: 'ready', page: windowPage('w1') });
+  expect(await advancing).toBe(true);
+  await visit.more();
+  expect(await visit.previous()).toBe(false);
+  expect(visit.snapshot().read.kind).toBe('failed');
+  expect(await visit.retryPage()).toBe(true);
+  expect(visit.canPrevious()).toBe(true);
+  expect(await visit.first()).toBe(false);
+  expect(visit.snapshot().read.kind).toBe('unavailable');
+  expect(await visit.retryPage()).toBe(true);
+  expect(visit.canPrevious()).toBe(false);
+  expect(addresses).toEqual([null, 'w1', 'w2', 'w1', 'w1', null, null]);
+  stop();
+});
+
+test('a staged page read throws without creating an empty page or accepting its coordinate', async () => {
+  let reads = 0;
+  const visit = new RealmMembersVisit('realm', {
+    pageBound: 20,
+    readPage: async ({ cursor }) => {
+      reads++;
+      if (cursor !== null) throw new Error('unexpected source failure');
+      return { kind: 'ready', page: { ...windowPage(null), next: 'w1' } };
+    },
+    readSelected: async () => ({ kind: 'unavailable' }),
+  });
+  const stop = visit.connect();
+  await settle();
+  await expect(visit.more()).rejects.toThrow('unexpected source failure');
+  expect(visit.snapshot().read.kind).toBe('loading');
+  expect(visit.snapshot().address.cursor).toBe('w1');
+  expect(visit.canPrevious()).toBe(false);
+  expect(reads).toBe(2);
+  stop();
 });

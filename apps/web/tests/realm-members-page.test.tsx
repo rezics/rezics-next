@@ -215,6 +215,88 @@ test('mounted roster inspects an exact current observation, keeps pending truthf
   expect(document.activeElement?.textContent).toBe(m.realm_members_inspect());
 });
 
+test('selected-member Back preserves the current window, row and deferred focus target', async () => {
+  const base = source();
+  const addresses: (string | null)[] = [];
+  const paged: RealmMembersSource = {
+    ...base,
+    readPage: async (address) => {
+      addresses.push(address.cursor);
+      const read = await base.readPage(address);
+      return read.kind === 'ready'
+        ? { ...read, page: { ...read.page, next: address.cursor === null ? 'window-two' : null } }
+        : read;
+    },
+  };
+  await render(paged);
+  await click(m.realm_members_more());
+  expect(document.activeElement?.textContent).toBe(m.realm_members_heading());
+  expect(host.querySelectorAll('button').length).toBeGreaterThan(0);
+  expect(host.textContent).toContain(m.realm_members_previous());
+  expect(host.textContent).toContain(m.realm_members_first());
+  await click(m.realm_members_inspect());
+  expect(host.textContent).not.toContain(m.realm_members_previous());
+  expect(host.textContent).not.toContain(m.realm_members_first());
+  expect(host.textContent).not.toContain(m.realm_members_more());
+  await click(m.realm_members_back());
+  expect(addresses).toEqual([null, 'window-two']);
+  expect(document.activeElement?.textContent).toBe(m.realm_members_inspect());
+  expect(host.textContent).toContain(m.realm_members_previous());
+  expect(host.textContent).toContain(m.realm_members_first());
+});
+
+test('Realm and source replacement during a staged read cannot show or focus the stale page', async () => {
+  for (const replacement of ['realm', 'source'] as const) {
+    const pending = Promise.withResolvers<MemberPageRead>();
+    const base = source();
+    const moving: RealmMembersSource = {
+      ...base,
+      readPage: async (address) => {
+        if (address.cursor === 'window-two') return pending.promise;
+        const read = await base.readPage(address);
+        return read.kind === 'ready' ? { ...read, page: { ...read.page, next: 'window-two' } } : read;
+      },
+    };
+    await render(moving);
+    await click(m.realm_members_more());
+    const replacementRealm = replacement === 'realm' ? 'other-realm' : 'realm';
+    const replacementLabel = replacement === 'realm' ? 'Other Realm' : 'Replacement Realm';
+    await render(
+      {
+        pageBound: 20,
+        readPage: async () => ({
+          kind: 'ready',
+          page: { realm: { id: replacementRealm, label: replacementLabel }, authority: 'replacement', rows: [], next: null },
+        }),
+        readSelected: async () => ({ kind: 'unavailable' }),
+      },
+      replacementRealm,
+    );
+    await act(async () => {
+      pending.resolve({
+        kind: 'ready',
+        page: {
+          realm: { id: 'realm', label: 'Stale Realm' },
+          authority: 'grant',
+          rows: [
+            {
+              kind: 'disclosed',
+              identity: { accountId: 'stale', reference: 'stale', label: 'Stale returned member' },
+              membershipInterval: 'stale-episode',
+              membership: 'current',
+            },
+          ],
+          next: null,
+        },
+      });
+      await tick();
+    });
+    expect(host.textContent).toContain(replacementLabel);
+    expect(host.textContent).not.toContain('Stale returned member');
+    expect(document.activeElement).not.toBe(host.querySelector('h1'));
+  }
+});
+
 test('mounted native source renders producer viewer authority and preserves the selected membership episode', async () => {
   const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
   const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000301';
@@ -278,7 +360,8 @@ test('selected addition reviews the entered identity, retries one immutable comm
     ...fixture,
     readPage: async (address) => {
       pages++;
-      return fixture.readPage(address);
+      const read = await fixture.readPage(address);
+      return read.kind === 'ready' ? { ...read, page: { ...read.page, next: 'window-two' } } : read;
     },
     readSelected: async (address) => {
       addresses.push(address);
@@ -313,6 +396,7 @@ test('selected addition reviews the entered identity, retries one immutable comm
   await click(m.realm_members_lookup_account());
   expect(addresses).toEqual([{ realmId: 'realm', accountId, authority: 'grant' }]);
   expect(host.textContent).toContain('Exact inspected account');
+  expect(host.textContent).not.toContain(m.realm_members_more());
   await click(m.realm_members_add_member());
   expect(host.textContent).toContain('Add Exact inspected account to Exact Realm?');
   expect(host.textContent).toContain(accountId);
@@ -323,6 +407,7 @@ test('selected addition reviews the entered identity, retries one immutable comm
   expect(intents).toHaveLength(2);
   expect(intents[0]).toEqual(intents[1]);
   expect(Object.isFrozen(intents[0])).toBe(true);
+  expect(host.textContent).not.toContain(m.realm_members_more());
   expect(host.textContent).toContain(m.realm_members_add_pending());
   expect(addresses).toHaveLength(1);
   expect(pages).toBe(1);
@@ -341,6 +426,11 @@ test('selected addition reviews the entered identity, retries one immutable comm
   ]);
   expect(host.textContent).toContain(m.realm_members_current());
   expect(pages).toBe(1);
+  await click(m.realm_members_back());
+  expect(host.textContent).toContain('Similar name');
+  expect(host.textContent).toContain(m.realm_members_more());
+  expect(pages).toBe(1);
+  expect(document.activeElement?.textContent).toBe(m.realm_members_heading());
 });
 
 test('selected ban and unban review the exact identity and use the existing native command/readback owner', async () => {
