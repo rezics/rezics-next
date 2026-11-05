@@ -5,6 +5,7 @@ import {
   createElement,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -477,6 +478,7 @@ export function BoardPinThreadControls({
   onRetry(): void;
   onRefresh(): void;
 }): ReactNode {
+  const confirmationId = useId();
   const [pending, setPending] = useState<BoardPinAction | null>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const statusRef = useRef<HTMLSpanElement>(null);
@@ -533,7 +535,7 @@ export function BoardPinThreadControls({
             className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
             ...{ 'data-board-pin-focus': 'toggle' },
             'aria-expanded': pending === action,
-            'aria-controls': `board-pin-confirm-${row!.threadId}`,
+            'aria-controls': confirmationId,
             onClick: () => setPending(pending === action ? null : action),
           },
           action === 'pin' ? m.board_pin_pin() : m.board_pin_unpin(),
@@ -543,21 +545,17 @@ export function BoardPinThreadControls({
       ? createElement(
           'div',
           {
-            id: `board-pin-confirm-${row.threadId}`,
+            id: confirmationId,
             'data-slot': 'board-pin-confirmation',
             role: 'group',
-            'aria-labelledby': `board-pin-confirm-title-${row.threadId}`,
-            'aria-describedby': `board-pin-confirm-description-${row.threadId}`,
+            'aria-labelledby': `${confirmationId}-title`,
+            'aria-describedby': `${confirmationId}-description`,
             className: 'min-w-0 max-w-full basis-full space-y-2 rounded-md border p-3 [overflow-wrap:anywhere]',
           },
-          createElement(
-            'h4',
-            { id: `board-pin-confirm-title-${row.threadId}`, className: 'font-medium' },
-            confirmTitle,
-          ),
+          createElement('h4', { id: `${confirmationId}-title`, className: 'font-medium' }, confirmTitle),
           createElement(
             'p',
-            { id: `board-pin-confirm-description-${row.threadId}`, className: 'text-sm text-muted-foreground' },
+            { id: `${confirmationId}-description`, className: 'text-sm text-muted-foreground' },
             confirmBody,
           ),
           createElement(
