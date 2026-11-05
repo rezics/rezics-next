@@ -2,6 +2,7 @@ goal: content
 manager: content
 kind: implementation
 ---
+
 # Finish the Subject Board entry visitor journey
 
 Resume the complete showcase work → supplied native Board → current creation advice → sign-in if needed → existing thread composer → acknowledged thread read → exact originating Subject region journey in this worktree.
