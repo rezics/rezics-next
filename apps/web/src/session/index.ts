@@ -6,6 +6,7 @@ export {
   type BrowserCacheEvent,
 } from './observation';
 export type { BrowserSession } from './browser-state';
+export { sessionQuery } from './query';
 export {
   addressLease,
   readLease,

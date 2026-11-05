@@ -1,8 +1,7 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useMemo, useSyncExternalStore } from 'react';
 import { getLocale } from '../../paraglide/runtime.js';
-import { sessionQuery } from '../../session/query';
-import { browserObservation } from '../../session/observation';
+import { browserObservation, sessionQuery } from '../../session';
 
 type SessionValue = { state?: string; subject?: string | null; csrfToken?: string | null };
 export type VndbVisit = {
