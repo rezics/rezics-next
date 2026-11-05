@@ -1,8 +1,15 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { openDb } from './db.ts';
-import { completedUtcHour, renderHourlyEfficiencyReport, sendHourlyEfficiencyReport } from './efficiency-report.ts';
+import { migrate, openDb } from './db.ts';
+import {
+  completedUtcHour,
+  efficiencyReportMigrations,
+  parseUtcHour,
+  renderHourlyEfficiencyReport,
+  sendHourlyEfficiencyReport,
+} from './efficiency-report.ts';
 import { recordFlow, type FlowEvent } from './flow.ts';
 import { SqliteLandingQueue } from './land.ts';
 import { WorkerStore, workerRecordEndedAtExpression } from './store.ts';
@@ -228,8 +235,9 @@ test('hourly delivery stores one timestamped outcome and discards notifier outpu
   try {
     const bucket = '2026-10-31T01:00:00.000Z';
     expect(completedUtcHour(Date.parse('2026-10-31T02:15:00.000Z')).start).toBe(bucket);
-    const capture = join(h.directory.path, 'sends.txt');
-    const append = `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(capture)}, 'sent\\n');`;
+    expect(parseUtcHour(bucket)).toEqual({ start: bucket, end: '2026-10-31T02:00:00.000Z' });
+    const capture = join(h.directory.path, 'report.txt');
+    const append = `require('node:fs').writeFileSync(${JSON.stringify(capture)}, process.argv[process.argv.length - 1]);`;
     const sent = await sendHourlyEfficiencyReport(
       h.db,
       bucket,
@@ -239,6 +247,7 @@ test('hourly delivery stores one timestamped outcome and discards notifier outpu
       new Date('2026-10-31T02:15:00.000Z'),
     );
     expect(sent.disposition).toBe('sent');
+    expect(sent.reportRef).toBe(createHash('sha256').update('hourly report').digest('hex'));
     const duplicate = await sendHourlyEfficiencyReport(
       h.db,
       bucket,
@@ -247,7 +256,8 @@ test('hourly delivery stores one timestamped outcome and discards notifier outpu
       2000,
     );
     expect(duplicate.disposition).toBe('already-sent');
-    expect(readFileSync(capture, 'utf8')).toBe('sent\n');
+    expect(duplicate.reportRef).toBe(sent.reportRef);
+    expect(readFileSync(capture, 'utf8')).toBe('hourly report');
     const stored = h.db
       .query('SELECT report, status, created_at, finished_at FROM efficiency_report_deliveries WHERE hour_bucket=?')
       .get(bucket) as {
@@ -284,6 +294,93 @@ test('hourly delivery stores one timestamped outcome and discards notifier outpu
           status: string;
         }
       ).status,
+    ).toBe('unknown');
+    const attemptedResend = join(h.directory.path, 'unknown-resend.txt');
+    const repeatedUnknown = await sendHourlyEfficiencyReport(
+      h.db,
+      timedOut.bucket,
+      'a timed-out report remains unknown',
+      [process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(attemptedResend)}, 'sent')`],
+      2000,
+    );
+    expect(repeatedUnknown.disposition).toBe('already-unknown');
+    expect(repeatedUnknown.reportRef).toBe(timedOut.reportRef);
+    expect(existsSync(attemptedResend)).toBe(false);
+  } finally {
+    h.close();
+  }
+});
+
+test('hourly delivery preserves disabled, competing and interrupted-claim outcomes through the public API', async () => {
+  const h = fixture();
+  try {
+    const bucket = '2026-10-31T01:00:00.000Z';
+    const disabled = await sendHourlyEfficiencyReport(h.db, bucket, 'not sent', undefined, 2000);
+    expect(disabled).toMatchObject({ disposition: 'disabled', bucket, reportRef: null, detail: 'notifier unconfigured' });
+    expect(
+      Boolean(h.db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='efficiency_report_deliveries'").get()),
+    ).toBe(false);
+
+    const capture = join(h.directory.path, 'competing-report.txt');
+    const firstReport = 'first report\nwith spaces; $(not-a-command)';
+    const notifier = `require('node:fs').writeFileSync(${JSON.stringify(capture)}, process.argv[process.argv.length - 1]); setTimeout(() => {}, 40);`;
+    const ownerPromise = sendHourlyEfficiencyReport(
+      h.db,
+      bucket,
+      firstReport,
+      [process.execPath, '-e', notifier],
+      2000,
+      new Date('2026-10-31T02:15:00.000Z'),
+    );
+    const competing = await sendHourlyEfficiencyReport(
+      h.db,
+      bucket,
+      'replacement report',
+      [process.execPath, '-e', "process.exit(31)"],
+      2000,
+      new Date('2026-10-31T02:15:01.000Z'),
+    );
+    const owner = await ownerPromise;
+    const firstReportRef = createHash('sha256').update(firstReport).digest('hex');
+    expect(owner.disposition).toBe('sent');
+    expect(owner.reportRef).toBe(firstReportRef);
+    expect(competing).toMatchObject({ disposition: 'claimed', reportRef: firstReportRef });
+    expect(readFileSync(capture, 'utf8')).toBe(firstReport);
+
+    migrate(h.db, efficiencyReportMigrations);
+    const interruptedBucket = '2026-10-31T03:00:00.000Z';
+    const interruptedRef = 'persisted-report-reference';
+    h.db
+      .query(
+        `INSERT INTO efficiency_report_deliveries(hour_bucket, report_ref, report, status, created_at, claimed_at)
+         VALUES (?, ?, ?, 'claimed', ?, ?)`,
+      )
+      .run(
+        interruptedBucket,
+        interruptedRef,
+        'original persisted report',
+        '2026-10-31T03:00:00.000Z',
+        '2026-10-31T03:01:00.000Z',
+      );
+    const attemptedResend = join(h.directory.path, 'interrupted-resend.txt');
+    const interrupted = await sendHourlyEfficiencyReport(
+      h.db,
+      interruptedBucket,
+      'replacement after interruption',
+      [process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(attemptedResend)}, 'sent')`],
+      2000,
+      new Date('2026-10-31T08:00:00.000Z'),
+    );
+    expect(interrupted).toMatchObject({
+      disposition: 'already-unknown',
+      reportRef: interruptedRef,
+      detail: 'previous notifier outcome unknown after interruption',
+    });
+    expect(existsSync(attemptedResend)).toBe(false);
+    expect(
+      (h.db.query('SELECT status FROM efficiency_report_deliveries WHERE hour_bucket=?').get(interruptedBucket) as {
+        status: string;
+      }).status,
     ).toBe('unknown');
   } finally {
     h.close();

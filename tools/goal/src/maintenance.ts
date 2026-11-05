@@ -6,7 +6,7 @@ import type { Runtime } from './config.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { terminateProcessGroup } from './process.ts';
 import { regenerateDerivedHead } from './promotion.ts';
-import { completedUtcHour } from './efficiency-report.ts';
+import { completedUtcHour } from './efficiency-report-time.ts';
 
 export const MAINTENANCE_JOBS = ['reap', 'alarm', 'detect', 'regenerate'] as const;
 export type MaintenanceJob = (typeof MAINTENANCE_JOBS)[number];

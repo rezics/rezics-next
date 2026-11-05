@@ -5,7 +5,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { reapContainers } from './containers.ts';
-import { completedUtcHour } from './efficiency-report.ts';
+import { completedUtcHour } from './efficiency-report-time.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { HostRequest, IntegrationRuntime } from './integration-runtime.ts';
 import { acquireDirectoryLease } from './lease.ts';

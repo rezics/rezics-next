@@ -8,8 +8,11 @@ Keep current-attempt fencing, immutable source identity, owned-process cancellat
 and the full promotion gate. They prevent concrete failures; removing their extra implementations is the saving.
 Do not add a new orchestration service to simplify this controller.
 
-This is a proposal, not an adopted change to delivery policy. No controller or harness code changes accompany it.
-The report stays at the contract's named path rather than creating a second research authority under `docs/research/`.
+The broader recommendations remain proposals. The hourly reporting boundary is adopted: rendering and event
+projections stay in `efficiency-report.ts`; delivery claims, persistence and notifier I/O live in
+`efficiency-report-delivery.ts`; canonical UTC-hour conversion lives in `efficiency-report-time.ts`. This is a
+code-boundary choice only and does not change delivery policy. Keep this report at its current path rather than
+creating a second research authority under `docs/research/`.
 
 The retained source is commit `7eca27f3e695e35a16f5a5d8f518bf4ef261511c`. At this revision there are **96**
 non-`*.test.ts` TypeScript files under `tools/goal/src`: 92 at its root and four provider adapters, totaling
@@ -351,7 +354,7 @@ These are not dead merely because the source import graph does not call their `m
 | `gate-parity.ts`                        | Lifecycle scenarios/CLI compare coverage across script and candidate boundaries.             | I15, I20; **keep** cross-version parity as migration tests; **delete** obsolete version branches after the compatibility window closes.                                 |
 | `gate.ts`                               | Goal gate entry runs the isolated controller typecheck/tests.                                | I10, I20; **keep** one thin test entry, not another production scheduler.                                                                                               |
 | `candidate-cleanliness-probe.ts`        | Explicit probe/its tests compare candidate state across check execution.                     | I15; **merge** shared integrity assertion with train/runner while keeping the probe's real-Git boundary scenarios.                                                      |
-| `efficiency-report.ts`                  | Host hourly scheduler/CLI requests a completed-hour report.                                  | I8; **keep** a thin reporting adapter over the shared event projections.                                                                                                |
+| `efficiency-report.ts`                  | Host hourly scheduler/CLI requests a completed-hour report.                                  | I8; **keep** rendering over shared event projections here; isolate delivery state and notifier I/O in `efficiency-report-delivery.ts`, with shared UTC-hour conversion in the leaf `efficiency-report-time.ts`. |
 | `check-host-route.ts`                   | Explicit route-management CLI applies/reverts only routes it owns.                           | No traced control-plane outage; **keep** as an operator transport prerequisite, separate from job retry policy.                                                         |
 | `smoke-codex-manager.ts`                | Explicit operator smoke exercises manager app-server connectivity.                           | I10; **merge** scenario/transport helpers with launch smoke, retain a focused operator command.                                                                         |
 
