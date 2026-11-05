@@ -12,6 +12,7 @@ export function CollectionDescriptionReader({
 }) {
   const textId = useId();
   const textRef = useRef<HTMLParagraphElement>(null);
+  const controlRef = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(false);
   // Match the note reader: full access remains available before layout, including SSR.
   const [truncated, setTruncated] = useState(true);
@@ -19,7 +20,11 @@ export function CollectionDescriptionReader({
   useLayoutEffect(() => {
     const text = textRef.current;
     if (!text || expanded) return;
-    const measure = () => setTruncated(text.scrollHeight > text.clientHeight);
+    const measure = () => {
+      // Keep the focused disclosure available until deliberate blur.
+      const focused = text.ownerDocument.activeElement === controlRef.current;
+      setTruncated(text.scrollHeight > text.clientHeight || focused);
+    };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     observer?.observe(text);
@@ -31,12 +36,17 @@ export function CollectionDescriptionReader({
     <div data-collection-description-reader className={`min-w-0 max-w-4xl ${className}`}>
       {(truncated || expanded) && (
         <Button
+          ref={controlRef}
           type="button"
           variant="link"
           aria-expanded={expanded}
           aria-controls={textId}
           className="h-auto min-h-11 max-w-full justify-start whitespace-normal rounded-sm px-0 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           onClick={() => setExpanded((value) => !value)}
+          onBlur={() => {
+            const text = textRef.current;
+            if (text && !expanded) setTruncated(text.scrollHeight > text.clientHeight);
+          }}
         >
           {expanded
             ? m.library_collection_description_reader_collapse()

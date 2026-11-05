@@ -21,6 +21,7 @@ export function CollectionNoteReader({
 }) {
   const textId = useId();
   const textRef = useRef<HTMLParagraphElement>(null);
+  const controlRef = useRef<HTMLButtonElement>(null);
   const [localExpanded, setLocalExpanded] = useState(false);
   const expanded = controlledExpanded ?? localExpanded;
   const changeExpanded = (next: boolean) => {
@@ -33,7 +34,11 @@ export function CollectionNoteReader({
   useLayoutEffect(() => {
     const text = textRef.current;
     if (!text || expanded) return;
-    const measure = () => setTruncated(text.scrollHeight > text.clientHeight);
+    const measure = () => {
+      // Keep the focused disclosure available until deliberate blur.
+      const focused = text.ownerDocument.activeElement === controlRef.current;
+      setTruncated(text.scrollHeight > text.clientHeight || focused);
+    };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     observer?.observe(text);
@@ -51,6 +56,7 @@ export function CollectionNoteReader({
     >
       {(truncated || expanded) && (
         <Button
+          ref={controlRef}
           type="button"
           variant="link"
           aria-expanded={expanded}
@@ -58,6 +64,10 @@ export function CollectionNoteReader({
           aria-label={`${action}: ${occurrence}`}
           className="h-auto min-h-11 max-w-full justify-start whitespace-normal rounded-sm px-0 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           onClick={() => changeExpanded(!expanded)}
+          onBlur={() => {
+            const text = textRef.current;
+            if (text && !expanded) setTruncated(text.scrollHeight > text.clientHeight);
+          }}
         >
           {action}
         </Button>
