@@ -7,7 +7,7 @@ import type { MineFollowingRead } from '../src/library/mine-following-actions';
 import type { FollowWriteInput, FollowWriteResult } from '../src/library/follow-records';
 import type { SessionEnv } from '../src/session/client';
 
-// UNRUN: one mounted/deferred journey and actual server-export regressions for integration.
+// Controlled mounted/deferred journeys and actual server-export regressions.
 // Controlled IO does not establish native authorization, browser, or full acceptance proof.
 const origin = 'https://site.test';
 const csrfToken = 'A'.repeat(22);
@@ -44,6 +44,8 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader: (name: string, value: string) => responseHeaders.set(name, value),
 }));
 mock.module('cloudflare:workers', () => ({ env }));
+const query = await import('../src/kernel/query');
+mock.module('../src/kernel/query', () => ({ ...query, personalRead: { ...query.personalRead, enabled: true } }));
 afterAll(() => mock.restore());
 
 const actions = await import('../src/library/mine-following-actions');
@@ -70,6 +72,7 @@ test('the actual Following server exports refuse stale preparation without priva
     const page = { signedIn: false, follows: [], next: null };
     expect(await actions.readMineFollowingForViewer({ data: { cursor: 'private/address+' } })).toEqual({
       subject: null,
+      kind: 'all',
       cursor: 'private/address+',
       locale: 'en',
       page,
@@ -86,6 +89,7 @@ test('the actual Following server exports refuse stale preparation without priva
     });
     expect(await actions.readMineFollowingForViewer({ data: { cursor: '' } })).toEqual({
       subject: null,
+      kind: 'all',
       cursor: '',
       locale: 'en',
       page,
@@ -145,8 +149,8 @@ test('the actual envelope names returned targets and carries the reader-prepared
     expect(named[0]).toBe(target);
     expect(named[1]).toBeNull();
     expect(calls.map((call) => Object.fromEntries(new URL(call.url).searchParams))).toEqual([
-      { view: 'FULL', limit: '100', cursor: address },
-      { view: 'FULL', limit: '100' },
+      { view: 'FULL', limit: '20', cursor: address },
+      { view: 'FULL', limit: '20' },
     ]);
     expect(calls.every((call) => call.headers.get('authorization') === 'Bearer opaque-not-a-decoded-identity')).toBe(
       true,
@@ -161,24 +165,29 @@ test('the actual envelope names returned targets and carries the reader-prepared
   }
 });
 
-
 test('both actual Following exports receive denial with the prepared owner and original kind/address', async () => {
   current.status = 'active';
   current.subject = 'denied-owner';
   actualRequest = request();
   const calls: Request[] = [];
-  const transport = spyOn(kernel, 'kernelClient').mockReturnValue(createKernelClient('https://kernel.test', {
-    fetch: async (input, init) => {
-      calls.push(new Request(input, init));
-      return Response.json({ code: 'forbidden' }, { status: 403 });
-    },
-  }));
+  const transport = spyOn(kernel, 'kernelClient').mockReturnValue(
+    createKernelClient('https://kernel.test', {
+      fetch: async (input, init) => {
+        calls.push(new Request(input, init));
+        return Response.json({ code: 'forbidden' }, { status: 403 });
+      },
+    }),
+  );
   const naming = spyOn(definitions, 'nameSubjectTypes');
   try {
     const data = { cursor: 'private/current+', kind: 'collection' as const };
     const page = { signedIn: true, forbidden: true, follows: [], next: null };
     expect(await actions.readMineFollowingForViewer({ data })).toEqual({
-      subject: 'denied-owner', cursor: data.cursor, kind: data.kind, locale: 'en', page,
+      subject: 'denied-owner',
+      cursor: data.cursor,
+      kind: data.kind,
+      locale: 'en',
+      page,
     });
     expect(await actions.readMineFollowingPage({ data })).toEqual(page);
     expect(calls).toHaveLength(2);
@@ -344,7 +353,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
   const expectRetired = () => {
     expect(host.querySelector('[data-slot="list-row"]')).toBeNull();
     expect(host.querySelector('[data-slot="follow-control"]')).toBeNull();
-    expect(host.querySelector('nav')).toBeNull();
+    expect(host.querySelector(`nav[aria-label="${m.library_following_heading()}"]`)).toBeNull();
     expect(host.textContent).not.toContain(m.library_follow_removed());
   };
   try {
@@ -439,7 +448,8 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).not.toContain(m.library_follow_removed());
     await act(async () => {
       [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent === m.following_reading_inspect())!.click();
+        .find((button) => button.textContent === m.following_reading_inspect())!
+        .click();
       await tick();
     });
     expect(host.querySelector('[data-slot="list-row"]')).not.toBeNull();
@@ -447,8 +457,10 @@ test('the mounted default Following composition retires viewer, cursor and row l
     const captured = writes.at(-1)!;
     const originalInput = structuredClone(captured.input);
     await refetch('current/cursor+');
-    const denied = { ...loaded('B', 'current/cursor+', 'Unused'),
-      page: { signedIn: true, forbidden: true as const, follows: [], next: null } };
+    const denied = {
+      ...loaded('B', 'current/cursor+', 'Unused'),
+      page: { signedIn: true, forbidden: true as const, follows: [], next: null },
+    };
     await settle(reads.at(-1)!, denied);
     expect(host.textContent).toContain(m.library_my_ratings_denied());
     expect(host.textContent).not.toContain('B replacement row');
@@ -463,13 +475,13 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).toContain(m.library_my_ratings_denied());
     await act(async () => {
       [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent === m.following_reading_refresh())!.click();
+        .find((button) => button.textContent === m.following_reading_refresh())!
+        .click();
       await tick();
     });
     await settle(reads.at(-1)!, loaded('B', 'current/cursor+', 'B replacement row', 'bounded-more'));
     expect(host.textContent).not.toContain(m.library_my_ratings_denied());
     expect(host.textContent).toContain('B replacement row');
-
 
     await act(async () => {
       const snapshot = exposure.viewerExposureLifetime(client).getSnapshot();
@@ -496,7 +508,7 @@ test('the mounted default Following composition retires viewer, cursor and row l
     expect(host.textContent).toContain(m.library_follow_removed());
     expect(host.textContent).toContain(m.library_following_page_empty());
     expect(host.querySelector('[data-slot="empty"] a')?.getAttribute('href')).toBe('/en/search');
-    const more = host.querySelector<HTMLAnchorElement>('nav a');
+    const more = host.querySelector<HTMLAnchorElement>(`nav[aria-label="${m.library_following_heading()}"] a`);
     expect(new URL(more!.href).searchParams.get('cursor')).toBe('bounded-more');
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, { state: 'unknown', subject: null, csrfToken: null });
@@ -540,6 +552,7 @@ test('the actual Following reset envelope preserves the originating prepared vie
     const result = await actions.readMineFollowingForViewer({ data: { cursor: 'expired/original+address=' } });
     expect(result).toEqual({
       subject: 'reset-owner',
+      kind: 'all',
       cursor: 'expired/original+address=',
       locale: 'en',
       page: { signedIn: true, follows: [], next: null, cursorReset: true },
@@ -559,6 +572,7 @@ test('the actual Following reset envelope preserves the originating prepared vie
     const invalid = await actions.readMineFollowingForViewer({ data: { cursor: 'x'.repeat(2049) } });
     expect(invalid).toMatchObject({
       subject: 'reset-owner',
+      kind: 'all',
       cursor: null,
       page: { addressInvalid: true },
     });
@@ -666,7 +680,11 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expect(new URL(restart()!.href).searchParams.has('cursor')).toBe(false);
   };
   const expectRetired = () => {
-    expect(host.querySelector('[data-slot="list-row"], [data-slot="follow-control"], nav')).toBeNull();
+    expect(
+      host.querySelector(
+        `[data-slot="list-row"], [data-slot="follow-control"], nav[aria-label="${m.library_following_heading()}"]`,
+      ),
+    ).toBeNull();
     expect(host.textContent).not.toContain(m.library_collections_cursor_reset());
     expect(host.textContent).not.toContain(m.library_follow_removed());
     expect(host.textContent).not.toContain(m.library_following_empty());
@@ -747,7 +765,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expect(host.textContent).toContain('Reset first-page row');
     expect(router.state.location.search).toEqual({ cursor: 'expired/page+' });
     const oldRestart = restart()!;
-    const oldNext = host.querySelector<HTMLAnchorElement>('nav a')!;
+    const oldNext = host.querySelector<HTMLAnchorElement>(`nav[aria-label="${m.library_following_heading()}"] a`)!;
     expect(new URL(oldNext.href).searchParams.get('cursor')).toBe('bounded/next+');
     await remove();
     const oldRemoval = writes.at(-1)!;

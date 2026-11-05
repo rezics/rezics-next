@@ -396,7 +396,9 @@ function MineFollowingPageState({
       {!addressRejected && !page.forbidden && page.signedIn && page.cursorReset ? (
         <p role="status">{m.library_collections_cursor_reset()}</p>
       ) : null}
-      {!addressRejected && !page.forbidden && page.signedIn && removed ? <p role="status">{m.library_follow_removed()}</p> : null}
+      {!addressRejected && !page.forbidden && page.signedIn && removed ? (
+        <p role="status">{m.library_follow_removed()}</p>
+      ) : null}
       {reading.suspended ? <p role="status">{m.following_reading_return_preparing()}</p> : null}
       {!addressRejected && page.signedIn && onRefresh ? (
         <Button
