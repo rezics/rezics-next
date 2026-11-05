@@ -884,9 +884,8 @@ and both command phases without an aggregate deadline or new probes. Entry reads
 command then performs session/approval/execution/final-session: four requests, five with entry. Only the supported
 unavailable approval permits one same-body retry (six with entry). Execution never automatically retries, reuses
 approval or renews it. Each deliberate same-command retry costs four requests, or five with approval retry.
-Current-advice Retry and cached restoration each make one bounded session read and zero commands. Focus, dismissal
-and locale changes add zero calls. There is no organization lookup or scan. Native/browser acceptance and the
-existing growth qualification remain separate from injected reply fixtures.
+Read Retry/restoration cost one session read and zero commands; focus/dismissal/locale cost zero. There is no lookup
+or scan. Injected fixtures do not grant native/browser/growth acceptance.
 
 The mounted page adopts only a valid current original execution acknowledgement before awaiting final session
 observation. It stays busy, clears the form and ends this send; approval alone proves no creation. An unchanged
@@ -895,9 +894,8 @@ existing membership-ID validator or Security fallback. Failed, signed-out, chang
 final reads remove private operands and navigation while preserving generic acknowledgement. Adoption cleanup
 compares the owned marker, key and draft, so final-read replacement storage survives.
 
-Read Retry/restoration cannot reconstruct lost private details, settle unknown execution from account existence,
-or reopen an acknowledged command. Fresh documents assert no historical acknowledgement; they use exact native
-continuation rules. A retired reply stays unknown, and only acknowledgement of that original operation settles it.
+Read Retry/restoration cannot restore private details, settle unknown execution or reopen acknowledged work.
+Fresh documents use exact continuations and assert no historical acknowledgement. A retired reply stays unknown, and only acknowledgement of that original operation settles it.
 No created-account lookup or persistent completion record is added. Generic history dismissal survives mounted
 read Retry/cached return; new acknowledgement reappears as new evidence. Dismissal cannot undo, confirm or authorize
 work, remove a marker or release unknown-send exclusion. There is no create-another action here.
