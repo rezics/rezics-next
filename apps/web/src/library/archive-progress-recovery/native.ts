@@ -3,7 +3,9 @@ import { archiveTransportLost } from '../archive-entry-recovery/native';
 
 type Root = ReturnType<KernelClient['libraryCopyArchives']>;
 type ReviewRoot = ReturnType<Root['progressReviews']>;
-type Data<F extends (...args: never[]) => unknown> = NonNullable<Awaited<ReturnType<F>> extends { data: infer T } ? T : never>;
+type Data<F extends (...args: never[]) => unknown> = NonNullable<
+  Awaited<ReturnType<F>> extends { data: infer T } ? T : never
+>;
 export type Upload = Data<KernelClient['libraryCopyArchives']['post']>;
 export type Holdings = Data<Root['get']>;
 export type Occurrences = Data<Root['progress']['get']>;
@@ -15,15 +17,20 @@ export type Result = Data<ReviewRoot['get']>;
 export type Reply<T> = { kind: 'ok'; value: T } | { kind: 'uncertain' } | { kind: 'refused'; status: number };
 export const UPLOAD_BYTES = 32 * 1024 * 1024;
 
-export async function receive<T>(call: () => Promise<{ data: T | null; error: unknown; status: number }>): Promise<Reply<T>> {
+export async function receive<T>(
+  call: () => Promise<{ data: T | null; error: unknown; status: number }>,
+): Promise<Reply<T>> {
   let result;
-  try { result = await call(); }
-  catch (error) {
+  try {
+    result = await call();
+  } catch (error) {
     if (archiveTransportLost(error)) return { kind: 'uncertain' };
     throw error;
   }
-  if (result.error) return result.status === 0 || result.status >= 500
-    ? { kind: 'uncertain' } : { kind: 'refused', status: result.status };
+  if (result.error)
+    return result.status === 0 || result.status >= 500
+      ? { kind: 'uncertain' }
+      : { kind: 'refused', status: result.status };
   return { kind: 'ok', value: result.data! };
 }
 
@@ -34,13 +41,23 @@ export function progressRecoveryNative(client: KernelClient, authorization: stri
   const root = (id: string) => client.libraryCopyArchives({ id });
   return {
     upload(base64: string, key: string) {
-      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-      return receive(() => client.libraryCopyArchives.post(new Blob([bytes], { type: 'application/json' }), write(key)));
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      return receive(() =>
+        client.libraryCopyArchives.post(new Blob([bytes], { type: 'application/json' }), write(key)),
+      );
     },
-    holdings(id: string, after = -1) { return receive(() => root(id).get({ ...options(), query: { after } })); },
-    occurrences(id: string, after = -1) { return receive(() => root(id).progress.get({ ...options(), query: { after } })); },
+    holdings(id: string, after = -1) {
+      return receive(() => root(id).get({ ...options(), query: { after } }));
+    },
+    occurrences(id: string, after = -1) {
+      return receive(() => root(id).progress.get({ ...options(), query: { after } }));
+    },
     units(id: string, sessionId: string, after = -1) {
-      return receive(() => root(id).progress({ sessionId }).units.get({ ...options(), query: { after } }));
+      return receive(() =>
+        root(id)
+          .progress({ sessionId })
+          .units.get({ ...options(), query: { after } }),
+      );
     },
     review(id: string, body: ReviewInput, key: string) {
       return receive(() => root(id).progressReviews.post(body, write(key)));
@@ -51,10 +68,16 @@ export function progressRecoveryNative(client: KernelClient, authorization: stri
     result(id: string, reviewId: string) {
       return receive(() => root(id).progressReviews({ reviewId }).get(options()));
     },
-    cancel(id: string) { return receive(() => root(id).$cancel.post(undefined, options())); },
-    remove(id: string) { return receive(() => root(id).delete(undefined, options())); },
+    cancel(id: string) {
+      return receive(() => root(id).$cancel.post(undefined, options()));
+    },
+    remove(id: string) {
+      return receive(() => root(id).delete(undefined, options()));
+    },
     subject(subjectId: string) {
-      return receive(() => client.subjects({ id: subjectId }).get({ ...options(), fetch: { cache: 'no-store', redirect: 'manual' } }));
+      return receive(() =>
+        client.subjects({ id: subjectId }).get({ ...options(), fetch: { cache: 'no-store', redirect: 'manual' } }),
+      );
     },
   };
 }

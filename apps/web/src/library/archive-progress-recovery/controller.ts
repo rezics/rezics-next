@@ -5,10 +5,23 @@ import type { Port } from './port';
 
 export type Occurrence = Occurrences['occurrences'][number]['evidence'];
 export type Snapshot = {
-  upload: Upload | null; holdings: Holdings | null; occurrences: Occurrences | null; units: Units | null;
-  unitSupport: Review['completedUnits']; selected: Occurrence | null; choices: ProgressChoices; mappedSubject: string | null;
-  review: Review | null; operands: ReviewInput | null; application: Application | null; result: Result | null;
-  busy: boolean; pending: boolean; cancelled: boolean; removing: boolean; removed: number;
+  upload: Upload | null;
+  holdings: Holdings | null;
+  occurrences: Occurrences | null;
+  units: Units | null;
+  unitSupport: Review['completedUnits'];
+  selected: Occurrence | null;
+  choices: ProgressChoices;
+  mappedSubject: string | null;
+  review: Review | null;
+  operands: ReviewInput | null;
+  application: Application | null;
+  result: Result | null;
+  busy: boolean;
+  pending: boolean;
+  cancelled: boolean;
+  removing: boolean;
+  removed: number;
   notice: 'ready' | 'uncertain' | 'recoverable' | 'refused' | 'expired' | 'oversize' | 'cancelled' | 'removed';
   refusal: number | null;
 };
@@ -21,9 +34,25 @@ type Pending = { port: Port; upload: Upload | null } & (
 const unresolved = new Map<string, Pending>();
 const cancellations = new Map<string, { port: Port; upload: Upload }>();
 const empty = (): Snapshot => ({
-  upload: null, holdings: null, occurrences: null, units: null, selected: null, choices: undefined, mappedSubject: null,
-  unitSupport: [], review: null, operands: null, application: null, result: null, busy: false, pending: false, cancelled: false,
-  removing: false, removed: 0, notice: 'ready', refusal: null,
+  upload: null,
+  holdings: null,
+  occurrences: null,
+  units: null,
+  selected: null,
+  choices: undefined,
+  mappedSubject: null,
+  unitSupport: [],
+  review: null,
+  operands: null,
+  application: null,
+  result: null,
+  busy: false,
+  pending: false,
+  cancelled: false,
+  removing: false,
+  removed: 0,
+  notice: 'ready',
+  refusal: null,
 });
 export function archiveBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -36,45 +65,106 @@ export class ProgressRecoveryJourney {
   #retired = false;
   #working = false;
   #selection = 0;
-  constructor(readonly port: Port, readonly binding: string, readonly current: () => boolean, readonly changed: () => void = () => {}) {
-    const pending = unresolved.get(binding), cancellation = cancellations.get(binding);
+  constructor(
+    readonly port: Port,
+    readonly binding: string,
+    readonly current: () => boolean,
+    readonly changed: () => void = () => {},
+  ) {
+    const pending = unresolved.get(binding),
+      cancellation = cancellations.get(binding);
     if (pending) {
       this.#state.upload = pending.upload;
       this.#state.pending = true;
       this.#state.notice = 'uncertain';
-      if (pending.kind === 'apply') { this.#state.review = pending.review; this.#state.operands = pending.body; }
+      if (pending.kind === 'apply') {
+        this.#state.review = pending.review;
+        this.#state.operands = pending.body;
+      }
     }
-    if (cancellation) { this.#state.pending = true; this.#state.upload = cancellation.upload; this.#state.notice = 'uncertain'; }
+    if (cancellation) {
+      this.#state.pending = true;
+      this.#state.upload = cancellation.upload;
+      this.#state.notice = 'uncertain';
+    }
   }
-  #live() { return !this.#retired && this.current(); }
+  #live() {
+    return !this.#retired && this.current();
+  }
   snapshot(): Snapshot {
     if (!this.#live()) return empty();
     if (this.#state.upload && Date.now() >= Date.parse(this.#state.upload.expiresAt)) this.#expire();
     return this.#state;
   }
   #expire() {
-    Object.assign(this.#state, { holdings: null, occurrences: null, units: null, unitSupport: [], selected: null,
-      choices: undefined, mappedSubject: null, review: null, operands: null, application: null, result: null, notice: 'expired' });
+    Object.assign(this.#state, {
+      holdings: null,
+      occurrences: null,
+      units: null,
+      unitSupport: [],
+      selected: null,
+      choices: undefined,
+      mappedSubject: null,
+      review: null,
+      operands: null,
+      application: null,
+      result: null,
+      notice: 'expired',
+    });
   }
-  expire() { if (this.#live()) { this.#expire(); this.#emit(); } }
-  #emit() { if (this.#live()) this.changed(); }
-  retire() { this.#retired = true; this.#selection++; this.#state = empty(); }
+  expire() {
+    if (this.#live()) {
+      this.#expire();
+      this.#emit();
+    }
+  }
+  #emit() {
+    if (this.#live()) this.changed();
+  }
+  retire() {
+    this.#retired = true;
+    this.#selection++;
+    this.#state = empty();
+  }
   #accept<T>(reply: Reply<T>): T | null {
     if (!this.#live()) return null;
-    if (reply.kind === 'ok') { this.#state.refusal = null; this.#state.notice = this.#state.cancelled ? 'cancelled' : 'ready'; return reply.value; }
+    if (reply.kind === 'ok') {
+      this.#state.refusal = null;
+      this.#state.notice = this.#state.cancelled ? 'cancelled' : 'ready';
+      return reply.value;
+    }
     this.#state.notice = reply.kind === 'uncertain' ? 'uncertain' : reply.status === 404 ? 'expired' : 'refused';
     this.#state.refusal = reply.kind === 'refused' ? reply.status : null;
     return null;
   }
-  #editable() { return this.#live() && !this.#working && !unresolved.has(this.binding) && !cancellations.has(this.binding) && !this.#state.removing; }
+  #editable() {
+    return (
+      this.#live() &&
+      !this.#working &&
+      !unresolved.has(this.binding) &&
+      !cancellations.has(this.binding) &&
+      !this.#state.removing
+    );
+  }
   async #work(run: () => Promise<void>) {
-    this.#working = true; this.#state.busy = true; this.#emit();
-    try { await run(); }
-    finally { this.#working = false; this.#state.busy = false; this.#emit(); }
+    this.#working = true;
+    this.#state.busy = true;
+    this.#emit();
+    try {
+      await run();
+    } finally {
+      this.#working = false;
+      this.#state.busy = false;
+      this.#emit();
+    }
   }
   async upload(file: File) {
     if (!this.#editable() || this.#state.upload) return;
-    if (file.size > UPLOAD_BYTES) { this.#state.notice = 'oversize'; this.#emit(); return; }
+    if (file.size > UPLOAD_BYTES) {
+      this.#state.notice = 'oversize';
+      this.#emit();
+      return;
+    }
     await this.#work(async () => {
       const base64 = archiveBase64(new Uint8Array(await file.arrayBuffer()));
       if (!this.#live()) return;
@@ -87,11 +177,17 @@ export class ProgressRecoveryJourney {
   async #inspect() {
     const id = this.#state.upload!.uploadId;
     const [holdings, occurrences] = await Promise.all([this.port.holdings(id), this.port.occurrences(id)]);
-    const h = this.#accept(holdings), p = this.#accept(occurrences);
+    const h = this.#accept(holdings),
+      p = this.#accept(occurrences);
     if (h) this.#state.holdings = h;
-    if (p) { this.#state.occurrences = p; this.#state.cancelled = p.state === 'cancelled'; }
+    if (p) {
+      this.#state.occurrences = p;
+      this.#state.cancelled = p.state === 'cancelled';
+    }
   }
-  async inspect() { if (this.#editable() && this.#state.upload) await this.#work(() => this.#inspect()); }
+  async inspect() {
+    if (this.#editable() && this.#state.upload) await this.#work(() => this.#inspect());
+  }
   async page(kind: 'holdings' | 'occurrences' | 'units', after = -1) {
     if (!this.#editable() || !this.#state.upload) return;
     await this.#work(async () => {
@@ -109,7 +205,10 @@ export class ProgressRecoveryJourney {
         }
         case 'units': {
           const page = this.#accept(await this.port.units(id, this.#state.selected!.session_id, after));
-          if (page) { this.#state.units = page; this.#state.unitSupport = []; }
+          if (page) {
+            this.#state.units = page;
+            this.#state.unitSupport = [];
+          }
         }
       }
     });
@@ -117,37 +216,78 @@ export class ProgressRecoveryJourney {
   async select(occurrence: Occurrence) {
     if (!this.#editable() || this.#state.cancelled) return;
     this.#selection++;
-    Object.assign(this.#state, { selected: occurrence, units: null, unitSupport: [], review: null, operands: null, choices: undefined,
-      mappedSubject: null, application: null, result: null, notice: 'ready' });
+    Object.assign(this.#state, {
+      selected: occurrence,
+      units: null,
+      unitSupport: [],
+      review: null,
+      operands: null,
+      choices: undefined,
+      mappedSubject: null,
+      application: null,
+      result: null,
+      notice: 'ready',
+    });
     await this.page('units');
   }
   async mapSubject(subjectId: string) {
     if (!this.#editable() || this.#state.cancelled) return;
     const epoch = ++this.#selection;
-    this.#state.review = null; this.#state.operands = null; this.#state.choices = undefined; this.#state.mappedSubject = null; this.#state.unitSupport = [];
+    this.#state.review = null;
+    this.#state.operands = null;
+    this.#state.choices = undefined;
+    this.#state.mappedSubject = null;
+    this.#state.unitSupport = [];
     await this.#work(async () => {
       const value = await this.port.choices(subjectId);
       if (!this.#live() || epoch !== this.#selection) return;
-      this.#state.choices = value.choices; this.#state.mappedSubject = value.subjectId;
+      this.#state.choices = value.choices;
+      this.#state.mappedSubject = value.subjectId;
     });
   }
   invalidateReview() {
     if (!this.#editable()) return;
-    this.#state.review = null; this.#state.operands = null; this.#state.result = null; this.#emit();
+    this.#state.review = null;
+    this.#state.operands = null;
+    this.#state.result = null;
+    this.#emit();
   }
   async review(body: ReviewInput, inspection = false) {
     if (!this.#editable() || this.#state.cancelled) return;
-    this.#state.review = null; this.#state.result = null; this.#state.application = null;
+    this.#state.review = null;
+    this.#state.result = null;
+    this.#state.application = null;
     await this.#work(async () => {
-      unresolved.set(this.binding, { kind: 'review', inspection, body: structuredClone(body), key: crypto.randomUUID(), port: this.port, upload: this.#state.upload });
+      unresolved.set(this.binding, {
+        kind: 'review',
+        inspection,
+        body: structuredClone(body),
+        key: crypto.randomUUID(),
+        port: this.port,
+        upload: this.#state.upload,
+      });
       await this.#deliver();
     });
   }
   async confirm(reviewId: string) {
-    if (!this.#editable() || this.#state.cancelled || this.#state.review?.reviewId !== reviewId || !this.#state.review.applicable) return;
-    const review = this.#state.review, body = this.#state.operands!;
+    if (
+      !this.#editable() ||
+      this.#state.cancelled ||
+      this.#state.review?.reviewId !== reviewId ||
+      !this.#state.review.applicable
+    )
+      return;
+    const review = this.#state.review,
+      body = this.#state.operands!;
     await this.#work(async () => {
-      unresolved.set(this.binding, { kind: 'apply', review, body, key: crypto.randomUUID(), port: this.port, upload: this.#state.upload });
+      unresolved.set(this.binding, {
+        kind: 'apply',
+        review,
+        body,
+        key: crypto.randomUUID(),
+        port: this.port,
+        upload: this.#state.upload,
+      });
       this.#state.result = null;
       await this.#deliver();
     });
@@ -166,17 +306,25 @@ export class ProgressRecoveryJourney {
       case 'review': {
         const value = this.#accept(await command.port.review(command.upload!.uploadId, command.body, command.key));
         if (!value) break;
-        if (command.inspection) { this.#state.unitSupport = value.completedUnits; this.#state.review = null; }
-        else { this.#state.review = value; this.#state.operands = command.body; }
+        if (command.inspection) {
+          this.#state.unitSupport = value.completedUnits;
+          this.#state.review = null;
+        } else {
+          this.#state.review = value;
+          this.#state.operands = command.body;
+        }
         unresolved.delete(this.binding);
         break;
       }
       case 'apply': {
-        const value = this.#accept(await command.port.apply(command.upload!.uploadId, command.review.reviewId, command.key));
+        const value = this.#accept(
+          await command.port.apply(command.upload!.uploadId, command.review.reviewId, command.key),
+        );
         if (!value) break;
         this.#state.application = value;
         if (value.state === 'recoverable' || value.state === 'applying') {
-          this.#state.result = null; this.#state.notice = 'recoverable';
+          this.#state.result = null;
+          this.#state.notice = 'recoverable';
         } else {
           unresolved.delete(this.binding);
           await this.#result(command.port, command.upload!.uploadId, command.review.reviewId);
@@ -187,7 +335,8 @@ export class ProgressRecoveryJourney {
     // Definitive refusals cannot have accepted this Web command; a recoverable native reply is still pending.
     if (this.#state.notice === 'refused' || this.#state.notice === 'expired') unresolved.delete(this.binding);
     this.#state.pending = unresolved.has(this.binding);
-    if (!this.#state.pending && !['refused', 'expired'].includes(this.#state.notice)) this.#state.notice = this.#state.cancelled ? 'cancelled' : 'ready';
+    if (!this.#state.pending && !['refused', 'expired'].includes(this.#state.notice))
+      this.#state.notice = this.#state.cancelled ? 'cancelled' : 'ready';
   }
   async #result(port: Port, id: string, reviewId: string) {
     const value = this.#accept(await port.result(id, reviewId));
@@ -209,7 +358,9 @@ export class ProgressRecoveryJourney {
     const command = cancellations.get(this.binding)!;
     const reply = this.#accept(await command.port.cancel(command.upload.uploadId));
     if (reply) {
-      cancellations.delete(this.binding); this.#state.cancelled = true; this.#state.notice = 'cancelled';
+      cancellations.delete(this.binding);
+      this.#state.cancelled = true;
+      this.#state.notice = 'cancelled';
       this.#state.result = null;
     }
     this.#state.pending = unresolved.has(this.binding) || cancellations.has(this.binding);
@@ -217,8 +368,10 @@ export class ProgressRecoveryJourney {
   async cancel() {
     if (!this.#live() || !this.#state.upload || this.#state.removing) return;
     cancellations.set(this.binding, { port: this.port, upload: this.#state.upload });
-    this.#state.pending = true; this.#emit();
-    await this.#cancel(); this.#emit();
+    this.#state.pending = true;
+    this.#emit();
+    await this.#cancel();
+    this.#emit();
     // An in-flight original apply is allowed to finish its receipt. No replacement command is started.
     if (!this.#working && unresolved.has(this.binding)) await this.retry();
   }
@@ -227,7 +380,19 @@ export class ProgressRecoveryJourney {
     const id = this.#state.upload.uploadId;
     await this.#work(async () => {
       this.#state.removing = true;
-      Object.assign(this.#state, { holdings: null, occurrences: null, units: null, unitSupport: [], selected: null, choices: undefined, mappedSubject: null, review: null, operands: null, application: null, result: null });
+      Object.assign(this.#state, {
+        holdings: null,
+        occurrences: null,
+        units: null,
+        unitSupport: [],
+        selected: null,
+        choices: undefined,
+        mappedSubject: null,
+        review: null,
+        operands: null,
+        application: null,
+        result: null,
+      });
       this.#emit();
       let complete = false;
       while (this.#live() && !complete) {
@@ -237,12 +402,14 @@ export class ProgressRecoveryJourney {
         else {
           const value = this.#accept(reply);
           if (!value) break;
-          this.#state.removed += value.removed; complete = value.complete;
+          this.#state.removed += value.removed;
+          complete = value.complete;
         }
         this.#emit();
       }
-      if (this.#live() && complete) { this.#state = { ...empty(), notice: 'removed' }; }
-      else this.#state.removing = false;
+      if (this.#live() && complete) {
+        this.#state = { ...empty(), notice: 'removed' };
+      } else this.#state.removing = false;
     });
   }
 }

@@ -13,52 +13,96 @@ export const progressRecoverySender = createServerFn({ method: 'POST' })
   .validator((input: unknown): ExpectedReader => {
     if (!validExpectedReader(input)) throw new Error('Invalid archive viewer');
     return input;
-  }).handler(async ({ data }) => {
+  })
+  .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, data))) throw new Error('Archive viewer changed');
+    if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, data)))
+      throw new Error('Archive viewer changed');
     return captureEntryRestoreCredential(request, env as Partial<SessionEnv>);
   });
 
 type Command = { [K in keyof NativePort]: { operation: K; args: Parameters<NativePort[K]> } }[keyof NativePort];
 type Input = Command & ExpectedReader & { sender?: string };
-const operations = ['upload', 'holdings', 'occurrences', 'units', 'review', 'apply', 'result', 'cancel', 'remove', 'subject'];
+const operations = [
+  'upload',
+  'holdings',
+  'occurrences',
+  'units',
+  'review',
+  'apply',
+  'result',
+  'cancel',
+  'remove',
+  'subject',
+];
 function validate(input: unknown): Input {
-  if (!validExpectedReader(input) || !('operation' in input) || typeof input.operation !== 'string' ||
-      !operations.includes(input.operation) || !('args' in input) || !Array.isArray(input.args)) throw new Error('Invalid archive command');
-  if ('sender' in input && (typeof input.sender !== 'string' || input.sender.length > 3200)) throw new Error('Invalid archive sender');
+  if (
+    !validExpectedReader(input) ||
+    !('operation' in input) ||
+    typeof input.operation !== 'string' ||
+    !operations.includes(input.operation) ||
+    !('args' in input) ||
+    !Array.isArray(input.args)
+  )
+    throw new Error('Invalid archive command');
+  if ('sender' in input && (typeof input.sender !== 'string' || input.sender.length > 3200))
+    throw new Error('Invalid archive sender');
   // The RPC envelope is external input. Native routes own each operand's semantic validation.
-  if (input.operation === 'upload' && (typeof input.args[0] !== 'string' || input.args[0].length > 4 * Math.ceil(UPLOAD_BYTES / 3)))
+  if (
+    input.operation === 'upload' &&
+    (typeof input.args[0] !== 'string' || input.args[0].length > 4 * Math.ceil(UPLOAD_BYTES / 3))
+  )
     throw new Error('Archive exceeds 32 MiB');
   return input as Input;
 }
-export const progressRecoveryCall = createServerFn({ method: 'POST' }).validator(validate).handler(async ({ data }) => {
-  setResponseHeader('cache-control', 'private, no-store');
-  const request = getRequest();
-  if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, data))) throw new Error('Archive viewer changed');
-  const authorization = await originalEntryRestoreCredential(request, env as Partial<SessionEnv>, data.sender);
-  if (!authorization) throw new Error('Archive sender changed');
-  const client = kernelClient(), port = progressRecoveryNative(client, authorization);
-  switch (data.operation) {
-    case 'upload': return port.upload(...data.args);
-    case 'holdings': return port.holdings(...data.args);
-    case 'occurrences': return port.occurrences(...data.args);
-    case 'units': return port.units(...data.args);
-    case 'review': return port.review(...data.args);
-    case 'apply': return port.apply(...data.args);
-    case 'result': return port.result(...data.args);
-    case 'cancel': return port.cancel(...data.args);
-    case 'remove': return port.remove(...data.args);
-    case 'subject': return port.subject(...data.args);
-  }
-});
+export const progressRecoveryCall = createServerFn({ method: 'POST' })
+  .validator(validate)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, data)))
+      throw new Error('Archive viewer changed');
+    const authorization = await originalEntryRestoreCredential(request, env as Partial<SessionEnv>, data.sender);
+    if (!authorization) throw new Error('Archive sender changed');
+    const client = kernelClient(),
+      port = progressRecoveryNative(client, authorization);
+    switch (data.operation) {
+      case 'upload':
+        return port.upload(...data.args);
+      case 'holdings':
+        return port.holdings(...data.args);
+      case 'occurrences':
+        return port.occurrences(...data.args);
+      case 'units':
+        return port.units(...data.args);
+      case 'review':
+        return port.review(...data.args);
+      case 'apply':
+        return port.apply(...data.args);
+      case 'result':
+        return port.result(...data.args);
+      case 'cancel':
+        return port.cancel(...data.args);
+      case 'remove':
+        return port.remove(...data.args);
+      case 'subject':
+        return port.subject(...data.args);
+    }
+  });
 
 export const progressRecoveryChoices = createServerFn({ method: 'POST' })
   .validator((input: unknown): ExpectedReader & { subjectId: string } => {
-    if (!validExpectedReader(input) || !('subjectId' in input) || typeof input.subjectId !== 'string' ||
-        !/^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(input.subjectId)) throw new Error('Invalid Subject');
+    if (
+      !validExpectedReader(input) ||
+      !('subjectId' in input) ||
+      typeof input.subjectId !== 'string' ||
+      !/^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(input.subjectId)
+    )
+      throw new Error('Invalid Subject');
     return { ...input, subjectId: input.subjectId };
-  }).handler(async ({ data }) => {
+  })
+  .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     const authorization = await prepareExpectedReader(request, env as Partial<SessionEnv>, data);
@@ -71,5 +115,8 @@ export const progressRecoveryChoices = createServerFn({ method: 'POST' })
     if (subject.kind !== 'ok') return { subjectId: data.subjectId, choices: undefined };
     // A redirected historical Subject cannot silently select a canonical target.
     if (subject.value.subject.id !== data.subjectId) return { subjectId: data.subjectId, choices: undefined };
-    return { subjectId: data.subjectId, choices: progressFormChoices(release, subject.value.subject.type, requestLocale(request) ?? 'en') };
+    return {
+      subjectId: data.subjectId,
+      choices: progressFormChoices(release, subject.value.subject.type, requestLocale(request) ?? 'en'),
+    };
   });
