@@ -76,7 +76,7 @@ type WorkShape = Readonly<{
   witnessKeys?: number;
 }>;
 
-const UUID = 'f'.repeat(36);
+const UUID = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 const ID64 = '\0'.repeat(64);
 const PIN = {
   provenance: 'profile',
@@ -449,8 +449,6 @@ export function copyPrivateReadStatementPlan(input: CopyPrivateReadInput) {
       kind: ID64,
       status: ID64,
       library_profile_pin: PIN,
-      kind_profile_pin: PIN,
-      status_profile_pin: PIN,
     },
     9,
   );
@@ -768,16 +766,16 @@ export type CopyMutationOperationInput = Readonly<{
   requestedBy: string | null;
   durationMs: number;
   commandInput: unknown;
-  subjectId?: string;
-  revision?: number;
-  deletionId?: string;
-  kind?: string;
-  status?: string;
-  location?: string | null;
-  source?: string | null;
-  acquiredOn?: string | null;
-  disposedOn?: string | null;
-  note?: string | null;
+  subjectId?: string | undefined;
+  revision?: number | undefined;
+  deletionId?: string | undefined;
+  kind?: string | undefined;
+  status?: string | undefined;
+  location?: string | null | undefined;
+  source?: string | null | undefined;
+  acquiredOn?: string | null | undefined;
+  disposedOn?: string | null | undefined;
+  note?: string | null | undefined;
   mediaCondition?: unknown;
   packagingCondition?: unknown;
 }>;
@@ -859,8 +857,6 @@ export function copyMutationOperationPlan(
       packaging_condition: input.packagingCondition ?? null,
       kind: input.kind ?? ID64,
       library_profile_pin: PIN,
-      kind_profile_pin: PIN,
-      status_profile_pin: PIN,
       transaction_id: UUID,
       time: COPY_TIME,
     }).bound;
