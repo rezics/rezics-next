@@ -32,7 +32,8 @@ export type RecipeCurrentReturnState = 'ready' | 'changed' | 'removed' | 'unsupp
 
 export const recipeVisitByteLimit = 8192;
 const publicReturnAddressByteLimit = 5600;
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const uuidSegment = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const uuid = new RegExp(`^${uuidSegment}$`);
 const fields = new Set([
   'schema:recipeIngredient',
   'wdt:P186',
@@ -42,7 +43,7 @@ const fields = new Set([
   'schema:recipeInstructions',
 ]);
 const localePattern = '(?:en|zh-Hant|zh-Hans|ja|ko|fr|de|es)';
-const subjectPath = new RegExp(`^/(${localePattern})/subjects/(${uuid.source})/[^/?#]+$`, 'i');
+const subjectPath = new RegExp(`^/(${localePattern})/subjects/(${uuidSegment})/[^/?#]+$`, 'i');
 const currentReturnKey = 'recipeReturn';
 
 function encodeAddress(value: string): string {
