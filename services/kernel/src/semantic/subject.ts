@@ -852,7 +852,7 @@ export async function readSubject(
     if (context !== GLOBAL_CONTEXT || input.context !== GLOBAL_CONTEXT || input.realm) {
       selectedSynopsis = { kind: 'unsupported' };
     } else {
-      const fact = selectedSynopsisFact(subject, input);
+      const fact = input.pageRelease && input.pageRelease !== active?.digest ? undefined : selectedSynopsisFact(subject, input);
       if (fact && await admit()) {
         // Content has released every home before this final authoritative Semantic pass.
         await refreshStatementReaderAuthorization();

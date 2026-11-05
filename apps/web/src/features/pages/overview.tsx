@@ -1522,6 +1522,7 @@ function SummaryContent({
       language: target.language,
       locale: value.locale,
       context: expectedContext,
+      subjectRelease: read.subject.release,
       ...(value.realm ? { realm: value.realm } : {}),
       ...(value.releaseDigest ? { release: value.releaseDigest } : {}),
       ...(revision ? { source: revision } : {}),

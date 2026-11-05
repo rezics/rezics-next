@@ -416,6 +416,7 @@ export type SummaryReadingReturn = {
   context?: string;
   realm?: string;
   release?: string;
+  subjectRelease?: string;
   source?: string;
   expanded?: boolean;
   focus?: 'reading' | 'evidence';
@@ -437,6 +438,7 @@ export function summaryReadingReturn(hash: string): SummaryReadingReturn | undef
     'context',
     'realm',
     'release',
+    'subjectRelease',
     'source',
     'expanded',
     'focus',
@@ -451,6 +453,7 @@ export function summaryReadingReturn(hash: string): SummaryReadingReturn | undef
   const context = params.get('context');
   const realm = params.get('realm');
   const release = params.get('release');
+  const subjectRelease = params.get('subjectRelease');
   const source = params.get('source');
   const expanded = params.get('expanded');
   const focus = params.get('focus');
@@ -469,6 +472,7 @@ export function summaryReadingReturn(hash: string): SummaryReadingReturn | undef
     (context !== null && !boundedToken(context, 128)) ||
     (realm !== null && !boundedToken(realm, 128)) ||
     (release !== null && !boundedToken(release, 128)) ||
+    (subjectRelease !== null && !boundedToken(subjectRelease, 128)) ||
     (source !== null && !boundedToken(source, 128)) ||
     (expanded !== null && expanded !== '1') ||
     (focus !== null && focus !== 'reading' && focus !== 'evidence')
@@ -489,6 +493,7 @@ export function summaryReadingReturn(hash: string): SummaryReadingReturn | undef
     ...(context ? { context } : {}),
     ...(realm ? { realm } : {}),
     ...(release ? { release } : {}),
+    ...(subjectRelease ? { subjectRelease } : {}),
     ...(source ? { source } : {}),
     ...(expanded === '1' ? { expanded: true } : {}),
     ...(focus ? { focus: focus as 'reading' | 'evidence' } : {}),
@@ -505,6 +510,7 @@ export function summaryReadingFragment(value: SummaryReadingReturn): string | un
     ...(value.context ? { context: value.context } : {}),
     ...(value.realm ? { realm: value.realm } : {}),
     ...(value.release ? { release: value.release } : {}),
+    ...(value.subjectRelease ? { subjectRelease: value.subjectRelease } : {}),
     ...(value.source ? { source: value.source } : {}),
     ...(value.expanded ? { expanded: '1' } : {}),
     ...(value.focus ? { focus: value.focus } : {}),
