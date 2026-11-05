@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { readAccount, type Account } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId } from '../../src/route/route.ts';
@@ -26,7 +25,6 @@ type Fixture = {
 };
 
 let database: GrowthDatabase;
-let accounts: Map<string, Account>;
 let fixtures: Fixture[];
 
 function persona(accountId: string): AccountActor {
@@ -55,7 +53,6 @@ async function insertAccount(accountId: string, route: number): Promise<void> {
      VALUES ($1, $2, 'actor', 'active', $3, false, 1)`,
     [route, accountId, newId(route)],
   );
-  accounts.set(accountId, (await readAccount(database.admin, route, accountId))!);
 }
 
 async function createFixture(route: number): Promise<Fixture> {
@@ -71,17 +68,16 @@ async function createFixture(route: number): Promise<Fixture> {
     release: { digest: bundledDigest, release: bundledRelease },
     authorize: async () => true,
   });
-  const access = createAccess({
-    actions: new Map([
+  const access = admittedAccess({
+    actions: new Map<string, { anonymous: boolean; authority?: 'own-account' }>([
       ['subject:read', { anonymous: true }],
       ...['progress_session:create', 'progress_session:update', 'progress_session:read', 'progress_session:list']
         .map((action) => [action, { anonymous: false, authority: 'own-account' as const }] as const),
     ]),
-    accountEvidence: (candidate) => accounts.get(candidate.accountId) ?? null,
   });
   return {
     route,
-    actor,
+    actor: await authenticateAccount(access, { pool: database.pool, deadline: Date.now() + 5000 }, actor),
     subjectId: created.subject.id,
     commands: createSessionCommands({ pool: database.pool, access, tokens, clock: () => new Date(recordedAt) }),
   };
@@ -304,7 +300,6 @@ async function recordProbes(fixture: Fixture): Promise<{ measured: string; warmu
 
 beforeAll(async () => {
   database = await openGrowthDatabase();
-  accounts = new Map();
   await bootstrapRelease(database.pool, bundledRelease);
   fixtures = [];
   for (let index = 0; index < 5; index += 1) fixtures.push(await createFixture(firstRoute + index));

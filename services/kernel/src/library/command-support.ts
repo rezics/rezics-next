@@ -22,7 +22,7 @@ import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { receiptKeysFor } from '../command/receipt-key.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
-import { consumeSessionWork, sessionCommandPlan, sessionShelfWork, type SessionOperationKind } from './session-operation-bounds.ts';
+import { consumeSessionWork, sessionCommandPlan, sessionShelfWork, withSessionCommandPlan, type SessionOperationKind } from './session-operation-bounds.ts';
 
 import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
 
@@ -42,6 +42,7 @@ export type OwnAccountCommand = {
   requestKey: string;
   input: unknown;
   sessionOperation?: SessionOperationKind;
+  sessionPreparation?: boolean;
   deadline?: number;
 };
 
@@ -130,7 +131,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     const identity = principalCommandIdentity(owner);
     const deadline = request.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
     const plan = request.sessionOperation === undefined ? undefined : sessionCommandPlan(request.sessionOperation,
-      { accountId: owner.accountId, kind: request.kind, key: request.requestKey, input: request.input }, receiptKeysFor(pool).keys.size);
+      { accountId: owner.accountId, kind: request.kind, key: request.requestKey, input: request.input }, receiptKeysFor(pool).keys.size, request.sessionPreparation ?? false);
     // Capture original command identity before any permission preparation awaits.
     const commandInput = plan?.original.input ?? request.input;
     const native = config.access
@@ -148,7 +149,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       resource: Object.freeze({ route, id: owner.accountId }),
       denied: () => (receiptOnly ? new ReceiptNotFoundError() : new GrantDeniedError()),
       async prepare(attempt) {
-        if (plan) await consumeSessionWork('command-control', plan.control, async () => undefined);
+        await plan?.consumeAttempt();
         const evidence = await native?.prepare?.(attempt);
         await prepare?.(attempt);
         return evidence;
@@ -183,7 +184,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
       },
     };
 
-    return withRequestDeadline(deadline, () => runCommand(
+    const execute = () => withRequestDeadline(deadline, () => runCommand(
       pool,
       {
         ...identity,
@@ -204,6 +205,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
         return body(tx, command);
       },
     ));
+    return plan ? withSessionCommandPlan(plan, execute) : execute();
   }
 
   async function ownAccount<T>(

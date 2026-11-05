@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import type { PoolClient } from 'pg';
@@ -34,6 +35,9 @@ import mappingSources from '../semantic/identity-epoch-read-sources.sql';
 import mappingPending from '../semantic/identity-epoch-read-pending.sql';
 import mappingCurrent from '../semantic/identity-terminal-closure-current.sql';
 import subjectReference from '../semantic/read-subject-reference.sql';
+import itemTypes from '../semantic/read-item-types.sql';
+import profileMigration from './profile-migration-progress.sql';
+import { partitionOf, routeOf } from '../route/route.ts';
 import headEnsure from './shelf-head-ensure.sql';
 import headTouch from './shelf-head-touch.sql';
 import entryRaise from './shelf-entry-raise.sql';
@@ -80,10 +84,10 @@ const text = (characters: number) => '\0'.repeat(characters);
 const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 const pin = { provenance: 'profile', releaseDigest: `sha256:${'f'.repeat(64)}`, acceptingType: '', profileId: '' };
 const pinBytes = size(pin) + 2 * 6 * RELEASE_LIMITS.bytes;
-const measure = { unit: text(64), amount: numeric, total: numeric };
+const measure = { unit: text(128), amount: numeric, total: numeric };
 const session = {
   route: 65535, id: uuid, accountId: uuid, subjectId: uuid, versionSubjectId: uuid,
-  mode: 'completed_units', unit: text(64), total: numeric, amount: numeric,
+  mode: 'completed_units', unit: text(128), total: numeric, amount: numeric,
   locator: text(256), position: numeric, completedUnitCount: 20_000, state: 'completed',
   revision: 2_147_483_647, startedAt: timestamp, completedAt: timestamp, transactionId: uuid,
   additionalMeasures: [],
@@ -91,6 +95,8 @@ const session = {
 // additional_measures has a separate 4096-byte JSONB CHECK. At most seven
 // repeated measures are returned even when every unit is a different meaning.
 const sessionBytes = size(session) + 6 * 4096;
+// Public multi-measure serialization repeats the primary amount/total in measures.
+const responseSessionBytes = sessionBytes + size({ measures: [measure] });
 const factBytes = sessionBytes + size({ libraryProfilePin: null }) + pinBytes;
 const journalBytes = size({
   sessionId: uuid, accountId: uuid, revision: 2_147_483_646,
@@ -98,9 +104,9 @@ const journalBytes = size({
   reflection: text(2000), assessmentPresence: 'explicit_null', assessmentUnits: 20, assessmentMeaningRevision: 1,
 });
 const unitBytes = size({ route: 65535, sessionId: uuid, unitId: text(128), addedAt: timestamp });
-// A change retains the original 100 add AND 100 remove IDs, not just their net
-// cardinality. Cursor records and lifecycle corrections are smaller branches.
-const intentBytes = size({ add: Array(100).fill(text(128)), remove: Array(100).fill(text(128)) }) + size(measure);
+// The native sparse intent caps the combined add/remove list at 100 original IDs.
+// Reserve both JSON field names independently of the distribution.
+const intentBytes = size({ add: [], remove: [] }) + 100 * (size(text(128)) + 1) + size(measure);
 const changeBytes = size({ route: 65535, sessionId: uuid, changeNo: 2_147_483_647,
   intent: null, recordedAt: timestamp, transactionId: uuid }) + intentBytes;
 
@@ -147,7 +153,7 @@ const sessionTriggers = sumBounds(sourceHeads, consumption, reportedYear, insigh
   progressRefresh, migration, memberScope);
 const childFence = nativePoint(1 + 4, 2, 2, 128);
 
-function frozen<I>(input: I): I {
+export function retainSessionOperands<I>(input: I): I {
   const original = structuredClone(input);
   function freeze(value: unknown): void {
     if (value === null || typeof value !== 'object') return;
@@ -159,20 +165,36 @@ function frozen<I>(input: I): I {
 }
 
 function statement<I, R>(kind: SessionSqlKind, query: Query<I, R>, input: I, shape: Shape, nested?: Bound): SessionSqlPlan<I, R> {
-  const original = frozen(input);
-  const total = sumBounds(declareBound({
-    candidateKeys: shape.keys, nativeRows: shape.rows, identityMetadataRows: 0,
-    nativePoints: shape.points, emptySeeks: shape.seeks, witnessKeys: 0, statements: 1,
-    bytes: Buffer.byteLength(query.sql) + size(original) + 2 + shape.output * (shape.rowBytes + 1),
-    // These closed leaves execute SQL only. Keep the ninth axis explicit.
-    engineRequests: 0,
-  }), ...(nested ? [nested] : []));
+  const original = retainSessionOperands(input);
+  const total = statementWork(query.sql, size(original), shape, nested);
   return Object.freeze({ kind, input: original, total,
     run(client: Client) { return consumeSessionWork(`sql.${kind}`, total, () => query.run(client, original)); } });
 }
 
+function statementWork(sql: string, inputBytes: number, shape: Shape, nested?: Bound): Bound {
+  return sumBounds(declareBound({
+    candidateKeys: shape.keys, nativeRows: shape.rows, identityMetadataRows: 0,
+    nativePoints: shape.points, emptySeeks: shape.seeks, witnessKeys: 0, statements: 1,
+    bytes: Buffer.byteLength(sql) + inputBytes + 2 + shape.output * (shape.rowBytes + 1),
+    // These closed leaves execute SQL only. Keep the ninth axis explicit.
+    engineRequests: 0,
+  }), ...(nested ? [nested] : []));
+}
+
+const enclosingSessionPlan = new AsyncLocalStorage<Readonly<{ total: Bound }>>();
+
+/** Keep the complete immutable attempt declaration across preparation, transaction and retries. */
+export function withSessionCommandPlan<T>(plan: SessionCommandPlan, dispatch: () => Promise<T>): Promise<T> {
+  return enclosingSessionPlan.run(plan, dispatch);
+}
+
 /** Translation to the existing eight-axis port is explicit; no ninth-axis work is dropped. */
 export function consumeSessionWork<T>(kind: string, total: Bound, dispatch: () => Promise<T>): Promise<T> {
+  if (enclosingSessionPlan.getStore()) return dispatch();
+  return consumeNativeSessionWork(kind, total, dispatch);
+}
+
+function consumeNativeSessionWork<T>(kind: string, total: Bound, dispatch: () => Promise<T>): Promise<T> {
   const association = currentCommandWorkAssociation();
   const { engineRequests, ...native } = total;
   // The closed operation set contains no Search request. Search's discovery
@@ -257,15 +279,17 @@ export function sessionMeaningRefreshPlan(input: { route: number; sessionId: str
 export function sessionPresentationWork(measures: number, sessions = 1): Bound {
   // Labels, forms and input rules are projections of one bounded immutable
   // release. Repeated measures serialize independently, even on the same pin.
-  return repeatBound(sessionBytesWork(factBytes + (1 + measures) * 6 * RELEASE_LIMITS.bytes), sessions);
+  return repeatBound(sessionBytesWork(responseSessionBytes + pinBytes + (1 + measures) * 6 * RELEASE_LIMITS.bytes), sessions);
 }
 
 export type SessionOperationKind = 'start' | 'record' | 'complete' | 'abandon' | 'reopen' | 'retire' | 'journal';
 export type SessionCommandPlan = Readonly<{
   kind: SessionOperationKind;
   original: Readonly<{ accountId: string; kind: string; key: string; input: unknown }>;
-  /** Executor work only. Store, source and native Access leaves compose separately. */
-  control: Bound;
+  /** Full Library attempt, including its closed preparation/mutation branches.
+   * Native Access producers compose through their existing independent work port. */
+  total: Bound;
+  consumeAttempt(): Promise<void>;
 }>;
 
 function sqlWork(sql: string, input: unknown, rows: number, points: number, outputBytes: number, metadata = 0): Bound {
@@ -278,9 +302,9 @@ function sqlWork(sql: string, input: unknown, rows: number, points: number, outp
  * Native Access owns account/action/group preparation via its original work port.
  * There is no second command invocation or admission for these declarations.
  */
-export function sessionCommandPlan(kind: SessionOperationKind, original: SessionCommandPlan['original'], receiptKeys: number): SessionCommandPlan {
-  const retained = frozen(original);
-  const responseBytes = kind === 'journal' ? size({ sessionId: uuid, revision: 2_147_483_646, changed: false }) : sessionBytes;
+export function sessionCommandPlan(kind: SessionOperationKind, original: SessionCommandPlan['original'], receiptKeys: number, preparesSource = false): SessionCommandPlan {
+  const retained = retainSessionOperands(original);
+  const responseBytes = kind === 'journal' ? size({ sessionId: uuid, revision: 2_147_483_646, changed: false }) : responseSessionBytes;
   const receipt = { principal: { kind: 'account', id: retained.accountId }, kind: retained.kind,
     key: 'rk1.2147483647.' + 'f'.repeat(64), digest: 'f'.repeat(44), response: null };
   const controls = [
@@ -290,8 +314,10 @@ export function sessionCommandPlan(kind: SessionOperationKind, original: Session
   ];
   const control = sumBounds(
     ...controls.map((sql) => sqlWork(sql, [], 0, 0, 0)),
-    sqlWork(timeRead.sql, {}, 1, 1, size({ time: timestamp })),
-    // Current account projection/hold are independent of the permission engine.
+    sqlWork(timeRead.sql, { at: timestamp }, 1, 1, size({ value: timestamp })),
+    // Native Access supplies account row/byte work; add its statement and original binds.
+    sqlWork(accountRead.sql, { route: routeOf(retained.accountId)!, account_id: retained.accountId }, 0, 0, 0),
+    // Current account hold is independent of the permission engine.
     sqlWork(accountShare.sql, { route: 65535, account_id: retained.accountId }, 1, 1, 256),
     sqlWork(receiptRead.sql, { partition_no: 4095, principal_kind: 'account', principal_id: retained.accountId,
       command_kind: retained.kind, idempotency_keys: Array(receiptKeys).fill(receipt.key) }, receiptKeys, receiptKeys,
@@ -306,9 +332,12 @@ export function sessionCommandPlan(kind: SessionOperationKind, original: Session
       size({ epoch: 2_147_483_647, position: '-9223372036854775808' })),
     sqlWork(noEffectFence.sql, { partition_no: 4095, transaction_id: uuid, receipt }, 1 + 4, 1 + 3,
       size({ epoch: 2_147_483_647, position: '-9223372036854775808' })),
+    sessionPartitionWork(partitionOf(routeOf(retained.accountId)!)),
     sessionBytesWork(size(retained) + 3 * responseBytes),
   );
-  return Object.freeze({ kind, original: retained, control });
+  const total = sumBounds(control, commandJourneyWork(kind, retained, preparesSource));
+  return Object.freeze({ kind, original: retained, total,
+    consumeAttempt() { return consumeNativeSessionWork(`command.${kind}`, total, async () => undefined); } });
 }
 
 /** Preparation snapshots have one connection and one RR transaction, released by
@@ -355,8 +384,11 @@ export function sessionSourceWork(subjectId: string, withProfile: boolean): Boun
       sqlWork(subjectReference.sql, { route: 65535, subject_id: subjectId }, 2, 2, size({ id: uuid, redirect: uuid })),
       ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', "SET LOCAL statement_timeout = '5000ms'", 'COMMIT', 'ROLLBACK']
         .map((sql) => sqlWork(sql, [], 0, 0, 0))), 3),
-    // readItemTypes selects exactly the terminal's one native type label.
-    nativePoint(1, 1, 1, 6 * RELEASE_LIMITS.bytes),
+    // The type leaf also probes the exact optional account-agent link. The
+    // terminal can differ from the requested ID, but both UUID binds have the same width.
+    sqlWork(itemTypes.sql, { partition_no: partitionOf(routeOf(subjectId)!),
+      routes: [routeOf(subjectId)!], subject_ids: [subjectId] }, 2, 2,
+      size({ id: uuid, type: '', agent_account_id: uuid, agent_verified: false }) + 6 * RELEASE_LIMITS.bytes),
     ...(withProfile ? [sessionReleaseWork(pin.releaseDigest, true)] : []));
 }
 
@@ -382,7 +414,7 @@ export function sessionShelfWork(route: number, accountId: string, counters: boo
     epoch: '-9223372036854775808', activeGeneration: uuid, runId: uuid });
   const runBytes = size({ runId: uuid, epoch: '-9223372036854775808', sequence: '-9223372036854775808',
     segment: 2_147_483_647, kind: 'backfill', phase: 'sessions', cursor: null, buildGeneration: uuid,
-    enqueuePending: false, cancelled: false });
+    enqueuePending: false, cancelled: false }) + 6 * 2048;
   const gate = sumBounds(sqlWork(accountShare.sql, input, 1, 1, 256),
     sqlWork(gateRead.sql, input, 1, 1, gateBytes),
     sqlWork(gateEnsure.sql, input, 4, 1, 0),
@@ -399,4 +431,171 @@ export function sessionShelfWork(route: number, accountId: string, counters: boo
     sqlWork(counterInitialize.sql, { ...input, fence_id: uuid }, 4, 1, 0),
     repeatBound(sqlWork(counterRead.sql, input, 1, 1, size({ fenceId: uuid, epoch: '-9223372036854775808', state: 'initializing', ready: false, generationId: uuid })), 2),
     sqlWork(counterComplete.sql, { ...input, ready: false, epoch: '-9223372036854775808', generation_id: uuid }, 3, 1, 0)) : gate;
+}
+
+
+export function sessionProfileMigrationWork(route: number, accountId: string): Bound {
+  return sqlWork(profileMigration.sql, { route, account_id: accountId }, 1, 1,
+    size({ phase: 'progress_meanings', digest: pin.releaseDigest, after: uuid }));
+}
+
+export function sessionReadTimeWork(): Bound {
+  return sqlWork(timeRead.sql, { at: timestamp }, 1, 1, size({ value: timestamp }));
+}
+
+
+/** Closed whole-attempt composition. Unknown stored projections use the native
+ * schema widths above; the original request is still serialized independently.
+ * Every SQL leaf binds its actual original operands before dispatch. Those
+ * declarations are included here, rather than charged for a second time.
+ */
+function commandJourneyWork(kind: SessionOperationKind, original: SessionCommandPlan['original'], preparesSource: boolean): Bound {
+  const route = routeOf(original.accountId)!;
+  const input = original.input as Record<string, unknown>;
+  const bindBytes = size(original.input) + 2 * factBytes + size({ time: timestamp, transactionId: uuid });
+  const read = statementWork(sessionRead.sql, size({ route, session_id: uuid }), point(factBytes));
+  const lock = statementWork(sessionLock.sql, size({ route, session_id: uuid }), point(size({ session_id: uuid })));
+  const head = sessionHeadWork({ route, account_id: original.accountId, subject_id: uuid });
+  const activity = sessionActivityWork({ route, account_id: original.accountId, subject_id: uuid,
+    time: timestamp, completed: true });
+  const gate = sessionShelfWork(route, original.accountId, false);
+  if (kind === 'journal') {
+    return sumBounds(gate, lock, read,
+      statementWork(journalLock.sql, bindBytes, point(journalBytes)),
+      statementWork(journalUpdate.sql, bindBytes, point(journalBytes), sumBounds(sessionHeapAndIndexes, sessionTriggers)));
+  }
+  const owner = sessionShelfWork(route, original.accountId, true);
+  if (kind === 'start') {
+    const subjectId = input.subjectId as string;
+    const versionId = input.versionSubjectId as string | null;
+    const measures = 1 + ((input.additionalMeasures as readonly unknown[] | undefined)?.length ?? 0);
+    return sumBounds(gate, owner, head, activity,
+      repeatBound(sessionSourceWork(subjectId, true), 2),
+      ...(versionId !== null && versionId !== subjectId ? [repeatBound(sessionSourceWork(versionId, true), 2)] : []),
+      statementWork(sessionInsert.sql, bindBytes, point(sessionBytes), sumBounds(sessionHeapAndIndexes, sessionTriggers)),
+      statementWork(meaningSql, bindBytes + measures * (pinBytes + size(measure)),
+        { keys: measures, rows: measures * 2, points: measures, seeks: measures, output: 0, rowBytes: 0 }),
+      statementWork(refreshSql, size({ route, sessionId: uuid }),
+        { keys: 0, rows: 0, points: 0, seeks: 0, output: 1, rowBytes: 4 }, progressRefresh));
+  }
+  // Record observes original accepted meaning and current Source. Lifecycle
+  // operations may have a reviewed binding; retaining that preparation maximum
+  // also covers reopen/retire. Clear never reads a new acceptance descriptor.
+  const preparation = !preparesSource
+    ? sessionBytesWork(0)
+    : sumBounds(sessionSnapshotWork(original.accountId), read,
+        repeatBound(sessionSourceWork(uuid, true), 2),
+        ...(kind === 'record' && input.clear !== true ? [sessionReleaseWork(pin.releaseDigest)] : []));
+  const changes: Bound[] = [];
+  if (kind === 'record') {
+    if (input.clear === true) {
+      changes.push(statementWork(unitClear.sql, size({ route, session_id: uuid }),
+        { keys: SESSION_LIMITS.units, rows: 3 * SESSION_LIMITS.units, points: 1, seeks: 1, output: 0, rowBytes: 0 },
+        repeatBound(childFence, SESSION_LIMITS.units)));
+    } else {
+      const add = (input.add as readonly string[] | undefined)?.length ?? 0;
+      const remove = (input.remove as readonly string[] | undefined)?.length ?? 0;
+      if (add) changes.push(statementWork(unitAdd.sql, size({ route, session_id: uuid, unit_ids: input.add }),
+        { keys: add, rows: 1 + add * 4, points: 1 + add * 2, seeks: 1 + add, output: 1, rowBytes: size({ added: 100 }) },
+        repeatBound(childFence, add)));
+      if (remove) changes.push(statementWork(unitRemove.sql, size({ route, session_id: uuid, unit_ids: input.remove }),
+        { keys: remove, rows: remove * 3, points: remove, seeks: remove, output: 1, rowBytes: size({ removed: 100 }) },
+        repeatBound(childFence, remove)));
+    }
+  }
+  return sumBounds(preparation, gate, owner, head, activity, repeatBound(read, 2), lock,
+    statementWork(sessionUpdate.sql, bindBytes, point(sessionBytes), sumBounds(sessionHeapAndIndexes, sessionTriggers)),
+    statementWork(changeAppend.sql, bindBytes, { ...point(changeBytes), rows: 3, points: 2 }, childFence), ...changes);
+}
+
+
+export type SessionReadKind = 'read' | 'inspect' | 'journal-read' | 'presentation'
+  | 'subject-page' | 'owner-page' | 'owner-current' | 'unit-page' | 'change-page';
+type ReadInput = Readonly<{ targetId?: string; versionSubjectId?: string | null; limit?: number; cursor?: string }>;
+export type SessionReadPlan = Readonly<{
+  kind: SessionReadKind;
+  original: ReadInput;
+  total: Bound;
+  run<T>(dispatch: () => Promise<T>): Promise<T>;
+}>;
+
+/** The read root includes transaction custody, current owner checks, cursor
+ * partition/generation fences, raw sentinels and returned serialization. */
+export function sessionReadOperationPlan(kind: SessionReadKind, accountId: string, input: ReadInput): SessionReadPlan {
+  const original = retainSessionOperands(input);
+  const route = routeOf(accountId)!;
+  const targetId = original.targetId ?? uuid;
+  const pointInput = size({ route, session_id: targetId });
+  const read = statementWork(sessionRead.sql, pointInput, point(factBytes));
+  const legacy = sessionProfileMigrationWork(route, accountId);
+  const snapshot = sessionSnapshotWork(accountId);
+  const partition = sessionPartitionWork(partitionOf(route));
+  const parts: Bound[] = [snapshot, sessionBytesWork(size(original))];
+  // seal prefixes two bytes and appends a SHA-256 base64url MAC. All native
+  // frontiers fit the timestamp/UUID/unit/generation projection below.
+  if (kind.endsWith('page')) {
+    const payloadBytes = size({ e: 2_147_483_647, a: [timestamp, uuid, text(128), '-9223372036854775808'], t: Number.MAX_SAFE_INTEGER });
+    parts.push(sessionBytesWork(4 * Math.ceil((2 + payloadBytes) / 3) + 1 + 43 + size(original)));
+  }
+  switch (kind) {
+    case 'read': parts.push(read, legacy, sessionBytesWork(responseSessionBytes)); break;
+    case 'inspect': parts.push(read, sessionBytesWork(factBytes)); break;
+    case 'journal-read': parts.push(statementWork(journalRead.sql,
+      size({ route, account_id: accountId, session_id: targetId }), point(journalBytes)), sessionBytesWork(journalBytes)); break;
+    case 'presentation':
+      // The version is read from the original stored fact after the first owner
+      // snapshot. Its UUID and native type widths are independent of its value.
+      parts.push(snapshot, repeatBound(read, 2), repeatBound(partition, 2), repeatBound(sessionReadTimeWork(), 2),
+        sessionReleaseWork(pin.releaseDigest), repeatBound(sessionSourceWork(uuid, true), 2),
+        repeatBound(sessionSourceWork(uuid, false), 2), repeatBound(sessionPresentationWork(8), 2));
+      break;
+    case 'owner-current':
+      parts.push(partition, statementWork(discoveryGeneration.sql,
+        size({ route, account_id: accountId }), point(size({ generation: '-9223372036854775808' }))));
+      break;
+    case 'owner-page': {
+      const limit = original.limit ?? 20;
+      parts.push(partition, legacy, statementWork(discoveryGeneration.sql,
+        size({ route, account_id: accountId }), point(size({ generation: '-9223372036854775808' }))),
+        statementWork(discoveryPage.sql, size(original) + size({ route, account_id: accountId,
+          subject_id: uuid, filter_kind: 'subject_profile', state_filter: 'completed', mode_filter: 'completed_units',
+          profile_filter: '', after_started_at: timestamp, after_session_id: uuid, has_cursor: true, limit: limit + 1 }),
+          { keys: limit + 1, rows: 2 * (limit + 1), points: limit + 2, seeks: limit + 2,
+            output: limit + 1, rowBytes: factBytes }),
+        sessionBytesWork(2 + limit * (responseSessionBytes + pinBytes + 1)));
+      break;
+    }
+    default: {
+      const limit = original.limit ?? 20;
+      const sent = Math.min(SESSION_LIMITS.page, limit + 1);
+      const next = original.cursor !== undefined;
+      const binds = size(original) + size({ route, account_id: accountId, subject_id: targetId,
+        session_id: targetId, after_started_at: timestamp, after_session_id: uuid,
+        after_unit_id: text(128), after_change_no: 2_147_483_647, has_cursor: next, limit: sent });
+      parts.push(partition);
+      if (kind === 'subject-page') {
+        const ranges = next ? 2 : 1;
+        parts.push(legacy, statementWork(sessionPage.sql, binds,
+          { keys: ranges * sent, rows: ranges * sent, points: ranges, seeks: ranges, output: sent, rowBytes: factBytes }));
+        if (limit === SESSION_LIMITS.page) parts.push(statementWork(sessionPage.sql, binds,
+          { keys: 2, rows: 2, points: 2, seeks: 2, output: 1, rowBytes: factBytes }));
+        parts.push(sessionBytesWork(2 + limit * (responseSessionBytes + 1)));
+      } else {
+        const sql = kind === 'unit-page' ? unitPage.sql : changePage.sql;
+        const width = kind === 'unit-page' ? unitBytes : changeBytes;
+        parts.push(read, legacy, statementWork(sql, binds,
+          { keys: sent, rows: sent, points: 1, seeks: 1, output: sent, rowBytes: width }));
+        if (limit === SESSION_LIMITS.page) parts.push(statementWork(sql, binds,
+          { keys: 1, rows: 1, points: 1, seeks: 1, output: 1, rowBytes: width }));
+        parts.push(sessionBytesWork(2 + limit * (width + 1)));
+      }
+      break;
+    }
+  }
+  const total = sumBounds(...parts);
+  return Object.freeze({ kind, original, total,
+    run<T>(dispatch: () => Promise<T>) {
+      if (enclosingSessionPlan.getStore()) return dispatch();
+      return consumeNativeSessionWork(kind, total, () => enclosingSessionPlan.run({ total }, dispatch));
+    } });
 }

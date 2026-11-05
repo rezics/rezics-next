@@ -117,9 +117,14 @@ export async function prepareProgressPresentation(deps: LibraryProfileSourceDepe
     disclosure: { subject: source !== null, versionSubject: version !== null },
     async verify(at: AuthoritativeTime) {
       const current = { ...deps, at };
-      if (anchor && !sameLibraryProfileAnchor(anchor, await consumeSessionWork('presentation-source-final',
-        sessionSourceWork(session.subjectId, false), () => readLibraryProfileAnchor(current, session.subjectId))))
-        throw new ProblemError('semantic_not_ready');
+      if (anchor) {
+        const final = await consumeSessionWork('presentation-source-final', sessionSourceWork(session.subjectId, true),
+          () => readLibraryProfileSourceObservation(current, session.subjectId));
+        if (!final || !sameLibraryProfileAnchor(anchor, final.anchor) || source?.kind !== final.source.kind ||
+          (source.kind === 'supported' && final.source.kind === 'supported' &&
+            JSON.stringify(source.pin) !== JSON.stringify(final.source.pin)))
+          throw new ProblemError('semantic_not_ready');
+      }
       if (
         version &&
         session.versionSubjectId !== session.subjectId &&

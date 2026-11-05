@@ -107,7 +107,7 @@ are independent: failure to present current source evidence cannot erase or ackn
 `session-operation-bounds.ts` supplies closed nine-axis SQL and native composition declarations using pure
 `@rezics/bounds` arithmetic. The existing `createLibraryCommandRunner` remains the command boundary. Session
 commands now bind its existing Access port, retain one absolute preparation/authorization/execution deadline,
-and compose one executor control declaration per native attempt. Account/action/group preparation and final
+and consume one immutable whole-operation declaration per native attempt. Included SQL, preparation and transaction leaves execute on the original resources without a second charge. Account/action/group preparation and final
 native authorization keep their original Access producers and accounting. No declaration opens a connection,
 changes an owner, manufactures execution evidence or grants another allowance.
 
@@ -132,7 +132,7 @@ witnesses, statements, serialized bytes and engine requests. Literal compiled SQ
 are separate byte terms. There is no observed-row repricing. The explicit eight-axis adapter retains a documented
 zero ninth axis for this SQL-only family; Search's engine calls stay at Search's native root.
 
-Session reads include UUIDs, int32/bigint projections, 64-character PostgreSQL timestamps, 256-character escaped
+Session reads include UUIDs, int32/bigint projections, 64-character PostgreSQL timestamps, 128-character unit IDs, 256-character escaped
 locators, the native numeric range, the independent 4096-byte additional-measure JSONB ceiling and immutable
 Definitions release ceilings for pinned identifiers. Journal projection includes its 2000-character/4096-byte
 reflection and nullable dates/assessment. Change projection includes both original add/remove lists and cursor
@@ -147,7 +147,7 @@ and the second refresh after meaning insertion. Failed CAS, stale revision and r
 
 The command control declaration includes authoritative time, native account hold, original receipt candidates,
 replay projection, transaction controls, commit/rollback, no-effect and event fences, History attribution,
-outbox, original receipt input and repeated response serialization. Executor retries retain native custody and
+outbox, original receipt input and repeated response serialization, including the primary measure repeated in the public measures array. Executor retries retain native custody and
 the original deadline; declarations do not introduce a runner, scheduler, retry or permission protocol. Shelf
 gate/owner composition includes first initialization, existing durable backfill run/step creation, run reads,
 head locks, activity and Entry activity effects. The future backfill pages retain their own operation owner;
@@ -155,8 +155,7 @@ creating its durable continuation does not claim those pages have executed.
 
 ### Current presentation and continuation
 
-Current presentation has independent original-release, current Source/profile, version-disclosure and final
-verification declarations. Rendering is charged before invocation, including failure after a completed command.
+Current presentation and first/next page roots consume complete immutable read declarations before dispatch. Current presentation includes original-release, current Source/profile, version-disclosure and final verification, including a changed active profile after rendering. Rendering is charged before invocation, including failure after a completed command.
 Released owner snapshots surround the render and final source/epoch/fact comparison. Expired snapshot cleanup rolls back on the original raw connection before its single release. The original command's
 receipt remains replayable if rendering fails. Historic meaning never selects a replacement release. Discovery
 uses one bounded release batch and independently serializes all repeated measure presentations.

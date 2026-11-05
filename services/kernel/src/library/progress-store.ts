@@ -1,3 +1,4 @@
+import { consumeSessionWork, sessionProfileMigrationWork } from './session-operation-bounds.ts';
 import { sessionInsertPlan, sessionReadPlan, sessionUpdatePlan, sessionSubjectPagePlan, sessionJournalReadPlan, sessionJournalLockPlan, sessionJournalUpdatePlan, sessionUnitAddPlan, sessionUnitRemovePlan, sessionUnitPagePlan, sessionChangeAppendPlan, sessionChangePagePlan, sessionDiscoveryPagePlan, sessionDiscoveryGenerationPlan, sessionMeaningInsertPlan, sessionMeaningRefreshPlan } from './session-operation-bounds.ts';
 import { assertPreProfileLibraryRead } from './profile-source.ts';
 import type { PoolClient } from 'pg';
@@ -272,7 +273,8 @@ export async function insertSession(
 export async function readSession(client: Client, route: number, sessionId: string): Promise<ProgressSession | null> {
   const row = await sessionReadPlan({ route, session_id: sessionId }).run(queryClient(client));
   if (row && decodeLibraryProfilePin(row.libraryProfilePin) === null) {
-    await assertPreProfileLibraryRead(client, row.accountId);
+    await consumeSessionWork('legacy-profile', sessionProfileMigrationWork(route, row.accountId),
+      () => assertPreProfileLibraryRead(client, row.accountId));
     assertUnit(row.unit, false);
   }
   return row ? asSession(row) : null;
@@ -441,7 +443,8 @@ export async function pageSessions(
     limit: Math.min(MAX_PROGRESS_PAGE_SIZE, page.limit),
   }).run(queryClient(client));
   if (rows.some((row) => row.libraryProfilePin === null)) {
-    await assertPreProfileLibraryRead(client, accountId);
+    await consumeSessionWork('legacy-profile', sessionProfileMigrationWork(route, accountId),
+      () => assertPreProfileLibraryRead(client, accountId));
     for (const row of rows) if (row.libraryProfilePin === null) assertUnit(row.unit, false);
   }
   return rows.map((row) => asSession(row));
@@ -494,7 +497,8 @@ export async function pageProgressDiscovery(
     limit,
   }).run(queryClient(client));
   if (rows.some((row) => row.libraryProfilePin === null)) {
-    await assertPreProfileLibraryRead(client, accountId);
+    await consumeSessionWork('legacy-profile', sessionProfileMigrationWork(route, accountId),
+      () => assertPreProfileLibraryRead(client, accountId));
     for (const row of rows) if (row.libraryProfilePin === null) assertUnit(row.unit, false);
   }
   return rows.map((row) => ({ session: asSession(row), profilePin: decodeLibraryProfilePin(row.libraryProfilePin) }));

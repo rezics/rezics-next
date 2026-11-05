@@ -776,10 +776,15 @@ test('native maximum measures repeat corrections and clear while an acknowledged
   await expect(commands.readPresentedSession(owner.actor, current.id, async () => {
     throw new Error('current presentation failed');
   })).rejects.toThrow('current presentation failed');
+  await expect(commands.readPresentedSession(owner.actor, current.id, async () => {
+    await native.activate(replacement);
+    return 'rendered against the previous current profile';
+  })).rejects.toMatchObject({ code: 'semantic_not_ready' });
+  await native.activate(digest);
   const cleared = await commands.recordProgress(owner.actor, current.id,
     { revision: acknowledged.value.revision, clear: true }, entryKey());
   expect(cleared.value.measures!.every((measure) => measure.amount === null)).toBe(true);
-  expect(await commands.recordProgress(owner.actor, current.id, intent, key)).toEqual(acknowledged);
+  expect(await commands.recordProgress(owner.actor, current.id, intent, key)).toEqual({ ...acknowledged, replayed: true });
   expect((await commands.readSession(owner.actor, current.id)).revision).toBe(cleared.value.revision);
 });
 
