@@ -11446,5 +11446,13 @@
   "moderation_manual_open": "Open board queue",
   "moderation_manual_catalogue": "Open catalogue reports",
   "subject_rating_control_uncertain": "The result is unknown. Retry the same request, or discard it and reload your current answer.",
-  "subject_rating_control_discard": "Discard request and reload answer"
+  "subject_rating_control_discard": "Discard request and reload answer",
+  "library_archive_progress_nav": "Recover archived progress",
+  "library_archive_use_completed_export": "Use the completed export from this visit",
+  "library_archive_completed_export_help": "The completed local archive stays with this signed-in owner until a new capture replaces it. Signing in as another account clears it.",
+  "library_archive_recovery_read_collection": "Read the current Collection",
+  "library_archive_recovery_restart_original": "Use the original archive",
+  "library_archive_entry_open_library": "Open Library",
+  "library_archive_progress_open_session": "Open the current Session",
+  "library_archive_progress_restart": "Start another recovery with the original archive"
 }

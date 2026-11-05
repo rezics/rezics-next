@@ -26,6 +26,7 @@ test('Library offers a distinct signed-in archive recovery destination beside ex
   });
   expect(libraryNavigation.some((item) => item.href === '/library/export')).toBe(true);
   expect(libraryNavigation.some((item) => item.href === '/library/import-mal')).toBe(true);
+  expect(libraryNavigation.some((item) => item.href === '/library/recover-progress')).toBe(true);
 });
 
 test('Every locale mounts native file admission and explains the supported branch and limits', () => {
@@ -58,6 +59,8 @@ test('Every locale mounts native file admission and explains the supported branc
       expect(html).toContain('aria-current="step"');
       expect(html).toContain(`href="/${locale}/library"`);
       expect(html).toContain(`href="/${locale}/library/export"`);
+      expect(html).toContain(`href="/${locale}/library/recover-collections"`);
+      expect(html).toContain(`href="/${locale}/library/recover-progress"`);
       expect(html).not.toContain('data-upload-id');
     }
   } finally {

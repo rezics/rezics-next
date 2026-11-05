@@ -62,11 +62,16 @@ and one encoded byte buffer.
 
 No partial, stale, limited, expired, cancelled or unfinished stream offers a file. A failed local save retries the
 same completed bytes. If those bytes are lost, replay starts from the original cursor under the same capture. Cancel,
-unmount and viewer or CSRF replacement clear private state and ignore late results. Private bytes stay in visit
-memory and the local file; they do not enter URLs, persistent browser storage or shared caches.
+unmount and viewer or CSRF replacement clear in-flight private state and ignore late results. A completed artifact
+stays with this signed-in owner in process memory so Collection, Entry and progress recovery can reuse those exact
+bytes. Another account cannot inherit them. Private bytes stay out of URLs, persistent browser storage and shared
+caches.
 
 Decision: offer Cancel only after creation resolves an identity; an uncertain create retains its original key and
 only explicit Retry can resend it. Cancelling immediately stops traversal and clears incomplete bytes. Pending
 cancellation coalesces activations; an uncertain acknowledgement retains the exact command for explicit Retry,
 without a replacement capture. Only an admitted terminal result acknowledges disposition; expiry and native
 refusal remain distinct from cancellation. Restart requires an acknowledged disposition and deliberate action.
+
+Decision: pin export-to-restore with journey tests for owner-keyed completed-archive custody, original-archive
+restart, Collection readback and other-member denial; keep the existing named upload, review and result stories.

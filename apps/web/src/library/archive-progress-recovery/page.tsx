@@ -11,6 +11,12 @@ import { EpisodeChecklistEditor } from '../episode-checklist/editor';
 import { preparingVisit } from '../episode-checklist/controller';
 import type { ProgressChoices } from '../progress-profile';
 import { ArchiveRecoveryDeparture } from '../archive-collection-recovery/departure';
+import {
+  archiveFileFromCustody,
+  bindArchiveCustodyOwner,
+  completedArchiveFor,
+} from '../private-export/custody';
+import { ArchiveRecoveryDestinations } from '../private-export/destinations';
 import { ProgressRecoveryJourney, type Snapshot } from './controller';
 import { browserProgressRecoveryPort } from './port';
 import type { ReviewInput } from './native';
@@ -72,6 +78,11 @@ export function ArchiveProgressRecoveryPage() {
 }
 
 function RecoveryJourney({ journey, snap }: { journey: Journey; snap: View }) {
+  const client = useContext(QueryClientContext);
+  const session = client?.getQueryData<{ subject?: string }>(sessionQuery.queryKey);
+  const owner = session?.subject;
+  if (owner) bindArchiveCustodyOwner(owner);
+  const completed = owner ? completedArchiveFor(owner) : null;
   const [consent, setConsent] = useState('');
   const locked = snap.busy || snap.pending;
   useEffect(() => {
@@ -93,6 +104,7 @@ function RecoveryJourney({ journey, snap }: { journey: Journey; snap: View }) {
     <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 [overflow-wrap:anywhere]">
       <PageHeading>{m.library_archive_progress_title()}</PageHeading>
       <p>{m.library_archive_progress_intro()}</p>
+      <ArchiveRecoveryDestinations current="progress" />
       <p role="status" aria-live="polite">
         {notices[snap.notice]()}
         {snap.refusal ? ` (${snap.refusal})` : ''}
@@ -103,20 +115,36 @@ function RecoveryJourney({ journey, snap }: { journey: Journey; snap: View }) {
         </button>
       ) : null}
       {!snap.upload ? (
-        <label className="block space-y-2">
-          <span>{m.library_archive_progress_file()}</span>
-          <input
-            className={action}
-            type="file"
-            accept="application/json,.json"
-            disabled={locked}
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0];
-              event.currentTarget.value = '';
-              if (file) void journey.upload(file);
-            }}
-          />
-        </label>
+        <div className="space-y-3">
+          <label className="block space-y-2">
+            <span>{m.library_archive_progress_file()}</span>
+            <input
+              className={action}
+              type="file"
+              accept="application/json,.json"
+              disabled={locked}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = '';
+                if (file) void journey.upload(file);
+              }}
+            />
+          </label>
+          {snap.hasOriginalArchive ? (
+            <button className={action} disabled={locked} onClick={() => void journey.adoptOriginal()}>
+              {m.library_archive_recovery_restart_original()}
+            </button>
+          ) : completed ? (
+            <button
+              className={action}
+              disabled={locked}
+              onClick={() => void journey.upload(archiveFileFromCustody(completed))}
+            >
+              {m.library_archive_use_completed_export()}
+            </button>
+          ) : null}
+          {completed || snap.hasOriginalArchive ? <p>{m.library_archive_completed_export_help()}</p> : null}
+        </div>
       ) : (
         <>
           <p>{m.library_archive_progress_expiry({ at: snap.upload.expiresAt })}</p>
@@ -211,6 +239,11 @@ function RecoveryJourney({ journey, snap }: { journey: Journey; snap: View }) {
               {m.library_archive_progress_readback()}
             </button>
           ) : null}
+          {snap.result?.progressSession?.id ? (
+            <a className={action} href={localizeHref(`/library/progress/${snap.result.progressSession.id}`)}>
+              {m.library_archive_progress_open_session()}
+            </a>
+          ) : null}
           <button className={action} disabled={locked} onClick={() => void journey.remove()}>
             {m.library_archive_progress_remove()}
           </button>
@@ -222,9 +255,11 @@ function RecoveryJourney({ journey, snap }: { journey: Journey; snap: View }) {
           {m.library_archive_recovery_confirm_cancel()}
         </button>
       ) : null}
-      <a className={action} href={localizeHref('/library/export')}>
-        {m.library_export_title()}
-      </a>
+      {snap.cancelled || snap.notice === 'removed' ? (
+        <button className={action} disabled={locked} onClick={() => journey.restart()}>
+          {m.library_archive_progress_restart()}
+        </button>
+      ) : null}
       <ArchiveRecoveryDeparture
         active={!!snap.upload || snap.pending}
         locked={snap.pending}

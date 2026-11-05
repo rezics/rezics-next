@@ -179,6 +179,37 @@ test('lost review response retains normalized operands; refreshed review uses a 
   expect(journey.snapshot().review?.reviewId).toBe('3');
 });
 
+test('cancel then restart reuses the original archive bytes under a new upload key', async () => {
+  const keys: string[] = [];
+  const native = port(async () => ({
+    kind: 'ok' as const,
+    value: {
+      uploadId: id,
+      reviewId: id,
+      state: 'partial' as const,
+      sessionId: id,
+      acceptedSteps: 1,
+      totalSteps: 3,
+      error: null,
+    },
+  }));
+  native.upload = async (_body, key) => {
+    keys.push(key);
+    return { kind: 'ok', value: upload };
+  };
+  const journey = new ProgressRecoveryJourney(native, crypto.randomUUID(), () => true);
+  await journey.upload(new File(['{"manifest":{}}'], 'archive.json'));
+  await journey.cancel();
+  expect(journey.snapshot().cancelled).toBe(true);
+  expect(journey.snapshot().hasOriginalArchive).toBe(true);
+  journey.restart();
+  expect(journey.snapshot().upload).toBeNull();
+  await journey.adoptOriginal();
+  expect(keys).toHaveLength(2);
+  expect(keys[1]).not.toBe(keys[0]);
+  expect(journey.snapshot().upload?.uploadId).toBe(id);
+});
+
 test('a refusal after response loss preserves apply custody, and lost cancellation remains pending after apply acknowledgement', async () => {
   const sent: unknown[][] = [];
   let acknowledgeCancel = false;

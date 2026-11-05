@@ -11161,5 +11161,13 @@
   "library_mal_score_source_details": "数值：{value}；MAL 评分范围：{scale}",
   "library_mal_score_source_scale": "MAL 范围 {min} 至 {max}，步长 {step}",
   "subject_rating_control_uncertain": "结果尚未确定。你可以重试同一笔请求，或丢弃请求并重新加载当前评分。",
-  "subject_rating_control_discard": "丢弃请求并重新加载评分"
+  "subject_rating_control_discard": "丢弃请求并重新加载评分",
+  "library_archive_progress_nav": "Recover archived progress",
+  "library_archive_use_completed_export": "Use the completed export from this visit",
+  "library_archive_completed_export_help": "The completed local archive stays with this signed-in owner until a new capture replaces it. Signing in as another account clears it.",
+  "library_archive_recovery_read_collection": "Read the current Collection",
+  "library_archive_recovery_restart_original": "Use the original archive",
+  "library_archive_entry_open_library": "Open Library",
+  "library_archive_progress_open_session": "Open the current Session",
+  "library_archive_progress_restart": "Start another recovery with the original archive"
 }

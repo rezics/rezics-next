@@ -109,6 +109,10 @@ Next, Refresh and read Retry each add one preview or result request at the same 
 never scans every page or account-wide labels and adds no smaller native cap. Source bounds are not observed
 byte/growth acceptance.
 
+Decision: keep the original admitted text for Restart after an acknowledged disposition, and offer a completed export
+from this signed-in owner. Acknowledged Entry destinations reopen Library and Subject readers; journals reopen the
+current Session.
+
 Focused Web tests cover mounted file admission, three preview windows, independent reader histories, empty selected
 projections with native continuation, exact failed-read retry, immutable review/apply, pending cancellation,
 acknowledged destination retention, current Entry and label-assignment reads, and original request bounds using the
