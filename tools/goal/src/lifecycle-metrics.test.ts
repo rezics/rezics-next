@@ -82,6 +82,34 @@ function insertLandingRequest(db: Database, taskId: string, attempt: number, del
     );
 }
 
+function countedDatabase(db: Database) {
+  const counts = { schemaReads: 0, columnReads: 0, landingReads: 0, landingSetReads: 0 };
+  const counted = new Proxy(db, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (property !== 'query') return typeof value === 'function' ? value.bind(target) : value;
+      return (sql: string) => {
+        const normalized = sql.toLowerCase();
+        if (normalized.includes('from sqlite_master')) counts.schemaReads++;
+        if (normalized.startsWith('pragma table_info')) counts.columnReads++;
+        if (normalized.includes('landing_queue') && normalized.includes('delivered')) counts.landingReads++;
+        if (normalized.includes('json_each') && normalized.includes('landing_queue')) counts.landingSetReads++;
+        return value.call(target, sql);
+      };
+    },
+  }) as Database;
+  return {
+    db: counted,
+    counts,
+    reset: () => {
+      counts.schemaReads = 0;
+      counts.columnReads = 0;
+      counts.landingReads = 0;
+      counts.landingSetReads = 0;
+    },
+  };
+}
+
 test('Hourly report exposes attempts per task per trailing hour, waiting age, orphaned landings, promotion phase age and quarantines with honest unknowns', () => {
   const { db } = database('measures.sqlite');
   const now = Date.UTC(2026, 9, 30, 12, 0);
@@ -180,7 +208,35 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
   new WorkerStore(noQueueDb);
   insertTask(noQueueDb, 'landing-without-queue-schema', 1, 'landing');
   insertLandingRequest(noQueueDb, 'landing-without-queue-schema', 1);
-  expect(lifecycleMetrics(noQueueDb, now).orphanedLandings).toEqual({ available: false, count: null, taskIds: [] });
+  recordFlow(noQueueDb, {
+    taskId: 'landing-without-queue-schema',
+    attempt: 1,
+    stage: 'landing',
+    action: 'enqueued',
+    at: stamp(now, -60_000),
+  });
+  const beforeQueueSchema = lifecycleMetrics(noQueueDb, now);
+  expect(beforeQueueSchema.orphanedLandings).toEqual({ available: false, count: null, taskIds: [] });
+  expect(beforeQueueSchema.waiting.queues).toHaveLength(1);
+  noQueueDb.exec(`
+    CREATE TABLE landing_queue (
+      task TEXT NOT NULL,
+      attempt INTEGER NOT NULL,
+      request TEXT NOT NULL,
+      delivered INTEGER NOT NULL,
+      PRIMARY KEY (task, attempt)
+    )
+  `);
+  noQueueDb
+    .query('INSERT INTO landing_queue(task, attempt, request, delivered) VALUES (?, ?, ?, ?)')
+    .run('landing-without-queue-schema', 1, '{}', 1);
+  const afterQueueSchema = lifecycleMetrics(noQueueDb, now);
+  expect(afterQueueSchema.orphanedLandings).toEqual({
+    available: true,
+    count: 1,
+    taskIds: ['landing-without-queue-schema'],
+  });
+  expect(afterQueueSchema.waiting.queues).toEqual([]);
 
   db.exec(`
     CREATE TABLE lifecycle_transition_events (
@@ -290,6 +346,49 @@ test('pending queue waits stay identical as settled event history grows', () => 
   }).immediate();
 
   expect(lifecycleMetrics(db, now).waiting.queues).toEqual(before);
+});
+
+test('pending landing delivery reads stay set-based as current queue waits grow', () => {
+  const { db } = database('landing-cohort.sqlite');
+  const now = Date.UTC(2026, 9, 30, 12, 0);
+  const at = stamp(now, -5 * 60_000);
+  const tracked = countedDatabase(db);
+  lifecycleMetrics(tracked.db, now);
+
+  const insertEvent = db.query('INSERT INTO flow_events(task_id, attempt, stage, action, at) VALUES (?, ?, ?, ?, ?)');
+  const insertQueue = db.query('INSERT INTO landing_queue(task, attempt, request, delivered) VALUES (?, ?, ?, ?)');
+  let sequence = 1;
+  const addLanding = (id: string, delivered: number | null, queueAttempt = 1) => {
+    insertTask(db, id, sequence++, 'landing');
+    insertEvent.run(id, 1, 'landing', 'enqueued', at);
+    if (delivered !== null) insertQueue.run(id, queueAttempt, '{}', delivered);
+  };
+  addLanding('landing-00', 0);
+
+  tracked.reset();
+  const one = lifecycleMetrics(tracked.db, now);
+  const oneCounts = { ...tracked.counts };
+  expect(one.waiting.queues.map((entry) => entry.taskId)).toEqual(['landing-00']);
+
+  for (let index = 1; index <= 20; index++) {
+    const id = `landing-${String(index).padStart(2, '0')}`;
+    if (index === 5) addLanding(id, 1);
+    else if (index === 6) addLanding(id, 1, 2);
+    else if (index === 10) addLanding(id, null);
+    else addLanding(id, 0);
+  }
+
+  tracked.reset();
+  const many = lifecycleMetrics(tracked.db, now);
+  const expectedIds = Array.from({ length: 20 }, (_, index) => index + 1)
+    .filter((index) => index !== 5)
+    .map((index) => `landing-${String(index).padStart(2, '0')}`)
+    .concat('landing-00')
+    .sort();
+  expect(many.waiting.queues.map((entry) => entry.taskId)).toEqual(expectedIds);
+  expect(many.waiting.queues.find((entry) => entry.taskId === 'landing-00')).toEqual(one.waiting.queues[0]);
+  expect(tracked.counts).toEqual(oneCounts);
+  expect(tracked.counts.landingSetReads).toBe(1);
 });
 
 test('orphaned landings require an undelivered queue record for the current task and attempt, without request events', () => {

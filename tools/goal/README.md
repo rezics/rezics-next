@@ -950,6 +950,8 @@ owner/rerere/replay resolution. Owner-landing capability is therefore `unavailab
 conflict-to-landed duration, total open conflicts and their age, and resolution-method counters remain unknown.
 An empty recorded window does not establish zero conflicts or zero conflict-created attempts.
 
+Decision: Each lifecycle-metrics pass reads source schema capabilities once and checks delivered membership with one set-based lookup over current landing waits; the snapshot stays report-local so schema changes appear on the next call.
+
 Decision: Resolver prompts use stdin; each dev conflict is counted once per accepted attempt as landed, returned to the worker with a reason, or still in progress in the trailing-hour flow report.
 
 A clean replay of the resolution onto a moved dev head lands without another resolver session; a replay conflict starts
