@@ -2009,128 +2009,128 @@ export class MergeTrain {
               retire = true;
               break;
             }
-          if (refreshConfiguration) Object.assign(o, await refreshConfiguration());
-          o.configurationRevision ??= trainConfigurationRevision(o);
-          const entry = o.queue.nextBatch(1, [...deferred], lane)[0];
-          if (!entry) break;
-          processedEntry = true;
-          try {
-            if (entry.outcome) {
-              o.sink.onGateOutcome(entry.outcome);
-              o.queue.acknowledge(entry.id);
-              retryDeferred.delete(entry.id);
-              continue;
-            }
-            o.fence.assertCurrent(entry.request);
-            const batchSize = o.integration?.batchSize ?? 1;
-            const batch: LandingEntry[] = [];
-            const scanned = new Set<number>([entry.id]);
-            if (this.canBatch(entry)) batch.push(entry);
-            while (batch.length < batchSize && batch.length > 0) {
-              const candidate = o.queue.nextBatch(1, [...deferred, ...scanned], lane)[0];
-              if (!candidate) break;
-              scanned.add(candidate.id);
-              if (candidate.outcome || !this.canBatch(candidate)) continue;
-              try {
-                o.fence.assertCurrent(candidate.request);
-              } catch (error) {
-                if (!(error instanceof StaleAttemptError)) throw error;
-                o.queue.acknowledge(candidate.id);
-                retryDeferred.delete(candidate.id);
+            if (refreshConfiguration) Object.assign(o, await refreshConfiguration());
+            o.configurationRevision ??= trainConfigurationRevision(o);
+            const entry = o.queue.nextBatch(1, [...deferred], lane)[0];
+            if (!entry) break;
+            processedEntry = true;
+            try {
+              if (entry.outcome) {
+                o.sink.onGateOutcome(entry.outcome);
+                o.queue.acknowledge(entry.id);
+                retryDeferred.delete(entry.id);
                 continue;
               }
-              batch.push(candidate);
-            }
-            if (batch.length > 1 || (batch.length === 1 && retryDeferred.has(batch[0]!.id))) {
-              const integrated = await this.integrateBatch(batch, lane);
-              if (integrated.resolution) {
-                o.queue.beginResolution(integrated.resolution.entry.id);
-                pendingDevResolutions.push(integrated.resolution);
-              }
-              for (const id of integrated.skippedIds) {
-                o.queue.acknowledge(id);
-                retryDeferred.delete(id);
-              }
-              for (const id of integrated.deferredIds) {
-                deferred.add(id);
-                retryDeferred.add(id);
-              }
-              for (const { entry: member, outcome } of integrated.outcomes) {
+              o.fence.assertCurrent(entry.request);
+              const batchSize = o.integration?.batchSize ?? 1;
+              const batch: LandingEntry[] = [];
+              const scanned = new Set<number>([entry.id]);
+              if (this.canBatch(entry)) batch.push(entry);
+              while (batch.length < batchSize && batch.length > 0) {
+                const candidate = o.queue.nextBatch(1, [...deferred, ...scanned], lane)[0];
+                if (!candidate) break;
+                scanned.add(candidate.id);
+                if (candidate.outcome || !this.canBatch(candidate)) continue;
                 try {
-                  o.queue.finish(member.id, outcome);
-                  o.sink.onGateOutcome(outcome);
-                  o.queue.acknowledge(member.id);
-                  retryDeferred.delete(member.id);
+                  o.fence.assertCurrent(candidate.request);
                 } catch (error) {
                   if (!(error instanceof StaleAttemptError)) throw error;
-                  o.queue.acknowledge(member.id);
-                  retryDeferred.delete(member.id);
-                }
-              }
-            } else {
-              const integration = await this.integrateOrdinary(entry, lane, handOff);
-              if (!integration) {
-                // Leave the request pending for the next pump, without retrying contention in this drain.
-                if (stale()) retire = true;
-                stop = true;
-                break;
-              }
-              if (isDevResolutionHandoff(integration)) {
-                o.queue.beginResolution(entry.id);
-                pendingDevResolutions.push(integration);
-                continue;
-              }
-              const outcome = integration;
-              const workspaceFailures = this.workspaceFailures.get(entry.id);
-              this.workspaceFailures.delete(entry.id);
-              if (workspaceFailures) {
-                for (const failure of workspaceFailures) {
-                  if (failure.taskId === entry.request.taskId) continue;
-                  const store = o.fence as WorkerStore;
-                  try {
-                    store.assertCurrent(failure);
-                  } catch (error) {
-                    if (error instanceof StaleAttemptError) continue;
-                    throw error;
-                  }
-                  if (store.record(failure)) o.sink.onGateOutcome(failure);
-                  else {
-                    const task = store.task(failure.taskId);
-                    new SqliteManagerInbox(
-                      store.db,
-                      o.inboxDirectory ?? join(o.stateDirectory, 'inboxes'),
-                      undefined,
-                      o.policy?.inbox,
-                    ).deliver({
-                      managerId: task.brief.manager,
-                      taskId: task.id,
-                      kind: 'instruction',
-                      summary:
-                        `Shared workspace landing failed in your work: ${failure.firstFailure?.assertion ?? failure.stage}. See ${failure.logPath}`.replace(
-                          /[\r\n]+/g,
-                          ' ',
-                        ),
-                    });
-                  }
-                }
-                if (!workspaceFailures.some((failure) => failure.taskId === entry.request.taskId)) {
-                  deferred.add(entry.id);
+                  o.queue.acknowledge(candidate.id);
+                  retryDeferred.delete(candidate.id);
                   continue;
                 }
+                batch.push(candidate);
               }
+              if (batch.length > 1 || (batch.length === 1 && retryDeferred.has(batch[0]!.id))) {
+                const integrated = await this.integrateBatch(batch, lane);
+                if (integrated.resolution) {
+                  o.queue.beginResolution(integrated.resolution.entry.id);
+                  pendingDevResolutions.push(integrated.resolution);
+                }
+                for (const id of integrated.skippedIds) {
+                  o.queue.acknowledge(id);
+                  retryDeferred.delete(id);
+                }
+                for (const id of integrated.deferredIds) {
+                  deferred.add(id);
+                  retryDeferred.add(id);
+                }
+                for (const { entry: member, outcome } of integrated.outcomes) {
+                  try {
+                    o.queue.finish(member.id, outcome);
+                    o.sink.onGateOutcome(outcome);
+                    o.queue.acknowledge(member.id);
+                    retryDeferred.delete(member.id);
+                  } catch (error) {
+                    if (!(error instanceof StaleAttemptError)) throw error;
+                    o.queue.acknowledge(member.id);
+                    retryDeferred.delete(member.id);
+                  }
+                }
+              } else {
+                const integration = await this.integrateOrdinary(entry, lane, handOff);
+                if (!integration) {
+                  // Leave the request pending for the next pump, without retrying contention in this drain.
+                  if (stale()) retire = true;
+                  stop = true;
+                  break;
+                }
+                if (isDevResolutionHandoff(integration)) {
+                  o.queue.beginResolution(entry.id);
+                  pendingDevResolutions.push(integration);
+                  continue;
+                }
+                const outcome = integration;
+                const workspaceFailures = this.workspaceFailures.get(entry.id);
+                this.workspaceFailures.delete(entry.id);
+                if (workspaceFailures) {
+                  for (const failure of workspaceFailures) {
+                    if (failure.taskId === entry.request.taskId) continue;
+                    const store = o.fence as WorkerStore;
+                    try {
+                      store.assertCurrent(failure);
+                    } catch (error) {
+                      if (error instanceof StaleAttemptError) continue;
+                      throw error;
+                    }
+                    if (store.record(failure)) o.sink.onGateOutcome(failure);
+                    else {
+                      const task = store.task(failure.taskId);
+                      new SqliteManagerInbox(
+                        store.db,
+                        o.inboxDirectory ?? join(o.stateDirectory, 'inboxes'),
+                        undefined,
+                        o.policy?.inbox,
+                      ).deliver({
+                        managerId: task.brief.manager,
+                        taskId: task.id,
+                        kind: 'instruction',
+                        summary:
+                          `Shared workspace landing failed in your work: ${failure.firstFailure?.assertion ?? failure.stage}. See ${failure.logPath}`.replace(
+                            /[\r\n]+/g,
+                            ' ',
+                          ),
+                      });
+                    }
+                  }
+                  if (!workspaceFailures.some((failure) => failure.taskId === entry.request.taskId)) {
+                    deferred.add(entry.id);
+                    continue;
+                  }
+                }
 
-              o.queue.finish(entry.id, outcome);
-              // Sink delivery is at least once; obsolete entries must never block the current attempt.
-              o.sink.onGateOutcome(outcome);
+                o.queue.finish(entry.id, outcome);
+                // Sink delivery is at least once; obsolete entries must never block the current attempt.
+                o.sink.onGateOutcome(outcome);
+                o.queue.acknowledge(entry.id);
+                retryDeferred.delete(entry.id);
+              }
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
               o.queue.acknowledge(entry.id);
               retryDeferred.delete(entry.id);
             }
-          } catch (error) {
-            if (!(error instanceof StaleAttemptError)) throw error;
-            o.queue.acknowledge(entry.id);
-            retryDeferred.delete(entry.id);
           }
-        }
         }
         // The main and dev lanes drain concurrently. A hook intended to observe a finished landing must not
         // be consumed by the idle lane before the lane with queued work reaches its handoff.
