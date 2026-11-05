@@ -113,8 +113,8 @@ export async function seedShowcasePersonalList(input: {
       return { state: 'unknown-delivery', code: 'upload-response-changed' };
   } else {
     input.journal.prepareAction(receiptKey, uploaded, action.idempotency_key);
-    input.journal.acknowledgeAction(receiptKey, uploaded.uploadId);
   }
+  input.journal.acknowledgeAction(receiptKey, uploaded.uploadId);
   input.journal.acknowledgeAction(actionKey, uploaded.uploadId);
   return { state: 'uploaded', ...uploaded };
 }

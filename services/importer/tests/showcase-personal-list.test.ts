@@ -84,7 +84,7 @@ test('reopen preserves the original response, current authority and terminal ref
   let calls = 0;
   let response = () => Response.json({ uploadId, rows: 1 });
   const client = createKernelClient(identity.origin, {
-    fetch: (async () => {
+    fetch: (async (_input, _init) => {
       calls++;
       return response();
     }) as typeof fetch,
@@ -114,6 +114,14 @@ test('reopen preserves the original response, current authority and terminal ref
     }
     response = () => Response.json({ uploadId, rows: 1 });
     expect(await run()).toEqual({ state: 'uploaded', uploadId, rows: 1 });
+    for (const invalid of [
+      () => Response.json({ uploadId, rows: 1 }, { status: 202 }),
+      () => Response.json({ uploadId: 'not-a-uuid', rows: 1 }),
+      () => Response.json({ uploadId, rows: 5001 }),
+    ]) {
+      response = invalid;
+      expect(await run()).toEqual({ state: 'unknown-delivery', code: 'invalid-response' });
+    }
     response = () => Response.json({ code: 'forbidden', detail: xml }, { status: 403 });
     expect(await run()).toEqual({ state: 'refused', code: 'http-403' });
     const sent = calls;

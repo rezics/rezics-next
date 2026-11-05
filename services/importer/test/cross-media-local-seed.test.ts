@@ -1,6 +1,5 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { developmentShowcaseSelection, runDevelopmentSeed } from '../../../scripts/datasets/cross-media-seed.ts';
@@ -45,8 +44,10 @@ test('seed origins allow loopback HTTP and require HTTPS elsewhere', () => {
 
 for (const configured of [true, false])
   test(`development seed binds the local persona and ${configured ? 'uploads the private export' : 'keeps missing input unavailable'}`, async () => {
-    const root = await mkdtemp(join(tmpdir(), 'cross-media-wrapper-'));
-    const keyDirectory = await mkdtemp(join(tmpdir(), 'cross-media-persona-key-'));
+    const tempRoot = resolve(import.meta.dir, '../../../.temp');
+    await mkdir(tempRoot, { recursive: true });
+    const root = await mkdtemp(join(tempRoot, 'cross-media-wrapper-'));
+    const keyDirectory = await mkdtemp(join(tempRoot, 'cross-media-persona-key-'));
     const key = join(keyDirectory, 'persona.key');
     const jwk = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ format: 'jwk' });
     await writeFile(key, JSON.stringify({ ...jwk, alg: 'ES256', kid: '11111111-1111-4111-8111-111111111111' }), {
