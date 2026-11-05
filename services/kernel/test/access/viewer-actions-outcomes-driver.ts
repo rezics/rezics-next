@@ -53,7 +53,7 @@ const persona = (p: { accountId: string; bearer: string }): Persona => ({
 });
 const roles = {
   roles: {
-    'viewer_fixture.owner': ['viewer_fixture:inspect', 'viewer_fixture:update', 'viewer_fixture:read', 'access:grant'],
+    'viewer_fixture.owner': ['viewer_fixture:inspect', 'viewer_fixture:update', 'viewer_fixture:read'],
     'viewer_fixture.reader': ['viewer_fixture:read'],
   },
   types: { 'viewer_fixture.item': { owner: 'viewer_fixture.owner', standing: ['viewer_fixture.reader'] } },

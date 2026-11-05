@@ -140,6 +140,11 @@ test('exact registered Global reach is the only alternate path, and unavailable 
   );
   expect(reach).toMatchObject({ decision: 'allow', reason: 'global-reach' });
 
-  const unknown = decideNativePermission(catalogue, collection, projection({ actorActionGrant: null }));
+  // The principal grant must hold so that only the unknown actor operand decides the result.
+  const unknown = decideNativePermission(
+    catalogue,
+    collection,
+    projection({ actorActionGrant: null, principalActionGrant: true }),
+  );
   expect(unknown.decision).toBe('unavailable');
 });
