@@ -120,9 +120,9 @@ test('metadata history stays bounded as unrelated native Collection rows grow', 
     `/v1/collections/${collection.id}/metadata-history?limit=25`,
   );
   expect(unchangedHistory.status).toBe(200);
-  expect(((await unchangedHistory.json()) as { items: { revision: number }[] }).items.map(({ revision }) => revision)).toEqual([
-    changedCollection.revision,
-  ]);
+  expect(
+    ((await unchangedHistory.json()) as { items: { revision: number }[] }).items.map(({ revision }) => revision),
+  ).toEqual([changedCollection.revision]);
   const database = f.database;
   await checkGrowth(database, {
     name: 'Collection metadata history over unrelated Collection, member and Access rows',

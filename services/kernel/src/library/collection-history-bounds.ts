@@ -22,12 +22,7 @@ export type CollectionMetadataSnapshotInput = Readonly<{
   presentationKind: string | null;
   coverMediaId: string | null;
 }>;
-export type CollectionMetadataFieldInput =
-  | 'title'
-  | 'description'
-  | 'visibility'
-  | 'presentationKind'
-  | 'coverMediaId';
+export type CollectionMetadataFieldInput = 'title' | 'description' | 'visibility' | 'presentationKind' | 'coverMediaId';
 type QueryClient = Pick<PoolClient, 'query'>;
 
 const ZERO = declareBound({
@@ -108,12 +103,15 @@ const stateRowBytes = projectionBytes({
   knownFromRevision: 2_147_483_647,
   prunedBeforeRevision: 2_147_483_647,
 });
-const pageRowBytes = projectionBytes({
-  revision: 2_147_483_647,
-  transactionId: 'f'.repeat(36),
-  recordedAt: 'x'.repeat(64),
-  changedFields: ['presentationKind', 'coverMediaId', 'description', 'visibility', 'title'],
-}, { recordedAt: 64 });
+const pageRowBytes = projectionBytes(
+  {
+    revision: 2_147_483_647,
+    transactionId: 'f'.repeat(36),
+    recordedAt: 'x'.repeat(64),
+    changedFields: ['presentationKind', 'coverMediaId', 'description', 'visibility', 'title'],
+  },
+  { recordedAt: 64 },
+);
 const detailRowBytes = projectionBytes(
   {
     revision: 2_147_483_647,
@@ -183,18 +181,24 @@ export function collectionMetadataHistoryInitializePlan(input: {
     transaction_id: input.transactionId,
     updated_at: input.time,
   };
-  return sqlPlan('collection.metadata-history.initialize', init, sqlInput, {
-    candidateKeys: 1,
-    examinedRows: 1,
-    resultRows: 1,
-    rowBytes: projectionBytes({ collectionId: 'f'.repeat(36) }),
-    emptySeeks: 1,
-  }, {
-    collection_id: 36,
-    curator_account_id: 36,
-    transaction_id: 36,
-    updated_at: 64,
-  });
+  return sqlPlan(
+    'collection.metadata-history.initialize',
+    init,
+    sqlInput,
+    {
+      candidateKeys: 1,
+      examinedRows: 1,
+      resultRows: 1,
+      rowBytes: projectionBytes({ collectionId: 'f'.repeat(36) }),
+      emptySeeks: 1,
+    },
+    {
+      collection_id: 36,
+      curator_account_id: 36,
+      transaction_id: 36,
+      updated_at: 64,
+    },
+  );
 }
 
 export type CollectionMetadataHistoryCapturePlan = Readonly<{
@@ -396,13 +400,19 @@ export function collectionMetadataHistoryStatePlan(input: {
     collection_id: input.collectionId,
     curator_account_id: input.curatorAccountId,
   };
-  return sqlPlan('collection.metadata-history.state', state, sqlInput, {
-    candidateKeys: 1,
-    examinedRows: 1,
-    resultRows: 1,
-    rowBytes: stateRowBytes,
-    emptySeeks: 1,
-  }, { collection_id: 36, curator_account_id: 36 });
+  return sqlPlan(
+    'collection.metadata-history.state',
+    state,
+    sqlInput,
+    {
+      candidateKeys: 1,
+      examinedRows: 1,
+      resultRows: 1,
+      rowBytes: stateRowBytes,
+      emptySeeks: 1,
+    },
+    { collection_id: 36, curator_account_id: 36 },
+  );
 }
 
 export function collectionMetadataHistoryPagePlan(input: {
@@ -447,16 +457,25 @@ export function collectionMetadataHistoryEntryPlan(input: {
     curator_account_id: input.curatorAccountId,
     revision: input.revision,
   };
-  return sqlPlan('collection.metadata-history.detail-exact-revision', read, sqlInput, {
-    candidateKeys: 1,
-    examinedRows: 1,
-    resultRows: 1,
-    rowBytes: detailRowBytes,
-    emptySeeks: 1,
-  }, { collection_id: 36, curator_account_id: 36 });
+  return sqlPlan(
+    'collection.metadata-history.detail-exact-revision',
+    read,
+    sqlInput,
+    {
+      candidateKeys: 1,
+      examinedRows: 1,
+      resultRows: 1,
+      rowBytes: detailRowBytes,
+      emptySeeks: 1,
+    },
+    { collection_id: 36, curator_account_id: 36 },
+  );
 }
 
-export function executeCollectionMetadataHistoryInitialize(client: QueryClient, plan: CollectionMetadataHistorySqlPlan) {
+export function executeCollectionMetadataHistoryInitialize(
+  client: QueryClient,
+  plan: CollectionMetadataHistorySqlPlan,
+) {
   return init.run(client, plan.input as Parameters<typeof init.run>[1]);
 }
 export function executeCollectionMetadataHistoryOwner(client: QueryClient, plan: CollectionMetadataHistorySqlPlan) {
@@ -480,5 +499,3 @@ export function executeCollectionMetadataHistoryPage(client: QueryClient, plan: 
 export function executeCollectionMetadataHistoryEntry(client: QueryClient, plan: CollectionMetadataHistorySqlPlan) {
   return read.run(client, plan.input as Parameters<typeof read.run>[1]);
 }
-
-

@@ -21,7 +21,11 @@ import {
 } from './collection-history-bounds.ts';
 
 type Client = Pick<PoolClient, 'query'>;
-export { COLLECTION_METADATA_HISTORY_LIMIT, COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE, COLLECTION_METADATA_HISTORY_PAGE_SIZE };
+export {
+  COLLECTION_METADATA_HISTORY_LIMIT,
+  COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE,
+  COLLECTION_METADATA_HISTORY_PAGE_SIZE,
+};
 
 export const COLLECTION_METADATA_FIELDS = [
   'title',
@@ -111,15 +115,13 @@ export async function captureCollectionMetadataHistory(
   if (curatorAccountId === null) throw new Error('A metadata write needs a current Collection curator');
   if (plan.changedFields.length === 0) return;
   const { owner: ownerPlan, append: appendPlan, prune: prunePlan, pruned: prunedPlan } = plan.leaves;
-  if (!ownerPlan || !appendPlan || !prunePlan || !prunedPlan)
-    throw new Error('Metadata transition plan is incomplete');
+  if (!ownerPlan || !appendPlan || !prunePlan || !prunedPlan) throw new Error('Metadata transition plan is incomplete');
   await executeCollectionMetadataHistoryOwner(client, ownerPlan);
   const rows = await executeCollectionMetadataHistoryAppend(client, appendPlan);
   if (rows.length !== 1) throw new Error('Collection metadata history did not record one native change');
   const removed = await executeCollectionMetadataHistoryPrune(client, prunePlan);
   if (removed.length > 1) throw new Error('Collection metadata history exceeded its one-row prune bound');
-  if (removed.length === 1)
-    await executeCollectionMetadataHistoryPruned(client, prunedPlan);
+  if (removed.length === 1) await executeCollectionMetadataHistoryPruned(client, prunedPlan);
 }
 
 export type CollectionMetadataHistoryState = {
