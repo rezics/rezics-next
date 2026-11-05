@@ -197,24 +197,29 @@ beforeAll(async () => {
   personas = await createPersonas(kernel, { version: 1, pool, auth });
   grants = createGrantCommands({ pool, access: kernel.testAccess, managementAction: 'access:grant' });
   const seller = personas.orgOwner;
-  // The existing native Commerce fixtures seed these two Global creation capabilities;
-  // the seller, edition, offer, order, and payment still come through their real commands.
+  // The existing native Commerce fixture seeds offer:create; local showcase board
+  // authority stays with its bootstrapped owner, while the seller uses a real board grant.
   await seedGovernanceAuthority(pool, PLATFORM_RESOURCE.route, PLATFORM_RESOURCE.id, seller.accountId, [
     'offer:create',
-    'board:create',
   ]);
-  await grant(seller, PLATFORM_RESOURCE, ['subject:create']);
+  await bootstrapLocalShowcaseBoardCreation(pool, personas.staff.accountId);
   for (const group of ['personal_library', 'purchases', 'selling'])
     await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
-  const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) =>
-    kernel.handle(
+  const editionPublisher = await createNativeEditionFixture(async (method, path, body, headers = {}) => {
+    const creator = path === '/v1/subjects' || path === '/v1/boards' ? personas.staff : seller;
+    const response = await kernel.handle(
       new Request(`http://kernel.test${path}`, {
         method,
-        headers: { authorization: `Bearer ${seller.bearer}`, ...headers },
+        headers: { authorization: `Bearer ${creator.bearer}`, ...headers },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
-    ),
-  );
+    );
+    if (method === 'POST' && path === '/v1/boards' && response.status === 201) {
+      const value = (await response.clone().json()) as { board: { id: string } };
+      await grant(seller, { route: routeOf(value.board.id)!, id: value.board.id }, ['board:read', 'thread:create']);
+    }
+    return response;
+  });
   contentEdition = await editionPublisher.publish({
     title: 'Native erasure book',
     subjectTitle: 'Native erasure source',
