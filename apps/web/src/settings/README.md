@@ -190,7 +190,11 @@ deliberate controls; it never dispatches. Missing or malformed headers add no de
 cursor-free recovery request, and blocked controls preserve failure feedback, retained pages and native action advice.
 Directory navigation and direct detail selection use the native observations described below; detail response-wait recovery remains with its existing reader.
 
+While the session is unavailable, any requested account selection shows only its Back link; invalid and valid selections share that view.
+
 The managed directory retains one successful page of at most 20 rows per feed; Next replaces only that feed and the first duplicate identity within the native page wins. A failed cursor-free restart retries cursor-free, while Retry-After keeps either recovery action unavailable until its original deadline. Successful replacement focuses that feed's heading. Credential, viewer or client replacement retires both feeds before late callbacks can install.
+
+A session credential replacement, including a CSRF token change, retires both feeds before late callbacks can install, and the replacement reader reads once. A retired session observation is replaced only by a fresh observation that matches the current session, so an unavailable session keeps the retired reader without re-creating it.
 
 The directory captures Retry-After once at response observation as an absolute endpoint deadline. The longest
 outstanding deadline guards both feeds, first-page recovery and whole refresh, including captured callbacks. An
