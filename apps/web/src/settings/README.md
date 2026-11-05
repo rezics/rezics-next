@@ -171,7 +171,9 @@ control uses that same absolute deadline after reattachment; expiry enables deli
 An older sibling may settle its selected feed page and loading state without replacing newer shared detail or
 navigation observations. Native restrictions still withdraw proof and invalidate sibling reads.
 
-Directory identities, membership roles and responsibility holds supply no detail admission. Until Content's serial successor to `d9c5a408-5c67-4d33-bf97-76a9918a21b5` installs the complete native viewer/navigation envelope and callable/root, identity rows have no detail links and show explicit unavailable feedback; the strict transport decoder continues to reject incompatible responses. This consumer does not publish declarations or infer missing authority.
+Directory identities, membership roles and responsibility holds supply no detail admission. The current Kernel producer returns the closed viewer and per-row navigation observations, but the generated `@rezics/client` route still exposes the prior response and Settings does not install the corresponding callable/root. Until the official client publication and composition root are integrated, identity rows have no detail links and show explicit unavailable feedback. This consumer does not publish declarations, add a shadow schema, or infer missing authority.
+
+**Decision:** A directory detail link requires the native admitted navigation observation. Returning removes only `managedAccount`, preserves locale and query context, retains at most the current page per feed for the same current viewer, and focuses the originating row or its feed heading if that row is no longer present.
 
 The Account card reads the current identity from the managed session and keeps rename advice in its separate native profile and viewer-actions read. Security, rename and deletion handoffs use only fixed Auth-owned paths from trusted issuer configuration; they do not grant a destructive command. An unavailable or denied read stays visible until deliberate reload, and native sign-out keeps ordinary POST/redirect behavior with explicit reload recovery and no automatic replay.
 
