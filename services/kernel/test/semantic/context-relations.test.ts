@@ -288,13 +288,20 @@ test('Person occupation is a native Concept relation while other classifications
   }
   await drain();
   expect(
-    (await call('GET', `/v1/subjects/${person.id}/relations?property=wdt:P106&language=en&limit=12&context=${GLOBAL_CONTEXT}`))
-      .relations.map((row: any) => row.target),
+    (
+      await call(
+        'GET',
+        `/v1/subjects/${person.id}/relations?property=wdt:P106&language=en&limit=12&context=${GLOBAL_CONTEXT}`,
+      )
+    ).relations.map((row: any) => row.target),
   ).toEqual([concept.id]);
   const refused = await kernel.handle(
-    new Request(`http://kernel.test/v1/subjects/${person.id}/relations?property=ex:classification&context=${GLOBAL_CONTEXT}`, {
-      headers: { authorization: `Bearer ${access.bearer('editor')}` },
-    }),
+    new Request(
+      `http://kernel.test/v1/subjects/${person.id}/relations?property=ex:classification&context=${GLOBAL_CONTEXT}`,
+      {
+        headers: { authorization: `Bearer ${access.bearer('editor')}` },
+      },
+    ),
   );
   expect(refused.status).toBe(400);
 });

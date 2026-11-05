@@ -335,7 +335,9 @@ test('selected dump candidates publish only by exact intent and resume a refused
     const acknowledged = journal.acknowledgedCommands().filter((entry) => entry.candidateId);
     expect(acknowledged.length).toBeGreaterThan(0);
     expect(accepted.size).toBe(0);
-    const synopses = [...candidates.values()].filter((candidate) => candidate.statement.property.id === 'schema:abstract');
+    const synopses = [...candidates.values()].filter(
+      (candidate) => candidate.statement.property.id === 'schema:abstract',
+    );
     expect(synopses.map((candidate) => candidate.source?.external_id).sort()).toEqual(['101', '102']);
     for (const candidate of synopses) {
       const proposal = acknowledged.find((entry) => entry.candidateId === candidate.id);
