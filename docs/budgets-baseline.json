@@ -39,7 +39,7 @@
     },
     {
       "path": "docs/development/verification.md",
-      "bytes": 39907
+      "bytes": 34231
     },
     {
       "path": "docs/development/web-check-entrypoints.md",
@@ -87,7 +87,7 @@
     },
     {
       "path": "docs/goals/performance.capabilities.md",
-      "bytes": 84532
+      "bytes": 84067
     },
     {
       "path": "docs/goals/search.capabilities.md",
@@ -271,7 +271,7 @@
     },
     {
       "path": "services/kernel/README.md",
-      "bytes": 168836
+      "bytes": 133986
     },
     {
       "path": "services/kernel/src/access/README.md",
@@ -303,7 +303,7 @@
     },
     {
       "path": "services/kernel/src/library/README.md",
-      "bytes": 396552
+      "bytes": 389602
     },
     {
       "path": "services/kernel/src/library/shelf-contract.md",
