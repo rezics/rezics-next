@@ -265,7 +265,7 @@ test('a non-resumable author task gets one Goal repair task for the cause', asyn
     const repairs = h.store.tasks().filter((task) => task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`));
     expect(repairs).toHaveLength(1);
     expect(repairs[0]?.brief.goal).toBe(owner.brief.goal);
-    expect(repairs[0]?.brief.markdown).toContain('Class: `API` (previously `UNAVAILABLE`)');
+    expect(repairs[0]?.brief.markdown).toContain('in class `API` (previously `UNAVAILABLE`)');
   } finally {
     await h.disposeAsync();
   }
