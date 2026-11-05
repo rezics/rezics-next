@@ -34,7 +34,7 @@ validity and deadline validity for those profiles; its final SQL booleans are re
 target type is not registered or inferable. The adapter evaluates every target at the same native snapshot and uses
 the same core for ordinary and explicit advice. Own-account action metadata binds its existing account target as
 `access.account`. The ordinary formula retains the verified public floor independently of scope. Explicit advice
-excludes that floor and resource-role grants. A core decision reached through registered Global authority still
+excludes that floor and resource-role grants; own-account grants remain explicit advice. A core decision reached through registered Global authority still
 marks the same governance provenance used by command auditing.
 
 The typed native projection maps SQL `live` to the core's `deadlineLive` operand without structural casts.
