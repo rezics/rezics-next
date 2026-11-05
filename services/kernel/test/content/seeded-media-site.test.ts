@@ -55,7 +55,12 @@ test('supported local stack starts the real site and serves media through native
     stderr: 'pipe',
   });
   const output = new Response(child.stdout).text();
-  const errors = new Response(child.stderr).text();
+  let diagnostics = '';
+  const errors = (async () => {
+    const decoder = new TextDecoder();
+    for await (const chunk of child.stderr)
+      diagnostics = (diagnostics + decoder.decode(chunk, { stream: true })).slice(-16_384);
+  })();
   let exited = false;
   void child.exited.then(() => {
     exited = true;
@@ -63,17 +68,20 @@ test('supported local stack starts the real site and serves media through native
   try {
     const deadline = Date.now() + 240_000;
     let ready = false;
+    let lastResponse = 'No HTTP response';
     while (!ready && !exited && Date.now() < deadline) {
       try {
         const response = await fetch(`${origin(web)}/en`, { signal: AbortSignal.timeout(10_000) });
         ready = response.status === 200;
-        await response.body?.cancel();
+        lastResponse = `${response.status}: ${(await response.text()).slice(0, 4096)}`;
       } catch (error) {
         if (!(error instanceof TypeError || error instanceof DOMException)) throw error;
+        lastResponse = error.message;
       }
       if (!ready) await Bun.sleep(1000);
     }
-    if (!ready) throw new Error(exited ? `Local stack exited: ${await errors}` : 'Local site did not become ready');
+    if (!ready)
+      throw new Error(`Local site ${exited ? 'exited' : 'did not become ready'}: ${lastResponse}\n${diagnostics}`);
     const response = await fetch(`${origin(web)}/media/00000000-0000-7000-8000-000000000001/webp-320`);
     expect(response.status).toBe(404);
     const persona = Object.fromEntries(
