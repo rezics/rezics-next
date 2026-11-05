@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { catalogueBytes, parseCatalogueJson, parseCataloguePin } from '@rezics/definitions';
-import type { CatalogueMechanicalInput, CatalogueMechanicalResult } from './definition-catalogue-types.ts';
+import type { CatalogueMechanicalInput, CatalogueMechanicalResult } from '../semantic/definition-catalogue-types.ts';
 
 export const CATALOGUE_MECHANICAL_REPRESENTATION = Object.freeze({
   inputBytes: 1024,

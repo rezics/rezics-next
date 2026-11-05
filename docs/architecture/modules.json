@@ -407,7 +407,8 @@
         "services/kernel/src/semantic/identity-adapters/index.ts",
         "services/kernel/src/semantic/identity-adapters/read.ts",
         "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
-        "services/kernel/src/semantic/work-module.ts"
+        "services/kernel/src/semantic/work-module.ts",
+        "services/kernel/src/semantic/definition-catalogue-types.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -498,7 +499,9 @@
         "services/kernel/src/events/contracts/rating-question-scale.ts",
         "services/kernel/src/events/contracts/rating.ts",
         "services/kernel/src/events/contracts/search-identity-epoch-participant.ts",
-        "services/kernel/src/events/contracts/semantic.ts"
+        "services/kernel/src/events/contracts/semantic.ts",
+        "services/kernel/src/events/erasure-locator-effects.ts",
+        "services/kernel/src/command/definition-catalogue-mechanical.ts"
       ],
       "allowedDependencies": [
         "bounds",

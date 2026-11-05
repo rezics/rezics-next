@@ -18,7 +18,7 @@ import {
 import {
   catalogueMechanicalSelection,
   CATALOGUE_MECHANICAL_REPRESENTATION,
-} from '../semantic/definition-catalogue-mechanical.ts';
+} from './definition-catalogue-mechanical.ts';
 import type { CatalogueMechanicalInput, CatalogueMechanicalResult } from '../semantic/definition-catalogue-types.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 

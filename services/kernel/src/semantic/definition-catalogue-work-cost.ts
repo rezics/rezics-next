@@ -31,7 +31,7 @@ import ledgerTicketSpend from './definition-catalogue-ticket-spend.sql';
 import ledgerTicketAdmit from './definition-catalogue-ticket-admit.sql';
 import ledgerOriginalRead from './definition-catalogue-original-read.sql';
 import ledgerOriginalAdmit from './definition-catalogue-original-admit.sql';
-import { CATALOGUE_MECHANICAL_REPRESENTATION } from './definition-catalogue-mechanical.ts';
+import { CATALOGUE_MECHANICAL_REPRESENTATION } from '../command/definition-catalogue-mechanical.ts';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';

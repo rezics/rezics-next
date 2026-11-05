@@ -11,7 +11,7 @@ import {
   PUBLISHER_COMMAND_COST,
 } from '../../src/command/publisher-coordination.ts';
 import { preparePublisherActivationResult } from '../../src/command/publisher-activation-result.ts';
-import { catalogueMechanicalSelection } from '../../src/semantic/definition-catalogue-mechanical.ts';
+import { catalogueMechanicalSelection } from '../../src/command/definition-catalogue-mechanical.ts';
 import type { CatalogueMechanicalInput } from '../../src/semantic/definition-catalogue-types.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { observeSql } from '../content/support/sql-observer.ts';

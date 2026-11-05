@@ -2,7 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool, type PoolClient } from 'pg';
 import { DBOS_SCHEMA, WORK_APPLICATION } from '../work/client.ts';
 import { createWorkClient } from '../work/client.ts';
-import { ERASURE_LOCATOR_EFFECTS } from '../access/erasure.ts';
+import { ERASURE_LOCATOR_EFFECTS } from './erasure-locator-effects.ts';
 import { LOCATOR_EFFECTS_QUEUE, WORK_QUEUES } from '../work/queues.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Relay } from './relays.ts';

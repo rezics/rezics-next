@@ -4,7 +4,7 @@ import {
   catalogueMechanicalSelection,
   encodeCatalogueMechanicalResult,
   decodeCatalogueMechanicalResult,
-} from '../../src/semantic/definition-catalogue-mechanical.ts';
+} from '../../src/command/definition-catalogue-mechanical.ts';
 import type {
   CatalogueMechanicalInput,
   CatalogueMechanicalResult,
