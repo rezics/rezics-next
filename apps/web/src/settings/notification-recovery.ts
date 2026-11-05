@@ -8,6 +8,7 @@ import type {
   SettingsPage,
 } from './preferences';
 import { optionalNotifications, preferencePageAllows } from './preferences';
+import { withManagedReadDeadline } from './managed-read-deadline';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 
 type Snapshot = { notifications: NotificationPreferences; version: number; page: PreferencePage };
@@ -409,7 +410,7 @@ export class NotificationEditor {
     });
     let result: NotificationWriteResult;
     try {
-      result = await this.io.save(attempt.input);
+      result = await withManagedReadDeadline(() => this.io.save(attempt.input));
       if (!this.live() || !this.canWrite()) return;
     } catch {
       this.update({ phase: 'uncertain', commandReason: 'unavailable', commandFailure: undefined });
@@ -513,7 +514,7 @@ export class NotificationEditor {
     if (!this.live()) return null;
     this.update({ currentAdvice: null, readReason: undefined, readFailure: undefined });
     try {
-      const page = await this.io.read();
+      const page = await withManagedReadDeadline(() => this.io.read());
       if (!this.live()) return null;
       if (
         !page.signedIn ||

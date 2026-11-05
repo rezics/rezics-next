@@ -52,6 +52,51 @@ function accountEnvelope(notifications: NotificationPreferences, version: number
 
 const envelope = accountEnvelope(optional, 7);
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+}
+
+function controlledManagedDeadlines() {
+  const originalSetTimeout = globalThis.setTimeout.bind(globalThis);
+  const originalClearTimeout = globalThis.clearTimeout.bind(globalThis);
+  const pending = new Map<ReturnType<typeof setTimeout>, { delay: number; fire: () => void }>();
+  const managedHandles = new Set<ReturnType<typeof setTimeout>>();
+  let next = 0;
+  const schedule = spyOn(globalThis, 'setTimeout').mockImplementation(
+    ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
+      if (delay !== 10_000) return originalSetTimeout(handler, delay, ...args);
+      const handle = (++next) as unknown as ReturnType<typeof setTimeout>;
+      const callback = handler as (...values: unknown[]) => void;
+      managedHandles.add(handle);
+      pending.set(handle, { delay, fire: () => callback(...args) });
+      return handle;
+    }) as typeof setTimeout,
+  );
+  const cancel = spyOn(globalThis, 'clearTimeout').mockImplementation((handle) => {
+    if (managedHandles.has(handle)) {
+      managedHandles.delete(handle);
+      pending.delete(handle);
+    } else originalClearTimeout(handle);
+  });
+  return {
+    fire() {
+      const entry = [...pending.entries()].at(-1);
+      expect(entry).toBeDefined();
+      expect(entry![1].delay).toBe(10_000);
+      pending.delete(entry![0]);
+      entry![1].fire();
+    },
+    restore() {
+      cancel.mockRestore();
+      schedule.mockRestore();
+    },
+  };
+}
+
 function harness(reply: () => Response, method: 'GET' | 'POST' = 'GET') {
   const calls: Request[] = [];
   let sessionReads = 0;
@@ -430,6 +475,130 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     });
   } finally {
     clock.mockRestore();
+  }
+});
+
+test('notification Save and current-read deadlines preserve original intent and fence late results', async () => {
+  const receiptNotifications = { ...optional, reply: false };
+  const currentNotifications = { ...receiptNotifications, board_activity: false };
+  const lateNotifications = { ...optional, reply: false, mention: false, board_activity: true };
+  const receiptPage = settingsPreferencePage(receiptNotifications, 8);
+  const currentPage = settingsPreferencePage(currentNotifications, 9);
+  const asSettingsPage = (notifications: NotificationPreferences, version: number): SettingsPage => ({
+    signedIn: true,
+    preferences: { spoilerLevel: 1, suitability: 'blur', version },
+    notifications,
+    page: settingsPreferencePage(notifications, version),
+    securityHref: null,
+  });
+  const firstSave = deferred<NotificationWriteResult>();
+  const replaySave = deferred<NotificationWriteResult>();
+  const stalledRead = deferred<SettingsPage>();
+  const recoveredRead = deferred<SettingsPage>();
+  const readStarts = [deferred<void>(), deferred<void>()];
+  const saves: NotificationChange[] = [];
+  let reads = 0;
+  const confirmed: number[] = [];
+  const deadlines = controlledManagedDeadlines();
+  const editor = new NotificationEditor(page, {
+    save: (input) => {
+      saves.push(input);
+      return saves.length === 1 ? firstSave.promise : replaySave.promise;
+    },
+    read: () => {
+      const index = reads++;
+      readStarts[index]?.resolve(undefined);
+      return index === 0 ? stalledRead.promise : recoveredRead.promise;
+    },
+    confirmed: (version) => confirmed.push(version),
+  });
+  try {
+    const initialSave = editor.edit('reply', false, 7);
+    const original = editor.snapshot().pending!.input;
+    await editor.edit('mention', false, 7);
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'saving',
+      pending: { input: original },
+      intent: { reply: false, mention: false },
+    });
+
+    deadlines.fire();
+    await initialSave;
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'uncertain',
+      currentAdvice: page,
+      pending: { input: original },
+      intent: { reply: false, mention: false },
+    });
+    expect(original).toMatchObject({ expectedVersion: 7, notifications: { reply: false } });
+    expect(original.idempotencyKey).toBeTruthy();
+    expect(reads).toBe(0);
+    firstSave.resolve({
+      ok: true,
+      version: 8,
+      notifications: receiptNotifications,
+      page: receiptPage,
+    });
+    await Promise.resolve();
+    expect(editor.snapshot()).toMatchObject({ phase: 'uncertain', pending: { input: original } });
+    expect(confirmed).toEqual([]);
+    expect(reads).toBe(0);
+
+    const retry = editor.retry();
+    expect(saves).toHaveLength(2);
+    expect(saves[0]).toBe(original);
+    expect(saves[1]).toBe(original);
+    replaySave.resolve({
+      ok: true,
+      version: 8,
+      notifications: receiptNotifications,
+      page: receiptPage,
+    });
+    await readStarts[0]!.promise;
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'reloading',
+      pending: null,
+      confirmedReceipt: { attempt: { input: original }, receipt: { version: 8 } },
+      currentAdvice: null,
+    });
+    deadlines.fire();
+    await retry;
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'failed',
+      pending: null,
+      confirmedReceipt: { attempt: { input: original }, receipt: { version: 8 } },
+      currentAdvice: null,
+      readReason: 'unavailable',
+    });
+    expect(reads).toBe(1);
+    expect(confirmed).toEqual([8]);
+
+    const reload = editor.reload();
+    await readStarts[1]!.promise;
+    recoveredRead.resolve(asSettingsPage(currentNotifications, 9));
+    await reload;
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      known: { notifications: currentNotifications, version: 9, page: currentPage },
+      currentAdvice: currentPage,
+      pending: null,
+      confirmedReceipt: null,
+      draft: { ...currentNotifications, mention: false },
+      intent: { mention: false },
+    });
+    stalledRead.resolve(asSettingsPage(lateNotifications, 11));
+    await Promise.resolve();
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      known: { notifications: currentNotifications, version: 9, page: currentPage },
+      currentAdvice: currentPage,
+      draft: { ...currentNotifications, mention: false },
+    });
+    expect(saves).toHaveLength(2);
+    expect(reads).toBe(2);
+    expect(confirmed).toEqual([8, 9]);
+  } finally {
+    deadlines.restore();
   }
 });
 

@@ -7,6 +7,7 @@ import type {
   NotificationPreferences,
   NotificationWriteResult,
   PreferencePage,
+  SettingsPage,
 } from '../src/settings/preferences';
 
 mock.module('@tanstack/react-start', () => start);
@@ -37,6 +38,51 @@ function settingsPage(
           { name: 'reset', expectedVersion: version },
         ]
       : [],
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+}
+
+function controlledManagedDeadlines() {
+  const originalSetTimeout = globalThis.setTimeout.bind(globalThis);
+  const originalClearTimeout = globalThis.clearTimeout.bind(globalThis);
+  const pending = new Map<ReturnType<typeof setTimeout>, { delay: number; fire: () => void }>();
+  const managedHandles = new Set<ReturnType<typeof setTimeout>>();
+  let next = 0;
+  const schedule = spyOn(globalThis, 'setTimeout').mockImplementation(
+    ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
+      if (delay !== 10_000) return originalSetTimeout(handler, delay, ...args);
+      const handle = (++next) as unknown as ReturnType<typeof setTimeout>;
+      const callback = handler as (...values: unknown[]) => void;
+      managedHandles.add(handle);
+      pending.set(handle, { delay, fire: () => callback(...args) });
+      return handle;
+    }) as typeof setTimeout,
+  );
+  const cancel = spyOn(globalThis, 'clearTimeout').mockImplementation((handle) => {
+    if (managedHandles.has(handle)) {
+      managedHandles.delete(handle);
+      pending.delete(handle);
+    } else originalClearTimeout(handle);
+  });
+  return {
+    fire() {
+      const entry = [...pending.entries()].at(-1);
+      expect(entry).toBeDefined();
+      expect(entry![1].delay).toBe(10_000);
+      pending.delete(entry![0]);
+      entry![1].fire();
+    },
+    restore() {
+      cancel.mockRestore();
+      schedule.mockRestore();
+    },
   };
 }
 
@@ -247,6 +293,204 @@ test('native kind forms own each field once; hydration retains choices and recov
     expect(calls[8]!.notifications).toBeNull();
   } finally {
     if (root) await act(async () => root!.unmount());
+    for (const [key, descriptor] of previous)
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    await window.happyDOM.close();
+    mock.restore();
+  }
+});
+
+test('timed-out Save and replay read recover deliberately in the rendered notification editor', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/settings' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    ...Object.fromEntries(
+      [
+        'HTMLElement',
+        'HTMLInputElement',
+        'HTMLButtonElement',
+        'Element',
+        'Node',
+        'Document',
+        'DocumentFragment',
+        'MutationObserver',
+        'ResizeObserver',
+        'FormData',
+      ].map((key) => [key, (window as any)[key]]),
+    ),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { hydrateRoot } = await import('react-dom/client');
+  const { renderToString } = await import('react-dom/server');
+  const { NotificationsCard } = await import('../src/settings/notifications');
+  const original = { reply: true, mention: true, weekly_digest: true };
+  const receipt = { reply: false, mention: true, weekly_digest: true };
+  const current = { reply: false, mention: true, weekly_digest: false };
+  const lateCurrent = { reply: true, mention: true, weekly_digest: true };
+  const reviewed = { reply: false, mention: false, weekly_digest: false };
+  const initialPage = settingsPage(original, 7);
+  const receiptPage = settingsPage(receipt, 8);
+  const currentPage = settingsPage(current, 9);
+  const reviewedPage = settingsPage(reviewed, 10);
+  const asSettingsPage = (notifications: NotificationPreferences, version: number): SettingsPage => ({
+    signedIn: true,
+    preferences: { spoilerLevel: 1, suitability: 'blur', version },
+    notifications,
+    page: settingsPage(notifications, version),
+    securityHref: null,
+  });
+  const result = (notifications: NotificationPreferences, version: number, page: PreferencePage) => ({
+    ok: true as const,
+    version,
+    notifications,
+    page,
+  });
+  const firstSave = deferred<NotificationWriteResult>();
+  const replaySave = deferred<NotificationWriteResult>();
+  const stalledRead = deferred<SettingsPage>();
+  const recoveredRead = deferred<SettingsPage>();
+  const readStarts = [deferred<void>(), deferred<void>()];
+  const calls: NotificationChange[] = [];
+  let reads = 0;
+  const io = {
+    save: (input: NotificationChange) => {
+      calls.push(input);
+      if (calls.length === 1) return firstSave.promise;
+      if (calls.length === 2) return replaySave.promise;
+      return Promise.resolve(result(reviewed, 10, reviewedPage));
+    },
+    read: () => {
+      const index = reads++;
+      readStarts[index]?.resolve(undefined);
+      return index === 0 ? stalledRead.promise : recoveredRead.promise;
+    },
+  };
+  const card = (
+    <NotificationsCard
+      initial={initialPage}
+      version={7}
+      csrfToken="token"
+      action="/en/settings"
+      io={io}
+      onVersionChange={() => {}}
+    />
+  );
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  host.innerHTML = renderToString(card);
+  let root: ReturnType<typeof hydrateRoot> | undefined;
+  let deadlines: ReturnType<typeof controlledManagedDeadlines> | undefined;
+  const visibleButton = (text: string) =>
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === text && !button.closest('[hidden]'),
+    );
+  const click = async (text: string) => act(async () => visibleButton(text)!.click());
+  const inputFor = (kind: string) =>
+    [...host.querySelectorAll<HTMLFormElement>('form')]
+      .find((form) => form.querySelector<HTMLInputElement>('input[name="notificationKind"]')?.value === kind)!
+      .querySelector<HTMLInputElement>('input[name="enabled"]')!;
+  const submitKind = async (kind: string, enabled: boolean) =>
+    act(async () => {
+      const input = inputFor(kind);
+      input.checked = enabled;
+      input.form!.requestSubmit();
+    });
+  const expectedVersionFor = (kind: string) =>
+    inputFor(kind).form!.querySelector<HTMLInputElement>('input[name="expectedVersion"]')!.value;
+  try {
+    await act(async () => {
+      root = hydrateRoot(host as unknown as HTMLElement, card);
+    });
+    deadlines = controlledManagedDeadlines();
+    await submitKind('reply', false);
+    const originalInput = calls[0]!;
+    expect(originalInput).toMatchObject({ expectedVersion: 7, notifications: { reply: false } });
+    await act(async () => {
+      deadlines!.fire();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(visibleButton('Retry original save')).toBeDefined();
+    expect(reads).toBe(0);
+
+    await act(async () => {
+      firstSave.resolve(result(receipt, 8, receiptPage));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(visibleButton('Retry original save')).toBeDefined();
+    expect(calls).toHaveLength(1);
+    expect(reads).toBe(0);
+    await submitKind('mention', false);
+    expect(calls).toHaveLength(1);
+
+    await click('Retry original save');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBe(originalInput);
+    expect(calls[1]!.idempotencyKey).toBe(calls[0]!.idempotencyKey);
+    await act(async () => {
+      replaySave.resolve(result(receipt, 8, receiptPage));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await readStarts[0]!.promise;
+    expect(reads).toBe(1);
+    await act(async () => {
+      deadlines!.fire();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('The original save was confirmed');
+    expect(visibleButton('Retry original save')).toBeUndefined();
+    expect(visibleButton('Reload')).toBeDefined();
+
+    await click('Reload');
+    await readStarts[1]!.promise;
+    recoveredRead.resolve(asSettingsPage(current, 9));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('Review current settings');
+    expect(expectedVersionFor('reply')).toBe('9');
+    expect(inputFor('reply').checked).toBe(false);
+    expect(inputFor('mention').checked).toBe(false);
+    expect(inputFor('weekly_digest').checked).toBe(false);
+
+    await act(async () => {
+      stalledRead.resolve(asSettingsPage(lateCurrent, 11));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(expectedVersionFor('reply')).toBe('9');
+    expect(inputFor('reply').checked).toBe(false);
+    expect(inputFor('mention').checked).toBe(false);
+    expect(inputFor('weekly_digest').checked).toBe(false);
+    expect(reads).toBe(2);
+
+    await click('Save reviewed choices');
+    expect(calls.map(({ expectedVersion, notifications }) => ({ expectedVersion, notifications }))).toEqual([
+      { expectedVersion: 7, notifications: { reply: false } },
+      { expectedVersion: 7, notifications: { reply: false } },
+      { expectedVersion: 9, notifications: { mention: false } },
+    ]);
+    expect(calls[0]).toBe(calls[1]);
+    expect(calls[2]!.idempotencyKey).not.toBe(calls[0]!.idempotencyKey);
+    expect(calls).toHaveLength(3);
+    expect(reads).toBe(2);
+  } finally {
+    if (root) await act(async () => root!.unmount());
+    deadlines?.restore();
     for (const [key, descriptor] of previous)
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
