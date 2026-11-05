@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { isNotFound, isRedirect } from '@tanstack/react-router';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -35,6 +36,8 @@ import { ShelfTypeDefaults } from './shelf-type-defaults/editor';
 import type { ShelfTypesCurrentRead } from '../library/shelf-types-read';
 import { useSettingsNavigationDraft } from './reading-navigation';
 import { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
+import { withManagedReadDeadline } from './managed-read-deadline';
+import { nativePreferenceFailureDetails } from './collection-privacy-data';
 
 const personalColumn = {
   cover: 'cover',
@@ -119,6 +122,13 @@ type ShelfOwner = {
 
 function shelfResponse(reason?: ShelfIssue, failure?: NativePreferenceFailure): ShelfResponseState {
   return { reason, failure, retryAt: preferenceRetryDeadline(failure?.retryAfter) };
+}
+
+function shelfTransportFailure(error: unknown): NativePreferenceFailure {
+  if (isRedirect(error) || isNotFound(error)) throw error;
+  return error instanceof DOMException && error.name === 'TimeoutError' && error.message === 'Account read timed out'
+    ? { status: null, code: 'local_timeout' }
+    : nativePreferenceFailureDetails(error);
 }
 
 function same(a: unknown, b: unknown): boolean {
@@ -537,11 +547,11 @@ export class ShelfPreferenceDraftRecovery {
     )
       return;
     this.update({ phase: 'saving', writeBusy: true });
-    let result;
+    let result: Awaited<ReturnType<ReadingIO['save']>>;
     try {
-      result = await this.io.save(pending.input);
-    } catch {
-      result = { ok: false as const, reason: 'unavailable' as const };
+      result = await withManagedReadDeadline(() => this.io.save(pending.input));
+    } catch (error) {
+      result = { ok: false, reason: 'unavailable', failure: shelfTransportFailure(error) };
     }
     if (!this.active(generation) || !this.owner.canWrite()) return;
     if (!result.ok) {
@@ -732,71 +742,10 @@ export class ShelfPreferenceDraftRecovery {
     )
       return;
     this.update({ readBusy: true });
+    let page: Awaited<ReturnType<ReadingIO['read']>>;
     try {
-      const read = currentPage(await this.io.read());
-      if (!this.active(generation) || !this.owner.canRead()) return;
-      if (!read.preferences) {
-        this.update({
-          phase: this.state.pending
-            ? 'uncertain'
-            : this.state.confirmedWrite || this.state.comparison
-              ? 'review'
-              : 'failed',
-          readResponse: shelfResponse(read.issue ?? 'read:unavailable', read.failure),
-          readBusy: false,
-          current: false,
-          advice: undefined,
-        });
-        return;
-      }
-      const current = read.preferences;
-      if (current.version < Math.max(this.state.known.version, this.owner.version())) {
-        this.update({
-          phase: this.state.pending
-            ? 'uncertain'
-            : this.state.confirmedWrite || this.state.comparison
-              ? 'review'
-              : 'conflict',
-          readResponse: shelfResponse('stale_version'),
-          readBusy: false,
-          current: false,
-          advice: undefined,
-        });
-        return;
-      }
-      if (
-        this.state.writeReceipt &&
-        current.version === this.state.writeReceipt.version &&
-        !same(current.shelf ?? {}, this.state.writeReceipt.shelf)
-      ) {
-        this.update({
-          phase: 'review',
-          readResponse: shelfResponse('read:inconsistent'),
-          readBusy: false,
-          current: false,
-          advice: undefined,
-        });
-        return;
-      }
-      const shelf = current.shelf ?? {};
-      const draft = rebaseDraft(shelf, this.state.draft, this.state.dirty);
-      this.update({
-        known: { shelf, version: current.version },
-        advice: current.advice,
-        current: true,
-        draft,
-        phase: this.state.pending
-          ? 'uncertain'
-          : this.state.confirmedWrite || this.state.comparison
-            ? 'review'
-            : read.issue
-              ? 'failed'
-              : 'review',
-        readResponse: shelfResponse(read.issue, read.failure),
-        readBusy: false,
-      });
-      this.owner.onVersionChange(Math.max(this.owner.version(), current.version));
-    } catch {
+      page = await withManagedReadDeadline(() => this.io.read());
+    } catch (error) {
       if (this.active(generation) && this.owner.canRead())
         this.update({
           phase: this.state.pending
@@ -804,12 +753,76 @@ export class ShelfPreferenceDraftRecovery {
             : this.state.confirmedWrite || this.state.comparison
               ? 'review'
               : 'failed',
-          readResponse: shelfResponse('read:unavailable'),
+          readResponse: shelfResponse('read:unavailable', shelfTransportFailure(error)),
           readBusy: false,
           current: false,
           advice: undefined,
         });
+      return;
     }
+    if (!this.active(generation) || !this.owner.canRead()) return;
+    const read = currentPage(page);
+    if (!read.preferences) {
+      this.update({
+        phase: this.state.pending
+          ? 'uncertain'
+          : this.state.confirmedWrite || this.state.comparison
+            ? 'review'
+            : 'failed',
+        readResponse: shelfResponse(read.issue ?? 'read:unavailable', read.failure),
+        readBusy: false,
+        current: false,
+        advice: undefined,
+      });
+      return;
+    }
+    const current = read.preferences;
+    if (current.version < Math.max(this.state.known.version, this.owner.version())) {
+      this.update({
+        phase: this.state.pending
+          ? 'uncertain'
+          : this.state.confirmedWrite || this.state.comparison
+            ? 'review'
+            : 'conflict',
+        readResponse: shelfResponse('stale_version'),
+        readBusy: false,
+        current: false,
+        advice: undefined,
+      });
+      return;
+    }
+    if (
+      this.state.writeReceipt &&
+      current.version === this.state.writeReceipt.version &&
+      !same(current.shelf ?? {}, this.state.writeReceipt.shelf)
+    ) {
+      this.update({
+        phase: 'review',
+        readResponse: shelfResponse('read:inconsistent'),
+        readBusy: false,
+        current: false,
+        advice: undefined,
+      });
+      return;
+    }
+    const shelf = current.shelf ?? {};
+    const draft = rebaseDraft(shelf, this.state.draft, this.state.dirty);
+    this.update({
+      known: { shelf, version: current.version },
+      advice: current.advice,
+      current: true,
+      draft,
+      phase: this.state.pending
+        ? 'uncertain'
+        : this.state.confirmedWrite || this.state.comparison
+          ? 'review'
+          : read.issue
+            ? 'failed'
+            : 'review',
+      readResponse: shelfResponse(read.issue, read.failure),
+      readBusy: false,
+    });
+    this.owner.onVersionChange(Math.max(this.owner.version(), current.version));
   }
 
   useCurrent() {
@@ -1220,7 +1233,7 @@ export function ShelfPreferencesCard({
                       {label}
                       {response.reason ? ` · ${response.reason.replace(':', ' · ').replaceAll('_', ' ')}` : ''}
                     </p>
-                    {response.failure?.status !== undefined ? (
+                    {response.failure?.status !== undefined && response.failure.code !== 'local_timeout' ? (
                       <p className="font-mono text-xs">HTTP {response.failure.status ?? 'unknown'}</p>
                     ) : null}
                     {response.failure?.code ? <p className="font-mono text-xs">{response.failure.code}</p> : null}
