@@ -444,6 +444,40 @@ test('COPY votes never become weights and conflicting or unavailable Kana rating
     });
     expect(unavailable.tagWeightObservations[0]).toMatchObject({ workId: 'v410', state: 'unavailable' });
     expect(unavailable.admitted.map((row) => row.tag)).toEqual(['g311', 'g44']);
+    const responseCases = [
+      [
+        'available',
+        '{"more":false,"results":[{"id":"v410","tags":[{"id":"g311","rating":null,"spoiler":0,"lie":false},{"id":"g44","spoiler":0,"lie":false}]}]}',
+      ],
+      [
+        'available',
+        '{"more":false,"results":[{"id":"v410","tags":[{"id":"g311","rating":2.5,"spoiler":0,"lie":true}]}]}',
+      ],
+      [
+        'unavailable',
+        '{"more":false,"results":[{"id":"v999","tags":[{"id":"g311","rating":2.5,"spoiler":0,"lie":false}]}]}',
+      ],
+      [
+        'unavailable',
+        '{"more":true,"results":[{"id":"v410","tags":[{"id":"g311","rating":2.5,"spoiler":0,"lie":false}]}]}',
+      ],
+      ['unavailable', '{"more":false,"results":[{"id":410,"tags":[]}]}'],
+      ['unavailable', '{"more":false,"results":[]'],
+    ] as const;
+    for (const [index, [state, bytes]] of responseCases.entries()) {
+      const emitted: BatchCommand[] = [];
+      const outcome = await importShowcaseTags({
+        tables: authoredTables(),
+        selectedVids: ['v410'],
+        path: join(directory, `boundary-${index}.sqlite`),
+        port: port(emitted),
+        known,
+        fetch: async () => new Response(bytes),
+      });
+      expect(outcome.tagWeightObservations[0]?.state).toBe(state);
+      expect(outcome.admitted.map((row) => row.tag)).toEqual(['g311', 'g44']);
+      expect(JSON.stringify(emitted)).not.toContain('rezics:sourceTagWeight');
+    }
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
