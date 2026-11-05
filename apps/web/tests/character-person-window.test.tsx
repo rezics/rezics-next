@@ -234,7 +234,7 @@ test('failed forward reads hide old rows and keep the admitted Previous address 
   await finish();
 });
 
-test('request A/B/A and locale replacement start fresh reads for the current address', async () => {
+test('request A/B/A reads fresh, and a locale replacement retires a pending read', async () => {
   const searchA = operand().search;
   const searchB = operand('characters').search;
   await show(characterPersonHref('en', searchA));
@@ -251,28 +251,15 @@ test('request A/B/A and locale replacement start fresh reads for the current add
   expect(reads.at(-1)!.search).toEqual(searchA);
   await finish();
 
-  pageLocale = 'de';
-  await act(async () => {
-    await setLocale('de', { reload: false });
-    await router.navigate({ href: characterPersonHref('de', searchB) });
-  });
-  if (reads.length !== 4)
-    throw new Error(
-      JSON.stringify({
-        pageLocale,
-        pathname: router.state.location.pathname,
-        publicHref: router.state.location.publicHref,
-        search: router.state.location.search,
-        reads: reads.map((read) => read.search),
-      }),
-    );
+  await activateWindow('next');
   expect(reads).toHaveLength(4);
-  expect(reads.at(-1)!.search).toEqual(searchB);
-  await finish();
-  await navigate(characterPersonHref('de', searchA));
-  expect(reads).toHaveLength(5);
-  expect(reads.at(-1)!.search).toEqual(searchA);
-  await finish();
+  const oldLocaleRead = reads.at(-1)!;
+  pageLocale = 'de';
+  await navigate(characterPersonHref('en', searchB));
+  expect(oldLocaleRead.signal.aborted).toBe(true);
+  await act(async () => oldLocaleRead.finish({ status: 'denied' }));
+  expect(host.querySelector('[data-search-recovery="denied"]')).toBeNull();
+  expect(host.querySelector('[data-search-windows]')).toBeNull();
 });
 
 test('checkpoint changes retire prior Previous history and focus recovery', async () => {
