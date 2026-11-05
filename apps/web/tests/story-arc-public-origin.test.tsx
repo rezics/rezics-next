@@ -216,6 +216,7 @@ test('the mounted Subject, canonical route, correction session and existing read
       createElement(SubjectPage, {
         page: makePage(context, realm, label),
         locale: 'en',
+        view: 'overview',
         messages: subjectPageMessages(),
         currentHref: originHref(realm),
         renderJsonLd: false,
@@ -272,6 +273,7 @@ test('the mounted Subject, canonical route, correction session and existing read
       createElement(SubjectPage, {
         page: makePage(selectedContext, realmId),
         locale: 'en',
+        view: 'overview',
         messages: subjectPageMessages(),
         currentHref: originHref(realmId),
         renderJsonLd: false,
@@ -330,6 +332,7 @@ test('the mounted Subject, canonical route, correction session and existing read
       createElement(SubjectPage, {
         page: readBack.page,
         locale: 'en',
+        view: 'overview',
         messages: subjectPageMessages(),
         currentHref: returnAddress.href,
         renderJsonLd: false,
