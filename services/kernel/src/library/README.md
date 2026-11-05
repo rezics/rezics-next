@@ -2061,7 +2061,7 @@ Decision: the Library owns fixed nine-axis declarations at its existing repair-b
   `runCommand` cannot receive them against a live native admission. The existing DBOS retry policy remains the page
   retry owner; a page runs one command attempt per DBOS attempt. The outbox call carries only a locator, while the
   DBOS client has no matching nine-axis enqueue admission. These descriptors do not reserve Source work or fund a
-  dispatch. See `.temp/continuation/collection-order-native-admission.md` for the remaining contract.
+  dispatch. Whole-command native admission remains deferred.
 - Growth check: Existing work/Source staleness and privacy assertions remain required for controller proof, including
   interruption, account terminal fencing, changed fences, terminal cleanup and held sources. Native receiving and
   broader acceptance remain deferred to the controller.

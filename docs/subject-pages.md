@@ -2308,9 +2308,7 @@ acceptance; no canned seed or Storybook substitute is admitted. Native producer 
 
 After the connected native journey succeeds, its last step captures Home, both Realms, one work for each of
 Steins;Gate, CLANNAD and Fate, a character, a person, Search, Library, Collection, a board thread, settings and creator
-sales. Every page requires phone390 and desktop1440 in light and dark: 56 images under
-`.temp/screenshots/core/<nn>-<page>-<width>-<theme>.png`, with every resulting path listed by the task result. These
-captures are required mounted acceptance, not a substitute for growth assertions. The landing policy defers native
+sales. Every page requires phone390 and desktop1440 in light and dark, producing 56 mounted captures whose paths are reported by the accepted run. These captures are required mounted acceptance, not a substitute for growth assertions. The landing policy defers native
 acceptance and browser capture to the integration verifier; authored harnesses do not establish executed evidence.
 
 ## Explore the bounded catalogue graph
