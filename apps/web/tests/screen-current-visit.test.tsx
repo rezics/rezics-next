@@ -49,7 +49,7 @@ const fakeClient = {
 };
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('@tanstack/react-start/server', () => ({ setResponseHeader: () => {} }));
+mock.module('@tanstack/react-start/server', () => ({ ...start, setResponseHeader: () => {} }));
 mock.module('@tanstack/react-start', () => ({
   ...start,
   createServerFn() {
