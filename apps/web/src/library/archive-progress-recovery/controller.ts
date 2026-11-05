@@ -1,6 +1,7 @@
 import type { Application, Holdings, Occurrences, Reply, Result, Review, ReviewInput, Units, Upload } from './native';
 import { UPLOAD_BYTES } from './native';
 import type { ProgressRecoveryPort, NativePort } from './native';
+import { projectArchiveForRecovery } from '../private-export/supported-recovery-artifact';
 
 export type Occurrence = Occurrences['occurrences'][number]['evidence'];
 export type Snapshot<Choices = unknown> = {
@@ -169,9 +170,9 @@ export class ProgressRecoveryJourney<Choices = unknown> {
       return;
     }
     await this.#work(async () => {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      this.#original = { bytes: new Uint8Array(bytes), name: file.name };
-      const base64 = archiveBase64(bytes);
+      const projected = projectArchiveForRecovery(new Uint8Array(await file.arrayBuffer()), 'progress');
+      this.#original = { bytes: new Uint8Array(projected), name: file.name };
+      const base64 = archiveBase64(projected);
       if (!this.#live()) return;
       // Store the exact request and original sender before delivery. No JSON parse/re-encode occurs.
       unresolved.set(this.binding, { kind: 'upload', base64, key: crypto.randomUUID(), port: this.port, upload: null });

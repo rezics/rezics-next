@@ -30,6 +30,7 @@ import {
   type RecoveryReadWindow,
   type RecoveryReader,
 } from './window';
+import { recoveryArchiveBase64 } from '../private-export/supported-recovery-artifact';
 
 export type RecoveryStage =
   | 'upload'
@@ -553,11 +554,12 @@ export function createArchiveCollectionRecoveryJourney(input: {
       return () => listeners.delete(listener);
     },
     upload(archiveBase64: string) {
-      originalArchiveBase64 = archiveBase64;
+      const admitted = recoveryArchiveBase64(archiveBase64, 'collections');
+      originalArchiveBase64 = admitted;
       const command: Extract<RecoveryEffectCommand, { kind: 'upload' }> = {
         kind: 'upload',
         key: newRecoveryCommandKey(),
-        body: { archiveBase64 },
+        body: { archiveBase64: admitted },
       };
       return dispatch(command);
     },

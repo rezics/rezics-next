@@ -13,6 +13,13 @@ export {
   archiveTextFromCustody,
   archiveBase64FromCustody,
 } from './custody';
+export {
+  projectArchiveForRecovery,
+  recoveryArchiveBase64,
+  recoveryArchiveFile,
+  recoveryArchiveText,
+  supportedRecoveryVersion,
+} from './supported-recovery-artifact';
 export { ArchiveRecoveryDestinations } from './destinations';
 export type { ExportPort, ExportPage, ExportRecord } from './contract';
 export type { ExportVisit } from './visit';

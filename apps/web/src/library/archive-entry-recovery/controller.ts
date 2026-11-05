@@ -12,6 +12,7 @@ import {
 import { selectedArchiveRecoveryResults } from './results';
 import { type RecoverySection } from './selection';
 import { ArchiveRecoveryVisit, type RecoveryBinding, type RecoveryReadDirection, type RecoveryRequest } from './visit';
+import { recoveryArchiveText } from '../private-export/supported-recovery-artifact';
 
 type ResultPage = ReturnType<typeof selectedArchiveRecoveryResults>;
 type Confirmation = { uploadId: string; body: ArchiveConfirmation };
@@ -132,7 +133,7 @@ export class ArchiveEntryRecoveryJourney {
     }
   }
 
-  /** File size is checked before reading; the native decoder alone interprets the contents. */
+  /** File size is checked before reading. V4 captures are projected to the installed V3 envelope before upload. */
   async upload(file: File) {
     if (file.size > archiveUploadBytes) {
       this.#notice = 'file_too_large';
@@ -146,7 +147,7 @@ export class ArchiveEntryRecoveryJourney {
     this.#readback = null;
     this.#reviewed = [];
     await this.#run(async () => {
-      const text = await file.text();
+      const text = recoveryArchiveText(await file.text(), 'entries');
       if (request.signal.aborted || !this.#current()) return;
       this.#originalText = text;
       this.#originalName = file.name;
