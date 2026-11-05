@@ -116,7 +116,7 @@ function safePath(value?: string) {
     : undefined;
 }
 
-function returnContext(value: string | null) {
+function returnContext(value: string | null | undefined) {
   const match = value && /~([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.exec(value);
   return match?.[1];
 }
