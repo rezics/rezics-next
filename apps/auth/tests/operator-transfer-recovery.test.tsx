@@ -106,6 +106,16 @@ test('signed-out restoration keeps the generic unresolved state and exact descri
   expect(page.calls.some(({ path }) => path.startsWith('/account-operations/'))).toBe(false);
 });
 
+test('oversized invalid restoration preserves mounted source uncertainty and retained bytes', async () => {
+  const page = await mount(unknown);
+  const raw = 'x'.repeat(54_110);
+  window.sessionStorage.setItem('rezics.operator-transfer.attempt', raw);
+  expect(restoreTransferAttempt()).toBe('invalid');
+  expect(window.sessionStorage.getItem('rezics.operator-transfer.attempt')).toBe(raw);
+  expect(page.host.textContent).toContain(m.auth_transfer_recovery_source_unknown());
+  expect(page.calls.some(({ path }) => path.startsWith('/account-operations/'))).toBe(false);
+});
+
 test('a replacement account cannot inherit the saved transfer identity or release its descriptor', async () => {
   const replacement: AccountSessionResult = { ...session, accountId: 'replacement-viewer' };
   const page = await mount(unknown, 'ready', replacement);

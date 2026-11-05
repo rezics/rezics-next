@@ -45,6 +45,9 @@ export type TransferResult =
   | TransferFailure;
 
 const storageKey = 'rezics.operator-transfer.attempt';
+// 4,096 request + 770 accountId + 49,156 source acceptance/reference + 87 outer keys,
+// syntax and quoted source/readback enums; six units per UTF-16 unit covers lone-surrogate escaping.
+const transferAttemptStorageMaxUnits = 54_109;
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -304,7 +307,9 @@ function isAttempt(value: unknown): value is TransferAttempt {
 export function storeTransferAttempt(attempt: TransferAttempt): boolean {
   if (!isAttempt(attempt)) return false;
   try {
-    window.sessionStorage.setItem(storageKey, JSON.stringify(attempt));
+    const raw = JSON.stringify(attempt);
+    if (raw.length > transferAttemptStorageMaxUnits) return false;
+    window.sessionStorage.setItem(storageKey, raw);
     return true;
   } catch {
     return false;
@@ -314,6 +319,7 @@ export function restoreTransferAttempt(): TransferAttempt | null | 'invalid' {
   try {
     const raw = window.sessionStorage.getItem(storageKey);
     if (raw === null) return null;
+    if (raw.length > transferAttemptStorageMaxUnits) return 'invalid';
     const value: unknown = JSON.parse(raw);
     return isAttempt(value) ? value : 'invalid';
   } catch {

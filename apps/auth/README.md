@@ -826,6 +826,12 @@ refill, polling, per-row authorization or automatic command on restoration, Retr
 Imported transfer data follows the [Accounts operator contract](../../docs/accounts.md#2-operators-and-automated-accounts);
 destination presentation cannot establish source approval or execution.
 
+Decision: Bound the stored attempt envelope to 54,109 UTF-16 units: its nested serialized request contributes at most
+4,096; the 128-unit accountId contributes 770 including quotes; and source acceptance and reference can coexist
+at 4,096 units each, contributing 49,156 including quotes at six escaped units per input unit for lone surrogates.
+The outer keys, punctuation and quoted source/readback values contribute 87. This storage limit leaves the
+separate 4,096-unit handoff request limit unchanged.
+
 Operator-transfer read failures offer Retry within the mounted page. A failed session read preserves the saved
 attempt without treating it as an account mismatch; recovery restores it only for its initiating account and requires
 fresh confirmation. Signed-out or changed accounts cannot act on it. Relation retries repeat only the failed read;
