@@ -87,6 +87,47 @@ test('only exact source key forms on Person records participate in reviewed iden
   expect(personIdentityForSource('bangumi', 'person:8', 'schema:Organization')).toBeUndefined();
 });
 
+test('Jun Maeda discovery retains the exact source records until a reviewer confirms the human bridge', () => {
+  // Public-record candidate; the pinned dump rows, digests, and native bindings remain separately required.
+  const candidate = {
+    bangumi: {
+      externalId: 'person:1916',
+      record: 'https://bgm.tv/person/1916',
+      work: 'https://bgm.tv/subject/1851',
+      creditedName: '麻枝准',
+    },
+    vndb: {
+      externalId: 's224',
+      record: 'https://vndb.org/s224',
+      work: 'https://vndb.org/v4',
+      creditedName: 'Maeda Jun',
+    },
+    independentEvidence: 'https://artist.cdjournal.com/a/maeda-jun/842760',
+  } as const;
+  const bangumi = personIdentityForSource('bangumi', candidate.bangumi.externalId, 'schema:Person')!;
+  const vndb = personIdentityForSource('vndb', candidate.vndb.externalId, 'schema:Person')!;
+
+  expect(bangumi).toEqual({
+    source: 'bangumi',
+    externalId: 'person:1916',
+    property: 'wdt:P6298',
+    value: '1916',
+  });
+  expect(vndb).toEqual({
+    source: 'vndb',
+    externalId: 's224',
+    property: 'wdt:P3180',
+    value: 's224',
+  });
+  const bangumiOriginal = read({
+    id: '00000000-0000-4000-8000-000000001916',
+    type: 'schema:Person',
+    statements: { 'wdt:P6298': [{ value: { type: 'value', content: '1916' } }] },
+  });
+  expect(observePersonIdentity(bangumi, bangumiOriginal).state).toBe('current');
+  expect(observePersonIdentity(vndb, bangumiOriginal).state).toBe('missing');
+});
+
 test('Bangumi credit replay keeps the durable source endpoint after its reviewed Person is redirected', async () => {
   // Synthetic bindings, native UUIDs and source fields are authored controls for this unit test.
   const bound = {

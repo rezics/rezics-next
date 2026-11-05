@@ -216,6 +216,13 @@ At most 64 credit rows, 511 role Concepts plus one Scheme, 512 vocabulary record
 
 At most 64 selected names and 65 name commands including the identifier.
 
+### Reuse reviewed Person identity across provider credits
+
+Bangumi `person:N` and VNDB `sN` remain separate source identities until a reviewer confirms them with independent
+public evidence. Names and overlapping credits only help locate candidates. Credit publication checks the current
+Person for the exact provider identifier; a missing, conflicting, or non-Person identity withholds that provider's
+credits. Durable import bindings and work citations keep their original provider keys after a canonical merge.
+
 ### Import authored VNDB contributor, producer and release websites
 
 At most 32 admitted links per owner and a 64 KiB projection; public website URL rules still apply.
