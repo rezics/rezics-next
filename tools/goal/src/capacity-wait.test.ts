@@ -80,7 +80,7 @@ test('a start waiting for host capacity counts current running attempts with one
       });
     }) as typeof db.query;
 
-    // Cross independent history and payload axes; active entries retain the same small bodies. A fixed set of
+    // Cross independent history and payload axes in one task's settled attempt history. A fixed set of
     // superseded running attempts also proves that admission counts each task's current attempt only.
     for (const runningCount of [0, 1, 10, 100]) {
       const work: number[] = [];
@@ -88,28 +88,34 @@ test('a start waiting for host capacity counts current running attempts with one
         for (const payloadBytes of [128, 1_024, 8_192]) {
           db.transaction(() => {
             db.exec('DELETE FROM worker_attempts; DELETE FROM worker_tasks');
-            for (let index = 0; index < runningCount + settledCount; index += 1) {
+            for (let index = 0; index < runningCount; index += 1) {
               const id = `task-${index}`;
-              const currentRunning = index < runningCount;
-              const supersededRunning = index >= runningCount && index < runningCount + 3;
-              insertTask.run(id, index + 1, 2, '{}');
+              insertTask.run(id, index + 1, 1, '{}');
               insertAttempt.run(
                 id,
                 1,
                 JSON.stringify({
-                  state: supersededRunning ? 'running' : 'finished',
-                  payload: 'x'.repeat(payloadBytes),
-                }),
-              );
-              insertAttempt.run(
-                id,
-                2,
-                JSON.stringify({
-                  state: currentRunning ? 'running' : 'finished',
-                  payload: 'x'.repeat(currentRunning ? 128 : payloadBytes),
+                  state: 'running',
+                  payload: 'x'.repeat(128),
                 }),
               );
             }
+            const history = `history-${runningCount}`;
+            insertTask.run(history, runningCount + 1, settledCount + 1, '{}');
+            for (let attempt = 1; attempt <= settledCount; attempt += 1)
+              insertAttempt.run(
+                history,
+                attempt,
+                JSON.stringify({
+                  state: attempt <= 3 ? 'running' : 'finished',
+                  payload: 'x'.repeat(payloadBytes),
+                }),
+              );
+            insertAttempt.run(
+              history,
+              settledCount + 1,
+              JSON.stringify({ state: 'finished', payload: 'x'.repeat(payloadBytes) }),
+            );
           })();
           executions.length = 0;
           store.resetDecodedRows();
