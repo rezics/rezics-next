@@ -128,7 +128,7 @@ test('the policy interval, defect transition, section output and per-run report 
 test('a dedicated stack boot failure reaches the supermanager with its first error line', async () => {
   const h = fixture();
   try {
-    const notices: { managerId: string; summary: string }[] = [];
+    const notices: { managerId: string; kind: string; summary: string }[] = [];
     const now = new Date('2026-01-01T00:00:00.000Z');
     const result = await runPageDataCycle({
       settings: h.settings,
