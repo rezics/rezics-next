@@ -393,6 +393,33 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     }
   }
   const eligible = taskRows.filter((t) => t.elapsedMs !== null && t.workingMs !== null);
+  const transpile = {
+    successfulChecks: 0,
+    repairHandbacks: 0,
+    unavailable: 0,
+    measuredChecks: 0,
+    totalMs: 0,
+    changedFiles: 0,
+    typescriptFiles: 0,
+  };
+  for (const event of ordered) {
+    if (event.stage !== 'landing' || event.action !== 'dev-transpile' || !event.detail) continue;
+    let detail: Record<string, unknown>;
+    try {
+      detail = JSON.parse(event.detail) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (detail.outcome === 'passed') transpile.successfulChecks++;
+    else if (detail.outcome === 'repair-handback') transpile.repairHandbacks++;
+    else if (detail.outcome === 'unavailable') transpile.unavailable++;
+    if (typeof detail.elapsedMs === 'number' && Number.isFinite(detail.elapsedMs)) {
+      transpile.measuredChecks++;
+      transpile.totalMs += detail.elapsedMs;
+    }
+    if (typeof detail.changedFileCount === 'number') transpile.changedFiles += detail.changedFileCount;
+    if (typeof detail.typescriptFileCount === 'number') transpile.typescriptFiles += detail.typescriptFileCount;
+  }
   const goals = [...new Set(tasks.map((t) => t.brief.goal))].map((goal) => {
     const members = tasks.filter((t) => t.brief.goal === goal);
     const rows = taskRows.filter((t) => t.goal === goal);
@@ -447,6 +474,10 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       ? [...integrated].reduce((n, id) => n + (attemptCounts.get(id) ?? 0), 0) / integrated.size
       : null,
     overBudgetLaunchesByLayer,
+    devTranspile: {
+      ...transpile,
+      totalMs: transpile.measuredChecks ? transpile.totalMs : null,
+    },
   };
 }
 

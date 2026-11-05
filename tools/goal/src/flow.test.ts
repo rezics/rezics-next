@@ -38,6 +38,61 @@ const task = (id: string, goal = 'sample'): Task =>
   }) as Task;
 const date = (minute: number) => new Date(Date.UTC(2026, 9, 29, 0, minute)).toISOString();
 
+test('dev transpile reporting prices final checks and handbacks while keeping measured zero distinct from unavailable', () => {
+  const result = flowReport(
+    [
+      {
+        taskId: 'repair',
+        attempt: 1,
+        stage: 'landing',
+        action: 'dev-transpile',
+        at: date(1),
+        detail: JSON.stringify({ outcome: 'repair-handback', elapsedMs: 0, changedFileCount: 2, typescriptFileCount: 1 }),
+      },
+      {
+        taskId: 'repair',
+        attempt: 2,
+        stage: 'landing',
+        action: 'dev-transpile',
+        at: date(2),
+        detail: JSON.stringify({ outcome: 'passed', elapsedMs: 0, changedFileCount: 1, typescriptFileCount: 1 }),
+      },
+      {
+        taskId: 'unavailable',
+        attempt: 1,
+        stage: 'landing',
+        action: 'dev-transpile',
+        at: date(3),
+        detail: JSON.stringify({ outcome: 'unavailable', elapsedMs: null, changedFileCount: 1, typescriptFileCount: 1 }),
+      },
+    ],
+    [],
+  );
+  expect(result.devTranspile).toMatchObject({
+    successfulChecks: 1,
+    repairHandbacks: 1,
+    unavailable: 1,
+    measuredChecks: 2,
+    totalMs: 0,
+    changedFiles: 4,
+    typescriptFiles: 3,
+  });
+  const unavailableOnly = flowReport(
+    [
+      {
+        taskId: 'unavailable',
+        attempt: 1,
+        stage: 'landing',
+        action: 'dev-transpile',
+        at: date(3),
+        detail: JSON.stringify({ outcome: 'unavailable', elapsedMs: null }),
+      },
+    ],
+    [],
+  );
+  expect(unavailableOnly.devTranspile).toMatchObject({ unavailable: 1, measuredChecks: 0, totalMs: null });
+});
+
 test('every task records durable timestamps for dispatch, start, each check-slot request, acquisition and release, worker finish, landing enqueue, landing start, dev update, verification and integration', () => {
   const dir = mkdtempSync(join(tmpdir(), 'flow-'));
   const path = join(dir, 'flow.db');

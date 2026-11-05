@@ -16,6 +16,12 @@ test('every attempt-ending failure and landing refusal has a non-empty priced gu
   }
   expect(Object.keys(failures).length).toBeGreaterThan(0);
   expect(Object.keys(refusals).length).toBeGreaterThan(0);
+  expect(GUARDS['dev-landing-transpile']).toMatchObject({
+    owner: 'control-plane',
+    since: '2026-11-05',
+  });
+  expect(GUARDS['dev-landing-transpile'].defect).toContain('const reassignment');
+  expect(GUARDS['dev-landing-transpile'].repair).toContain('same worker session');
 });
 
 test('flow report prices guard firings and flags unchanged next attempts for repair in place', async () => {

@@ -28,6 +28,7 @@ import type {
   ControlPlaneBatchDevHandoff,
   ControlPlaneBatchDevHandoffRequest,
   AttemptRef,
+  DevLandingTranspileHandoff,
   GateOutcome,
   GateOutcomeSink,
   GateStage,
@@ -35,6 +36,12 @@ import type {
   RebaseConflictContext,
 } from './contracts.ts';
 import { ensureGateOutcomeRefusal } from './guards.ts';
+import { recordFlow } from './flow.ts';
+import {
+  LandingTranspileInterruptedError,
+  transpileLandingCandidate,
+  type LandingTranspileResult,
+} from './landing-transpile.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
@@ -1529,6 +1536,12 @@ type PreparedLanding = {
   started: number;
 };
 
+type DevLandingSourceOwner = {
+  entry: Pick<LandingEntry, 'id' | 'request'>;
+  sourceCommit: string;
+  changedFiles: readonly string[];
+};
+
 function emptyTokens(): Tokens {
   return { input: 0, cached: 0, output: 0 };
 }
@@ -1541,11 +1554,70 @@ function addTokens(left: Tokens, right: Tokens): Tokens {
   };
 }
 
-function isDevResolutionHandoff(value: GateOutcome | DevResolutionHandoff | undefined): value is DevResolutionHandoff {
+function isDevResolutionHandoff(
+  value: GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff | undefined,
+): value is DevResolutionHandoff {
   return !!value && 'kind' in value && value.kind === 'dev-resolution';
 }
 
+function isDevLandingTranspileHandoff(
+  value: GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff | undefined,
+): value is DevLandingTranspileHandoff {
+  return !!value && 'kind' in value && value.kind === 'dev-landing-transpile';
+}
+
+function devTranspileEvidence(result: LandingTranspileResult): NonNullable<GateOutcome['devTranspile']> {
+  return {
+    base: result.base,
+    candidate: result.candidate,
+    changedFileCount: result.changedFileCount,
+    typescriptFileCount: result.typescriptFileCount,
+    elapsedMs: result.elapsedMs,
+    outcome: 'passed',
+  };
+}
+
+function transpileHandoff(
+  entry: Pick<LandingEntry, 'id' | 'request'>,
+  sourceCommit: string,
+  changedFiles: readonly string[],
+  result: LandingTranspileResult,
+): DevLandingTranspileHandoff {
+  if (result.outcome !== 'diagnostic' || !result.diagnostic || result.elapsedMs === null)
+    throw new Error('dev landing compiler handoff requires a measured TypeScript diagnostic');
+  return {
+    kind: 'dev-landing-transpile',
+    taskId: entry.request.taskId,
+    attempt: entry.request.attempt,
+    entryId: entry.id,
+    request: entry.request,
+    sourceCommit,
+    base: result.base,
+    candidate: result.candidate,
+    changedFiles: [...changedFiles],
+    typescriptFiles: [...result.typescriptFiles],
+    elapsedMs: result.elapsedMs,
+    logPath: result.logPath,
+    diagnostic: result.diagnostic,
+  };
+}
+
 class ControlPlaneProofInterrupted extends Error {}
+class ControlPlaneTranspileHandoffSignal extends Error {
+  constructor(
+    readonly batchId: string,
+    readonly handoff: DevLandingTranspileHandoff,
+  ) {
+    super('control-plane dev candidate requires an in-place compiler repair');
+    this.name = 'ControlPlaneTranspileHandoffSignal';
+  }
+}
+class LandingTranspileUnavailableError extends Error {
+  constructor(readonly result: LandingTranspileResult) {
+    super(result.infrastructureError ?? 'dev landing transpile command unavailable');
+    this.name = 'LandingTranspileUnavailableError';
+  }
+}
 
 type OrdinaryProofAttempt = {
   source: string;
@@ -1637,6 +1709,26 @@ export class MergeTrain {
   private initializeLandingLog(logPath: string): void {
     const revision = this.options.configurationRevision ?? trainConfigurationRevision(this.options);
     writeFileSync(logPath, `Configuration revision: ${revision}\n`);
+  }
+
+  private recordUnavailableDevTranspile(request: LandingRequest, result: LandingTranspileResult): void {
+    if (!(this.options.fence instanceof WorkerStore)) return;
+    recordFlow(this.options.fence.db, {
+      ...request,
+      stage: 'landing',
+      action: 'dev-transpile',
+      at: new Date().toISOString(),
+      detail: JSON.stringify({
+        outcome: 'unavailable',
+        base: result.base,
+        candidate: result.candidate,
+        changedFileCount: result.changedFileCount,
+        typescriptFileCount: result.typescriptFileCount,
+        elapsedMs: null,
+        logPath: result.logPath,
+        infrastructureError: result.infrastructureError ?? null,
+      }),
+    });
   }
 
   private configuredLandingBoot(): IntegrationCheck | undefined {
@@ -2004,6 +2096,7 @@ export class MergeTrain {
       let retry = false;
       let committed = false;
       let stale: LandingEntry | undefined;
+      let transpileEvidence: GateOutcome['devTranspile'];
       try {
         for (const entry of pending) {
           const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
@@ -2378,14 +2471,80 @@ export class MergeTrain {
         // prelanding typecheck, then the policy boot check when changed paths match; other verification
         // runs after integration in the independent verifier.
         const finalCandidate = prepared[prepared.length - 1]!.candidate;
+        const batchLog = logPaths.get(prepared[0]!.entry.id)!;
         this.git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
+        if (lane === 'dev') {
+          const finalChangedFiles = changedPathsBetween(
+            trainTree,
+            base,
+            finalCandidate,
+            this.options.policy?.merge,
+          );
+          const transpiled = await transpileLandingCandidate({
+            cwd: trainTree,
+            base,
+            candidate: finalCandidate,
+            changedFiles: finalChangedFiles,
+            logPath: batchLog,
+          });
+          let staleDuringTranspile: LandingEntry | undefined;
+          for (const member of prepared) {
+            try {
+              o.fence.assertCurrent(member.entry.request);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              staleDuringTranspile = member.entry;
+              break;
+            }
+          }
+          if (staleDuringTranspile) {
+            skipped.add(staleDuringTranspile.id);
+            pending = pending.filter((entry) => entry.id !== staleDuringTranspile!.id);
+            retry = true;
+            continue;
+          }
+          if (target() !== base) {
+            retry = true;
+            continue;
+          }
+          if (transpiled.outcome === 'diagnostic') {
+            const location = transpiled.diagnostic?.file;
+            const owner =
+              (location
+                ? prepared.find((member) =>
+                    member.result.changedFiles.some((path) => resolve(trainTree, path) === resolve(location)),
+                  )
+                : undefined) ?? prepared[0]!;
+            for (const member of prepared) if (member.entry.id !== owner.entry.id) deferred.add(member.entry.id);
+            for (const [id, outcome] of localOutcomes) outcomes.set(id, outcome);
+            appendFileSync(
+              owner.result.logPath,
+              `Candidate ${finalCandidate} was not published; returning its Bun diagnostic to task ${owner.entry.request.taskId} attempt ${owner.entry.request.attempt}.\n`,
+            );
+            return {
+              outcomes: orderedOutcomes(),
+              deferredIds: [...deferred],
+              skippedIds: [...skipped],
+              transpileHandoff: transpileHandoff(
+                owner.entry,
+                owner.entry.request.workerCommit ?? finalCandidate,
+                finalChangedFiles,
+                transpiled,
+              ),
+            };
+          }
+          if (transpiled.outcome === 'unavailable') {
+            this.recordUnavailableDevTranspile(prepared[0]!.entry.request, transpiled);
+            throw new LandingTranspileUnavailableError(transpiled);
+          }
+          if (transpiled.outcome === 'passed') transpileEvidence = devTranspileEvidence(transpiled);
+        }
         if (
           !existsSync(join(trainTree, 'node_modules')) &&
           existsSync(join(trainTree, 'bun.lock')) &&
           existsSync(join(trainTree, 'package.json'))
         )
           installShared(trainTree, undefined, undefined, this.options.policy);
-        const batchLog = logPaths.get(prepared[0]!.entry.id)!;
         const {
           command,
           result: checked,
@@ -2532,6 +2691,7 @@ export class MergeTrain {
         }
         committed = true;
         for (const member of prepared) {
+          if (member === prepared[0] && transpileEvidence) member.result.devTranspile = transpileEvidence;
           const request = member.entry.request;
           if (request.devResolution && o.trainResolver)
             o.trainResolver.devConflictLanded(
@@ -2583,6 +2743,8 @@ export class MergeTrain {
         };
       } catch (error) {
         if (committed) throw error;
+        if (error instanceof LandingTranspileUnavailableError || error instanceof LandingTranspileInterruptedError)
+          throw error;
         if (error instanceof StaleAttemptError) {
           const staleEntry = pending.find(
             (entry) => entry.request.taskId === error.ref.taskId && entry.request.attempt === error.ref.attempt,
@@ -2635,7 +2797,7 @@ export class MergeTrain {
     lane: 'main' | 'dev',
     handOff: () => Promise<void>,
     drainDev: () => Promise<void>,
-  ): Promise<GateOutcome | DevResolutionHandoff | undefined> {
+  ): Promise<GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff | undefined> {
     const o = this.options;
     if (
       lane !== 'main' ||
@@ -2703,7 +2865,7 @@ export class MergeTrain {
     entry: LandingEntry,
     devPending: () => boolean,
     onYield: () => void,
-  ): Promise<GateOutcome | undefined> {
+  ): Promise<GateOutcome | DevLandingTranspileHandoff | undefined> {
     const o = this.options;
     const path = join(o.stateDirectory, `control-plane-proof-${entry.id}.json`);
     const history = existsSync(path)
@@ -2816,6 +2978,7 @@ export class MergeTrain {
       const integrated = await this.integrate(entry, custody);
       if (isDevResolutionHandoff(integrated))
         throw new Error('Control-plane proof cannot be handed off to the dev resolver');
+      if (isDevLandingTranspileHandoff(integrated)) return integrated;
       const outcome = integrated;
       attempt.status = 'finished';
       attempt.outcome = outcome;
@@ -3136,7 +3299,7 @@ export class MergeTrain {
   private async integrate(
     entry: LandingEntry,
     custody?: OrdinaryProofCustody,
-  ): Promise<GateOutcome | DevResolutionHandoff> {
+  ): Promise<GateOutcome | DevResolutionHandoff | DevLandingTranspileHandoff> {
     const o = this.options;
     const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
       assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit, o.policy?.integration);
@@ -3157,6 +3320,7 @@ export class MergeTrain {
       : undefined;
     let sharedTasks: Task[] = [];
     let sharedSource = '';
+    let transpileEvidence: GateOutcome['devTranspile'];
 
     let integrationTarget: IntegrationTarget =
       recorded.target === 'stabilize' && recorded.goal !== 'control-plane'
@@ -3218,6 +3382,8 @@ export class MergeTrain {
       );
     };
     const finish = () => {
+      if (transpileEvidence) result.devTranspile = transpileEvidence;
+      else delete result.devTranspile;
       ensureGateOutcomeRefusal(result);
       if (!result.passed && !this.workspaceFailures.has(entry.id)) attributeFailure(result);
       return result;
@@ -3449,6 +3615,8 @@ export class MergeTrain {
       prepareRemoval = captureTrainWorktreeRemoval(trainTree);
       for (;;) {
         o.fence.assertCurrent(request);
+        transpileEvidence = undefined;
+        delete result.devTranspile;
         delete result.firstFailure;
         delete result.failsOnMain;
         delete result.timedOut;
@@ -3806,6 +3974,27 @@ export class MergeTrain {
         // Direct dev landings honor the configurable root compiler guard and the policy boot check when paths match.
         const skipDevChecks = directDevLanding;
         if (directDevLanding) {
+          const transpiled = await transpileLandingCandidate({
+            cwd: trainTree,
+            base,
+            candidate,
+            changedFiles: result.changedFiles,
+            logPath,
+          });
+          o.fence.assertCurrent(request);
+          if (target() !== base) continue;
+          if (transpiled.outcome === 'diagnostic') {
+            appendFileSync(
+              logPath,
+              `Candidate ${candidate} was not published; returning its Bun diagnostic to task ${request.taskId} attempt ${request.attempt}.\n`,
+            );
+            return transpileHandoff(entry, workerCommit ?? request.workerCommit ?? candidate, result.changedFiles, transpiled);
+          }
+          if (transpiled.outcome === 'unavailable') {
+            this.recordUnavailableDevTranspile(request, transpiled);
+            throw new LandingTranspileUnavailableError(transpiled);
+          }
+          if (transpiled.outcome === 'passed') transpileEvidence = devTranspileEvidence(transpiled);
           stage = 'gate';
           if (
             !existsSync(join(trainTree, 'node_modules')) &&
@@ -4230,12 +4419,27 @@ export class MergeTrain {
           }
           const release = this.prepareControlPlaneRelease(
             request,
+            [
+              {
+                entry,
+                sourceCommit: request.workerCommit ?? candidate,
+                changedFiles: result.changedFiles,
+              },
+            ],
             releaseSnapshot,
             candidate,
             lifecycleEvidence,
             compatibilityCommand,
             logPath,
           );
+          if (release.transpileHandoff) {
+            o.fence.assertCurrent(request);
+            if (target() !== base || !this.controlPlaneSnapshotMatches(releaseSnapshot)) {
+              retryMovedControlPlaneRefs();
+              continue;
+            }
+            return release.transpileHandoff;
+          }
           if (release.conflicts?.length) {
             const files = [...release.conflicts].sort();
             const sourceBranch = release.sourceBranch ?? mainBranch;
@@ -4277,6 +4481,7 @@ export class MergeTrain {
             retryMovedControlPlaneRefs();
             continue;
           }
+          transpileEvidence = release.devTranspile;
           preparedControlPlaneRelease = release.prepared;
           preparedControlPlaneRelease.record.source = { branch: request.branch, commit: tip };
         }
@@ -4366,7 +4571,13 @@ export class MergeTrain {
         return finish();
       }
     } catch (error) {
-      if (custody?.signal.aborted || error instanceof StaleAttemptError) throw error;
+      if (
+        custody?.signal.aborted ||
+        error instanceof StaleAttemptError ||
+        error instanceof LandingTranspileUnavailableError ||
+        error instanceof LandingTranspileInterruptedError
+      )
+        throw error;
       const message = String(error);
       appendFileSync(logPath, `${message}\n`);
       result.stage = stage;
@@ -5665,11 +5876,15 @@ export class MergeTrain {
   }
 
   /** Main -> dev is the only nested train order. Dev never takes main while holding its lane. */
-  private async withControlPlaneBatchLanes<T>(run: () => Promise<T>): Promise<T> {
+  private async withControlPlaneBatchLanes(
+    run: () => Promise<ControlPlaneBatchResult>,
+  ): Promise<ControlPlaneBatchResult> {
     const main = acquireDirectoryLease(
       join(this.options.stateDirectory, 'train-main.lease'),
       this.options.policy?.leases,
     );
+    let handoff: ControlPlaneTranspileHandoffSignal | undefined;
+    let result: ControlPlaneBatchResult | undefined;
     try {
       const dev = await acquireControlPlaneDevLane(
         this.options.stateDirectory,
@@ -5677,13 +5892,27 @@ export class MergeTrain {
         this.options.policy,
       );
       try {
-        return await run();
+        try {
+          result = await run();
+        } catch (error) {
+          if (!(error instanceof ControlPlaneTranspileHandoffSignal)) throw error;
+          handoff = error;
+        }
       } finally {
         dev.release();
       }
     } finally {
       main.release();
     }
+    if (handoff) {
+      if (!this.options.sink.onDevLandingTranspileHandoff)
+        throw new Error('dev landing transpile handoff requires the worker continuation sink');
+      this.options.sink.onDevLandingTranspileHandoff(handoff.handoff);
+      this.options.queue.acknowledge(handoff.handoff.entryId);
+      return { batchId: handoff.batchId, members: [], transpileHandoffs: [handoff.handoff] };
+    }
+    if (!result) throw new Error('control-plane batch ended without a result');
+    return result;
   }
 
   /** Authenticated, append-only receiving operation for the same exact ref-starved source generation. */
@@ -6694,12 +6923,22 @@ export class MergeTrain {
               throw new Error('Control-plane batch has no exact native release evidence');
             const release = this.prepareControlPlaneRelease(
               preparedMembers[0]!.request,
+              preparedMembers.map((member) => ({
+                entry: { id: member.entryId, request: member.request },
+                sourceCommit: member.disposition.acceptedCommit,
+                changedFiles: member.outcome.changedFiles,
+              })),
               snapshot,
               candidate,
               proof.lifecycleEvidence,
               proof.compatibilityCommand,
               node.logPath,
             );
+            if (release.transpileHandoff) {
+              if (!this.controlPlaneSnapshotMatches(snapshot)) continue;
+              assertIdentities();
+              throw new ControlPlaneTranspileHandoffSignal(batchId, release.transpileHandoff);
+            }
             if (!release.prepared) {
               if (!this.controlPlaneSnapshotMatches(snapshot)) continue;
               split(
@@ -7022,9 +7261,35 @@ export class MergeTrain {
     targetBranch: string,
     targetHead: string,
     logPath: string,
-  ): { commit?: string; conflicts?: string[]; cause?: string } {
+    devLanding?: { owners: readonly DevLandingSourceOwner[]; snapshot: ControlPlaneReleaseSnapshot },
+  ): Promise<{
+    commit?: string;
+    conflicts?: string[];
+    cause?: string;
+    moved?: boolean;
+    transpileHandoff?: DevLandingTranspileHandoff;
+    devTranspile?: GateOutcome['devTranspile'];
+  }> {
     if (isAncestor(this.options.mainCheckout, sourceCommit, targetHead, this.options.policy?.merge))
-      return { commit: targetHead };
+      return Promise.resolve({ commit: targetHead });
+    return this.mergeControlPlaneCandidateTree(sourceCommit, sourceBranch, targetBranch, targetHead, logPath, devLanding);
+  }
+
+  private async mergeControlPlaneCandidateTree(
+    sourceCommit: string,
+    sourceBranch: string,
+    targetBranch: string,
+    targetHead: string,
+    logPath: string,
+    devLanding?: { owners: readonly DevLandingSourceOwner[]; snapshot: ControlPlaneReleaseSnapshot },
+  ): Promise<{
+    commit?: string;
+    conflicts?: string[];
+    cause?: string;
+    moved?: boolean;
+    transpileHandoff?: DevLandingTranspileHandoff;
+    devTranspile?: GateOutcome['devTranspile'];
+  }> {
     const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
     mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
     try {
@@ -7049,7 +7314,45 @@ export class MergeTrain {
         appendFileSync(logPath, `${message}\n`);
         return conflicts.length ? { conflicts, cause: cause || message } : { cause: message };
       }
-      return { commit: this.git(tree, 'rev-parse', 'HEAD') };
+      const commit = this.git(tree, 'rev-parse', 'HEAD');
+      if (devLanding && targetBranch === devLanding.snapshot.devBranch) {
+        const changed = changedPathsBetween(tree, targetHead, commit, this.options.policy?.merge);
+        const transpiled = await transpileLandingCandidate({
+          cwd: tree,
+          base: targetHead,
+          candidate: commit,
+          changedFiles: changed,
+          logPath,
+        });
+        for (const owner of devLanding.owners) this.options.fence.assertCurrent(owner.entry.request);
+        if (!this.controlPlaneSnapshotMatches(devLanding.snapshot)) return { moved: true };
+        if (transpiled.outcome === 'diagnostic') {
+          const location = transpiled.diagnostic?.file;
+          const owner =
+            (location
+              ? devLanding.owners.find((item) =>
+                  item.changedFiles.some((path) => resolve(tree, path) === resolve(location)),
+                )
+              : undefined) ?? devLanding.owners[0]!;
+          return {
+            transpileHandoff: transpileHandoff(
+              owner.entry,
+              owner.sourceCommit,
+              changed,
+              transpiled,
+            ),
+          };
+        }
+        if (transpiled.outcome === 'unavailable') {
+          this.recordUnavailableDevTranspile(devLanding.owners[0]!.entry.request, transpiled);
+          throw new LandingTranspileUnavailableError(transpiled);
+        }
+        return {
+          commit,
+          ...(transpiled.outcome === 'passed' ? { devTranspile: devTranspileEvidence(transpiled) } : {}),
+        };
+      }
+      return { commit };
     } finally {
       try {
         this.git(this.options.mainCheckout, 'worktree', 'remove', '--force', tree);
@@ -7061,6 +7364,7 @@ export class MergeTrain {
 
   private prepareControlPlaneRelease(
     request: LandingRequest,
+    owners: readonly DevLandingSourceOwner[],
     snapshot: ControlPlaneReleaseSnapshot,
     candidate: string,
     lifecycleEvidence: string,
@@ -7072,13 +7376,15 @@ export class MergeTrain {
     sourceBranch?: string;
     targetBranch?: string;
     cause?: string;
+    transpileHandoff?: DevLandingTranspileHandoff;
+    devTranspile?: GateOutcome['devTranspile'];
   } {
     if (!this.controlPlaneSnapshotMatches(snapshot)) return {};
     let stabilizeCommit: string | undefined;
     let devSource = candidate;
     let sourceBranch = snapshot.mainBranch;
     if (snapshot.stabilizeHead) {
-      const stable = this.mergeControlPlaneCandidate(
+      const stable = await this.mergeControlPlaneCandidate(
         candidate,
         snapshot.mainBranch,
         snapshot.stabilizeBranch,
@@ -7102,7 +7408,16 @@ export class MergeTrain {
       );
     }
 
-    const dev = this.mergeControlPlaneCandidate(devSource, sourceBranch, snapshot.devBranch, snapshot.devHead, logPath);
+    const dev = await this.mergeControlPlaneCandidate(
+      devSource,
+      sourceBranch,
+      snapshot.devBranch,
+      snapshot.devHead,
+      logPath,
+      { owners, snapshot },
+    );
+    if (dev.moved) return {};
+    if (dev.transpileHandoff) return { transpileHandoff: dev.transpileHandoff };
     if (!dev.commit)
       return {
         ...(dev.conflicts ? { conflicts: dev.conflicts } : {}),
@@ -7133,7 +7448,10 @@ export class MergeTrain {
       `Prepared control-plane release candidate=${candidate} dev-script-tree=${snapshot.devHead}` +
         `${stabilizeCommit ? ` stabilize=${stabilizeCommit}` : ''} dev=${dev.commit}\n`,
     );
-    return { prepared: { snapshot, record } };
+    return {
+      prepared: { snapshot, record },
+      ...(dev.devTranspile ? { devTranspile: dev.devTranspile } : {}),
+    };
   }
 
   private publishControlPlaneRelease(prepared: PreparedControlPlaneRelease): boolean {
