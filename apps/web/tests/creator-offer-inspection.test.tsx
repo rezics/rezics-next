@@ -128,6 +128,7 @@ describe('exact owned offer and captured terms inspection', () => {
         const trigger = page.button(m.creator_inspect_open(), row);
         await act(async () => user.click(trigger));
         const panel = page.inspect()!;
+        expect(panel.id).toBe('creator-offer-inspection');
         expect(panel.querySelector('h2')?.textContent).toBe(sameTitle);
         expect(document.activeElement).toBe(panel.querySelector('h2'));
         expect(panel.textContent).toContain(offer.id);

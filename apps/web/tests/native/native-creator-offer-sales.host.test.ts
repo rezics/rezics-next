@@ -161,7 +161,9 @@ test('creator publishes an eligible edition offer, finds it on the Subject, revi
   await ready(creatorPage);
   await creatorPage.getByRole('heading', { name: 'Your offers' }).waitFor();
   expect(await creatorPage.getByText(edition.title, { exact: true }).count()).toBeGreaterThan(0);
-  await creatorPage.getByRole('button', { name: 'Inspect captured terms' }).click();
+  await creatorPage
+    .getByRole('button', { name: `Inspect ${edition.title}, offer ${offerId}, revision 1` })
+    .click();
   await creatorPage.locator('#creator-offer-inspection').waitFor();
   await screenshot(creatorPage, 'creator-offer-inspect-en-1440-light.png');
   await creatorPage.getByRole('button', { name: 'Manage price or delist' }).click();

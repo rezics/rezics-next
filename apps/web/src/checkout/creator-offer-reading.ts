@@ -1,6 +1,9 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { CreatorOffer, CreatorOfferGuard, CreatorOffersData } from './creator-offers';
 import { offerReviewStatus, sameOfferObservation } from './creator-offer-review/observation';
+
+/** One captured-terms panel per received page, matching the sales inspection landmark. */
+export const CREATOR_OFFER_INSPECTION_ID = 'creator-offer-inspection';
 
 type Selection = {
   observed: CreatorOffer;
@@ -16,7 +19,7 @@ type ReadingProps = {
 
 /** Local reading state lives beneath the existing current-origin boundary, outside command memory. */
 export function useCreatorOfferReading({ page, locale, cursor, guard }: ReadingProps) {
-  const inspectionId = useId();
+  const inspectionId = CREATOR_OFFER_INSPECTION_ID;
   const [scope, setScope] = useState(() => ({ locale, cursor, guard }));
   const [selection, setSelection] = useState<Selection | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
