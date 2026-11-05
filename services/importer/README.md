@@ -84,11 +84,11 @@ Source dates cite the exact subject, follow its selected Book, Game, music or li
 
 ### Bangumi Person names, biographies and careers
 
-Type-1 Person keeps `person:<id>` identity. Top-level `name`→`und`; `name_cn` or exact parsed PersonDetail `简体中文名`→`zh`. Conflicting, malformed or over-bound Chinese evidence withholds only `zh`; exact source text enters the digest, not HTTP cache validators. A nonempty summary becomes attributed `schema:abstract`; birth dates use supported PersonDetail integers.
+Type-1 Person keeps `person:<id>`; `name`→`und`, `name_cn` or exact PersonDetail infobox key `简体中文名`→`zh`. Ambiguous, malformed or over-bound Chinese evidence withholds only `zh`; exact text enters the digest, not cache validators. Nonempty summaries are attributed `schema:abstract`; dates use supported PersonDetail integers.
 
-Career strings normalize only for an actual type-1 Person, at most seven values. The vocabulary mapper alone emits `wdt:P106`, for that Person at exact `person:<id>`, with source-owned careers Scheme, exact current bound Concept, released property and exact Person `#/career` citation. The pure converter emits none; source Concepts assert no canonical occupation or cross-provider equivalence. Valid items survive malformed neighbors; empty, unknown, malformed or Organization cases yield no unsupported occupation. Identity, biography, credits and career citations stay independent.
+Careers normalize to at most seven strings. Only the vocabulary mapper emits `wdt:P106` for the actual Person and exact `person:<id>`, with source-owned careers Scheme, current bound Concept, released property and exact `#/career` citation. The pure converter emits none; source Concepts claim no canonical occupation or cross-provider equivalence. Valid items survive malformed neighbors; empty, unknown, malformed or Organization cases yield no unsupported occupation. Identity, biography, credits and career citations stay independent.
 
-Ordinary Bangumi dumps use JSONL. Alias `bangumi_cross_media` also accepts five-column PersonDetail TSV: `/type/person`, `person:<id>`, `unversioned`, ETag-or-empty, exact JSON body. Requested ID and type must match the actual Person; ETag is cache metadata, never a source revision.
+Ordinary Bangumi dumps use JSONL. Alias `bangumi_cross_media` also accepts five-column PersonDetail TSV: `/type/person`, `person:<id>`, `unversioned`, ETag-or-empty, JSON body. Requested ID and type must match the actual Person; ETag is cache metadata, not a revision.
 
 The career feature review retains its original identities cross-media-entities@12, bangumi-vocabulary@3 and source-vocabulary@3 as history. The current source registration uses the checked-in exports above. When the archive omits career data, only the separately authorized local showcase may use the fallback described under [Explicit local showcase publication](#explicit-local-showcase-publication).
 
@@ -104,9 +104,9 @@ Showcase inputs are bounded by the selected work/person graph, with no label/cat
 
 ### Bangumi Person career acquisition
 
-Archive careers, including empty or malformed values, win. Fetch PersonDetail only for a selected actual Person missing career, birth-date fields or an admitted Chinese name; one response also serves creator-image evidence. At most 64 selected Persons and requests per provider/acquisition, sequentially spaced 250 ms under the shared deadline; each ≤64 KiB response must identify the Person and contain ≤7 bounded careers. Invent no archive revision.
+Archive careers, including empty or malformed values, win. Fetch only selected actual Persons missing career, birth-date fields or an admitted Chinese name; share a response with creator-image evidence. At most 64 Persons/requests per provider/acquisition, spaced 250 ms under the shared deadline; each ≤64 KiB response must identify the Person and contain ≤7 bounded careers. Invent no archive revision.
 
-The immutable journal receipt binds exact GET `https://api.bgm.tv/v0/persons/{id}`, archive digest, response SHA-256 and optional ETag; restart reuses it. Missing, malformed or unavailable data withholds only dependent P106, birth-date or Chinese-name facts; identity, biography and credits stay independent. Admission uses the exact Person, Scheme, Concept and P106 mapping above.
+The immutable receipt binds exact GET `https://api.bgm.tv/v0/persons/{id}`, archive digest, response SHA-256 and optional ETag; restart replays it. Missing, malformed or unavailable data withholds dependent P106, birth-date or Chinese-name facts only; identity, biography and credits stay independent. Admission uses the exact Person, Scheme, Concept and P106 mapping above.
 
 ### Media rights and replay
 
@@ -206,7 +206,7 @@ One selected Character; at most 16 preferred names, 64 aliases and 85 commands. 
 
 ### Bangumi PersonDetail name import
 
-At most 64 selected Persons/provider and 64 shared responses/acquisition; each TSV body or response ≤65,536 bytes. One actual Person yields at most two name proposals; infobox ≤64 entries, each name ≤4,096 UTF-8 bytes/500 codepoints, with ≤16 diagnostics. No graph roots or identity lookup.
+At most 64 selected Persons and 64 shared responses/provider/acquisition; TSV body or response ≤65,536 bytes. One Person yields at most two name proposals; infobox ≤64 entries, names ≤4,096 UTF-8 bytes/500 codepoints and ≤16 diagnostics. No graph roots or identity lookup.
 
 ### Import Open Library Work first publication date
 
