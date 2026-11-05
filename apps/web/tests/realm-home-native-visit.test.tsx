@@ -354,13 +354,16 @@ async function settle(action: () => void) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
+function controls() {
+  return [...host.querySelectorAll('button, a')].map((control) => control.textContent);
+}
 const target = { kind: 'space' as const, address: 'realm' };
 function capture() {
   return captureSpacePageAdmission(client, { target, locale: 'en', credentialMode: 'session' });
 }
 async function paint(page: SpacePageData, source = operations, admission?: SpacePageAdmission) {
   const content = <SpacePage page={page} nativeOperations={source} />;
-  client.setQueryData(sessionModule.sessionQuery.queryKey, session);
+  if (!admission) client.setQueryData(sessionModule.sessionQuery.queryKey, session);
   await settle(() =>
     root.render(
       <Frame.Provider
@@ -436,18 +439,18 @@ test('unavailable, refused and empty Realm advice never hide public reading or i
   expect(host.textContent).toContain('Native Realm');
   expect(host.textContent).toContain(m.realm_membership_unavailable());
   expect(host.textContent).toContain(m.realm_membership_retry());
-  expect(host.textContent).not.toContain(m.realm_join());
+  expect(controls()).not.toContain(m.realm_join());
 
   joinAdvice = { state: 'refused' };
   await paint(await readNativeRealmHome(operations, input));
   expect(host.textContent).toContain(m.realm_membership_advice_refused());
-  expect(host.textContent).not.toContain(m.realm_join());
+  expect(controls()).not.toContain(m.realm_join());
   expect(host.querySelector('a[href*="auth/sign-in"]')).toBeNull();
 
   joinAdvice = { state: 'current', allowed: false };
   await paint(await readNativeRealmHome(operations, input));
   expect(host.textContent).toContain(m.realm_native_access_denied());
-  expect(host.textContent).not.toContain(m.realm_join());
+  expect(controls()).not.toContain(m.realm_join());
   expect(host.textContent).toContain(m.realm_published_empty());
 });
 
@@ -557,13 +560,13 @@ test('member actions use current native advice while denied participation and or
   expect(host.textContent).toContain(m.realm_state_member());
   expect(host.textContent).toContain(m.realm_leave());
   expect(host.textContent).toContain(m.community_manage());
-  expect(host.textContent).not.toContain(m.realm_join());
+  expect(controls()).not.toContain(m.realm_join());
 
   native = fixture(0, 'none', { participation: 'denied' });
   await paint(await readNativeRealmHome(operations, input));
   expect(host.textContent).toContain(m.realm_native_access_denied());
-  expect(host.textContent).not.toContain(m.realm_join());
-  expect(host.textContent).not.toContain(m.realm_leave());
+  expect(controls()).not.toContain(m.realm_join());
+  expect(controls()).not.toContain(m.realm_leave());
 
   native = fixture(0, 'none', { orphaned: true });
   const orphaned = await readNativeRealmHome(operations, input);
