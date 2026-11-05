@@ -101,7 +101,7 @@ try {
   // The complete composition may report an unavailable private list; catalogue reads remain independently testable.
   const seedLog = Bun.file(resolve(privateLogs, 'seed.log'));
   const seedDescriptor = openSync(seedLog.name!, 'a', 0o600);
-  const seed = Bun.spawn(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], {
+  const seed = Bun.spawn(['bun', '--eval', 'await (await import("./scripts/datasets/cross-media-seed.ts")).runDevelopmentSeed()'], {
     cwd: root, env: { ...env, ...seedEnv }, stdout: seedDescriptor, stderr: seedDescriptor,
   });
   const seedCode = await seed.exited;
