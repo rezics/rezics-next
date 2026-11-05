@@ -78,6 +78,7 @@ export async function readMemberList(
   client: KernelClient,
   input: MemberListRequest,
   authorization?: string,
+  signal?: AbortSignal,
 ): Promise<Section> {
   const response = await client.pages.$read.post(
     {
@@ -86,7 +87,7 @@ export async function readMemberList(
       ...(input.cursor ? { continuation: { node: input.node, cursor: input.cursor } } : {}),
     },
     {
-      fetch: { redirect: 'manual' },
+      fetch: { redirect: 'manual', signal },
       ...(authorization ? { headers: { authorization } } : {}),
     },
   );
@@ -234,11 +235,11 @@ export const loadMemberList = createServerFn({ method: 'GET', strict: false })
   })
   .handler(async ({ data }): Promise<Section> => {
     setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
     let authorization: string | undefined;
     if (data.expectedReader !== null) {
       const { env } = await import('cloudflare:workers');
       const { prepareSession, sessionSubject, viewerCredential } = await import('../../session/request');
-      const request = getRequest();
       await prepareSession(request, env as Partial<SessionEnv>);
       const credential = viewerCredential(request);
       const reader = credential
@@ -252,5 +253,5 @@ export const loadMemberList = createServerFn({ method: 'GET', strict: false })
       authorization = credential ?? undefined;
     }
     const { kernelClient } = await import('../../kernel/client');
-    return readMemberList(kernelClient(data.locale), data, authorization);
+    return readMemberList(kernelClient(data.locale), data, authorization, request.signal);
   });

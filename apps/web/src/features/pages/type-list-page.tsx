@@ -106,17 +106,12 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   const admission: TypeListAdmissionInput = {
     state,
     ...(expectedReader !== undefined ? { expectedReader } : {}),
-    incarnation,
+    incarnation: reader.incarnation,
     mode,
   };
-  const options = typeListQuery(
-    locale,
-    list,
-    page,
-    cursor,
-    admission,
-    selectedRealm ? { isCurrent: () => reader.current(incarnation) } : undefined,
-  );
+  const options = typeListQuery(locale, list, page, cursor, admission, {
+    isCurrent: () => reader.current(reader.incarnation),
+  });
   const loaderResult =
     (!selectedRealm || state !== 'unavailable') &&
     requestMatches &&
@@ -166,7 +161,7 @@ export function ConfiguredList({ list, page, cursor, locale, initialData }: Conf
   }, [retryController]);
   useLayoutEffect(() => retryController.select(retryOwner));
 
-  if (selectedRealm) reader.registerQuery('configured-list', queryKey);
+  reader.registerQuery('configured-list', queryKey);
   const query = useQuery({
     ...options,
     enabled:

@@ -175,7 +175,10 @@ const readTypeList = createServerFn({ method: 'GET', strict: false })
         languages: requestLanguages(data.locale),
         ...(data.cursor !== undefined ? { continuation: { node: data.node, cursor: data.cursor } } : {}),
       },
-      authorization ? { fetch: { redirect: 'manual' }, headers: { authorization } } : { fetch: { redirect: 'manual' } },
+      {
+        fetch: { redirect: 'manual', signal: request.signal },
+        ...(authorization ? { headers: { authorization } } : {}),
+      },
     );
     if (result.status === 404) throw notFound();
     if (result.status === 308) {
@@ -259,7 +262,17 @@ export const typeListQuery = (
         ? ['anonymous']
         : ['reader', expectedReader];
   return queryOptions({
-    queryKey: ['configured-type-list', locale, node, page, cursor ?? null, state, expectedReaderKey, mode, incarnation],
+    queryKey: [
+      'configured-type-list',
+      locale,
+      node,
+      page,
+      cursor ?? null,
+      state,
+      expectedReaderKey,
+      mode,
+      admission.incarnation,
+    ],
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -274,6 +287,7 @@ export const typeListQuery = (
       let result: TypeListQueryResult;
       try {
         result = await readTypeList({
+          signal,
           data: {
             locale,
             node,

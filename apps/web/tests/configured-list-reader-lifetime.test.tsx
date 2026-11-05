@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { Component, act, createElement, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
+import { createKernelClient } from '@rezics/client';
 import type { CompositionDocument, SelectedContext } from '@rezics/composition';
 import type { TypeListTarget } from '../src/features/pages/type-list-model';
 import type { TypeListQueryResult } from '../src/features/pages/type-list-query';
@@ -33,6 +34,7 @@ let responseNode = '';
 const nativeReads: Array<{
   body: { target: TypeListTarget; languages: string[]; continuation?: { node: string; cursor: string } };
   authorization?: string;
+  signal: AbortSignal;
   node: string;
   work: Deferred<unknown>;
 }> = [];
@@ -64,7 +66,22 @@ function requestFor(reader: string): Request {
   });
 }
 
-mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start', () => ({
+  ...start,
+  createServerFn: () => {
+    const chain = start.createServerFn();
+    const handler = chain.handler;
+    chain.handler = ((fn: Parameters<typeof handler>[0]) => {
+      const invoke = handler(fn);
+      return (input: { signal?: AbortSignal }) => {
+        // Model the server-function HTTP request, carrying the caller's signal to the BFF.
+        currentRequest = new Request(currentRequest, { signal: input.signal });
+        return invoke(input as never);
+      };
+    }) as typeof handler;
+    return chain;
+  },
+}));
 mock.module('@tanstack/react-start/server', () => ({
   ...start,
   getRequest: () => currentRequest,
@@ -74,25 +91,23 @@ mock.module('cloudflare:workers', () => ({ env }));
 // The only controlled boundary is the delayed native page response; server validation, session preparation,
 // query keys, render admission and mounted reader lifetime stay real.
 mock.module('../src/kernel/client', () => ({
-  kernelClient: () => ({
-    pages: {
-      $read: {
-        post: (
-          body: { target: TypeListTarget; languages: string[]; continuation?: { node: string; cursor: string } },
-          options?: { headers?: { authorization?: string } },
-        ) => {
-          const work = deferred<unknown>();
-          nativeReads.push({
-            body,
-            authorization: options?.headers?.authorization,
-            node: body.continuation?.node ?? responseNode,
-            work,
-          });
-          return work.promise;
-        },
+  kernelClient: () =>
+    createKernelClient('https://kernel.test', {
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        const body = (await request.json()) as (typeof nativeReads)[number]['body'];
+        const work = deferred<unknown>();
+        nativeReads.push({
+          body,
+          authorization: request.headers.get('authorization') ?? undefined,
+          signal: request.signal,
+          node: body.continuation?.node ?? responseNode,
+          work,
+        });
+        const reply = (await work.promise) as { status: number; data: unknown };
+        return Response.json(reply.data, { status: reply.status });
       },
-    },
-  }),
+    }),
 }));
 
 class ErrorBoundary extends Component<{ children: ReactNode; onError: (error: unknown) => void }, { failed: boolean }> {
@@ -108,7 +123,6 @@ class ErrorBoundary extends Component<{ children: ReactNode; onError: (error: un
   }
 }
 
-// UNRUN: mounted reader replacement, ABA and native redirect regression for controller integration.
 test('configured full lists retire private reads across reader, target, node, cursor and ABA while public SSR stays current', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -281,6 +295,8 @@ test('configured full lists retire private reads across reader, target, node, cu
       root.render(createElement(QueryClientProvider, { client }, createElement(Surface)));
     });
     await until(() => nativeReads.length === 2, 'replacement Realm read');
+    expect(nativeReads[0]!.signal.aborted).toBe(true);
+    expect(nativeReads[1]!.signal.aborted).toBe(false);
     expect(nativeReads[1]!.authorization).toBe('Bearer reader-b-token');
     expect(nativeReads[1]!.body.target).toEqual({ subject: subjectB, realm: realmB });
     expect(nativeReads[1]!.body.continuation).toEqual({ node: 'books-b', cursor: cursorB });
@@ -293,6 +309,7 @@ test('configured full lists retire private reads across reader, target, node, cu
       root.render(createElement(QueryClientProvider, { client }, createElement(Surface)));
     });
     await until(() => nativeReads.length === 3, 'fresh A admission after ABA');
+    expect(nativeReads[1]!.signal.aborted).toBe(true);
     expect(nativeReads[2]!.authorization).toBe('Bearer reader-a-token');
     expect(nativeReads[2]!.body.continuation).toEqual({ node: 'books-a', cursor: cursorA });
 
@@ -360,6 +377,20 @@ test('configured full lists retire private reads across reader, target, node, cu
     });
     expect(nativeReads).toHaveLength(6);
     expect(host.textContent).toContain('Public SSR');
+    expect(errors).toHaveLength(0);
+
+    // Public visits also retire, and returning to the exact address starts fresh native work.
+    config = { ...config, cursor: 'public-next' };
+    await render();
+    await until(() => nativeReads.length === 7, 'public continuation');
+    await act(async () => root.render(null));
+    expect(nativeReads[6]!.signal.aborted).toBe(true);
+    await render();
+    await until(() => nativeReads.length === 8, 'fresh public return');
+    expect(nativeReads[7]!.signal.aborted).toBe(false);
+    await act(async () => nativeReads[6]!.work.resolve({ status: 308, data: { redirect: { to: 'obsolete' } } }));
+    await act(async () => nativeReads[7]!.work.resolve(pageResponse(nativeReads[7]!, 'Fresh public rows')));
+    await until(() => host.textContent?.includes('Fresh public rows') ?? false, 'fresh public rows');
     expect(errors).toHaveLength(0);
   } finally {
     await act(async () => root.unmount());
