@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { RELEASE_FORMAT, type Release } from '@rezics/definitions';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
+import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
@@ -190,16 +191,28 @@ beforeAll(async () => {
   personas = await createPersonas(kernel, { version: 1, pool, auth });
   for (const group of ['purchases', 'selling'])
     await accepted(personas.staff, `/v1/platform/exposure/${group}:open`, {});
-  for (const [resource, actions] of [
-    [PLATFORM_RESOURCE, ['offer:create']],
-    [{ route: 0, id: GLOBAL_CONTEXT }, ['subject:create']],
-  ] as const)
-    await accepted(personas.staff, '/v1/grants', {
-      resource,
+  const grants = createGrantCommands({ pool, access: kernel.testAccess, managementAction: 'access:grant' });
+  const grantor = await kernel.testAccess.authenticate(personas.staff.bearer, { pool, deadline: Date.now() + 30_000 });
+  await grants.create(
+    { pool, actor: grantor, deadline: Date.now() + 30_000 },
+    {
+      resource: PLATFORM_RESOURCE,
       subject: { kind: 'account', id: personas.staff.accountId },
-      actions,
+      actions: ['offer:create'],
       valid: '(,)',
-    });
+      key: Bun.randomUUIDv7(),
+    },
+  );
+  await grants.create(
+    { pool, actor: grantor, deadline: Date.now() + 30_000 },
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: personas.staff.accountId },
+      actions: ['subject:create'],
+      valid: '(,)',
+      key: Bun.randomUUIDv7(),
+    },
+  );
   await bootstrapRelease(pool, targetRelease);
   targetSubjectId = (
     await accepted(personas.staff, '/v1/subjects', { type: 'schema:Book', labels: { en: 'Commerce erasure book' } })
