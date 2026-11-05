@@ -188,3 +188,30 @@ test('refused submitted-marker persistence sends no execution', async () => {
     Object.defineProperty(window, 'sessionStorage', descriptor);
   }
 });
+test('timeout after dispatch retains submitted hints and sends no automatic retry', async () => {
+  const page = await open(<DeleteAccountContent {...props} initial={initial} />, body);
+  await submit(page.host);
+  const setTimer = globalThis.setTimeout;
+  let expire: (() => void) | undefined;
+  const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms: number) => {
+    if (ms === 5000) {
+      expire = fn;
+      return setTimer(() => {}, ms);
+    }
+    return setTimer(fn, ms);
+  }) as typeof setTimeout);
+  try {
+    await flush(() => page.calls[0]!.resolve(approval()));
+    const saved = readPendingAccountOperationStepUp()!;
+    expect(saved.submitted).toBe(true);
+    await flush(() => expire!());
+    expect(page.calls).toHaveLength(2);
+    expect(readPendingAccountOperationStepUp()).toEqual(saved);
+    expect(page.host.querySelector('[data-account-deletion-return="unknown"]')).not.toBeNull();
+    await flush(() => page.calls[1]!.resolve(Response.json({ accountId: initial.accountId })));
+    expect(page.host.querySelector('[data-account-deletion-return="acknowledged"]')).toBeNull();
+    expect(page.calls).toHaveLength(2);
+  } finally {
+    timer.mockRestore();
+  }
+});
