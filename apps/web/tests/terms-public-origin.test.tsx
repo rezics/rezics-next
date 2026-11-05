@@ -166,7 +166,8 @@ test('mounted public entry and menu gate the production Terms session until a de
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const { m } = await import('../src/paraglide/messages.js');
   const testRequire = createRequire(import.meta.url);
-  const { within, waitFor } = await import(testRequire.resolve('@testing-library/dom'));
+  const storybookRequire = createRequire(testRequire.resolve('storybook/test'));
+  const { within, waitFor } = await import(storybookRequire.resolve('@testing-library/dom'));
   const previousLocale = getLocale();
   setLocale(locale, { reload: false });
 
