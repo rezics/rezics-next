@@ -63,11 +63,19 @@ identities and older captures identify inputs; they do not establish current pub
 
 The focused mounted-contract command is
 `bun apps/web/scripts/focused.ts --private-network -- bun test tests/concept-tagged-works.test.ts`.
-At `94ea99ede91ab0c3ef612eeef694e2d95379432d` it passed six tests and 54 assertions; this is source regression evidence.
+It passed six tests and 54 assertions on the first retained revision. On integrated revision
+`b0fc206e80d868a6c607f6d0eff22ffe8af17710`, the controller also returned exit zero for the prescribed local worker-check
+fallback; direct focused execution refused an unintegrated Performance snapshot. This is source regression evidence.
+
 The retained local stack served `580cb1000be3ce3962688375782e355901cfa7d0`. Anonymous native reads of VNDB `v2002`
 (`01a1a8fe-b84b-749c-a651-806639d32394`) and Bangumi `10380` (`01a1a8f0-7edf-77a4-899b-f42edb681fd8`) returned
 empty statements. The hydrated VN entry displayed unavailable tag evidence. Exact Science Fiction tag Search returned
-`503 index_not_ready`; configured OpenSearch was absent and documented startup refused worker execution after two retries.
+`503 index_not_ready`; configured OpenSearch was absent. A fresh retry confirmed the bare worker-container refusal.
+The newly documented approved `dev-stack.ts walk` path was then tried without changing the retained stack. Two launches
+failed to bind PostgreSQL on allocated slot ports `20034` and `20024`, already held by other walk tasks; their containers
+were preserved and the shared allocation failure was escalated. The second launch log is retained at
+`.temp/path7/attempt2/retry2.log`.
+
 Local native/browser acceptance remains incomplete: no exact/descendant parity, counts, continuation, editor readback
 or all-persona pass is established. No promoted acceptance is claimed.
 
