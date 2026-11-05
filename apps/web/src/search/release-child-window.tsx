@@ -96,6 +96,8 @@ export function ReleaseChildWindow({
   const current = (request: AbortController) => owner.mounted && owner.read.current() && !request.signal.aborted;
 
   useLayoutEffect(() => {
+    // Keep dispatch captured until the settled view is committed, even for an immediately resolved transport.
+    if (view.status !== 'loading') pending.current = null;
     if (!open || !visible) focus.current = null;
     if (view.status === 'loading' || !focus.current) return;
     const source = focus.current;
@@ -127,7 +129,6 @@ export function ReleaseChildWindow({
     }
     owner.requests.delete(request);
     if (pending.current !== request) return;
-    pending.current = null;
     if (!current(request)) return;
     if (result.status === 'ready' || result.status === 'preparing') {
       const history = view.history.includes(token) ? view.history : [...view.history, token];

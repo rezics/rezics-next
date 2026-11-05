@@ -757,6 +757,12 @@ test('current release visits retire pending windows and bound cursor progress wi
     await render(); // Equivalent values keep the same deliberate expansion and accepted window.
     expect(group().querySelector('details')!.open).toBe(true);
     expect(group().querySelectorAll('ul > li')).toHaveLength(20);
+    button()!.focus();
+    await click();
+    const elsewhere = host.querySelector('[name="q"]') as HTMLInputElement;
+    elsewhere.focus();
+    await complete(ready('second', 20));
+    expect(window.document.activeElement).toBe(elsewhere);
     for (const replace of [
       () => {
         currentParsed = parseReleaseSearch({ ...parsed.form, q: 'B' }, bundledRelease, locale);
@@ -781,7 +787,9 @@ test('current release visits retire pending windows and bound cursor progress wi
     ]) {
       await click();
       const pending = deferred.at(-1)!;
-      replace();
+      await act(async () => {
+        replace();
+      });
       await render();
       expect(pending.signal?.aborted).toBe(true);
       expect(group().textContent).not.toContain('Current edition');
@@ -832,6 +840,18 @@ test('current release visits retire pending windows and bound cursor progress wi
       expect(group().textContent?.includes('Current edition')).toBe(status === 'unavailable');
       expect(button() !== null).toBe(status === 'unavailable');
     }
+    let immediateCalls = 0;
+    readChildren = async () => {
+      immediateCalls++;
+      return ready('immediate');
+    };
+    await act(async () => {
+      button()!.click();
+      await Promise.resolve();
+      button()?.click();
+    });
+    expect(immediateCalls).toBe(1);
+    readChildren = (input) => new Promise((resolve) => deferred.push({ resolve, signal: input.signal }));
     await click();
     const pending = deferred.at(-1)!;
     await act(async () => root.unmount());
