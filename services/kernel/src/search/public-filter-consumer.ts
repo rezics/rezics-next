@@ -3,6 +3,8 @@ import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } fro
 import {
   joinNativePublicFilterRepair,
   readNativePublicFilterRepairStart,
+  readNativePublicFilterPublicationCompletion,
+  type NativePublicFilterPublicationCompletion,
 } from '../semantic/public-filter-source-binding.ts';
 import repairSave from './public-filter-custody-repair-save.sql';
 import repairCurrent from './public-filter-custody-repair-current.sql';
@@ -742,6 +744,29 @@ function locatorHome(locator: string): number {
   return Number(matched[1]);
 }
 
+type NativeGenerationInput = Readonly<{
+  job: string;
+  consumer: PublicFilterConsumer;
+  capture: PublicFilterConsumerCaptureInput;
+  observation?: string;
+}>;
+const generationSources = new WeakMap<PublicDiscoveryConsumerOperations,
+  (input: NativeGenerationInput, context: PublicFilterConsumerContext) => Promise<NativePublicFilterPublicationCompletion | PublicFilterConsumerUnavailable>>();
+
+/** Advance the existing native preparation/repair owner; this grants no serving authority. */
+export async function advanceNativeGenerationSource(
+  config: Parameters<PublicFilterConsumerOperationsFactory>[0],
+  input: NativeGenerationInput,
+  context: PublicFilterConsumerContext,
+) {
+  const operations = await createPublicFilterConsumerOperations(config);
+  try {
+    return await generationSources.get(operations)!(input, context);
+  } finally {
+    await operations.close();
+  }
+}
+
 /** Native Source and Search custody are injected; construction performs no Source or engine I/O. */
 export const createPublicFilterConsumerOperations: PublicFilterConsumerOperationsFactory = async (config) => {
   if (!config.pool || !config.source || !config.binding || typeof config.clock !== 'function' || !config.search)
@@ -1458,6 +1483,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     m: Meter,
     context: PublicFilterConsumerContext,
     page?: Page,
+    publication?: PublicFilterConsumer,
   ): Promise<PublicFilterConsumerCapture> {
     if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
     let recovery = m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
@@ -1548,6 +1574,11 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         if (prepared.status !== 'retained') return m.unavailable('observation_lost');
         work.queried = prepared.queried;
         encoded = await save(work, encoded, true, m);
+        if (publication) {
+          const closed = m.take(await custody.closeObservation(q, config.search, context));
+          if (closed.status !== 'closed') return m.unavailable('observation_lost');
+          owned.delete(q.snapshot.observation);
+        }
         owned.set(prepared.queried.snapshot.observation, prepared.queried);
       } finally {
         m.add((await custody.release(acquired.use, context)).cost);
@@ -1555,7 +1586,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     const q = work.queried!;
     await physical(q, m, context);
-    if (!work.adopted) {
+    if (!work.adopted && !publication) {
       const recovered = m.take(await binding.recover({ bootstrap: work.bootstrap.id }, context));
       if (recovered.status === 'pending') return { status: 'preparing', repair: job, cost: m.cost };
       if (recovered.status !== 'begun' && recovered.status !== 'adopted') return m.unavailable('source_pending');
@@ -1581,6 +1612,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       [work.registration.partition, work.registration.id, encoded],
     );
 
+    if (publication) return { status: 'captured', queried: q, repair: job, cost: m.cost };
     try {
       const joined = await join(q, undefined, m, context);
       if (!isDeepStrictEqual(joined.covered, work.bootstrap.covered)) return m.unavailable('observation_lost');
@@ -1604,6 +1636,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     snapshot: 'pit' | 'prepared',
     context: PublicFilterConsumerContext,
     page?: Page,
+    publication?: PublicFilterConsumer,
   ): Promise<PublicFilterConsumerCapture> {
     const m = page?.m ?? meter(context);
     if (snapshot !== 'pit' && snapshot !== 'prepared') throw new TypeError('Unknown immutable snapshot kind');
@@ -1636,7 +1669,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           {
             definition: resolved.definition,
             physicalTarget: target,
-            consumerGeneration: resolved.definition.source.configuration,
+            consumerGeneration: publication?.consumerGeneration ?? resolved.definition.source.configuration,
             projectionGeneration: resolved.definition.readDefinition,
             catalogue: null,
           },
@@ -1653,7 +1686,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         )
       ).rows[0];
       if (old?.consumer_work)
-        return advanceCapture(decodeState<ConsumerWork>(old.consumer_work), old.consumer_work, m, context, page);
+        return advanceCapture(decodeState<ConsumerWork>(old.consumer_work), old.consumer_work, m, context, page, publication);
       if (!bootstrapBinding(binding)) return m.unavailable('source_pending');
       const preparation = {
         source: config.source,
@@ -1700,7 +1733,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
           },
           cost: m.cost,
         };
-      return await advanceCapture(work, encoded, m, context, page);
+      return await advanceCapture(work, encoded, m, context, page, publication);
     } catch (error) {
       return failure(error, m);
     }
@@ -2451,6 +2484,81 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       })());
     },
   };
+  generationSources.set(operations, async (input, context) => {
+    const m = meter(context);
+    try {
+      const original = await readNativePublicFilterPublicationCompletion(binding, { job: input.job }, context);
+      m.add(original.cost);
+      if ('publication' in original) {
+        if (original.status === 'pending') {
+          const repair = await repairStep({ consumer: input.consumer,
+            job: original.publication.queried.snapshot.observation }, context);
+          m.add(repair.cost);
+        }
+        return { ...original, cost: m.cost };
+      }
+      const { readGenerationPublicationCustody } = await import('./public-filter-custody.ts');
+      const retained = m.take(await readGenerationPublicationCustody(
+        config.pool, input.consumer, 0, context, input.observation,
+      ));
+      if (!('definition' in retained)) return m.unavailable('registration_missing');
+      let q = retained.queried;
+      const preparing = await m.sql<{ consumer_work: string | null }>(
+        'SELECT consumer_work FROM search.public_filter_registration WHERE (partition_no,id)=($1,$2)',
+        [retained.registration.partition, retained.registration.id],
+      );
+      if (!q || q.snapshot.kind !== 'prepared' || preparing.rows[0]!.consumer_work) {
+        const capture = await capturePlan(input.capture, 'prepared', context, undefined, input.consumer);
+        m.add(capture.cost);
+        if (capture.status !== 'captured') return m.unavailable('source_pending');
+        q = capture.queried;
+      }
+      const job = { consumer: input.consumer, job: q.snapshot.observation };
+      const loaded = await load(job, m);
+      const work = loaded.work;
+      if (!work.execution) {
+        // The job UUID is the stable execution locator even if append/save loses its reply.
+        const existing = await m.sql(
+          'SELECT id FROM search.public_filter_execution WHERE partition_no=$1 AND observation=$2 AND id=$3',
+          [work.registration.partition, q.snapshot.observation, input.job],
+        );
+        if (!existing.rowCount) {
+          const acquired = m.take(await custody.acquire(q, context));
+          if (acquired.status !== 'acquired') return m.unavailable('observation_lost');
+          try {
+            const started = await readNativePublicFilterRepairStart(binding, {
+              bootstrap: work.bootstrap.id, queried: q,
+            }, context);
+            if (!started) return m.unavailable('source_pending');
+            m.add(started.cost);
+            const appended = m.take(await custody.appendExecution({
+              use: acquired.use, execution: { id: input.job, start: started.start, ownRows: [] },
+            }, context));
+            if (appended.status !== 'appended') return m.unavailable('observation_lost');
+          } finally {
+            m.add((await custody.release(acquired.use, context)).cost);
+          }
+        }
+        work.execution = input.job;
+        await save(work, loaded.encoded, false, m);
+      }
+      // Source commits the immutable tuple before any repair dispatch or adoption.
+      const completion = await readNativePublicFilterPublicationCompletion(binding, {
+        job: input.job, bootstrap: work.bootstrap.id, queried: q, execution: work.execution,
+      }, context);
+      m.add(completion.cost);
+      if (completion.status === 'pending') {
+        const repair = await repairStep(job, context);
+        m.add(repair.cost);
+      }
+      return { ...completion, cost: m.cost };
+    } catch (error) {
+      return failure(error, m);
+    } finally {
+      // The persisted publication/preparation owns these observations across factory restarts.
+      owned.clear();
+    }
+  });
   function openPage(
     incoming: PublicFilterConsumerContext,
     capture?: Extract<PublicFilterConsumerCapture, { status: 'captured' }>,

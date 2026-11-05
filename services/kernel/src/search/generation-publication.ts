@@ -1,4 +1,6 @@
-import { readSearchWriterGenerationActions } from './writer-guard.ts';
+import { advanceNativeGenerationSource } from './public-filter-consumer.ts';
+import { readNativePublicFilterPublicationCompletion } from '../semantic/public-filter-source-binding.ts';
+import { bindSearchWriterPublicationSource, readSearchWriterGenerationActions } from './writer-guard.ts';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
@@ -219,6 +221,7 @@ export function createSearchGenerationPublication(
   );
   requireValue(config.meaning.digest === releaseDigest(config.meaning.release));
   const { pool, search, source, sourceKeys, binding, writerGuard, registry } = config;
+  bindSearchWriterPublicationSource(writerGuard, binding);
   const meaning = structuredClone(config.meaning);
   const kinds = registry
     ? registry.entries.map(({ kind, owner }) => ({ kind, owner })).sort((a, b) => a.kind.localeCompare(b.kind))
@@ -397,38 +400,32 @@ export function createSearchGenerationPublication(
     )
       throw new Pending('source_pending');
     if (!needObservation) return;
-    if (!custody.queried) throw new Pending('source_pending');
-    const joined = await binding.join({ queried: custody.queried }, context);
-    add(meter, joined.cost);
-    if (joined.status !== 'joined') throw new Pending(joined.reason === 'deadline' ? 'deadline' : 'source_pending');
-    populationDefinition(joined.definition);
-    if (
-      !same(joined.queried, custody.queried) ||
-      !same(bindingKey(joined.definition), job.binding) ||
-      !same(joined.definition.capture, resolved.definition.capture) ||
-      !same(joined.definition.dependencyKeys, resolved.definition.dependencyKeys)
-    )
-      throw new Pending('source_pending');
-    // This is the canonical native Source population observation, not Search's diagnostic query status.
-    const heads = await source.readPrivacyReductionHeads({
-      kind: 'population',
-      queried: joined.queried,
-      start: null,
-      context,
-    });
-    add(meter, heads.cost);
-    if (heads.status !== 'observed')
-      throw new Pending(heads.status === 'unavailable' && heads.reason === 'deadline' ? 'deadline' : 'source_pending');
-    if (!heads.routingComplete) throw new Pending('routing_incomplete');
-    if (
-      heads.coverage !== 'all_native_homes' ||
-      heads.unacknowledged.length ||
-      heads.changed.length ||
-      heads.blocking.length
-    )
-      throw new Pending('source_pending');
-    return joined.queried;
+    const completion = await readNativePublicFilterPublicationCompletion(binding, { job: job.job }, context);
+    add(meter, completion.cost);
+    if (completion.status !== 'complete') throw new Pending('source_pending');
+    return completion.publication.queried;
   }
+  async function completeSource(job: Job, client: PoolClient, context: PublicFilterConsumerContext, meter: Meter) {
+    const custody = await readGenerationPublicationCustody(pool, job.consumer, job.source_home, context,
+      job.observation ?? undefined);
+    add(meter, custody.cost);
+    if (!('definition' in custody)) throw new Pending('source_pending');
+    const completion = await advanceNativeGenerationSource({
+      pool, search, source, binding, clock: config.clock, meaning, context,
+      physicalTarget: job.physical_target, ...(registry ? { registry } : {}),
+    }, {
+      job: job.job, consumer: job.consumer,
+      capture: publicationCapture(custody.definition.capture) as PublicFilterConsumerCaptureInput,
+      ...(job.observation ? { observation: job.observation } : {}),
+    }, context);
+    add(meter, completion.cost);
+    if ('publication' in completion && !job.observation) {
+      job.observation = completion.publication.queried.snapshot.observation;
+      await save(client, job, meter);
+    }
+    return completion.status === 'complete';
+  }
+
   const reference = (job: Job): GenerationPublicationJob => ({ consumer: structuredClone(job.consumer), job: job.job });
   const fence = (job: Job): SearchWriterPublicationFence => ({
     consumer: job.consumer,
@@ -521,7 +518,10 @@ export function createSearchGenerationPublication(
               // Definition/observation changes can be discovered before entering the publication body.
               // Recover an outstanding alias intent under the same native fence before returning unready.
               await native(job.consumer, context);
-              if (!job.fence) await installFence(job, client, context, meter);
+              if (!job.fence) {
+            if (!(await completeSource(job, client, context, meter))) return preparing();
+            await installFence(job, client, context, meter);
+          }
               await restart(job, client, context, meter);
             }
             throw error;
@@ -978,7 +978,7 @@ export function createSearchGenerationPublication(
     job.home = 0;
     job.after_id = null;
     job.after_route = null;
-    job.observation = null;
+    // Keep the original Source tuple across reconciliation/fence retries.
     job.previous_target = null;
     job.previous_uuid = null;
     // Indexed bounded invalidation: old home rows are replaced lazily as their native home is revisited.
