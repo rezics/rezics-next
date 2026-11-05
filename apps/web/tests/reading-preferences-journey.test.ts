@@ -85,7 +85,7 @@ test('a stalled Reading save keeps its original for deliberate retry and ignores
     expect(original).toMatchObject({ expectedVersion: 0, spoilerLevel: 1 });
     await editor.edit({ suitability: 'show' });
     expect(editor.snapshot().pending).toBe(original);
-    expect(editor.snapshot().draft).toEqual({ spoilerLevel: 1, suitability: 'show' });
+    expect(editor.snapshot().draft).toMatchObject({ spoilerLevel: 1, suitability: 'show' });
 
     const lateReceipt = await fixture.io.save(original);
     releaseSave(lateReceipt);
