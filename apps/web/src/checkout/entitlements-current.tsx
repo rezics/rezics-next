@@ -217,7 +217,7 @@ function EntitlementsRead<T extends Page>({
   useBuyerHistoryFocus(
     navigation,
     address.kind === 'list' && display.page.kind === 'ready' && !query.isFetching,
-    display.page.kind !== 'ready' && display.page.kind !== 'preparing',
+    !query.isFetching && display.page.kind !== 'ready' && display.page.kind !== 'preparing',
   );
   const retry = useCallback(
     (event?: MouseEvent<HTMLElement>) => {

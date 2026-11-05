@@ -45,7 +45,7 @@ export function OrdersPage({
 }) {
   return (
     <section className="max-w-4xl min-w-0 space-y-6 text-foreground" aria-labelledby="orders-heading">
-      <PageHeading id="orders-heading" className="text-foreground">
+      <PageHeading id="orders-heading" tabIndex={-1} className="text-foreground">
         {m.orders_heading()}
       </PageHeading>
       <p>

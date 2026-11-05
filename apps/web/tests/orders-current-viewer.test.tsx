@@ -785,6 +785,7 @@ test('mounted paired buyer windows survive exact receipt/Edition return and comm
     });
     await tick();
     expect(visit.windows.window('orders').current).toBeNull();
+    expect(host.querySelector('#orders-heading')!.getAttribute('tabindex')).toBe('-1');
     const next = [...host.querySelectorAll('a')].find((a) => a.textContent === m.buyer_history_next())!;
     const beforeModified = calls.length;
     next.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }));
@@ -811,8 +812,9 @@ test('mounted paired buyer windows survive exact receipt/Edition return and comm
       expect(calls.at(-1)).toBe('entitlements:e2/+?=');
     }
     benefitKind = 'ready';
-    await click(m.buyer_history_retry());
+    await click(m.buyer_history_retry(), true);
     expect(host.textContent).toContain(m.entitlements_page_empty());
+    expect(document.activeElement?.id).toBe('entitlements-heading');
     await click(m.buyer_history_previous());
     await click(mappedEntitlement.summary!.label!.value);
     const reader = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((a) => a.href.includes('/editions/'))!;
