@@ -532,44 +532,78 @@ export function shelfMaintenanceCommandPlan(
         response,
       }
     : null;
-  const events = [
-    { id: U, type: 'com.rezics.library.shelf-maintenance.advanced.v1', subject: U, data: { accountId: U } },
-  ];
+  // Receipt-bearing rebuild commands may emit the single maintenance event. Recovery ACK is
+  // always no-effect. A matching request may also be no-effect; reserve the larger fresh branch.
+  const events = receipt
+    ? [{ id: U, type: 'com.rezics.library.shelf-maintenance.advanced.v1', subject: U, data: { accountId: U } }]
+    : [];
   const basis = 'basis' in options ? options.basis : null;
-  const sqlBytes =
-    2 * Buffer.byteLength(commandTime.sql) +
-    Buffer.byteLength(commandFence.sql) +
-    Buffer.byteLength(commandNoEffect.sql) +
-    (receipt ? Buffer.byteLength(commandReceipt.sql) : 0);
-  // Time RR transaction: BEGIN/settings/time/COMMIT/ROLLBACK; Core: its two BEGINs, lock timeout,
-  // initial/final statement timeout, time, receipt, fence/no-effect, COMMIT and ROLLBACK.
+  const prepared = !!options.authorization?.prepare;
   const controls = [
-    'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY',
+    ...(prepared
+      ? [
+          'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY',
+          "SET LOCAL statement_timeout = '200ms'",
+          'COMMIT',
+          'ROLLBACK',
+        ]
+      : []),
+    // The retained untracked Core path issues both BEGINs. Terminal failure may also reach ROLLBACK.
     'BEGIN ISOLATION LEVEL SERIALIZABLE',
     'BEGIN ISOLATION LEVEL SERIALIZABLE',
     "SET LOCAL lock_timeout = '200ms'",
-    ...Array(3).fill("SET LOCAL statement_timeout = '5000ms'"),
-    'COMMIT',
-    'ROLLBACK',
+    "SET LOCAL statement_timeout = '5000ms'",
+    "SET LOCAL statement_timeout = '5000ms'",
     'COMMIT',
     'ROLLBACK',
   ];
-  // One partition UPDATE (heap+PK), outbox INSERT (PK + id + publication index), basis INSERT
-  // (PK + command/principal indexes), receipt INSERT (PK + principal indexes), partition FKs.
-  // Both normal and no-effect alternatives and failed terminal controls remain reserved.
+  const fenceStatements = receipt ? [commandFence, commandNoEffect] : [commandNoEffect];
+  const sqlBytes =
+    Buffer.byteLength(commandTime.sql) +
+    fenceStatements.reduce((n, query) => n + Buffer.byteLength(query.sql), 0) +
+    (receipt ? Buffer.byteLength(commandReceipt.sql) : 0);
+  const receiptBinds = receipt ? [options.partition, principal!.kind, principal!.id, receipt.kind, candidates] : [];
+  const fenceBinds = receipt
+    ? [
+        options.partition,
+        events,
+        U,
+        basis ? { principal, clientId: basis.clientId, requestedBy: basis.requestedBy } : null,
+        serializedReceipt,
+      ]
+    : [];
+  const noEffectBinds = [options.partition, U, serializedReceipt];
+  // PK heap/index mutation: partition UPDATE 4 rows/3 points; outbox/receipt INSERT 4/3,
+  // basis INSERT 6/5 (two unique indexes). Each inserted child adds its partition FK point
+  // and one native statement. Shelf event/kind predicates exclude the other partial indexes;
+  // family/irreversibility triggers apply to UPDATE/DELETE, not these INSERTs.
+  const inserted = receipt ? 2 + (basis ? 1 : 0) : 0;
   const scaffold = shelfCost({
-    nativeRows: 4 + 8 + 8 + 8 + candidates.length,
-    nativePoints: 3 + 7 + 7 + 7 + candidates.length,
-    emptySeeks: 4 + candidates.length,
-    statements: controls.length + 5,
+    nativeRows: (receipt ? 4 + 4 + 4 + (basis ? 6 : 0) : 1) + inserted + candidates.length,
+    nativePoints: (receipt ? 3 + 3 + 3 + (basis ? 5 : 0) : 1) + inserted + candidates.length,
+    emptySeeks: (receipt ? 3 + (basis ? 1 : 0) : 1) + inserted + candidates.length,
+    statements: controls.length + 2 + (receipt ? 1 : 0) + inserted,
     bytes:
       sqlBytes +
-      controls.reduce((n, sql) => n + Buffer.byteLength(sql), 0) +
-      size([options.partition, candidates, receipt?.kind, principal, serializedReceipt, events, basis, U]) +
-      row({ epoch: I, position: D }) * 2 +
-      row({ at: T }) * 2 +
-      size(response) +
-      size(serializedReceipt),
+      controls.reduce((n, sql) => n + Buffer.byteLength(sql) + 2, 0) +
+      size(receiptBinds) +
+      size(fenceBinds) +
+      size(noEffectBinds) +
+      size([T]) +
+      row({ epoch: I, position: D }) +
+      row({ at: T }) +
+      (receipt
+        ? row({
+            requestDigest: Buffer.alloc(32),
+            epoch: I,
+            position: D,
+            transactionId: U,
+            response,
+            payloadState: 'minimized',
+          }) +
+          size(response) +
+          size(serializedReceipt)
+        : size(null)),
   });
   const kind = receipt?.kind === 'library.shelf-maintenance.request' ? 'request' : receipt ? 'page' : 'recovery';
   return shelfMaintenanceOperation(
