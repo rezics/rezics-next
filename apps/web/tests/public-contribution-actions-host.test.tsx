@@ -1218,3 +1218,32 @@ test.each(['discussion', 'reviews', 'posts'] as const)('installed %s row compose
     expect(dom.window.location.hash).toBe('#reply');
   } finally { await act(async () => root.unmount()); client.clear(); node.remove(); await dom.close(); }
 });
+
+test('the installed callable sends the exact private selected request and refuses changed or non-closed HTTP responses', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { readInstalledContributionActions } = await import('../src/accounts/public-profile/contribution-actions/request');
+  const input: ContributionInput = { accountId: id, view: 'discussion', cursor: 'original+/=', proof: 'original-proof', references: [{ type: 'content.thread', id, placeId: id, sourceRevisionId: id }] };
+  const calls: { url: string; init?: RequestInit }[] = [];
+  let response = installedResponse(input);
+  const client = createKernelClient('https://kernel.example', { fetch: async (url, init) => {
+    calls.push({ url: String(url), init });
+    return Response.json(response);
+  } });
+  const abort = new AbortController();
+  expect(await readInstalledContributionActions(client, input, 'Bearer original-reader', abort.signal)).toEqual(response);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.url).toBe(`https://kernel.example/v1/accounts/${id}/contribution-actions`);
+  expect(calls[0]!.init?.cache).toBe('no-store');
+  expect(new Headers(calls[0]!.init?.headers).get('authorization')).toBe('Bearer original-reader');
+  expect(JSON.parse(String(calls[0]!.init?.body))).toEqual({ view: input.view, cursor: input.cursor, proof: input.proof, references: input.references });
+  for (const change of [
+    (value: ContributionResponse) => { Object.assign(value, { borrowedAdvice: true }); },
+    (value: ContributionResponse) => { value.selected[0]!.reference.sourceRevisionId = null; },
+    (value: ContributionResponse) => { value.selected.push(value.selected[0]!); },
+    (value: ContributionResponse) => { value.actions.references[0]!.operations.push(value.actions.references[0]!.operations[0]!); },
+    (value: ContributionResponse) => { Object.assign(value.watch.items[0]!, { receipt: true }); },
+  ]) {
+    response = structuredClone(installedResponse(input)); change(response);
+    await expect(readInstalledContributionActions(client, input, 'Bearer original-reader', abort.signal)).rejects.toThrow('Invalid author contribution actions response');
+  }
+});
