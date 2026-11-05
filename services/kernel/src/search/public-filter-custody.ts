@@ -1128,30 +1128,40 @@ export function createPublicFilterCustody(
     acquire(q, context) {
       const input = decode<typeof q>(encode(q));
       queried(input);
-      return run(context, async (meter) => {
-        const token = randomUUID();
-        const result = await sql(
-          pool,
-          meter,
-          `WITH locked AS (
+      return run(context, (meter) =>
+        transaction(meter, async (client) => {
+          // Serialize reader enrollment with the ordinary publication admission fence.
+          await sql(client, meter, 'SELECT pg_advisory_xact_lock_shared(hashtextextended($1,741))', [
+            input.consumer.physicalTarget,
+          ]);
+          const token = randomUUID();
+          const result = await sql(
+            client,
+            meter,
+            `WITH locked AS (
           SELECT o.partition_no,o.observation FROM search.public_filter_observation o
           JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
           JOIN search.public_filter_target t ON (t.partition_no,t.physical_target)=(r.partition_no,r.physical_target)
-          WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state='open' AND o.expires_at>$4 AND r.state='active' AND t.incarnation=$7 FOR UPDATE OF o FOR SHARE OF r,t)
+          WHERE (o.partition_no,o.observation)=($1,$2) AND o.queried=$3 AND o.state='open' AND o.expires_at>$4
+            AND r.state='active' AND t.incarnation=$7
+            AND NOT EXISTS (SELECT 1 FROM search.identity_writer_gate g
+              WHERE g.partition_no=0 AND g.physical_target=r.physical_target AND g.publication_fence IS NOT NULL)
+          FOR UPDATE OF o FOR SHARE OF r,t)
           INSERT INTO search.public_filter_reference SELECT partition_no,observation,$5,$6 FROM locked RETURNING token`,
-          [
-            partition(input.snapshot.observation),
-            input.snapshot.observation,
-            encode(input),
-            Date.now(),
-            token,
-            Math.min(context.deadline, Date.now() + 300_000),
-            input.consumer.incarnation,
-          ],
-        );
-        if (!result.rowCount) throw new Failure('observation_lost');
-        return { status: 'acquired' as const, use: { observation: input.snapshot.observation, token }, cost: meter };
-      });
+            [
+              partition(input.snapshot.observation),
+              input.snapshot.observation,
+              encode(input),
+              Date.now(),
+              token,
+              Math.min(context.deadline, Date.now() + 300_000),
+              input.consumer.incarnation,
+            ],
+          );
+          if (!result.rowCount) throw new Failure('observation_lost');
+          return { status: 'acquired' as const, use: { observation: input.snapshot.observation, token }, cost: meter };
+        }),
+      );
     },
     appendExecution(request, context) {
       const input = decode<typeof request>(encode(request));
