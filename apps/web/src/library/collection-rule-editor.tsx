@@ -15,6 +15,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import type { RuleChoicePage, RuleChoices, RuleMeaning, RulePage } from './collection-rule-read';
 import type { RuleWrite } from './collection-rule-actions';
+import type { SavedQuerySource } from './saved-query-editor/selection';
 import type { CollectionWriteResult } from './collection-records';
 import { CollectionRuleControls } from './collection-rule-controls';
 import { collectionRuleLabelPrefix } from './collection-rule-label-input';
@@ -258,6 +259,7 @@ type EditorProps = {
   navigate?: ((id: string) => void) | undefined;
   resultsHref?: string | undefined;
   seed?: FilterDocument | undefined;
+  seedSource?: SavedQuerySource | undefined;
   locale?: string | undefined;
 };
 
@@ -449,6 +451,7 @@ function RuleForm({
   canLabelCurrent,
   requireProvenance,
   seed,
+  seedSource,
   accepts,
   remember,
 }: Omit<EditorProps, 'page' | 'admitted'> & {
@@ -475,6 +478,10 @@ function RuleForm({
   const [filter, setFilter] = useState<FilterDocument | undefined>(
     page.state === 'ready' ? page.rule.filter : (seed ?? { and: [presence] }),
   );
+  const source: SavedQuerySource =
+    page.state === 'ready'
+      ? (page.rule.source ?? { kind: 'owner' })
+      : (seedSource ?? { kind: 'owner' });
   const [choices, setChoices] = useState(page.choices);
   const [query, setQuery] = useState('');
   const prefix = collectionRuleLabelPrefix(query);
@@ -497,7 +504,7 @@ function RuleForm({
   const [currentRuleRead, setCurrentRuleRead] = useState(false);
   const [reviewCurrentRule, setReviewCurrentRule] = useState(false);
   const confirmed = useRef(false);
-  const snapshot = ruleDraftSnapshot({ filter, title, description });
+  const snapshot = ruleDraftSnapshot({ filter, title, description, source });
   const baseline = useRef(snapshot);
   const navigation = useCollectionRuleDraftNavigation({
     dirty: !savedId && (snapshot !== baseline.current || !!intent),
@@ -549,6 +556,7 @@ function RuleForm({
     const draft = {
       filter: parsed,
       sort: 'id' as const,
+      ...(source.kind === 'catalogue' ? { source } : {}),
       ...(base.state === 'ready' ? { id: base.id, revision: base.rule.revision } : { title, description }),
     };
     const input = captured.current ?? {

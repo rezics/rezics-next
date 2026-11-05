@@ -154,6 +154,7 @@ export async function prepareBuiltinMaterialization(
   const rule: SavedCollectionRule = {
     filter: filter(key),
     sort: 'id',
+    source: { kind: 'owner' },
     releaseDigest,
     revision: 0,
     collectionRevision: 0,

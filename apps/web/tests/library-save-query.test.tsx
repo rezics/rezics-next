@@ -39,7 +39,7 @@ test('the current representable filter reaches one private id-ordered create act
     type: 'schema:Book',
     search: '?l.schema%3Akeywords=localized+label&cursor=next',
   });
-  expect(selection).toEqual({ state: 'admitted', filter, sort: 'id' });
+  expect(selection).toEqual({ state: 'admitted', filter, sort: 'id', source: { kind: 'owner' } });
   const calls: Request[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
@@ -66,6 +66,30 @@ test('the current representable filter reaches one private id-ordered create act
   });
 });
 
+test('a Search-origin handoff reaches the create action with its catalogue Source beside the predicate', async () => {
+  const calls: Request[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      calls.push(new Request(input, init));
+      return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+    },
+  });
+  const filter = parseFilter({ statement: { property: 'schema:keywords', in: ['space opera'] } });
+  await submitCollectionRule(client, request(), sessionEnv, {
+    title: 'Space opera',
+    description: '',
+    filter,
+    sort: 'id',
+    source: { kind: 'catalogue' },
+    idempotencyKey: key,
+  });
+  expect(await calls[0]!.json()).toMatchObject({
+    membershipKind: 'dynamic',
+    visibility: 'private',
+    rule: { filter, sort: 'id', source: { kind: 'catalogue' } },
+  });
+});
+
 test('unsupported selections stay unsaved and a replacement viewer cannot consume the handoff', () => {
   const store = createSavedQueryHandoffStore();
   const unsupported = admitSavedQuerySelection({ document: filter, type: 'schema:Book', search: '?q=space+opera' });
@@ -74,7 +98,10 @@ test('unsupported selections stay unsaved and a replacement viewer cannot consum
   expect(store.take('replacement-viewer')).toBeNull();
   expect(store.take('owner')).toBeNull();
 
-  expect(store.write({ viewerId: 'owner', filter, sort: 'id' })).toBe(true);
-  expect(store.take('owner')).toEqual({ viewerId: 'owner', filter, sort: 'id' });
+  expect(store.write({ viewerId: 'owner', filter, sort: 'id', source: { kind: 'owner' } })).toBe(true);
+  expect(store.take('owner')).toEqual({ viewerId: 'owner', filter, sort: 'id', source: { kind: 'owner' } });
   expect(store.take('owner')).toBeNull();
+
+  expect(store.write({ viewerId: 'owner', filter, sort: 'id', source: { kind: 'catalogue' } })).toBe(true);
+  expect(store.take('owner')).toEqual({ viewerId: 'owner', filter, sort: 'id', source: { kind: 'catalogue' } });
 });

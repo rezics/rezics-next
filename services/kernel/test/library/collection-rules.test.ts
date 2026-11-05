@@ -34,6 +34,41 @@ test('saving a supported native rule admits the definition without claiming a co
   );
 }, 120_000);
 
+test('a catalogue source is retained beside its predicate and is never narrowed to the curator OWNER population', async () => {
+  const source = { kind: 'catalogue' } as const;
+  const created = await f.send('POST', '/v1/collections', {
+    ...draft,
+    rule: { filter: { type: { in: ['schema:Book'] } }, sort: 'id', source },
+  });
+  expect(created.status).toBe(201);
+  const { collection } = await created.json();
+  const saved = await f.send('GET', `/v1/collections/${collection.id}/rule`);
+  expect(saved.status).toBe(200);
+  expect(await saved.json()).toMatchObject({
+    rule: { filter: { type: { in: ['schema:Book'] } }, sort: 'id', source, revision: 1 },
+  });
+
+  const update = {
+    revision: collection.revision,
+    filter: { not: { type: { in: ['schema:Book'] } } },
+    sort: 'id',
+    source,
+  };
+  const key = randomUUID();
+  const edited = await f.send('PUT', `/v1/collections/${collection.id}/rule`, update, f.owner, key);
+  expect(edited.status).toBe(200);
+  expect((await edited.json()).collection.revision).toBe(2);
+  expect((await f.send('PUT', `/v1/collections/${collection.id}/rule`, update, f.owner, key)).status).toBe(200);
+  const reopened = await f.send('GET', `/v1/collections/${collection.id}/rule`);
+  expect(await reopened.json()).toMatchObject({
+    rule: { filter: { not: { type: { in: ['schema:Book'] } } }, source, revision: 2, collectionRevision: 2 },
+  });
+
+  const members = await f.send('GET', `/v1/collections/${collection.id}/members`);
+  expect(members.status).toBe(503);
+  expect(await members.json()).toMatchObject({ code: 'dependency_unavailable' });
+}, 120_000);
+
 test('Saved dynamic definitions use actual shared admission while current dynamic readers distinguish private execution from explicit public output', async () => {
   const selected = await f.subject('Selected output');
   const matching = await f.subject('Matching private result outside the selection');

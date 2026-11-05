@@ -5,6 +5,7 @@ import {
   hasSavedQueryInput,
   savedQueryCreateHref,
   savedQuerySeed,
+  savedQuerySourceSeed,
 } from '../src/library/saved-query-editor/selection';
 import { locales } from '../src/paraglide/runtime.js';
 
@@ -22,9 +23,17 @@ test('saved query admission carries the exact filter document and displayed type
     state: 'admitted',
     filter: parseFilter({ and: [presence, { and: [book, document] }] }),
     sort: 'id',
+    source: { kind: 'owner' },
   });
   expect(savedQuerySeed(null, selection)).toEqual(selection.state === 'admitted' ? selection.filter : undefined);
+  expect(savedQuerySourceSeed(null, selection)).toEqual({ kind: 'owner' });
   expect(savedQuerySeed('existing', selection)).toBeUndefined();
+  expect(savedQuerySourceSeed('existing', selection)).toBeUndefined();
+});
+
+test('catalogue saved selections keep the shared predicate without injecting owner presence', () => {
+  const selection = admitSavedQuerySelection({ document, source: { kind: 'catalogue' } });
+  expect(selection).toEqual({ state: 'admitted', filter: document, sort: 'id', source: { kind: 'catalogue' } });
 });
 
 test('text, resource, unknown, invalid, and non-id sort selections remain unrepresentable', () => {

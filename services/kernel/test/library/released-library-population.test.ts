@@ -402,7 +402,11 @@ native(
   async (f) => {
     const own = await f.state();
     const unselected = await f.holdings();
-    const rule: CollectionRule = { filter: { owner: { presence: true } }, sort: 'id' };
+    const rule: CollectionRule = {
+      filter: { owner: { presence: true } },
+      sort: 'id',
+      source: { kind: 'owner' },
+    };
     const before = f.calls.length;
     const selected: ReleasedDynamicSelection = await f.publishDynamicSelection({
       owner: 'alice',

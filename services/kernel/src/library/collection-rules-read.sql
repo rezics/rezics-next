@@ -1,4 +1,5 @@
 SELECT rule_filter::text AS filter, rule_sort AS sort, rule_release_digest AS "releaseDigest",
+       rule_source AS source,
        rule_revision::text AS "ruleRevision", revision AS "collectionRevision", source_generation::text AS "sourceGeneration"
 FROM library.collection
 WHERE route = :route AND collection_id = :collection_id

@@ -23,7 +23,7 @@ async function stored(filter: unknown) {
   const release = await activeRelease(f.runtime.database.pool);
   if (!release) throw new Error('Native release required');
   await f.runtime.database.pool.query(
-    `UPDATE library.collection SET membership_kind='dynamic', rule_filter=$3::jsonb, rule_sort='id',
+    `UPDATE library.collection SET membership_kind='dynamic', rule_filter=$3::jsonb, rule_sort='id', rule_source='owner',
       rule_release_digest=$4, rule_revision=1 WHERE route=$1 AND collection_id=$2`,
     [routeOf(collection.id), collection.id, JSON.stringify(filter), release.digest],
   );

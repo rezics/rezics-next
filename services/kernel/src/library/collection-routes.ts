@@ -248,7 +248,11 @@ const createMetadata = {
   presentationKind: t.Optional(nullableString),
   coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
 };
-const ruleBody = { filter: t.Unknown(), sort: t.Optional(t.String()) };
+const ruleSource = t.Union([
+  t.Object({ kind: t.Literal('owner') }, closed),
+  t.Object({ kind: t.Literal('catalogue') }, closed),
+]);
+const ruleBody = { filter: t.Unknown(), sort: t.Optional(t.String()), source: t.Optional(ruleSource) };
 const memberResponse = t.Object({ member: memberSchema }, closed);
 const structurePlacementSchema = t.Union([
   t.Object(
@@ -944,6 +948,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
                 {
                   filter: t.Unknown(),
                   sort: t.Literal('id'),
+                  source: ruleSource,
                   releaseDigest: t.String(),
                   revision: t.Integer({ minimum: 0 }),
                   collectionRevision: revision,

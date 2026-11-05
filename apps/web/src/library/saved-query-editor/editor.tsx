@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { CollectionRuleCurrent } from '../collection-rule-current';
 import { takeSavedQueryHandoff } from '../save-query';
 import type { RulePage } from '../collection-rule-read';
-import { savedQuerySeed, type SavedQuerySelection } from './selection';
+import { savedQuerySeed, savedQuerySourceSeed, type SavedQuerySelection } from './selection';
 import { m } from '../../paraglide/messages.js';
 
 /** Review a carried selection, then the existing rule editor. Invalid selections never POST. */
@@ -22,9 +22,10 @@ export function SavedQueryEditor({
   );
   const selection: SavedQuerySelection =
     collectionId === null && page.state === 'new' && handoff?.viewerId === page.viewerId && handoff.sort === 'id'
-      ? { state: 'admitted', filter: handoff.filter, sort: handoff.sort }
+      ? { state: 'admitted', filter: handoff.filter, sort: handoff.sort, source: handoff.source }
       : { state: 'empty' };
   const seed = savedQuerySeed(collectionId, selection);
+  const seedSource = savedQuerySourceSeed(collectionId, selection);
   return (
     <>
       {collectionId === null && page.state === 'new' && !seed ? (
@@ -36,6 +37,7 @@ export function SavedQueryEditor({
         page={page}
         collectionId={collectionId}
         {...(seed ? { seed } : {})}
+        {...(seedSource ? { seedSource } : {})}
         {...(navigate ? { navigate } : {})}
       />
     </>

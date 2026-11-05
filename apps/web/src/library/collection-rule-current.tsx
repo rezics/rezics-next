@@ -4,6 +4,7 @@ import { CollectionRuleEditor } from './collection-rule-editor';
 import type { RulePage } from './collection-rule-read';
 import { readCollectionRule, readCollectionRuleChoices, saveCollectionRule } from './collection-rule-actions';
 import { useCollectionOwnerCurrent } from './collection-owner-current';
+import type { SavedQuerySource } from './saved-query-editor/selection';
 
 export { useCollectionOwnerCurrent } from './collection-owner-current';
 
@@ -26,12 +27,14 @@ export function CollectionRuleCurrent({
   navigate,
   resultsHref,
   seed,
+  seedSource,
 }: {
   page: RulePage;
   collectionId: string | null;
   navigate?: (id: string) => void;
   resultsHref?: string | undefined;
   seed?: FilterDocument;
+  seedSource?: SavedQuerySource;
 }) {
   const owner = useCollectionOwnerCurrent(JSON.stringify(['rule', collectionId, resultsHref]), true);
   // A retired loader object cannot seed a returning viewer/address lifetime.
@@ -77,6 +80,7 @@ export function CollectionRuleCurrent({
       currentCsrf={owner.credential}
       requireProvenance
       {...(seed ? { seed } : {})}
+      {...(seedSource ? { seedSource } : {})}
       save={(data, csrf) =>
         owner.isCurrent() && owner.credential()
           ? saveCollectionRule({ data, headers: { 'X-CSRF-Token': csrf } })
