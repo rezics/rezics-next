@@ -4,8 +4,9 @@ import { publicCollectionDiscoverySource } from '../library/index.ts';
 import { readSpaceDiscoverySummaries, spaceDiscoverySource } from '../community/index.ts';
 import type { DiscoveryProducerEntry } from '../search/index.ts';
 import { createDiscoveryOwnerAdapters } from '../search/default-discovery.ts';
-import { createRatedSubjectSource, type SubjectSource } from '../search/rated-source.ts';
+import { createRatedSubjectSource } from '../search/rated-source.ts';
 import { createSpaceDiscoveryAdapter } from '../search/space-discovery.ts';
+import type { SubjectSource } from '../search/source.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ReviewDiscoverySource } from '../content/index.ts';
 import type { Access } from '../request/access.ts';
@@ -42,7 +43,7 @@ export function createDiscoveryProducerEntry(input: {
     pool,
     routeKey,
     access,
-    clock,
+    ...(clock ? { clock } : {}),
     collectionSource: publicCollectionDiscoverySource({ pool }),
     reviewSource,
     space,
