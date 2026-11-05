@@ -125,6 +125,10 @@ test('generated Web label methods reopen actual admitted rows, preserve source d
   expect(current.data!.assignments.map((item) => item.id).sort()).toEqual(
     [items[0]!.assignment!.id, items[1]!.assignment!.id].sort(),
   );
+  const deepReview = await calls.review(id, { ...body, ordinal: 20 }, crypto.randomUUID());
+  const deepResult = await calls.apply(id, { confirmations: [{ ordinal: 20, reviewId: deepReview.data!.review.id }] });
+  expect(deepResult.data!.outcomes[0]!.items.every((item) => item.status === 'unchanged')).toBe(true);
+  expect(deepResult.data!.outcomes[0]!.items[0]!.assignment).toEqual(items[0]!.assignment);
   // Effects committed but producer work acknowledgement was lost: replay original native keys.
   await f.pool.query(
     "UPDATE library.list_import_anilist SET payload=payload-'labelWork' WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=0",
@@ -196,6 +200,20 @@ test('effect-before-ack creation and assignment recover exact keys; source cance
     (await calls.apply(id, { confirmations: [{ ordinal: 0, reviewId: newest.data!.review.id }] })).data!.outcomes[0]!
       .items[0]!.status,
   ).toBe('unchanged');
+  // An explicit Subject change replaces the label review epoch. The old confirmation admits no new work.
+  const nextSubject = await f.createSubject('unprofiled');
+  const retargeted = await calls.review(
+    id,
+    { ...body, subjectId: nextSubject, selections: [{ key: 'customLists:Recovery', target: { labelId: label.id } }] },
+    crypto.randomUUID(),
+  );
+  await calls.apply(id, { confirmations: [{ ordinal: 0, reviewId: newest.data!.review.id }] });
+  expect((await json('/v1/libraryLabelAssignments?subjectId=' + nextSubject)).assignments).toHaveLength(0);
+  const retargetedResult = await calls.apply(id, {
+    confirmations: [{ ordinal: 0, reviewId: retargeted.data!.review.id }],
+  });
+  expect(retargetedResult.data!.outcomes[0]!.items[0]!.status).toBe('applied');
+  expect((await json('/v1/libraryLabelAssignments?subjectId=' + nextSubject)).assignments).toHaveLength(1);
   await json(path + ':cancel', 'POST', { remove: false });
   expect((await calls.apply(id, confirmation)).data).toEqual({ outcomes: [], complete: false });
   expect((await json('/v1/libraryLabelAssignments?subjectId=' + subjectId)).assignments).toHaveLength(1);
