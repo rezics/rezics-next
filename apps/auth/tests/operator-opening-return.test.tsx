@@ -129,7 +129,7 @@ test('oversized native approval is unavailable and never crosses the submission 
   );
   expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
   expect(readPendingManagementOperationStepUp()?.phase).not.toBe('submitted');
-  expect(page.host.textContent).toContain('Opening service unavailable');
+  expect(page.host.textContent).toContain('Current authorized account details are unavailable. Opening is disabled.');
 });
 
 test('native acknowledgement stays as generic history after cached retirement', async () => {
