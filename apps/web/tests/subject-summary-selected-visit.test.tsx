@@ -66,6 +66,17 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     candidateId: second.id,
     body: fromPlainText('The exact second synopsis.'),
   });
+  const japanese = structuredClone(second);
+  japanese.id = '00000000-0000-4000-8000-000000000103';
+  const japaneseContent = { document: '00000000-0000-4000-8000-000000000203', digest: 'd'.repeat(64), language: 'ja' };
+  const japaneseCitation = 'https://example.test/japanese-synopsis';
+  japanese.value = { type: 'value', content: japaneseContent };
+  japanese.references = [{ hash: 'japanese-reference', parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: japaneseCitation } }] }];
+  fixture.publicRead.subject.statements['schema:abstract']!.push(japanese);
+  fixture.documents.set(japaneseContent.document, {
+    ...[...fixture.documents.values()][0]!, ...japaneseContent, id: japaneseContent.document,
+    candidateId: japanese.id, body: fromPlainText('日本語の概要。'),
+  });
   let held: { resolve: (read: AuthoredRead) => void; address: AuthoredAddress } | undefined;
   let holdNext = false;
   const noCommand = () => {
@@ -127,9 +138,22 @@ test('selected second synopsis traverses authored inspection and fresh return; u
   const { readSubjectSources } = await import('../src/features/catalogue/subject-sources');
   const sourceRead = ({ data }: { data: { id: string; locale: string; via?: string } }) =>
     readSubjectSources(sourcesClient, data.id, data.locale, undefined, false, data.via);
+  let holdSourceRefresh = false;
+  let failSourceRefresh = false;
+  let releaseSource: (() => void) | undefined;
   mock.module('../src/features/catalogue/subject-sources-actions', () => ({
     loadSubjectSources: sourceRead,
-    readCurrentSubjectSources: sourceRead,
+    readCurrentSubjectSources: async (request: Parameters<typeof sourceRead>[0]) => {
+      if (failSourceRefresh) return { kind: 'unavailable' };
+      const result = await sourceRead(request);
+      if (!holdSourceRefresh) return result;
+      holdSourceRefresh = false;
+      return new Promise<typeof result>((resolve) => {
+        releaseSource = () => resolve(result.kind === 'ready'
+          ? { ...result, page: { ...result.page, title: { text: 'Late retired Sources' } } }
+          : result);
+      });
+    },
   }));
   const queries = await import('../src/features/pages/subject-queries');
   mock.module('../src/features/pages/subject-queries', () => ({
@@ -221,7 +245,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
   // Browser anchor adapter: follow the actual mounted href through the destination router.
   host.addEventListener('click', (event: any) => {
     const link = event.target.closest('a');
-    if (!link || event.button !== 0 || event.metaKey || event.ctrlKey) return;
+    if (event.defaultPrevented || !link || event.button !== 0 || event.metaKey || event.ctrlKey) return;
     const target = link.getAttribute('href');
     if (target?.startsWith('/en/subjects/')) {
       event.preventDefault();
@@ -273,9 +297,42 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     expect(host.textContent).not.toContain(content.document);
     expect(host.innerHTML).not.toContain(content.document);
     expect(host.innerHTML).not.toContain(content.digest);
+    const session = (subject: string, token: string) => ({ state: 'signed-in', subject, csrfToken: token });
+    holdSourceRefresh = true;
+    await act(async () => client.setQueryData(sessionQuery.queryKey, session(fixture.transport.reader!, 'held-a')));
+    await settle();
+    expect(releaseSource).toBeDefined();
+    for (const subject of ['another-reader', fixture.transport.reader!]) {
+      await act(async () => client.setQueryData(sessionQuery.queryKey, session(subject, 'held-a')));
+      await settle();
+      expect(host.querySelector('[data-slot="subject-sources-detail"]')).not.toBeNull();
+    }
+    await act(async () => releaseSource!());
+    await settle();
+    expect(host.textContent).not.toContain('Late retired Sources');
+    failSourceRefresh = true;
+    await act(async () => client.setQueryData(sessionQuery.queryKey, session(fixture.transport.reader!, 'retry-a')));
+    await settle();
+    const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.sources_retry())!;
+    expect(retry).toBeDefined();
+    failSourceRefresh = false;
+    await act(async () => { retry.focus(); await user.keyboard('{Enter}'); });
+    await settle();
+    expect(sourceRequests.at(-1)).toMatchObject({ statement: second.id, document: content.document });
+    expect(window.document.activeElement).toBe(host.querySelector('[data-slot="view-heading"] h1'));
     await click([...host.querySelectorAll('a')].find((link) => link.textContent === m.subject_synopsis_return())!);
     expect((host.querySelector('select') as HTMLSelectElement).value).toBe(second.id);
     expect(window.document.activeElement?.id).toBe('subject-summary-evidence');
+    await act(async () => user.selectOptions(host.querySelector('select')!, japanese.id));
+    await settle();
+    await click([...host.querySelectorAll('#subject-summary-evidence a')].find((link) => link.textContent === m.subject_synopsis_evidence())!);
+    expect(sourceRequests.at(-1)).toMatchObject({ statement: japanese.id, document: japaneseContent.document, language: 'ja' });
+    expect(host.textContent).toContain(japaneseCitation);
+    expect(host.textContent).not.toContain('日本語の概要。');
+    await click([...host.querySelectorAll('a')].find((link) => link.textContent === m.subject_synopsis_return())!);
+    expect((host.querySelector('select') as HTMLSelectElement).value).toBe(japanese.id);
+    await act(async () => user.selectOptions(host.querySelector('select')!, second.id));
+    await settle();
     const correction = [...host.querySelectorAll('a')].find((link) => link.textContent === m.correction_title())!;
     const selectedAddress = correction.getAttribute('href')!;
     expect(selectedAddress).toContain('via=');

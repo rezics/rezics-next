@@ -145,6 +145,7 @@ export function explainSubjectSources(
   definitions?: SourceDefinitions,
 ): SourcesPageData {
   const exact = read.selectedSynopsis;
+  const admittedExact = exact?.kind === 'matched' && spoilerLevel(exact.fact) <= defaultReader.spoilerLevel;
   const subject = exact
     ? {
         ...read.subject,
@@ -157,7 +158,7 @@ export function explainSubjectSources(
   const title = pageText(subject.labels, locale, original);
   const identity = { id: subject.id, label: title.text };
   const exactIds =
-    exact?.kind === 'matched'
+    admittedExact
       ? new Set(
           [
             exact.fact,
@@ -274,7 +275,7 @@ export function explainSubjectSources(
     });
   }
   return {
-    ...(exact ? { selectedSynopsis: exact.kind } : {}),
+    ...(exact && (exact.kind !== 'matched' || admittedExact) ? { selectedSynopsis: exact.kind } : {}),
     viewer: { state: 'public', actions },
     id: subject.id,
     title,

@@ -240,6 +240,7 @@ test('native exact Sources admits the second same-language document and loses it
   const second = subject.statements['schema:abstract'][1];
   await realAccess.grant({ route: routeOf(subject.id)!, id: subject.id }, 'editor', 'subject:read');
   const reference = second.value.content;
+  await realAccess.grant({ route: routeOf(reference.document)!, id: reference.document }, 'editor', 'document:erase');
   const input = {
     statement: second.id,
     document: reference.document,

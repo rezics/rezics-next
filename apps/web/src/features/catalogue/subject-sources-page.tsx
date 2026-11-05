@@ -13,6 +13,7 @@ import type { SourcePart, SourcesPageData, SourcesResult } from './subject-sourc
 import { SourceObservationReader } from './source-observation/reader';
 import type { SourceObservationInspect, SourceObservationProvider } from './source-observation/contract';
 import { NamesReturnAnchor } from './work-names/navigation';
+import { summaryReadingReturn } from '../pages/subject-visit-navigation';
 
 type SourceObservationMount = {
   source: SourceObservationProvider;
@@ -145,7 +146,11 @@ export function SubjectSourcesPage({
         <p role="status">
           {page.selectedSynopsis === 'unsupported'
             ? m.subject_synopsis_sources_unsupported({}, o)
-            : m.sources_conflict({}, o)}
+            : page.selectedSynopsis === 'changed'
+              ? m.subject_synopsis_visit_changed({}, o)
+              : page.selectedSynopsis === 'missing'
+                ? m.subject_synopsis_unavailable({}, o)
+                : m.sources_unavailable({}, o)}
         </p>
       )}
       <SubjectFrame
@@ -162,7 +167,8 @@ export function SubjectSourcesPage({
             <a className={linkClassName} href={page.href}>
               {m.sources_back({}, o)}
             </a>
-            {returnTo && (
+            {returnTo &&
+              (page.selectedSynopsis || !summaryReadingReturn(new URL(returnTo, 'https://rezics.invalid').hash)) && (
               <NamesReturnAnchor className={linkClassName} href={returnTo} locale={locale}>
                 {m.subject_synopsis_return({}, o)}
               </NamesReturnAnchor>

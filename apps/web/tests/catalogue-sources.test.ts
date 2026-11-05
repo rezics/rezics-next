@@ -224,6 +224,26 @@ test('exact projection owns an empty citation list and cannot borrow page suppor
   );
   expect(changed.fields).toEqual([]);
   expect(changed.sources.records).toEqual([]);
+  const hiddenTarget = '00000000-0000-4000-8000-000000000099';
+  const hidden = explainSubjectSources(
+    {
+      ...fixture.read,
+      related: { ...fixture.read.related, [hiddenTarget]: { labels: { en: 'Hidden citation author' } } },
+      selectedSynopsis: {
+        kind: 'matched', context: fixture.read.subject.context, release: fixture.read.subject.release,
+        fact: {
+          ...fact,
+          qualifiers: [{ property: { id: 'rezics:spoilerLevel', data_type: 'quantity' }, value: { type: 'value', content: { amount: '2', unit: '1' } } }],
+          references: [{ hash: 'hidden-reference', parts: [{ property: { id: 'schema:author', data_type: 'wikibase-item' }, value: { type: 'value', content: hiddenTarget } }] }],
+        },
+      },
+    },
+    'en', sourceDefinitions,
+  );
+  expect(hidden.fields).toEqual([]);
+  expect(hidden.related).toEqual({});
+  expect(hidden.selectedSynopsis).toBeUndefined();
+  expect(JSON.stringify(hidden)).not.toContain('Hidden citation author');
 });
 
 test('exact HTTP receiving binds the original second/non-default selection and rejects foreign or leaking results', async () => {
