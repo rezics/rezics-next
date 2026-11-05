@@ -15,8 +15,17 @@ const { ResultRow } = await import('../src/search/results');
 import { listKeyFacts } from '../src/media/type-presentation';
 const { parseDiscoveryPage, parseLegacySearchPage, readDiscovery } = await import('../src/search/discovery');
 import { bundledRelease } from '@rezics/definitions/bundled';
-import type { FilterRelease } from '@rezics/filter';
-import { parseReleaseSearch, releaseSearchHref, releaseSearchRequest } from '../src/search/release-search';
+import {
+  admittedReleaseSearchControls,
+  admittedReleaseSearchTypes,
+  type FilterRelease,
+} from '@rezics/filter';
+import {
+  parseReleaseSearch,
+  releaseSearchHref,
+  releaseSearchRequest,
+  type ReleaseSearchType,
+} from '../src/search/release-search';
 const releaseSearchQuery = await import('../src/search/release-search-query');
 import { defaultParseSearch } from '@tanstack/react-router';
 const { GLOBAL, QUESTION } = await import('../src/features/pages/subject-ratings');
@@ -34,6 +43,7 @@ mock.module('../src/search/release-search-query', () => ({
 
 const { parseReleaseSearchChildrenPage, parseReleaseSearchGroupsPage } = releaseSearchQuery;
 const { ReleaseSearchPage } = await import('../src/search/release-search-page');
+const { ReleaseSearchFormView } = await import('../src/search/release-criteria-form');
 afterAll(() => mock.restore());
 
 test('the universal editor preserves precise endpoints instead of rendering numeric year inputs', () => {
@@ -116,6 +126,72 @@ test('date display keeps astronomical years and rejects malformed facts without 
 
 const releaseId = '018f0000-0000-7000-8000-000000000001';
 const releaseType = 'wd:Q20631656';
+const platformId = '018f0000-0000-7000-8000-000000000002';
+const developerId = '018f0000-0000-7000-8000-000000000003';
+function releaseSearchTypes(release: FilterRelease): ReleaseSearchType[] {
+  return admittedReleaseSearchTypes(release).map((id) => {
+    const controls = admittedReleaseSearchControls(release, id)!;
+    return {
+      id,
+      label: id,
+      controls: {
+        platform: controls.platform,
+        language: controls.language,
+        date: controls.date,
+        ageRating: controls.ageRating,
+        producers: controls.producers,
+      },
+    };
+  });
+}
+const releaseTypes = releaseSearchTypes(bundledRelease);
+
+async function mountReleaseCriteria(locale = 'en') {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: `https://site.test/${locale}/search/releases` });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host);
+  return {
+    host,
+    window,
+    render: (
+      parsed: ReturnType<typeof parseReleaseSearch>,
+      selections?: Parameters<typeof ReleaseSearchFormView>[0]['selections'],
+    ) =>
+      act(async () =>
+        root.render(
+          createElement(ReleaseSearchFormView, {
+            parsed,
+            types: releaseTypes,
+            locale,
+            ...(selections ? { selections } : {}),
+          }),
+        ),
+      ),
+    async close() {
+      await act(async () => root.unmount());
+      window.close();
+      for (const [key, descriptor] of previous) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+      }
+    },
+  };
+}
 function releasePages(date: object) {
   const summary = {
     id: releaseId,
@@ -320,7 +396,7 @@ test('withdrawn controls and malformed URL operands remain repairable without br
       createElement(ReleaseSearchPage, {
         locale: 'en',
         parsed,
-        types: [{ id: releaseType, label: 'Release' }],
+        types: releaseSearchTypes(release),
         state: { status: 'invalid' },
       }),
     );
@@ -346,7 +422,7 @@ test('the release page localizes controls and distinguishes loading, unavailable
         createElement(ReleaseSearchPage, {
           locale,
           parsed,
-          types: [{ id: releaseType, label: 'Released subtype' }],
+          types: releaseTypes,
           state,
         }),
       );
@@ -354,7 +430,12 @@ test('the release page localizes controls and distinguishes loading, unavailable
     expect(loading).toContain(m.release_search_heading({}, { locale }));
     expect(loading).toContain('aria-busy="true"');
     expect(loading).toContain('value="2024-02-29"');
-    expect(loading).toContain('value="ja, en"');
+    expect(loading).toContain(m.condition_languages_label({}, { locale }));
+    expect(loading).toContain('name="language" value="ja"');
+    expect(loading).toContain('name="language" value="en"');
+    expect(loading).toContain(m.release_search_age_help({}, { locale }));
+    expect(loading).toContain(m.condition_calendar_day({}, { locale }));
+    expect(loading).toContain(m.condition_calendar_help({}, { locale }));
     expect(loading).toContain('<label');
     expect(render({ status: 'unavailable' })).toContain('role="alert"');
     const preparing = render({
@@ -397,7 +478,7 @@ test('platform and producer operands use contextual selections while URLs retain
       createElement(ReleaseSearchPage, {
         locale,
         parsed,
-        types: [{ id: releaseType, label: 'Release' }],
+        types: releaseTypes,
         selections: {
           platform: { id: releaseId, label: 'Nintendo Switch', type: 'schema:GamePlatform' },
           developer: { id: releaseId, label: 'Example Studio', type: 'schema:Organization' },
@@ -414,6 +495,179 @@ test('platform and producer operands use contextual selections while URLs retain
     expect(html).not.toContain(
       `type="search" autoComplete="off" placeholder="${m.search_placeholder({}, { locale })}" value="${releaseId}"`,
     );
+  }
+});
+
+test('release criteria update on subtype change, retain repairs, and apply an ordered cursor-free request', async () => {
+  const previousFetch = Object.getOwnPropertyDescriptor(globalThis, 'fetch');
+  Object.defineProperty(globalThis, 'fetch', {
+    configurable: true,
+    writable: true,
+    value: async (input: RequestInfo | URL) => {
+      const query = new URL(String(input), 'https://site.test').searchParams.get('q');
+      const subject =
+        query === 'Nintendo'
+          ? { id: platformId, type: 'schema:GamePlatform', labels: { en: 'Nintendo Switch' } }
+          : { id: developerId, type: 'schema:Organization', labels: { en: 'Example Studio' } };
+      const type = subject.type;
+      return new Response(
+        JSON.stringify({
+          subjects: [{ ...subject, summary: null }],
+          types: { [type]: { en: type } },
+          as_of: '2026-11-05T00:00:00.000Z',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    },
+  });
+  const mounted = await mountReleaseCriteria();
+  const condition = JSON.stringify({ not: { statement: { property: 'schema:inLanguage', in: ['de'] } } });
+  const original = parseReleaseSearch(
+    {
+      subtype: releaseType,
+      q: 'Edition',
+      language: ['fr', 'ja'],
+      gte: '2024-02',
+      lte: '2024-03',
+      ageGte: '1.25',
+      ageLte: '3.5',
+      ageUnit: 'http://www.wikidata.org/entity/Q577',
+      sort: 'relevance',
+      threshold: '2',
+      condition,
+      cursor: 'old-result-cursor',
+    },
+    bundledRelease,
+    'en',
+  );
+  const input = (id: string) => mounted.host.querySelector<HTMLInputElement>(`#release-search-${id}`)!;
+  const changeValue = (id: string, value: string) => {
+    const field = mounted.host.querySelector<HTMLInputElement | HTMLSelectElement>(`#release-search-${id}`)!;
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), 'value')?.set?.call(field, value);
+    field.dispatchEvent(new mounted.window.Event(field.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+  };
+  const choose = async (id: string, query: string) => {
+    await act(async () => {
+      changeValue(id, query);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+      mounted.host.querySelector<HTMLElement>('[role="option"]')!.click();
+    });
+  };
+  try {
+    await mounted.render(original);
+    await choose('platform', 'Nintendo');
+    await choose('developer', 'Studio');
+    expect(mounted.host.textContent).toContain('Nintendo Switch');
+    expect(mounted.host.textContent).toContain('Example Studio');
+    expect(mounted.host.textContent).toContain('schema:GamePlatform');
+    expect(mounted.host.textContent).toContain('schema:Organization');
+    expect(mounted.host.textContent).toContain(m.release_search_subject_help({}, { locale: 'en' }));
+    expect(mounted.host.textContent).toContain(m.release_search_draft_notice({}, { locale: 'en' }));
+
+    await act(async () => {
+      changeValue('releaseLanguage', 'ja, en');
+    });
+    const moveJapaneseUp = [...mounted.host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.getAttribute('aria-label') === m.condition_languages_move_up({ language: 'ja' }, { locale: 'en' }),
+    )!;
+    await act(async () => moveJapaneseUp.click());
+
+    await act(async () => {
+      changeValue('subtype', 'rezics:AnimeRelease');
+    });
+    expect(mounted.host.querySelector('[data-criteria-field="platform"]')).not.toBeNull();
+    expect(input('platform').getAttribute('aria-invalid')).toBe('true');
+    expect(input('developer').getAttribute('aria-invalid')).toBe('true');
+    expect(input('ageGte').value).toBe('1.25');
+    expect(input('ageUnit').value).toBe('http://www.wikidata.org/entity/Q577');
+    expect(input('releaseLanguage').getAttribute('aria-invalid')).toBe('true');
+    expect(mounted.host.querySelector('#release-search-errors a[href="#release-search-platform"]')).not.toBeNull();
+    const form = mounted.host.querySelector('form')!;
+    await act(async () => {
+      expect(form.dispatchEvent(new mounted.window.Event('submit', { bubbles: true, cancelable: true }))).toBe(false);
+    });
+    expect(mounted.window.document.activeElement?.id).toBe('release-search-errors');
+
+    await act(async () => {
+      changeValue('subtype', releaseType);
+      changeValue('releaseLanguage', 'ja, en');
+    });
+    expect(mounted.host.querySelector('[role="alert"]')).toBeNull();
+    const params = new URLSearchParams();
+    for (const [key, value] of new mounted.window.FormData(form)) if (typeof value === 'string') params.append(key, value);
+    expect(params.getAll('language')).toEqual(['ja', 'fr']);
+    expect(params.has('cursor')).toBe(false);
+    expect(params.get('condition')).toBe(condition);
+    expect(params.get('threshold')).toBe('2');
+    expect(params.get('sort')).toBe('relevance');
+
+    const reopened = parseReleaseSearch(defaultParseSearch(`?${params}`), bundledRelease, 'en');
+    expect(reopened.invalid).toEqual([]);
+    expect(reopened.search.cursor).toBeUndefined();
+    const request = releaseSearchRequest(reopened.search, bundledRelease);
+    const expected = parseReleaseSearch(
+      {
+        ...reopened.form,
+        platform: platformId,
+        releaseLanguage: 'ja, en',
+        developer: developerId,
+      },
+      bundledRelease,
+      'en',
+    );
+    expect(request).toEqual(releaseSearchRequest(expected.search, bundledRelease));
+    await mounted.render(reopened, {
+      platform: { id: platformId, label: 'Nintendo Switch', type: 'schema:GamePlatform' },
+      developer: { id: developerId, label: 'Example Studio', type: 'schema:Organization' },
+    });
+    expect(input('gte').value).toBe('2024-02');
+    expect(input('lte').value).toBe('2024-03');
+    expect(input('ageGte').value).toBe('1.25');
+    expect(input('ageLte').value).toBe('3.5');
+    expect(input('ageUnit').value).toBe('http://www.wikidata.org/entity/Q577');
+    expect(mounted.host.textContent).toContain('Nintendo Switch');
+    expect(mounted.host.textContent).toContain('Example Studio');
+  } finally {
+    await mounted.close();
+    if (previousFetch) Object.defineProperty(globalThis, 'fetch', previousFetch);
+    else Reflect.deleteProperty(globalThis, 'fetch');
+  }
+});
+
+test('withdrawn subtype and invalid URL language stay visible until focused correction', async () => {
+  const mounted = await mountReleaseCriteria();
+  try {
+    const parsed = parseReleaseSearch({ subtype: 'local:Withdrawn', language: ['??', 'ja'] }, bundledRelease, 'en');
+    await mounted.render(parsed);
+    const subtype = mounted.host.querySelector<HTMLSelectElement>('#release-search-subtype')!;
+    expect(subtype.value).toBe('local:Withdrawn');
+    expect(subtype.querySelector('option[value="local:Withdrawn"]')).not.toBeNull();
+    expect(subtype.getAttribute('aria-describedby')).toContain('release-search-subtype-error');
+    expect(mounted.host.querySelector('#release-search-language')?.getAttribute('aria-invalid')).toBe('true');
+    expect(mounted.host.textContent).toContain('??');
+
+    const form = mounted.host.querySelector('form')!;
+    await act(async () => {
+      expect(form.dispatchEvent(new mounted.window.Event('submit', { bubbles: true, cancelable: true }))).toBe(false);
+    });
+    expect(mounted.window.document.activeElement?.id).toBe('release-search-errors');
+    await act(async () => {
+      const changeValue = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(subtype), 'value')?.set;
+      changeValue?.call(subtype, releaseType);
+      subtype.dispatchEvent(new mounted.window.Event('change', { bubbles: true }));
+    });
+    const removeInvalidTag = [...mounted.host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.getAttribute('aria-label') === m.condition_languages_remove({ language: '??' }, { locale: 'en' }),
+    )!;
+    await act(async () => removeInvalidTag.click());
+    expect(mounted.host.querySelector('[role="alert"]')).toBeNull();
+    const data = new mounted.window.FormData(form);
+    expect(data.getAll('language')).toEqual(['ja']);
+    expect(data.has('cursor')).toBe(false);
+  } finally {
+    await mounted.close();
   }
 });
 

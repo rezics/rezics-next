@@ -22,7 +22,7 @@ import { ConditionRangeInput } from './condition-range-input';
 import { ConditionCalendarRangeEditor } from './condition-calendar-range';
 import { ConditionRangeMode } from './condition-range-mode';
 import { quantityUnitChangeNeedsConfirmation, searchQuantityUnitText } from './condition-quantity';
-import { ConditionLanguages } from './condition-languages';
+import { ConditionLanguages } from './language-preferences';
 import { ConditionSavedFilter, editSavedFilterTree, type SavedFilterEditMode } from './condition-saved-filter';
 import {
   CONDITION_POINTER,

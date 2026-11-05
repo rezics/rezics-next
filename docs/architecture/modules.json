@@ -530,7 +530,8 @@
       "publicEntries": [
         "apps/web/src/search/search.tsx",
         "apps/web/src/search/search-window/index.ts",
-        "apps/web/src/search/release-window.ts"
+        "apps/web/src/search/release-window.ts",
+        "apps/web/src/search/language-preferences.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -699,7 +700,11 @@
         "apps/web/src/session/index.ts",
         "apps/web/src/session/reader.ts",
         "apps/web/src/subject/definitions.ts",
-        "apps/web/src/subject/quantity-presentation.ts"
+        "apps/web/src/subject/quantity-presentation.ts",
+        "apps/web/src/paraglide/messages.js",
+        "apps/web/src/paraglide/messages.d.ts",
+        "apps/web/src/paraglide/runtime.js",
+        "apps/web/src/paraglide/runtime.d.ts"
       ],
       "allowedDependencies": [
         "client",
