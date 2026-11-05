@@ -15,7 +15,7 @@ export const characterUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0
 export type CharacterItem = ReturnType<typeof initialTerms>['item'] & { statements: Record<string, StatementInput[]> };
 export type CharacterCommand = { item: CharacterItem; key: string };
 export type CharacterRead =
-  | { ok: false; reason: 'invalid' | 'denied' | 'stale' | 'unsupported' | 'unavailable' }
+  | { ok: false; reason: 'invalid' | 'denied' | 'stale' | 'unavailable'; selection?: 'unsupported' }
   | {
       ok: true;
       release: Release;
@@ -149,8 +149,8 @@ export async function readCharacterProfile(
   )
     return { ok: false, reason: 'invalid' };
   if (!address.id && (address.context !== undefined || address.realm !== undefined))
-    return { ok: false, reason: 'unsupported' };
-  if (address.realm && !address.context) return { ok: false, reason: 'unsupported' };
+    return { ok: false, reason: 'unavailable', selection: 'unsupported' };
+  if (address.realm && !address.context) return { ok: false, reason: 'unavailable', selection: 'unsupported' };
   const context = address.context ?? candidateContext;
   const [active, character, work] = await Promise.all([
     client.definitions.active.get(),
@@ -169,13 +169,15 @@ export async function readCharacterProfile(
     if (result?.status === 308 || (result?.data && result.data.subject.id !== id))
       return { ok: false, reason: 'stale' };
     if ((result?.status === 400 || result?.status === 422) && id === address.id && address.context)
-      return { ok: false, reason: 'unsupported' };
+      return { ok: false, reason: 'unavailable', selection: 'unsupported' };
     if (result?.status !== 200 || !result.data) return { ok: false, reason: 'unavailable' };
   }
   if (active.status !== 200 || !active.data) return { ok: false, reason: 'unavailable' };
-  if (character?.data && character.data.subject.context !== context) return { ok: false, reason: 'unsupported' };
-  if (character?.data && character.data.subject.type !== characterType) return { ok: false, reason: 'invalid' };
-  const releaseDigest = character?.data.subject.release ?? active.data.digest;
+  const characterData = character?.data ?? null;
+  if (characterData && characterData.subject.context !== context)
+    return { ok: false, reason: 'unavailable', selection: 'unsupported' };
+  if (characterData && characterData.subject.type !== characterType) return { ok: false, reason: 'invalid' };
+  const releaseDigest = characterData?.subject.release ?? active.data.digest;
   const bundle = await client.definitions.releases({ digest: releaseDigest }).get();
   if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== releaseDigest)
     return { ok: false, reason: 'unavailable' };
@@ -192,7 +194,7 @@ export async function readCharacterProfile(
     release,
     context,
     ...(address.realm ? { realm: address.realm } : {}),
-    character: character?.data ?? null,
+    character: characterData,
     work: work?.data ?? null,
     workDescriptor,
   };
