@@ -31,6 +31,8 @@ Every capability uses the `privacy` fixture contract from `docs/research/api-acc
 
 **Native acceptance:** `sh -c 'bun run --cwd services/auth check test/workflows.test.ts && bun run --cwd services/kernel check test/access/account-lifecycle-outcome.test.ts test/access/session-revocation.test.ts test/access/suspension.test.ts test/access/suspended-sign-in.test.ts test/access/suspended-bearer.test.ts'`.
 
+**Worker focused evidence:** At head `7275db3bd2`, `bun test apps/auth/tests/recovery.test.ts` passed 21/21, `bun test apps/auth/tests/step-up.test.ts` passed 3/3, and `bun run --cwd apps/auth typecheck` reported no type errors in 228 files. At head `79815141d3`, `bun test apps/auth/tests/login.test.ts` passed 4/4 and `bun test apps/auth/tests/signup.test.ts` passed 8/8; Auth source and those test files are unchanged at `7275db3bd2`. Seeded persona acceptance and the full browser/native walk remain deferred to the verifier.
+
 ## permission-formula
 
 **User job:** An actor performs an operation only when actor grants, consented client scopes and principal grants all permit it, subject to the anonymous floor and explicit denials.
