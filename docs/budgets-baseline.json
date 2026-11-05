@@ -55,7 +55,7 @@
     },
     {
       "path": "docs/goals/**/*.capabilities.*",
-      "bytes": 571667
+      "bytes": 571647
     },
     {
       "path": "docs/goals/accounts.capabilities.md",
@@ -75,7 +75,7 @@
     },
     {
       "path": "docs/goals/imports.capabilities.md",
-      "bytes": 9716
+      "bytes": 9521
     },
     {
       "path": "docs/goals/library.capabilities.md",
