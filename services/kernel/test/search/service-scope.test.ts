@@ -31,7 +31,8 @@ test('the actual SearchService-bound scope factory contract is staged without a 
   expectTypeOf<ReturnType<typeof createSearchScopeForService>>().toEqualTypeOf<
     ReturnType<typeof createSearchScopeSource>
   >();
-  expectTypeOf<ScopeRuntime>().toEqualTypeOf<Omit<Parameters<typeof createSearchScopeSource>[0], 'evidence'>>();
+  expectTypeOf<ScopeRuntime>().toMatchTypeOf<Omit<Parameters<typeof createSearchScopeSource>[0], 'evidence'>>();
+  expectTypeOf<'realmSubjectsForReader' extends keyof ScopeRuntime ? true : false>().toEqualTypeOf<true>();
   expectTypeOf<'scope' extends keyof SearchService ? true : false>().toEqualTypeOf<false>();
 });
 
