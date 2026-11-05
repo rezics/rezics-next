@@ -127,7 +127,7 @@ function IdentifierVisitReader({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const result = query.isFetching ? undefined : query.data;
+  const result = query.isFetching || query.isError ? undefined : query.data;
   const evidence = result?.kind === 'ready' ? result.evidence : undefined;
   const statement = evidence && inspection ? identifierOccurrence(evidence, inspection) : undefined;
   useLayoutEffect(() => () => focusLease.current?.cancel(), []);
