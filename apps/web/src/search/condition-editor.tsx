@@ -350,7 +350,13 @@ export function ConditionEditor({
         <span key={announcement.version}>{announcement.text}</span>
       </p>
       {onLanguages && (
-        <ConditionLanguages languages={languages ?? []} locale={locale} disabled={disabled} onChange={onLanguages} />
+        <ConditionLanguages
+          key={focusOwner}
+          languages={languages ?? []}
+          locale={locale}
+          disabled={disabled}
+          onChange={onLanguages}
+        />
       )}
       {issues.length > 0 && (
         <div role="alert" tabIndex={-1} data-condition-errors className="space-y-1 text-sm text-destructive">

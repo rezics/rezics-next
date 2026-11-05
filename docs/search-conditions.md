@@ -50,6 +50,8 @@ must check Realm authority and native figure eligibility, with typed readiness f
 
 ## Conditions and resource meaning
 
+Decision: Search criteria reserve composing Enter/Escape (including native `isComposing` and keyCode 229) for the active editor; candidate confirmation cannot add a language, submit or dismiss Filters. Explicit Apply after composition uses the complete draft through the existing GET serializer. Request or locale replacement retires composition and language drafts under the current filter-surface owner.
+
 Use the one released Boolean grammar, typed properties, units and same-statement qualifiers. Expand user,
 saved and authorized private predicates together, then exact-deduplicate and admit the whole tree: at most
 32 leaves, depth 4, OR 16, `in` 64 and qualifiers 4. Never truncate expansion or drop an OR branch to fit.

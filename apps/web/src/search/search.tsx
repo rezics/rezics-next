@@ -86,6 +86,7 @@ import {
 import { conditionConceptSuggestionFilter } from './condition-concept-model';
 import { createFilterDraft, resetFilterDraft } from './filter-draft-reset';
 import { useFilterSurfaceFocus } from './filter-surface-focus';
+import { useConditionComposition } from './condition-composition';
 type SearchResult = LegacySearchPage;
 export type SearchFacetValueLabel = { text: string; lang?: string };
 type SearchParams = {
@@ -767,7 +768,8 @@ export function SearchPage({
     checkpoint: discovery?.status === 'ready' ? discovery.page.as_of : result?.as_of,
     enabled: !filtersOnly,
   });
-  const stateKey = JSON.stringify(committedState);
+  const stateKey = JSON.stringify([committedState, locale]);
+  const composition = useConditionComposition(stateKey);
   const latestStateKey = useRef(stateKey);
   latestStateKey.current = stateKey;
   const filterFocus = useFilterSurfaceFocus(stateKey);
@@ -1039,6 +1041,10 @@ export function SearchPage({
       }),
     );
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    if (composition.isComposing()) {
+      event.preventDefault();
+      return;
+    }
     setDraft((previous) => ({ ...previous, attempted: true }));
     if (localIssues.length || router) event.preventDefault();
     if (localIssues.length) {
@@ -1473,6 +1479,7 @@ export function SearchPage({
           tabIndex={-1}
           className="min-w-0 rounded-xl border border-border/60 p-4"
           onKeyDown={(event) => {
+            if (event.defaultPrevented || composition.isComposing(event)) return;
             if (event.key === 'Escape') {
               event.preventDefault();
               closeFilters();
@@ -1486,7 +1493,14 @@ export function SearchPage({
               {m.search_close_filters({}, options)}
             </Button>
           </div>
-          <form id="desktop-filter-form" method="get" onSubmit={submit} action={`/${locale}/search`}>
+          <form
+            key={stateKey}
+            {...composition.handlers}
+            id="desktop-filter-form"
+            method="get"
+            onSubmit={submit}
+            action={`/${locale}/search`}
+          >
             {filterContents('desktop')}
           </form>
         </div>
@@ -1500,7 +1514,15 @@ export function SearchPage({
           closeLabel={m.search_close_filters({}, options)}
           title={`${m.search_filters({}, options)} (${number.format(activeFilterCount)})`}
         >
-          <form id="search-filters" method="get" action={`/${locale}/search`} onSubmit={submit} onClick={follow}>
+          <form
+            key={stateKey}
+            {...composition.handlers}
+            id="search-filters"
+            method="get"
+            action={`/${locale}/search`}
+            onSubmit={submit}
+            onClick={follow}
+          >
             {filterContents('mobile')}
           </form>
         </BottomSheet>

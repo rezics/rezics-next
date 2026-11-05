@@ -6,6 +6,7 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { canonicalLanguageTag } from './language-refinement';
+import { useConditionComposition } from './condition-composition';
 
 export const MAX_LANGUAGE_PREFERENCES = 8;
 
@@ -95,6 +96,7 @@ export function ConditionLanguages({
   const [selected, setSelected] = useState('');
   const [customTag, setCustomTag] = useState('');
   const [customTagInvalid, setCustomTagInvalid] = useState(false);
+  const composition = useConditionComposition(locale);
   const atLimit = languages.length >= MAX_LANGUAGE_PREFERENCES;
   const available = locales.filter(
     (tag) => !languages.some((language) => language.toLowerCase() === tag.toLowerCase()),
@@ -113,6 +115,18 @@ export function ConditionLanguages({
       if (action.type === 'remove') pendingFocus.current = { kind: 'remove', index: action.index };
     }
     onChange(next);
+  };
+
+  const addCustomTag = (raw: string) => {
+    if (composition.isComposing()) return;
+    const tag = canonicalLanguageTag(raw.trim());
+    if (!tag) {
+      setCustomTagInvalid(true);
+      return;
+    }
+    update({ type: 'add', tag });
+    setCustomTag('');
+    setCustomTagInvalid(false);
   };
 
   useLayoutEffect(() => {
@@ -224,6 +238,7 @@ export function ConditionLanguages({
         <FieldLabel htmlFor={`${selectId}-custom`}>{m.condition_languages_custom_label({}, options)}</FieldLabel>
         <div className="flex flex-wrap items-end gap-2">
           <Input
+            {...composition.handlers}
             id={`${selectId}-custom`}
             value={customTag}
             maxLength={35}
@@ -238,16 +253,10 @@ export function ConditionLanguages({
               setCustomTagInvalid(false);
             }}
             onKeyDown={(event) => {
+              if (event.defaultPrevented || composition.isComposing(event)) return;
               if (event.key === 'Enter') {
                 event.preventDefault();
-                const tag = canonicalLanguageTag(customTag.trim());
-                if (!tag) {
-                  setCustomTagInvalid(true);
-                  return;
-                }
-                update({ type: 'add', tag });
-                setCustomTag('');
-                setCustomTagInvalid(false);
+                addCustomTag(event.currentTarget.value);
               }
             }}
           />
@@ -256,16 +265,7 @@ export function ConditionLanguages({
             variant="outline"
             size="sm"
             disabled={disabled || atLimit || !customTag.trim()}
-            onClick={() => {
-              const tag = canonicalLanguageTag(customTag.trim());
-              if (!tag) {
-                setCustomTagInvalid(true);
-                return;
-              }
-              update({ type: 'add', tag });
-              setCustomTag('');
-              setCustomTagInvalid(false);
-            }}
+            onClick={() => addCustomTag(customTag)}
           >
             {m.condition_languages_add_custom({}, options)}
           </Button>
