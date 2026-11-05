@@ -53,3 +53,14 @@ retained mounted-scope scenario failed SQL import with `No database URL: set DAT
 `services/kernel/test/content/media-dev-stack-configuration.test.ts`, under the owning native check-host
 protocol. Its complete original scope assertions are retained. The full Auth dev-stack browser scenario remains
 part of the owner-deferred seeded/browser execution.
+
+## Performance receiving
+
+Received the authenticated lazy-initialization delivery through `26acb99` in merge `b97141939e`.
+The dev-stack import conflict retains both bounded-stack process launch and the private media HMAC binding.
+Parent/Board probes retain their getter calls and native routing/transaction assertions. Native receiving
+continues with lifecycle, local storage/HTTP, image and mounted-scope acceptance before seeded stages.
+The post-merge inbox notification cannot start: `error: Cannot find package 'oxc-parser'` from
+`scripts/architecture.ts`. The dependency-private command was attempted before receiving dependency
+changes and failed with the retained controller-policy error recorded above. No shared dependency files
+were written manually.
