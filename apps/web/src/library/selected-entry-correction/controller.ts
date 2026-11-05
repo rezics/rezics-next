@@ -71,7 +71,7 @@ export class SelectedCorrection {
       const result = await this.port.read(page.reviewId, pageNumber);
       if (!this.current()) return;
       if (result.kind === 'ready') {
-        this.update({ page: result.value });
+        this.update({ page: result.value, current: {} });
         await this.readCurrent(result.value);
       } else if (result.kind === 'rejected') this.update({ rejected: result.status });
     } finally {
@@ -120,14 +120,14 @@ export class SelectedCorrection {
       }
       this.update({ command: null });
       if ('items' in result.value) {
-        this.update({ page: result.value });
+        this.update({ page: result.value, current: {} });
         await this.readCurrent(result.value);
         if (command.kind === 'confirm') await this.refreshEntries();
       } else {
         const page = this.state.page!;
         const reopened = await this.port.read(page.reviewId, page.page);
         if (reopened.kind === 'ready') {
-          this.update({ page: reopened.value });
+          this.update({ page: reopened.value, current: {} });
           await this.readCurrent(reopened.value);
         } else this.update({ page: { ...page, state: result.value.state } });
       }

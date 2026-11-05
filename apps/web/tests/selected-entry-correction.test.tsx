@@ -103,6 +103,43 @@ test('cancellation reconciles an unknown original item; retirement drops callbac
   expect(commands).toHaveLength(4);
 });
 
+test('an unavailable native row retires earlier readback while another row is still being read', async () => {
+  let next = page();
+  let release!: () => void;
+  const blocked = new Promise<void>((done) => {
+    release = done;
+  });
+  let slow = false;
+  const visit = new SelectedCorrection(
+    {
+      send: async () => ({ kind: 'ready', value: next }),
+      read: async () => ({ kind: 'ready', value: next }),
+      personal: async () => {
+        if (slow) await blocked;
+        return { kind: 'ready', entry: personal };
+      },
+    },
+    () => true,
+    async () => {},
+  );
+  await visit.create([{ ...selected, note: { op: 'preserve' }, priority: { op: 'preserve' } }]);
+  expect(visit.snapshot().current[selected.subjectId]?.kind).toBe('ready');
+  next = {
+    ...next,
+    items: [
+      { ...next.items[0]!, eligibility: 'unavailable', current: null, operation: null },
+      { ...next.items[0]!, selected: { ...selected, subjectId: 'second' } },
+    ],
+  };
+  slow = true;
+  const reading = visit.reopen();
+  await Promise.resolve();
+  expect(visit.snapshot().current[selected.subjectId]).toBeUndefined();
+  release();
+  await reading;
+  expect(visit.snapshot().current[selected.subjectId]).toEqual({ kind: 'unavailable' });
+});
+
 for (const width of [390, 1280])
   test(`production selected review, return and departure at ${width}px preserve the source address`, async () => {
     const { Window } = await import(
