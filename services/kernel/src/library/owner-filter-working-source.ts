@@ -1,29 +1,9 @@
 /** Server-held query context. A locator, structural capture or public output cannot enter this branch. */
-import { AsyncLocalStorage } from 'node:async_hooks';
-import type { Pool } from 'pg';
-import {
-  authoritativeTimeValue,
-  commandAttemptDeadline,
-  type AuthoritativeTime,
-  type CommandAttempt,
-} from '../command/command.ts';
+import { authoritativeTimeValue, commandAttemptDeadline } from '../command/command.ts';
 import { requireAccessDeadline } from '../request/unavailable.ts';
-import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { readNativeCollectionMemberAdmission, type CollectionMemberAdmission } from './owner-filter.ts';
-import type { NativeCollectionWork } from './collection-source-work.ts';
-
-type Context = Readonly<{
-  pool: Pool;
-  actor: Actor;
-  collectionId: string;
-  admission: CollectionMemberAdmission;
-  at: AuthoritativeTime;
-  deadline: number;
-  work: NativeCollectionWork;
-  attempt?: CommandAttempt;
-}>;
-const contexts = new AsyncLocalStorage<Context>();
+import { readNativeCollectionMemberAdmission } from './owner-filter.ts';
+import { contexts, type Context } from './owner-filter-working-context.ts';
 
 /** Reenter only with the immutable ordinary admission and the SAME native time/attempt and ledger.
  * This selects private Source semantics; current Collection, account and family Access remain mandatory.
@@ -48,21 +28,4 @@ export function withAdmittedOwnerWorkingSource<T>(context: Context, body: () => 
   )
     throw new TypeError('Foreign owner working Source attempt');
   return contexts.run(context, body);
-}
-
-/** Context lookup never grants authority. The native reader still checks the actual current curator/account. */
-export function admittedOwnerWorkingSource(pool: Pool, collectionId: string) {
-  const context = contexts.getStore();
-  if (
-    !context ||
-    context.pool !== pool ||
-    context.collectionId !== collectionId ||
-    context.actor.kind !== 'account' ||
-    !context.admission.filter
-  )
-    return undefined;
-  authoritativeTimeValue(context.at);
-  requireAccessDeadline(context.deadline);
-  context.work.assertReady();
-  return context;
 }

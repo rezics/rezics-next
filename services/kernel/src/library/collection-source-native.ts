@@ -28,7 +28,8 @@ import { nativeSourceFence } from './canonical-source-store.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
 import { grantCapable } from './collection-reads.ts';
-import { admittedOwnerWorkingSource } from './owner-filter-working-source.ts';
+import { requireAccessDeadline } from '../request/unavailable.ts';
+import { contexts } from './owner-filter-working-context.ts';
 import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
 import {
   assertLibraryIdentityWork,
@@ -626,6 +627,22 @@ export async function readNativeCollectionMetadataForWork(
   return {
     metadata: await (options.working ? observeWorking(client, ref) : observe(client, ref)),
   };
+}
+/** Context lookup never grants authority. The native reader still checks the actual current curator/account. */
+function admittedOwnerWorkingSource(pool: Pool, collectionId: string) {
+  const context = contexts.getStore();
+  if (
+    !context ||
+    context.pool !== pool ||
+    context.collectionId !== collectionId ||
+    context.actor.kind !== 'account' ||
+    !context.admission.filter
+  )
+    return undefined;
+  authoritativeTimeValue(context.at);
+  requireAccessDeadline(context.deadline);
+  context.work.assertReady();
+  return context;
 }
 function metadataCall(pool: Pool, ref: Ref, options: Options, sharedWork?: NativeCollectionWork) {
   const owner = admittedOwnerWorkingSource(pool, ref.collectionId);
