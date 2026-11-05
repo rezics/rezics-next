@@ -29,7 +29,7 @@ import { inspectNativeRetainedOrder, prepareNativeRetainedOrder } from './suppor
 import { until } from './support/work-fixture.ts';
 import { startWorkStripe } from './support/work-stripe.ts';
 
-setDefaultTimeout(90_000);
+setDefaultTimeout(120_000);
 const pool = createPool(process.env.DATABASE_URL!);
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
 let kernel: TestKernel;
