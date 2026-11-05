@@ -782,7 +782,7 @@ describe('Comparison handoff remains independent of native editor and Undo inten
       expect(calls.undo).toHaveLength(0);
       if (operation === 'create') await submit();
       else {
-        await click(m.library_copy_delete(), form());
+        await click(m.library_copy_editor_retry_delete(), form());
         await click(m.library_copy_delete_confirm(), form());
       }
       expect(latest(operation).input).toEqual(captured.input);
