@@ -11,7 +11,8 @@ import {
 } from './history-current-origin';
 import { readCurrentFollowState, readFollowState, setFollow } from './follow-actions';
 import { FollowControl } from './follow-control';
-import type { FollowState, FollowWriteInput } from './follow-records';
+import type { FollowState } from './follow-records';
+import { createFollowIntent, type FollowIntentOwner } from './mine-following-intent';
 import { refreshFollowing } from './mine-following-refresh';
 
 type FollowLifetime = {
@@ -70,6 +71,7 @@ export function FollowTargetControl({
   onReview,
   disabled = false,
   origin: parent,
+  intentOwner: retainedIntent,
 }: {
   targetId: string;
   following?: boolean | null;
@@ -84,6 +86,8 @@ export function FollowTargetControl({
   disabled?: boolean;
   /** Supplied owner rows retain their actual reader and mounted address. */
   origin?: HistoryOrigin;
+  /** Following's visit retains the row command owner across list-result presentation changes. */
+  intentOwner?: FollowIntentOwner;
 }) {
   const canFollow = useOperation('follow.put');
   const canRemove = useOperation('follow.delete');
@@ -94,10 +98,15 @@ export function FollowTargetControl({
     canFollow,
     canRemove,
   ]);
-  // A refreshed session may reauthorize a retry, but cannot replace its original transport.
-  const commands = useRef(new WeakMap<FollowWriteInput, { token: string; send: typeof setFollow }>()).current;
   const viewer = origin.subject;
   const identity = origin.boundary.id;
+  const localIntent = useRef<{ identity: string; targetId: string; owner: FollowIntentOwner } | null>(null);
+  if (
+    !retainedIntent &&
+    (!localIntent.current || localIntent.current.identity !== identity || localIntent.current.targetId !== targetId)
+  )
+    localIntent.current = { identity, targetId, owner: createFollowIntent() };
+  const intentOwner = retainedIntent ?? localIntent.current!.owner;
   const [readGeneration, setReadGeneration] = useState(0);
   const readRef = useRef<FollowLifetime | null>(null);
   const readKey = JSON.stringify([origin.lifetime(0), readGeneration, following === undefined]);
@@ -160,6 +169,7 @@ export function FollowTargetControl({
         canRemove={origin.retained[2] === true}
         ready={!disabled && (origin.allowed[1] === true || origin.allowed[2] === true)}
         {...(idempotencyKey ? { idempotencyKey } : {})}
+        intentOwner={intentOwner}
         {...(menuTitle ? { menuTitle } : {})}
         {...(onRemovalUnsettledChange
           ? {
@@ -190,14 +200,13 @@ export function FollowTargetControl({
           : {})}
         write={(input) => {
           if (!isCurrent(input.following)) return Promise.resolve({ ok: false, reason: 'unavailable' });
-          let command = commands.get(input);
-          if (!command) {
-            const token = origin.credential(input.following ? 1 : 2);
-            if (!token) return Promise.resolve({ ok: false, reason: 'unavailable' });
-            command = { token, send: setFollow };
-            commands.set(input, command);
-          }
-          return command.send({ data: input, headers: { 'X-CSRF-Token': command.token } });
+          return (
+            intentOwner.dispatch(
+              input,
+              () => origin.credential(input.following ? 1 : 2),
+              (command, credential) => setFollow({ data: command, headers: { 'X-CSRF-Token': credential } }),
+            ) ?? Promise.resolve({ ok: false, reason: 'unavailable' })
+          );
         }}
         onAccepted={(next, input) => {
           if (!isCurrent(input.following)) return false;

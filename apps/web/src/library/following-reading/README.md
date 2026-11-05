@@ -67,4 +67,8 @@ retry resends those original operands, and refreshed facts do not rebase them. V
 address, source or visit replacement retires stale rows, destinations, callbacks and focus. Recovery is explicit and
 read-only; it does not make another read automatically.
 
+Decision: Within the same Following visit, an uncertain removal keeps its exact command and captured sender/credential
+across denied list presentation; denied DOM contains no target or continuation, and only a current admitted list may
+reattach the row control for native-admitted replay. Viewer or address retirement fences the old callbacks.
+
 Kind navigation is owned by [Following kind navigation](../following-kind-navigation/README.md).

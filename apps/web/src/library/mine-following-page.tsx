@@ -41,6 +41,7 @@ import { useFollowingSelection } from './following-reading/current-selection';
 import { FollowingInspection, type FollowingSpaceReader } from './following-reading/inspection';
 import { useFollowingReturn } from './following-reading/return';
 import { SubjectCover } from './subject-row';
+import { createFollowIntent, type FollowIntentOwner } from './mine-following-intent';
 
 type ReviewFollow = (targetId: string) => Promise<FollowState | null>;
 type FollowingWindowIdentity = { source: object; subject: string; locale: string; authorityEpoch: number };
@@ -381,6 +382,7 @@ export function CurrentViewerMineFollowingPage({
           if (current()) void read.refetch();
         }}
         navigation={windowNavigation}
+        refreshCurrent={current}
         onReview={async (targetId) => {
           if (addressInvalid || !current() || !readCurrent()) return null;
           const result = await read.refetch();
@@ -421,6 +423,7 @@ export function MineFollowingPageView({
   onRetry,
   onReview,
   onRefresh,
+  refreshCurrent,
   readSpace,
   navigation,
 }: {
@@ -433,9 +436,24 @@ export function MineFollowingPageView({
   onRetry?: (() => void) | undefined;
   onReview?: ReviewFollow | undefined;
   onRefresh?: (() => void) | undefined;
+  refreshCurrent?: (() => boolean) | undefined;
   readSpace?: FollowingSpaceReader | undefined;
   navigation?: FollowingWindowNavigation | undefined;
 }) {
+  const intentOwners = useRef<{
+    lifetime: HistoryOrigin['lifetime'] | undefined;
+    byTarget: Map<string, FollowIntentOwner>;
+  } | null>(null);
+  if (!intentOwners.current || intentOwners.current.lifetime !== origin?.lifetime)
+    intentOwners.current = { lifetime: origin?.lifetime, byTarget: new Map() };
+  const intentOwnerFor = (targetId: string) => {
+    let owner = intentOwners.current!.byTarget.get(targetId);
+    if (!owner) {
+      owner = createFollowIntent();
+      intentOwners.current!.byTarget.set(targetId, owner);
+    }
+    return owner;
+  };
   const requestedAddress = personalDirectoryAddress(cursor ?? undefined, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
   const addressRejected = invalidAddress || page.addressInvalid || page.kindUnavailable || !requestedAddress.valid;
   const requestedCursor = requestedAddress.cursor;
@@ -486,8 +504,10 @@ export function MineFollowingPageView({
       onRetry={onRetry}
       onReview={onReview}
       onRefresh={onRefresh}
+      refreshCurrent={refreshCurrent}
       readSpace={readSpace}
       navigation={navigation}
+      intentOwnerFor={intentOwnerFor}
     />
   );
 }
@@ -502,8 +522,10 @@ function MineFollowingPageState({
   onRetry,
   onReview,
   onRefresh,
+  refreshCurrent,
   readSpace,
   navigation,
+  intentOwnerFor,
 }: {
   page: MineFollowingPage;
   cursor: string | null;
@@ -514,8 +536,10 @@ function MineFollowingPageState({
   onRetry?: (() => void) | undefined;
   onReview?: ReviewFollow | undefined;
   onRefresh?: (() => void) | undefined;
+  refreshCurrent?: (() => boolean) | undefined;
   readSpace?: FollowingSpaceReader | undefined;
   navigation?: FollowingWindowNavigation | undefined;
+  intentOwnerFor: (targetId: string) => FollowIntentOwner;
 }) {
   const canUnfollow = useOperation('follow.delete');
   const canReadCollection = useOperation('collection.get');
@@ -658,7 +682,14 @@ function MineFollowingPageState({
           variant="outline"
           disabled={!!status || navigationDisabled}
           onClick={() => {
-            if (page.forbidden ? !origin.isCurrent() : !reading.returnCurrent()) return;
+            if (
+              refreshCurrent
+                ? !refreshCurrent()
+                : page.forbidden
+                  ? !origin.isCurrent()
+                  : !reading.returnCurrent()
+            )
+              return;
             reading.close(false);
             onRefresh();
           }}
@@ -710,6 +741,7 @@ function MineFollowingPageState({
                     <span hidden={!canUnfollow}>
                       <FollowTargetControl
                         origin={origin}
+                        intentOwner={intentOwnerFor(follow.targetId)}
                         targetId={follow.targetId}
                         following
                         disabled={!!status}
