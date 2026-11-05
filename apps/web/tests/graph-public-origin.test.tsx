@@ -133,7 +133,7 @@ test('the production graph route gates unsupported origins and a fresh Global ch
   const rootRoute = createRootRoute({ component: () => useContext(content) ?? h(Outlet) });
   const graphRoute = Route.update({
     id: '/subjects/$id_/$slug/graph',
-    path: '/subjects/$id_/$slug/graph',
+    path: '/subjects/$id/$slug/graph',
     getParentRoute: () => rootRoute,
   } as never);
   const host = window.document.createElement('main');
