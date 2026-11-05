@@ -882,7 +882,7 @@ export class CrossMediaGraph {
             nativeType: input.nativeType,
             currentRelationEndpoint: input.currentRelationEndpoint,
             currentFactFence,
-            journal: input.journal,
+            ...(input.journal ? { journal: input.journal } : {}),
           },
           input.relationSnapshot,
         )),
