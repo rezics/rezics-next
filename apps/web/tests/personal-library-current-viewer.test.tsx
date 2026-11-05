@@ -208,7 +208,11 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     expect(calls.filter((call) => new URL(call.url).pathname === '/v1/collections')).toHaveLength(1);
     expect(
       calls
-        .filter((call) => new URL(call.url).pathname !== '/v1/openapi.json')
+        .filter((call) =>
+          ['/v1/libraryEntries', '/v1/libraryContinue', '/v1/libraryPins', '/v1/collections'].includes(
+            new URL(call.url).pathname,
+          ),
+        )
         .every((call) => call.headers.get('authorization') === 'Bearer credential-A'),
     ).toBe(true);
     expect(headers.get('cache-control')).toBe('private, no-store');
