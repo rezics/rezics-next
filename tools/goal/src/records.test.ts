@@ -167,6 +167,9 @@ test('long retained sessions keep bounded read buffers and isolate the current a
     expect(scan.bytesRead).toBeGreaterThan(SESSION_JSONL_READ_BUFFER_BYTES * 10);
     expect(scan.maxBufferedBytes).toBeLessThanOrEqual(SESSION_JSONL_READ_BUFFER_BYTES + SESSION_JSONL_MAX_RECORD_BYTES);
     expect(scan.maxBufferedBytes).toBeLessThan(scan.bytesRead / 2);
+    const sessionText = readFileSync(rollout, 'utf8');
+    const sessionOptions = { startedAt: start, endedAt: end };
+    expect(measureSessionFile(rollout, sessionOptions)?.measurement).toEqual(measureLog(sessionText, sessionOptions));
 
     const previous = lines([
       { type: 'thread.started', thread_id: session },

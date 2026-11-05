@@ -323,31 +323,27 @@ export function measureSessionFile(
   } = {},
 ): { measurement: LogMeasurement; hasUsage: boolean } | null {
   const adapters = options.adapter ? [options.adapter] : allAgentAdapters();
+  const withoutRollout = measurementState(options, adapters, false);
+  const withRollout = measurementState(options, adapters, true);
+  const usageAccumulators: AgentUsageAccumulator[] = adapters.flatMap((adapter) =>
+    adapter.createUsageAccumulator
+      ? [adapter.createUsageAccumulator(withoutRollout.start, withoutRollout.end, options.policy?.provider)]
+      : [],
+  );
   let hasRollout = false;
-  const header = scanSessionJsonl(
+  const scan = scanSessionJsonl(
     path,
     (event) => {
       if (!hasRollout) hasRollout = adapters.some((adapter) => adapter.hasRollout?.([event]) ?? false);
-    },
-    options.policy?.records,
-  );
-  if (!header.complete) return null;
-
-  const state = measurementState(options, adapters, hasRollout);
-  const usageAccumulators: AgentUsageAccumulator[] = adapters.flatMap((adapter) =>
-    adapter.createUsageAccumulator
-      ? [adapter.createUsageAccumulator(state.start, state.end, options.policy?.provider)]
-      : [],
-  );
-  const body = scanSessionJsonl(
-    path,
-    (event) => {
-      state.add(event);
+      withoutRollout.add(event);
+      withRollout.add(event);
       for (const accumulator of usageAccumulators) accumulator.add(event);
     },
     options.policy?.records,
   );
-  if (!body.complete) return null;
+  if (!scan.complete) return null;
+
+  const state = hasRollout ? withRollout : withoutRollout;
   const ledger = usageAccumulators.map((accumulator) => accumulator.finish()).find((usage) => usage !== null) ?? null;
   const measurement = state.finish(ledger);
   return { measurement, hasUsage: ledger !== null || (state.hasUsage && state.exactUsage) };

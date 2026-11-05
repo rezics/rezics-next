@@ -2512,6 +2512,8 @@ changed files, host gate time and the fixed classifier version. Step classes are
 commit. Cumulative snapshots are differenced; repeated or older totals add no tokens. A resumed log requires its
 preceding token baseline, or a rollout containing the pre-window observation.
 
+Decision: retained session accounting uses one bounded file traversal, keeps both rollout interpretations as streaming aggregates, and selects after the scan so late rollout markers retain precedence without retaining event history.
+
 ```sh
 bun tools/goal/src/cli.ts import-attempt /absolute/path/to/<capture-directory>
 ```
