@@ -382,7 +382,7 @@ test('duplicate More reads once; failed Previous and First retry their staged cu
   const delayed = Promise.withResolvers<MemberPageRead>();
   let deferNext = true;
   let failPrevious = true;
-  let failFirst = true;
+  let failFirst = false;
   const visit = new RealmMembersVisit('realm', {
     pageBound: 20,
     readPage: async ({ cursor }) => {
@@ -416,6 +416,7 @@ test('duplicate More reads once; failed Previous and First retry their staged cu
   expect(visit.snapshot().read.kind).toBe('failed');
   expect(await visit.retryPage()).toBe(true);
   expect(visit.canPrevious()).toBe(true);
+  failFirst = true;
   expect(await visit.first()).toBe(false);
   expect(visit.snapshot().read.kind).toBe('unavailable');
   expect(await visit.retryPage()).toBe(true);
