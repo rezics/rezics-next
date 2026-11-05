@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, QueryConfig, QueryResultRow } from 'pg';
+import { type Bound } from '@rezics/bounds';
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
@@ -18,7 +19,7 @@ import {
 } from './canonical-source-bounds.ts';
 import { nativeSourceFence, type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
 import { readNativeCollectionMetadataForWork, type NativeCollectionMetadata } from './collection-source-native.ts';
-import type { CollectionSourceObservation, WorkDimensions, WorkReceipt } from './collection-source.ts';
+import type { CollectionSourceObservation, WorkReceipt } from './collection-source.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 
 export type CollectionSourceWorkDefinition = Awaited<ReturnType<typeof readScopeWorkDefinition>>;
@@ -39,7 +40,7 @@ export const COLLECTION_SOURCE_WORK_GROUP_LIMIT = CANONICAL_SOURCE_RAW_KEY_LIMIT
 /** Upper bounds follow the exact indexed statements in the canonical Source plan. */
 export const COLLECTION_SOURCE_WORK_COST = CANONICAL_SOURCE_RECEIVING_COST;
 
-const sourceReceipt = (bound: ReturnType<typeof canonicalSourceWorkDimensions> | Parameters<typeof canonicalSourceWorkDimensions>[0]): WorkReceipt =>
+const sourceReceipt = (bound: Bound): WorkReceipt =>
   Object.freeze({
     reservationId: 'collection-source-static',
     used: canonicalSourceWorkDimensions(bound),
@@ -69,12 +70,13 @@ async function query<R extends QueryResultRow>(
     throw new ProblemError('semantic_not_ready');
   assertCanonicalSourceStatement(declared, values);
   current.called.add(declared.name);
-  const config: QueryConfig = {
-    text: declared.sql,
-    values,
-    query_timeout: Math.max(1, current.deadline - Date.now()),
-  };
-  const rows = (await work.tx.query<R>(config)).rows;
+  const rows = (
+    await work.tx.query<R>({
+      text: declared.sql,
+      values,
+      query_timeout: Math.max(1, current.deadline - Date.now()),
+    } as QueryConfig)
+  ).rows;
   if (rows.length > declared.rows || Buffer.byteLength(JSON.stringify(rows) ?? '') > declared.resultBytes)
     throw new ProblemError('dependency_unavailable');
   return rows;
