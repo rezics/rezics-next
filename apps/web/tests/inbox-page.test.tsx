@@ -564,6 +564,10 @@ test('Previous and browser return re-admit the exact unread address and restore 
     },
   );
   const returnEvents: Array<{ phase: string | null; historyKey: string | null }> = [];
+  const navigationEvents: Array<{ from: string; to: string }> = [];
+  const stopNavigationEvents = view.router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) =>
+    navigationEvents.push({ from: fromLocation?.href ?? '', to: toLocation.href }),
+  );
   const stopReturnEvents = subscribeInboxReturn(view.router, (receipt) =>
     returnEvents.push({ phase: receipt?.phase ?? null, historyKey: receipt?.historyKey ?? null }),
   );
@@ -586,6 +590,8 @@ test('Previous and browser return re-admit the exact unread address and restore 
     await tick();
     expect(view.router.state.location.pathname).toBe('/threads/thread');
     await view.settle(() => view.host.textContent?.includes('Thread destination') === true);
+    if (returnEvents.at(-1)?.phase === null)
+      throw new Error(`Inbox return cleared while away: ${JSON.stringify({ returnEvents, navigationEvents })}`);
     expect(returnEvents.map(({ phase }) => phase)).toEqual(['armed', 'departed']);
     await act(async () => view.router.history.back());
     await tick();
@@ -608,6 +614,7 @@ test('Previous and browser return re-admit the exact unread address and restore 
     expect(seenCommands).toEqual([]);
   } finally {
     stopReturnEvents();
+    stopNavigationEvents();
     await view.unmount();
   }
 });
