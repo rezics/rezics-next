@@ -28,9 +28,9 @@ function serverPort(visit: VndbVisit): VndbPort {
     delete: (command) => deleteVndbImport({ data: { ...data, uploadId: command.uploadId, key: command.key }, headers }),
   };
   // A lost browser/server-function acknowledgement retains the exact dispatched command.
-  async function send<K extends keyof VndbPort>(kind: K, command: Parameters<VndbPort[K]>[0]) {
+  async function send<T>(command: VndbCommand, operation: () => Promise<T>): Promise<T | VndbUnknown> {
     try {
-      return await (endpoints[kind] as (command: VndbCommand) => ReturnType<VndbPort[K]>)(command);
+      return await operation();
     } catch (error) {
       if (error instanceof TypeError || error instanceof DOMException || error instanceof SyntaxError)
         return { kind: 'unknown', command } satisfies VndbUnknown;
@@ -38,13 +38,13 @@ function serverPort(visit: VndbVisit): VndbPort {
     }
   }
   return {
-    preview: (command) => send('preview', command),
-    page: (command) => send('page', command),
-    source: (command) => send('source', command),
-    review: (command) => send('review', command),
-    apply: (command) => send('apply', command),
-    cancel: (command) => send('cancel', command),
-    delete: (command) => send('delete', command),
+    preview: (command) => send(command, () => endpoints.preview(command)),
+    page: (command) => send(command, () => endpoints.page(command)),
+    source: (command) => send(command, () => endpoints.source(command)),
+    review: (command) => send(command, () => endpoints.review(command)),
+    apply: (command) => send(command, () => endpoints.apply(command)),
+    cancel: (command) => send(command, () => endpoints.cancel(command)),
+    delete: (command) => send(command, () => endpoints.delete(command)),
   };
 }
 

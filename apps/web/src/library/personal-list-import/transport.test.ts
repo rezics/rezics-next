@@ -156,7 +156,7 @@ test('lost transport keeps the original command', async () => {
   const client = createKernelClient('https://kernel.invalid', {
     fetch: (async (_input, _init) => {
       throw new TypeError('lost acknowledgement');
-    }) as typeof fetch,
+    }) as unknown as typeof fetch,
   });
   const port = kernelVndbPort(client, new Request('https://web.invalid'), {}, true, owner);
   expect(await port.apply(command)).toEqual({ kind: 'unknown', command });
