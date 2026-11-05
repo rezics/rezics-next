@@ -208,7 +208,12 @@ test('default selected-family COPY planning joins only selected VN links and kee
         ? [command.statement.value.type === 'value' ? command.statement.value.content : null]
         : [],
     );
-    expect(urls).toEqual(['https://bgm.tv/subject/100', 'https://example.org/v411']);
+    expect(urls).toEqual([
+      'https://bgm.tv/subject/100',
+      'https://example.org/v411',
+      'https://bgm.tv/character/9',
+      'https://bgm.tv/person/8',
+    ]);
     expect(
       converted.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P5732'),
     ).toBe(false);
