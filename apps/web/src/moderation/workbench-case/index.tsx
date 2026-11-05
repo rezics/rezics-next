@@ -162,7 +162,7 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
         search: props.search,
         reportId: props.reportId,
         locale: getLocale(),
-        source,
+        ...(source ? { source } : {}),
       });
     props.onReturnQueue(queueHref);
   }
@@ -170,7 +170,13 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
   const retired = current.observe();
   const queueHref = localizeHref(workbenchCaseQueueHref(props.search ?? props.input));
   if (retired || (typeof window !== 'undefined' && !browserClient) || (current.owner && !current.owner.available()))
-    return <WorkbenchCaseStatus state="unavailable" queueHref={queueHref} onReturnQueue={props.onReturnQueue ? returnToQueue : undefined} />;
+    return (
+      <WorkbenchCaseStatus
+        state="unavailable"
+        queueHref={queueHref}
+        {...(props.onReturnQueue ? { onReturnQueue: returnToQueue } : {})}
+      />
+    );
 
   const result = workbenchCaseFromPage(props.page, props.reportId);
   if (result.state !== 'ready')
