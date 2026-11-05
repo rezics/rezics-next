@@ -106,7 +106,7 @@ async function mount() {
     DocumentFragment: window.DocumentFragment,
     MutationObserver: window.MutationObserver,
     IS_REACT_ACT_ENVIRONMENT: true,
-  };
+  ;
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
