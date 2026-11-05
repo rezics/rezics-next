@@ -116,3 +116,6 @@ is delivered; no second parser or import route is introduced.
 
 Decision: Generated annotation and source-observation calls encode each unchanged logical UUID key as a Structured
 Field string at the native HTTP boundary.
+
+Decision: AniList and Bangumi retain each returned enriched source-admission command at the head of their existing
+queue until settlement; later rows capture custody independently on their first read.
