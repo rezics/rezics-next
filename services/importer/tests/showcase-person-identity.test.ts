@@ -397,10 +397,13 @@ test('review transport keeps original source observations, decimal security revi
     origin: 'https://kernel.import.test',
     tokenProvider: async () => 'original-token',
     maxAttempts: 1,
-    fetch: (async () => {
-      synchronousMergeCalls++;
-      return Response.json({ survivor: original, redirected: other, revision: 2 }, { status: 200 });
-    }) as typeof fetch,
+    fetch: Object.assign(
+      async () => {
+        synchronousMergeCalls++;
+        return Response.json({ survivor: original, redirected: other, revision: 2 }, { status: 200 });
+      },
+      { preconnect() {} },
+    ),
   });
   await expect(synchronousMerge.mergeReviewedPersons(body, 'synchronous-result')).rejects.toMatchObject({
     status: 200,
