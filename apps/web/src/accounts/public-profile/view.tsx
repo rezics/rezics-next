@@ -1,3 +1,6 @@
+import type { MouseEvent, Ref } from 'react';
+import { realmsWindowHref } from './realm-windows/address';
+import type { Movement } from './realm-windows/visit';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { ContentItem } from '@rezics/ui/content-item';
@@ -58,6 +61,9 @@ export function PublicRealmsPage({
   result,
   retry,
   search = '',
+  hash = '',
+  navigation,
+  regionRef,
 }: {
   handle: string;
   title: string;
@@ -65,18 +71,30 @@ export function PublicRealmsPage({
   result: PublicRealms;
   retry?: (() => void) | undefined;
   search?: string;
-}) {
-  const base = accountHref(locale, handle, 'realms');
-  // Keep the current profile's query context; continuations replace only the opaque cursor.
-  const continuationHref = (cursor?: string) => {
-    const params = new URLSearchParams(search);
-    params.delete('cursor');
-    if (cursor) params.set('cursor', cursor);
-    const query = params.toString();
-    return query ? `${base}?${query}` : base;
+  hash?: string;
+  regionRef?: Ref<HTMLElement>;
+  navigation?: {
+    previous: string | undefined;
+    hasPrevious: boolean;
+    later: boolean;
+    move: (movement: Movement, target: string | undefined, action: HTMLElement) => void;
   };
+}) {
+  const continuationHref = (cursor?: string) => realmsWindowHref(handle, locale, search, hash, cursor);
+  const navigate = (movement: Movement, cursor?: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!navigation || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigation.move(movement, cursor, event.currentTarget);
+  };
+  const actionClass =
+    'inline-flex min-h-11 min-w-11 items-center wrap-anywhere text-primary underline underline-offset-4';
   return (
-    <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-8 sm:py-10">
+    <article
+      ref={regionRef}
+      tabIndex={-1}
+      aria-label={m.public_account_realms()}
+      className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-8 sm:py-10"
+    >
       <header className="min-w-0 space-y-2 wrap-anywhere">
         <a
           href={accountHref(locale, handle)}
@@ -90,7 +108,7 @@ export function PublicRealmsPage({
         <>
           <PublicAccountState state={result.state} retry={retry} />
           {result.state === 'invalid-cursor' && (
-            <a className="text-primary underline" href={continuationHref()}>
+            <a className={actionClass} href={continuationHref()} onClick={navigate('first')}>
               {m.public_account_start_again()}
             </a>
           )}
@@ -114,14 +132,27 @@ export function PublicRealmsPage({
               {result.next ? m.public_account_realms_more() : m.public_account_realms_empty()}
             </p>
           )}
-          {result.next && (
-            <a
-              className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
-              href={continuationHref(result.next)}
-            >
-              {m.public_account_next()}
-            </a>
-          )}
+          <nav aria-label={m.public_account_realms()} className="flex flex-wrap gap-x-6 gap-y-2">
+            {navigation?.hasPrevious && (
+              <a
+                className={actionClass}
+                href={continuationHref(navigation.previous)}
+                onClick={navigate('previous', navigation.previous)}
+              >
+                {m.music_context_previous_page()}
+              </a>
+            )}
+            {navigation?.later && (
+              <a className={actionClass} href={continuationHref()} onClick={navigate('first')}>
+                {m.public_account_start_again()}
+              </a>
+            )}
+            {result.next && (
+              <a className={actionClass} href={continuationHref(result.next)} onClick={navigate('next', result.next)}>
+                {m.public_account_next()}
+              </a>
+            )}
+          </nav>
         </>
       )}
     </article>
