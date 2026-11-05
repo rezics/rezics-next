@@ -518,7 +518,8 @@ Turning an optional kind off affects future optional sends, not old inbox entrie
 Preserve effective defaults, null-reset merge patch, shared `expectedVersion` CAS, idempotency and self-only
 session/CSRF behavior. A matching receipt is historical acknowledgement, not current readback. Web must keep an
 ambiguous save distinct from Saved, retain its original input/key for resolution and use fresh GET/replay as
-appropriate; failures cannot fabricate effective defaults. Unavailable unread data must be distinct from real
+appropriate; failures cannot fabricate effective defaults. A pending or conflicting restore-defaults draft previews the catalogue
+defaults that the null-reset patch produces, never the values it would replace. Unavailable unread data must be distinct from real
 zero. Current count measures capped stored candidates, not the Access-filtered visible inbox population.
 
 Reading, notification and shelf preferences share one current envelope and version. Reading defaults are
