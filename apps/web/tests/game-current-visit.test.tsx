@@ -286,6 +286,7 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
             context={candidateContext}
             type="schema:VideoGame"
             locale="en"
+            realm={realm}
             source={currentPublicRead}
             reader={null}
             returnSelection={returnDescriptor}
@@ -328,6 +329,7 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
             context={candidateContext}
             type="schema:VideoGame"
             locale="en"
+            realm={realm}
             source={changedPublicRead}
             reader={null}
             returnSelection={returnDescriptor}
