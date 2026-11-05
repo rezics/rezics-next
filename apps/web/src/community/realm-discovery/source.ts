@@ -79,6 +79,7 @@ export async function loadRealmDiscovery(
   if (!request.success) return { kind: 'unavailable' };
   try {
     const { sort, cursor, limit } = request.output;
+    signal?.throwIfAborted();
     const result = await client.realms.discovery.get({
       query: { sort, ...(cursor === undefined ? {} : { cursor }), ...(limit === undefined ? {} : { limit }) },
       fetch: { cache: 'no-store', ...(signal === undefined ? {} : { signal }) },
