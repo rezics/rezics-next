@@ -35,10 +35,12 @@ function CharacterVisit({
   locale,
   failed,
   paged,
+  stale,
 }: {
   locale: 'en' | 'ja' | 'zh-Hant';
   failed: boolean;
   paged: boolean;
+  stale: boolean;
 }) {
   const streams = (['schema:character', 'wdt:P725'] as const).map((property, index) => ({
     key: `in:${property}${index ? ':qualified' : ''}`,
@@ -48,7 +50,7 @@ function CharacterVisit({
     label: pickText(release.properties[property].relation.inverseLabels, locale).text,
     forwardLabel: pickText(release.properties[property].labels, locale).text,
     language: locale,
-    ...(index ? { filter: id(1) } : {}),
+    ...(index ? { filter: id(1), qualifier: 'wdt:P453' } : {}),
   }));
   const read: ConnectionRead = async (address) => {
     const allSections = Object.fromEntries(
@@ -64,6 +66,7 @@ function CharacterVisit({
                   ok: true,
                   read: { kind: 'links', id: id(1), property: stream.property, limit: 12 },
                   body: {
+                    freshness: { consistency: 'eventual', target_seconds: 10, caught_up: !stale },
                     links: (paged && stream.group === 'characters'
                       ? address.selection?.characters?.cursor === 'appearance-page-3'
                         ? []
@@ -81,7 +84,7 @@ function CharacterVisit({
                         id: id(10 + index * 10 + row),
                         rank: 'normal',
                         qualifiers: [
-                          snak(index ? 'schema:character' : 'wdt:P3831', index ? id(1) : id(3)),
+                          snak(index ? 'wdt:P453' : 'wdt:P3831', index ? id(1) : id(3)),
                           ...(row
                             ? [
                                 {
@@ -153,7 +156,7 @@ function CharacterVisit({
 const meta = {
   title: 'Pages/Character/Work appearances',
   component: CharacterVisit,
-  args: { locale: 'en', failed: false, paged: false },
+  args: { locale: 'en', failed: false, paged: false, stale: false },
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof CharacterVisit>;
 export default meta;
@@ -163,5 +166,6 @@ export const CurrentWindow: Story = {};
 export const IndependentCreditFailure: Story = { args: { failed: true } };
 /** The selected appearance stream exposes Previous, Next, page status and an empty terminal page. */
 export const BoundedPages: Story = { args: { paged: true } };
+export const PartialFreshness: Story = { args: { stale: true } };
 export const LongJapanese: Story = { args: { locale: 'ja' } };
 export const LongChinese: Story = { args: { locale: 'zh-Hant' } };
