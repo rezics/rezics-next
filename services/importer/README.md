@@ -2740,7 +2740,7 @@ with null object prototypes retain the same provenance; prototype identity is ne
 
 Decision: `task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
 
-[Seed denial diagnostics](seed-diagnostics.md) owns private HTTP refusal evidence.
+[Seed denial diagnostics](seed-diagnostics.md).
 
 Decision: the local seed stores finite reviewed-catalogue journal identities in the same importer state file, then validates native bindings on every run; a transient unavailable read preserves only the exact prior keyword candidate.
 
