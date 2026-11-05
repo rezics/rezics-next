@@ -420,6 +420,23 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
           source.careers.some(
             (career) => typeof career !== 'string' || !career.isWellFormed() || career.length > 64,
           ))) ||
+      (source.personChineseName !== undefined &&
+        (!source.personChineseName.isWellFormed() ||
+          source.personChineseName.trim().length === 0 ||
+          Buffer.byteLength(source.personChineseName, 'utf8') > 4096 ||
+          [...source.personChineseName].length > 500 ||
+          /\p{Cc}/u.test(source.personChineseName))) ||
+      (source.personNameDiagnostics !== undefined &&
+        (!Array.isArray(source.personNameDiagnostics) ||
+          source.personNameDiagnostics.length > 16 ||
+          source.personNameDiagnostics.some(
+            (item) =>
+              !item ||
+              typeof item.pointer !== 'string' ||
+              item.pointer.length > 96 ||
+              typeof item.code !== 'string' ||
+              item.code.length > 64,
+          ))) ||
       (source.etag !== undefined && (source.etag.length > 64 || !/^[\x20-\x7e]*$/u.test(source.etag)))
     )
       throw new TypeError('Invalid Bangumi Person career receipt');

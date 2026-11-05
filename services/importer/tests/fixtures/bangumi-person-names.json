@@ -1,0 +1,56 @@
+{
+  "controlled": true,
+  "description": "Synthetic importer mutation fixtures; these are not Bangumi observations.",
+  "duplicateInfobox": [
+    {
+      "key": "简体中文名",
+      "value": "同一名"
+    },
+    {
+      "key": "简体中文名",
+      "value": "冲突名"
+    }
+  ],
+  "nestedValue": {
+    "id": 641,
+    "type": 1,
+    "name": "岸本斉史",
+    "infobox": [
+      {
+        "key": "简体中文名",
+        "value": {
+          "nested": [
+            "不予读取"
+          ]
+        }
+      }
+    ]
+  },
+  "responseIdentityMismatch": {
+    "id": 642,
+    "type": 1,
+    "name": "岸本斉史",
+    "infobox": [
+      {
+        "key": "简体中文名",
+        "value": "岸本齐史"
+      }
+    ]
+  },
+  "responseTypeMismatch": {
+    "id": 641,
+    "type": 2,
+    "name": "岸本斉史",
+    "infobox": [
+      {
+        "key": "简体中文名",
+        "value": "岸本齐史"
+      }
+    ]
+  },
+  "absentChinese": {
+    "id": 641,
+    "type": 1,
+    "name": "岸本斉史"
+  }
+}
