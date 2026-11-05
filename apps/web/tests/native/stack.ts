@@ -400,6 +400,58 @@ async function startDurableWorker(
   }
 }
 
+function ownedPostgresDiagnostics(container: string): string {
+  const inspect = Bun.spawnSync([
+    'docker',
+    'inspect',
+    '-f',
+    '{{.State.Status}} running={{.State.Running}} oom={{.State.OOMKilled}} err={{.State.Error}}',
+    container,
+  ]);
+  const logs = Bun.spawnSync(['docker', 'logs', '--tail', '80', container]);
+  return [
+    inspect.stdout.toString().trim(),
+    inspect.stderr.toString().trim(),
+    logs.stdout.toString().trim(),
+    logs.stderr.toString().trim(),
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+async function waitForOwnedPostgres(container: string, databaseUrl: string): Promise<void> {
+  const deadline = Date.now() + 120_000;
+  while (true) {
+    const inspect = Bun.spawnSync([
+      'docker',
+      'inspect',
+      '-f',
+      '{{.State.Running}} {{.State.Status}} {{.State.OOMKilled}}',
+      container,
+    ]);
+    const state = inspect.stdout.toString().trim();
+    if (inspect.exitCode !== 0 || state.startsWith('false '))
+      throw new Error(`Disposable PostgreSQL did not become ready.\n${ownedPostgresDiagnostics(container)}`);
+    const probe = new Pool({
+      connectionString: databaseUrl,
+      connectionTimeoutMillis: 1500,
+      max: 1,
+    });
+    try {
+      await probe.query('SELECT 1');
+      return;
+    } catch (error) {
+      if (Date.now() >= deadline)
+        throw new Error(`Disposable PostgreSQL did not become ready.\n${ownedPostgresDiagnostics(container)}`, {
+          cause: error,
+        });
+      await Bun.sleep(500);
+    } finally {
+      await probe.end();
+    }
+  }
+}
+
 async function startStack(): Promise<
   Omit<NativeWebStack, 'kernel' | 'request' | 'routeAuthPages'> & {
     routeAuthPages(origin?: string): Promise<string>;
@@ -553,14 +605,9 @@ async function startStack(): Promise<
       console.info('Native web stack cleanup: complete');
     })());
   try {
-    reportStackProgress('Native web stack startup: registering kernel SQL modules');
-    // Match the kernel test preload before evaluating anything that imports SQL.
-    await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
-    reportStackProgress('Native web stack startup: kernel SQL modules registered');
     if (!process.env.DATABASE_URL) {
       reportStackProgress('Native web stack startup: starting PostgreSQL');
       const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
-      const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
       postgresContainer = startPostgresContainer();
       if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ postgresContainer } satisfies HostReply);
       const portResult = Bun.spawnSync(['docker', 'port', postgresContainer, '5432/tcp']);
@@ -570,29 +617,18 @@ async function startStack(): Promise<
       if (!Number.isInteger(port) || port <= 0)
         throw new Error(`Could not parse owned PostgreSQL port: ${portResult.stdout.toString()}`);
       const databaseUrl = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
-      const deadline = Date.now() + 60_000;
-      while (true) {
-        const probe = new Pool({
-          connectionString: databaseUrl,
-          connectionTimeoutMillis: 1500,
-          max: 1,
-        });
-        try {
-          await probe.query('SELECT 1');
-          break;
-        } catch (error) {
-          if (Date.now() >= deadline)
-            throw new Error('Disposable PostgreSQL did not become ready.', {
-              cause: error,
-            });
-          await Bun.sleep(500);
-        } finally {
-          await probe.end();
-        }
-      }
+      await waitForOwnedPostgres(postgresContainer, databaseUrl);
       process.env.DATABASE_URL = databaseUrl;
+      reportStackProgress('Native web stack startup: PostgreSQL ready');
+    }
+    reportStackProgress('Native web stack startup: registering kernel SQL modules');
+    // Match the kernel test preload before evaluating anything that imports SQL.
+    await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
+    reportStackProgress('Native web stack startup: kernel SQL modules registered');
+    if (postgresContainer) {
+      const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
       reportStackProgress('Native web stack startup: PostgreSQL ready; migrating database');
-      migrate(databaseUrl);
+      migrate(process.env.DATABASE_URL!);
       reportStackProgress('Native web stack startup: PostgreSQL migration complete');
     }
     reportStackProgress('Native web stack startup: preparing SQL analysis');

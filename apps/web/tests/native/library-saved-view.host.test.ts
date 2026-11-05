@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import type { Page } from 'playwright';
 import { startAuthStack, type NativeAuthStack } from './auth-stack';
 import { startNativeWebStack, type NativeWebStack } from './stack';
 import { subjectHref } from '../../src/subject/subject-href';
@@ -213,6 +214,10 @@ function writeEvidence(body: Record<string, unknown>) {
   writeFileSync(resolve(evidenceDirectory, 'walk.json'), `${JSON.stringify(body, null, 2)}\n`);
 }
 
+function layoutControl(page: Page, name: string) {
+  return page.getByRole('button', { name }).or(page.getByRole('radio', { name }));
+}
+
 test('touched Library labels exist in every launch locale', () => {
   for (const locale of locales) {
     expect(m.library_heading({}, { locale }).trim().length).toBeGreaterThan(0);
@@ -237,15 +242,16 @@ test('the Library owner reads and edits the saved view through native pages and 
   await page.getByRole('heading', { name: m.library_heading() }).waitFor();
   await page.getByText(fixture.title).waitFor();
   const counts = page.getByRole('navigation', { name: m.library_summary_heading() });
-  await counts.getByText('1 / 1').waitFor();
+  await counts.getByRole('link', { name: `${m.library_state_all()} 1 / 1` }).waitFor();
   await page.getByRole('link', { name: m.library_nav_labels() }).waitFor();
   await page.locator('[data-received-entry-reading-trigger]').click();
   await page.locator('[data-received-entry-reading]').waitFor();
   expect(await page.locator('[data-entry-reading-progress]').innerText()).toContain('12');
   await page.locator('[data-received-entry-reading-close]').click();
 
-  await page.getByRole('button', { name: m.library_layout_list() }).click();
+  await layoutControl(page, m.library_layout_list()).click();
   await page.waitForURL(/layout=list/);
+  await page.locator('select[name="orderBy"]').waitFor();
   await page.locator('select[name="orderBy"]').selectOption('createdAt');
   await page.getByRole('button', { name: m.library_sort_apply() }).click();
   await page.waitForURL(/orderBy=createdAt/);
@@ -303,7 +309,10 @@ test('the Library owner reads and edits the saved view through native pages and 
   await page.locator('html[data-hydrated]').waitFor();
   await page.getByText(fixture.title).waitFor();
   await page.getByRole('button', { name: m.home_continue_actions({ title: fixture.title }) }).click();
-  await page.getByRole('menuitem', { name: m.home_continue_open_subject() }).click();
+  const openSubject = page
+    .getByRole('menuitem', { name: m.home_continue_open_subject() })
+    .or(page.getByRole('link', { name: m.home_continue_open_subject() }));
+  await openSubject.click();
   await page.waitForURL(new RegExp(fixture.subjectId));
   await page.goBack({ waitUntil: 'domcontentloaded' });
   await page.getByText(fixture.title).waitFor();
@@ -329,7 +338,7 @@ test('the Library owner reads and edits the saved view through native pages and 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('html[data-hydrated]').waitFor();
   await page.getByText(fixture.title).waitFor();
-  const listControl = page.getByRole('button', { name: m.library_layout_list() });
+  const listControl = layoutControl(page, m.library_layout_list());
   const box = await listControl.boundingBox();
   expect(box).toBeTruthy();
   expect(Math.min(box!.width, box!.height)).toBeGreaterThanOrEqual(44);
