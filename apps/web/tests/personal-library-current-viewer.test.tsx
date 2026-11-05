@@ -30,7 +30,25 @@ const request = () =>
     headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
   });
 let currentRequest = request();
-mock.module('@tanstack/react-start', () => start);
+let serverReads = true;
+mock.module('@tanstack/react-start', () => ({
+  ...start,
+  createIsomorphicFn: () => {
+    let server: (...args: never[]) => unknown = () => undefined;
+    let client: (...args: never[]) => unknown = () => undefined;
+    const chain = {
+      server(handler: typeof server) {
+        server = handler;
+        return chain;
+      },
+      client(handler: typeof client) {
+        client = handler;
+        return (...args: never[]) => (serverReads ? server : client)(...args);
+      },
+    };
+    return chain;
+  },
+}));
 mock.module('@tanstack/react-start/server', () => ({
   ...start,
   getRequest: () => currentRequest,
@@ -234,6 +252,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
     expect(calls.map((call) => new URL(call.url).pathname)).toEqual(['/v1/libraryContinue']);
   } finally {
     native.mockRestore();
+    serverReads = false;
   }
 
   const { createRoot, hydrateRoot } = await import('react-dom/client');
@@ -245,7 +264,7 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
   const { EntriesWindowNavigation } = await import('../src/library/entries-window-navigation');
   const windows = new EntriesWindowNavigation();
   const { Route } = await import('../src/routes/library/index');
-  expect(String(Route.options.component)).toContain('PersonalLibraryCurrent');
+  expect(String(Route.options.component)).toContain('LibraryPresentationBoundary');
   const actions = await import('../src/library/entries-actions');
   const labelActions = await import('../src/library/subject-slot-actions');
   const labelReads = await import('../src/library/labels-actions');
