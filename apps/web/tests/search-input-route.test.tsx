@@ -222,7 +222,9 @@ test('the mounted Search route retains multiple errors and a protected filter th
     await router.load();
     await Promise.resolve();
   });
-  const returnedLanguage = host.querySelector('[data-search-input-key="language"][data-search-input-occurrence="1"] textarea')!;
+  const returnedLanguage = host.querySelector(
+    '[data-search-input-key="language"][data-search-input-occurrence="1"] textarea',
+  )!;
   expect(returnedLanguage.value).toBe('bad_tag');
   expect(document.activeElement !== returnedLanguage).toBe(true);
   expect(reads).toHaveLength(0);
@@ -239,7 +241,10 @@ test('the mounted Search route retains multiple errors and a protected filter th
     JSON.stringify({ statement: { property: 'schema:genre', in: ['mystery'] } }),
   );
   expect(
-    Array.from(host.querySelectorAll<HTMLElement>('[data-search-input-key]'), (element) => element.dataset.searchInputKey),
+    Array.from(
+      host.querySelectorAll<HTMLElement>('[data-search-input-key]'),
+      (element) => element.dataset.searchInputKey,
+    ),
   ).toEqual([]);
   expect(reads).toHaveLength(1);
   expect(reads[0]?.languages).toEqual(['ja', 'zh-CN', 'zh-Hant']);

@@ -8,11 +8,7 @@ import {
 } from '@rezics/filter';
 import { isWithinGlobalSearchQueryLimit } from '../query-text-limit';
 import { canonicalRealmRatingPopulationId, RATING_POPULATION_FIELD } from '../rating-population';
-import {
-  parseSearchResourceScope,
-  removeSearchResourceScope,
-  type SearchResourceScope,
-} from '../advanced-scope';
+import { parseSearchResourceScope, removeSearchResourceScope, type SearchResourceScope } from '../advanced-scope';
 import { canonicalResourceLanguageValues, RESOURCE_LANGUAGE_PROPERTY } from '../language-refinement';
 import type { SearchLoaderDeps, SearchFacetValues } from '../search-params';
 
@@ -215,11 +211,15 @@ function parseStructured(
   }
 }
 
-function parseCondition(
-  issues: SearchInputIssue[],
-  input: AuthoredValue,
-): FilterDocument | undefined {
-  const value = scalarValue(issues, 'condition', input, (text) => text.length <= 16_384, 'invalid-condition', 'structured');
+function parseCondition(issues: SearchInputIssue[], input: AuthoredValue): FilterDocument | undefined {
+  const value = scalarValue(
+    issues,
+    'condition',
+    input,
+    (text) => text.length <= 16_384,
+    'invalid-condition',
+    'structured',
+  );
   return value === undefined ? undefined : parseStructured(issues, 'condition', value, 'invalid-condition');
 }
 
@@ -227,7 +227,14 @@ function parseFilterInput(
   issues: SearchInputIssue[],
   input: AuthoredValue,
 ): { value?: string; scope?: SearchResourceScope } {
-  const value = scalarValue(issues, 'filter', input, (text) => new TextEncoder().encode(text).byteLength <= SEARCH_STRUCTURED_VALUE_BYTE_LIMIT, 'invalid-filter', 'structured');
+  const value = scalarValue(
+    issues,
+    'filter',
+    input,
+    (text) => new TextEncoder().encode(text).byteLength <= SEARCH_STRUCTURED_VALUE_BYTE_LIMIT,
+    'invalid-filter',
+    'structured',
+  );
   if (value === undefined || value === '') return { ...(value === '' ? { value } : {}) };
   const scope = parseSearchResourceScope(value);
   if (scope.invalidInput) {
@@ -292,18 +299,18 @@ export function searchUrlIntake(
   visitAddress?: string,
 ): SearchUrlIntake {
   const suppliedLength = visitAddress?.length ?? searchString?.length ?? estimatedAddressLength(search);
-  if (suppliedLength > SEARCH_VISIT_ADDRESS_CHARACTER_LIMIT)
-    return { kind: 'over-budget', fingerprint: 'over-budget' };
+  if (suppliedLength > SEARCH_VISIT_ADDRESS_CHARACTER_LIMIT) return { kind: 'over-budget', fingerprint: 'over-budget' };
 
   const rawParams = searchString === undefined ? undefined : new URLSearchParams(searchString);
   const issues: SearchInputIssue[] = [];
-  const q = scalarValue(
-    issues,
-    'q',
-    authoredValue(search, 'q', rawParams, false),
-    isWithinGlobalSearchQueryLimit,
-    'invalid-query',
-  ) ?? '';
+  const q =
+    scalarValue(
+      issues,
+      'q',
+      authoredValue(search, 'q', rawParams, false),
+      isWithinGlobalSearchQueryLimit,
+      'invalid-query',
+    ) ?? '';
   const type = scalarValue(
     issues,
     'type',
@@ -358,8 +365,7 @@ export function searchUrlIntake(
     if (index >= FILTER_LIMITS.leaves)
       addIssue(issues, key, input.value, 'too-many', { maximum: FILTER_LIMITS.leaves });
     if (property && values)
-      facets[property] =
-        property === RESOURCE_LANGUAGE_PROPERTY ? canonicalResourceLanguageValues(values) : values;
+      facets[property] = property === RESOURCE_LANGUAGE_PROPERTY ? canonicalResourceLanguageValues(values) : values;
   });
 
   const rawPopulation = authoredValue(search, RATING_POPULATION_FIELD, rawParams, false);
@@ -424,5 +430,5 @@ export function facetValuesFromSearch(search: Record<string, unknown>): SearchFa
 
 export function rangeValuesFromSearch(search: Record<string, unknown>): Record<string, FilterRange> {
   const intake = searchUrlIntake(search);
-  return intake.kind === 'ready' ? intake.request.ranges ?? {} : {};
+  return intake.kind === 'ready' ? (intake.request.ranges ?? {}) : {};
 }

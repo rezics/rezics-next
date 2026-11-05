@@ -13,7 +13,13 @@ export {
   searchParams,
   searchUrlIntake,
 } from './search-params';
-export type { SearchInputIssue, SearchInputIssueReason, SearchLoaderDeps, SearchParams, SearchUrlIntake } from './search-params';
+export type {
+  SearchInputIssue,
+  SearchInputIssueReason,
+  SearchLoaderDeps,
+  SearchParams,
+  SearchUrlIntake,
+} from './search-params';
 export { SearchInputRecovery } from './search-input-recovery';
 import { useSearchWindow } from './search-window';
 import { SearchResultsRegion } from './search-regions/results';

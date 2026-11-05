@@ -93,19 +93,22 @@ export function SearchInputRecovery(props: LegacyProps | IntakeProps | OverBudge
   const overBudget = 'overBudget' in props && props.overBudget;
   const locale = props.locale;
   const options = locale === undefined ? { locale: 'en' as const } : messageOptions(locale);
-  const issues: SearchInputIssue[] = 'issues' in props
-    ? props.issues
-    : 'parameter' in props
-      ? [
-        {
-          key: props.parameter,
-          value: props.value,
-          reason: props.parameter === 'q' ? 'invalid-query' : 'invalid-shape',
-          removal: 'field',
-        },
-      ]
-      : [];
-  const [drafts, setDrafts] = useState(() => Object.fromEntries(issues.map((issue, index) => [issueId(issue, index), issue.value])));
+  const issues: SearchInputIssue[] =
+    'issues' in props
+      ? props.issues
+      : 'parameter' in props
+        ? [
+            {
+              key: props.parameter,
+              value: props.value,
+              reason: props.parameter === 'q' ? 'invalid-query' : 'invalid-shape',
+              removal: 'field',
+            },
+          ]
+        : [];
+  const [drafts, setDrafts] = useState(() =>
+    Object.fromEntries(issues.map((issue, index) => [issueId(issue, index), issue.value])),
+  );
   const apply = (issue: SearchInputIssue, value: string) => {
     if ('parameter' in props) props.onApply(value);
     else if ('issues' in props) props.onApply(issue, value);
@@ -141,9 +144,10 @@ export function SearchInputRecovery(props: LegacyProps | IntakeProps | OverBudge
               {issues.map((issue, index) => {
                 const id = issueId(issue, index);
                 const field = fieldName(issue, options);
-                const occurrence = issue.occurrence === undefined
-                  ? undefined
-                  : m.search_input_occurrence({ occurrence: issue.occurrence + 1 }, options);
+                const occurrence =
+                  issue.occurrence === undefined
+                    ? undefined
+                    : m.search_input_occurrence({ occurrence: issue.occurrence + 1 }, options);
                 const first = index === 0 ? { 'data-search-input-first': '' } : {};
                 return (
                   <article
@@ -171,11 +175,7 @@ export function SearchInputRecovery(props: LegacyProps | IntakeProps | OverBudge
                           locale={locale}
                           onApply={(value) => apply(issue, value)}
                         />
-                        <button
-                          className="rounded-md border px-4 py-2"
-                          type="button"
-                          onClick={() => remove(issue)}
-                        >
+                        <button className="rounded-md border px-4 py-2" type="button" onClick={() => remove(issue)}>
                           {removalLabel(issue, field, options)}
                         </button>
                       </>

@@ -98,10 +98,7 @@ function SearchRoute() {
   const cachedSession = queryClient.getQueryData(sessionQuery.queryKey);
   const readerIntent = cachedSession ? searchSessionOwner(cachedSession) : undefined;
   const visitLocation = router.state.location;
-  const focusAfterNavigation = (
-    nextSearch: Record<string, unknown>,
-    startNavigation: () => Promise<unknown>,
-  ) => {
+  const focusAfterNavigation = (nextSearch: Record<string, unknown>, startNavigation: () => Promise<unknown>) => {
     if (router.state.location !== visitLocation || typeof document === 'undefined') return;
     const expectedFingerprint = searchInputFingerprint(nextSearch);
     const source = document.activeElement;
@@ -115,11 +112,7 @@ function SearchRoute() {
         if (currentReader !== readerIntent) return;
         const active = document.activeElement;
         const shellFocus = document.getElementById('main-content');
-        if (
-          active !== source &&
-          !(active === document.body && source && !source.isConnected) &&
-          active !== shellFocus
-        )
+        if (active !== source && !(active === document.body && source && !source.isConnected) && active !== shellFocus)
           return;
         const firstIssue = document.querySelector<HTMLElement>(
           '[data-search-input-first] textarea, [data-search-input-first] input, [data-search-input-first] button',
@@ -191,8 +184,8 @@ function SearchResults({
 }) {
   const sessionState = useSession();
   const reader = searchSessionOwner(sessionState);
-  const page = searchRequiresCurrentReader(deps) && (sessionState.state !== 'signed-in' || reader === null)
-    ? (
+  const page =
+    searchRequiresCurrentReader(deps) && (sessionState.state !== 'signed-in' || reader === null) ? (
       <SearchPage
         query={deps.query}
         data={{ ...searchUnavailablePage(deps), recovery: { status: 'session' } }}
@@ -200,8 +193,7 @@ function SearchResults({
         session={null}
         searchHref={searchHref}
       />
-    )
-    : (
+    ) : (
       <LoadedSearchResults
         deps={deps}
         locale={locale}
