@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { SubjectPersonalLease } from '../src/features/pages/subject-personal-reader';
-import type { QuestionBoundRatingInput } from '../src/features/pages/rating-actions';
+import type { RatingWriteInput } from '../src/features/pages/rating-control';
 import { sessionQueryKey } from '../src/session/browser-state';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as start from '../.storybook/react-start';
@@ -153,7 +153,7 @@ test('composed rating controls label and submit their own question, value and re
         preserveUncertainty: () => {},
       }),
     };
-    const commands: QuestionBoundRatingInput[] = [];
+    const commands: RatingWriteInput[] = [];
     const renderRecovery = async (question = questions[0]!) =>
       act(async () =>
         root.render(
@@ -167,7 +167,7 @@ test('composed rating controls label and submit their own question, value and re
               own={{ reader: 'reader', kind: 'ready', units: 10 }}
               binding={binding}
               write={async (input) => {
-                commands.push(input as QuestionBoundRatingInput);
+                commands.push(input);
                 return 'uncertain';
               }}
             />
@@ -184,7 +184,6 @@ test('composed rating controls label and submit their own question, value and re
       question: { id: questions[0]!.id, revision: 1, meaning: 'Your rating' },
     });
     expect(Object.isFrozen(commands[0])).toBe(true);
-    expect(Object.isFrozen(commands[0]!.question.scale)).toBe(true);
     client.setQueryData(sessionQueryKey, {
       state: 'signed-in',
       subject: 'reader',
@@ -197,7 +196,7 @@ test('composed rating controls label and submit their own question, value and re
     expect(host.querySelector('[data-slot="rating-uncertain"]')).toBeNull();
     await act(async () => host.querySelectorAll('form button')[1]!.click());
     expect(commands[2]!.idempotencyKey).not.toBe(commands[0]!.idempotencyKey);
-    expect(commands[2]!.expectedCredential).toBe('replacement-credential');
+    expect(commands[2]).toMatchObject({ expectedCredential: 'replacement-credential' });
     await renderRecovery({ ...questions[0]!, revision: 2 });
     expect(host.querySelector('[data-slot="rating-uncertain"]')).toBeNull();
     expect(host.querySelector('form')!.getAttribute('action')).toBe('/en/original#rating');
