@@ -3,7 +3,8 @@ import type { KernelClock } from '../clock.ts';
 import { type CommandTransaction } from '../command/command.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { ProgressMeasurePresentation, ProgressPresentation, ProgressSession, ProgressSessionJournalDate } from './progress-model.ts';
+import type { ProgressMeasurePresentation, ProgressPresentation, ProgressSession } from './progress-model.ts';
+import * as store from './progress-store.ts';
 import type { LibraryProfilePin } from './profile.ts';
 type Dependencies = {
     pool: Pool;
@@ -14,6 +15,8 @@ type Dependencies = {
 type Page = {
     limit?: number;
     cursor?: string;
+    origin?: string;
+    language?: string;
 };
 export type ProgressSessionJournalAdmission = {
     identity: unknown;
@@ -21,10 +24,10 @@ export type ProgressSessionJournalAdmission = {
 };
 type ExpectedProgressBinding = {
     subjectId: string;
-    requestedSubjectId: string | null;
+    requestedSubjectId?: string | null;
     acceptingType: string;
     identityEpoch: string;
-    component: {
+    component?: {
         partition: number;
         epoch: number;
         position: string;
@@ -56,10 +59,10 @@ export declare function createSessionCommands(config: Dependencies): {
     readSessionJournal: (actor: Actor, sessionId: string) => Promise<Readonly<{
         sessionId: string;
         revision: number;
-        startDate: ProgressSessionJournalDate | null;
-        finishDate: ProgressSessionJournalDate | null;
+        startDate: import("@rezics/progress").ProgressSessionJournalDate | null;
+        finishDate: import("@rezics/progress").ProgressSessionJournalDate | null;
         reflection: string | null;
-        assessment: import("./progress-model.ts").ProgressSessionJournalAssessment;
+        assessment: import("@rezics/progress").ProgressSessionJournalAssessment;
     }>>;
     patchSessionJournal: (actor: Actor, sessionId: string, input: unknown, requestKey: string, admission?: ProgressSessionJournalAdmission) => Promise<import("../command/command.ts").CommandOutcome<{
         sessionId: string;
@@ -74,6 +77,13 @@ export declare function createSessionCommands(config: Dependencies): {
         sessions: ProgressSession[];
         next: string | null;
     }>;
+    listOwnerSessions: (actor: Actor, filter: store.ProgressDiscoveryFilter, options?: Page) => Promise<{
+        sessions: store.ProgressDiscoveryFact[];
+        generation: string;
+        partitionEpoch: number | null;
+        next: string | null;
+    }>;
+    verifyOwnerDiscoveryCurrent: (actor: Actor, generation: string, partitionEpoch: number | null) => Promise<void>;
     listUnits: (actor: Actor, sessionId: string, options?: Page) => Promise<{
         units: import("./progress-model.ts").ProgressUnitRecord[];
         next: string | null;

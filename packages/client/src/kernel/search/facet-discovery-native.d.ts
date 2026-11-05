@@ -32,11 +32,17 @@ export type FacetNativeReadyFacet = Readonly<{
     /** Native eligible lookahead, not a capped storage page or a bucket estimate. */
     hasMore: boolean;
 }>;
+export type FacetNativePageFinalization = Readonly<{
+    status: 'current' | 'changed';
+    cost: PublicFilterCost;
+}>;
 export type FacetNativePageResult = Readonly<{
     status: 'ready';
     facets: readonly FacetNativeReadyFacet[];
     asOf: string;
     cost: PublicFilterCost;
+    /** One use, bound to these exact sibling reads; called after Search projects values and cursors. */
+    finalize(): Promise<FacetNativePageFinalization>;
 }> | Readonly<{
     status: 'preparing';
     cost: PublicFilterCost;

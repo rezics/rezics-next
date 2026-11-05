@@ -9,7 +9,7 @@ import { type CurrentNativeLeaf, type CurrentOwnerFilterPlan } from '../search/c
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { type PrepareCollectionSource } from './collection-source.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
-import type { AdmittedCollectionRule } from './collection-rules.ts';
+import type { AdmittedCollectionRule, CollectionRuleSource } from './collection-rules.ts';
 import { type LibraryProfilePin } from './profile.ts';
 type EntryOperand = Extract<OwnerLeaf['owner'], {
     state: unknown;
@@ -71,6 +71,8 @@ export interface OwnerFilterLeafProvider {
 export type CollectionMemberAdmission = {
     filter: FilterDocument | undefined;
     sort: 'id';
+    /** Saved population is part of the admitted meaning; it selects the native receiving Source. */
+    source: 'owner' | 'catalogue';
     plan: CurrentOwnerFilterPlan | null;
     /** Immutable admitted meaning and exact expanded query; private cursor/preparation input, never permission. */
     releaseDigest: string | null;
@@ -121,6 +123,7 @@ export declare function readNativeCollectionMemberAdmission(admission: Collectio
     pool: Pool;
     deadline: number;
     retainedMeaning: boolean;
+    source: CollectionRuleSource;
 }> | undefined;
 type PrivateRead = {
     action: string;

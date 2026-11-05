@@ -42,6 +42,7 @@ export declare class AccessWorkUnavailableError extends AccessUnavailableError {
     constructor(dependency: string);
 }
 export declare function addAccessWork(...values: readonly AccessWork[]): AccessWork;
+export declare function isAccessWorkDispatch(): boolean;
 /** Receipt accumulator only. Admission and remaining budget stay with the sink.
  * Dispatch charges the bound immediately, so timeout/parallel/failed work cannot
  * disappear from a caller's receipt while an operation is still unwinding.
@@ -72,7 +73,7 @@ export declare function accessOwnerWork<C, R>(work: AccessWorkAccounting | undef
  * Byte reservations cover parameters and the closed projection. Only bytes and
  * the outer empty seek can settle below their bound on a completed statement.
  */
-export declare function accessNativeDeclaration(operation: 'time' | 'assignment' | 'inverse' | 'membership' | 'candidates' | 'formula' | 'account-state' | 'opening' | 'opening-partition' | 'opening-moved-target' | 'transaction', input: unknown, shape: Readonly<{
+export declare function accessNativeDeclaration(operation: 'time' | 'assignment' | 'inverse' | 'membership' | 'candidates' | 'formula' | 'account-state' | 'account-profile' | 'opening' | 'opening-partition' | 'opening-moved-target' | 'transaction', input: unknown, shape: Readonly<{
     members?: number;
     groups?: number;
     targets?: number;

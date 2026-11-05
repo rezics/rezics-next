@@ -1,3 +1,4 @@
+import { type ReviewedPersonEndpoint, type ReviewedPersonSource } from './reviewed-person-identity.ts';
 import { type SubjectSummary, type SummaryDependencies } from './summaries.ts';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
@@ -52,6 +53,7 @@ export declare function writeSubject(tx: CommandTransaction, transactionId: stri
     }[];
 }>;
 export declare function readSubject(pool: Pool, id: string, authorize: (client: PoolClient) => Promise<boolean>, context: string | undefined, routeKey: Uint8Array, summaries?: {
+    reviewIdentity?: ReviewedPersonSource;
     languages?: readonly string[];
     authorize?: SummaryDependencies['authorize'];
     seen?: readonly {
@@ -64,6 +66,7 @@ export declare function readSubject(pool: Pool, id: string, authorize: (client: 
     prepareAuthorize?: (id: string) => Promise<AccessCheck>;
     readAs?: <T>(read: () => Promise<T>) => Promise<T>;
 }): Promise<{
+    reviewedIdentity?: ReviewedPersonEndpoint | null;
     subject: Item;
     account: {
         id: string;

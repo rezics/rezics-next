@@ -370,8 +370,8 @@ export declare function executeCollectionRemoveTarget(dependencies: BulkDependen
 /** Private source-bound accounting; can recover prior commits after revocation,
  * cannot restore an initiator, issue personal effects or disclose target data.
  */
-export declare function reconcileBulkTarget(_dependencies: BulkDependencies, _command: TargetCommand): Promise<AttemptResult>;
-export declare function acknowledgeBulkOutcome(_dependencies: BulkDependencies, _evidence: TargetEvidence): Promise<OperationView>;
+export declare function reconcileBulkTarget(dependencies: BulkDependencies, command: TargetCommand): Promise<AttemptResult | null>;
+export declare function acknowledgeBulkOutcome(dependencies: BulkDependencies, evidence: TargetEvidence): Promise<OperationView | null>;
 export declare function cancelBulkPage(_dependencies: BulkDependencies, _input: SegmentInput): Promise<Checkpoint>;
 /** At most 100 pages per segment; returns only a native checkpoint locator. */
 export declare function runBulkSegment(_dependencies: BulkDependencies, _input: SegmentInput): Promise<Checkpoint>;

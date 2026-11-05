@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { type KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type FacetRequest } from './facets.ts';
+import { type SearchFreshness } from './search-context.ts';
 export { validateSearchLimit } from './hits.ts';
 import { type OpenSearch } from './opensearch.ts';
 import { type SearchPlan } from './query.ts';
@@ -20,6 +21,8 @@ import type { KindValue } from './query.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import type { FacetDiscovery200Response } from './facet-discovery-contract.ts';
 import { type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
+import { type MatchEvidence } from './match-evidence.ts';
+import { type SuggestionWorkContext, type SuggestionWorkContextReader } from './suggestion-context.ts';
 export type SearchRequest = {
     text?: string;
     filter?: unknown;
@@ -40,13 +43,16 @@ export type GroupedReleaseSearchRequest = SearchRequest & {
     childCursor?: string;
 };
 export type PublicSearchPage = {
-    subjects: PublicSearchHit[];
+    subjects: (PublicSearchHit & {
+        matchEvidence: MatchEvidence;
+    })[];
     kinds?: {
         values: KindValue[];
         next: string | null;
     };
     next: string | null;
     as_of: string;
+    freshness?: SearchFreshness;
 };
 export type PublicSearchReadContext = Readonly<{
     deadline: number;
@@ -59,11 +65,12 @@ type Result = {
     id: string;
     type: string;
     labels: Record<string, string>;
+    workContext?: SuggestionWorkContext;
 };
 export declare function bindSearchScopeCursorRequest(request: unknown, basis: ScopeBasis): unknown;
 /** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
 export declare function requiresAdvancedSearch(request: SearchRequest): boolean;
-export declare function createSearchService({ pool, client, prefix, source, ratings, realmSubjects, realmRatings, realmSubjectCapabilities, cursors, clock, facetSample, facetProvider, publicFilters, preparePublic, release: releaseOverride, }: {
+export declare function createSearchService({ pool, client, prefix, source, ratings, realmSubjects, realmSubjectsForReader, realmRatings, realmSubjectCapabilities, cursors, clock, facetSample, facetProvider, publicFilters, preparePublic, suggestionWorkContext, release: releaseOverride, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
@@ -72,6 +79,7 @@ export declare function createSearchService({ pool, client, prefix, source, rati
     }>;
     ratings?: PublicRatingSource;
     realmSubjects?: RealmSubjectSource;
+    realmSubjectsForReader?: (reader: LeafOptions) => RealmSubjectSource | undefined;
     realmRatings?: RealmRatingSource;
     realmSubjectCapabilities?: RealmSubjectCapabilities;
     cursors: KeyRing;
@@ -84,12 +92,24 @@ export declare function createSearchService({ pool, client, prefix, source, rati
     preparePublic?: (job: PublicFilterConsumerJob) => Promise<void>;
     /** Trusted native owner composition. Missing native ports fail closed. */
     facetProvider?: () => Promise<FacetDiscoveryProvider | undefined>;
+    /** Optional batched handoff to the qualified work-context owner. */
+    suggestionWorkContext?: SuggestionWorkContextReader;
 }): {
     releaseGroups: (principal: 'anonymous' | `account:${string}`, submitted: GroupedReleaseSearchRequest, now?: number, active?: {
         digest: string;
         head?: number;
         release: FilterRelease;
-    } | null, readContext?: PublicSearchReadContext) => Promise<any>;
+    } | null, readContext?: PublicSearchReadContext) => Promise<{
+        status: 'ready' | 'preparing';
+        children: PublicSearchHit[];
+        next: string | null;
+        as_of: string;
+    } | {
+        status: 'ready' | 'preparing';
+        groups: import("./release-search-cursor.ts").ReleaseSearchGroup<PublicSearchHit, PublicSearchHit>[];
+        next: string | null;
+        as_of: string;
+    }>;
     search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number, active?: {
         digest: string;
         head?: number;
@@ -103,11 +123,17 @@ export declare function createSearchService({ pool, client, prefix, source, rati
         deadline: number;
         filter?: unknown;
         scope?: LeafOptions;
+        suggestionWorkContext?: SuggestionWorkContextReader;
         complete(page: {
             subjects: Result[];
             as_of: string;
         }): Promise<void>;
-    }): Promise<{
+    }): Promise<Readonly<{
+        subjects: (Result & Readonly<{
+            workContext: SuggestionWorkContext;
+        }>)[];
+        as_of: string;
+    }> | {
         subjects: {
             id: string;
             type: string;

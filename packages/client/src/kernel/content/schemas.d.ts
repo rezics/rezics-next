@@ -2,13 +2,14 @@ import { type DocumentSnapshot } from '@rezics/document';
 import type { Static, TSchema } from 'typebox';
 export { CommunityPresentationSchema } from './community-presentation-model.ts';
 import { REACTION_KINDS } from './events.ts';
-import type { AuthorPostEntry } from './author-item-reads.ts';
+import type { AuthorPostEntry, AuthorThreadEntry } from './author-item-reads.ts';
 import type { FeedReviewContext } from './model.ts';
 import type { ItemView, PostEntry } from './reads.ts';
 import type { ReportReadView } from './reports.ts';
 import type { Operation } from './operation-contract.ts';
 import type { OwnDraftEntry } from './own-drafts.ts';
 import type { SubjectThreadCardEntry } from './subject-threads-cards.ts';
+import type { SubjectThreadEntry } from './subject-entry.ts';
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ViewerReactionSlot = {
     readonly viewerReaction?: ViewerReactionKind | null;
@@ -57,6 +58,19 @@ export declare const SourceFenceResponseSchema: import("typebox").TObject<{
 }>;
 export declare const ContentIdSchema: import("typebox").TString;
 export declare const WatchManagementKindSchema: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
+export declare const WatchManagementAdviceSchema: import("typebox").TUnion<[import("typebox").TLiteral<"available">, import("typebox").TLiteral<"denied">]>;
+export declare const WatchManagementViewerSchema: import("typebox").TObject<{
+    state: import("typebox").TLiteral<"current">;
+    accountId: import("typebox").TString;
+}>;
+export declare const WatchManagementActionsSchema: import("typebox").TObject<{
+    remove: import("typebox").TUnion<[import("typebox").TLiteral<"available">, import("typebox").TLiteral<"denied">]>;
+}>;
+export declare const WatchManagementCommandSchema: import("typebox").TObject<{
+    watchId: import("typebox").TString;
+    kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
+    expectedRevision: import("typebox").TInteger;
+}>;
 export declare const WatchManagementItemSchema: import("typebox").TUnion<[import("typebox").TObject<{
     id: import("typebox").TString;
     kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
@@ -65,14 +79,31 @@ export declare const WatchManagementItemSchema: import("typebox").TUnion<[import
     state: import("typebox").TLiteral<"available">;
     resourceId: import("typebox").TString;
     title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+    command: import("typebox").TObject<{
+        watchId: import("typebox").TString;
+        kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
+        expectedRevision: import("typebox").TInteger;
+    }>;
 }>, import("typebox").TObject<{
     id: import("typebox").TString;
     kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
     revision: import("typebox").TInteger;
     createdAt: import("typebox").TString;
     state: import("typebox").TLiteral<"unavailable">;
+    command: import("typebox").TObject<{
+        watchId: import("typebox").TString;
+        kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
+        expectedRevision: import("typebox").TInteger;
+    }>;
 }>]>;
 export declare const WatchManagementPageSchema: import("typebox").TObject<{
+    viewer: import("typebox").TObject<{
+        state: import("typebox").TLiteral<"current">;
+        accountId: import("typebox").TString;
+    }>;
+    actions: import("typebox").TObject<{
+        remove: import("typebox").TUnion<[import("typebox").TLiteral<"available">, import("typebox").TLiteral<"denied">]>;
+    }>;
     items: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
         id: import("typebox").TString;
         kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
@@ -81,16 +112,30 @@ export declare const WatchManagementPageSchema: import("typebox").TObject<{
         state: import("typebox").TLiteral<"available">;
         resourceId: import("typebox").TString;
         title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        command: import("typebox").TObject<{
+            watchId: import("typebox").TString;
+            kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
+            expectedRevision: import("typebox").TInteger;
+        }>;
     }>, import("typebox").TObject<{
         id: import("typebox").TString;
         kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
         revision: import("typebox").TInteger;
         createdAt: import("typebox").TString;
         state: import("typebox").TLiteral<"unavailable">;
+        command: import("typebox").TObject<{
+            watchId: import("typebox").TString;
+            kind: import("typebox").TUnion<[import("typebox").TLiteral<"thread">, import("typebox").TLiteral<"board">]>;
+            expectedRevision: import("typebox").TInteger;
+        }>;
     }>]>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
 }>;
 export type WatchManagementKind = Static<typeof WatchManagementKindSchema>;
+export type WatchManagementAdvice = Static<typeof WatchManagementAdviceSchema>;
+export type WatchManagementViewer = Static<typeof WatchManagementViewerSchema>;
+export type WatchManagementActions = Static<typeof WatchManagementActionsSchema>;
+export type WatchManagementCommand = Static<typeof WatchManagementCommandSchema>;
 export type WatchManagementItem = Static<typeof WatchManagementItemSchema>;
 export type WatchManagementPage = Static<typeof WatchManagementPageSchema>;
 export declare const ReportInputSchema: import("typebox").TObject<{
@@ -108,6 +153,14 @@ export declare const ReportReceiptSchema: import("typebox").TObject<{
 }>;
 export declare const ReportResponseSchema: import("typebox").TObject<{
     report: import("typebox").TUnsafe<ReportReadView>;
+    inspection: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
+        reportedRevision: import("./reports.ts").ReportTargetInspection;
+        currentTarget: import("./reports.ts").ReportTargetInspection;
+        viewer: Readonly<{
+            canDismiss: boolean;
+            canTakeDown: boolean;
+        }>;
+    }>>>;
 }>;
 /** The erased variant cannot carry authored bytes, even to an authorized reader. */
 export declare const ItemViewSchema: import("typebox").TUnsafe<ItemView & ViewerReactionSlot & ReactionCountsSlot>;
@@ -145,7 +198,7 @@ export declare const ThreadViewSchema: import("typebox").TUnsafe<Omit<Readonly<{
 export declare const BoardRecordSchema: import("typebox").TObject<{
     id: import("typebox").TString;
     route: import("typebox").TInteger;
-    visibility: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+    visibility: import("typebox").TUnion<[import("typebox").TLiteral<"published">, import("typebox").TLiteral<"draft">, import("typebox").TLiteral<"protected">, import("typebox").TLiteral<"taken_down">]>;
     securityRevision: import("typebox").TString;
     createdAt: import("typebox").TString;
     realmId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -274,6 +327,53 @@ export declare const BoardResponseSchema: import("typebox").TObject<{
         createdAt: string;
     }>>;
 }>;
+export declare const ReviewDestinationPageSchema: import("typebox").TObject<{
+    state: import("typebox").TUnion<[import("typebox").TLiteral<"choices">, import("typebox").TLiteral<"sparse">, import("typebox").TLiteral<"no-destinations">, import("typebox").TLiteral<"exhausted">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"expired">]>;
+    viewer: import("typebox").TObject<{
+        state: import("typebox").TUnion<[import("typebox").TLiteral<"current">, import("typebox").TLiteral<"denied">]>;
+    }>;
+    context: import("typebox").TUnion<[import("typebox").TObject<{
+        subject: import("typebox").TObject<{
+            id: import("typebox").TString;
+            label: import("typebox").TUnion<[import("typebox").TObject<{
+                value: import("typebox").TString;
+                language: import("typebox").TString;
+            }>, import("typebox").TNull]>;
+            source: import("typebox").TObject<{
+                partition: import("typebox").TInteger;
+                epoch: import("typebox").TInteger;
+                position: import("typebox").TString;
+            }>;
+        }>;
+        realm: import("typebox").TObject<{
+            id: import("typebox").TString;
+            title: import("typebox").TString;
+            spaceId: import("typebox").TString;
+            headRevisionId: import("typebox").TString;
+        }>;
+    }>, import("typebox").TNull]>;
+    items: import("typebox").TArray<import("typebox").TObject<{
+        id: import("typebox").TString;
+        title: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        purpose: import("typebox").TLiteral<"reviews">;
+        actions: import("typebox").TObject<{
+            createReview: import("typebox").TLiteral<"allowed">;
+        }>;
+        native: import("typebox").TObject<{
+            kind: import("typebox").TLiteral<"review">;
+            boardId: import("typebox").TString;
+            subjectIds: import("typebox").TTuple<[import("typebox").TString]>;
+            subjectSource: import("typebox").TObject<{
+                partition: import("typebox").TInteger;
+                epoch: import("typebox").TInteger;
+                position: import("typebox").TString;
+            }>;
+            realmHeadRevisionId: import("typebox").TString;
+            boardSecurityRevision: import("typebox").TString;
+        }>;
+    }>>;
+    next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+}>;
 export declare const GlobalBoardDirectoryQuerySchema: import("typebox").TObject<{
     purpose: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"discussion">, import("typebox").TLiteral<"reviews">]>>;
     cursor: import("typebox").TOptional<import("typebox").TString>;
@@ -302,6 +402,24 @@ export declare const PostPageResponseSchema: import("typebox").TObject<{
         position: import("typebox").TString;
     }>, import("typebox").TNull]>>;
 }>;
+export declare const AvatarSummarySchema: import("typebox").TUnion<[import("typebox").TObject<{
+    media: import("typebox").TString;
+    width: import("typebox").TInteger;
+    height: import("typebox").TInteger;
+    placeholder: import("typebox").TObject<{
+        thumbhash: import("typebox").TString;
+        color: import("typebox").TString;
+    }>;
+    variants: import("typebox").TArray<import("typebox").TObject<{
+        format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+        width: import("typebox").TInteger;
+    }>>;
+    focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+        x: import("typebox").TNumber;
+        y: import("typebox").TNumber;
+    }>, import("typebox").TNull]>;
+    credit: import("typebox").TNull;
+}>, import("typebox").TNull]>;
 export declare const HistoryPageContextSchema: import("typebox").TObject<{
     viewer: import("typebox").TUnion<[import("typebox").TObject<{
         kind: import("typebox").TLiteral<"account">;
@@ -1966,6 +2084,7 @@ export declare const BoardPageResponseSchema: import("typebox").TObject<{
         availability: import("./model.ts").Availability;
         createdAt: string;
     }>>;
+    pinRevision: import("typebox").TString;
     pinnedThreads: import("typebox").TArray<import("typebox").TObject<{
         thread: import("typebox").TUnsafe<Omit<Readonly<{
             id: import("./model.ts").ThreadId;
@@ -2363,6 +2482,32 @@ export declare const BoardPageResponseSchema: import("typebox").TObject<{
         createThread: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"sign-in">, import("typebox").TLiteral<"unavailable">]>;
     }>;
 }>;
+/** Private, exact selected inspection; it is not a Board page or command. */
+export declare const BoardPinAdviceInputSchema: import("typebox").TObject<{
+    selected: import("typebox").TArray<import("typebox").TObject<{
+        threadId: import("typebox").TString;
+        placeId: import("typebox").TString;
+        sourceRevisionId: import("typebox").TString;
+    }>>;
+    pinRevision: import("typebox").TOptional<import("typebox").TString>;
+}>;
+export declare const BoardPinAdviceResponseSchema: import("typebox").TUnion<[import("typebox").TObject<{
+    state: import("typebox").TLiteral<"stale">;
+}>, import("typebox").TObject<{
+    state: import("typebox").TLiteral<"ready">;
+    viewer: import("typebox").TObject<{
+        kind: import("typebox").TLiteral<"account">;
+        id: import("typebox").TString;
+    }>;
+    boardId: import("typebox").TString;
+    pinRevision: import("typebox").TString;
+    management: import("typebox").TUnion<[import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">]>;
+    threads: import("typebox").TArray<import("typebox").TObject<{
+        threadId: import("typebox").TString;
+        pinned: import("typebox").TBoolean;
+        actions: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TLiteral<"pin">, import("typebox").TLiteral<"unpin">]>>;
+    }>>;
+}>]>;
 export declare const BoardThreadPinInputSchema: import("typebox").TObject<{
     pinned: import("typebox").TBoolean;
 }>;
@@ -2409,6 +2554,7 @@ export declare const SitemapThreadPageSchema: import("typebox").TObject<{
 export declare const SubjectThreadsQuerySchema: import("typebox").TObject<{
     place: import("typebox").TString;
     kind: import("typebox").TUnion<[import("typebox").TLiteral<"discussion">, import("typebox").TLiteral<"review">]>;
+    board: import("typebox").TOptional<import("typebox").TString>;
     cursor: import("typebox").TOptional<import("typebox").TString>;
     limit: import("typebox").TOptional<Readonly<import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TCodec<import("typebox").TRefine<import("typebox").TString>, number>]>>>;
 }>;
@@ -2490,6 +2636,7 @@ export declare const SubjectThreadCardSchema: import("typebox").TUnsafe<Readonly
     }>;
 }>>;
 export declare const SubjectThreadsResponseSchema: import("typebox").TObject<{
+    entry: import("typebox").TUnsafe<SubjectThreadEntry>;
     threads: import("typebox").TArray<import("typebox").TUnsafe<SubjectThreadCardEntry>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     reactionsAsOf: import("typebox").TUnion<[import("typebox").TObject<{
@@ -2532,34 +2679,69 @@ export declare const AuthorThreadsQuerySchema: import("typebox").TObject<{
     kind: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TLiteral<"discussion">, import("typebox").TLiteral<"review">]>>;
 }>;
 export declare const AuthorThreadsResponseSchema: import("typebox").TObject<{
-    threads: import("typebox").TArray<import("typebox").TUnsafe<Omit<Readonly<{
-        id: import("./model.ts").ThreadId;
-        route: import("./model.ts").Route;
-        authorId: import("./model.ts").ContentId;
-        kind: 'discussion' | 'review';
-        title: string | null;
-        licence: string;
-        subjectIds: readonly import("./model.ts").ContentId[];
-        boardId: import("./model.ts").BoardId;
-        visibility: import("./model.ts").Visibility;
-        securityRevision: import("./model.ts").SecurityRevision;
-        availability: import("./model.ts").Availability;
-        createdAt: string;
-        firstPost: import("./model.ts").PostEntry;
-    }>, "firstPost"> & Readonly<{
-        firstPost: PostEntry;
-    }> & ViewerReactionSlot & ReactionCountsSlot & Readonly<{
-        reviewContext?: FeedReviewContext;
-    }>>>;
+    actionSelection: import("typebox").TOptional<import("typebox").TObject<{
+        proof: import("typebox").TString;
+        references: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+            type: import("typebox").TLiteral<"content.thread">;
+            id: import("typebox").TString;
+            placeId: import("typebox").TString;
+            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            type: import("typebox").TLiteral<"content.post">;
+            id: import("typebox").TString;
+            threadId: import("typebox").TString;
+            placeId: import("typebox").TString;
+            threadRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>]>>;
+    }>>;
+    threads: import("typebox").TArray<import("typebox").TUnsafe<AuthorThreadEntry>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
 }>;
 export declare const AuthorPostsResponseSchema: import("typebox").TObject<{
+    actionSelection: import("typebox").TOptional<import("typebox").TObject<{
+        proof: import("typebox").TString;
+        references: import("typebox").TArray<import("typebox").TUnion<[import("typebox").TObject<{
+            type: import("typebox").TLiteral<"content.thread">;
+            id: import("typebox").TString;
+            placeId: import("typebox").TString;
+            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            type: import("typebox").TLiteral<"content.post">;
+            id: import("typebox").TString;
+            threadId: import("typebox").TString;
+            placeId: import("typebox").TString;
+            threadRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            sourceRevisionId: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>]>>;
+    }>>;
     posts: import("typebox").TArray<import("typebox").TUnsafe<AuthorPostEntry>>;
     next: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
 }>;
 export declare const DocumentMediaInputSchema: import("typebox").TObject<{
     ids: import("typebox").TArray<import("typebox").TIntersect<[import("typebox").TString, import("typebox").TString]>>;
 }>;
+export declare const DocumentImagePresentationSchema: import("typebox").TUnsafe<Readonly<{
+    id: string;
+    containerId: string;
+    digest: string;
+    width: number;
+    height: number;
+    variants: readonly {
+        format: 'avif' | 'webp';
+        width: number;
+        height: number;
+    }[];
+    placeholder: {
+        thumbhash: string;
+        color: string;
+    } | null;
+    focalPoint: {
+        x: number;
+        y: number;
+    } | null;
+    credit: import("@rezics/definitions/media-import").MediaImportRequest['credit'] | null;
+}>>;
 export declare const DocumentMediaPageSchema: import("typebox").TUnsafe<Readonly<{
     images: readonly import("./media-presentation.ts").DocumentImagePresentation[];
 }>>;
@@ -2633,6 +2815,23 @@ export declare const MediaDownloadResponseSchema: import("typebox").TObject<{
     publicCache: import("typebox").TLiteral<false>;
     cacheControl: import("typebox").TUnion<[import("typebox").TLiteral<"private, no-cache">, import("typebox").TLiteral<"private, no-store">]>;
 }>;
+export declare const AvatarUploadAdviceQuerySchema: import("typebox").TObject<{}>;
+export declare const AvatarUploadAdviceResponseSchema: import("typebox").TObject<{
+    viewerState: import("typebox").TLiteral<"signed_in">;
+    viewer: import("typebox").TObject<{
+        accountId: import("typebox").TString;
+    }>;
+    target: import("typebox").TObject<{
+        containerId: import("typebox").TString;
+        purpose: import("typebox").TLiteral<"avatar">;
+    }>;
+    constraints: import("typebox").TObject<{
+        mediaTypes: import("typebox").TTuple<[import("typebox").TLiteral<"image/avif">, import("typebox").TLiteral<"image/gif">, import("typebox").TLiteral<"image/jpeg">, import("typebox").TLiteral<"image/png">, import("typebox").TLiteral<"image/webp">]>;
+        maxByteCount: import("typebox").TLiteral<20971520>;
+    }>;
+    allowedActions: import("typebox").TUnion<[import("typebox").TTuple<[import("typebox").TLiteral<"upload">]>, import("typebox").TTuple<[]>]>;
+}>;
+export type AvatarUploadAdvice = Static<typeof AvatarUploadAdviceResponseSchema>;
 export declare const OwnMediaInventoryQuerySchema: import("typebox").TObject<{
     cursor: import("typebox").TOptional<import("typebox").TString>;
 }>;

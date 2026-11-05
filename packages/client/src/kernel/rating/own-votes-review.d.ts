@@ -1,4 +1,10 @@
 import type { CommandTransaction } from '../command/command.ts';
+import type { IdentityRatingReviewOperand } from '../semantic/index.ts';
+export declare const VOTE_SCOPE = "rating:vote";
+export declare class VoteInvalidError extends Error {
+    readonly field: string;
+    constructor(field: string);
+}
 export type VoteReviewEpoch = Readonly<{
     partition: number;
     epoch: string;
@@ -12,6 +18,8 @@ export type VoteReviewGuard = Readonly<{
     subject: Readonly<{
         canonicalId: string;
         epochs: readonly VoteReviewEpoch[];
+        /** Absent on historical reviews, which can replay but cannot admit a fresh effect. */
+        identity?: IdentityRatingReviewOperand;
     }>;
     ownVote: Readonly<{
         state: 'absent' | 'present';

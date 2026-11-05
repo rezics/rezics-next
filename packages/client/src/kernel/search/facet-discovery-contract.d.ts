@@ -20,7 +20,7 @@ export type FacetScopeCursorBinding = Readonly<{
 export type FacetDiscoveryRequest = {
     text?: string;
     filter?: unknown;
-    /** Exact Discovery result-kind selection, kept separate from semantic filter clauses. */
+    /** Exact Discovery result-kind selection, retained as a separate predicate in the native Search request. */
     kinds?: string[];
     languages?: string[];
     /** Additive second-scope reference. Omit to retain the existing unscoped request. */

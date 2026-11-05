@@ -65,10 +65,11 @@ export type ReportDependencies = Readonly<{
 export type ReportRequestContext = RequestContext & Readonly<{
     botToken?: string;
 }>;
-type ReadContext = Readonly<{
+export type ReportReadContext = Readonly<{
     actor: Actor;
     deadline: number;
 }>;
+type ReadContext = ReportReadContext;
 export declare class ReportUnavailableError extends Error {
     constructor();
 }
@@ -88,6 +89,31 @@ export declare function reporterHistoryAuthority(dependencies: ReportDependencie
  * home, only after current recipient authorization on every fill/recheck. */
 export declare function readReporterHistoryCases(dependencies: ReportDependencies, ids: readonly string[], context: ReadContext): Promise<ReadonlyMap<string, ReportView>>;
 export declare function readReport(dependencies: ReportDependencies, reportId: ReportId, context: ReadContext): Promise<Anchored<ReportView | null>>;
+/** Exact moderator selection. Authorization is checked on the report's parent
+ * before the private row is retained; a missing current target does not turn a
+ * retained, independently authorized report into a concealed report. */
+export declare function readModerationReportReference(dependencies: ReportDependencies, reportId: ReportId, context: ReadContext): Promise<Anchored<ReportView | null>>;
+export type ReportTargetInspection = Readonly<{
+    state: 'available' | 'taken-down' | 'erased' | 'withheld' | 'unavailable';
+    value: unknown | null;
+    destination: Readonly<{
+        boardId: string;
+        threadId?: string;
+        realmId?: string;
+    }> | null;
+}>;
+/** One exact current-target read and, when recorded, one exact historical post
+ * revision read. Current destination disclosure is a separate native read. */
+export declare function readReportTargetInspection(dependencies: ReportDependencies, report: ReportView, context: ReadContext): Promise<Readonly<{
+    current: ReportTargetInspection;
+    reportedRevision: ReportTargetInspection;
+}>>;
+/** Advice is a current read only; dismiss and takedown writers reauthorize the
+ * original report and target when their existing command is submitted. */
+export declare function readReportActionAdvice(dependencies: ReportDependencies, report: ReportView, current: ReportTargetInspection, context: ReadContext): Promise<Readonly<{
+    dismiss: boolean;
+    takeDown: boolean;
+}>>;
 /** Minimal current projection for an outcome notice owned by its reporter.
  * It does not load report reason/evidence or inspect the target body. */
 export declare function readReporterNoticeOutcome(dependencies: ReportDependencies, reportId: ReportId, context: ReadContext): Promise<{

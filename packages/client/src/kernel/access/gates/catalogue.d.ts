@@ -2,8 +2,9 @@ import { type AccessWorkAccounting } from '../work.ts';
 import type { Pool } from 'pg';
 import { type CommandAuthorization, type AuthoritativeTime, type CommandOutcome } from '../../command/command.ts';
 import type { AccountActor, AccessContext, Resource } from '../../request/access.ts';
+import { isExposureGroup } from '@rezics/access';
 export declare const GLOBAL_CONTEXT: Resource;
-export declare function isExposureGroup(value: string): boolean;
+export { isExposureGroup };
 export type ExposureState = {
     open: boolean;
     at: string;

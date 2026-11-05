@@ -43,7 +43,12 @@ export declare function admitProperties(properties: readonly string[], release: 
 export declare function chooseTexts(list: IndexedSubject['labels'], languages: readonly string[] | undefined, original: string | undefined, map?: (value: string) => string): {
     [k: string]: string;
 };
-export declare function projectHit(subject: IndexedSubject, { descriptions, languages, matchEvidence }: HitOptions): SearchHit;
+export declare function projectHit(subject: IndexedSubject, options: HitOptions & {
+    matchEvidence: MatchEvidence;
+}): SearchHit & {
+    matchEvidence: MatchEvidence;
+};
+export declare function projectHit(subject: IndexedSubject, options: HitOptions): SearchHit;
 type Pending = Exclude<Fact, {
     kind: 'item';
 }> | {

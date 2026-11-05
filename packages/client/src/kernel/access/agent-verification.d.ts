@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { CommandOutcome } from '../command/command.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { Access, AccessContext, Actor } from '../request/access.ts';
+import { type Access, type AccessContext, type Actor } from '../request/access.ts';
 export type AccountVerificationLink = {
     label: string;
     url: string;
@@ -36,6 +36,14 @@ export type AgentVerificationRequest = {
 export type PendingVerificationPage = {
     verificationRequests: AgentVerificationRequest[];
     next: string | null;
+};
+export type AgentVerificationViewerAction = {
+    action: string;
+    operations: string[];
+};
+export type AgentVerificationStatus = {
+    verificationRequest: AgentVerificationRequest | null;
+    viewerActions: AgentVerificationViewerAction[];
 };
 type VerificationRow = {
     id: string;
@@ -73,6 +81,8 @@ export declare class AgentVerificationPageConflictError extends Error {
 }
 /** One status lookup for the actor's own latest request or a managed organization. */
 export declare function readLatestAgentVerificationRequest(pool: Pool, access: Access, context: VerificationContext, accountId: string): Promise<AgentVerificationRequest | null>;
+/** Private latest request plus closed request/withdraw advice. Advice never grants command authority. */
+export declare function readAgentVerificationStatus(pool: Pool, access: Access, context: VerificationContext, accountId: string): Promise<AgentVerificationStatus>;
 /** Pending governance page; the partial index excludes every decided request. */
 export declare function readPendingAgentVerificationRequests(pool: Pool, access: Access, context: VerificationContext, tokens: KeyRing, input: {
     limit?: number;

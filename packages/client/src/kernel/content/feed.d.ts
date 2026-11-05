@@ -3,9 +3,11 @@ import type { Access, Actor } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
-import type { DiscoverySearch } from '../search/discovery-service.ts';
+import type { DiscoverySearch } from '../search/index.ts';
 import type { SearchService } from '../search/service-scope.ts';
+import type { ViewerPersonalActionsReader } from '../library/viewer-personal-actions.ts';
 import { type FeedPage, type FeedSelection } from './feed-contract.ts';
+import type { ReadingPageViewerActionRuntime } from './reading-page.ts';
 export type FeedDependencies = {
     pool: Pool;
     routeKey: Uint8Array;
@@ -16,6 +18,10 @@ export type FeedDependencies = {
     workClient: () => Promise<WorkClient>;
     discovery?: DiscoverySearch;
     search?: SearchService;
+    /** Home calls this bounded seam only after its feed candidates are admitted and disclosed. */
+    viewerPersonalActions: ViewerPersonalActionsReader;
+    /** Reuse the mounted Content reading-page action catalogue for selected Home targets. */
+    viewerActionRuntime?: () => ReadingPageViewerActionRuntime;
 };
 /** The native factory and mounted route share this query and response contract. */
 export type FeedReadQuery = {

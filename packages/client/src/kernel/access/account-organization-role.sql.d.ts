@@ -22,7 +22,7 @@ export type QueryError = import("reylo").QueryError<"postgres">;
  *
  * The statement as Reylo sends it to the database, as the module's `sql` export: `:id` is `$1` on Postgres and `?` on MySQL and SQLite, each cast is the dialect's own, and a comment naming the file ends it.
  */
-export declare const sql: "SELECT m.role\nFROM access.organization_member m\nJOIN access.account a ON a.route = m.route AND a.account_id = m.organization_id\nWHERE m.route = $1 AND m.organization_id = $2\n  AND a.kind = 'organization' AND a.state = 'active' AND NOT a.authn_fenced\n  AND m.member_account_id = $3 AND m.valid @> $4::timestamptz\nLIMIT 1 /*file='src%2Faccess%2Faccount-organization-role.sql'*/;";
+export declare const sql: "SELECT m.role\nFROM access.organization_member m\nJOIN access.account a ON a.route = m.route AND a.account_id = m.organization_id\nWHERE m.route = $1 AND m.organization_id = $2\n  AND a.kind = 'organization' AND a.state = 'active' AND NOT a.authn_fenced\n  AND m.member_account_id = $3 AND m.valid @> $4::timestamptz\nLIMIT 1 /*file='..%2F..%2F..%2F..%2Fservices%2Fkernel%2Fsrc%2Faccess%2Faccount-organization-role.sql'*/;";
 /**
  * ```sql
  * SELECT m.role

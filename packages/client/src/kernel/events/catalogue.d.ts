@@ -1481,6 +1481,10 @@ declare const productEventTypes: {
     readonly 'com.rezics.library.type-preparation.changed.v1': Type.TObject<{
         preparationId: Type.TString;
     }>;
+    readonly 'com.rezics.library.yearly-goal.changed.v1': Type.TObject<{
+        year: Type.TInteger;
+        revision: Type.TString;
+    }>;
     readonly 'com.rezics.library.account-graph.purged.v1': Type.TObject<{
         accountId: Type.TString;
         kind: Type.TString;
@@ -1536,6 +1540,9 @@ declare const productEventTypes: {
     }>;
     readonly 'com.rezics.library.copy.deleted.v1': Type.TObject<{
         copyId: Type.TString;
+    }>;
+    readonly 'com.rezics.library.copy-loan.changed.v1': Type.TObject<{
+        loanId: Type.TString;
     }>;
     readonly 'com.rezics.library.published_log.updated.v1': Type.TObject<{
         logId: Type.TString;

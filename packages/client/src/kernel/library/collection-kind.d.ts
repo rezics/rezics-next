@@ -6,6 +6,7 @@ import type { Access, Actor } from '../request/access.ts';
 import type { IdentityScopedObservations, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { type NativeLibrarySourceCustody } from './native-source-custody.ts';
 import { type CollectionSource, type CollectionAliasProgress, type CollectionSourceObservation, type CollectionSourceContext, type PreparedCollectionSource, type WorkAllowance, type WorkReceipt } from './collection-source.ts';
+export { COLLECTION_KIND_INPUT_DECLARATION } from './collection-kind-input-bounds.ts';
 import type { KindAudienceAccess } from '../access/kind-audience.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { KindConsentConsumer, KindConsentReference } from '@rezics/auth-contract';
@@ -227,4 +228,3 @@ export declare function readCollectionKindSourcePage(input: CollectionKindSource
     work: WorkReceipt;
 }>;
 export declare function validateCollectionKindPage(page: CollectionKindPage, after: string | null, frontier?: string | null): void;
-export {};

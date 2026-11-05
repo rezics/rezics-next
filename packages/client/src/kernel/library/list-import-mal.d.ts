@@ -3,11 +3,12 @@ import { type CommandOutcome } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { SessionComponent } from '../tokens/session.ts';
 import type { ProgressSessionJournalDate } from './progress-model.ts';
 import type { createSessionCommands } from './sessions.ts';
 import type { Entry } from './entry-model.ts';
 import { type MalRow } from './list-import-mal-parser.ts';
-import { type RatingQuestion, type Vote } from '../rating/votes.ts';
+import { type RatingQuestion, type VoteReviewGuard } from '../rating/votes.ts';
 import { type MalLabelReview, type MalLabelSelection, type MalLabelOutcome } from './list-import-mal-tags.ts';
 import { type EntryImportMetadataOutcome, type EntryImportMetadataProposals } from './list-import-entry-metadata.ts';
 import { progressResults, type ProgressAdoptionCheckpoint, type ProgressAdoptionInput, type ProgressAdoptionPlan } from './list-import-progress-adoption.ts';
@@ -39,7 +40,9 @@ export type MalScoreReview = {
         reason: 'native-units-require-explicit-selection' | 'source-score-outside-integer-1-through-10' | 'source-zero-means-no-rating' | 'source-score-absent';
     };
     conversion: 'owner-selected-not-exact';
-    question: Pick<RatingQuestion, 'id' | 'revision' | 'label' | 'meaning' | 'grain' | 'scale' | 'lifecycleState'>;
+    question: Pick<RatingQuestion, 'id' | 'revision' | 'label' | 'meaning' | 'grain' | 'lifecycleState'> & {
+        scale: Pick<RatingQuestion, 'minimumUnits' | 'maximumUnits' | 'stepUnits'>;
+    };
     units: number | null;
     replaceCurrent: boolean;
     support: {
@@ -52,7 +55,11 @@ export type MalScoreReview = {
         revision: number | null;
         at: string | null;
     };
+    guard?: VoteReviewGuard;
     admission: {
+        status: 'conditional';
+        reason: null;
+    } | {
         status: 'unavailable';
         reason: 'conditional-vote-admission-unavailable';
         missingGuard: 'question-revision-and-target-identity-and-current-vote-revision';
@@ -60,10 +67,10 @@ export type MalScoreReview = {
 };
 export type MalScoreOutcome = {
     action: 'adopt' | 'clear' | null;
-    status: 'unavailable' | 'stale' | 'skipped' | 'unsupported' | 'failed';
+    status: 'applied' | 'unavailable' | 'stale' | 'skipped' | 'unsupported' | 'failed';
     reason: string | null;
     vote: {
-        units: number;
+        units: number | null;
         revision: number;
         at: string;
     } | null;
@@ -187,8 +194,6 @@ type Dependencies = {
     tokens: KeyRing;
     routeKey: Uint8Array;
     journal: ReturnType<typeof createSessionCommands>;
-    readScoreQuestion?: (actor: Actor, questionId: string) => Promise<RatingQuestion>;
-    readOwnScoreVote?: (actor: Actor, questionId: string, targetId: string) => Promise<Vote | null>;
     clock?: KernelClock;
 };
 export declare function malMetadataProposals(row: MalRow): EntryImportMetadataProposals;
@@ -242,6 +247,11 @@ export declare function createMalImport(deps: Dependencies): {
             }[];
             review: MalReview | null;
             scoreReviewState: "observations-match" | "stale" | "unavailable" | null;
+            currentScoreVote: {
+                units: number | null;
+                revision: number;
+                at: string;
+            } | null;
             outcome: MalOutcome | null;
             dateReview: MalDateReview | null;
             dateOutcome: MalDateOutcome | null;
@@ -306,6 +316,11 @@ export declare function createMalImport(deps: Dependencies): {
             }[];
             review: MalReview | null;
             scoreReviewState: "observations-match" | "stale" | "unavailable" | null;
+            currentScoreVote: {
+                units: number | null;
+                revision: number;
+                at: string;
+            } | null;
             outcome: MalOutcome | null;
             dateReview: MalDateReview | null;
             dateOutcome: MalDateOutcome | null;
@@ -378,6 +393,11 @@ export declare function createMalImport(deps: Dependencies): {
             }[];
             review: MalReview | null;
             scoreReviewState: "observations-match" | "stale" | "unavailable" | null;
+            currentScoreVote: {
+                units: number | null;
+                revision: number;
+                at: string;
+            } | null;
             outcome: MalOutcome | null;
             dateReview: MalDateReview | null;
             dateOutcome: MalDateOutcome | null;
@@ -426,8 +446,15 @@ export declare function createMalImport(deps: Dependencies): {
         id: string;
     }>>;
     reviewMetadata: (actor: Actor, id: string, input: MalMetadataReviewInput, key: string, deadline: number) => Promise<{
-        id: string;
-        reviewToken: string;
+        value: {
+            id: string;
+            reviewToken: string;
+        };
+        partition: number;
+        epoch: number;
+        position: bigint;
+        transactionId: string;
+        replayed: boolean;
     }>;
     metadata: (actor: Actor, id: string, ordinal: number, token: string, deadline: number) => Promise<Readonly<{
         status: 'current' | 'stale';
@@ -442,7 +469,7 @@ export declare function createMalImport(deps: Dependencies): {
     reviewDates: (actor: Actor, id: string, input: MalDateReviewInput, key: string, deadline: number) => Promise<CommandOutcome<{
         id: string;
     }>>;
-    apply: (actor: Actor, id: string, input: MalApplyInput, deadline: number, signal: AbortSignal, record: (value: CommandOutcome<unknown>) => void) => Promise<{
+    apply: (actor: Actor, id: string, input: MalApplyInput, deadline: number, signal: AbortSignal, record: (value: CommandOutcome<unknown> | SessionComponent) => void) => Promise<{
         id: string;
         outcomes: MalOutcome[];
         remaining: number[];
