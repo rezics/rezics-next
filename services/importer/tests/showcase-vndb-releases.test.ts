@@ -18,7 +18,14 @@ import {
   developmentStatusSchemeUri,
   developmentStatusTaxonomy,
 } from '../src/vndb-release-fidelity.ts';
-import { prepareShowcaseVndbReleaseClassifications, seedShowcaseVndbReleases } from '../src/showcase-vndb-releases.ts';
+import {
+  catalogueVndbReleaseGroups,
+  composeShowcaseVndbReleaseContext,
+  groupsFromVndbReleaseBindings,
+  prepareShowcaseVndbReleaseClassifications,
+  sameShowcaseVndbReleaseClassifications,
+  seedShowcaseVndbReleases,
+} from '../src/showcase-vndb-releases.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 import { planVndbReleasePlatforms } from '../src/vndb-release-platforms.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
@@ -630,6 +637,59 @@ test('later selected-family reseeds carry the newly current release classificati
     });
     expect(JSON.stringify(reread.bindings)).toBe(JSON.stringify(classifications.bindings));
     expect(classifications.bindings.concepts.some((item) => item.code === 'win')).toBe(true);
+    expect(sameShowcaseVndbReleaseClassifications(first.bindings, classifications.bindings)).toBe(false);
+    expect(groupsFromVndbReleaseBindings(classifications.bindings)).toContainEqual(
+      expect.objectContaining({
+        taxonomy: vndbReleasePlatformTaxonomy,
+        uri: vndbReleasePlatformSchemeUri,
+        concepts: [{ code: 'win', id: platformWinId }],
+      }),
+    );
+    expect(catalogueVndbReleaseGroups(undefined, classifications.requirements)).toEqual([]);
+    const releaseContext = composeShowcaseVndbReleaseContext({
+      bindings: classifications.bindings,
+      preservedBindings: first.bindings,
+      groups: classifications.groups,
+    });
+    const changedPlatformId = '00000000-0000-4000-8000-000000000099';
+    const changedBindings = {
+      ...classifications.bindings,
+      concepts: classifications.bindings.concepts.map((concept) =>
+        concept.taxonomy === vndbReleasePlatformTaxonomy && concept.code === 'win'
+          ? { ...concept, id: changedPlatformId }
+          : concept,
+      ),
+    };
+    expect(sameShowcaseVndbReleaseClassifications(classifications.bindings, changedBindings)).toBe(false);
+    const changedContext = composeShowcaseVndbReleaseContext({
+      bindings: changedBindings,
+      preservedBindings: classifications.bindings,
+      groups: [
+        {
+          taxonomy: vndbReleasePlatformTaxonomy,
+          uri: vndbReleasePlatformSchemeUri,
+          schemeId: classifications.bindings.schemes.find((scheme) => scheme.taxonomy === vndbReleasePlatformTaxonomy)!.id,
+          concepts: [{ code: 'win', id: changedPlatformId }],
+        },
+      ],
+    });
+    expect(
+      changedContext.bindings.concepts.filter((concept) => concept.taxonomy === vndbReleasePlatformTaxonomy),
+    ).toEqual([expect.objectContaining({ code: 'win', id: changedPlatformId })]);
+    const withoutPlatform = composeShowcaseVndbReleaseContext({
+      bindings: {
+        ...classifications.bindings,
+        schemes: classifications.bindings.schemes.filter((scheme) => scheme.taxonomy !== vndbReleasePlatformTaxonomy),
+        concepts: classifications.bindings.concepts.filter(
+          (concept) => concept.taxonomy !== vndbReleasePlatformTaxonomy,
+        ),
+      },
+      preservedBindings: classifications.bindings,
+    });
+    expect(
+      withoutPlatform.bindings.schemes.some((scheme) => scheme.taxonomy === vndbReleasePlatformTaxonomy),
+    ).toBe(false);
+    expect(withoutPlatform.groups.some((group) => group.taxonomy === vndbReleasePlatformTaxonomy)).toBe(false);
 
     const nextCommands = commands.length;
     const later = await seedShowcaseVndbReleases({
@@ -637,7 +697,8 @@ test('later selected-family reseeds carry the newly current release classificati
       plan: structuredClone(plan),
       path: join(directory, 'state.sqlite'),
       port: reviewPort,
-      bindings: first.bindings,
+      bindings: releaseContext.bindings,
+      groups: releaseContext.groups,
       extras: extras(),
     });
     const laterPlatformProposals = commands.slice(nextCommands).filter(

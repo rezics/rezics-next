@@ -501,22 +501,24 @@ test('cross-media CLI retains selected release classifications through later voc
       return runtime.replay(request);
     }) as typeof fetch;
 
-    await runCrossMediaSeedCli(
-      [
-        '--bangumi', dump.bangumi,
-        '--vndb', dump.vndb,
-        '--state', state,
-        '--result', resultPath,
-        '--api', runtime.origin,
-        '--auth', authOrigin,
-        '--account-key', keyPath,
-        '--account', runtime.identity.governance.accountId,
-        '--client', clientId,
-        '--showcase-state', showcase,
-        '--vndb-release-state-bindings', join(directory, 'release-bindings.json'),
-      ],
-      { selection: { bangumi: [1], vndb: ['v1'], peoplePerProvider: 1 } },
-    );
+    const run = () =>
+      runCrossMediaSeedCli(
+        [
+          '--bangumi', dump.bangumi,
+          '--vndb', dump.vndb,
+          '--state', state,
+          '--result', resultPath,
+          '--api', runtime.origin,
+          '--auth', authOrigin,
+          '--account-key', keyPath,
+          '--account', runtime.identity.governance.accountId,
+          '--client', clientId,
+          '--showcase-state', showcase,
+          '--vndb-release-state-bindings', join(directory, 'release-bindings.json'),
+        ],
+        { selection: { bangumi: [1], vndb: ['v1'], peoplePerProvider: 1 } },
+      );
+    await run();
 
     const result = JSON.parse(await readFile(resultPath, 'utf8')) as {
       identities: { key: string; kind: string; subjectId: string }[];
@@ -558,6 +560,30 @@ test('cross-media CLI retains selected release classifications through later voc
     expect(values((await readCurrent(mediumId)) as typeof release, 'schema:url')).toEqual([
       'https://vndb.org/releases/media/cd',
     ]);
+
+    await run();
+    const reopened = JSON.parse(await readFile(resultPath, 'utf8')) as typeof result;
+    expect(reopened.identities.find((row) => row.key === 'v1' && row.kind === 'work')?.subjectId).toBe(workId);
+    expect(reopened.identities.find((row) => row.key === 'r1' && row.kind === 'release')?.subjectId).toBe(releaseId);
+
+    await writeFile(join(dump.vndb, 'db', 'releases_platforms'), 'r1\tmac\n');
+    await run();
+    const refreshed = JSON.parse(await readFile(resultPath, 'utf8')) as typeof result;
+    expect(refreshed.identities.find((row) => row.key === 'v1' && row.kind === 'work')?.subjectId).toBe(workId);
+    expect(refreshed.identities.find((row) => row.key === 'r1' && row.kind === 'release')?.subjectId).toBe(releaseId);
+    expect(refreshed.showcase.manifest.records.find((record) => record.sourceKey === 'r1')?.subjectId).toBe(releaseId);
+    const refreshedRelease = await readCurrent(releaseId!);
+    expect(values(refreshedRelease, 'schema:exampleOfWork')).toEqual([workId]);
+    expect(values(refreshedRelease, 'schema:inLanguage')).toEqual(['ja']);
+    expect(values(refreshedRelease, 'schema:datePublished')[0]).toEqual(
+      expect.objectContaining({ time: '+2020-02-29T00:00:00Z', precision: 11 }),
+    );
+    const refreshedPlatforms = await Promise.all(
+      values(refreshedRelease, 'schema:gamePlatform').map(async (id) =>
+        values((await readCurrent(id as string)) as typeof release, 'schema:url'),
+      ),
+    );
+    expect(refreshedPlatforms.flat()).toContain('https://vndb.org/releases/platforms/mac');
   } finally {
     globalThis.fetch = originalFetch;
     await runtime.close();

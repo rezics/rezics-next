@@ -684,6 +684,65 @@ export function groupsFromVndbReleaseBindings(
   });
 }
 
+export type ShowcaseVndbReleaseContext = Readonly<{
+  bindings: SourceVocabularyBindings;
+  groups: readonly VndbReleaseBindingGroup[];
+}>;
+
+function mergeShowcaseVndbReleaseBindings(
+  preserved: SourceVocabularyBindings,
+  current: SourceVocabularyBindings,
+): SourceVocabularyBindings {
+  const classifications = new Set(vndbReleaseClassificationTaxonomies());
+  const retained: SourceVocabularyBindings = {
+    releaseDigest: preserved.releaseDigest,
+    schemes: preserved.schemes.filter((scheme) => !classifications.has(scheme.taxonomy)),
+    concepts: preserved.concepts.filter((concept) => !classifications.has(concept.taxonomy)),
+  };
+  return mergeBindings(retained, current);
+}
+
+/** Keep the last selected release bindings and the latest current classification groups together. */
+export function composeShowcaseVndbReleaseContext(input: {
+  bindings: SourceVocabularyBindings;
+  preservedBindings?: SourceVocabularyBindings;
+  groups?: readonly VndbReleaseBindingGroup[];
+  configuredGroups?: readonly VndbReleaseBindingGroup[];
+}): ShowcaseVndbReleaseContext {
+  const bindings = input.preservedBindings
+    ? mergeShowcaseVndbReleaseBindings(input.preservedBindings, input.bindings)
+    : input.bindings;
+  return {
+    bindings,
+    groups: overlayBindingGroups([
+      input.configuredGroups ?? [],
+      groupsFromVndbReleaseBindings(bindings),
+      input.groups ?? [],
+    ]),
+  };
+}
+
+/** Compare only the finite platform/media classifications in a seed and a later current read. */
+export function sameShowcaseVndbReleaseClassifications(
+  left: SourceVocabularyBindings,
+  right: SourceVocabularyBindings,
+): boolean {
+  const taxonomies = new Set(vndbReleaseClassificationTaxonomies());
+  const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  const selected = (bindings: SourceVocabularyBindings) => {
+    const schemes = bindings.schemes
+      .filter((row) => taxonomies.has(row.taxonomy))
+      .map(({ taxonomy, uri, id }) => [taxonomy, uri, id] as const)
+      .sort((a, b) => compare(a.join('\u0000'), b.join('\u0000')));
+    const concepts = bindings.concepts
+      .filter((row) => taxonomies.has(row.taxonomy))
+      .map(({ taxonomy, code, schemeId, id }) => [taxonomy, code, schemeId, id] as const)
+      .sort((a, b) => compare(a.join('\u0000'), b.join('\u0000')));
+    return { schemes, concepts };
+  };
+  return JSON.stringify(selected(left)) === JSON.stringify(selected(right));
+}
+
 /** Optional UUID file: binding groups or current native scheme/concept hints. */
 export function parseVndbReleaseStateBindings(value: unknown): {
   groups: VndbReleaseBindingGroup[];
