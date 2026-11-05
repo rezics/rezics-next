@@ -65,7 +65,11 @@ export const localClientIds = {
 const personaClient = localClientIds.importer;
 const showcaseClient = localClientIds.showcase;
 export function localShowcaseClientRegistration() {
-  return { clientId: showcaseClient, firstParty: true, scopes: [...new Set([...DEVELOPMENT_SHOWCASE_SCOPES, ...developmentCollectionScopes])] };
+  return {
+    clientId: showcaseClient,
+    firstParty: true,
+    scopes: [...new Set([...DEVELOPMENT_SHOWCASE_SCOPES, ...developmentCollectionScopes])],
+  };
 }
 export type DevelopmentKeys = {
   secret: string;

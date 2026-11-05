@@ -95,7 +95,6 @@ export type DevelopmentShowcaseResult = {
   ))[];
   sources: ({ provider: Source['provider']; externalId: string } & Outcome<Source>)[];
   workLinks: CrossMediaSeedResult['workLinks'];
-
 };
 
 /** Only external HTTP failures become incomplete outcomes; programming errors still throw. */
@@ -341,6 +340,5 @@ export async function seedDevelopmentShowcase(
     collections,
     sources,
     workLinks: input.result.workLinks,
-
   };
 }

@@ -48,7 +48,9 @@ test('development seed fetches the shared cache once and passes the local person
   const keyDirectory = await mkdtemp(join(tmpdir(), 'cross-media-persona-key-'));
   const key = join(keyDirectory, 'persona.key');
   const jwk = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ format: 'jwk' });
-  await writeFile(key, JSON.stringify({ ...jwk, alg: 'ES256', kid: '11111111-1111-4111-8111-111111111111' }), { mode: 0o600 });
+  await writeFile(key, JSON.stringify({ ...jwk, alg: 'ES256', kid: '11111111-1111-4111-8111-111111111111' }), {
+    mode: 0o600,
+  });
   const args: string[] = [];
   let passedOptions: unknown;
   let fetches = 0;
@@ -94,8 +96,9 @@ test('development seed fetches the shared cache once and passes the local person
     expect(fetches).toBe(1);
     expect(result.collections).toBe(report.persona);
     expect(result).toMatchObject({ state: 'incomplete', community: { state: 'missing_source' } });
-    expect(JSON.parse(await readFile(join(root, '.temp/cross-media-seed/result.json'), 'utf8')).developmentShowcase)
-      .toEqual(result);
+    expect(
+      JSON.parse(await readFile(join(root, '.temp/cross-media-seed/result.json'), 'utf8')).developmentShowcase,
+    ).toEqual(result);
     expect(option('--bangumi')).toBe('/shared/dumps/bangumi');
     expect(option('--vndb')).toBe('/shared/dumps/vndb');
     expect(option('--api')).toBe('http://127.0.0.1:4100');
