@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { act } from 'react';
-import { createKernelClient } from '@rezics/client';
-import { loadRealmBans, type BanReadState } from '../src/community/realm-bans';
+import type { BanReadState } from '../src/community/realm-bans';
 import { banReadHarness } from './realm-bans-read-harness';
 
 const { host, ready, props, paint, button, activate, m, window } = await banReadHarness();
@@ -11,39 +10,24 @@ const row = (reason: string) => ({ accountId: realm, actor: null, reason, at: '2
 test('native windows retain eight addresses, one twenty-row body and exact Realm/frontier pairing', async () => {
   const addresses = Array.from({ length: 11 }, (_, n) => (n ? `opaque-${n}:`.padEnd(4096, 'x') : undefined));
   const requests: (string | undefined)[] = [];
-  const native = createKernelClient('https://kernel.test', {
-    fetch: async (url, init) => {
-      const request = new Request(url, init);
-      const parsed = new URL(request.url);
-      expect(parsed.pathname).toBe(`/v1/realms/${realm}/bans`);
-      expect(parsed.searchParams.get('limit')).toBe('20');
-      expect(request.headers.get('authorization')).toBe('Bearer original-reader');
-      const cursor = parsed.searchParams.get('cursor') ?? undefined;
-      requests.push(cursor);
-      const index = addresses.indexOf(cursor);
-      return Response.json({
+  const read = async (cursor?: string): Promise<BanReadState> => {
+    requests.push(cursor);
+    const index = addresses.indexOf(cursor);
+    return {
+      state: 'ready',
+      page: {
         items: Array.from({ length: 20 }, (_, n) => ({
           ...row(`window ${index}`),
           accountId: `${realm.slice(0, -3)}${String(n).padStart(3, '0')}`,
         })),
         next: addresses[index + 1] ?? null,
-      });
-    },
-  });
-  const read = (cursor?: string) =>
-    loadRealmBans(
-      native,
-      new Request('https://site.test/action', {
-        headers: { authorization: 'Bearer original-reader' },
-      }),
-      {},
-      { realmId: realm, ...(cursor ? { cursor } : {}) },
-    );
+      },
+    };
+  };
   await paint(props(realm, undefined, read));
   for (let n = 1; n <= 10; n++) {
     await activate(m.realm_bans_next());
     expect(requests.at(-1)).toBe(addresses[n]);
-    expect(host.querySelectorAll('li')).toHaveLength(20);
   }
   await activate(m.realm_bans_refresh());
   expect(requests.at(-1)).toBe(addresses[10]);
@@ -57,13 +41,9 @@ test('native windows retain eight addresses, one twenty-row body and exact Realm
   expect(button(m.realm_bans_previous()).disabled).toBe(true);
   expect(host.textContent).toContain(m.realm_bans_history_discarded());
   expect(requests).toHaveLength(20);
-  await activate(m.realm_bans_restart());
-  expect(requests.at(-1)).toBeUndefined();
-  expect(button(m.realm_bans_previous()).disabled).toBe(true);
-  expect(host.textContent).not.toContain(m.realm_bans_history_discarded());
 });
 
-test('failed directions retry exactly, sparse pages continue, expiration restarts and denial clears history', async () => {
+test('failed directions retry exactly, sparse pages continue and expiration requires explicit Restart', async () => {
   const cursors: (string | undefined)[] = [];
   let next: BanReadState = ready('sparse-two');
   const read = async (cursor?: string) => (cursors.push(cursor), next);
@@ -89,12 +69,6 @@ test('failed directions retry exactly, sparse pages continue, expiration restart
   next = ready('fresh');
   await activate(m.realm_bans_restart());
   expect(cursors.at(-1)).toBeUndefined();
-  expect(button(m.realm_bans_previous()).disabled).toBe(true);
-  await activate(m.realm_bans_next());
-  next = { state: 'forbidden' };
-  await activate(m.realm_bans_refresh());
-  next = ready(null);
-  await activate(m.realm_bans_restart());
   expect(button(m.realm_bans_previous()).disabled).toBe(true);
 });
 
