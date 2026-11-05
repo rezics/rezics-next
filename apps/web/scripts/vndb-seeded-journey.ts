@@ -1,5 +1,6 @@
 /** Run the selected VNDB journey on the worker-check host, using the real development composition. */
 import assert from 'node:assert/strict';
+import { closeSync, openSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
@@ -41,8 +42,10 @@ let password = '';
 async function command(name: string, args: string[]) {
   console.log(`VNDB journey: ${name}`);
   const log = Bun.file(resolve(privateLogs, `${name}.log`));
-  const child = Bun.spawn(args, { cwd: root, env, stdout: log, stderr: log });
+  const descriptor = openSync(log.name!, 'a', 0o600);
+  const child = Bun.spawn(args, { cwd: root, env, stdout: descriptor, stderr: descriptor });
   const code = await child.exited;
+  closeSync(descriptor);
   if (code !== 0) {
     const output = (await log.text()).replaceAll(password || '\u0000', '[redacted]');
     throw new Error(`${name} exited ${code}\n${output.slice(-12000)}`);
@@ -52,20 +55,24 @@ async function command(name: string, args: string[]) {
 
 async function ready(url: string, child: Bun.Subprocess) {
   const deadline = Date.now() + 180_000;
+  let lastFailure = 'no response';
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error(`Development stack exited ${child.exitCode} before ${url}`);
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(2000) });
       if (response.ok) return;
+      lastFailure = `HTTP ${response.status}\n${(await response.text()).slice(0, 16000)}`;
     } catch (error) {
       if (!(error instanceof TypeError) && !(error instanceof DOMException)) throw error;
+      lastFailure = String(error);
     }
     await Bun.sleep(500);
   }
-  throw new Error(`Development stack readiness timed out: ${url}`);
+  throw new Error(`Development stack readiness timed out: ${url}\n${lastFailure}`);
 }
 
 let stack: Bun.Subprocess | undefined;
+let stackDescriptor: number | undefined;
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 try {
   await command('database', ['bun', 'run', '--cwd', 'services/kernel', 'db', 'up']);
@@ -79,12 +86,12 @@ try {
   const keys = JSON.parse(await readFile(resolve(root, '.temp/local-stack/keys.json'), 'utf8'));
   password = keys.password;
   const stackLog = Bun.file(resolve(privateLogs, 'stack.log'));
+  stackDescriptor = openSync(stackLog.name!, 'a', 0o600);
   stack = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
-    cwd: root, env, stdout: stackLog, stderr: stackLog,
+    cwd: root, env, stdout: stackDescriptor, stderr: stackDescriptor,
   });
   await ready(`${issuerOrigin}/.well-known/jwks.json`, stack);
-  await ready(`${webOrigin}/en`, stack);
-  report.phases.push('stack-ready');
+  report.phases.push('auth-ready');
   const seedEnv = Object.fromEntries(
     (await readFile(resolve(root, '.temp/local-stack/seed.env'), 'utf8')).trim().split('\n').map((line) => {
       const at = line.indexOf('=');
@@ -93,10 +100,12 @@ try {
   );
   // The complete composition may report an unavailable private list; catalogue reads remain independently testable.
   const seedLog = Bun.file(resolve(privateLogs, 'seed.log'));
+  const seedDescriptor = openSync(seedLog.name!, 'a', 0o600);
   const seed = Bun.spawn(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], {
-    cwd: root, env: { ...env, ...seedEnv }, stdout: seedLog, stderr: seedLog,
+    cwd: root, env: { ...env, ...seedEnv }, stdout: seedDescriptor, stderr: seedDescriptor,
   });
   const seedCode = await seed.exited;
+  closeSync(seedDescriptor);
   if (!(await Bun.file(resolve(root, '.temp/cross-media-seed/result.json')).exists())) {
     throw new Error(`seed exited ${seedCode}\n${(await seedLog.text()).replaceAll(password, '[redacted]').slice(-12000)}`);
   }
@@ -108,6 +117,7 @@ try {
     vndbCreditDiagnostics: result.vndbCreditDiagnostics,
   }, null, 2), { mode: 0o600 });
   report.phases.push('seed-returned');
+  await ready(`${webOrigin}/en`, stack);
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -141,4 +151,5 @@ try {
     stack.kill('SIGTERM');
     await stack.exited;
   }
+  if (stackDescriptor !== undefined) closeSync(stackDescriptor);
 }
