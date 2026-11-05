@@ -1,4 +1,5 @@
 import { mock } from 'bun:test';
+import * as runtimeStart from '@tanstack/react-start';
 import * as start from '../../.storybook/react-start';
 import type {
   PublicationAddress,
@@ -26,6 +27,7 @@ export const writes: {
 
 mock.module('@tanstack/react-start', () => ({
   ...start,
+  ...runtimeStart,
   createServerFn() {
     const delegate = start.createServerFn();
     let validate: ((input: unknown) => unknown) | undefined;
