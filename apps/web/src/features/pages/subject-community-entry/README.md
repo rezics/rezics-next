@@ -28,7 +28,7 @@ Board/composer authority and Subject/place/return intent through sign-in. No row
 region selects a creation Board. Content's additive inputs flow through the adapter and context; no
 outer placement change is required for these reading and recovery fields.
 
-Decision: consume the showcase's explicit native Board/work association through the installed Subject `board` query and closed `entry` response; until both fields are installed, keep creation unavailable without inferring a Board.
+Decision: consume only the showcase's supplied native Board/work association through `subjects({ id }).threads.get({ query: { board } })` and its closed `entry` response. The current installed root callable omits both `query.board` and response `entry`, and the current Subject thread composition read has no Board association operand; keep creation unavailable until the existing owners publish those inputs, without inferring a Board.
 
 Decision: preserve the complete originating Subject region URL, including its cursor and Realm/node context,
 as the return target through admitted Board entry and sign-in.
