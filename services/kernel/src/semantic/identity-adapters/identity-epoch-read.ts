@@ -246,8 +246,14 @@ function identityReviewFromEvidence(
     };
   if (mapped.some((row) => row.state === 'absent')) return { state: 'absent' };
 
-  const requested = mapped.find((row) => row.state === 'mapped' && row.original === requestedOriginalId);
-  const canonical = mapped.find((row) => row.state === 'mapped' && row.original === canonicalTerminalId);
+  const requested = mapped.find(
+    (row): row is Extract<IdentityMapping, { state: 'mapped' }> =>
+      row.state === 'mapped' && row.original === requestedOriginalId,
+  );
+  const canonical = mapped.find(
+    (row): row is Extract<IdentityMapping, { state: 'mapped' }> =>
+      row.state === 'mapped' && row.original === canonicalTerminalId,
+  );
   if (!requested || !canonical) return { state: 'absent' };
   if (requested.terminal !== canonicalTerminalId || canonical.terminal !== canonicalTerminalId)
     return {
