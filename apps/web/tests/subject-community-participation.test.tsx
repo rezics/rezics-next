@@ -484,9 +484,8 @@ test('community visits retire on replacement and unmount without reviving a prev
 });
 
 test('community body survives initial session preparation while private advice waits for its matching observation', async () => {
-  const { SubjectCommunityContext, SubjectCommunityRegion } = await import(
-    '../src/features/pages/subject-community-view'
-  );
+  const { SubjectCommunityContext, SubjectCommunityRegion } =
+    await import('../src/features/pages/subject-community-view');
   const id = '01a17a3b-0884-721b-91ef-d7ffd7bb58e4';
   const region = {
     state: 'ready' as const,

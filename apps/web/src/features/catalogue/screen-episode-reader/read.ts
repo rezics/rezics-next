@@ -115,13 +115,7 @@ function pageState(
 ): ScreenEpisodeRead {
   if (count && (!Number.isSafeInteger(count.value) || count.value < 0)) return { ok: false, reason: 'unavailable' };
   if (next !== null && (!next.length || next.length > 8192)) return { ok: false, reason: 'unavailable' };
-  if (
-    !cursor &&
-    entries.length === 0 &&
-    rowCount === 0 &&
-    next === null &&
-    (count === undefined || count.value === 0)
-  )
+  if (!cursor && entries.length === 0 && rowCount === 0 && next === null && (count === undefined || count.value === 0))
     return { ok: true, state: 'empty', entries, next };
   const withheld =
     entries.some((entry) => !entry.statement) ||

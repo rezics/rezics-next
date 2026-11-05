@@ -79,10 +79,7 @@ class PopulationRegistry {
     if (query.queryKey[0] === 'subject-rating' && query.queryKey[3] === 'question') {
       const previous = this.sourceData.get(query);
       const replaced = this.dataReplaced(query);
-      if (
-        event.type === 'removed' ||
-        (replaced && previous !== undefined)
-      ) {
+      if (event.type === 'removed' || (replaced && previous !== undefined)) {
         this.epoch++;
         this.notify();
       }
@@ -217,7 +214,19 @@ export function useRatingPopulations(
       lease.retire();
       registry.remove(lease);
     };
-  }, [registry, signature, enabled, reader, anonymous, observation, observationStore, read, client, input.subjectId, input.question]);
+  }, [
+    registry,
+    signature,
+    enabled,
+    reader,
+    anonymous,
+    observation,
+    observationStore,
+    read,
+    client,
+    input.subjectId,
+    input.question,
+  ]);
   const lease = owner?.signature === signature ? owner.lease : undefined;
   return { lease, reader, registry, client };
 }

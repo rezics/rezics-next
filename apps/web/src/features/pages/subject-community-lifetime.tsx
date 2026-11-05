@@ -41,9 +41,7 @@ function initialBinding(
 ): CommunityReadingBinding {
   const observed = environment.observation?.getSnapshot() ?? unknownSnapshot();
   const matched =
-    input.reader !== null &&
-    observed.state === 'signed-in' &&
-    observed.observation.subject === input.reader;
+    input.reader !== null && observed.state === 'signed-in' && observed.observation.subject === input.reader;
   const settledMismatch =
     input.reader !== null &&
     (observed.state === 'signed-out' ||
@@ -74,9 +72,7 @@ export function useSubjectCommunityReading(input: {
     setBinding({ ...initialBinding(input, environment), generation: binding.generation + 1 });
   } else if (
     !binding.retired &&
-    (binding.descriptor !== input.descriptor ||
-      binding.reader !== input.reader ||
-      binding.environment !== environment)
+    (binding.descriptor !== input.descriptor || binding.reader !== input.reader || binding.environment !== environment)
   ) {
     setBinding({ ...binding, retired: true, generation: binding.generation + 1 });
   } else if (!binding.retired && input.reader !== null) {

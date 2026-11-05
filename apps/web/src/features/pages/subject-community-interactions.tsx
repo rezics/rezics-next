@@ -52,16 +52,15 @@ export function SubjectCommunityInteractions({
   const sessionState = client?.getQueryState(['session']);
   const session = normalizeSessionObservation(client?.getQueryData(['session']));
   const sessionKnown = !client || sessionState?.status === 'success';
-  const sessionMatches =
-    Boolean(
-      client &&
-        sessionKnown &&
-        reader !== null &&
-        session.state === 'signed-in' &&
-        session.subject === reader &&
-        observation.state === 'signed-in' &&
-        observation.observation.subject === reader,
-    );
+  const sessionMatches = Boolean(
+    client &&
+    sessionKnown &&
+    reader !== null &&
+    session.state === 'signed-in' &&
+    session.subject === reader &&
+    observation.state === 'signed-in' &&
+    observation.observation.subject === reader,
+  );
   const advice = thread.actions;
   const watchAdvice = advice?.watch;
   const currentWatch = watchAdvice?.state === 'current' ? watchAdvice : null;

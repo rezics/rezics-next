@@ -29,7 +29,9 @@ const testStart = {
     let serverHandler: (...args: unknown[]) => unknown = () => undefined;
     let clientHandler: (...args: unknown[]) => unknown = serverHandler;
     const invoke = (...args: unknown[]) =>
-      (typeof window === 'undefined' || serverFunctionContext.getStore() === true ? serverHandler : clientHandler)(...args);
+      (typeof window === 'undefined' || serverFunctionContext.getStore() === true ? serverHandler : clientHandler)(
+        ...args,
+      );
     const chain = {
       server(handler: (...args: unknown[]) => unknown) {
         serverHandler = handler;

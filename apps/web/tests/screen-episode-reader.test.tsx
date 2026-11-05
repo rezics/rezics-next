@@ -233,12 +233,7 @@ test('unknown totals keep a sparse disclosed window continuable and oversized ev
   const fixture = screenProfileFixture('ready', 'en', true, 'schema:TVSeries');
   const profile = await fixture.transport.load();
   if (!profile.ok || !profile.public) throw new Error('Expected a current Screen profile');
-  const terminalEmpty = await readScreenEpisodePage(
-    clientFor(linkPage([])),
-    profile.release,
-    profile.public,
-    'en',
-  );
+  const terminalEmpty = await readScreenEpisodePage(clientFor(linkPage([])), profile.release, profile.public, 'en');
   expect(terminalEmpty).toEqual({ ok: true, state: 'empty', entries: [], next: null });
   const emptyHtml = renderToStaticMarkup(
     <ScreenEpisodeList

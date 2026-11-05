@@ -269,7 +269,9 @@ const paths = (suffix: string, privateOnly = false) =>
 const directoryQueries = () => cache.getQueryCache().findAll({ queryKey: ['subject-rating-populations'] });
 const boxes = () => Array.from(host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
 const selectedNames = () =>
-  Array.from(host.querySelectorAll<HTMLElement>('[data-slot="rating-comparison"] h4')).map((heading) => heading.textContent);
+  Array.from(host.querySelectorAll<HTMLElement>('[data-slot="rating-comparison"] h4')).map(
+    (heading) => heading.textContent,
+  );
 const button = (text: string) =>
   Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((node) => node.textContent === text)!;
 async function tick() {
