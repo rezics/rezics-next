@@ -13,6 +13,8 @@ import { VNDB_PUBLIC_TAG_COLUMNS } from '../src/vndb-tables.ts';
 const VNDB_DUMP_TABLES = [
   'anime',
   'chars',
+  'chars_alias',
+  'chars_names',
   'chars_vns',
   'entry_meta',
   'extlinks',
@@ -43,6 +45,8 @@ const VNDB_DUMP_TABLES = [
 ];
 const VNDB_DUMP_HEADERS: Record<string, readonly string[]> = {
   extlinks: ['id', 'site', 'value'],
+  chars_alias: ['id', 'spoil', 'name', 'latin'],
+  chars_names: ['id', 'lang', 'name', 'latin'],
   producers_relations: ['id', 'pid', 'relation'],
   releases_media: ['id', 'medium', 'qty'],
   releases_platforms: ['id', 'platform'],
