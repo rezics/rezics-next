@@ -942,7 +942,7 @@ export function createVndbImport(config: Config) {
             target.profileBinding,
             vndbProgressSources(row),
             progressInput,
-            `vndb-progress-start:${hash({ id, ordinal: choice.ordinal, reviewId })}`,
+            `vndb-progress-start:${entryImportMetadataDigest({ id, ordinal: choice.ordinal, reviewId })}`,
           )
         : undefined;
     return mutation(actor, 'review', key, { id, choice }, async (tx, account) => {
@@ -970,13 +970,13 @@ export function createVndbImport(config: Config) {
         targetId: target?.targetId ?? null,
         state: choice.action === 'state' ? choice.state! : null,
         baseline: target?.baseline ?? null,
-        replace: choice.replace === true,
+        replace: choice.action === 'state' && choice.replace === true,
         commandKey: `vndb:${id}:${reviewId}`,
         guard: target ? { uploadId: id, ordinal: choice.ordinal, reviewId, source: target.source } : null,
         matchDigest,
         ...(scoreCompatible ? { score: before!.score } : {}),
         ...(progressPlan
-          ? { progress: { plan: progressPlan, sourceFingerprint: hash(row) } }
+          ? { progress: { plan: progressPlan, sourceFingerprint: entryImportMetadataDigest(row) } }
           : {}),
         // A refreshed source review has its own consent, even on the same target.
         // Old metadata tokens must not be transplanted into a corrected match.
@@ -1663,7 +1663,8 @@ export function createVndbImport(config: Config) {
       const target = decision.targetId ? await current(actor, decision.targetId) : null;
       if (
         !row ||
-        hash(row) !== (decision.progress?.sourceFingerprint ?? hash(row)) ||
+        entryImportMetadataDigest(row) !==
+          (decision.progress?.sourceFingerprint ?? entryImportMetadataDigest(row)) ||
         !target ||
         !decision.guard ||
         decision.guard.uploadId !== id ||
@@ -1709,7 +1710,7 @@ export function createVndbImport(config: Config) {
                 : {}),
             },
             decision.commandKey,
-            decision.guard,
+            decision.guard!,
           );
           record(result);
           status = 'applied';
@@ -1756,7 +1757,11 @@ export function createVndbImport(config: Config) {
     }
 
     let progress: ReturnType<typeof progressView> | null = null;
-    if (decision.progress && decision.progress.sourceFingerprint === hash((await load(actor, id, true)).rows[choice.ordinal])) {
+    if (
+      decision.progress &&
+      decision.progress.sourceFingerprint ===
+        entryImportMetadataDigest((await load(actor, id, true)).rows[choice.ordinal])
+    ) {
       const reviewedProgress = decision.progress;
       const checkpoint = await executeProgressAdoption(actor, sessions, reviewedProgress.plan, reviewedProgress.checkpoint, {
         async canceled() {
@@ -1776,7 +1781,7 @@ export function createVndbImport(config: Config) {
             upload.state !== 'active' ||
             upload.expires_at.getTime() <= Date.now() ||
             !row ||
-            hash(row) !== reviewedProgress.sourceFingerprint ||
+            entryImportMetadataDigest(row) !== reviewedProgress.sourceFingerprint ||
             !currentDecision ||
             currentDecision.reviewId !== choice.reviewId ||
             currentDecision.matchDigest !== decision.matchDigest
@@ -1794,7 +1799,7 @@ export function createVndbImport(config: Config) {
           return target.profileBinding;
         },
         async save(next, admission = false) {
-          const digest = hash(next);
+          const digest = entryImportMetadataDigest(next);
           try {
             const saved = await mutation(
               actor,
@@ -1813,7 +1818,8 @@ export function createVndbImport(config: Config) {
                   currentDecision.reviewId !== choice.reviewId ||
                   currentDecision.matchDigest !== decision.matchDigest ||
                   currentDecision.progress?.sourceFingerprint !== reviewedProgress.sourceFingerprint ||
-                  hash(currentDecision.progress.plan) !== hash(reviewedProgress.plan)
+                  entryImportMetadataDigest(currentDecision.progress.plan) !==
+                    entryImportMetadataDigest(reviewedProgress.plan)
                 )
                   throw new LibraryConflictError();
                 const hadAttempt =
@@ -1848,14 +1854,17 @@ export function createVndbImport(config: Config) {
       else if (action === 'progress' && statuses.every((value) => value === 'unsupported' || value === 'invalid' || value === 'missing' || value === 'unknown'))
         status = 'unsupported';
       else if (action === 'progress' && status === 'reviewed') status = 'skipped';
-      progress = await progressResponse(actor, decision.progress);
+      progress = await progressResponse(actor, decision.progress!);
     }
 
     const nextDecision = { ...decision, status };
     await mutation(
       actor,
       'apply-entry-result',
-      `vndb:${id}:${choice.ordinal}:${choice.reviewId}:result:${hash({ status, progress: nextDecision.progress?.checkpoint ?? null })}`,
+      `vndb:${id}:${choice.ordinal}:${choice.reviewId}:result:${entryImportMetadataDigest({
+        status,
+        progress: nextDecision.progress?.checkpoint ?? null,
+      })}`,
       { id, ordinal: choice.ordinal, reviewId: choice.reviewId, status, progress: nextDecision.progress?.checkpoint ?? null },
       async (tx, account) => {
         const locked = await tx.query<{ decision: Decision | null }>(
