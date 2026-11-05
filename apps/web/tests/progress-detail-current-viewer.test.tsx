@@ -6,6 +6,7 @@ import * as start from '../.storybook/react-start';
 import type { SessionEnv } from '../src/session/client';
 import type { ProgressDetail, ProgressDetailAddress } from '../src/library/progress-detail-server';
 import type { NativeProgressSession } from '../src/library/progress-reads';
+import type { EpisodeLoad } from '../src/library/episode-checklist/load';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -235,6 +236,19 @@ mock.module('../src/subject/definitions', () => ({
   },
 }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': current.csrfToken ?? '' }) }));
+const { readyVisit } = await import('../src/library/episode-checklist/controller');
+const { emptyChecklistWork } = await import('../src/library/episode-checklist/cost');
+mock.module('../src/library/episode-checklist/server', () => ({
+  loadCanonicalEpisodeChecklist: async ({ data }: { data: { viewer: string; locale: string; subjectId: string; sessionId: string; revision: number } }): Promise<EpisodeLoad> => ({
+    state: 'ready',
+    work: emptyChecklistWork(),
+    membership: { state: 'admitted', candidates: [], next: null, stream: 'inverse:schema:isPartOf' },
+    visit: readyVisit(data, [], { membership: 'empty' }),
+  }),
+  inspectCanonicalEpisodes: () => { throw new Error('History is not a canonical episode operand'); },
+  continueCanonicalEpisodes: () => { throw new Error('History is not a canonical episode operand'); },
+  recordCanonicalEpisodes: () => { throw new Error('History is not a canonical episode operand'); },
+}));
 const detailModule = await import('../src/library/progress-detail-server');
 const actualDetail = detailModule.readProgressDetail;
 const { prepareSession } = await import('../src/session/request');
@@ -589,7 +603,7 @@ test('B detail, record and publication remain independently usable while A detai
     expect(h.navigation).toEqual([]);
     expect(h.field(m.library_progress_amount()).value).toBe('0');
     expect((h.host.querySelector('textarea') as HTMLTextAreaElement).value).toBe('B note');
-    expect(h.body.queryByRole('alert')).toBeNull();
+    expect(h.body.queryAllByRole('alert').map((alert) => alert.textContent)).toEqual([]);
     await h.click(m.library_progress_record());
     expect(writes).toHaveLength(3);
     await act(async () => {
@@ -623,7 +637,7 @@ test('late history failures and publication failures/finally cannot alter a newe
     await settle(() => oldHistory.work.reject(new Error('old history failure')));
     await settle(() => oldPublish.work.reject(new Error('old publication failure')));
     await settle(oldPublishSubmit);
-    expect(h.body.queryByRole('alert')).toBeNull();
+    expect(h.body.queryAllByRole('alert').map((alert) => alert.textContent)).toEqual([]);
     expect(h.field(m.library_progress_amount()).value).toBe('9.25');
     expect(h.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
     await h.click(m.library_progress_record());
@@ -656,7 +670,7 @@ test('a batched away/back viewer change retires retained callbacks and late fail
     const currentWrite = writes[1]!;
     await settle(() => old.work.resolve(Response.json({ code: 'forbidden' }, { status: 403 })));
     expect(h.field(m.library_progress_amount()).value).toBe('6.25');
-    expect(h.body.queryByRole('alert')).toBeNull();
+    expect(h.body.queryAllByRole('alert').map((alert) => alert.textContent)).toEqual([]);
     await h.click(m.library_progress_record());
     expect(writes).toHaveLength(2);
     expect(currentWrite.body).toEqual({ revision: 20, amount: '6.25' });
@@ -953,6 +967,36 @@ test('equal route replacement retires a staged read and its predecessor coordina
     expect(h.host.textContent).not.toContain('A:history');
     await h.resolveRead(detail('A', h.reads.at(-1)!.data));
     expect(changes().queryByRole('link', { name: m.library_window_previous() })).toBeNull();
+  } finally {
+    await h.close();
+  }
+});
+
+
+test('keyboard history movement focuses its admitted heading once and independent focus cancels late focus', async () => {
+  const h = await mount(detail(), false, viewer(), true);
+  try {
+    const section = () => h.body.getByRole('region', { name: m.library_progress_changes(), exact: true });
+    const enter = async () => act(async () => {
+      within(section()).getByRole('link', { name: m.library_progress_more() }).focus();
+      await userEvent.setup({ document }).keyboard('{Enter}');
+    });
+    await enter();
+    await h.resolveRead(detail('A', h.reads.at(-1)!.data));
+    expect(document.activeElement?.getAttribute('data-progress-history-heading')).toBe('changes');
+    await h.show();
+    const heading = document.activeElement;
+    await enter();
+    const retry = h.body.getByRole('button', { name: m.library_progress_retry() });
+    // The loading Retry is disabled; another user-owned focus target cancels the move.
+    const other = document.createElement('button');
+    document.body.append(other);
+    other.focus();
+    await h.resolveRead(detail('A', h.reads.at(-1)!.data));
+    expect(document.activeElement === other).toBe(true);
+    expect(heading?.isConnected).toBe(false);
+    expect(retry.isConnected).toBe(false);
+    other.remove();
   } finally {
     await h.close();
   }
