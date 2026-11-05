@@ -22,6 +22,7 @@ export type ConceptWorkIntent = {
   property?: string;
   scheme?: string;
   type?: string;
+  sort?: 'name' | 'rating';
   includeChildren?: boolean;
   spoilerThreshold?: 0 | 1 | 2;
   conditionText?: string;
@@ -142,6 +143,7 @@ function validWorks(value: unknown): value is ConceptWorkIntent {
       'property',
       'scheme',
       'type',
+      'sort',
       'includeChildren',
       'spoilerThreshold',
       'conditionText',
@@ -156,6 +158,7 @@ function validWorks(value: unknown): value is ConceptWorkIntent {
           !/[\s\u0000-\u001f\u007f]/u.test(works[key])),
     ) &&
     (works.scheme === undefined || (typeof works.scheme === 'string' && uuid.test(works.scheme))) &&
+    (works.sort === undefined || works.sort === 'name' || works.sort === 'rating') &&
     (works.includeChildren === undefined || typeof works.includeChildren === 'boolean') &&
     (works.spoilerThreshold === undefined || [0, 1, 2].includes(works.spoilerThreshold as number)) &&
     (works.conditionText === undefined ||
@@ -261,6 +264,7 @@ export function conceptWorkIntentFor(route: ConceptWorksRouteState | undefined, 
     ...(route?.property ? { property: route.property } : {}),
     ...(scheme ? { scheme } : {}),
     ...(route?.type ? { type: route.type } : {}),
+    ...(route?.sort ? { sort: route.sort } : {}),
     ...(route?.includeChildren ? { includeChildren: true } : {}),
     ...(route?.spoilerThreshold !== undefined ? { spoilerThreshold: route.spoilerThreshold } : {}),
     ...(route?.conditionText ? { conditionText: route.conditionText } : {}),

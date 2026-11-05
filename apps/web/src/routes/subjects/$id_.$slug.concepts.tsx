@@ -21,6 +21,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
     const property = search.property;
     const scheme = search.scheme;
     const type = search.type;
+    const sort = search.sort;
     const children = search.children;
     const spoiler = search.spoiler;
     const condition = search.condition;
@@ -40,6 +41,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
       invalid = true;
     if (scheme !== undefined && (typeof scheme !== 'string' || !/^[0-9a-f-]{36}$/i.test(scheme))) invalid = true;
     if (type !== undefined && (typeof type !== 'string' || type.length < 1 || type.length > 128)) invalid = true;
+    if (sort !== undefined && sort !== 'name' && sort !== 'rating') invalid = true;
     if (children !== undefined && children !== 'true' && children !== true) invalid = true;
     if (spoiler !== undefined && spoiler !== '0' && spoiler !== '1' && spoiler !== '2') invalid = true;
     if (condition !== undefined && (typeof condition !== 'string' || condition.length > 16_384)) invalid = true;
@@ -59,6 +61,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
       property: typeof property === 'string' && property.length <= 128 ? property : undefined,
       scheme: typeof scheme === 'string' && /^[0-9a-f-]{36}$/i.test(scheme) ? scheme : undefined,
       type: typeof type === 'string' && type.length <= 128 ? type : undefined,
+      ...(sort === 'name' || sort === 'rating' ? { sort } : {}),
       includeChildren: children === 'true' || children === true,
       ...(spoiler === '1' || spoiler === '2'
         ? { spoilerThreshold: spoiler === '1' ? (1 as const) : (2 as const) }
@@ -88,6 +91,7 @@ function ConceptsRoute() {
     property,
     scheme,
     type,
+    sort,
     includeChildren,
     spoilerThreshold,
     conditionText,
@@ -106,6 +110,7 @@ function ConceptsRoute() {
   const propertyValue = property ?? workIntent?.property;
   const schemeValue = scheme ?? workIntent?.scheme;
   const typeValue = type ?? workIntent?.type;
+  const sortValue = sort ?? workIntent?.sort;
   const childrenValue = includeChildren ?? workIntent?.includeChildren;
   const spoilerValue = spoilerThreshold ?? workIntent?.spoilerThreshold;
   const conditionValue = conditionText ?? workIntent?.conditionText;
@@ -130,9 +135,11 @@ function ConceptsRoute() {
         const retainedProperty = typeof next.property === 'string' ? next.property : savedWorks?.property;
         const retainedScheme = typeof next.scheme === 'string' ? next.scheme : savedWorks?.scheme;
         const retainedType = typeof next.type === 'string' ? next.type : savedWorks?.type;
+        const retainedSort = next.sort === 'name' || next.sort === 'rating' ? next.sort : savedWorks?.sort;
         for (const key of [
           'conditionText',
           'tagQualifiersText',
+          'sort',
           'includeChildren',
           'spoilerThreshold',
           'invalid',
@@ -153,6 +160,8 @@ function ConceptsRoute() {
         else set('scheme', retainedScheme);
         if ('type' in patch) set('type', patch.type);
         else set('type', retainedType);
+        if ('sort' in patch) set('sort', patch.sort);
+        else set('sort', retainedSort);
         if ('includeChildren' in patch) set('children', patch.includeChildren ? 'true' : undefined);
         if ('spoilerThreshold' in patch)
           set('spoiler', patch.spoilerThreshold ? String(patch.spoilerThreshold) : undefined);
@@ -228,6 +237,7 @@ function ConceptsRoute() {
         property: propertyValue,
         scheme: schemeValue,
         type: typeValue,
+        sort: sortValue,
         includeChildren: childrenValue,
         spoilerThreshold: spoilerValue,
         conditionText: conditionValue,

@@ -73,11 +73,11 @@ Decision: represent each concept as a one-value statement plus selected-scheme m
 Decision: the Web Concept reader retries only after an explicit action for the unchanged query or exact selected identity. Preparing and unavailable reads preserve the selected UUID, requested scheme and match mode; refusal, unsupported metadata and release restart remain distinct.
 
 The mounted Concept visit uses the existing locale-prefixed `/subjects/:id/:slug/concepts` route. Its bounded query
-state keeps the selected property, source scheme, work type, descendant choice, spoiler threshold, additional
-condition and opaque continuation together with the fixed Concept. Changing a selection, condition or page creates
-a browser history entry; browser back/forward therefore restores the original Concept visit and its committed
-filters. A readable work tag chip supplies its exact property and carries a readable spoiler qualifier on the same
-concept statement.
+state keeps the selected property, source scheme, work type, admitted name or rating sort, descendant choice, spoiler
+threshold, additional condition and opaque continuation together with the fixed Concept. Changing a selection,
+condition, sort or page creates a browser history entry; browser back/forward therefore restores the original Concept
+visit and its committed filters. A readable work tag chip supplies its exact property and carries a readable spoiler
+qualifier on the same concept statement.
 
 When released saved-filter metadata has no localized label, identify the authored `{saved: id}` reference by its exact ID.
 An empty editor group is a repair state: keep it visible and prevent applying until a child is restored or the group is explicitly removed.

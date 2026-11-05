@@ -211,6 +211,9 @@ dispatch. It introduces no lifecycle, public cursor, retained permission or clos
 
 ## Native Boolean concept conditions
 
+Decision: the mounted M1 Concept page keeps its catalogue work-type control count-free; public result totals and
+catalogue property facets remain count-free on this route under the Search count contract.
+
 Decision: one Boolean concept attempt shares its native window and raw-row allowance across deduplicated leaves and revalidates every visited witness after all leaves' membership work.
 
 `matchNativeConceptFilter` admits scheme-bound exact and descendant concept conditions, then uses
