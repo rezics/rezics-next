@@ -361,4 +361,3 @@ export class TrainQueue<TConfiguration> {
 function isDevResolutionHandoff(value: GateOutcome | DevResolutionHandoff | undefined): value is DevResolutionHandoff {
   return !!value && 'kind' in value && value.kind === 'dev-resolution';
 }
-

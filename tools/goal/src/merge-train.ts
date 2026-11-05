@@ -1933,8 +1933,7 @@ export class MergeTrain {
         return train.queueOwner();
       },
       integrateBatch: (entries, lane) => this.integrateBatch(entries, lane),
-      integrateOrdinary: (entry, lane, handOff, drainDev) =>
-        this.integrateOrdinary(entry, lane, handOff, drainDev),
+      integrateOrdinary: (entry, lane, handOff, drainDev) => this.integrateOrdinary(entry, lane, handOff, drainDev),
       resolveDevLanding: (pending) => this.resolveDevLanding(pending),
     };
     return new TrainQueue(queueOptions);
