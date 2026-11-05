@@ -272,8 +272,10 @@ export function PrivateDiaryPage({
       },
     }).catch(() => 'unavailable' as const);
     const current = binding.current;
+    if (!live.current) return;
+    // Clear the in-flight state even when the route moved meanwhile; otherwise the mounted reader stays locked.
+    setClosing(false);
     if (
-      !live.current ||
       current.href !== expected.href ||
       current.loaded !== expected.loaded ||
       current.source !== expected.source ||
@@ -282,7 +284,6 @@ export function PrivateDiaryPage({
       !sameDiaryAddress(current.address, expected.address)
     )
       return;
-    setClosing(false);
     if (result === 'unavailable') {
       setCloseRetry(identity);
       return;
@@ -411,7 +412,9 @@ export function PrivateDiaryPage({
         <p role="status" className="rounded-md border p-4">
           {pageRefusal === 'closed' ? m.platform_closed_message() : m.ctxw_denied()}
         </p>
-      ) : authorizedLoad?.diary.kind === 'unavailable' || (page && !currentPage) ? (
+      ) : authorizedLoad?.diary.kind === 'unavailable' ||
+        authorizedLoad?.diary.kind === 'conflict' ||
+        (page && !currentPage) ? (
         <section className="rounded-md border p-4">
           <p>{m.library_diary_read_unavailable()}</p>
           <button

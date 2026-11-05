@@ -18,7 +18,16 @@ function readFailure(status: number, problem: unknown): DiaryReadFailure {
   return { kind: status === 403 ? 'denied' : 'unavailable' };
 }
 
-export type DiaryRead = { kind: 'ready'; page: DiaryPage } | { kind: 'stale' } | DiaryReadFailure;
+/** `conflict` means an edit landed mid-read: retry the same request. `stale` restarts from the first page. */
+export type DiaryRead =
+  | { kind: 'ready'; page: DiaryPage }
+  | { kind: 'stale' }
+  | { kind: 'conflict' }
+  | DiaryReadFailure;
+
+function problemCode(problem: unknown): unknown {
+  return typeof problem === 'object' && problem !== null ? (problem as { code?: unknown }).code : undefined;
+}
 
 export async function readDiaryPage(
   client: KernelClient,
@@ -36,7 +45,11 @@ export async function readDiaryPage(
     headers: { authorization },
   });
   if (!result.error && result.data) return { kind: 'ready', page: result.data };
-  return result.status === 409 ? { kind: 'stale' } : readFailure(result.status, result.error?.value);
+  // Expired, cancelled, tampered or rebound tokens are dead: clear them and restart at the first page.
+  if (result.status === 409 || (result.status === 400 && problemCode(result.error?.value) === 'invalid_cursor')) {
+    return problemCode(result.error?.value) === 'conflict' ? { kind: 'conflict' } : { kind: 'stale' };
+  }
+  return readFailure(result.status, result.error?.value);
 }
 
 export type SummaryRead = { kind: 'ready'; summary: ConsumptionSummary } | DiaryReadFailure;

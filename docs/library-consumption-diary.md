@@ -131,6 +131,8 @@ lost scope or native permission is `403`. Clear private rows and detail on eithe
 account's cached data. Addressed missing/retired/foreign occurrences are concealed as `404`; remove the stale detail
 and offer diary refresh. Detail's concurrent revision conflict is `409 conflict`; reload that occurrence.
 
+Decision: the Web repeats only a `409 conflict` page read with the same request; every other `409` and `400 invalid_cursor` clears the saved token and restarts at the first page.
+
 Transient native authority, partition or catalogue failures use existing `503` problem codes, including
 `semantic_not_ready`, `dependency_unavailable` and `deadline_exceeded`; preserve the last known page only while the
 same account remains admitted, mark it stale and retry the same request. `503 overloaded` can also mean all eight
