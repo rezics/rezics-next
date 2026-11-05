@@ -346,7 +346,7 @@ export function createNativeTypePreparationPorts(
         }
         const initialEvidence: TypePreparationEvidence = {
           preparationId,
-          binding: jsonParameter(binding),
+          binding,
           origin: originBinding,
           sourceIdentity: source.identity!,
           originIdentity: origin.identity!,
@@ -372,7 +372,7 @@ export function createNativeTypePreparationPorts(
           route,
           accountId: actor.accountId,
           preparationId,
-          binding: jsonParameter(binding),
+          binding,
           origin: originBinding,
           sourceIdentity: source.identity!,
           originIdentity: origin.identity!,

@@ -18,7 +18,7 @@ const pending = Type.Object({
       sourceAfter: Type.Union([
         Type.TemplateLiteral([
           Type.Literal('1:'),
-          Type.Union([0, 1, 2, 3, 4, 5].map((value) => Type.Literal(value))),
+          Type.Union(([0, 1, 2, 3, 4, 5] as const).map((value) => Type.Literal(value))),
           Type.Literal(':'),
           Type.String(),
           Type.Literal(':'),

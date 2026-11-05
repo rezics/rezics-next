@@ -59,5 +59,9 @@ The statement-byte regression test pins the envelope against all Kernel SQL path
 
 Compatibility follows the [0.7.0 release notes](https://github.com/colinhacks/reylo/releases/tag/v0.7.0).
 Decision: use one focused Kernel regression file for SQL transport byte bounds and the migrated server import graph;
-reuse workspace typechecks for inferred result contracts. Run it with
-`bun run --cwd services/kernel check scripts/statement-bytes.test.ts`.
+include a PostgreSQL round trip for JSON wire normalization and parameter subscripts; reuse workspace typechecks for inferred result contracts. Run it with
+`bun run --cwd services/kernel check test/scripts/reylo-compatibility.test.ts`.
+
+Decision: materialize JSON wire values at SQL parameter boundaries rather than asserting domain records are Reylo
+`Json`. Decode opaque JSON database responses with their owner shapes, retaining existing semantic checks. Readonly
+domain values and undefined object fields keep their JSON serialization semantics. These codecs stay at database I/O.

@@ -1,7 +1,10 @@
+import { Client } from 'pg';
+import transport from './reylo-transport.sql';
+import { jsonParameter } from '../../src/sql/json.ts';
 import { expect, test } from 'bun:test';
 import { defineQuery } from 'reylo';
 import { resolve } from 'node:path';
-import { SQL_COMMENT_BYTE_BOUND, statementBytes } from '../src/sql/statement-bytes.ts';
+import { SQL_COMMENT_BYTE_BOUND, statementBytes } from '../../src/sql/statement-bytes.ts';
 
 test('SQL work bounds include the comment Reylo adds only at dispatch', async () => {
   for (const source of ["src/é'--query.sql", 'src/plain.sql']) {
@@ -26,7 +29,7 @@ test('SQL work bounds include the comment Reylo adds only at dispatch', async ()
     expect(statementBytes(query)).toBeGreaterThanOrEqual(Buffer.byteLength(sent));
     expect(statementBytes(query.sql)).toBeGreaterThanOrEqual(Buffer.byteLength(sent));
   }
-  const root = resolve(import.meta.dir, '..');
+  const root = resolve(import.meta.dir, '../..');
   for (const file of new Bun.Glob('src/**/*.sql').scanSync({ cwd: root })) {
     // Analysis projects live below .temp; include their relative-path prefix.
     const source = `../../../../../../${file}`;
@@ -35,6 +38,19 @@ test('SQL work bounds include the comment Reylo adds only at dispatch', async ()
 });
 
 test('the server SQL import graph loads against the migrated check database', async () => {
-  const { startServer } = await import('../src/server.ts');
+  const { startServer } = await import('../../src/server.ts');
   expect(typeof startServer).toBe('function');
 }, 300_000);
+
+// The runtime driver, SQL mapper and native engine must agree on JSON and parameter subscripts.
+test('JSON wire values and parameter subscripts survive a PostgreSQL round trip', async () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    const input = Object.freeze({ refs: Object.freeze([{ label: "é'", omitted: undefined }]), missing: null });
+    const row = await transport.run(client, { body: jsonParameter(input), index: 2 });
+    expect(row).toEqual({ body: { refs: [{ label: "é'" }], missing: null }, tag: 'second' });
+  } finally {
+    await client.end();
+  }
+});

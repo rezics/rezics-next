@@ -1,7 +1,7 @@
 import { Type } from 'typebox';
 import { jsonParameter } from '../sql/json.ts';
 import type { PoolClient } from 'pg';
-import { BatchReferenceSchema, SourceSchema, RightsSchema } from '@rezics/definitions/bulk';
+import { BatchReferenceSchema, SourceSchema } from '@rezics/definitions/bulk';
 import { Value } from 'typebox/value';
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
@@ -39,6 +39,12 @@ const ImportedSourceSchema = Type.Intersect([
   SourceSchema,
   Type.Object({ references: Type.Array(BatchReferenceSchema) }),
 ]);
+
+const ImportedRightsSchema = Type.Object({
+  license: Type.String(),
+  obligations: Type.Array(Type.String()),
+  attribution: Type.String(),
+});
 
 function text(value: unknown, maximum: number): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= maximum && !controls.test(value);
@@ -187,7 +193,7 @@ export async function readImportedField(
     body: row.body === null ? null : Buffer.from(row.body),
     availability: row.availability as ImportedFieldView['availability'],
     source: Value.Decode(ImportedSourceSchema, row.source),
-    rights: Value.Decode(RightsSchema, row.rights),
+    rights: Value.Decode(ImportedRightsSchema, row.rights),
     language: row.language,
   };
 }
@@ -214,7 +220,7 @@ export async function readImportedFieldBounded(
     bodyTooLarge: row.bodyTooLarge ?? false,
     availability: row.availability as ImportedFieldView['availability'],
     source: Value.Decode(ImportedSourceSchema, row.source),
-    rights: Value.Decode(RightsSchema, row.rights),
+    rights: Value.Decode(ImportedRightsSchema, row.rights),
     language: row.language,
   };
 }

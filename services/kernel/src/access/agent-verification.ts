@@ -614,7 +614,7 @@ export function createAgentVerificationCommands(config: { pool: Pool; access: Ac
         accountId: input.accountId,
         subject: input.subject,
         statement: input.statement,
-        links: jsonParameter(input.links),
+        links: input.links,
       });
       try {
         return await runCommand(

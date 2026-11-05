@@ -210,7 +210,7 @@ export async function recordCommandHistory(
       {
         partition: declaration.partition,
         locator: nativeLocator,
-        accounts: jsonParameter(scope.accounts),
+        accounts: scope.accounts,
       },
       input.position,
     );
