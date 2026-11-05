@@ -516,6 +516,7 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
     expect(newestAfterReturn.cursor).toBeNull();
     retired();
     await settle(newestAfterReturn, history('B', null, 'Newest after direct route return'));
+    console.log('newest-state', reads.map(({ cursor }) => cursor), client.getQueryCache().findAll({ queryKey: ['my-logs-current-viewer'] }).map((entry) => ({ key: entry.queryKey.slice(1, 6), status: entry.state.status, fetchStatus: entry.state.fetchStatus, data: entry.state.data ? { subject: (entry.state.data as MyLogsViewerHistory).sessionSubject, cursor: (entry.state.data as MyLogsViewerHistory).cursor, page: (entry.state.data as MyLogsViewerHistory).page.state } : null })));
     expect(host.textContent).toContain('Newest after direct route return');
     await settle(oldAddress, new Error('Late prior-address failure'));
     expect(host.textContent).toContain('Newest after direct route return');
