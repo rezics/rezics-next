@@ -1,3 +1,4 @@
+import { securityResponseLimits } from '@rezics/auth-contract';
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 
 export class SecurityInventoryDenied extends Error {
@@ -25,7 +26,9 @@ export function securityPageInput(
     Array.isArray(input) ||
     Object.keys(input).some((key) => key !== 'cursor' && key !== 'limit') ||
     (input.cursor !== undefined &&
-      (typeof input.cursor !== 'string' || !/^[A-Za-z0-9_-]{40,8192}$/.test(input.cursor))) ||
+      (typeof input.cursor !== 'string' ||
+        input.cursor.length > securityResponseLimits.cursor ||
+        !/^[A-Za-z0-9_-]{40,}$/.test(input.cursor))) ||
     (input.limit !== undefined && (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100))
   )
     throw new SecurityInventoryDenied();

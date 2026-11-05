@@ -9,7 +9,8 @@ export const securityResponseLimits = Object.freeze({
   sessions: 64,
   passkeys: 32,
   selectedPage: 20,
-  cursor: 8192,
+  // AES-GCM IV/tag 28 bytes; JSON [after, expires] with escaped ID and safe integer.
+  cursor: 4 * Math.ceil((28 + (2 + 6 * 1024) + 1 + 17 + 2) / 3),
 });
 
 function finite(value: number): number {

@@ -4,6 +4,7 @@ import { securityResponseByteBudgets, securityScopeLimit, securityJsonStringByte
 import { composeSecurityPage } from '../src/security-page.ts';
 import { securityPasskey } from '../src/security-response-bounds.ts';
 import { securityInventory } from '../src/security-inventory.ts';
+import { securityCursors, securityPageInput } from '../src/security-cursor.ts';
 import { readRegistrationPage } from '../src/registration-page.ts';
 
 const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
@@ -160,4 +161,15 @@ test('registration requirements and current viewer fit the published private reg
   });
   expect(page.kind).toBe('already-signed-in');
   expect(bytes(page)).toBeLessThanOrEqual(securityResponseByteBudgets(1000).registrationPage);
+});
+
+test('maximally escaped exact client IDs round-trip through a bound cursor without clipping', () => {
+  const cursors = securityCursors('persistent-test-secret', 'https://auth.test', () => 1000);
+  const binding = { accountId: 'owner', sessionId: 'session', clientId: 'login', epoch: 1, scopes: [] };
+  const after = '\u0001'.repeat(1024);
+  const cursor = cursors.write(after, 'clients', binding, 20);
+  expect(cursor.length).toBeGreaterThan(8192);
+  expect(securityPageInput({ cursor, limit: 20 }).cursor).toBe(cursor);
+  expect(cursors.read(cursor, 'clients', binding, 20)).toBe(after);
+  expect(() => cursors.read(cursor, 'consents', binding, 20)).toThrow();
 });
