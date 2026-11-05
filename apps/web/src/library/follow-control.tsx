@@ -154,6 +154,10 @@ function FollowControlState({
     | 'readLifetime'
     | 'onAccepted'
   > | null>(null);
+  const runningCurrent = (
+    running: NonNullable<typeof inFlight.current>,
+    currentCheck = committed.current?.isCurrent ?? running.isCurrent,
+  ) => !currentCheck || currentCheck(running.input.following);
   const reportedRemoval = useRef(false);
   const signedOut = initial.state === 'signed-out';
   const following = initial.state === 'ready' ? initial.following : undefined;
@@ -175,7 +179,7 @@ function FollowControlState({
     (!ready ||
       signedOut ||
       !(running.input.following ? canFollow : canRemove) ||
-      (running.isCurrent && !running.isCurrent(running.input.following)))
+      !runningCurrent(running, isCurrent))
   ) {
     inFlight.current = null;
     setPending(false);
@@ -280,24 +284,25 @@ function FollowControlState({
     } catch {
       result = { ok: false, reason: 'unavailable' };
     }
-    if (inFlight.current !== running || (running.isCurrent && !running.isCurrent(input.following))) return;
+    if (inFlight.current !== running || !runningCurrent(running)) return;
     try {
       if (result.ok) {
         intent.confirm(input);
         if (!input.following) reportRemovalUnsettled(false);
-        const accepted = running.onAccepted?.(result.following, input) ?? true;
-        if (running.isCurrent && !running.isCurrent(input.following)) return;
+        const onAccepted = committed.current?.onAccepted ?? running.onAccepted;
+        const accepted = onAccepted?.(result.following, input) ?? true;
+        if (!runningCurrent(running)) return;
         if (accepted && committed.current?.readLifetime === running.readLifetime) {
           setCurrent({ state: 'ready', following: result.following });
           setRemoved(!result.following);
         }
-        if (!running.onAccepted) running.onChange?.(result.following);
+        if (!onAccepted) (committed.current?.onChange ?? running.onChange)?.(result.following);
       } else {
         conflict.current = result.reason === 'conflict';
         setFailure(result.reason);
       }
     } finally {
-      if (inFlight.current === running && (!running.isCurrent || running.isCurrent(input.following))) {
+      if (inFlight.current === running && runningCurrent(running)) {
         inFlight.current = null;
         setPending(false);
       }
