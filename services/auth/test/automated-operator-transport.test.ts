@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
-import { AUTH_MANAGEMENT_CLIENT_ID, type SessionProof } from '@rezics/auth-contract';
+import {
+  AUTH_MANAGEMENT_CLIENT_ID,
+  AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH,
+  AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH,
+  AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES,
+  type SessionProof,
+} from '@rezics/auth-contract';
 import type { AuthService } from '../src/index.ts';
 import { automatedOperatorTransport, type AutomatedCreationPage } from '../src/automated-operator-transport.ts';
 const operatorAccountId = '00000000-0000-4000-8000-000000000001';
@@ -92,6 +98,8 @@ test('selected operator refuses identity substitution, browser bearers, operated
     { ...label, email: 'private' },
     { id: operatorAccountId, kind: 'actor' },
     { ...label, members: [] },
+    { ...label, handle: `a${'-'.repeat(AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH)}` },
+    { ...label, displayName: 'x'.repeat(AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH + 1) },
   ]) {
     const bad = result === undefined ? {} : page(result);
     expect((await fixture(human, bad).handler(request())).status).toBe(503);
@@ -99,6 +107,43 @@ test('selected operator refuses identity substitution, browser bearers, operated
   expect((await automatedOperatorTransport(f.service, async () => new Response(), undefined)(request())).status).toBe(
     503,
   );
+});
+
+test('native page projection keeps every legal variant and the maximum escaped selected labels within its byte contract', async () => {
+  const variants = [
+    { selected: operatorAccountId, result: page(null, 'authentication-needed', 'authenticate') },
+    { selected: null, result: page(null, 'select-operator', 'select-operator') },
+    {
+      selected: operatorAccountId,
+      result: page(
+        {
+          ...label,
+          handle: `a${'-'.repeat(AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH - 1)}`,
+          displayName: '\u0001'.repeat(AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH),
+        },
+      ),
+    },
+    { selected: operatorAccountId, result: page(null, 'refused', 'none') },
+  ];
+  for (const variant of variants) {
+    const response = await fixture(human, variant.result).handler(request({ operatorAccountId: variant.selected }));
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(new TextEncoder().encode(text).byteLength).toBeLessThanOrEqual(AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES);
+    expect(JSON.parse(text)).toEqual(variant.result);
+  }
+});
+
+test('native page projection refuses invalid viewer identity and over-bound native labels without truncation', async () => {
+  const safe = page();
+  const invalid = [
+    { ...safe, viewer: { accountId: 'x'.repeat(37) } },
+    { ...safe, viewer: { accountId: human.account_id, extra: true } },
+    page({ ...label, handle: 'a'.repeat(AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH + 1) }),
+    page({ ...label, displayName: 'x'.repeat(AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH + 1) }),
+  ];
+  for (const result of invalid)
+    expect((await fixture(human, result).handler(request())).status).toBe(503);
 });
 
 test('ordinary sessions receive only the native safe authentication advice and dependencies stay unavailable', async () => {

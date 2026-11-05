@@ -1,7 +1,14 @@
 import { managementOperationProfile, type AccountOperation, type ManagementSession } from '@rezics/auth-contract';
+import {
+  AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH,
+  AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH,
+  AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES,
+} from '@rezics/auth-contract';
 import { authPost, type AuthPostResult } from './api';
 import { loadManagementSession } from './management-operations';
 import { normalizeSignupHandle } from './signup';
+import { privateAuthRead } from './private-auth-read';
+import { readJsonBounded } from './private-auth-json';
 
 // The installed shared discriminator has no automated alias. Reuse its actual
 // account:manage profile without changing registration ceilings or step-up kinds.
@@ -44,6 +51,42 @@ export type AutomatedPageRead =
   | { kind: 'ready'; page: AutomatedCreationPage }
   | { kind: 'refused' | 'signed-out' | 'unavailable' };
 const storageKey = 'rezics.automated-create.attempt';
+const AUTOMATED_ATTEMPT_MAX_OPERATION_KEY_LENGTH = 128;
+const AUTOMATED_ATTEMPT_MAX_REFERENCE_LENGTH = 4096;
+function attemptStorageSkeleton(reference: boolean, submitted: boolean) {
+  return JSON.stringify({
+    accountId: '',
+    operationKey: '',
+    operation: {
+      kind: 'automated',
+      registrationId: '',
+      operationKey: '',
+      operatorAccountId: '',
+      handle: '',
+    },
+    operator: { id: '', kind: 'organization', handle: '', displayName: '' },
+    ...(reference ? { reference: '' } : {}),
+    ...(submitted ? { submitted: true } : {}),
+  }).length;
+}
+function attemptStorageStringUnits(reference: boolean) {
+  return (
+    AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH +
+    2 * AUTOMATED_ATTEMPT_MAX_OPERATION_KEY_LENGTH +
+    2 * AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH +
+    2 * AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH +
+    AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH +
+    (reference ? AUTOMATED_ATTEMPT_MAX_REFERENCE_LENGTH : 0)
+  );
+}
+const automatedAttemptStorageVariants = [false, true].flatMap((reference) =>
+  [false, true].map((submitted) =>
+    attemptStorageSkeleton(reference, submitted) + 6 * attemptStorageStringUnits(reference),
+  ),
+);
+/** Maximum canonical JSON string length in UTF-16 code units, including all
+ * reference/submitted marker combinations and worst-case JSON escaping. */
+export const AUTOMATED_ATTEMPT_MAX_SERIALIZED_UTF16 = Math.max(...automatedAttemptStorageVariants);
 export function automatedId(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.exec(value)?.[0] === value;
 }
@@ -62,8 +105,13 @@ function identity(value: unknown): value is OperatorIdentity {
     fields(value, ['id', 'kind', 'handle', 'displayName']) &&
     automatedId(value.id) &&
     (value.kind === 'actor' || value.kind === 'organization') &&
-    (value.handle === null || typeof value.handle === 'string') &&
-    (value.displayName === null || typeof value.displayName === 'string')
+    (value.handle === null ||
+      (typeof value.handle === 'string' &&
+        value.handle.length <= AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH &&
+        /^[a-z0-9][a-z0-9_-]{0,63}$/.exec(value.handle)?.[0] === value.handle)) &&
+    (value.displayName === null ||
+      (typeof value.displayName === 'string' &&
+        value.displayName.length <= AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH))
   );
 }
 
@@ -137,28 +185,40 @@ export function parseAutomatedCreationOperator(
 export async function loadAutomatedCreationPage(
   accountId: string,
   operatorAccountId: string | null,
+  caller?: AbortSignal,
 ): Promise<AutomatedPageRead> {
   if (!automatedId(accountId) || (operatorAccountId !== null && !automatedId(operatorAccountId)))
     return { kind: 'unavailable' };
   try {
-    const session = await loadManagementSession();
-    if (session.kind !== 'ready') return session;
-    if (session.accountId !== accountId) return { kind: 'refused' };
-    const result = await authPost('/account-management/automated/operator', { operatorAccountId });
-    if (!result.ok)
-      return { kind: result.status === 401 ? 'signed-out' : result.status === 403 ? 'refused' : 'unavailable' };
-    const current = await loadManagementSession();
-    if (
-      current.kind !== 'ready' ||
-      current.accountId !== accountId ||
-      current.clientId !== session.clientId ||
-      JSON.stringify(current.scopes) !== JSON.stringify(session.scopes) ||
-      current.authnEpoch !== session.authnEpoch ||
-      current.authTime !== session.authTime ||
-      JSON.stringify(current.amr) !== JSON.stringify(session.amr)
-    )
-      return { kind: 'unavailable' };
-    return parseAutomatedCreationPage(result.body, accountId, operatorAccountId);
+    return await privateAuthRead(async (signal) => {
+      const session = await loadManagementSession(signal);
+      if (session.kind !== 'ready') return session;
+      if (session.accountId !== accountId) return { kind: 'refused' };
+      const response = await fetch('/account-management/automated/operator', {
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operatorAccountId }),
+        signal,
+      });
+      const body: unknown = await readJsonBounded(response, AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES, signal);
+      if (response.status !== 200)
+        return { kind: response.status === 401 ? 'signed-out' : response.status === 403 ? 'refused' : 'unavailable' };
+      const current = await loadManagementSession(signal);
+      if (
+        current.kind !== 'ready' ||
+        current.accountId !== accountId ||
+        current.clientId !== session.clientId ||
+        JSON.stringify(current.scopes) !== JSON.stringify(session.scopes) ||
+        current.authnEpoch !== session.authnEpoch ||
+        current.authTime !== session.authTime ||
+        JSON.stringify(current.amr) !== JSON.stringify(session.amr)
+      )
+        return { kind: 'unavailable' };
+      return parseAutomatedCreationPage(body, accountId, operatorAccountId);
+    }, caller);
   } catch {
     return { kind: 'unavailable' };
   }
@@ -171,6 +231,8 @@ export async function loadAutomatedOperator(accountId: string, operatorAccountId
 }
 
 export function parseAutomatedAttempt(value: unknown): AutomatedAttempt | null {
+  const hasReference = record(value) && Object.hasOwn(value, 'reference');
+  const hasSubmitted = record(value) && Object.hasOwn(value, 'submitted');
   if (
     !record(value) ||
     !fields(value, [
@@ -183,10 +245,11 @@ export function parseAutomatedAttempt(value: unknown): AutomatedAttempt | null {
     ]) ||
     !automatedId(value.accountId) ||
     !text(value.operationKey) ||
-    value.operationKey.length > 128 ||
+    value.operationKey.length > AUTOMATED_ATTEMPT_MAX_OPERATION_KEY_LENGTH ||
     !identity(value.operator) ||
-    (value.reference !== undefined && !text(value.reference)) ||
-    (value.submitted !== undefined && value.submitted !== true)
+    (hasReference &&
+      (!text(value.reference) || value.reference.length > AUTOMATED_ATTEMPT_MAX_REFERENCE_LENGTH)) ||
+    (hasSubmitted && value.submitted !== true)
   )
     return null;
   const op = value.operation;
@@ -221,6 +284,8 @@ export function createAutomatedAttempt(
   operator: OperatorIdentity,
   handle: string,
 ): AutomatedAttempt | null {
+  // An unknown or unreadable retained command is never treated as absence.
+  if (restoreAutomatedAttempt() !== null) return null;
   const operationKey = crypto.randomUUID();
   return parseAutomatedAttempt({
     accountId,
@@ -243,12 +308,15 @@ export function saveAutomatedAttempt(attempt: AutomatedAttempt): boolean {
           JSON.stringify(previous.operator) !== JSON.stringify(parsed.operator)))
     )
       return false;
-    const retained = {
+    const retained = parseAutomatedAttempt({
       ...parsed,
       ...(previous?.submitted ? { submitted: true as const } : {}),
       ...(previous?.reference && !parsed.reference ? { reference: previous.reference } : {}),
-    };
-    window.sessionStorage.setItem(storageKey, JSON.stringify(retained));
+    });
+    if (!retained) return false;
+    const serialized = JSON.stringify(retained);
+    if (serialized.length > AUTOMATED_ATTEMPT_MAX_SERIALIZED_UTF16) return false;
+    window.sessionStorage.setItem(storageKey, serialized);
     return true;
   } catch {
     return false;
@@ -258,6 +326,7 @@ export function restoreAutomatedAttempt(): AutomatedAttempt | null | 'invalid' {
   try {
     const raw = window.sessionStorage.getItem(storageKey);
     if (raw === null) return null;
+    if (raw.length > AUTOMATED_ATTEMPT_MAX_SERIALIZED_UTF16) return 'invalid';
     return parseAutomatedAttempt(JSON.parse(raw)) ?? 'invalid';
   } catch {
     return 'invalid';

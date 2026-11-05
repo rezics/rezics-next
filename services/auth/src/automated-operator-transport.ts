@@ -1,4 +1,9 @@
 import type { SessionProof } from '@rezics/auth-contract';
+import {
+  AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH,
+  AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH,
+  AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH,
+} from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { automatedCallerMatches } from './automated-account-transport.ts';
 import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
@@ -27,6 +32,10 @@ export interface AutomatedOperatorAccess {
 
 const id = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.exec(value)?.[0] === value;
+const operatorHandle = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  value.length <= AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH &&
+  /^[a-z0-9][a-z0-9_-]{0,63}$/.exec(value)?.[0] === value;
 function fields(value: Record<string, unknown>, names: string[]) {
   return Object.keys(value).length === names.length && names.every((name) => Object.hasOwn(value, name));
 }
@@ -37,9 +46,12 @@ export function automatedCreationOperator(value: unknown, operatorAccountId: str
   if (
     !fields(row, ['id', 'kind', 'handle', 'displayName']) ||
     row.id !== operatorAccountId ||
+    operatorAccountId.length > AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH ||
     (row.kind !== 'actor' && row.kind !== 'organization') ||
-    (row.handle !== null && typeof row.handle !== 'string') ||
-    (row.displayName !== null && typeof row.displayName !== 'string')
+    (row.handle !== null && !operatorHandle(row.handle)) ||
+    (row.displayName !== null &&
+      (typeof row.displayName !== 'string' ||
+        row.displayName.length > AUTOMATED_CREATION_PAGE_MAX_DISPLAY_NAME_LENGTH))
   )
     throw new TransportDenied(503);
   return { id: operatorAccountId, kind: row.kind, handle: row.handle, displayName: row.displayName };
@@ -48,7 +60,7 @@ export function automatedCreationOperator(value: unknown, operatorAccountId: str
 /** Fail closed if a native dependency returns a broader or inconsistent envelope. */
 export function automatedCreationPage(
   value: unknown,
-  accountId: string,
+  human: SessionProof,
   operatorAccountId: string | null,
 ): AutomatedCreationPage {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TransportDenied(503);
@@ -58,17 +70,19 @@ export function automatedCreationPage(
     maxLength: 64,
     normalization: 'lowercase',
     pattern: '[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]',
-  };
+  } as const;
   const actions = {
     'authentication-needed': 'authenticate',
     'select-operator': 'select-operator',
     review: 'confirm',
     refused: 'none',
   };
+  const accountId = human.account_id;
   if (
+    accountId.length > AUTOMATED_CREATION_PAGE_MAX_ID_LENGTH ||
     !fields(value as Record<string, unknown>, ['viewer', 'readiness', 'operator', 'handleRules', 'action']) ||
     !page.viewer ||
-    Object.keys(page.viewer).join(',') !== 'accountId' ||
+    !fields(page.viewer as Record<string, unknown>, ['accountId']) ||
     page.viewer.accountId !== accountId ||
     !Object.hasOwn(actions, page.readiness) ||
     page.action !== actions[page.readiness] ||
@@ -89,7 +103,7 @@ export function automatedCreationPage(
     viewer: { accountId },
     readiness: page.readiness,
     operator,
-    handleRules: page.handleRules,
+    handleRules: rules,
     action: page.action,
   };
 }
@@ -130,7 +144,7 @@ export function automatedOperatorTransport(
           if (human.amr.length !== 1 || !['pwd', 'pop'].includes(human.amr[0]!)) throw new TransportDenied(403);
           const page = automatedCreationPage(
             await access.readAutomatedCreationPage({ human, operatorAccountId, deadline }),
-            human.account_id,
+            human,
             operatorAccountId,
           );
           // An ordinary proof cannot admit target disclosure, even from a malformed native port.
