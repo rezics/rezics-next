@@ -147,6 +147,10 @@ test('a current visit inspects one fresh exact assertion, retires stale and late
   const publicPage = (title: string): SubjectPageData => {
     const page = structuredClone(recordedPage) as unknown as SubjectPageData;
     page.subject = literaryWorkId;
+    page.document = {
+      root: { props: {} },
+      content: [{ type: 'SubjectHeader', props: { id: 'r0' } }],
+    };
     page.context = { id: candidateContext, population: { kind: 'global' } };
     page.catalogue = {
       state: 'released',
