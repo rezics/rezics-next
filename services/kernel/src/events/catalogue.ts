@@ -1,6 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
-import { RECENT_SEARCH_EVENTS } from '../search/query-events.ts';
-import { TRENDING_SEARCH_EVENTS } from '../search/query-events.ts';
+import { RECENT_SEARCH_EVENTS, TRENDING_SEARCH_EVENTS } from '../search/query-events.ts';
 import { Type, type TSchema } from 'typebox';
 import { ZONE_EVENTS } from '../zones/events.ts';
 import { Compile, type Validator } from 'typebox/compile';

@@ -362,6 +362,7 @@
       "publicEntries": [
         "services/kernel/src/search/index.ts",
         "services/kernel/src/search/composition.ts",
+        "services/kernel/src/search/query-events.ts",
         "services/kernel/src/search/rated-source.ts",
         "services/kernel/src/search/space-discovery.ts",
         "services/kernel/src/search/work.ts",
@@ -457,6 +458,7 @@
       ],
       "publicEntries": [
         "services/kernel/src/command/receipt-key.ts",
+        "services/kernel/src/events/catalogue.ts",
         "services/kernel/src/clock.ts",
         "services/kernel/src/memoized.ts",
         "services/kernel/src/request/access.ts",
