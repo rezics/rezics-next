@@ -249,7 +249,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     await act(async () => {
       await router.navigate({ to: '/en/other' as never });
     });
-    for (let attempt = 0; attempt < 25 && delayedReads.length === 0; attempt++)
+    for (let attempt = 0; attempt < 25 && delayedReads.length < 2; attempt++)
       await act(async () => {
         await Promise.resolve();
       });
