@@ -19,6 +19,8 @@ bun run --cwd services/importer typecheck
 No type errors in 408 files
 ```
 
+`bun run --cwd services/kernel typecheck` remains red on untouched kernel files, including `services/kernel/src/content/appeal-routes.ts(317,5)` (`TS2345`) and `services/kernel/test/semantic/identity-core.test.ts` (`TS2769`). The importer-specific type errors seen on its first run were fixed; importer typecheck now passes.
+
 Pending native acceptance: run `bun run --cwd services/kernel check test/imports/showcase-vndb-releases.test.ts` after the controller resolves the schema preflight. This attempt stopped before the target test ran with:
 
 ```text
