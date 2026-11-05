@@ -226,11 +226,13 @@ test('prepared Diary composition preserves native refusals, retirement, stale pa
     expect(requests).toHaveLength(4);
     expect(requests.every((request) => request.headers.get('authorization') === 'Bearer current')).toBe(true);
   }
-  for (const error of [new PlatformClosedError(403, {}), { name: 'PlatformClosedError' },
-    { message: 'rezics-platform-closed' }, new Error('forbidden'), { code: 'platform_closed' }]) {
-    nativeClient = createKernelClient('https://kernel.test', { fetch: async () => { throw error; } });
-    const kind = error instanceof PlatformClosedError || 'name' in error && error.name === 'PlatformClosedError' ||
-      'message' in error && error.message === 'rezics-platform-closed' ? 'closed' : 'unavailable';
+  for (const [error, kind] of [
+    [new PlatformClosedError(403, {}), 'closed'], [{ name: 'PlatformClosedError' }, 'closed'],
+    [{ message: 'rezics-platform-closed' }, 'closed'], [new Error('forbidden'), 'unavailable'],
+    [{ code: 'platform_closed' }, 'unavailable'],
+  ] as const) {
+    // Throw at the installed-client boundary; its fetch layer normalizes transport exceptions.
+    nativeClient = new Proxy(nativeClient, { get: () => ({ get: async () => { throw error; } }) });
     expect(await readPrivateDiary({ data: {} })).toMatchObject({ diary: { kind }, summary: { kind } });
     expect(await readPrivateDiary({ data: { year: 2020 } })).toMatchObject({ diary: { kind }, reportedYear: { kind } });
   }
