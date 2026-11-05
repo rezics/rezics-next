@@ -92,6 +92,53 @@ export function historyArtifact(type: string, minimizerVersion = 1) {
   return entry;
 }
 
+/** Current native Zone serializers. Keep this finite so a new or former wire producer stays a
+ * visible family gap until its body and consumer disposition are adopted. */
+export const ZONE_HISTORY_RECEIPT_KINDS = Object.freeze([
+  'zone.create',
+  'zone.configure',
+  'zone.publish',
+  'zone.delete',
+  'zone.restore',
+] as const);
+export const ZONE_HISTORY_EVENT_TYPES = Object.freeze([
+  'com.rezics.zone.created.v1',
+  'com.rezics.zone.configured.v1',
+  'com.rezics.zone.published.v1',
+  'com.rezics.zone.deleted.v1',
+  'com.rezics.zone.restored.v1',
+] as const);
+export type ZoneHistoryReceiptKind = (typeof ZONE_HISTORY_RECEIPT_KINDS)[number];
+export type ZoneHistoryEventType = (typeof ZONE_HISTORY_EVENT_TYPES)[number];
+
+/** Terminal-account Zone cleanup context carried from the sole Zone lifecycle owner.
+ * It is provenance for History's existing copy/consumer work, not a RecordPurgeAuthority
+ * and not a new admission or acknowledgement. The owner holds and revalidates its branch
+ * locks while consuming the returned per-copy observation. */
+export type ZoneHistoryCleanupBinding = Readonly<{
+  kind: 'terminal_account';
+  accountId: string;
+  accountRoute: number;
+  barrierVersion: number;
+  barrierAt: string;
+  zoneId: string;
+  zoneRoute: number;
+  originalHome: number;
+  originalEpoch: number;
+  ownerId: string;
+  ownerTransactionId: string;
+  zoneRevision: string;
+  lifecycleRevision: string;
+  deletionGeneration: string;
+  protectionRevision: string;
+}>;
+
+/** Existing account erasure remains the default. A Zone branch must be explicitly carried
+ * through the History receiving calls so it cannot be mistaken for ordinary record purge. */
+export type HistoryReceivingDiscriminant =
+  | Readonly<{ kind: 'account-erasure' }>
+  | Readonly<{ kind: 'zone-cleanup'; binding: ZoneHistoryCleanupBinding }>;
+
 export type EventClassification =
   | Readonly<{ kind: 'account-bearing'; roles: readonly AccountRole[] }>
   | Readonly<{ kind: 'non-personal'; roles: readonly [] }>;
