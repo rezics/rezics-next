@@ -249,7 +249,7 @@ test('static Zone reads preserve withheld route concealment and fresh authorizat
       )
     ).status,
   ).toBe(401);
-  // Seed existing authoritative withholding decisions only; this proves read disclosure, not the unimplemented moderation command.
+  // Seed authoritative withholding decisions directly; this proves read disclosure. Takedown commands are covered in lifecycle-journey.test.ts.
   const withholding = {
     '/labels/en': {},
     '/pages/0/document/content/0/props/text': {},

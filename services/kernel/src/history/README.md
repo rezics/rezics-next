@@ -2,9 +2,9 @@
 
 ## Zone receipts, outbox events and current closure boundary
 
-The delivered Zone producer cut is the five native command receipts `zone.create`, `zone.configure`,
-`zone.publish`, `zone.delete` and `zone.restore`, plus their five outbox events
-`com.rezics.zone.{created,configured,published,deleted,restored}.v1`. The event schemas are exactly `{ id, revision }`;
+The delivered Zone producer cut is the seven native command receipts `zone.create`, `zone.configure`,
+`zone.publish`, `zone.delete`, `zone.restore`, `zone.takedown` and `zone.releaseTakedown`, plus their seven outbox events
+`com.rezics.zone.{created,configured,published,deleted,restored,taken_down,takedown_released}.v1`. The event schemas are exactly `{ id, revision }`;
 `contracts.ts` keeps them nonpersonal. Receipt responses still carry configuration and actor/provenance associations,
 so they follow the existing physical minimizer after their real consumer and receiving obligations close. The current
 rebuilt Zone owner has no `durable-work/v1` producer. History registers only the receipt and event coverage and leaves

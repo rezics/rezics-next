@@ -19,7 +19,7 @@ for (const type of ZONE_HISTORY_EVENT_TYPES) {
   if (classifyEvent(type).kind !== 'non-personal') throw new TypeError('Zone base event classification changed');
 }
 
-/** The current rebuilt producer cut: five receipt codecs and five closed ID/revision events.
+/** The current rebuilt producer cut: seven receipt codecs and seven closed ID/revision events.
  * No Zone durable-work producer is registered until its actual native owner exists. */
 export const ZONE_HISTORY_FAMILY_SOURCES: readonly HistoryFamilySource[] = Object.freeze([
   ...ZONE_HISTORY_RECEIPT_KINDS.map((producer) => ({
