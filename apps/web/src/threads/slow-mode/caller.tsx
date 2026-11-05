@@ -1,5 +1,13 @@
 import { QueryClientContext, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { sessionQuery } from '../../session/query';
 import { browserObservation } from '../../session/observation';
 import { useReaderAddress } from '../../reader/current-origin';
