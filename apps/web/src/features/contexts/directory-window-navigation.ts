@@ -29,16 +29,14 @@ export class DirectoryWindowNavigation {
     }
   }
 
-  request(cursor: Cursor) {
+  request(cursor: Cursor, addressChanged = false) {
     // A browser address change replaces a pending target; a reread of that target does not arm it.
-    if (this.target && cursor !== this.target.cursor) {
+    if (addressChanged && this.target && cursor !== this.target.cursor) {
       this.target = undefined;
       this.armed = false;
       this.cancelFocus();
     }
-    const movement = this.armed ? this.target : undefined;
-    this.armed = false;
-    return movement;
+    return this.armed && this.target?.cursor === cursor ? this.target : undefined;
   }
   retry(cursor: Cursor, keyboardOrigin?: HTMLElement) {
     if (this.target && this.target.cursor === cursor) this.stage(this.target.direction, cursor, keyboardOrigin);
@@ -54,6 +52,7 @@ export class DirectoryWindowNavigation {
       if (movement.direction === 'first') this.predecessors = [];
       this.committedFocus = !!this.focus;
       this.target = undefined;
+      this.armed = false;
     } else if (cursor !== this.current) {
       // Browser Back/Forward and direct addresses do not invent a traversal.
       this.predecessors = [];
@@ -64,6 +63,7 @@ export class DirectoryWindowNavigation {
   }
 
   failed() {
+    this.armed = false;
     this.cancelFocus();
   }
   handoff(heading: HTMLElement) {
