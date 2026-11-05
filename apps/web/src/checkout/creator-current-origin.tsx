@@ -90,7 +90,12 @@ const identity = (value: Observation) =>
   ]);
 
 function sameOperations(left: readonly string[] | null, right: readonly string[] | null) {
-  return left !== null && right !== null && left.length === right.length && left.every((value, index) => value === right[index]);
+  return (
+    left !== null &&
+    right !== null &&
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function sameAdmittedOwner(before: Observation, after: Observation) {

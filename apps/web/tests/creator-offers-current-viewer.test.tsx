@@ -304,7 +304,7 @@ async function mounted() {
     oldSubmit,
     async dispose() {
       await act(async () => root.unmount());
-    keepObservation();
+      keepObservation();
       client.clear();
       spies.forEach((spy) => spy.mockRestore());
       host.remove();

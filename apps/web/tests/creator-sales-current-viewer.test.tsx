@@ -149,7 +149,10 @@ test('sales retires late viewer, admission and address ABA results, retains acce
     await tick();
     expect(host.textContent).toContain(`Private sale ${A}`);
     expect(pending).toHaveLength(0);
-    const oldQuery = client.getQueryCache().findAll({ queryKey: ['creator-sales-current'] }).at(-1)!;
+    const oldQuery = client
+      .getQueryCache()
+      .findAll({ queryKey: ['creator-sales-current'] })
+      .at(-1)!;
     let oldRefresh!: Promise<unknown>;
     await act(async () => {
       oldRefresh = oldQuery.fetch();
