@@ -47,7 +47,7 @@ Cases: [Person careers](../../services/importer/tests/showcase-bangumi-person-ca
 
 ### Open Library Work publication date
 
-Only optional Work first_publish_date creates its independently cited schema:datePublished assertion. Edition fields and existing publish_date behavior stay separate. [Conversion cases](../../packages/conversion/tests/open-library-first-publication.test.ts) pin precision, citation, digest changes, malformed values and Edition exclusion. [Native cases](../../services/kernel/test/imports/open-library-first-publication.test.ts) retain separate selection, adoption and current public reads.
+Decision: retain the ordinary proposal-only Open Library CLI and separate Work/Edition bindings; reviewers adopt Work dates and Edition page counts/ISBNs independently. Only optional Work first_publish_date creates its independently cited schema:datePublished assertion; existing publish_date behavior stays separate. [Conversion cases](../../packages/conversion/tests/open-library-first-publication.test.ts) pin precision, citation, digest changes, malformed values and Edition exclusion. [Native cases](../../services/kernel/test/imports/open-library-first-publication.test.ts) retain separate selection, adoption and current public reads.
 
 ### VNDB facts, tags and relations
 
