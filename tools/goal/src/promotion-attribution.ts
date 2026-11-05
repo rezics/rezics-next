@@ -330,4 +330,3 @@ export async function resolveCulprit(
 export function pausedAt(settings: Settings): boolean {
   return existsSync(join(settings.stateDirectory, 'promotion.paused'));
 }
-

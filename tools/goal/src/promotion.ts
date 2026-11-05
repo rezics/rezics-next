@@ -619,10 +619,8 @@ export async function promote(options: PromotionOptions): Promise<void> {
       if (run.phase === 'classify-main') run = await resolveMainFailure(options, run);
       if (run.phase === 'classify-prefixes') {
         const attributionRun = run;
-        run = await resolveCulprit(
-          options,
-          attributionRun,
-          (target, taskIds) => publishPrefix(options, attributionRun, target, taskIds),
+        run = await resolveCulprit(options, attributionRun, (target, taskIds) =>
+          publishPrefix(options, attributionRun, target, taskIds),
         );
         if (run.phase === 'classify-prefixes') return;
       }
