@@ -32,7 +32,8 @@ test('supported local stack starts the real site and serves media through native
     REZICS_LOCAL_STACK_NATIVE_ORIGIN: origin(native),
     REZICS_LOCAL_STACK_KERNEL_ORIGIN: origin(kernel),
   };
-  const configuration = developmentEnv('', database) +
+  const configuration =
+    developmentEnv('', database) +
     `AUTH_ISSUER=${origin(issuer)}\nAUTH_JWKS_URL=${origin(issuer)}/.well-known/jwks.json\n` +
     (process.env.OPENSEARCH_URL ? `OPENSEARCH_URL=${process.env.OPENSEARCH_URL}\n` : '');
   await writeFile(resolve(root, 'services/kernel/.env'), configuration, { mode: 0o600 });
@@ -48,12 +49,17 @@ test('supported local stack starts the real site and serves media through native
   };
   await run(['services/auth/scripts/dev-stack.ts', 'setup']);
   const child = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
-    cwd: root, env, stdout: 'pipe', stderr: 'pipe',
+    cwd: root,
+    env,
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
   const output = new Response(child.stdout).text();
   const errors = new Response(child.stderr).text();
   let exited = false;
-  void child.exited.then(() => { exited = true; });
+  void child.exited.then(() => {
+    exited = true;
+  });
   try {
     const deadline = Date.now() + 240_000;
     let ready = false;
@@ -70,8 +76,15 @@ test('supported local stack starts the real site and serves media through native
     if (!ready) throw new Error(exited ? `Local stack exited: ${await errors}` : 'Local site did not become ready');
     const response = await fetch(`${origin(web)}/media/00000000-0000-7000-8000-000000000001/webp-320`);
     expect(response.status).toBe(404);
-    const persona = Object.fromEntries((await readFile(resolve(root, '.temp/local-stack/seed.env'), 'utf8'))
-      .trim().split('\n').map((line) => { const at = line.indexOf('='); return [line.slice(0, at), line.slice(at + 1)]; }));
+    const persona = Object.fromEntries(
+      (await readFile(resolve(root, '.temp/local-stack/seed.env'), 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => {
+          const at = line.indexOf('=');
+          return [line.slice(0, at), line.slice(at + 1)];
+        }),
+    );
     expect(persona.REZICS_DEV_PERSONA_ACCOUNT).toBeTruthy();
     await mkdir(resolve(root, '.temp/media-site'), { recursive: true });
     await writeFile(resolve(root, '.temp/media-site/visit.json'), JSON.stringify({ origin: origin(web) }));

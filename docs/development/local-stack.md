@@ -168,6 +168,9 @@ group fails with the name of its first missing variable.
 Decision: local development uses the existing media port with a fixed 20 MiB-per-object file store and the exact
 Bangumi media host `lain.bgm.tv`; R2 remains the only production storage configuration.
 
+Decision: local media acceptance starts the supported `setup`/`start` composition against its owning check's
+isolated database and search node, with separate loopback application ports, before testing site media admission.
+
 ## Keys and reset
 
 Generated Auth signing, website, importer, and staging keys and the persona password live under
