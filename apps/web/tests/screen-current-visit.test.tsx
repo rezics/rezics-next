@@ -319,12 +319,16 @@ test('Screen correction visits preserve the selected reading, exact occurrence a
   }
 });
 
-
 test('installed correction route rereads selected Contexts, retires A/B/A results and returns to fresh public focus', async () => {
   const ui = await browser();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const [{ createRootRoute, createRoute, createRouter, createMemoryHistory, RouterProvider, Outlet },
-    { ScreenProfileOverview }, { Route: installed }, contract, { screenProfileFixture }] = await Promise.all([
+  const [
+    { createRootRoute, createRoute, createRouter, createMemoryHistory, RouterProvider, Outlet },
+    { ScreenProfileOverview },
+    { Route: installed },
+    contract,
+    { screenProfileFixture },
+  ] = await Promise.all([
     import('@tanstack/react-router'),
     import('../src/features/catalogue/screen-profile-reader'),
     import('../src/routes/subjects/$id_.$slug_.screen'),
@@ -346,27 +350,44 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
   const occurrence = { holder: subjectId, property, statement: statement.id };
   const source = `/en/subjects/${subjectId}/the-observatory?realm=${realmId}`;
   const visit: ScreenCurrentVisit = {
-    version: 1, subject: subjectId, type: 'schema:Movie', context: contextId,
-    realm: realmId, locale: 'en', definition: digest, source, occurrence,
+    version: 1,
+    subject: subjectId,
+    type: 'schema:Movie',
+    context: contextId,
+    realm: realmId,
+    locale: 'en',
+    definition: digest,
+    source,
+    occurrence,
   };
   const rootRoute = createRootRoute({ component: Outlet });
   const publicRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/en/subjects/$id/$slug',
-    component: () => h(ScreenProfileOverview, {
-      locale: 'en', public: nativeSubject, context: contextId, realm: realmId,
-    }),
+    component: () =>
+      h(ScreenProfileOverview, {
+        locale: 'en',
+        public: nativeSubject,
+        context: contextId,
+        realm: realmId,
+      }),
   });
   const correctionRoute = installed.update({
-    getParentRoute: () => rootRoute, path: '/en/subjects/$id/$slug/screen',
+    getParentRoute: () => rootRoute,
+    path: '/en/subjects/$id/$slug/screen',
   } as never);
   const router = createRouter({
     routeTree: rootRoute.addChildren([publicRoute, correctionRoute]),
     history: createMemoryHistory({ initialEntries: [source] }),
   });
-  const settle = async () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+  const settle = async () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
   const go = async (href: string) => {
-    await act(async () => { await router.navigate({ href }); });
+    await act(async () => {
+      await router.navigate({ href });
+    });
     await settle();
   };
   const link = (text: string) => [...ui.host.querySelectorAll('a')].find((a) => a.textContent === text);
@@ -380,7 +401,8 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
     expect(inspect).toBeDefined();
     const entry = new URL(inspect!.getAttribute('href')!, 'https://site.invalid');
     expect(contract.screenCurrentRouteVisit(entry.search)).toMatchObject({
-      kind: 'current', visit: { context: contextId, realm: realmId },
+      kind: 'current',
+      visit: { context: contextId, realm: realmId },
     });
     await go(contract.screenCurrentVisitHref(entry.pathname, visit)!);
     expect(ui.host.textContent).toContain(ui.m.screen_visit_unsupported());
@@ -392,7 +414,10 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
 
     // Each route admission owns its pending read, even when the address returns to A.
     let resolveOld!: (read: SubjectRead) => void;
-    pendingNative = () => new Promise((resolve) => { resolveOld = resolve; });
+    pendingNative = () =>
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      });
     const contextB = '00000000-0000-4000-8000-000000000907';
     await go(contract.screenCurrentVisitHref(entry.pathname, { ...visit, context: contextB })!);
     expect(ui.host.textContent).toContain(ui.m.candidate_loading());
@@ -402,7 +427,9 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
     expect(ui.host.textContent).toContain(ui.m.screen_visit_unsupported());
     const obsolete = structuredClone(nativeSubject);
     obsolete.subject.labels = { en: 'Obsolete Context B' };
-    await act(async () => { resolveOld(obsolete); });
+    await act(async () => {
+      resolveOld(obsolete);
+    });
     await settle();
     expect(ui.host.textContent).not.toContain('Obsolete Context B');
 
@@ -431,8 +458,11 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
     await go(incompatible.pathname + incompatible.search);
     expect(ui.host.textContent).toContain(ui.m.screen_visit_invalid());
     expect(ui.host.textContent).not.toContain(ui.m.screen_visit_unsupported());
-    expect(new URL(link(ui.m.screen_visit_global())!.getAttribute('href')!, 'https://site.invalid')
-      .searchParams.get('classificationHandoff')).toBe(handoff);
+    expect(
+      new URL(link(ui.m.screen_visit_global())!.getAttribute('href')!, 'https://site.invalid').searchParams.get(
+        'classificationHandoff',
+      ),
+    ).toBe(handoff);
     await go(`${entry.pathname}?screenVisit=malformed&classificationHandoff=${handoff}`);
     expect(ui.host.textContent).toContain(ui.m.screen_visit_invalid());
     expect(ui.host.querySelector('input, textarea')).toBeNull();
@@ -445,13 +475,18 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
     nativeSubject.subject.release = digest;
     nativeSubject.subject.labels = { en: 'The observatory' };
     let resolveReturn!: (read: SubjectRead) => void;
-    pendingNative = () => new Promise((resolve) => { resolveReturn = resolve; });
+    pendingNative = () =>
+      new Promise((resolve) => {
+        resolveReturn = resolve;
+      });
     await go(contract.screenCurrentReturnHref(visit)!);
     await act(async () => {
       ui.window.document.dispatchEvent(new ui.window.Event('pointermove', { bubbles: true }));
     });
     pendingNative = undefined;
-    await act(async () => { resolveReturn(nativeSubject); });
+    await act(async () => {
+      resolveReturn(nativeSubject);
+    });
     await settle();
     expect(ui.host.querySelector(`#${contract.screenCurrentInspectionId(statement.id)}`)).not.toBeNull();
     expect(ui.window.document.activeElement?.id).not.toBe(contract.screenCurrentInspectionId(statement.id));
