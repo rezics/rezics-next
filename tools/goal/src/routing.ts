@@ -162,31 +162,3 @@ export function routeTask(
     experiment: experiment?.name ?? null,
   };
 }
-
-function profileKey(profile: Profile): string {
-  return `${profile.cli}\0${profile.model}\0${profile.poolClass}`;
-}
-
-/** The profile a new task of this brief would start on, plus every class and experiment fallback that can take it. */
-export function admissionProfiles(
-  brief: Brief,
-  table: RoutingTable,
-  sequence = 1,
-): { first: Profile; fallbacks: Profile[] } {
-  const routed = routeTask(brief, sequence, table);
-  if (brief.model !== undefined || brief.kind === 'verification') return { first: routed.profile, fallbacks: [] };
-  const seen = new Set([profileKey(routed.profile)]);
-  const fallbacks: Profile[] = [];
-  for (const profile of [
-    ...retryFallbacks(table, routed.taskClass),
-    ...table.experiments
-      .filter((entry) => entry.open && entry.class === routed.taskClass)
-      .flatMap((entry) => entry.profiles),
-  ]) {
-    const key = profileKey(profile);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    fallbacks.push(profile);
-  }
-  return { first: routed.profile, fallbacks };
-}

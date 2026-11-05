@@ -24,8 +24,8 @@ test('the worker prompt names the main checkout as read-only and asks for paths 
     brief: { markdown: 'Do the thing.', acceptance: { command: ['bun', 'test'], tests: ['x'] } },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('the main checkout /repo/main is read-only');
-  expect(prompt).toContain('Work only in /work/trees/t1;');
+  expect(prompt).toContain('Main checkout: /repo/main (read-only)');
+  expect(prompt).toContain('work only in /work/trees/t1.');
 });
 
 // Skipped while LOCAL_STORYBOOK_AVAILABLE is false (storybook-dev.ts still refuses interactive use).
@@ -105,7 +105,7 @@ test('an implementation worker is told the applicable AGENTS.md is already loade
   expect(prompt).toContain('AGENTS.md is loaded.');
   expect(prompt).not.toContain('Read and follow its AGENTS.md');
   expect(prompt).toContain(
-    'Search freely inside the worktree; outside it, only the directories named here.',
+    'Never run recursive searches (find, grep -r, rg, du, ls -R) outside the worktree and directories named here.',
   );
 });
 
@@ -140,10 +140,10 @@ test('the worker prompt forbids touching resources the attempt did not start', (
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('Leave containers, databases and processes this attempt did not start running');
-  expect(prompt).toContain('do not prune Docker');
+  expect(prompt).toContain('Never stop or remove containers, databases or processes this attempt did not start');
+  expect(prompt).toContain('never prune Docker');
   // A diagnosis patched a hardlinked reylo file in place and every worktree and check host printed its trace.
-  expect(prompt).toContain('Do not write under node_modules');
+  expect(prompt).toContain('Never write under node_modules');
   // Promotion gates and repeated full worker checks left a 13-slot fleet with a 1.9-hour p95 slot wait (2026-10-28).
   expect(prompt).toContain('Check slots are scarce: run your acceptance command once after your last relevant edit.');
   expect(prompt).toContain('This base has no scripts/worker-check.ts; do not add one.');
@@ -236,7 +236,7 @@ test('worker and manager prompts trust repository callers and let dev repair con
     "Frozen acceptance files hold the contract's tests: tests/acceptance.test.ts. If one contradicts the contract, an owner document or the delivered code it depends on, change the smallest assertion that makes them agree, list the file and the reason in your summary, and continue.",
   );
   expect(rendered.prompt).toContain(
-    'When two requirements conflict, follow the owner documents and the delivered code, change the smaller side (a test, fixture or brief detail), list it and continue.',
+    'When two requirements conflict, take the reading most consistent with the owner documents and the delivered code, change the smaller side (a test, fixture or brief detail), list it and continue.',
   );
   expect(rendered.prompt).toContain(
     'Validate only where outside input enters: HTTP requests, imported records, external files and third-party responses.',
@@ -426,7 +426,7 @@ test('a worker reports persistent tool and infrastructure failures as a tool blo
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
   expect(prompt).toContain(
-    'a tool or infrastructure failure persisting after two retries, reported as a `tool` blocker starting with the exact error line.',
+    'a tool or infrastructure failure (SSH, network, disk, memory, file watchers, a service that will not start) persisting after two retries: a `tool` blocker starting with the exact error line; never weaken a check instead.',
   );
 });
 
