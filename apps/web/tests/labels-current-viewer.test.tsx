@@ -298,7 +298,13 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     ) => {
       menus.length = 0;
       await act(async () => {
-        queryClient.setQueryData(['session'], viewer);
+        const currentSession = queryClient.getQueryData<typeof viewer>(['session']);
+        if (
+          currentSession?.state !== viewer.state ||
+          currentSession?.subject !== viewer.subject ||
+          currentSession?.csrfToken !== viewer.csrfToken
+        )
+          queryClient.setQueryData(['session'], viewer);
         const current = browserObservation(queryClient).getSnapshot();
         if (current.state === 'signed-in')
           queryClient.setQueryData(viewerExposureQuery(current.observation).queryKey, {
