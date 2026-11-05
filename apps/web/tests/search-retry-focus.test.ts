@@ -2,6 +2,7 @@ import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import type { SearchPageData } from '../src/search/search';
 import type { DiscoveryState } from '../src/search/discovery';
@@ -36,6 +37,7 @@ const user = userEvent.setup({ document: window.document });
 const host = document.createElement('main');
 document.body.append(host);
 let root: ReturnType<typeof createRoot>;
+const queryClient = new QueryClient();
 const emptyDiscovery: DiscoveryState = {
   status: 'ready',
   page: { hits: [], kinds: { values: [], next: null }, next: null, as_of: discoveryExample.as_of },
@@ -67,15 +69,19 @@ async function show(data: SearchPageData, extra?: { query?: string; session?: st
   await act(async () =>
     root.render(
       createElement(
-        'div',
-        null,
-        createElement('button', { type: 'button', 'data-move-focus': true }, 'Other control'),
-        createElement(SearchPage, {
-          query,
-          data,
-          onRetry() {},
-          session: extra?.session ?? null,
-        }),
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(
+          'div',
+          null,
+          createElement('button', { type: 'button', 'data-move-focus': true }, 'Other control'),
+          createElement(SearchPage, {
+            query,
+            data,
+            onRetry() {},
+            session: extra?.session ?? null,
+          }),
+        ),
       ),
     ),
   );

@@ -1269,14 +1269,7 @@ export function SearchPage({
       {!typeRefinementAvailable && type && <input type="hidden" name="type" value={type} />}
       {data?.discovery?.status === 'ready' && data.queryState && (
         <DiscoveryKinds
-          key={JSON.stringify([
-            data.queryState,
-            locale,
-            session,
-            readerOwner,
-            data.discovery.page.as_of,
-            data.discovery.page.kinds,
-          ])}
+          key={JSON.stringify([data.queryState, locale, session, readerOwner, data.discovery.page])}
           initial={data.discovery.page.kinds}
           checkpoint={data.discovery.page.as_of}
           locale={locale}

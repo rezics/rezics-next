@@ -140,10 +140,11 @@ test('pending reads and transport retries retain the window, cursor and native c
   expect(submitted()).toEqual(['schema:1-0']);
   await act(async () => settle({ status: 'unavailable', retryable: true, recovery: { status: 'unavailable' } }));
   expect(more()).toBeUndefined();
-  await click('Retry this result type page');
+  expect(visible()).toEqual([...ids(0), ...ids(1)]);
   await click('Retry this result type page');
   expect(visible()).toEqual([...ids(0), ...ids(1)]);
-  await click();
+  await click('Retry this result type page');
+  expect(visible()).toEqual([...ids(0), ...ids(2)]);
   expect(calls).toEqual(['opaque+/=', 'exact-next', 'exact-next', 'exact-next']);
   expect(hiddenKinds()).toEqual(['schema:1-0']);
   await click('Return to the directory start');
@@ -310,7 +311,7 @@ test('changed omitted-kind coverage drops old options and deliberately re-reads 
   );
   await click();
   expect(visible()).toEqual([]);
-  expect(hiddenKinds()).toEqual(['retained', 'schema:0-0']);
+  expect(hiddenKinds()).toEqual(['schema:0-0', 'retained']);
   await click('Refresh result types');
   expect(refreshes).toBe(1);
 });
