@@ -10,12 +10,7 @@ import {
   isResidentSupermanagerRecord,
   recordManagerCommand,
 } from './manager-command-context.ts';
-import {
-  createHourlyReportScheduler,
-  serveManagers,
-  singleFlight,
-  startOrphanRecoveryTimer,
-} from './manager-host.ts';
+import { createHourlyReportScheduler, serveManagers, singleFlight, startOrphanRecoveryTimer } from './manager-host.ts';
 import { recordManagerDecision } from './managers.ts';
 import { MergeTrain } from './merge-train.ts';
 import { defaultPolicy } from './policy.ts';
