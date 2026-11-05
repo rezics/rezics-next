@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createContext, useContext, type ReactNode } from 'react';
 import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
@@ -17,6 +17,7 @@ import {
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+afterAll(() => mock.restore());
 
 const id = '00000000-0000-4000-8000-00000000c001';
 const otherId = '00000000-0000-4000-8000-00000000c004';
@@ -170,7 +171,7 @@ test('mounted menu and production relation route gate unsupported origins before
     createRequire(require.resolve('storybook/test')).resolve('@testing-library/user-event')
   );
   const { m } = await import('../src/paraglide/messages.js');
-  const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
+  const { deLocalizeUrl, getLocale, localizeUrl, setLocale } = await import('../src/paraglide/runtime.js');
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
   const user = userEvent.setup({ document: window.document });
@@ -196,6 +197,7 @@ test('mounted menu and production relation route gate unsupported origins before
   const router = createRouter({
     routeTree: rootRoute.addChildren([Route]),
     history: createMemoryHistory({ initialEntries: ['/'] }),
+    rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
   const menu = <EditorialEntry id={subjectId} label={label} locale="en" context={candidateContext}>{null}</EditorialEntry>;
   const renderMenu = async () =>
@@ -307,13 +309,6 @@ test('mounted menu and production relation route gate unsupported origins before
     await act(async () => root.unmount());
     client.clear();
     setLocale(previousLocale, { reload: false });
-    mock.module('../src/features/pages/subject', () => subjectPages);
-    mock.module('../src/features/pages/subject-frame', () => subjectFrame);
-    mock.module('../src/features/pages/route-support', () => routeSupport);
-    mock.module('../src/features/pages/views', () => views);
-    mock.module('../src/kernel/client', () => kernel);
-    mock.module('../src/subject/load-subject', () => loadSubjectModule);
-    mock.module('../src/features/catalogue/relation-editor-actions', () => relationActions);
     for (const [name, descriptor] of saved) {
       if (descriptor) Object.defineProperty(globalThis, name, descriptor);
       else Reflect.deleteProperty(globalThis, name);
