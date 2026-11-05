@@ -38,11 +38,17 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader: (name: string, value: string) => headers.set(name, value),
 }));
 mock.module('cloudflare:workers', () => ({ env }));
+const originalKernel = await import('../src/kernel/client');
 const nativeClient = createKernelClient('https://kernel.test', {
   headers: { 'accept-language': 'en' },
   fetch: (input, init) => globalThis.fetch(input, init),
 });
-mock.module('../src/kernel/client', () => ({ kernelClient: () => nativeClient, requestLocale: () => 'en' }));
+mock.module('../src/kernel/client', () => ({
+  ...originalKernel,
+  configuredKernelOrigin: () => env.KERNEL_ORIGIN,
+  kernelClient: () => nativeClient,
+  requestLocale: () => 'en',
+}));
 afterAll(() => mock.restore());
 function deferred<T>() {
   let resolve!: (value: T) => void;
