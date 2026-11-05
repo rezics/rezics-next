@@ -24,6 +24,14 @@ promises still hold.
 - **Evidence.** Moderation and audit records keep identifiers and decisions, not the deleted content, past the
   window.
 
+## Content author thread erasure
+
+Author thread erasure is an AIP-151/DBOS workflow. It first makes the thread logically erased, then clears revision
+bodies to physical `NULL` in bounded steps of at most 100 posts, authorizing each selected post against current
+authority. Revocation stops later effects. Progress reports `processedPosts`, `erasedRevisions` and `steps`, never a
+full count; terminal errors keep native `google.rpc.Status` and HTTP RFC 9457 forms. Point erasure and takedown remain
+synchronous. See [Content deletion](../services/kernel/src/content/README.md#deletion) for its native contract.
+
 ## Account erasure
 
 1. **Confirmation and T.** Account erasure is final at confirmation, with fresh authentication and the typed

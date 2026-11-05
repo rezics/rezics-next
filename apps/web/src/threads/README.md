@@ -634,9 +634,8 @@ an ended request cannot publish a page or start later hydration from a late read
 
 ## Current-page mention reading
 
-Decision: disclosed mention occurrences use the existing References reader and its occurrence return positions;
-unresolved mentions retain the document codec's `@` text. Identity links and ordinary links share one return host,
-with independent ordinal spaces so equal identities and link marks cannot overwrite each other's targets.
-Decision: keep `readDocumentMentions` until the complete native projection is callable through the installed
-ReadingPage. Derive identity and source-binding types from that result; never substitute local wire types for
-missing publication. Accounts retains identity admission.
+The final-admitted installed projection binds each document to `postId`, `threadId`, `revisionId`, `sha256` and
+`pageIndex`; a page holds at most 21 documents, 32 image references and 100 mention identities. Keep
+active/concealed/erased, zero/unavailable/overflow and unresolved `@` text distinct. References retain exact occurrence/page/cursor
+return with separate mention/link ordinals. Keep separate hydration until the official callable is installed;
+viewer, revision or cache changes retire output. No refill or second renderer. Accounts admits identities.

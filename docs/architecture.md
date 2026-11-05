@@ -76,6 +76,10 @@ landing's final candidate. It needs no database and runs in seconds. Workers run
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
 an alias edge or an allowance. Every worker prompt carries the module map generated from the manifest.
 
+The production Kernel has one `createKernel` composition for module, route, event and resource registrations. Queue
+registration completes before DBOS launch, and the composition injects one clock. Exposure, initializer and event
+commit checks use their owner manifests; governance stays closed, including `read_reports`.
+
 Content's `community-projection/index.ts` is a registered pure core with no dependencies. Board and Realm adapters
 supply selected native activity values and actor identity through that public entry, including its contract types;
 `realm-board-home.ts` is the registered effectful Realm Board entry. DB reads, source selection/confirmation,
@@ -101,7 +105,8 @@ even when its owner is viewing it.
 Pure bounds arithmetic and operation descriptors belong in contracts or cores, outside service handlers and
 transport adapters. Native adapters bind through service composition roots.
 
-Writes are single-partition commands. A read may not join rows across partitions.
+Writes are single-partition commands. A read may not join rows across partitions; related reads start from an
+authorized native anchor and use route-first indexed keys.
 
 A batched key read is not a join and is admitted for reads. It uses one statement per row kind, selecting by full
 keys with `(route, id) = ANY(keys)`, with no join between partitions. All of a read's batched statements run in one
