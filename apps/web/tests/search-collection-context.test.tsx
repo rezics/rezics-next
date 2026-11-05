@@ -245,6 +245,7 @@ test('mounted Search uses one aggregate read, native command results and termina
   let source: DiscoveryState = { status: 'ready', page: page() };
   let reads = 0;
   let nativeFollowing = false;
+  let pendingRead: ReturnType<typeof deferred<DiscoveryBoundPage>> | undefined;
   let write = deferred<FollowWriteResult>();
   const commands: unknown[] = [];
   function Live() {
@@ -259,7 +260,7 @@ test('mounted Search uses one aggregate read, native command results and termina
         const result = bound(source);
         if (result.state.status === 'ready' && result.state.page.collectionFollows?.state === 'current')
           result.state.page.collectionFollows.rows[0]!.following = nativeFollowing;
-        return result;
+        return pendingRead ? pendingRead.promise : result;
       },
       writeFollow: async ({ data }) => {
         commands.push(data);
@@ -326,13 +327,32 @@ test('mounted Search uses one aggregate read, native command results and termina
     write = deferred();
     await act(async () => button().click());
     expect(commands[3]).not.toEqual(commands[2]);
+    await act(async () => write.resolve({ ok: false, reason: 'conflict' }));
+    pendingRead = deferred();
+    const nextReview = [...host.querySelectorAll<HTMLButtonElement>('[data-slot=collection-follow] button')].find(
+      (item) => item.textContent?.includes('Review current follow'),
+    )!;
+    nextReview.focus();
+    await act(async () => nextReview.click());
+    const otherAction = host.querySelectorAll<HTMLButtonElement>(
+      '[data-slot=collection-follow] > [data-slot=follow-control] > button',
+    )[2]!;
+    otherAction.focus();
+    const reviewed = bound(source);
+    if (reviewed.state.status === 'ready' && reviewed.state.page.collectionFollows?.state === 'current')
+      reviewed.state.page.collectionFollows.rows[0]!.following = true;
+    await act(async () => pendingRead!.resolve(reviewed));
+    pendingRead = undefined;
+    expect(window.document.activeElement).not.toBe(button());
+    write = deferred();
+    await act(async () => button().click());
     await act(async () => write.resolve({ ok: false, reason: 'forbidden' }));
     expect(host.querySelector('[role=alert]')?.textContent).toContain('permissions');
     expect(button().disabled).toBe(true);
     nativeFollowing = false;
     source = { status: 'ready', page: page() };
     await act(async () => render());
-    expect(reads).toBe(4);
+    expect(reads).toBe(5);
     write = deferred();
     await act(async () => button().click());
     const oldWrite = write;
