@@ -112,7 +112,10 @@ export function isRelationProperty(release: Release, property: string): boolean 
   );
 }
 
-function hasRelationSlots(property: string, relation: RelationDefinition | undefined): relation is RelationDefinition {
+function hasRelationSlots(
+  property: string,
+  relation: RelationDefinition | undefined,
+): relation is RelationDefinition {
   return (
     RELATION_GROUPS.has(relation?.group ?? '') ||
     (property === OCCUPATION_PROPERTY && relation?.group === 'classification')
