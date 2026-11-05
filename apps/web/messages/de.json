@@ -10354,5 +10354,6 @@
   "library_rule_results_empty": "Die Regel ist bereit. Die erste Seite ist ausgeschöpft und enthält keine Mitglieder.",
   "library_rule_results_page_empty": "Die Regel ist bereit. Diese Seite enthält keine Mitglieder; weitere Seiten können folgen.",
   "library_rule_results_incomplete": "Einige Bedingungen wurden nicht angewendet. Diese Antwort kann daher kein leeres Ergebnis belegen.",
-  "library_rule_results_retry": "Gespeicherte Regel erneut lesen"
+  "library_rule_results_retry": "Gespeicherte Regel erneut lesen",
+  "character_person_results": "Ergebnisse für Figuren und Personen"
 }

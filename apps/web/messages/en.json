@@ -10497,5 +10497,6 @@
   "library_rule_results_empty": "The rule is ready. The exhausted first page has no members.",
   "library_rule_results_page_empty": "The rule is ready. This page has no members; more pages may remain.",
   "library_rule_results_incomplete": "Some conditions were not applied, so this response cannot establish an empty result.",
-  "library_rule_results_retry": "Retry reading the saved rule"
+  "library_rule_results_retry": "Retry reading the saved rule",
+  "character_person_results": "Character and People results"
 }

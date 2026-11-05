@@ -10361,5 +10361,6 @@
   "library_rule_results_empty": "规则已就绪。第一页已读完且没有成员。",
   "library_rule_results_page_empty": "规则已就绪。此页没有成员；可能还有后续页。",
   "library_rule_results_incomplete": "部分条件未应用，因此此响应不能证明结果为空。",
-  "library_rule_results_retry": "重新读取已保存规则"
+  "library_rule_results_retry": "重新读取已保存规则",
+  "character_person_results": "角色与人物搜索结果"
 }

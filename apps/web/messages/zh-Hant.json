@@ -10404,5 +10404,6 @@
   "library_rule_results_empty": "規則已就緒。第一頁已讀完且沒有成員。",
   "library_rule_results_page_empty": "規則已就緒。此頁沒有成員；可能還有後續頁。",
   "library_rule_results_incomplete": "部分條件未套用，因此此回應不能證明結果為空。",
-  "library_rule_results_retry": "重新讀取已儲存規則"
+  "library_rule_results_retry": "重新讀取已儲存規則",
+  "character_person_results": "角色與人物搜尋結果"
 }

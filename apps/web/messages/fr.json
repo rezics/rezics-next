@@ -10354,5 +10354,6 @@
   "library_rule_results_empty": "La règle est prête. La première page est épuisée et ne contient aucun membre.",
   "library_rule_results_page_empty": "La règle est prête. Cette page ne contient aucun membre ; d’autres pages peuvent suivre.",
   "library_rule_results_incomplete": "Certaines conditions n’ont pas été appliquées ; cette réponse ne peut donc pas établir un résultat vide.",
-  "library_rule_results_retry": "Relire la règle enregistrée"
+  "library_rule_results_retry": "Relire la règle enregistrée",
+  "character_person_results": "Résultats des personnages et des personnes"
 }

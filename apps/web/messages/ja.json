@@ -10404,5 +10404,6 @@
   "library_rule_results_empty": "ルールの読み込みは完了しました。最初のページは終了しており、メンバーはありません。",
   "library_rule_results_page_empty": "ルールの読み込みは完了しました。このページにメンバーはありません。続きのページがある場合があります。",
   "library_rule_results_incomplete": "一部の条件が適用されていないため、この応答から結果が空だとは判断できません。",
-  "library_rule_results_retry": "保存済みルールを再読み込み"
+  "library_rule_results_retry": "保存済みルールを再読み込み",
+  "character_person_results": "キャラクターと人物の検索結果"
 }

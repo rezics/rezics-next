@@ -1,10 +1,7 @@
 import { useCallback, useState } from 'react';
-import { queryOptions, useQuery } from '@tanstack/react-query';
-import { createServerFn } from '@tanstack/react-start';
-import { getRequest } from '@tanstack/react-start/server';
+import { useQuery } from '@tanstack/react-query';
+import { useRouter } from '@tanstack/react-router';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import * as v from 'valibot';
-import { kernelClient } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -16,67 +13,18 @@ import {
   type CharacterPersonSelection,
   type CharacterPersonSelectionMetadata,
 } from './character-person-selection';
-import { readDiscovery, type DiscoveryState } from './discovery';
+import type { DiscoveryState } from './discovery';
+import { characterPersonQueryOptions } from './character-person-window-query';
+import { characterPersonWindowFacts, CharacterPersonWindowLinks } from './character-person-window';
+export { characterPersonQueryOptions } from './character-person-window-query';
 import { DiscoveryResults } from './discovery-results';
 import {
   type CharacterPersonSearch,
-  characterPersonQueryKey,
   characterPersonHref,
-  characterPersonRequest,
-  characterPersonVisibleState,
+  parseCharacterPersonSearch,
   type CharacterPersonForm as CharacterPersonFormState,
   type ParsedCharacterPersonSearch,
 } from './character-person';
-
-const characterPersonSearchSchema = v.object({
-  mode: v.picklist(['characters', 'people']),
-  name: v.string(),
-  works: v.array(v.string()),
-  role: v.optional(v.string()),
-  languages: v.array(v.string()),
-  threshold: v.picklist([0, 1, 2]),
-  sort: v.picklist(['name', 'relevance']),
-  cursor: v.optional(v.string()),
-});
-
-const readCharacterPerson = createServerFn({ method: 'GET' })
-  .validator(v.object({ locale: v.string(), search: characterPersonSearchSchema }))
-  .handler(async ({ data }) => {
-    const request = characterPersonRequest(data.search as CharacterPersonSearch);
-    return readDiscovery(request, async (body) =>
-      kernelClient(data.locale).subjects.$search.post(body, { fetch: { signal: getRequest().signal } }),
-    );
-  });
-
-export function characterPersonQueryOptions(
-  locale: string,
-  search: CharacterPersonSearch,
-  principal: string,
-  current?: () => boolean,
-) {
-  return queryOptions({
-    queryKey: characterPersonQueryKey(locale, principal, search),
-    queryFn: async ({ signal }): Promise<{ discovery: DiscoveryState; restarted: boolean }> => {
-      try {
-        if (current && !current()) throw new DOMException('Reader retired', 'AbortError');
-        const result = await readCharacterPerson({ data: { locale, search }, signal });
-        signal.throwIfAborted();
-        if (current && !current()) throw new DOMException('Reader retired', 'AbortError');
-        return result;
-      } catch (error) {
-        if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
-        return { discovery: { status: 'unavailable' }, restarted: false };
-      }
-    },
-    staleTime: 0,
-    gcTime: 0,
-    retry: false,
-    refetchOnMount: true,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    enabled: true,
-  });
-}
 
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -243,7 +191,21 @@ export function CharacterPersonSearchPage({
   principal: string;
 }) {
   const options = messageOptions(locale);
-  const reader = useCharacterPersonReader(locale, JSON.stringify(parsed));
+  const router = useRouter({ warn: false });
+  const executedHref = characterPersonHref(locale, parsed.search, parsed.search.cursor);
+  const reader = useCharacterPersonReader(locale, executedHref);
+  // A pending router address can precede replacement of the rendered match's props.
+  const current = () => {
+    if (!reader.current()) return false;
+    if (!router) return true;
+    const location = router.state.location;
+    const actual = parseCharacterPersonSearch(location.search, locale);
+    return (
+      location.pathname.replace(/\/$/, '') === '/search/characters' &&
+      !actual.error &&
+      characterPersonHref(locale, actual.search, actual.search.cursor) === executedHref
+    );
+  };
   const [dirty, setDirty] = useState(false);
   const [selectionReady, setSelectionReady] = useState(
     parsed.search.works.length === 0 && !parsed.search.role && !parsed.error,
@@ -254,10 +216,10 @@ export function CharacterPersonSearchPage({
     queryFn: async ({ signal }) => {
       const result = await readCharacterPersonSelectionMetadata({ signal });
       signal.throwIfAborted();
-      if (!reader.current()) throw new DOMException('Reader retired', 'AbortError');
+      if (!current()) throw new DOMException('Reader retired', 'AbortError');
       return result;
     },
-    enabled: reader.ready,
+    enabled: reader.ready && current(),
     retry: false,
     gcTime: 0,
     staleTime: 0,
@@ -266,17 +228,22 @@ export function CharacterPersonSearchPage({
   });
   const currentMetadata = metadata.isError || metadata.isFetching ? undefined : (metadata.data ?? undefined);
   const selected = parsed.search.works.length > 0 || !!parsed.search.role;
-  const enabled = reader.ready && !parsed.error && !dirty && selectionReady && (!selected || !!currentMetadata);
+  const enabled =
+    reader.ready && current() && !parsed.error && !dirty && selectionReady && (!selected || !!currentMetadata);
   const query = useQuery({
-    ...characterPersonQueryOptions(locale, parsed.search, `${principal}:${reader.identity}`, reader.current),
+    ...characterPersonQueryOptions(locale, parsed.search, `${principal}:${reader.identity}`, current),
     enabled,
   });
-  const state: DiscoveryState = dirty
-    ? { status: 'loading' }
-    : characterPersonVisibleState(parsed, !enabled || query.isFetching, query.data);
-  const restartHref = characterPersonHref(locale, parsed.search);
+  const state: DiscoveryState = parsed.error
+    ? { status: 'invalid' }
+    : !enabled || query.isFetching
+      ? { status: 'loading' }
+      : query.isError
+        ? { status: 'unavailable' }
+        : (query.data?.discovery ?? { status: 'loading' });
+  const facts = characterPersonWindowFacts(locale, parsed, state, current);
   const next = state.status === 'ready' ? state.page.next : null;
-  const pageEmpty = state.status === 'ready' && state.page.hits.length === 0 && next !== null;
+  const sparse = state.status === 'ready' && state.page.hits.length === 0 && next !== null;
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
       <PageHeading>{m.character_person_heading({}, options)}</PageHeading>
@@ -303,36 +270,42 @@ export function CharacterPersonSearchPage({
             : m.character_person_invalid({}, options)}
         </p>
       )}
-      {pageEmpty && (
-        <p className="text-sm text-muted-foreground" role="status">
-          {m.character_person_page_empty({}, options)}
-        </p>
-      )}
-      {dirty ? (
-        <p role="status" className="text-muted-foreground">
-          {m.character_person_apply_changes({}, options)}
-        </p>
-      ) : (
-        <DiscoveryResults state={state} locale={locale} restartHref={restartHref} />
-      )}
-      {!dirty && ['unavailable', 'not-ready'].includes(state.status) && (
-        <button
-          type="button"
-          className={buttonVariants({ variant: 'outline' })}
-          onClick={() => {
-            if (reader.current()) void query.refetch();
-          }}
-        >
-          {m.character_person_retry({}, options)}
-        </button>
-      )}
-      {next && (
-        <nav aria-label={m.character_person_pagination({}, options)}>
-          <a className={buttonVariants({ variant: 'outline' })} href={characterPersonHref(locale, parsed.search, next)}>
-            {m.character_person_continue({}, options)}
-          </a>
-        </nav>
-      )}
+      <section
+        aria-label={m.character_person_results({}, options)}
+        data-character-person-results
+        data-search-recovery={state.status === 'ready' ? undefined : state.status}
+        tabIndex={-1}
+        aria-busy={state.status === 'loading'}
+        className="space-y-4"
+      >
+        {dirty ? (
+          <p role="status" className="text-muted-foreground">
+            {m.character_person_apply_changes({}, options)}
+          </p>
+        ) : sparse ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            {m.character_person_page_empty({}, options)}
+          </p>
+        ) : (
+          <DiscoveryResults
+            state={state}
+            locale={locale}
+            {...(state.status === 'restart' ? { restartHref: facts.firstHref } : {})}
+          />
+        )}
+        {!dirty && ['unavailable', 'not-ready', 'preparing'].includes(state.status) && (
+          <button
+            type="button"
+            className={buttonVariants({ variant: 'outline' })}
+            onClick={() => {
+              if (current()) void query.refetch({ cancelRefetch: false });
+            }}
+          >
+            {m.character_person_retry({}, options)}
+          </button>
+        )}
+      </section>
+      {!dirty && facts.enabled && <CharacterPersonWindowLinks locale={locale} facts={facts} next={next} />}
     </main>
   );
 }

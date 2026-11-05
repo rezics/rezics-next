@@ -10354,5 +10354,6 @@
   "library_rule_results_empty": "La regla está lista. La primera página está agotada y no tiene miembros.",
   "library_rule_results_page_empty": "La regla está lista. Esta página no tiene miembros; puede haber más páginas.",
   "library_rule_results_incomplete": "No se aplicaron algunas condiciones, por lo que esta respuesta no confirma un resultado vacío.",
-  "library_rule_results_retry": "Volver a leer la regla guardada"
+  "library_rule_results_retry": "Volver a leer la regla guardada",
+  "character_person_results": "Resultados de personajes y personas"
 }
