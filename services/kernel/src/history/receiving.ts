@@ -14,11 +14,15 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { lockZoneHead } from '../zones/resource-store.ts';
 import { commandHistoryKind } from './record.ts';
 import { agentIdentityCopyRetentionGap } from './agent-identity-source.ts';
-import { encodeLocator, validateLocator, validateScope } from './locator.ts';
+import { decodeLocator, encodeLocator, validateLocator, validateScope } from './locator.ts';
 import { lockNativeFamilyCoverage, type NativeFamilyCoverage } from './family-coverage-state.ts';
 import type { AccountErasureSearchObservation } from '../search/account-erasure-source.ts';
+import { ACCOUNT_ROLE_BITS, classifyEvent, ZONE_HISTORY_EVENT_TYPES, ZONE_HISTORY_RECEIPT_KINDS } from './contracts.ts';
+import type { HistoryReceivingDiscriminant, ZoneHistoryCleanupBinding, ZoneHistoryEventType } from './contracts.ts';
+import zoneSource from './zone-consumers.sql';
 import {
   HISTORY_PRODUCER_FAMILIES,
   type HistoryArtifact,
@@ -32,6 +36,7 @@ export type HistoryReceivingDependencies = Readonly<{
 }>;
 export type HistoryReceivingContext = Readonly<{
   deadline: number;
+  discriminant?: HistoryReceivingDiscriminant;
   identityConsumerWork?: IdentitySourceConsumerMaintenanceWork;
   accountErasureSearchObservation?: AccountErasureSearchObservation;
   recoveryReceivingReserved?: boolean;
@@ -46,6 +51,7 @@ export type HistoryOwnerCoverageResult =
 
 type ReceiptBinding = Readonly<{
   barrier: HistoryBarrier;
+  discriminant: HistoryReceivingDiscriminant;
   partition: number;
   locator: Buffer;
   roleDigest: Buffer;
@@ -84,6 +90,232 @@ export async function lockHistoryBarrier(tx: CommandTransaction, barrier: Histor
     ])
   ).rows[0];
   return row?.version === barrier.version && row?.at === barrier.at;
+}
+
+export type ZoneHistoryConsumerObservation =
+  | Readonly<{ state: 'pending'; gap: string }>
+  | Readonly<{
+      state: 'closed';
+      zoneId: string;
+      sourceKey: string;
+      sourceTransactionId: string;
+      sourcePosition: string;
+      eventType: ZoneHistoryEventType;
+      eventPosition: string;
+      eventSeq: number;
+      consumer: 'semantic_erasure_locator';
+      receivingHolds: 'released';
+    }>;
+
+const ZONE_RECEIPT_KIND_SET = new Set<string>(ZONE_HISTORY_RECEIPT_KINDS);
+const ZONE_EVENT_TYPE_SET = new Set<string>(ZONE_HISTORY_EVENT_TYPES);
+
+function sameZoneBinding(a: ZoneHistoryCleanupBinding, b: ZoneHistoryCleanupBinding): boolean {
+  return (
+    a.kind === b.kind &&
+    a.accountId === b.accountId &&
+    a.accountRoute === b.accountRoute &&
+    a.barrierVersion === b.barrierVersion &&
+    a.barrierAt === b.barrierAt &&
+    a.zoneId === b.zoneId &&
+    a.zoneRoute === b.zoneRoute &&
+    a.originalHome === b.originalHome &&
+    a.originalEpoch === b.originalEpoch &&
+    a.ownerId === b.ownerId &&
+    a.ownerTransactionId === b.ownerTransactionId &&
+    a.zoneRevision === b.zoneRevision &&
+    a.lifecycleRevision === b.lifecycleRevision &&
+    a.deletionGeneration === b.deletionGeneration &&
+    a.protectionRevision === b.protectionRevision
+  );
+}
+
+function sameDiscriminant(
+  a: HistoryReceivingDiscriminant | undefined,
+  b: HistoryReceivingDiscriminant | undefined,
+): boolean {
+  const left = a ?? { kind: 'account-erasure' as const };
+  const right = b ?? { kind: 'account-erasure' as const };
+  return left.kind === 'account-erasure'
+    ? right.kind === 'account-erasure'
+    : right.kind === 'zone-cleanup' && sameZoneBinding(left.binding, right.binding);
+}
+
+function zoneIdFromSourceKey(sourceKey: string): string | null {
+  const value = JSON.parse(sourceKey) as unknown;
+  if (!Array.isArray(value) || value.length !== 2 || value[0] !== 'zone' || typeof value[1] !== 'string') return null;
+  return routeOf(value[1]) === null ? null : value[1];
+}
+
+/** Reads one exact Zone command's native consumer and receiving custody. A terminal owner
+ * copy requires Semantic's explicit branch binding; actor/provenance copies can close under
+ * the account barrier when the Zone belongs to another live owner. This returns an in-transaction
+ * observation only and creates no acknowledgement or durable receipt. */
+export async function observeZoneHistoryConsumerClosure(
+  tx: CommandTransaction,
+  artifact: HistoryArtifact,
+  barrier: HistoryBarrier,
+  binding?: ZoneHistoryCleanupBinding,
+): Promise<ZoneHistoryConsumerObservation> {
+  const pending = (gap: string): ZoneHistoryConsumerObservation => ({ state: 'pending', gap });
+  if (!hasLiveCommandTransaction(tx) || currentCommand(tx).partition !== artifact.partition)
+    return pending('zone-history-native-home-unavailable');
+  if (artifact.locator.artifactType === 'durable-work/v1')
+    return pending('zone-history-durable-work-inventory-unavailable');
+
+  const own = artifact.accounts.find(
+    (account) => account.accountId === barrier.accountId && account.accountRoute === barrier.accountRoute,
+  );
+  const ownerRole = own !== undefined && (own.roles & ACCOUNT_ROLE_BITS.owner) !== 0;
+  if (binding) {
+    if (
+      binding.accountId !== barrier.accountId ||
+      binding.accountRoute !== barrier.accountRoute ||
+      binding.barrierVersion !== barrier.version ||
+      binding.barrierAt !== barrier.at ||
+      binding.ownerId !== barrier.accountId ||
+      binding.zoneRoute !== routeOf(binding.zoneId) ||
+      binding.originalHome !== artifact.partition ||
+      partitionOf(binding.zoneRoute) !== binding.originalHome
+    )
+      return pending('zone-history-terminal-binding-changed');
+  } else if (ownerRole) return pending('zone-history-terminal-account-branch-required');
+
+  // The lookup is deliberately non-locking: discover the parent first, then lock Zone before
+  // its native copy/hold rows, matching the existing Zone consumer fence order.
+  const rawSource = (
+    await tx.query<{ source_key: string }>(
+      `SELECT source_key FROM core.record_history_locator
+       WHERE partition_no=$1 AND artifact_type=$2 AND locator=$3
+       ORDER BY source_key LIMIT 2`,
+      [artifact.partition, artifact.locator.artifactType, Buffer.from(encodeLocator(artifact.locator))],
+    )
+  ).rows;
+  if (rawSource.length !== 1) return pending('zone-history-source-inventory-unavailable');
+  const foundZoneId = zoneIdFromSourceKey(rawSource[0]!.source_key);
+  if (!foundZoneId) return pending('zone-history-source-inventory-unavailable');
+  const zoneId = binding?.zoneId ?? foundZoneId;
+  const route = binding?.zoneRoute ?? routeOf(zoneId);
+  if (route === null || foundZoneId !== zoneId) return pending('zone-history-source-binding-changed');
+
+  const zone = await lockZoneHead(tx, route, zoneId);
+  if (!zone) return pending('zone-history-source-missing');
+  if (binding) {
+    if (
+      zone.ownerId !== binding.ownerId ||
+      zone.transactionId !== binding.ownerTransactionId ||
+      zone.revision !== binding.zoneRevision ||
+      zone.lifecycleRevision !== binding.lifecycleRevision
+    )
+      return pending('zone-history-current-owner-custody-changed');
+  } else if (zone.ownerId === barrier.accountId) return pending('zone-history-terminal-account-branch-required');
+
+  const home = (
+    await tx.query<{ epoch: number; write_state: string }>(
+      'SELECT epoch,write_state FROM core.partition WHERE partition_no=$1 FOR SHARE',
+      [artifact.partition],
+    )
+  ).rows[0];
+  if (home?.write_state !== 'active') return pending('zone-history-native-home-unavailable');
+  if (binding && home.epoch !== binding.originalEpoch)
+    return pending('zone-history-home-epoch-changed');
+  if (!(await lockHistoryBarrier(tx, barrier))) return pending('zone-history-terminal-barrier-unavailable');
+
+  const sourceKey = JSON.stringify(['zone', zoneId]);
+  const locatorBytes = Buffer.from(encodeLocator(artifact.locator));
+  const sourceRows = await zoneSource.run(tx, {
+    partition: artifact.partition,
+    source_key: sourceKey,
+    artifact_type: artifact.locator.artifactType,
+    locator: locatorBytes,
+  });
+  if (sourceRows.length !== 1 || sourceRows[0]!.producer_version !== 1)
+    return pending('zone-history-source-inventory-unavailable');
+  const source = sourceRows[0]!;
+  if (!source.originalTransaction || !source.originalPosition)
+    return pending('zone-history-source-position-unavailable');
+
+  const openHold = await tx.query(
+    `SELECT hold_id FROM semantic.record_purge_hold
+     WHERE partition_no=$1 AND source_key=$2 AND released=false
+     ORDER BY hold_id LIMIT 1 FOR SHARE`,
+    [artifact.partition, sourceKey],
+  );
+  if (openHold.rows.length) return pending('zone-history-receiving-hold-open');
+
+  let eventLocator: Extract<HistoryArtifact['locator'], { artifactType: 'outbox-event/v1' }>;
+  if (artifact.locator.artifactType === 'outbox-event/v1') {
+    eventLocator = artifact.locator;
+  } else {
+    const events = await tx.query<{ locator: Buffer }>(
+      `SELECT locator FROM core.record_history_locator
+       WHERE source_key=$1 AND partition_no=$2 AND original_transaction=$3::uuid AND original_position=$4::bigint
+         AND artifact_type='outbox-event/v1'
+       ORDER BY locator LIMIT 2 FOR SHARE`,
+      [sourceKey, artifact.partition, source.originalTransaction, source.originalPosition],
+    );
+    if (events.rows.length !== 1) return pending('zone-history-command-event-custody-unavailable');
+    const decoded = decodeLocator('outbox-event/v1', events.rows[0]!.locator);
+    if (decoded.artifactType !== 'outbox-event/v1' || decoded.position.toString() !== source.originalPosition)
+      throw new TypeError('Zone receipt event locator differs from its source command');
+    eventLocator = decoded;
+  }
+
+  const event = (
+    await tx.query<{ type: string }>(
+      `SELECT type FROM core.outbox WHERE partition_no=$1 AND position=$2 AND event_seq=$3 FOR SHARE`,
+      [artifact.partition, eventLocator.position.toString(), eventLocator.eventSeq],
+    )
+  ).rows[0];
+  if (!event || !ZONE_EVENT_TYPE_SET.has(event.type))
+    return pending('zone-history-event-inventory-unavailable');
+  const classification = classifyEvent(event.type);
+  if (classification.kind !== 'non-personal') throw new TypeError('Zone base event classification changed');
+  if (
+    artifact.locator.artifactType === 'outbox-event/v1' &&
+    (artifact.locator.position !== eventLocator.position || artifact.locator.eventSeq !== eventLocator.eventSeq)
+  )
+    throw new TypeError('Zone outbox locator differs from its source command');
+
+  const delivery = (
+    await tx.query<{ complete: boolean }>(
+      `SELECT complete FROM semantic.erasure_delivery
+       WHERE partition_no=$1 AND source_position=$2::bigint FOR SHARE`,
+      [artifact.partition, source.originalPosition],
+    )
+  ).rows[0];
+  if (!delivery) return pending('zone-erasure-locator-consumer-unobserved');
+  if (!delivery.complete) return pending('zone-erasure-locator-consumer-open');
+
+  return {
+    state: 'closed',
+    zoneId,
+    sourceKey,
+    sourceTransactionId: source.originalTransaction,
+    sourcePosition: source.originalPosition,
+    eventType: event.type as ZoneHistoryEventType,
+    eventPosition: eventLocator.position.toString(),
+    eventSeq: eventLocator.eventSeq,
+    consumer: 'semantic_erasure_locator',
+    receivingHolds: 'released',
+  };
+}
+
+async function isZoneHistoryArtifact(tx: CommandTransaction, artifact: HistoryArtifact): Promise<boolean> {
+  if (artifact.locator.artifactType === 'command-receipt/v1') {
+    const kind = commandHistoryKind(artifact.locator.commandKindId);
+    return kind !== undefined && ZONE_RECEIPT_KIND_SET.has(kind);
+  }
+  if (artifact.locator.artifactType === 'outbox-event/v1') {
+    const event = (
+      await tx.query<{ type: string }>(
+        `SELECT type FROM core.outbox WHERE partition_no=$1 AND position=$2 AND event_seq=$3 FOR SHARE`,
+        [artifact.partition, artifact.locator.position.toString(), artifact.locator.eventSeq],
+      )
+    ).rows[0];
+    return event !== undefined && ZONE_EVENT_TYPE_SET.has(event.type);
+  }
+  return false;
 }
 
 function scopeDigest(artifact: HistoryArtifact): Buffer {
@@ -143,6 +375,18 @@ export async function recordHistoryReceivingProof(
   if (partition !== partitionOf(barrier.accountRoute)) return 'history-receiving-barrier-home-unavailable';
   if (hasLiveCommandTransaction(tx) && currentCommand(tx).partition !== partition)
     return 'history-receiving-artifact-home-unavailable';
+  const zoneArtifact = await isZoneHistoryArtifact(tx, { partition, locator, accounts: [] });
+  if (context?.discriminant?.kind === 'zone-cleanup' && !zoneArtifact)
+    return 'zone-history-receiving-artifact-mismatch';
+  if (zoneArtifact) {
+    const zoneClosure = await observeZoneHistoryConsumerClosure(
+      tx,
+      { partition, locator, accounts: [] },
+      barrier,
+      context?.discriminant?.kind === 'zone-cleanup' ? context.discriminant.binding : undefined,
+    );
+    if (zoneClosure.state === 'pending') return zoneClosure.gap;
+  }
   if (locator.artifactType === 'durable-work/v1') {
     const { currentAgentIdentityHistoryUnit, assertAgentIdentityHistoryUnit } =
       await import('./agent-identity-retirement.ts');
@@ -395,6 +639,17 @@ async function nativeReceipt(
   // No foreign root read may occur while the artifact home is held. A released
   // observation cannot carry that root lock into this transaction.
   if (artifact.partition !== partitionOf(barrier.accountRoute)) return null;
+  const zoneArtifact = await isZoneHistoryArtifact(tx, artifact);
+  if (context?.discriminant?.kind === 'zone-cleanup' && !zoneArtifact) return null;
+  if (zoneArtifact) {
+    const closure = await observeZoneHistoryConsumerClosure(
+      tx,
+      artifact,
+      barrier,
+      context?.discriminant?.kind === 'zone-cleanup' ? context.discriminant.binding : undefined,
+    );
+    if (closure.state === 'pending') return null;
+  }
   if (!(await lockHistoryBarrier(tx, barrier))) return null;
   if (await historyReceivingGap(tx, artifact.partition, artifact.locator, barrier, pool, context)) return null;
   const digest = scopeDigest(artifact);
@@ -443,6 +698,7 @@ async function nativeReceipt(
     return null;
   return {
     barrier: Object.freeze({ ...barrier }),
+    discriminant: structuredClone(context?.discriminant ?? { kind: 'account-erasure' as const }),
     partition: artifact.partition,
     locator: encoded,
     roleDigest: digest,
@@ -458,6 +714,7 @@ export async function readHistoryReceivingReceipt(
 ): Promise<HistoryReceivingReceipt | null> {
   validateBarrier(barrier);
   historyDeadline(context, artifact.partition);
+  const discriminant = structuredClone(context.discriminant ?? { kind: 'account-erasure' as const });
   // Do not expose a capability retaining caller-owned mutable arrays or buffers.
   const fixedArtifact = structuredClone(artifact);
   const fixedBarrier = Object.freeze({ ...barrier });
@@ -494,7 +751,7 @@ export async function readHistoryReceivingReceipt(
   );
   if (!binding) return null;
   const receipt = Object.freeze({}) as HistoryReceivingReceipt;
-  receipts.set(receipt, binding);
+  receipts.set(receipt, { ...binding, discriminant });
   return receipt;
 }
 
@@ -504,12 +761,14 @@ export async function verifyHistoryReceivingReceipt(
   barrier: HistoryBarrier,
   artifact: HistoryArtifact,
   receipt: HistoryReceivingReceipt,
+  context?: HistoryReceivingContext,
 ): Promise<boolean> {
   const bound = receipts.get(receipt);
   if (
     !bound ||
     currentCommand(tx).partition !== partitionOf(barrier.accountRoute) ||
     !sameBarrier(bound.barrier, barrier) ||
+    !sameDiscriminant(bound.discriminant, context?.discriminant) ||
     bound.partition !== artifact.partition ||
     !bound.locator.equals(Buffer.from(encodeLocator(artifact.locator))) ||
     !bound.roleDigest.equals(scopeDigest(artifact))
@@ -531,7 +790,7 @@ export async function verifyHistoryReceivingReceipt(
     );
   }
   const { pool } = currentCommandResources(tx);
-  const current = await nativeReceipt(tx, barrier, artifact, pool);
+  const current = await nativeReceipt(tx, barrier, artifact, pool, context);
   return current !== null && current.epoch === bound.epoch && current.roleDigest.equals(bound.roleDigest);
 }
 

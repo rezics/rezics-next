@@ -4,6 +4,7 @@ import { verifyAgentIdentityRecoveryArtifactReadiness } from '../history/agent-i
 import { admitSharedHistory } from './shared-history.ts';
 import { advancePendingContextRoleProvenance, type ContextRoleOccurrence } from './shared-history-context.ts';
 import type { HistoryReceivingContext } from '../history/receiving.ts';
+import { registerZoneHistoryConsumers } from '../history/zone-consumers.ts';
 
 /** One native receiving worker. Its progress, barrier and errors are never a DBOS argument or
  * generic effect payload. Pending jobs sleep until an actual custody/registration change. */
@@ -12,6 +13,7 @@ export const sharedHistoryWorkModule: WorkModule = {
   register(context) {
     const history = context.history;
     if (!history || !context.addNativeEffects) throw new Error('Shared history requires native work composition');
+    registerZoneHistoryConsumers({ history });
     history.registerOwner({
       name: 'library.entry.retention.purge',
       artifactType: 'command-receipt/v1',

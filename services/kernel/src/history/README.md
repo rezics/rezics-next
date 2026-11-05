@@ -1,5 +1,40 @@
 # History
 
+## Zone receipts, outbox events and current closure boundary
+
+The delivered Zone producer cut is the five native command receipts `zone.create`, `zone.configure`,
+`zone.publish`, `zone.delete` and `zone.restore`, plus their five outbox events
+`com.rezics.zone.{created,configured,published,deleted,restored}.v1`. The event schemas are exactly `{ id, revision }`;
+`contracts.ts` keeps them nonpersonal. Receipt responses still carry configuration and actor/provenance associations,
+so they follow the existing physical minimizer after their real consumer and receiving obligations close. The current
+rebuilt Zone owner has no `durable-work/v1` producer. History registers only the receipt and event coverage and leaves
+`zones:durable-work/v1` visible in `HistoryRegistry.familyGaps` until its native producer and consumer are delivered.
+
+`registerZoneHistoryConsumers` in `zone-consumers.ts` is called by `access/shared-history-work.ts`. It registers the
+exact ten producer names and owner callbacks. Each callback uses `observeZoneHistoryConsumerClosure` in
+`receiving.ts`, which resolves the original `core.record_history_locator`, verifies its native outbox event and
+`semantic.erasure_delivery` completion, and requires every `semantic.record_purge_hold` for that source to be
+released. A delivery row must exist and be complete; an accepted event, a workflow state, a missing row, or an empty
+walk does not close the consumer. The observation carries the exact Zone source key, original transaction/position,
+event type/position/sequence, consumer name and released-hold state. No new acknowledgement row is written.
+
+The receiving input remains the existing `HistoryReceivingContext`. Ordinary account erasure uses its default
+`{ kind: 'account-erasure' }` discriminant. A future Semantic terminal-Account caller supplies
+`{ kind: 'zone-cleanup', binding }`, where the binding carries the committed account barrier and the exact Zone
+original home/epoch, captured owner/transaction, resource/lifecycle revisions, deletion generation and protection
+revision. The output is either a pending native gap or an in-transaction `ZoneHistoryConsumerObservation`; it is not
+`RecordPurgeAuthority`, a Zone CAS result, physical-minimizer completion or an all-copy acknowledgement. The existing
+`readHistoryReceivingReceipt`, `recordHistoryReceivingProof` and `verifyHistoryReceivingReceipt` carry this context
+to their native same-transaction checks. Use `bun run --cwd services/kernel check test/history/zone-consumers.test.ts`
+for the focused owner regression.
+
+Decision: register only the ten proven receipt/event producers and keep the absent Zone durable-work family open
+until its native producer and closure owner land. The single cleanup policy is [Zones](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup).
+
+Semantic's sole Zone lifecycle owner operation is still undelivered. The next owner seam must lock and bind the
+committed account barrier, original Zone owner/transaction custody, current lifecycle/protection state and durable
+source/copy progress before it passes the existing receiving context. See `.temp/continuation/zone-history-semantic.md`.
+
 ## Recovered Account identity serializers
 
 The original Account command and its later `access.agent-identity.recover` command have separate native cuts. The
@@ -475,4 +510,4 @@ The delivered Core lifetime is now bound by the selected adapter and is not a mi
 term. Missing complete partitions still refuse before affected child I/O, and missing
 physical/native enrollment refuses the affected final proof. No complete Account erasure
 or all-copy completion is asserted.
-History closes actual Zone receipt/outbox/work consumers and their physical artifacts. A pending branch-aware minimizer must bind the same generation/version and await source inventory/pages, copies, released holds and late effects. No new receipt or ACK is adopted. See the [Zones cleanup contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup); current History support does not complete Zone cleanup.
+History closes the delivered Zone receipt/outbox consumers only when their exact Semantic delivery and receiving holds are closed. The complete branch-aware minimizer must still bind the same generation/version and await source inventory/pages, copies, released holds and late effects. No new receipt or ACK is adopted. See the [Zones cleanup contract](../../../../docs/zones.md#deletion-restoration-withholding-and-durable-cleanup); History support does not complete Zone cleanup.
