@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { chromium, type Browser } from '../packages/ui/node_modules/playwright/index.mjs';
+import { chromium } from '../packages/ui/node_modules/playwright/index.mjs';
 import {
   classifySection,
   formatLine,
@@ -184,17 +184,8 @@ const pages = {
   </body></html>`,
 };
 
-let browser: Browser;
-
-beforeAll(async () => {
-  browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
-});
-
-afterAll(async () => {
-  await browser?.close();
-});
-
 test('fixture pages reproduce WEB, API and SEED through the CLI runner', async () => {
+  const browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
   const web = Bun.serve({
     port: 0,
     fetch(request) {
@@ -239,6 +230,7 @@ test('fixture pages reproduce WEB, API and SEED through the CLI runner', async (
     expect(result.defects).toBeGreaterThan(0);
     expect(result.results.every((entry) => printed.includes(formatLine(entry)))).toBe(true);
   } finally {
+    await browser.close();
     web.stop(true);
     kernel.stop(true);
   }
