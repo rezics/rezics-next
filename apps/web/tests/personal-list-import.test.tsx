@@ -64,6 +64,14 @@ function row(ordinal: number): VndbRow {
   };
 }
 
+function matchedRow(): VndbRow {
+  return {
+    ...row(0),
+    match: { status: 'matched', candidates: [subject] },
+    target: { targetId: subject, states: [{ id: 'reading', labels: { en: 'Reading' } }], baseline: null },
+  };
+}
+
 function scoredRow(): VndbRow {
   const scored = row(0);
   scored.fields.score = { kind: 'value', raw: '07.0', value: 7, scale: { min: 1, max: 10, step: 0.1 } };
@@ -386,7 +394,7 @@ test('sends XML to native admission without a browser size guard or local previe
 });
 
 test('confirms only reviewed rows and retries an unknown apply with the identical command', async () => {
-  const rows = [row(0)];
+  const rows = [matchedRow()];
   const commands: Extract<VndbCommand, { kind: 'apply' }>[] = [];
   let attempts = 0;
   const journey = createVndbJourney({
@@ -575,7 +583,7 @@ test('a lost review acknowledgement freezes its body and key and a new review ne
     visit: visit(),
     port: makePort({
       preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
-      page: async () => ({ kind: 'page', value: pageValue([row(0)]) }),
+      page: async () => ({ kind: 'page', value: pageValue([matchedRow()]) }),
       review: async (command) => {
         commands.push(command);
         if (commands.length === 4) return { kind: 'denied', status: 403 };

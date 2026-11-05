@@ -4,6 +4,7 @@ import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import {
   quotedVndbKey,
+  type VndbBaseline,
   type VndbCommand,
   type VndbFailure,
   type VndbPage,
@@ -55,6 +56,30 @@ export async function withVndbSession(
     if (isPlatformClosedError(error)) return { kind: 'unavailable', status: 503 };
     throw error;
   }
+}
+
+/** One owner-authorized current Entry read for an explicitly chosen catalogue target. */
+export async function readVndbTargetEntry(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  originConfigured: boolean,
+  expectedSubject: string,
+  targetId: string,
+): Promise<{ kind: 'target-entry'; baseline: VndbBaseline } | VndbFailure> {
+  const auth = await withVndbSession(request, sessionEnv, originConfigured, expectedSubject);
+  if ('kind' in auth) return auth;
+  const response = await client.libraryEntries({ subjectId: targetId }).get({
+    headers: { authorization: auth.authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+  if (response.status === 404) return { kind: 'target-entry', baseline: null };
+  if (response.error) return failure(response.status, response.error);
+  const entry = response.data!.libraryEntry;
+  return {
+    kind: 'target-entry',
+    baseline: { state: entry.state, revision: entry.revision, incarnationId: entry.incarnationId ?? null },
+  };
 }
 
 export function kernelVndbPort(

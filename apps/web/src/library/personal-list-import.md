@@ -9,8 +9,10 @@ Web owns a signed-in visit for a person's own VNDB XML export. Commerce owns pri
 row review, and application. The Kernel routes are mounted at `/v1/libraryImports/vndb`, and the native contract is
 documented in [Personal VNDB list import](../../../../docs/library-import-vndb.md). The installed `@rezics/client`
 surface exposes typed `libraryImports.vndb` methods for preview, bounded page reads, source evidence, state review,
-score review, apply, cancel, and deletion. Current native page evidence determines whether a particular score action
-is admitted. An unavailable conditional native writer remains an unavailable result, never a successful vote.
+score review, apply, cancel, and deletion. Its released conditional score branch carries the current question, counted
+own vote, native units and explicit consent. Native admission decides each effect; an unavailable conditional native
+writer remains an unavailable result, never a successful vote. Web never substitutes an aggregate or a source-scale
+value for a current own vote.
 
 Decision: display native `fields.score` with its exact raw spelling, retaining `fields.vote` compatibility; keep the
 installed generated request types as the boundary for independent state and score commands.
@@ -21,21 +23,23 @@ authoritative page without a decision removes the previous local selection.
 
 Decision: derive page, review and apply-result types from the installed generated methods, freeze apply operands
 when confirmation opens, and withdraw the previous selection as soon as replacement review begins, including refusal.
-The generated declarations include score review and context fields; state commands select the generated state
-branch and require state review IDs. Score commands retain their separate score review IDs and exact target,
-question revision, selection and consent. Neither review authorizes the other effect.
+The generated declarations include state, Progress and score review branches; state commands select the generated
+state branch and require state review IDs. Score commands retain their separate score review IDs and exact target,
+question revision, selection and consent. Neither review authorizes the other effect. A new explicit match refreshes
+the retained native page before score consent, so the target and its counted vote come from the same current native
+observation. A failed refresh retries the read and retains the acknowledged review.
 
-Decision: derive score-only aliases from generated fields; source replacement
-immediately retires private review authority even if deletion fails, and a credential change permanently retires its visit.
-Replacement retains only the upload identifier and exact cleanup/new-preview retry commands until native cleanup
-succeeds. It cannot reread the retired source, recover its selection or confirm an older review. A lost cleanup
-acknowledgement retries the same deletion before submitting the replacement XML.
+Decision: derive score-only aliases from generated fields; source replacement immediately retires private review
+authority even if deletion fails, and a credential change permanently retires its visit. Replacement retains only the
+upload identifier and exact cleanup/new-preview retry commands until native cleanup succeeds. It cannot reread the
+retired source, recover its selection or confirm an older review. A lost cleanup acknowledgement retries the same
+deletion before submitting the replacement XML.
 
 Decision: all four import visits share browser-observation retirement, including a same-credential A→B→A round trip,
 and remount private state for each observation and locale. Bind AniList through the callable generated client surface;
 copy retained-label selections before review, withdraw old confirmation before replacement review, and retry only the
-captured command. MAL retains only its bounded uncertain command custody for the returning owner. AniList custom
-lists become private labels under their separate owner contract; creating Collections remains a separate action.
+captured command. MAL retains only its bounded uncertain command custody for the returning owner. AniList custom lists
+become private labels under their separate owner contract; creating Collections remains a separate action.
 
 The native source accepts only the person's uploaded `vndb-export version="1.0"` XML. It does not claim another
 account, fetch provider data, create catalogue subjects or identities, publish reviews, or turn private notes into
@@ -45,13 +49,13 @@ admitted state replacement. Web calls the generated client methods directly and 
 synchronizer, or native implementation.
 
 Native preview maps only an explicitly selected released Library state. VNDB status labels suggest roles but do not
-choose state IDs. Source scores retain their original 1–10 scale and do not automatically become local ratings.
-The review explains that 7.3 has no exact match on a
-native half-step scale, source 0 is invalid, native vote 0 is valid, and clearing is separate. Uploading a score or
-choosing a Library state does not grant consent for a public or aggregate vote; existing votes remain unchanged.
-Progress and units, date precision, notes, privacy, labels, reviews, release records, unknown XML, and unmapped
-metadata remain private source evidence unless a native owner admits a field. A private note never becomes a public
-review.
+choose state IDs. Source scores retain their original 1–10 scale and do not automatically become local ratings. This
+visit shows that source scale beside the released native question and counted own vote. The review explains that 7.3
+has no exact match on a native half-step scale, source 0 is invalid, native vote 0 is valid, and clearing is separate.
+Uploading a score or choosing a Library state does not grant consent for a public or aggregate vote; existing votes
+remain unchanged. Progress requires an explicit existing occurrence or start and released native measures; date
+precision, notes, privacy, labels, reviews, release records, unknown XML and unmapped metadata remain private evidence
+unless their native owner admits a field. A private note never becomes a public review.
 
 Upload errors must preserve native distinctions. Invalid XML and XML above 2 MiB return HTTP 400. The independently
 escaped JSON request wire limit is 12 MiB + 64 bytes and returns HTTP 413; browser `File.size` is not the wire size.
@@ -65,7 +69,8 @@ Score context cost follows the native owner: at most one question and one curren
 target on a page of eight rows. Each score review repeats that pair plus the bounded owner/upload read, tuple match,
 target observation, review receipt and locked decision update. The native owner reserves 32 KiB per possible page row
 within the existing 16 MiB evidence cap and keeps baselines and command operands within the 8 MiB decision bound.
-An apply admits at most eight total actions; native score admission and current counted readback determine vote effects. Journey
+An apply admits at most eight total actions and dispatches deliberate score effects only through the released
+conditional Content writer; native score admission and current counted readback determine each vote effect. Journey
 calls remain one upload plus bounded pages, explicit reviews, selected actions, lifecycle cleanup and exact retries.
 
 MAL remains a separate uploaded format with its existing native prerequisite and journey owner. VNDB has a separate
@@ -75,7 +80,15 @@ AniList, Bangumi and MAL confirmation pages admit source observations through th
 `libraryEntries(...).sourceObservations.post` method after the existing import apply. VNDB keeps its own generated
 client contract and does not add a second parser or provider synchronizer.
 
-Decision: after apply, an explicit fresh read shows up to eight current Library entries in activity order; normal Library navigation owns continuation, and returning to source review repeats its native page read.
+Decision: after apply, an explicit fresh read shows up to eight current Library entries in activity order, with
+native status, Progress and counted own-vote facts. Zero, absence and unavailable remain distinct in all layouts and
+inspection. Facts stay in native occurrence order; source scores and apply receipts cannot fill a missing read.
+One FULL page supplies these facts with no per-row query. Normal Library navigation owns continuation; returning
+to source review repeats its native page read. Result and Library work links retain the public-safe return landmark
+without carrying the private upload address.
+
+Selecting another catalogue target reads that owner's current Entry before replacement consent. The extra cost is
+one authenticated point read per selection and one eight-row native page refresh after a changed-target review.
 
 Decision: the mounted review address carries only the native upload UUID and bounded page offset. Reopening reads
 that owner's retained upload through the existing native page endpoint, restores acknowledged state outcomes, and
