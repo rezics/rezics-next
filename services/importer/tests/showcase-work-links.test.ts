@@ -21,7 +21,9 @@ const VNDB_DUMP_TABLES = [
   'producers_extlinks',
   'releases',
   'releases_extlinks',
+  'releases_media',
   'releases_producers',
+  'releases_platforms',
   'releases_supersedes',
   'releases_titles',
   'releases_vn',
@@ -42,6 +44,8 @@ const VNDB_DUMP_TABLES = [
 const VNDB_DUMP_HEADERS: Record<string, readonly string[]> = {
   extlinks: ['id', 'site', 'value'],
   producers_relations: ['id', 'pid', 'relation'],
+  releases_media: ['id', 'medium', 'qty'],
+  releases_platforms: ['id', 'platform'],
   tags: VNDB_PUBLIC_TAG_COLUMNS.tags,
   tags_parents: VNDB_PUBLIC_TAG_COLUMNS.tags_parents,
   tags_vn: VNDB_PUBLIC_TAG_COLUMNS.tags_vn,
