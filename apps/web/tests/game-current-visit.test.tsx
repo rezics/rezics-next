@@ -254,7 +254,7 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
     const readerReady = {
       ok: true,
       public: currentPublicRead,
-      digest: publicRelease.digest,
+      digest: currentPublicRead.subject.release,
       admitted: true,
       grain: readPickText(publicRelease.types['schema:VideoGame']!.labels, 'en'),
       groups: [
