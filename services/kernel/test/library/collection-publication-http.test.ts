@@ -112,5 +112,19 @@ describe('native whole-query publication through the existing default worker', (
       [routeOf(collection.id), collection.id, complete.publication.generation],
     );
     expect(receipt.rows).toEqual([{ generation: complete.publication.generation }]);
+    // The completed generation must be useful to its public consumers, not only visible in native tables.
+    for (const persona of [null, f.other]) {
+      const detail = await f.send('GET', `/v1/collections/${collection.id}`, undefined, persona);
+      expect(detail.status).toBe(200);
+      const body = await detail.json();
+      expect(body.collection.visibility).toBe('unlisted');
+      const page = await f.send('GET', `/v1/collections/${collection.id}/members`, undefined, persona);
+      expect(page.status).toBe(200);
+      const output = await page.json();
+      expect(output.members.map((member: { subjectId: string }) => member.subjectId).sort()).toEqual(
+        [...subjectIds].sort(),
+      );
+      expect(output.next).toBeNull();
+    }
   }, 120_000);
 });
