@@ -23,6 +23,7 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
     );
     const window = new Window({ url: 'https://rezics.example/en', width: 390 });
     window.document.documentElement.lang = 'en';
+    let narrow = true;
     // happy-dom has no text layout. Supply overflowing and short geometry; browser stories use real layout.
     Object.defineProperties(window.HTMLElement.prototype, {
       clientHeight: {
@@ -34,7 +35,7 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
       scrollHeight: {
         configurable: true,
         get() {
-          return (this.textContent?.length ?? 0) > 120 ? 144 : 24;
+          return narrow && (this.textContent?.length ?? 0) > 120 ? 144 : 24;
         },
       },
     });
@@ -172,6 +173,11 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
       expect(texts[0]!.classList.contains(clamp)).toBe(false);
       expect(texts[0]!.textContent).toBe(firstNote);
       expect(window.document.activeElement).toBe(first);
+      narrow = false;
+      await act(async () => resizeCallbacks.forEach((resize) => resize()));
+      expect(controlFor(texts[0]!)).toBe(first);
+      expect(first.getAttribute('aria-expanded')).toBe('true');
+      narrow = true;
       await act(async () => user.keyboard(' '));
       expect(first.getAttribute('aria-expanded')).toBe('false');
       expect(window.document.activeElement).toBe(first);
@@ -213,6 +219,17 @@ for (const presentation of ['occurrence list', 'member list', 'grid'] as const) 
       expect(host.querySelector('[data-collection-note-reader]')).toBeNull();
       await show(render([members[0]!]));
       expect(controlFor(notes()[0]!).getAttribute('aria-expanded')).toBe('false');
+      const retained = controlFor(notes()[0]!);
+      retained.focus();
+      narrow = false;
+      await act(async () => resizeCallbacks.forEach((resize) => resize()));
+      expect(controlFor(notes()[0]!)).toBe(retained);
+      expect(window.document.activeElement).toBe(retained);
+      await act(async () => user.tab({ shift: true }));
+      expect(controlFor(notes()[0]!)).toBeNull();
+      narrow = true;
+      await act(async () => resizeCallbacks.forEach((resize) => resize()));
+      expect(controlFor(notes()[0]!)).not.toBeNull();
       if (presentation !== 'occurrence list') {
         // Id-less supplied read rows must not carry expansion by their old array position.
         const idless = (note: string) => (
