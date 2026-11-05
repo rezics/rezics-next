@@ -351,9 +351,12 @@ export function useDiscoveryPersonalResults(input: {
         observation,
         observe: () => (owns() ? observation : undefined),
         registry: nativeRegistry.commands,
+        activate: () => {
+          pendingFocus.current = null;
+          captureFocus();
+        },
         retirePrivate: () => {
           if (!owns() || !current) return;
-          captureFocus();
           current.suppressed = true;
           setMounted({ owner: episode, value: { ...current } });
         },

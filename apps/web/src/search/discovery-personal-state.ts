@@ -107,6 +107,7 @@ export function createDiscoveryPersonalPage(input: {
   registry: DiscoveryCommandRegistry;
   refresh: (signal: AbortSignal) => Promise<void>;
   retirePrivate: () => void;
+  activate?: () => void;
 }) {
   const captured = structuredClone(input.observation);
   const encoded = new TextEncoder();
@@ -222,6 +223,7 @@ export function createDiscoveryPersonalPage(input: {
       try {
         // A subscription can retire the host synchronously when pending is published.
         if (retired || !owns()) return 'retired';
+        input.activate?.();
         result = await send(structuredClone(target), crypto.randomUUID());
       } catch {
         result = 'uncertain';
