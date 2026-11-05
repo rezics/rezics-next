@@ -70,12 +70,17 @@ export function CreatorSalesCurrent(props: Props) {
   }
   const [, wake] = useState(0);
   const live = useRef(active);
+  const mounted = useRef(false);
   live.current = active;
   useLayoutEffect(() => {
+    mounted.current = true;
     const cancel = () => { live.current.windows.focus = undefined; };
     document.addEventListener('focusin', cancel);
+    window.addEventListener('blur', cancel);
     return () => {
+      mounted.current = false;
       document.removeEventListener('focusin', cancel);
+      window.removeEventListener('blur', cancel);
       live.current.windows.focus = undefined;
     };
   }, []);
@@ -108,7 +113,7 @@ export function CreatorSalesCurrent(props: Props) {
       hydrated={current.hydrated}
       revision={admittedLoader.version}
       windows={active.windows}
-      settled={() => { if (live.current.windows === active.windows) wake((n) => n + 1); }}
+      settled={() => { if (mounted.current && live.current.windows === active.windows) wake((n) => n + 1); }}
       seed={active.transfer || current.seed || (admittedLoader.version > 0 && admittedLoader.origin === current.origin.id)}
     />
   );
@@ -197,6 +202,7 @@ function CurrentSalesRead({
     if (value?.page.kind !== 'ready' && value?.page.kind !== 'loading') windows.focus = undefined;
     if (windows.completed !== staged || !windows.admitting || !staged || staged.cursor !== cursor || value?.page.kind !== 'ready' || !sourceIsCurrent()) return;
     windows.coordinates.accept();
+    windows.completed = undefined;
     windows.admitting = false;
     const focus = windows.focus;
     windows.focus = undefined;
