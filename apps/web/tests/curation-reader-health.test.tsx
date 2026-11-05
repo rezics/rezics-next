@@ -330,7 +330,8 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     await settle(() => reads.length === 1, 'fresh A admission after batched ABA');
     await act(async () => reads[0]!.work.resolve(readFor(readerA, profileA, 7)));
     await settle(() => host.textContent?.includes(m.curation_unknown()) ?? false, 'retained original after A recovery');
-    expect(host.textContent).not.toContain('A later raw-language draft');
+    await openDetailsHeading();
+    expect(field('text.en')?.value).toBe('A later raw-language draft');
     const recoveredASelect = templateControl(m.curation_template()) as InstanceType<typeof window.HTMLSelectElement>;
     recoveredASelect.focus();
     const recoveredAStatuses = [...host.querySelectorAll('[role="status"]')].map((node) => node.textContent);
