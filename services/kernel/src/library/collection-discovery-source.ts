@@ -1,5 +1,6 @@
 /** Native indexing hints only. Current viewer hydration is a separate Commerce boundary. */
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
+import type { AccessClient } from '../request/access.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { FollowCountUnavailableError } from './follow-count-target.ts';
 import { readFollowCountHealthObservation, type FollowCountHealthObservation } from './follow-count-health.ts';
@@ -110,8 +111,16 @@ function compare(a: CollectionDiscoveryKey, b: CollectionDiscoveryKey) {
   return a.route - b.route || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
-async function item(client: PoolClient, key: CollectionDiscoveryKey, row?: Row): Promise<CollectionDiscoveryItem> {
+async function item(client: AccessClient, key: CollectionDiscoveryKey, row?: Row): Promise<CollectionDiscoveryItem> {
   if (!row || row.state !== 'active' || row.visibility !== 'public') return { key, status: 'withdrawn' };
+  const presentationKind: CollectionPresentationKind = row.presentationKind === null
+    ? { kind: 'mixed' }
+    : { kind: 'owner', id: row.presentationKind };
+  const recency: CollectionDiscoveryRecency = [
+    row.membershipKind === 'curated' ? row.updatedAtEpochMicros : null,
+    key.route,
+    key.id,
+  ];
   const common = {
     kind: 'collection' as const,
     key,
@@ -121,10 +130,10 @@ async function item(client: PoolClient, key: CollectionDiscoveryKey, row?: Row):
     presentationKind: row.presentationKind,
     coverMediaId: row.coverMediaId,
     operands: {
-      presentationKind: row.presentationKind === null ? { kind: 'mixed' } : { kind: 'owner', id: row.presentationKind },
+      presentationKind,
       subjectMembership: null,
       popularity: null,
-      recency: [row.membershipKind === 'curated' ? row.updatedAtEpochMicros : null, key.route, key.id],
+      recency,
     },
   };
   if (row.membershipKind === 'curated')
@@ -155,7 +164,7 @@ export function publicCollectionDiscoverySource({ pool }: { pool: Pool }): Colle
     partition: number,
     query: CollectionDiscoveryQuery | undefined,
     context: CollectionDiscoveryReadContext | undefined,
-    rows: (client: PoolClient) => Promise<{ keys: readonly CollectionDiscoveryKey[]; rows: Row[] }>,
+    rows: (client: AccessClient) => Promise<{ keys: readonly CollectionDiscoveryKey[]; rows: Row[] }>,
   ): Promise<CollectionDiscoverySnapshot> {
     try {
       return await withReadTransaction(pool, async (connection) => {

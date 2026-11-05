@@ -1,6 +1,7 @@
 import { withConnection } from '../database/pool.ts';
 import { consumerReady, readConsumerLag } from '../events/consumer-lag.ts';
-import type { Pool, PoolClient } from 'pg';
+import type { AccessClient } from '../request/access.ts';
+import type { Pool } from 'pg';
 import { countTransaction, type CountRuntime } from './follow-count-source.ts';
 import { FollowCountUnavailableError } from './follow-count-target.ts';
 
@@ -65,7 +66,7 @@ export async function sampleFollowCountHealth(deps: CountRuntime, partition: num
 }
 
 /** Constant root metadata in the caller's native snapshot. No partition/follower scan. */
-export async function readFollowCountHealthObservation(tx: PoolClient): Promise<FollowCountHealthObservation> {
+export async function readFollowCountHealthObservation(tx: AccessClient): Promise<FollowCountHealthObservation> {
   const row = (
     await tx.query<{
       ready: boolean;

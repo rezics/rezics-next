@@ -1,8 +1,8 @@
 /** Public, bounded context for a native Collection card. No saved query or personal facts. */
-import type { PoolClient } from 'pg';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
+import type { AccessClient } from '../request/access.ts';
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import type { SummaryReaderDependencies, SubjectSummary } from '../semantic/summaries.ts';
 
@@ -51,7 +51,7 @@ function disclosedCurator(account: AccountSummary | null, unavailableReason: 'de
  * Curated occurrences keep their native order; dynamic rows use only the selected published output.
  */
 export async function readDiscoveryMemberKeys(
-  client: Pick<PoolClient, 'query'>,
+  client: AccessClient,
   sources: readonly ContextSource[],
 ): Promise<ReadonlyMap<string, readonly DiscoveryMemberKey[]>> {
   const result = new Map<string, DiscoveryMemberKey[]>(sources.map(({ id }) => [id, []]));
@@ -98,7 +98,7 @@ export async function readDiscoveryMemberKeys(
 
 /** Indexed exact-Subject probes for a query operand; this never reads or materializes a Collection's members. */
 export async function readDiscoverySubjectMembership(
-  client: Pick<PoolClient, 'query'>,
+  client: AccessClient,
   sources: readonly ContextSource[],
   subjectId: string,
 ): Promise<ReadonlyMap<string, boolean>> {
