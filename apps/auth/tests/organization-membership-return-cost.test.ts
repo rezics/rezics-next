@@ -107,16 +107,19 @@ const { membershipProfile, newMembershipCommand, submitMembership, saveMembershi
     }) as typeof setTimeout;
     try {
       for (const stalledBody of [true, false]) {
+        let reachedExecute!: () => void;
+        const dispatch = new Promise<void>(resolve => { reachedExecute = resolve; });
         let release!: (r: Response) => void;
         const late = new Promise<Response>(resolve => { release = resolve; });
-        globalThis.fetch = ((input, init) => String(input).endsWith('/execute')
-          ? stalledBody ? new Response(new ReadableStream({ start() {}, cancel() {} })) : late
-          : ordinaryFetch(input, init)) as typeof fetch;
+        globalThis.fetch = ((input, init) => {
+          if (!String(input).endsWith('/execute')) return ordinaryFetch(input, init);
+          reachedExecute();
+          return stalledBody ? new Response(new ReadableStream({ start() {}, cancel() {} })) : late;
+        }) as typeof fetch;
         const attempt = newMembershipCommand(accountId!, command.operation);
         saveMembershipCommand(attempt);
         const pending = submitMembership(attempt);
-        // Allow the existing session/selected/approval promises to reach execute.
-        for (let i = 0; i < 100; i++) await Promise.resolve();
+        await dispatch;
         expire();
         expect(await pending).toBe('unknown');
         const saved = readMembershipCommand();

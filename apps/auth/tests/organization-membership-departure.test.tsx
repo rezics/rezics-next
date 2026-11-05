@@ -427,7 +427,7 @@ test('pagehide synchronously clears prepared authentication inputs and stale sig
   const normal = globalThis.fetch;
   globalThis.fetch = (async (input, init) =>
     String(input).endsWith('/approve')
-      ? Response.json({ code: 'step_up_required' }, { status: 401 })
+      ? Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 })
       : normal(input, init)) as typeof fetch;
   await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
   await click(m.auth_members_submit());
@@ -460,7 +460,7 @@ test('pagehide synchronously clears prepared authentication inputs and stale sig
   expect(host.querySelector('#membership-confirmation')).toBeNull();
 });
 
-test('a refused exact retry keeps first unknown and records the latest native refusal', async () => {
+test.each([403, 503])('a refused exact retry (%s) keeps first unknown and latest native refusal', async (status) => {
   await mount();
   execute = async () => Response.json({}, { status: 503 });
   await click(m.auth_members_change_role());
@@ -473,7 +473,7 @@ test('a refused exact retry keeps first unknown and records the latest native re
   await click(m.auth_members_retry_exact());
   expect(host.textContent).toContain(m.auth_members_unknown());
   expect(host.textContent).toContain(m.auth_members_return_refused());
-  expect(host.textContent).not.toContain(member);
+  if (status === 403) expect(host.textContent).not.toContain(member);
   expect(membership.readMembershipCommand()).toEqual(saved);
   expect(writes().filter((p) => p.endsWith('/approve'))).toHaveLength(1);
   expect(writes().filter((p) => p.endsWith('/execute'))).toHaveLength(2);

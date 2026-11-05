@@ -446,6 +446,7 @@ function outcome(status: number, code: string): MembershipOutcome {
 export async function submitMembership(
   command: MembershipCommand,
   isActive: () => boolean = () => true,
+  onNativeRefusal: () => void = () => {},
 ): Promise<MembershipOutcome> {
   if (!isActive() || !validCommand(command)) return 'denied';
   const original = { ...command };
@@ -473,7 +474,10 @@ export async function submitMembership(
       isActive,
     );
     if (!isActive()) return 'unavailable';
-    if (approved.kind === 'refused') return outcome(approved.status, approved.value.error);
+    if (approved.kind === 'refused') {
+      onNativeRefusal();
+      return outcome(approved.status, approved.value.error);
+    }
     if (approved.kind !== 'received' || Date.parse(approved.value.expiresAt) <= Date.now()) return 'unavailable';
     command.reference = approved.value.reference;
   }
@@ -503,6 +507,7 @@ export async function submitMembership(
   if (executed.kind === 'received')
     return executed.value.accountId === command.operation.memberAccountId ? 'acknowledged' : 'unknown';
   if (executed.kind === 'unavailable') return 'unknown';
+  onNativeRefusal();
   // This refusal establishes only this dispatch's effect. Earlier lost execution
   // stays unresolved, independently of the latest refusal shown by the mounted page.
   if (!earlierUnknown) {

@@ -683,7 +683,10 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setConfirmed(false);
         return;
       }
-      const result: MembershipOutcome = await submitMembership(command, isActive);
+      let nativeRefused = false;
+      const result: MembershipOutcome = await submitMembership(command, isActive, () => {
+        nativeRefused = true;
+      });
       if (!mounted.current) return;
       // Classify this original attempt before observing current membership, even
       // when private authority retired while its execution was in flight.
@@ -692,7 +695,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
           ? 'acknowledged'
           : result === 'unknown'
             ? 'unresolved'
-            : result === 'denied' || result === 'conflict' || result === 'step-up'
+            : nativeRefused || result === 'denied' || result === 'conflict' || result === 'step-up'
               ? 'refused'
               : 'unsent';
       phase.current = classification;
