@@ -1,5 +1,11 @@
 # Reaction caller lifetime
 
+Acceptance pairs the focused unavailable-Subject and mounted-thread lifetime regressions with a real development
+showcase thread and post. Two ordinary members independently add and remove an admitted reaction, refresh, and
+compare their own slot and public totals with fresh native reads after each write. An anonymous reader sees public
+totals without a member selection; returning through Home or Context retains one action host and the current
+reader's state. The existing reaction command and reader remain the authority throughout this journey.
+
 `ThreadReactions` owns one mounted reader/target visit. Changing target kind or ID, withdrawing signed-in admission
 or personal readiness, unmounting, or observing loss/replacement of the browser session retires that visit. Account
 and CSRF token are both identity fields. Replacing the QueryClient also creates a new visit, even with identical
