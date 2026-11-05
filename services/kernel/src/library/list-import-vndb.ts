@@ -1998,8 +1998,7 @@ export function createVndbImport(config: Config) {
           if (
             !stored?.active ||
             stored.decision.score?.reviewId !== score.reviewId ||
-            entryImportMetadataDigest(stored.row) !== score.sourceDigest ||
-            entryImportMetadataDigest(stored.decision.score) !== entryImportMetadataDigest(score)
+            entryImportMetadataDigest(stored.row) !== score.sourceDigest
           )
             throw new LibraryConflictError();
         };
