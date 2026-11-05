@@ -1696,7 +1696,7 @@ export function createVndbImport(config: Config) {
     initial: Decision | undefined,
     record: (outcome: CommandOutcome<unknown>) => void,
   ) {
-    const staleOutcome = { ordinal: choice.ordinal, reviewId: choice.reviewId, status: 'stale' };
+    const staleOutcome = { ordinal: choice.ordinal, reviewId: choice.reviewId, status: 'stale' as const, progress: null };
     if (!initial || initial.reviewId !== choice.reviewId || stateActionOf(initial) === null) return staleOutcome;
     let decision = initial;
     const action = stateActionOf(decision)!;
@@ -1947,10 +1947,10 @@ export function createVndbImport(config: Config) {
         const currentDecision = locked.rows[0]?.decision;
         if (!currentDecision || currentDecision.reviewId !== choice.reviewId) throw new LibraryConflictError();
         await save(tx, account, id, choice.ordinal, { ...currentDecision, ...nextDecision });
-        return { ordinal: choice.ordinal, reviewId: choice.reviewId, status };
+        return { ordinal: choice.ordinal, reviewId: choice.reviewId, status, progress: progress ?? null };
       },
     );
-    return { ordinal: choice.ordinal, reviewId: choice.reviewId, status, progress };
+    return { ordinal: choice.ordinal, reviewId: choice.reviewId, status, progress: progress ?? null };
   }
 
   /** The source owner contributes admission to the existing native vote command. */
