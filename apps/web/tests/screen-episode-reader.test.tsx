@@ -230,6 +230,23 @@ test('unknown totals keep a sparse disclosed window continuable and oversized ev
   const fixture = screenProfileFixture('ready', 'en', true, 'schema:TVSeries');
   const profile = await fixture.transport.load();
   if (!profile.ok || !profile.public) throw new Error('Expected a current Screen profile');
+  const terminalEmpty = await readScreenEpisodePage(
+    clientFor(linkPage([])),
+    profile.release,
+    profile.public,
+    'en',
+  );
+  expect(terminalEmpty).toEqual({ ok: true, state: 'empty', entries: [], next: null });
+  const emptyHtml = renderToStaticMarkup(
+    <ScreenEpisodeList
+      locale="en"
+      read={terminalEmpty}
+      release={profile.release}
+      origin={{ pathname: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory', searchStr: '' }}
+    />,
+  );
+  expect(emptyHtml).toContain('This film or series has no admitted profile facts yet.');
+
   const membership = statement(seasonMembership, profile.public.subject.id, ' 1/2 ');
   const sparse = await readScreenEpisodePage(
     clientFor(

@@ -93,6 +93,13 @@ export function SubjectCommunityRegion({
     ]),
   });
   if (!reading.available) region = { state: 'unavailable' };
+  const viewerActionsCurrent = community?.reader == null || reading.privateActionsCurrent();
+  if (!viewerActionsCurrent && region.state === 'ready') {
+    region = {
+      ...region,
+      threads: region.threads.map(({ actions: _actions, viewerReaction: _viewerReaction, ...thread }) => thread),
+    };
+  }
   const heading = useRef<HTMLHeadingElement>(null);
   const focused = useRef<EventTarget | null>(null);
   useLayoutEffect(() => {
@@ -143,8 +150,10 @@ export function SubjectCommunityRegion({
       aria-labelledby={`${id}-title`}
       className="min-w-0 space-y-4"
       onClickCapture={(event) => {
-        // A queued click must not navigate or reveal retired card content.
-        if (reading.available && !reading.isCurrent()) {
+        // A queued private command cannot outlive its observation; public body links remain usable.
+        const target = event.target;
+        const privateControl = target instanceof Element && target.closest('[data-slot="community-actions"]');
+        if (!reading.available || !reading.isCurrent() || (privateControl && !viewerActionsCurrent)) {
           event.preventDefault();
           event.stopPropagation();
         }
@@ -285,7 +294,7 @@ export function SubjectCommunityRegion({
                     thread={thread}
                     subject={subject}
                     locale={locale}
-                    reader={reader}
+                    reader={viewerActionsCurrent ? reader : null}
                     reactionsAsOf={reactionsAsOf}
                   />
                   <SubjectCommunityInteractions
@@ -294,7 +303,7 @@ export function SubjectCommunityRegion({
                     locale={locale}
                     href={threadHref}
                     contextId={community?.contextId ?? null}
-                    reader={reader}
+                    reader={viewerActionsCurrent ? reader : null}
                     source={community?.sourceKey ?? community?.now ?? ''}
                     reactionsAsOf={reactionsAsOf}
                     {...(refreshAdvice ? { refreshAdvice } : {})}

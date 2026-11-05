@@ -28,7 +28,7 @@ export const readViewerExposure = createServerFn({ method: 'GET' })
       const { env } = await import('cloudflare:workers');
       const { prepareSession, sessionSubject, viewerCredential } = await import('../session/request');
       const request = getRequest();
-      await prepareSession(request, env as Partial<SessionEnv>, { refresh: false });
+      await prepareSession(request, env as Partial<SessionEnv>);
       const subject = sessionSubject(request);
       const authorization = viewerCredential(request);
       // The expected subject can reject a read, but only the prepared request establishes its identity.
@@ -47,7 +47,7 @@ export function viewerExposureQuery(observation: ViewerObservation | undefined) 
       : (['exposure', 'viewer', 'closed'] as const),
     queryFn: () => (observation ? readViewerExposure({ data: observation.subject }) : Promise.resolve(closedExposure)),
     enabled: observation !== undefined,
-    staleTime: Infinity,
+    staleTime: (query) => (query.state.data?.state === 'unavailable' ? 0 : Infinity),
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
