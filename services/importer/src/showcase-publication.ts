@@ -620,9 +620,31 @@ type CandidateRead = {
 type CandidatePage = {
   candidates: CandidateRead[];
   next: unknown;
-  adoption: { head?: number | null; selection?: { candidate: string; rank: 'normal' | 'preferred' }[] } | null;
+  adoption:
+    | {
+        head?: number | null;
+        selection?: { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
+      }
+    | null;
 };
+type AdoptionSnapshot = Readonly<{
+  head: number;
+  selection: readonly { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
+}>;
 const nativeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+function sameAdoptionSelection(
+  left: readonly { candidate: string; rank: string }[],
+  right: readonly { candidate: string; rank: string }[],
+): boolean {
+  const sorted = (selection: readonly { candidate: string; rank: string }[]) =>
+    JSON.stringify([...selection].sort((a, b) => a.candidate.localeCompare(b.candidate)));
+  return sorted(left) === sorted(right);
+}
+
+function adoptionSnapshot(adoption: CandidatePage['adoption']): AdoptionSnapshot | null {
+  return adoption ? { head: adoption.head!, selection: adoption.selection! } : null;
+}
 
 function subjectId(read: ReviewedSubjectRead): string | null {
   const subject = read.subject as { id?: unknown } | undefined;
@@ -647,7 +669,20 @@ function safeCandidatePage(value: unknown): CandidatePage {
         !nativeUuid.test(candidate.id) ||
         !candidate.statement ||
         typeof candidate.statement !== 'object',
-    )
+    ) ||
+    (page.adoption !== null &&
+      (!page.adoption ||
+        !Number.isSafeInteger(page.adoption.head) ||
+        (page.adoption.head as number) < 1 ||
+        !Array.isArray(page.adoption.selection) ||
+        page.adoption.selection.some(
+          (selection) =>
+            !selection ||
+            typeof selection.candidate !== 'string' ||
+            !nativeUuid.test(selection.candidate) ||
+            typeof selection.rank !== 'string' ||
+            !['normal', 'preferred', 'deprecated'].includes(selection.rank),
+        )))
   )
     throw new TypeError('Invalid current candidate page');
   return page as CandidatePage;
@@ -1315,6 +1350,8 @@ export type ShowcasePublicationResult = Readonly<{
       qualifiers?: NonNullable<BatchStatement['qualifiers']>;
       rights?: Extract<BatchCommand, { op: 'propose' }>['rights'];
       target?: { sourceKey: string; subjectId: string; nativeType: string };
+      adoption: { head: number; candidateId: string; rank: 'normal' | 'preferred' | 'deprecated' };
+      readback: unknown;
     }[];
   }[];
   vndbWorkRelations: readonly VndbWorkRelationOutcome[];
@@ -1950,6 +1987,7 @@ export async function publishShowcase(input: {
   };
 
   const parentEvidence = manifest.tagParentEvidence ?? [];
+  const adoptionSnapshots = new Map<string, AdoptionSnapshot | null>();
   const parentOutcomeByPath = new Map(
     (manifest.tagParentPublications ?? []).map((publication) => [publication.path, publication]),
   );
@@ -2208,6 +2246,9 @@ export async function publishShowcase(input: {
       currentEdges.push(edge);
     }
     const previous = page.adoption;
+    const currentAdoption = adoptionSnapshot(previous);
+    const adoptionKey = groupKey(childId, 'skos:broader');
+    adoptionSnapshots.set(adoptionKey, currentAdoption);
     const priorSelection = Array.isArray(previous?.selection) ? previous.selection : [];
     const selections = new Map<string, 'normal' | 'preferred'>();
     let parentRetirementUnavailable = false;
@@ -2250,11 +2291,19 @@ export async function publishShowcase(input: {
     const action = actionKey('adopt', `${childId}:skos:broader`, showcaseDigest({ intent: manifest.digest, body }));
     const idempotencyKey = actionIdempotencyKey(body);
     const priorAction = input.journal.action(action);
-    if (priorAction?.state !== 'acknowledged') {
+    if (
+      priorAction?.state !== 'acknowledged' ||
+      !currentAdoption ||
+      !sameAdoptionSelection(currentAdoption.selection, body.selection)
+    ) {
       const sealedBody = input.journal.prepareAction(action, body, idempotencyKey) as typeof body;
       const sealedKey = input.journal.action(action)!.idempotency_key;
       try {
-        await input.review.adoptReviewedCandidates(childId, sealedBody, sealedKey);
+        const receipt = await input.review.adoptReviewedCandidates(childId, sealedBody, sealedKey);
+        adoptionSnapshots.set(adoptionKey, {
+          head: receipt.adoption.head,
+          selection: receipt.adoption.selection,
+        });
         input.journal.acknowledgeAction(action);
       } catch (error) {
         input.journal.refuseAction(action, errorCode(error));
@@ -2444,6 +2493,8 @@ export async function publishShowcase(input: {
       if (group.property !== 'schema:image') stoppedSubjects.add(id);
       continue;
     }
+    const currentAdoption = adoptionSnapshot(previous);
+    adoptionSnapshots.set(key, currentAdoption);
     if (refreshWeights && page.next !== null && page.next !== undefined) {
       omissions.push({
         provider: group.record.provider,
@@ -2580,11 +2631,20 @@ export async function publishShowcase(input: {
     const action = actionKey('adopt', `${id}:${group.property}`, showcaseDigest({ intent: manifest.digest, body }));
     const idempotencyKey = actionIdempotencyKey(body);
     const priorAction = input.journal.action(action);
-    if (priorAction?.state === 'acknowledged') continue;
+    if (
+      priorAction?.state === 'acknowledged' &&
+      currentAdoption &&
+      sameAdoptionSelection(currentAdoption.selection, body.selection)
+    )
+      continue;
     const sealedBody = input.journal.prepareAction(action, body, idempotencyKey) as typeof body;
     const sealedKey = input.journal.action(action)!.idempotency_key;
     try {
-      await input.review.adoptReviewedCandidates(id, sealedBody, sealedKey);
+      const receipt = await input.review.adoptReviewedCandidates(id, sealedBody, sealedKey);
+      adoptionSnapshots.set(key, {
+        head: receipt.adoption.head,
+        selection: receipt.adoption.selection,
+      });
       input.journal.acknowledgeAction(action);
       pageCache.delete(groupKey(id, group.property));
       publicSubjects.delete(id);
@@ -2610,9 +2670,16 @@ export async function publishShowcase(input: {
       qualifiers?: NonNullable<BatchStatement['qualifiers']>;
       rights?: Extract<BatchCommand, { op: 'propose' }>['rights'];
       target?: { sourceKey: string; subjectId: string; nativeType: string };
+      adoption: { head: number; candidateId: string; rank: 'normal' | 'preferred' | 'deprecated' };
+      readback: unknown;
     }[];
   }[] = [];
   const finalMediaOutcomes = [...mediaOutcomes];
+  const readbacksByCandidate = new Map<string, unknown>();
+  const adoptionsByCandidate = new Map<
+    string,
+    { head: number; candidateId: string; rank: 'normal' | 'preferred' | 'deprecated' }
+  >();
   const readHandoffs = new Map<
     string,
     { subjectId: string; readerRoute: string; property: 'schema:image'; value: string }
@@ -2733,12 +2800,29 @@ export async function publishShowcase(input: {
       )
         return false;
       const rows = publicSubject?.statements?.[assertion.property] ?? [];
-      const found = rows.some((row) => statementOnPublicRead(row, assertion.statement));
-      if (!found && assertion.graphTarget) {
+      const readback = rows.find((row) => statementOnPublicRead(row, assertion.statement));
+      if (!readback && assertion.graphTarget) {
         withheldGraphCandidates.add(assertion.candidateId);
         omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'graph-relation-not-public' });
       }
-      return found;
+      if (!readback) return false;
+      const adoption = adoptionSnapshots.get(groupKey(record.subjectId!, assertion.property));
+      const selected = adoption?.selection.find((selection) => selection.candidate === assertion.candidateId);
+      if (!adoption || !selected) {
+        omissions.push({
+          provider: record.provider,
+          sourceKey: record.sourceKey,
+          code: 'candidate-not-currently-adopted',
+        });
+        return false;
+      }
+      readbacksByCandidate.set(assertion.candidateId, readback);
+      adoptionsByCandidate.set(assertion.candidateId, {
+        head: adoption.head,
+        candidateId: assertion.candidateId,
+        rank: selected.rank,
+      });
+      return true;
     });
     const imageVisible =
       imagePublishable &&
@@ -2799,6 +2883,8 @@ export async function publishShowcase(input: {
                 },
               }
             : {}),
+          adoption: adoptionsByCandidate.get(candidateId)!,
+          readback: readbacksByCandidate.get(candidateId)!,
         }),
       ),
     });

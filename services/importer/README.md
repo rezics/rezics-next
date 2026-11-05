@@ -469,3 +469,52 @@ When deferred cover recovery finds a currently bound candidate whose exact comma
 
 Bound: Run-store and resolver descriptor validation examines O(K) own keys supplied by the caller, the changes side of the O(changes × log stored N) criterion; this work is independent of stored R/B/H and catalogue/history. Direct in-process callers pay for the objects their code builds, so validation does not reject an arbitrarily wide host object in constant time or cap its pre-validation allocation. External source records are guarded at 1 MiB (256 KiB default), parsed API responses at 1 MiB, and public envelopes and binding snapshots at 65,536 bytes. Private record plans remain capped at 2 MiB and are not public envelopes.
 The concrete media resolver bounds calls and scheduled waits per invocation, while injected coordinator providers and repeated run invocations have no lifetime API-call bound.
+
+## Native execution boundary
+
+Importer prepares source records and candidate commands through its bounded APIs. Native runtime, authorization, command execution and public acceptance remain Kernel-owned. Source conversion, native acceptance, adoption and independent readback are separate stages. The [Imports capability acceptance map](../../docs/goals/imports.capabilities.md) describes coverage without recording prior attempt results here.
+
+Decision: reviewed Person merges remain bound to the generated asynchronous admission contract. A paired original-identity read only prepares explicit confirmation; HTTP 202 admission starts separate publication and current public readback. A synchronous HTTP 200 merge result or an application-side reread cannot stand in for that boundary, so dependent credits stay withheld until current identity and independent reads establish publication.
+
+Generate and bind the producer's read, query, merge and error types together when its asynchronous admission and independent publication routes are available. Until then, retain the original source bindings and sealed records; do not simulate the missing admission with a local response type or treat a synchronous merge as publication.
+
+## Selected source acquisition and publication
+
+Development dump acquisition fixes VNDB to the November 4 archive, SHA-256 and TIMESTAMP documented in
+[local stack](../../docs/development/local-stack.md#cross-media-dump-cache); a rotating dump or older cached manifest
+cannot replace that source generation. General unpinned acquisition remains separate. The existing dump-fetch
+suite covers exact cache reopen, stale-manifest replacement, extraction repair, checksum and timestamp refusal.
+The development wrapper returns and persists acquired `sourceSnapshots` alongside current publication results,
+including an incomplete seed, without exporting private persona data.
+
+External files and third-party responses enter through bounded, provider-specific acquisition. The importer owns source-key and request journals, sealing, replay, current source metadata, publication fences and the recovery of acknowledged or unknown writes. Exact response identity and source revision are retained; malformed or unavailable data yields a bounded omission and never substitutes a different record. Graph traversal and resolved identities come from their existing owners; this importer does not search labels or infer identity from titles or URLs.
+
+A trusted caller supplies selected normalized records and exact released bindings to Conversion. The mapper validates the profile, property, qualifiers, exact citations and current descriptor without acquiring data or authorizing writes. Importer keeps its provider registration revisions and source journals, then prepares only ordinary create and proposal commands. Pending and unknown publication reuses the original sealed response and command identity before any source reacquisition.
+
+Reviewed vocabulary lookup is finite and exact. Current subject, source identifier, selected candidate and disclosure checks determine whether a binding can be reused; local journal identifiers are read anchors only. No label search, catalogue scan or fallback resolver is added. Current native actions authorize acceptance and adoption, which remain separate from proposal acknowledgement and independent public readback.
+
+## Selected showcase publication
+
+`task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
+
+Decision: each published assertion returns its current Global adoption head and selected candidate with the exact public statement readback; `task seed:dev` is complete only when the shared source publication is published.
+
+The development wrapper mounts the existing [private VNDB list preview](../../docs/development/local-stack.md#upload-the-development-personas-private-vndb-list)
+through the authenticated generated Kernel client and common showcase journal. Missing private input is unavailable;
+the report carries only the actual upload UUID and row count, never inferred personal activity or export contents.
+
+[Seed denial diagnostics](seed-diagnostics.md).
+
+Selected Bangumi synopsis proposals use the exact source record and document snapshot, keep the converter's `und`
+language and CC-BY-SA-3.0 attribution and ShareAlike obligations, and remain private until the matching candidate is
+accepted and selected for Global. The common publisher rereads the exact subject, candidate, rights and source citation
+before acceptance, then checks the public statement and authored document separately; an unadopted proposal never
+becomes public synopsis text.
+
+Ordinary imports prepare proposals only. Selected showcase plans reuse the source records, current bindings and common journal; they do not add a second converter, publisher or identity resolver. Source records retain exact keys, source and converter digests, selected candidate identities and caller routes. Current facts fences apply to unchanged and cached results as well as refreshes.
+
+Creator and voice candidates retain their exact selected source relationships, credited Person identity and released role qualifiers. Candidate preparation withholds a dependent credit when current source-to-Person reconciliation fails; it does not suppress unrelated facts. Source aggregate weights, votes or ranks are not native votes, confidence, acceptance, adoption or publication.
+
+Publication accepts each selected candidate through the existing review API, adopts only those exact IDs, preserves previous selections, and independently reads back the current public identity and complete statement. Literary native acceptance and readback remain separate from conversion and candidate preparation. Unsupported records, malformed fields and unavailable third-party responses produce bounded omissions without substituting guessed values.
+
+Book, Manga, Person, Character and game-specific values follow the mappings in [Conversion](../../packages/conversion/README.md). The importer keeps PersonDetail acquisition bounds in [Cost](#cost); acquisition and publication prose does not redefine those mappings.

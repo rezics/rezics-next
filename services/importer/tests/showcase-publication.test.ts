@@ -450,9 +450,42 @@ test('selected dump candidates publish only by exact intent and resume a refused
       expect(subject.statements['schema:abstract']).toEqual([candidate.statement]);
       expect(publicReadIds.has(subject.id)).toBe(true);
       expect(publicReads.get(subject.id)?.subject?.statements?.['schema:abstract']).toEqual([candidate.statement]);
+      expect(
+        replayed.published
+          .find((record) => record.provider === 'bangumi' && record.sourceKey === candidate.source?.external_id)
+          ?.assertions.find((assertion) => assertion.candidateId === candidate.id),
+      ).toMatchObject({
+        adoption: { head: 1, candidateId: candidate.id, rank: 'normal' },
+        readback: candidate.statement,
+      });
     }
     const tagAcceptanceCalls = acceptanceCalls.filter((call) => call.candidateId === membershipCandidateId);
     expect(tagAcceptanceCalls).toHaveLength(1);
+
+    const reopenedSynopsis = synopses.find((candidate) => candidate.source?.external_id === '101')!;
+    const reopenedSubject = [...subjects.values()].find(
+      (item) => item.sourceExternalId === reopenedSynopsis.source?.external_id,
+    )!;
+    adopted.set(`${reopenedSubject.id}\0schema:abstract`, { head: 2, selection: [] });
+    delete reopenedSubject.statements['schema:abstract'];
+    const restored = await publishShowcase({
+      plan,
+      result,
+      aliases: crossMediaAliases,
+      journal,
+      review,
+      publicClient,
+      ...tagOptions,
+    });
+    expect(restored.status).toBe('published');
+    expect(
+      restored.published
+        .find((record) => record.provider === 'bangumi' && record.sourceKey === '101')
+        ?.assertions.find((assertion) => assertion.candidateId === reopenedSynopsis.id),
+    ).toMatchObject({
+      adoption: { head: 3, candidateId: reopenedSynopsis.id, rank: 'normal' },
+      readback: reopenedSynopsis.statement,
+    });
 
     journal.close();
     journal = new ShowcaseJournal(journalPath);
