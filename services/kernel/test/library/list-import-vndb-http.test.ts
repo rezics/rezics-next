@@ -537,7 +537,9 @@ test('VNDB explicit unmatched score choice commits chosen units, zero and clear 
   expect(JSON.stringify(await c.send('GET', `${base}/${uploadId}`))).not.toContain('nativeGuard');
 
   for (const units of [0, null]) {
-    const next = await c.send('POST', base + ':preview', { xml: xml(vn('v999999999991', '<vote>8.2</vote>')) });
+    const next = await c.send('POST', base + ':preview', {
+      xml: xml(vn('v999999999991', units === null ? '' : '<vote>8.2</vote>')),
+    });
     if (units === null) {
       expect((await c.send('GET', `${base}/${next.uploadId}`)).rows[0].fields.score.kind).toBe('missing');
       expect((await c.votes.readVoteReview(c.actor, STANDARD_QUESTION_ID, c.target)).currentVote).toMatchObject({
@@ -752,6 +754,10 @@ test('an original score intent cannot admit a fresh effect after source change, 
         await f.pool.query('UPDATE rating.question SET meaning=$2 WHERE id=$1', [
           STANDARD_QUESTION_ID,
           originalMeaning,
+        ]);
+      if (change === 'scale')
+        await f.pool.query('UPDATE rating.question SET maximum_units=maximum_units-1 WHERE id=$1', [
+          STANDARD_QUESTION_ID,
         ]);
       if (change !== 'remove') await c.send('DELETE', `${base}/${uploadId}`);
     }
