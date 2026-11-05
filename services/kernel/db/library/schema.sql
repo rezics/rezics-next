@@ -1798,6 +1798,7 @@ BEGIN
   IF NEW.curator_account_id IS NULL THEN
     NEW.rule_filter := NULL;
     NEW.rule_sort := NULL;
+    NEW.rule_source := NULL;
     NEW.rule_release_digest := NULL;
     NEW.rule_revision := 0;
   END IF;
@@ -3213,6 +3214,7 @@ CREATE TABLE library.collection (
     rule_release_digest text,
     rule_revision bigint DEFAULT 0 NOT NULL,
     partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    rule_source text,
     CONSTRAINT collection_active_deletion CHECK (((state <> 'active'::text) OR (deleted_at IS NULL))),
     CONSTRAINT collection_builtin_identity_check CHECK (
 CASE membership_kind
@@ -3239,6 +3241,7 @@ END),
     CONSTRAINT collection_revision_check CHECK ((revision >= 1)),
     CONSTRAINT collection_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT collection_saved_rule CHECK ((((rule_filter IS NULL) AND (rule_sort IS NULL) AND (rule_release_digest IS NULL) AND (rule_revision = 0)) OR ((membership_kind = 'dynamic'::text) AND (builtin_kind IS NULL) AND (curator_account_id IS NOT NULL) AND (jsonb_typeof(rule_filter) = 'object'::text) AND (rule_sort = 'id'::text) AND ((rule_release_digest COLLATE "C") ~ '\Asha256:[0-9a-f]{64}\Z'::text) AND (octet_length(rule_release_digest) = 71) AND (rule_revision > 0) AND (rule_filter IS NOT NULL) AND (rule_sort IS NOT NULL) AND (rule_release_digest IS NOT NULL)))),
+    CONSTRAINT collection_saved_rule_source CHECK ((((rule_filter IS NULL) AND (rule_source IS NULL)) OR ((rule_filter IS NOT NULL) AND (rule_source IS NOT NULL) AND (rule_source = ANY (ARRAY['owner'::text, 'catalogue'::text]))))),
     CONSTRAINT collection_source_generation_check CHECK ((source_generation >= 0)),
     CONSTRAINT collection_state_check CHECK ((state = ANY (ARRAY['active'::text, 'deleted'::text]))),
     CONSTRAINT collection_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
