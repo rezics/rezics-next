@@ -54,12 +54,24 @@ const facts: CollectionViewerFacts = {
         revision: 7,
       },
       vote: { state: 'present', questionId, questionRevision: 1, units: 14, revision: 9 },
+      actions: {
+        state: 'current',
+        allowed: [
+          { action: 'library_entry:update', operations: ['library_entry.put'] },
+          { action: 'library_entry:delete', operations: ['library_entry.delete'] },
+          { action: 'progress_session:create', operations: ['progress_session.create'] },
+          { action: 'progress_session:update', operations: ['progress_session.update'] },
+          { action: 'rating:vote_put', operations: ['rating.vote_put'] },
+          { action: 'rating:vote_delete', operations: ['rating.vote_delete'] },
+        ],
+      },
     },
     {
       rowKey: memberIds[1]!,
       subjectId,
       entry: { state: 'absent' },
       vote: { state: 'absent', questionId, questionRevision: 1 },
+      actions: { state: 'current', allowed: [] },
     },
   ],
 };
@@ -247,20 +259,74 @@ test('a failed private projection does not fail or empty the admitted public Col
   expect(page.viewerFacts).toBeUndefined();
 });
 
-test('undelivered member action fields never grant from current Entry or vote facts', () => {
-  const row = facts.rows[0]!;
-  for (const actions of [
-    { state: 'current', allowed: [{ action: 'library_entry:update', operations: ['library_entry.put'] }] },
-    { state: 'current', allowed: [] },
-    { state: 'unavailable' },
-  ]) {
-    const undocumented = { ...row, actions };
-    expect(collectionViewerActionsState(undocumented)).toBe('unavailable');
-    expect(collectionViewerHasPersonalAction(undocumented, facts.question)).toBe(false);
-  }
-  expect(collectionViewerVoteCurrent(row, facts.question)).toBe(true);
-  expect(collectionViewerVoteCurrent(row, { ...facts.question!, revision: 2 })).toBe(false);
-  expect(collectionViewerVoteCurrent(row, { ...facts.question!, scale: { min: 0, max: 10, displayStep: 1 } })).toBe(
+test('installed exact occurrence action pairs reach the Subject hosts and return to that Collection occurrence', async () => {
+  const { client } = collectionReadSource();
+  const page = await loadEditableCollectionPage(
+    client,
+    new Request(
+      `https://rezics.test/en/collections/${collectionId}?cursor=page-two&layout=grid&type=schema%3ABook&f.schema%3Agenre=fiction`,
+      { headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } },
+    ),
+    sessionEnv(),
+    { id: collectionId, cursor: 'page-two' },
+  );
+  if ('preparing' in page) throw new Error('Expected a curated Collection page');
+  const projection = collectionViewerProjection(page.viewerFacts, page.provenance, 'reader', true);
+  expect(projection.state).toBe('current');
+  if (projection.state !== 'current') throw new Error('Expected current viewer facts');
+  const first = collectionViewerFactForMember(projection, page.members[0]!);
+  const second = collectionViewerFactForMember(projection, page.members[1]!);
+  expect(collectionViewerActionsState(first)).toBe('current');
+  expect(collectionViewerHasPersonalAction(first, projection.question)).toBe(true);
+  expect(collectionViewerActionsState(second)).toBe('current');
+  expect(collectionViewerHasPersonalAction(second, projection.question)).toBe(false);
+
+  const source = `/en/collections/${collectionId}?cursor=page-two&layout=grid&type=schema%3ABook&f.schema%3Agenre=fiction`;
+  const returnTo = collectionMemberReturnAddress(source, memberIds[0]!);
+  const subject = collectionViewerActionHref(`/en/subjects/${subjectId}/repeated-work`, returnTo);
+  const markup = renderToStaticMarkup(
+    createElement(CollectionReadMembers, {
+      members: page.members,
+      layout: 'grid',
+      currentHref: source,
+      viewerProjection: projection,
+      viewerActionHref: (member) => {
+        const row = collectionViewerFactForMember(projection, member);
+        if (!collectionViewerHasPersonalAction(row, projection.question)) return undefined;
+        return collectionViewerActionHref(
+          `/en/subjects/${subjectId}/repeated-work`,
+          collectionMemberReturnAddress(source, member.id),
+        );
+      },
+      onCopy: () => undefined,
+    }),
+  );
+  expect(markup.match(/Open your Library controls/g)).toHaveLength(1);
+  expect(markup).toContain(`href="${subject?.replaceAll('&', '&amp;')}"`);
+  expect(returnTo).toContain('cursor=page-two');
+  expect(returnTo).toContain('layout=grid');
+  expect(returnTo).toContain('f.schema%3Agenre=fiction');
+  expect(returnTo?.endsWith(`#collection-member-${memberIds[0]}`)).toBe(true);
+
+  const scoreOnly = {
+    ...facts.rows[1]!,
+    actions: {
+      state: 'current' as const,
+      allowed: [
+        { action: 'rating:vote_put' as const, operations: ['rating.vote_put' as const] },
+        { action: 'rating:vote_delete' as const, operations: ['rating.vote_delete' as const] },
+      ],
+    },
+  };
+  expect(collectionViewerHasPersonalAction(scoreOnly, facts.question)).toBe(true);
+  expect(collectionViewerHasPersonalAction(scoreOnly, { ...facts.question!, revision: 2 })).toBe(false);
+  expect(collectionViewerHasPersonalAction(scoreOnly, null)).toBe(false);
+  expect(collectionViewerHasPersonalAction({ ...scoreOnly, actions: { state: 'current', allowed: [] } }, facts.question)).toBe(
+    false,
+  );
+  expect(collectionViewerVoteCurrent(facts.rows[0]!, facts.question)).toBe(true);
+  expect(collectionViewerVoteCurrent(facts.rows[0]!, { ...facts.question!, revision: 2 })).toBe(false);
+  expect(collectionViewerVoteCurrent(facts.rows[0]!, { ...facts.question!, scale: { min: 0, max: 10, displayStep: 1 } })).toBe(
     false,
   );
 });
