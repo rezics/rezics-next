@@ -161,11 +161,13 @@ function RecoveryReader({
     try {
       // Refresh includes the bounded operation read so progress and deadlines remain native facts.
       const result =
-        target.cursor === undefined || target.kind === 'refresh'
+        target.kind === 'first' || target.kind === 'refresh'
           ? await readBulkOperationRecovery({
               data: { operationId: id, ...(target.cursor === undefined ? {} : { cursor: target.cursor }) },
             })
-          : await readBulkOperationRecoveryPage({ data: { operationId: id, cursor: target.cursor } });
+          : await readBulkOperationRecoveryPage({
+              data: { operationId: id, ...(target.cursor === undefined ? {} : { cursor: target.cursor }) },
+            });
       if (!addressCurrent(pathname, owner, lease) || windows.current !== path || path.target !== target) return;
       if (result.state === 'available') {
         const accepted = previous as Extract<LibraryBulkRecoveryRead, { state: 'available' }>;

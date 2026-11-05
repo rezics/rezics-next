@@ -108,7 +108,7 @@ mock.module('../src/library/bulk-operation-recovery-server', () => ({
     reads.push(data);
     return { state: 'available', operation: operation(data.operationId), ...page(data.cursor) };
   },
-  readBulkOperationRecoveryPage: async ({ data }: { data: { operationId: string; cursor: string } }) => {
+  readBulkOperationRecoveryPage: async ({ data }: { data: { operationId: string; cursor?: string } }) => {
     reads.push(data);
     if (late) await late();
     if (fail) {
@@ -254,6 +254,11 @@ test('production route replaces three windows, retries exact reads independently
       await router.navigate({ to: '/library/operations/$id', params: { id: otherId } });
       await settle();
     });
+    await act(async () => {
+      await settle();
+    });
+    expect(router.state.location.pathname).toBe(`/library/operations/${otherId}`);
+    expect(host.textContent).not.toContain(m.library_bulk_recovery_address_pending());
     expect(reads.at(-1)?.operationId).toBe(otherId);
     expect(host.textContent).not.toContain('subject-b-');
   } finally {
