@@ -124,7 +124,7 @@ export function MineCollectionsCurrentViewer({
       origin={origin}
       initial={initial}
       seed={lifetime.seed}
-      windows={windows}
+      {...(windows ? { windows } : {})}
       authorityKey={authorityKey}
     />
   );
@@ -267,7 +267,7 @@ function MineCollectionsViewerRead({
       pinsOrigin={pinsOrigin}
       layout={address.layout}
       viewerId={subject}
-      windows={windows}
+      {...(windows ? { windows } : {})}
       windowAuthorityKey={authorityKey}
       windowCurrent={() => !!admittedCollections && origin.collectionsCurrent() && origin.isCurrent()}
       onMove={(action, target, element) => {
@@ -348,7 +348,7 @@ export function MineCollectionsPageView({
     windows?.getSnapshot ?? getEmptyWindowsSnapshot,
     getEmptyWindowsSnapshot,
   );
-  const collectionRegion = useRef<HTMLElement>(null);
+  const collectionRegion = useRef<HTMLDivElement>(null);
   const currentCoordinate = currentCursor ?? null;
   const hasCurrentCoordinate =
     windowSnapshot.current === currentCoordinate && windowSnapshot.coordinates.at(-1) === currentCoordinate;
