@@ -316,6 +316,64 @@ test('replays return the original result without repeated rows or events', async
   });
 });
 
+test('journal receipts retain public command identity across private admission changes', async () => {
+  const session = await start('scalar_amount');
+  const request = key();
+  const patch = { revision: 0, reflection: 'Original reflection' };
+  let admissions = 0;
+  const accepted = await commands.patchSessionJournal(owner, session.id, patch, request, {
+    identity: { review: 'original' },
+    async assert() {
+      admissions++;
+    },
+  });
+  expect(admissions).toBe(1);
+  await commands.patchSessionJournal(owner, session.id, { revision: 1, reflection: null }, key());
+  const before = await snapshot();
+  for (const admission of [
+    undefined,
+    {
+      identity: { review: 'replaced' },
+      async assert() {
+        throw new Error('Obsolete import review must not replace a completed receipt');
+      },
+    },
+  ]) {
+    expect(await commands.patchSessionJournal(owner, session.id, patch, request, admission)).toMatchObject({
+      value: accepted.value,
+      replayed: true,
+    });
+  }
+  await expect(
+    commands.patchSessionJournal(owner, session.id, { ...patch, reflection: 'Different body' }, request),
+  ).rejects.toThrow();
+  await expect(
+    commands.patchSessionJournal(persona(owner.accountId, []), session.id, patch, request),
+  ).rejects.toThrow();
+  expect((await commands.readSessionJournal(owner, session.id)).reflection).toBeNull();
+  expect(await snapshot()).toEqual(before);
+});
+
+test('failed private journal admission rolls back without acknowledging the command', async () => {
+  const session = await start('scalar_amount');
+  const request = key();
+  const patch = { revision: 0, reflection: 'Retained after retry' };
+  const before = await snapshot();
+  await expect(
+    commands.patchSessionJournal(owner, session.id, patch, request, {
+      identity: { review: 'stale' },
+      async assert() {
+        throw new Error('Stale import review');
+      },
+    }),
+  ).rejects.toThrow('Stale import review');
+  expect(await snapshot()).toEqual(before);
+  expect((await commands.readSessionJournal(owner, session.id)).revision).toBe(0);
+  const accepted = await commands.patchSessionJournal(owner, session.id, patch, request);
+  expect(accepted.replayed).toBe(false);
+  expect(accepted.value).toEqual({ sessionId: session.id, revision: 1, changed: true });
+});
+
 test('unknown subjects and versions are not found; invalid creation changes nothing', async () => {
   const before = await snapshot();
   for (const input of [

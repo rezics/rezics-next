@@ -496,7 +496,9 @@ export function createSessionCommands(config: Dependencies) {
         action: 'progress_session:update',
         kind: 'progress_session.journal',
         requestKey,
-        input: { sessionId, patch, admission: admission?.identity ?? null },
+        // Retain the public receipt shape. Private import admission is execution
+        // evidence, not part of the caller's journal command identity.
+        input: { sessionId, patch, admission: null },
       },
       async (tx) => {
         if (admission) {
