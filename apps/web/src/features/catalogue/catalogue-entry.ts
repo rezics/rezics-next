@@ -117,7 +117,12 @@ export const catalogueEntries = {
     label: m.catalogue_create_title({}, options(locale)),
     href: `/${locale}/catalogue/new?relatedWorkHandoff=${encodeURIComponent(token)}`,
   }),
-  authored: ({ id, title, locale, origin }: Locale & {
+  authored: ({
+    id,
+    title,
+    locale,
+    origin,
+  }: Locale & {
     id: string;
     title: string;
     origin?: AuthoredPublicOrigin | undefined;

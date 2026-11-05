@@ -48,7 +48,12 @@ test('authored public visit descriptors stay closed, bounded and separate from s
     base,
   );
   expect(authoredPublicVisitUnsupported(realmVisit)).toBe(true);
-  const freshHref = authoredGlobalVisitHref(base, addonProfileId, 'en', realmVisit.kind === 'origin' ? realmVisit.origin.returnHref : '');
+  const freshHref = authoredGlobalVisitHref(
+    base,
+    addonProfileId,
+    'en',
+    realmVisit.kind === 'origin' ? realmVisit.origin.returnHref : '',
+  );
   expect(parseAuthoredPublicVisit(new URL(freshHref, 'https://site.test').search, addonProfileId, 'en', base)).toEqual({
     kind: 'fresh',
     returnHref: `${publicHref}?realm=${addonWorkId}#connections`,
@@ -225,9 +230,9 @@ test('mounted entry, contribution menu and authored route keep public intent out
     );
     const slugRepairHref = (slugRepair as { options?: { href?: string } } | undefined)?.options?.href;
     expect(slugRepairHref).toContain('origin=');
-    expect(parseAuthoredPublicVisit(new URL(slugRepairHref!, 'https://site.test').search, addonProfileId, 'en', base).kind).toBe(
-      'origin',
-    );
+    expect(
+      parseAuthoredPublicVisit(new URL(slugRepairHref!, 'https://site.test').search, addonProfileId, 'en', base).kind,
+    ).toBe('origin');
     const originalSubjectId = profile.current.subject.id;
     profile.current.subject.id = addonWorkId;
     const identityChange = await loadCanonical('harbor-northern-lights', originHref).then(
@@ -252,9 +257,9 @@ test('mounted entry, contribution menu and authored route keep public intent out
     );
     const freshHref = host.querySelector<HTMLAnchorElement>('a[href*="publicReturn="]')?.getAttribute('href');
     expect(freshHref).toBeTruthy();
-    expect(parseAuthoredPublicVisit(new URL(freshHref!, 'https://site.test').search, addonProfileId, 'en', base).kind).toBe(
-      'fresh',
-    );
+    expect(
+      parseAuthoredPublicVisit(new URL(freshHref!, 'https://site.test').search, addonProfileId, 'en', base).kind,
+    ).toBe('fresh');
 
     for (const invalidHref of [
       `${base}?origin=!`,

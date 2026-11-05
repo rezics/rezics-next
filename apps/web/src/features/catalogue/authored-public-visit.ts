@@ -26,11 +26,7 @@ export function authoredPublicIntentFits(value: string): boolean {
   return value.length <= authoredPublicIntentLimit && encoder.encode(value).byteLength <= authoredPublicIntentLimit;
 }
 
-function publicReturn(
-  value: unknown,
-  subject: string,
-  locale: string,
-): { href: string; realm?: string } | undefined {
+function publicReturn(value: unknown, subject: string, locale: string): { href: string; realm?: string } | undefined {
   if (typeof value !== 'string' || !authoredPublicIntentFits(value) || !value.startsWith('/') || value.startsWith('//'))
     return;
   const href = subjectVisitReturn(value, locale);
