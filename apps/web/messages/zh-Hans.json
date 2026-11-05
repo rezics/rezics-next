@@ -10835,6 +10835,8 @@
   "library_archive_entry_upload_help": "上传已完成的 V1、V2 或 V3 书库归档，最大 34 MiB。原生解码器检查深度、格式和数量。不支持 V4。上传本身不会更改数据。",
   "library_archive_entry_scope": "恢复明确选择的条目、私密标签、分配、注释，以及原生审核支持的日志字段。其他记录保留为私密证据。不会发布任何内容。",
   "library_archive_personal_help": "未选择的字段会保留当前原生值。请明确选择设为归档值或清除。原生审核会在确认前显示当前值。",
+  "library_archive_personal_assessment_evidence": "评价在此仅作为证据保留。缺少评价不代表零分，也不表示清除当前值。",
+  "library_archive_personal_observation_evidence": "来源观察在此仅作为证据保留。不会应用隐私设置或来源时间戳。",
   "library_archive_personal_incarnation": "当前 Entry incarnation ID",
   "library_archive_personal_session": "当前未退役的 Session ID",
   "library_archive_personal_note": "注释",

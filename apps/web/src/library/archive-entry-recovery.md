@@ -11,6 +11,10 @@ for every supported branch; preserve current fields by default and require delib
 for personal facts. Web consumes producer-published operands without generating another client, decoding files locally
 or adding a native endpoint. Content remains the shared publisher.
 
+Decision: while the installed review client omits assessment and observation operands, show their retained-evidence
+limitations beside journal choices and source-observation rows. Missing assessment never means zero or clear;
+privacy and source timestamps are never applied through another branch.
+
 ## Upload and inventory
 
 The signed-in route prepares exposure, sets `private, no-store`, keeps no private loader cache and uses noindex metadata.
@@ -30,7 +34,9 @@ captures, retained unsupported evidence and manifest omissions. An empty page ne
 upload, page size, selected-row limit and immutable review lifecycle cover every activated branch. V4 provider sections
 and rows without a producer-published review operand remain retained unsupported evidence. The installed client
 currently lacks `journal.fields.assessment` and the source-observation review variant; Content owns those generated
-route operands.
+route operands. The integrated native route already declares both; its installed client snapshot still needs
+publication. Assessment and observation mapping, native readback and their mounted/native acceptance remain dependent
+on that publication, including the correction's exact current observation revision.
 
 ## Deliberate selection and immutable review
 
@@ -104,6 +110,7 @@ byte/growth acceptance.
 Focused Web tests cover mounted file admission, three preview windows, independent reader histories, empty selected
 projections with native continuation, exact failed-read retry, immutable review/apply, pending cancellation,
 acknowledged destination retention, current Entry and label-assignment reads, and original request bounds using the
-existing typed native fixture. Existing controller fence and bounded-growth assertions remain. Browser,
+existing typed native fixture. Retained assessment and source-observation notices explain fields that cannot yet be
+selected, while retaining evidence unchanged. Existing controller fence and bounded-growth assertions remain. Browser,
 installed-root, byte/caller observations, broader native acceptance and promotion remain integration
 responsibilities.

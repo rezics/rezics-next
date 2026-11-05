@@ -10922,6 +10922,8 @@
   "library_archive_entry_upload_help": "上傳已完成的 V1、V2 或 V3 書庫歸檔，最大 34 MiB。原生解碼器檢查深度、格式和數量。不支援 V4。上傳本身不會更改資料。",
   "library_archive_entry_scope": "復原明確選取的條目、私密標籤、指派、註釋，以及原生審核支援的日誌欄位。其他記錄保留為私密證據。不會發佈任何內容。",
   "library_archive_personal_help": "未選欄位會保留目前原生值。請明確選擇設為封存值或清除。原生審核會在確認前顯示目前值。",
+  "library_archive_personal_assessment_evidence": "評價在此僅作為證據保留。缺少評價不代表零分，也不表示清除目前值。",
+  "library_archive_personal_observation_evidence": "來源觀察在此僅作為證據保留。不會套用隱私設定或來源時間戳記。",
   "library_archive_personal_incarnation": "目前 Entry incarnation ID",
   "library_archive_personal_session": "目前未退役的 Session ID",
   "library_archive_personal_note": "註釋",

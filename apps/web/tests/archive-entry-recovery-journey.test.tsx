@@ -620,6 +620,8 @@ test('Annotation and one combined journal row review current facts and read actu
     const reviewHtml = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={f.journey} />);
     expect(reviewHtml).toContain('Current note');
     expect(reviewHtml).toContain('Current reflection');
+    expect(reviewHtml).toContain('A missing assessment is not zero');
+    expect(reviewHtml).not.toContain('name="assessment"');
     const review = JSON.parse(f.calls.find((call) => call.path.endsWith('/review'))!.body);
     expect(review.items).toEqual([
       {
@@ -657,6 +659,25 @@ test('Annotation and one combined journal row review current facts and read actu
     });
     expect(f.calls.some((call) => call.path.endsWith('/personal'))).toBe(true);
     expect(f.calls.some((call) => call.path.endsWith('/journal'))).toBe(true);
+  } finally {
+    f.journey.retire();
+  }
+});
+
+test('Retained source observation evidence explains that privacy and timestamps are not applied', async () => {
+  const f = fixture();
+  try {
+    const row: ArchiveRow = {
+      ordinal: 6, section: 'provenance', status: 'unsupported', review: null, reviewRevision: 0,
+      evidence: { observation: { provider: 'source', recordId: 'record', sourceCreated: '2005-02' } },
+    };
+    f.pages(new Map([[-1, previewPage([row], null)]]), new Map());
+    await f.journey.upload(new File(['{}'], 'archive-v3.json'));
+    const html = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={f.journey} />);
+    expect(html).toContain('Privacy and source timestamps are not applied.');
+    expect(html).toContain('2005-02');
+    expect(html).not.toContain('<form');
+    expect(f.journey.snapshot().state!.choices).toEqual([]);
   } finally {
     f.journey.retire();
   }

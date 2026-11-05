@@ -10823,6 +10823,8 @@
   "library_archive_entry_upload_help": "Ein abgeschlossenes V1-, V2- oder V3-Archiv bis 34 MiB hochladen. Der native Decoder prüft Tiefe, Format und Mengen. V4 wird nicht unterstützt. Der Upload ändert keine Daten.",
   "library_archive_entry_scope": "Ausgewählte Einträge, private Labels, Zuordnungen, Anmerkungen und Journalfelder werden wiederhergestellt, soweit die native Prüfung sie unterstützt. Andere Datensätze bleiben private Nachweise. Es wird nichts veröffentlicht.",
   "library_archive_personal_help": "Nicht ausgewählte Felder behalten ihre aktuellen nativen Werte. Das Setzen des Archivwerts oder Löschen des aktuellen Werts muss ausdrücklich gewählt werden. Die native Prüfung zeigt aktuelle Werte vor der Bestätigung.",
+  "library_archive_personal_assessment_evidence": "Bewertungen bleiben hier als Belege erhalten. Eine fehlende Bewertung ist weder null Punkte noch eine Aufforderung, einen aktuellen Wert zu löschen.",
+  "library_archive_personal_observation_evidence": "Quellenbeobachtungen bleiben hier als Belege erhalten. Datenschutzangaben und Zeitstempel der Quelle werden nicht übernommen.",
   "library_archive_personal_incarnation": "Aktuelle Entry-Incarnation-ID",
   "library_archive_personal_session": "Aktuelle nicht stillgelegte Session-ID",
   "library_archive_personal_note": "Anmerkung",

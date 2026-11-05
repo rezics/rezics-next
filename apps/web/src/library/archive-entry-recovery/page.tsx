@@ -226,8 +226,6 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                         }
                         onChoose={(choice) => journey!.choose(choice)}
                       />
-                    ) : row.section === 'provenance' ? (
-                      <p>{m.library_archive_entry_retained()}</p>
                     ) : (
                       <MappingForm
                         key={`${row.ordinal}:${state.upload!.id}`}
@@ -242,7 +240,11 @@ export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRec
                       />
                     )
                   ) : (
-                    <p>{m.library_archive_entry_retained()}</p>
+                    <p>
+                      {row.section === 'provenance'
+                        ? m.library_archive_personal_observation_evidence()
+                        : m.library_archive_entry_retained()}
+                    </p>
                   )}
                 </article>
               ))}
@@ -750,6 +752,7 @@ function JournalMappingForm({
       }}
     >
       <fieldset disabled={disabled} className="space-y-3">
+        <p>{m.library_archive_personal_assessment_evidence()}</p>
         <label htmlFor={`${prefix}-subject`}>{m.library_archive_entry_subject_id()}</label>
         <input
           id={`${prefix}-subject`}

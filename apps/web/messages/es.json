@@ -10823,6 +10823,8 @@
   "library_archive_entry_upload_help": "Sube un archivo V1, V2 o V3 completado, de hasta 34 MiB. El decodificador nativo comprueba profundidad, formato y recuentos. V4 no es compatible. La subida no modifica datos.",
   "library_archive_entry_scope": "Recupera las entradas, etiquetas privadas, asignaciones, anotaciones y campos del diario seleccionados cuando la revisión nativa los admite. Los demás registros siguen como pruebas privadas. No se publica nada.",
   "library_archive_personal_help": "Los campos no seleccionados conservan sus valores nativos actuales. Elige explícitamente establecer el valor archivado o borrar el valor actual. La revisión nativa muestra los valores actuales antes de confirmar.",
+  "library_archive_personal_assessment_evidence": "Las valoraciones se conservan aquí como evidencia. Una valoración ausente no equivale a cero ni solicita borrar un valor actual.",
+  "library_archive_personal_observation_evidence": "Las observaciones de origen se conservan aquí como evidencia. No se aplican la privacidad ni las marcas de tiempo del origen.",
   "library_archive_personal_incarnation": "ID de incarnation actual de Entry",
   "library_archive_personal_session": "ID de Session actual no retirada",
   "library_archive_personal_note": "Nota de anotación",

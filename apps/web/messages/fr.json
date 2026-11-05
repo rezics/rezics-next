@@ -10823,6 +10823,8 @@
   "library_archive_entry_upload_help": "Importez une archive V1, V2 ou V3 terminée, de 34 Mio maximum. Le décodeur natif vérifie profondeur, format et comptes. V4 est refusé. Le téléversement ne modifie rien.",
   "library_archive_entry_scope": "Récupérez les entrées, étiquettes privées, affectations, annotations et champs du journal sélectionnés lorsque la revue native les accepte. Les autres enregistrements restent des preuves privées. Rien n’est publié.",
   "library_archive_personal_help": "Les champs non sélectionnés gardent leurs valeurs natives actuelles. Choisissez explicitement de définir la valeur de l’archive ou d’effacer la valeur actuelle. La revue native affiche les valeurs actuelles avant confirmation.",
+  "library_archive_personal_assessment_evidence": "Les évaluations restent ici des éléments de preuve. Une évaluation absente ne vaut pas zéro et ne demande pas d’effacer une valeur actuelle.",
+  "library_archive_personal_observation_evidence": "Les observations de source restent ici des éléments de preuve. La confidentialité et les horodatages de la source ne sont pas appliqués.",
   "library_archive_personal_incarnation": "ID d’incarnation actuelle de l’Entry",
   "library_archive_personal_session": "ID de Session actuelle non retirée",
   "library_archive_personal_note": "Note d’annotation",
