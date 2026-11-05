@@ -6,8 +6,12 @@ import { cookies, nativeFixture, password } from '../../access/native-account-bi
 import { deletePersona } from '../../support/account-deletion.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 
-/** A registration that does not settle within a minute fails with the durable workflow rows it left behind. */
-async function boundedRegistration<T>(work: Promise<T>, pool: Pool): Promise<T> {
+let stalledRegistration: Error | undefined;
+
+/** A registration that does not settle within a minute fails with the durable workflow rows it left behind; later
+ * registrations in this process fail at once with that first evidence instead of waiting again. */
+async function boundedRegistration<T>(start: () => Promise<T>, pool: Pool): Promise<T> {
+  if (stalledRegistration) throw stalledRegistration;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const stalled = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -17,11 +21,14 @@ async function boundedRegistration<T>(work: Promise<T>, pool: Pool): Promise<T> 
           (result) => JSON.stringify(result.rows),
           (error: unknown) => `status query failed: ${String(error)}`,
         )
-        .then((detail) => reject(new Error(`Library native registration did not settle; workflows: ${detail}`)));
+        .then((detail) => {
+          stalledRegistration = new Error(`Library native registration did not settle; workflows: ${detail}`);
+          reject(stalledRegistration);
+        });
     }, 60_000);
   });
   try {
-    return await Promise.race([work, stalled]);
+    return await Promise.race([start(), stalled]);
   } finally {
     clearTimeout(timer);
   }
@@ -84,12 +91,13 @@ export async function createLibraryAccountHost(input: {
       }
       if (!key) throw new Error('Library native registration could not place the requested partition');
       const registered = await boundedRegistration(
-        fixture.host.workflows.register({
-          key,
-          handle: `library_${key.replaceAll('-', '')}`,
-          email: `${key}@example.test`,
-          password,
-        }),
+        () =>
+          fixture.host.workflows.register({
+            key,
+            handle: `library_${key.replaceAll('-', '')}`,
+            email: `${key}@example.test`,
+            password,
+          }),
         input.pool,
       );
       const route = routeOf(registered.accountId)!;
