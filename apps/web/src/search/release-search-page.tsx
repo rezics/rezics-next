@@ -1,16 +1,14 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
+import type { ReaderOrigin } from '../session/reader';
+import { ReleaseChildWindow, useReleaseChildOwner } from './release-child-window';
+import { ReleaseResultRow } from './release-child-row';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { discoveryMessage } from './discovery-results';
-import { ResultRow, localizedLabel, type ResultHit } from './results';
-import {
-  readReleaseSearchChildren,
-  type ReleaseSearchCard,
-  type ReleaseSearchChildrenState,
-  type ReleaseSearchState,
-} from './release-search-query';
+import { localizedLabel } from './results';
+import { type ReleaseSearchState } from './release-search-query';
 import {
   HEADER_SUGGESTION_LIMIT,
   loadGlobalHeaderSuggestions,
@@ -359,31 +357,6 @@ export function ReleaseSearchFormView({
   );
 }
 
-type ChildView = {
-  status: 'loading' | ReleaseSearchChildrenState['status'];
-  children: ReleaseSearchCard[];
-  next: string | null;
-};
-
-function resultHit(card: ReleaseSearchCard): ResultHit {
-  const { summary, kind: _kind, base: _base, ...hit } = card;
-  return { ...hit, ...(summary ? { summary } : {}) };
-}
-
-function hitTypes(card: ReleaseSearchCard): Record<string, Record<string, string>> {
-  const label = card.base.kindLabel;
-  if (
-    label !== null &&
-    typeof label === 'object' &&
-    'value' in label &&
-    typeof label.value === 'string' &&
-    'language' in label &&
-    typeof label.language === 'string'
-  )
-    return { [card.type]: { [label.language]: label.value } };
-  return {};
-}
-
 /** Grouped cards use server-confirmed current links and independent child cursors. */
 export function ReleaseSearchPage({
   locale,
@@ -392,6 +365,7 @@ export function ReleaseSearchPage({
   selections,
   state,
   retryHref,
+  reader,
 }: {
   locale: string;
   parsed?: ParsedReleaseSearch;
@@ -399,8 +373,8 @@ export function ReleaseSearchPage({
   selections?: ReleaseSearchSelections;
   state: ReleaseSearchState;
   retryHref?: string;
+  reader?: ReaderOrigin;
 }) {
-  const [childViews, setChildViews] = useState<Record<string, ChildView>>({});
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const page = 'page' in state ? state.page : undefined;
   const next = page?.next ?? null;
@@ -409,38 +383,10 @@ export function ReleaseSearchPage({
     ? releaseSearchHref(locale, parsed.form)
     : (retryHref ?? `/${encodeURIComponent(locale)}/search/releases`);
 
-  const loadChildren = async (work: string, token: string) => {
-    const previous = childViews[work];
-    const retained = previous?.children ?? [];
-    setChildViews((current) => ({
-      ...current,
-      [work]: { status: 'loading', children: retained, next: token },
-    }));
-    try {
-      const result = await readReleaseSearchChildren({
-        data: { locale, rawJson: JSON.stringify(parsed?.form ?? {}), work, cursor: token },
-      });
-      if (result.status === 'ready' || result.status === 'preparing') {
-        const children = [...retained];
-        const existing = new Set(children.map((child) => child.id));
-        for (const child of result.page.children) if (!existing.has(child.id)) children.push(child);
-        setChildViews((current) => ({
-          ...current,
-          [work]: { status: result.status, children, next: result.page.next },
-        }));
-      } else {
-        setChildViews((current) => ({
-          ...current,
-          [work]: { status: result.status, children: retained, next: token },
-        }));
-      }
-    } catch {
-      setChildViews((current) => ({
-        ...current,
-        [work]: { status: 'unavailable', children: retained, next: token },
-      }));
-    }
-  };
+  const owner = useReleaseChildOwner(
+    JSON.stringify([locale, parsed?.form, parsed?.search, parsed?.invalid, page ?? state.status]),
+    reader,
+  );
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-4 py-6">
@@ -485,81 +431,18 @@ export function ReleaseSearchPage({
         <ul role="list" data-slot="release-search-results" className="space-y-2">
           {page.groups.map((group) => {
             if (group.kind === 'release')
-              return (
-                <ResultRow
-                  key={`release:${group.id}`}
-                  hit={resultHit(group.release)}
-                  locale={locale}
-                  hitTypes={hitTypes(group.release)}
-                  yearProperties={['schema:datePublished']}
-                />
-              );
-            const view = childViews[group.id];
-            const token = view?.next ?? group.next;
-            const children = [...group.releases, ...(view?.children ?? [])];
-            const viewStatus = view?.status;
+              return <ReleaseResultRow key={`release:${group.id}`} card={group.release} locale={locale} />;
             return (
               <Fragment key={`work:${group.id}`}>
-                <ResultRow
-                  hit={resultHit(group.work)}
+                <ReleaseResultRow card={group.work} locale={locale} />
+                <ReleaseChildWindow
+                  key={owner.id}
+                  owner={owner}
+                  group={group}
                   locale={locale}
-                  hitTypes={hitTypes(group.work)}
-                  yearProperties={['schema:datePublished']}
+                  {...(parsed ? { parsed } : {})}
+                  restartHref={restartHref}
                 />
-                <li data-release-work={group.id} className="ml-6 list-none rounded-md border px-3 py-2">
-                  <details>
-                    <summary className="cursor-pointer text-sm font-medium">
-                      {m.release_search_related_releases({}, options)}
-                    </summary>
-                    <ul role="list" className="mt-2 divide-y">
-                      {children.map((child) => (
-                        <ResultRow
-                          key={child.id}
-                          hit={resultHit(child)}
-                          locale={locale}
-                          hitTypes={hitTypes(child)}
-                          yearProperties={['schema:datePublished']}
-                        />
-                      ))}
-                    </ul>
-                    {viewStatus === 'preparing' && (
-                      <p role="status" aria-live="polite" className="py-2 text-sm text-muted-foreground">
-                        {discoveryMessage('preparing', locale)}
-                      </p>
-                    )}
-                    {viewStatus && viewStatus !== 'ready' && viewStatus !== 'preparing' && viewStatus !== 'loading' && (
-                      <div
-                        role={
-                          ['unavailable', 'restart', 'invalid', 'unsupported', 'denied'].includes(viewStatus)
-                            ? 'alert'
-                            : 'status'
-                        }
-                        className="grid gap-2 py-2"
-                      >
-                        <p>{discoveryMessage(viewStatus, locale)}</p>
-                        {viewStatus === 'restart' && (
-                          <a href={restartHref} className="w-fit underline">
-                            {m.discovery_restart_action({}, options)}
-                          </a>
-                        )}
-                      </div>
-                    )}
-                    {token && viewStatus !== 'restart' && parsed && (
-                      <button
-                        type="button"
-                        className={buttonVariants({ variant: 'outline' })}
-                        disabled={viewStatus === 'loading'}
-                        onClick={() => void loadChildren(group.id, token)}
-                      >
-                        {viewStatus === 'loading'
-                          ? m.discovery_loading({}, options)
-                          : viewStatus && viewStatus !== 'ready' && viewStatus !== 'preparing'
-                            ? m.search_facet_retry({}, options)
-                            : m.release_search_continue({}, options)}
-                      </button>
-                    )}
-                  </details>
-                </li>
               </Fragment>
             );
           })}

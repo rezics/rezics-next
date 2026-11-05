@@ -10371,5 +10371,9 @@
   "library_vndb_score_review_notice_changed": "The current vote changed during review. Its fresh basis is shown; choose again to authorize a new review.",
   "library_vndb_score_review_notice_vote": "The current vote could not be read, so this score review was not created.",
   "library_vndb_score_review_notice_question": "The native question could not be read, so this score review was not created.",
-  "library_vndb_refresh_page": "Refresh this bounded import page"
+  "library_vndb_refresh_page": "Refresh this bounded import page",
+  "release_search_child_preview": "Preview of related releases.",
+  "release_search_child_window": "Current window: {count} releases.",
+  "release_search_child_restart_needed": "Restart to explore from the first window.",
+  "release_search_child_first": "First window"
 }

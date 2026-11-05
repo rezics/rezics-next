@@ -10228,5 +10228,9 @@
   "library_vndb_score_review_notice_changed": "El voto actual cambió durante la revisión. Se muestra la nueva base; vuelve a elegir para autorizar una nueva revisión.",
   "library_vndb_score_review_notice_vote": "No se pudo leer el voto actual, así que no se creó esta revisión de puntuación.",
   "library_vndb_score_review_notice_question": "No se pudo leer la pregunta nativa, así que no se creó esta revisión de puntuación.",
-  "library_vndb_refresh_page": "Actualizar esta página de importación acotada"
+  "library_vndb_refresh_page": "Actualizar esta página de importación acotada",
+  "release_search_child_preview": "Vista previa de ediciones relacionadas.",
+  "release_search_child_window": "Ventana actual: {count} ediciones.",
+  "release_search_child_restart_needed": "Reinicia para explorar desde la primera ventana.",
+  "release_search_child_first": "Primera ventana"
 }

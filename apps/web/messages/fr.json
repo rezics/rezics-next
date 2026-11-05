@@ -10228,5 +10228,9 @@
   "library_vndb_score_review_notice_changed": "Le vote actuel a changé pendant l’examen. La nouvelle base est affichée ; choisissez à nouveau pour autoriser un nouvel examen.",
   "library_vndb_score_review_notice_vote": "Impossible de lire le vote actuel ; cet examen de note n’a donc pas été créé.",
   "library_vndb_score_review_notice_question": "Impossible de lire la question native ; cet examen de note n’a donc pas été créé.",
-  "library_vndb_refresh_page": "Actualiser cette page d’import limitée"
+  "library_vndb_refresh_page": "Actualiser cette page d’import limitée",
+  "release_search_child_preview": "Aperçu des éditions associées.",
+  "release_search_child_window": "Fenêtre actuelle : {count} éditions.",
+  "release_search_child_restart_needed": "Recommencez pour explorer depuis la première fenêtre.",
+  "release_search_child_first": "Première fenêtre"
 }

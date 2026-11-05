@@ -10235,5 +10235,9 @@
   "library_vndb_score_review_notice_changed": "审核期间当前投票已变化。现显示最新依据；请重新选择并明确授权新的审核。",
   "library_vndb_score_review_notice_vote": "无法读取当前投票，因此未创建此评分审核。",
   "library_vndb_score_review_notice_question": "无法读取原生问题，因此未创建此评分审核。",
-  "library_vndb_refresh_page": "刷新此有界导入页面"
+  "library_vndb_refresh_page": "刷新此有界导入页面",
+  "release_search_child_preview": "相关发行版本预览。",
+  "release_search_child_window": "当前窗口：{count} 个发行版本。",
+  "release_search_child_restart_needed": "重新开始以从首个窗口浏览。",
+  "release_search_child_first": "首个窗口"
 }

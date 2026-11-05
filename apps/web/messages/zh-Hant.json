@@ -10278,5 +10278,9 @@
   "library_vndb_score_review_notice_changed": "審核期間目前投票已變更。現在顯示最新依據；請重新選擇並明確授權新的審核。",
   "library_vndb_score_review_notice_vote": "無法讀取目前投票，因此未建立此評分審核。",
   "library_vndb_score_review_notice_question": "無法讀取原生問題，因此未建立此評分審核。",
-  "library_vndb_refresh_page": "重新整理此有界匯入頁面"
+  "library_vndb_refresh_page": "重新整理此有界匯入頁面",
+  "release_search_child_preview": "相關發行版本預覽。",
+  "release_search_child_window": "目前視窗：{count} 個發行版本。",
+  "release_search_child_restart_needed": "重新開始以從首個視窗瀏覽。",
+  "release_search_child_first": "首個視窗"
 }

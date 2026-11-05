@@ -10228,5 +10228,9 @@
   "library_vndb_score_review_notice_changed": "검토 중 현재 투표가 바뀌었습니다. 새로운 기준이 표시됩니다. 다시 선택해 새 검토를 명시적으로 승인하세요.",
   "library_vndb_score_review_notice_vote": "현재 투표를 읽을 수 없어 점수 검토를 만들지 않았습니다.",
   "library_vndb_score_review_notice_question": "네이티브 질문을 읽을 수 없어 점수 검토를 만들지 않았습니다.",
-  "library_vndb_refresh_page": "이 제한된 가져오기 페이지 새로 고침"
+  "library_vndb_refresh_page": "이 제한된 가져오기 페이지 새로 고침",
+  "release_search_child_preview": "관련 출시 미리보기입니다.",
+  "release_search_child_window": "현재 창: 출시 {count}개.",
+  "release_search_child_restart_needed": "첫 번째 창부터 탐색하려면 다시 시작하세요.",
+  "release_search_child_first": "첫 번째 창"
 }

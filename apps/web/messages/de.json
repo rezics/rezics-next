@@ -10228,5 +10228,9 @@
   "library_vndb_score_review_notice_changed": "Die aktuelle Stimme hat sich während der Prüfung geändert. Die neue Grundlage wird angezeigt; prüfe erneut, um eine neue Prüfung ausdrücklich zu bestätigen.",
   "library_vndb_score_review_notice_vote": "Die aktuelle Stimme konnte nicht gelesen werden. Daher wurde keine Bewertungsprüfung erstellt.",
   "library_vndb_score_review_notice_question": "Die native Frage konnte nicht gelesen werden. Daher wurde keine Bewertungsprüfung erstellt.",
-  "library_vndb_refresh_page": "Diese begrenzte Importseite aktualisieren"
+  "library_vndb_refresh_page": "Diese begrenzte Importseite aktualisieren",
+  "release_search_child_preview": "Vorschau verwandter Veröffentlichungen.",
+  "release_search_child_window": "Aktuelles Fenster: {count} Veröffentlichungen.",
+  "release_search_child_restart_needed": "Starten Sie neu, um das erste Fenster zu öffnen.",
+  "release_search_child_first": "Erstes Fenster"
 }
