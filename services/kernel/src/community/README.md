@@ -1102,10 +1102,10 @@ Access consumers, source proofs, transaction controls and DBOS work.
 
 ## Participation on the Space home
 
-The Space home keeps Realm membership separate from following the Space. Public self-join and direct,
-owner-selected add-member use the existing membership commands and their `202 { workflowId }` acceptance.
-Protected Realms do not offer self-join; an owner admits an account through `POST /v1/realms/{realmId}/members`.
-Resource roles do not create membership or a My Realms entry.
+Accounts owns Realm-home membership, roles and bans: leave removes access first and ban is immediate explicit deny.
+The Space home keeps membership separate from following, composing durable join then Library follow. Public self-join
+and owner add-member use current membership commands (`202 { workflowId }`); protected Realms require owner admission
+through `POST /v1/realms/{realmId}/members`. Roles alone create no membership or My Realms entry.
 
 After an accepted self join or leave, the web interface refreshes `GET /v1/realms/{realmId}/members/me` and
 `GET /v1/realms/{realmId}/participation` at most four times per refresh. Acceptance alone never means that the

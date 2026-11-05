@@ -580,7 +580,10 @@ source/parent revisions, takedown and restoration retain native read authority a
 
 ## Mixed Home summaries
 
-[The feed contract](../../../../docs/feeds.md) owns selection, source limits and sparse cursors.
+Content owns mixed Home composition through the existing Home port. The [feed contract](../../../../docs/feeds.md)
+owns selection, source limits and sparse cursors; Search owns its public discovery source/result/continuation entry,
+real adapters, query/default-worker assembly and minimal caller migration. There is no second renderer or private
+Library merge.
 `feed-discovery.ts` maps Search's delivered Subject/Account and public Collection/review/Space summaries with
 exhaustive dispatch and exact route, kind and primary identity checks. It translates only the public
 `library/collection` and `community/space` keys to Content's `commerce/collection` and `content/space` feed
@@ -601,11 +604,9 @@ The producer constants derive at most 91 mixed candidates plus 21 author keys (s
 at most one avatar and one verified-agent Subject), 123 anonymous candidates, or 20 Following candidates plus
 60 author keys; the composed maxima 112, 123 and 80 remain below the 160 ceiling.
 
-Decision: Keep Search's bounded public owner summaries authoritative; translate only validated owner keys and leave Collection curator/cover and Review rating absent until their current public summaries supply those fields.
-
-The Review census still cannot certify ready eligibility coverage, and Community has not yet supplied the complete
-current Space/Realm tuple capability. These feed projections do not promote installation, an empty page, or
-preparing coverage into native readiness; those source authorities remain in the continuation.
+Decision: Keep Search's bounded public owner summaries authoritative; translate only validated owner keys and leave
+Collection curator/cover and Review rating absent until their current public summaries supply those fields. Producer
+readiness remains authoritative; installation, an empty page or a preparing census never certifies it.
 
 #### Cost: native mixed Discovery feed projection
 
@@ -2444,7 +2445,11 @@ Cover variants are served by the website's media route like every other media ob
 
 ### Rights
 
-Every imported cover carries its rights holder, the source it came through and its licence, and is credited where it is shown. A cover comes down on a valid complaint through the media takedown path, and its subject then shows its placeholder. The takedown also fences the source record's cover field, so a later import refresh cannot bring the same cover back.
+Cover import uses Global bulk-granted `importFromUrl` with bounded allowlisted fetch, redirect, time and
+40-megapixel processing. The importer re-encodes through this media path and keeps unique external claims,
+unresolved source IDs, unversioned SHA-256 digests, rights holder, licence and source `via`; display includes the
+corresponding credit. A valid complaint uses media takedown and fences the source cover field, so a later refresh
+cannot restore it.
 
 ## Document image presentations
 
@@ -2547,10 +2552,11 @@ then the existing uploader/new-media initializer, reservation receipt and reserv
 an exact route/home. It adds no `media:create` grant on a Realm and no account-avatar reuse.
 Reservation status includes the native purpose. The existing `/v1/media` request schema remains unchanged.
 
-Completion uses the existing website uploader BFF, uploader/media:complete authorization, reservation identity,
-20 MiB measured-byte limit and declared digest checks. For Realm purposes it also checks the active Realm and current
-`realm:manage` at each command attempt's T, before receipt replay. No client scope is widened. Accounts owns scope
-mapping; an unavailable or missing mapping denies admission. The existing image job publishes reencoded AVIF/WebP,
+Completion is website-only through the existing server-side uploader BFF using `private_key_jwt` website tokens.
+`media:complete` checks uploader, container, reservation identity, measured bytes and declared hash under the existing
+20 MiB limit. For Realm purposes it also checks the active Realm and current `realm:manage` at each command attempt's
+T, before receipt replay. Accounts owns registration and scope mapping; Web owns transport. Missing mapping denies.
+The existing image job publishes reencoded AVIF/WebP,
 with its 40-million-pixel ceiling, width ladder, at most twelve variants and normal rejected outcome. Unclaimed
 media follows the existing 24-hour collector.
 
@@ -3621,13 +3627,10 @@ Focused outcomes are in `test/content/board-slow.test.ts` and
 
 ## Realm Subject structural census
 
-`realm-subject-source.ts:createRealmSubjectSource` owns the population port and its types.
-Search adapts its planned port to these exports (prefix/match accept 32 inputs). The separate
-`RealmSubjectDisclosure` owns Realm read/ban, reader binding, original/terminal identity,
-thread, opening, board and place checks. `RealmSubjectMaintenance` owns live cut coverage
-and currentness, including dependencies added by each page. Match resolves original inputs
-to their independently readable terminal through disclosure. Without both capabilities,
-structural completion remains unavailable.
+Semantic owns the smallest acyclic public reader for Copy/census/relocated mapping and narrow binding/import repair.
+Content retains its native census, reactions/Rating, original mapping, compiler, installed-root and growth acceptance.
+The reader has no resolver, store-index redirect/module or baseline expansion. Match resolves original inputs to an
+independently readable terminal through disclosure; incomplete coverage remains unavailable.
 Decision: retain unresolved originals with null terminals; never assume a self mapping.
 
 `createRealmSubjectCandidates` is the single live writer/coverage seam. Maintenance fences a
