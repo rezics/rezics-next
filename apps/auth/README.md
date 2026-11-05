@@ -582,27 +582,47 @@ not settle an earlier unknown, and retired callbacks cannot replace current revi
 
 Connected-application whole-call costs: Security entry and cached-document return each make one bounded `/clients` inventory read and one bounded `/consents` inventory read, at most 20 rows apiece. Each explicit current reload, failed-target retry, first-page action or Next/Previous transition makes one read for that inventory and cursor. A confirmed reduction first reads the same bounded consent page once to recheck the target, pending state and exact current grants. A nonempty retained set then makes one existing exact `GET /consent/<client_id>` review; remove-all makes no consent GET. Each path sends at most one existing `POST /consent`; nonempty reductions include the original `reviewed_scopes`, while remove-all keeps its empty-scope body. Every awaited preflight is followed by the existing operation-currentness check, including the exact consent read, and a final currentness check immediately precedes the POST. The response is classified only from its exact native result; no post-write inventory read settles an unknown. A known `stale_review` refusal permits one bounded current consent-page read and no second command. Return, Retry, pagination, focus, language changes and notice presentation send zero commands. There is no polling, full list scan or per-row authority read.
 
+Decision: password replacement uses closed producer-shaped phase acknowledgements, formula-derived byte limits and
+one five-second browser lifetime for each of its three POSTs; retries retain exact phase custody.
+
 Password changes use the current native Auth password limits, shown locally with Unicode character counts and kept
 within Auth's storage bounds, and require matching new-password confirmation. Before dispatch, the person reviews the
 current account and the native session consequences. Replacing an existing password retires all sessions, including
 the current one; adding the first password leaves existing sessions active. Security advice never discloses password-row existence; the review explains both outcomes.
 
-One random operation key and its exact stage, approval and apply bindings stay in mounted page memory. A transport
-failure, timeout or malformed response is phase-specific uncertainty. No phase is retried automatically. An explicit
-retry reuses that exact phase payload only while current Security advice allows it; native authorization remains final.
-Only a validated apply receipt confirms completion. A refusal or expired approval after an unknown apply does not
-resolve that earlier result. A confirmed replacement retires the session and the page offers sign-in with the new password;
-if that does not work, the existing account-recovery path remains available. When current advice requires step-up, the
-page goes to `/step-up?return_to=%2Fsecurity` before sending any credential-effect request. No password is put in a URL.
+The password wire contracts are exact: stage echoes the original key and subject with an Auth UUID effect reference,
+`set-password`, and a lowercase 64-character digest; approval has an Access sealed reference and canonical UTC
+millisecond expiry; apply has an Auth UUID receipt and a boolean replay flag. Key and subject echoes use the host's
+actual 1,024 UTF-16-unit string admission. Their maximum streamed success bodies are 12,465 bytes for stage, 2,821
+for password approval, and 69 for apply; either exact native error body is at most 66 bytes. The password approval
+reference is an Access base64url seal plus a dot and 43-character HMAC, at most 2,766 characters from the exact
+workflow/operator producer shapes. Stage, approval and apply each use the installed bounded reader before fatal UTF-8
+decoding and JSON parsing. Auth checks Access approval output against the stage-purpose bound and canonical UTC
+millisecond expiry before projection. Apply carries the reference through its dedicated bounded input unchanged. A
+wrong status, extra or duplicate field, excess body, malformed body or lost body cannot
+advance a phase. The seven native `credential_effect_denied` status mappings and the `401 step_up_required` mapping
+retain their exact `not_applied` marker.
 
-Page departure or private-authority retirement captures only the interrupted stage, approval or apply phase and
-whether an apply receipt was confirmed. Passwords, proof, bindings, references, keys and the former identity are
-cleared. This generic history stays in mounted memory through cached-page restoration and cannot be settled by a
-current Security read. It offers sign-in and account recovery; a fresh password form appears only after explicit
-acknowledgement of an earlier unknown result and a current allowed Security review. Exact retry is unavailable after
-the original attempt is retired. Review current Security performs no command: it reuses the existing Security page and
+One random operation key and its exact stage, approval and apply bindings stay in mounted page memory. Each POST has
+one absolute five-second browser allowance from before fetch through headers and bounded body completion; the three
+phases do not share one five-second journey allowance. Each native host request keeps its existing three-second
+deadline. A transport failure, timeout or malformed response is phase-specific uncertainty. No phase is retried
+automatically. An explicit retry resends only that exact phase payload while current Security advice allows it; a
+later refusal or expired approval cannot settle earlier uncertainty. Admitted staging clears the password payload.
+Only the original validated apply receipt confirms completion. A confirmed replacement retires the session and the
+page offers sign-in with the new password; if that does not work, the existing account-recovery path remains available.
+When current advice requires step-up, the page goes to `/step-up?return_to=%2Fsecurity` before sending any
+credential-effect request. No password is put in a URL.
+
+Page departure or private-authority retirement captures only the most advanced interrupted phase and whether an
+apply receipt was confirmed. Passwords, proof, bindings, references, keys and the former identity are cleared. This
+generic history stays in mounted memory through cached-page restoration and cannot be settled by a fresh Security
+read. It offers sign-in and account recovery; a fresh password form appears only after explicit acknowledgement of
+an earlier unknown result and a current allowed Security review. Exact retry is unavailable after the original
+attempt is retired. Review current Security performs no command: it reuses the existing Security page and
 password-requirements reads (two Auth reads), current account-identity read, and one bounded first page each for
-clients and consents (five reads total). It performs no inventory scan or per-row authority reads.
+clients and consents (five reads total). It performs no inventory scan or per-row authority reads. The existing single
+Stay/Leave decision remains the only departure choice.
 
 Mounted return history keeps only the most advanced interrupted phase and whether an apply receipt was observed; read Retry preserves that history, while fresh work requires explicit acknowledgement and current native advice.
 

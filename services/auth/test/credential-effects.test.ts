@@ -1,6 +1,7 @@
 import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { credentialEffectResponseLimits } from '@rezics/auth-contract';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -59,7 +60,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
       async approveCredentialEffect(input: { stage: CredentialEffectBinding; human: SessionProof }) {
         if (!allowed) throw new Error('Fixture authority revoked');
         expect(await service.internal.accessTokenForProof(input.human)).toBeString();
-        const reference = randomUUID();
+        const reference = `${'A'.repeat(credentialEffectResponseLimits.passwordApprovalReferenceUnits - 44)}.${'A'.repeat(43)}`;
         const expiresAt = new Date(Date.now() + 60000).toISOString();
         openings.set(reference, { stage: input.stage, spent: false, expiresAt });
         return { reference, expiresAt };
@@ -445,10 +446,14 @@ test('Auth host transports only closed credential commands and redacts every den
     const stageResponse = await request('stage', {
       key: randomUUID(),
       subjectId: 'robot',
-      credential: { kind: 'key', kid: 'new-key', publicJwk: f.publicJwk },
+      credential: { kind: 'password', password: 'candidate password long enough' },
     });
     expect(stageResponse.status).toBe(200);
     const op = await stageResponse.json();
+    expect(Object.keys(op).sort()).toEqual(['digest', 'effectRef', 'key', 'purpose', 'subjectId']);
+    expect(op).toMatchObject({ purpose: 'set-password', subjectId: 'robot' });
+    expect(op.effectRef).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(op.digest).toMatch(/^[a-f0-9]{64}$/);
     for (const body of [
       { ...op, purpose: 'session' },
       { ...op, digest: 'hostile' },
@@ -464,9 +469,18 @@ test('Auth host transports only closed credential commands and redacts every den
     const approvalResponse = await request('approve', op);
     expect(approvalResponse.status).toBe(200);
     const approval = await approvalResponse.json();
+    expect(Object.keys(approval).sort()).toEqual(['expiresAt', 'reference']);
+    expect(approval.reference).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/);
+    expect(approval.expiresAt).toBe(new Date(approval.expiresAt).toISOString());
     const result = await request('apply', { ...op, reference: approval.reference });
     expect(result.status).toBe(200);
-    expect(await result.json()).toEqual({ receiptId: expect.any(String), replayed: false });
+    const applied = await result.json();
+    expect(Object.keys(applied).sort()).toEqual(['receiptId', 'replayed']);
+    expect(applied).toMatchObject({ replayed: false });
+    expect(applied.receiptId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    const replay = await request('apply', { ...op, reference: approval.reference });
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual({ ...applied, replayed: true });
     const unavailable = await createAuthService({
       ...f.options,
       trustedAccess: trustedAccessPorts({

@@ -3,7 +3,13 @@ import {
   securityScopeLimit,
   securityResponseByteBudgets,
   securityResponseLimits,
+  isCredentialEffectApprovalExpiry,
+  isCredentialEffectApprovalReference,
+  isPasswordCredentialEffectApprovalReference,
   type ReviewedConsentDecisionResponse,
+  type CredentialEffectStageResponse,
+  type CredentialEffectApprovalResponse,
+  type CredentialEffectApplyResponse,
 } from '@rezics/auth-contract';
 import { securityId, securityDisplay, securityPasskey } from './security-response-bounds.ts';
 import { AuthRestoreAdmissionError, requireRestoredAuthAdmission } from './restore-admission.ts';
@@ -1515,7 +1521,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           subjectId: stage.subjectAccountId,
           purpose: stage.purpose,
           digest: stage.effectDigest,
-        };
+        } satisfies CredentialEffectStageResponse;
       },
       async stagePasskeyEffect(input) {
         const human = await humanProof(input.headers);
@@ -1568,8 +1574,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         );
         const expires = Date.parse(approval?.expiresAt);
         const source = proofSources.get(human);
+        const approvalReferenceValid =
+          stage.binding.purpose === 'set-password'
+            ? isPasswordCredentialEffectApprovalReference(approval?.reference)
+            : isCredentialEffectApprovalReference(approval?.reference);
         if (
-          !approval?.reference ||
+          !approvalReferenceValid ||
+          !isCredentialEffectApprovalExpiry(approval?.expiresAt) ||
           !Number.isFinite(expires) ||
           expires <= Date.now() ||
           expires > Date.now() + 60000 ||
@@ -1582,7 +1593,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           [approval.expiresAt],
         );
         if (live.rowCount !== 1) throw new Denied();
-        return { reference: approval.reference, expiresAt: approval.expiresAt };
+        return { reference: approval.reference, expiresAt: approval.expiresAt } satisfies CredentialEffectApprovalResponse;
       },
       async applyCredentialEffect(input) {
         // Direct internal callers also receive one boundary deadline here;
@@ -1593,7 +1604,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         freshCredentialProof(human, input.subjectAccountId);
         const subject = await activeActor(input.subjectAccountId);
         const stage = await credentialStage(input, human);
-        const authorization = text(input.authorization);
+        const authorization = input.authorization;
         const revalidate = async (
           replay: boolean,
           consumedOpening?: CredentialEffectAuthorization<CredentialFloorPurpose>,
@@ -1631,7 +1642,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (stage.row.committed_at) {
           await revalidate(true, undefined, undefined, stage.row.opening_receipt_id ?? undefined);
           await humanProof(input.headers);
-          return { receiptId: stage.row.receipt_id, replayed: true };
+          return { receiptId: stage.row.receipt_id, replayed: true } satisfies CredentialEffectApplyResponse;
         }
         await credentials.current(database, stage);
         const consumeInput = {
@@ -1793,7 +1804,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             .then((result) => {
               if (result.rowCount !== 1) throw new Denied();
             });
-          const result = { receiptId: locked.row.receipt_id, replayed: false };
+          const result: CredentialEffectApplyResponse = { receiptId: locked.row.receipt_id, replayed: false };
           const committed = await connection.query(
             `UPDATE auth_effect_receipt SET opening_receipt_id=$2,minimum_authn_epoch=$3,committed_result=$4,opening_reference=$5,committed_at=statement_timestamp()
             WHERE receipt_id=$1 AND committed_at IS NULL`,

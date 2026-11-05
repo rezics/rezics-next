@@ -508,6 +508,39 @@ read. Destructive effects revoke the subject's native sessions. Failed effects
 may spend the approval or leave the Access barrier raised; retry with a new
 approved command rather than replaying its receipt.
 
+The browser password path uses the existing `/credential-effects/stage`,
+`/approve` and `/apply` host commands. Each host request keeps its single native
+three-second deadline and the existing authorization, current credential,
+approval, floor, receipt, lock, replay and session-revocation behavior. The host
+admits a bounded 16,384-byte JSON request; its ordinary string fields retain the
+actual 1,024 UTF-16-unit limit. The apply approval reference has its own
+producer-derived allowance: the password Access seal is at most 2,766 ASCII
+characters; the shared host accepts up to 2,770 for the longest supported
+credential purpose (`remove-password`). These are Access's base64url payload,
+dot and 43-character SHA-256 HMAC, derived from its 255-unit operation-key
+locator, UUID account/effect/receipt fields, 64-character digest and embedded
+workflow-approval `{ route, id, binding }` seal or operator receipt locator. The
+embedded workflow seal uses the native route maximum 65,535, UUID approval ID
+and 64-character binding digest. Native approval expiries use
+`Date.prototype.toISOString()` (24 UTF-8 bytes), and Auth effect references and
+receipts use `randomUUID()` (36 lowercase UUID characters).
+
+The closed password success projections are stage `{ effectRef, key, subjectId,
+purpose: "set-password", digest }`, approval `{ reference, expiresAt }`, and
+apply `{ receiptId, replayed }`; the only error bodies are exact
+`credential_effect_denied` or `step_up_required` with
+`effect_status: "not_applied"`. Their largest UTF-8 bodies are respectively
+12,465, 2,821 and 69 bytes, with a 66-byte error ceiling. The Auth page spends
+one absolute five-second browser allowance per POST through headers and streamed
+body admission; it sends stage, approval and apply once each on ordinary
+completion. A lost response remains possible completion and only an explicit
+retry may repeat the exact uncertain phase. These browser allowances add no
+native reads or commands and do not change any native deadline or effect.
+Auth checks the trusted Access approval against the stage-purpose reference
+bound and canonical UTC millisecond expiry before projecting it. Apply forwards
+the exact sealed reference through its typed internal call; the host's ordinary
+1,024-unit string limit does not truncate or reject this longer reference.
+
 A first operator opening or key installation creates a native credential owner
 with `user.id = account_id` and a `credential` account row. A passwordless owner
 has null password. The schema plugin makes the native email column optional;

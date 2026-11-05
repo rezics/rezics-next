@@ -80,7 +80,7 @@ async function begin(host: HTMLElement) {
 
 function stageResponse(body: Record<string, string>) {
   return Response.json({
-    effectRef: 'retired-effect-ref',
+    effectRef: '00000000-0000-4000-8000-000000000002',
     key: body.key,
     subjectId: body.subjectId,
     purpose: 'set-password',

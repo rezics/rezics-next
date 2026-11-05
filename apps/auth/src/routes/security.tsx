@@ -801,6 +801,7 @@ function SecurityPageView({
         authorityGeneration.current !== generation ||
         activeAccount.current !== current.subjectId ||
         held?.kind !== 'password' ||
+        held.attempt !== current ||
         held.attempt.key !== current.key ||
         held.attempt.phase !== current.phase
       )
@@ -815,6 +816,7 @@ function SecurityPageView({
         authorityGeneration.current !== generation ||
         activeAccount.current !== current.subjectId ||
         active?.kind !== 'password' ||
+        active.attempt !== current ||
         active.attempt.key !== current.key ||
         active.attempt.phase !== current.phase
       )

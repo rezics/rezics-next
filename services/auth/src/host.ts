@@ -17,7 +17,13 @@ import {
 } from './organization-membership-page.ts';
 import { randomUUID } from 'node:crypto';
 import { createNativeLifecycleResults } from './native-lifecycle-results.ts';
-import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
+import {
+  AUTH_PAGE_OPERATION_CLIENT_ID,
+  AUTH_PAGE_OPERATION_SCOPES,
+  credentialEffectNotAppliedStatuses,
+  credentialEffectResponseLimits,
+  isCredentialEffectApprovalReference,
+} from '@rezics/auth-contract';
 import { authManagementClient } from './auth-management-client.ts';
 import {
   accountManagementReadTransport,
@@ -450,7 +456,12 @@ export function credentialEffectTransport(
           : ['key', 'subjectId', 'effectRef', 'purpose', 'digest', ...(command === 'apply' ? ['reference'] : [])];
       if (Object.keys(body).some((field) => !names.includes(field))) return denied(400);
       const string = (value: unknown): string => {
-        if (typeof value !== 'string' || !value || value.length > 1024) throw new CredentialEffectDenied(400);
+        if (typeof value !== 'string' || !value || value.length > credentialEffectResponseLimits.textUnits)
+          throw new CredentialEffectDenied(400);
+        return value;
+      };
+      const approvalReference = (value: unknown): string => {
+        if (!isCredentialEffectApprovalReference(value)) throw new CredentialEffectDenied(400);
         return value;
       };
       const input = { key: string(body.key), subjectAccountId: string(body.subjectId), headers: request.headers };
@@ -485,7 +496,7 @@ export function credentialEffectTransport(
       const requestInput = {
         ...input,
         effectRef,
-        authorization: string(body.reference),
+        authorization: approvalReference(body.reference),
         deadline,
       };
       return response(await service.internal.applyCredentialEffect(requestInput));
@@ -493,7 +504,11 @@ export function credentialEffectTransport(
       if (error && typeof error === 'object' && 'code' in error && error.code === 'step_up_required')
         return response({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
-      return denied(typeof status === 'number' && [400, 401, 403, 409, 413, 415, 503].includes(status) ? status : 503);
+      return denied(
+        typeof status === 'number' && credentialEffectNotAppliedStatuses.some((supported) => supported === status)
+          ? status
+          : 503,
+      );
     }
   };
 }
